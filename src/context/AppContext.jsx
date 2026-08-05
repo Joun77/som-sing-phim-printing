@@ -303,10 +303,10 @@ const initialEquipment = [
 ];
 
 const initialCustomers = [
-  { name: 'ສົມພອນ ສີວິໄລ', creditLimit: 2000000 },
-  { name: 'ນາງ ແສງດາວ', creditLimit: 1000000 },
-  { name: 'ຮ້ານອາຫານ ທ່າທາງ', creditLimit: 3000000 },
-  { name: 'ໂຮງແຮມ ລ້ານຊ້າງ', creditLimit: 5000000 }
+  { id: 'cust-1', name: 'ສົມພອນ ສີວິໄລ', phone: '020 55667788', address: 'ບ້ານສີຫອມ, ເມືອງຈັນທະບູລີ, ນະຄອນຫຼວງວຽງຈັນ', creditLimit: 2000000 },
+  { id: 'cust-2', name: 'ນາງ ແສງດາວ', phone: '020 22334455', address: 'ບ້ານທົ່ງຂັນຄຳ, ເມືອງທ່າແຂກ, ແຂວງຄຳມ່ວນ', creditLimit: 1000000 },
+  { id: 'cust-3', name: 'ຮ້ານອາຫານ ທ່າທາງ', phone: '020 99887766', address: 'ບ້ານດົງໂດກ, ເມືອງໄຊທານີ, ນະຄອນຫຼວງວຽງຈັນ', creditLimit: 3000000 },
+  { id: 'cust-4', name: 'ໂຮງແຮມ ລ້ານຊ້າງ', phone: '020 77889900', address: 'ຖະໜົນລ້ານຊ້າງ, ເມືອງສີສັດຕະນາກ, ນະຄອນຫຼວງວຽງຈັນ', creditLimit: 5000000 }
 ];
 
 const initialOffcuts = [
@@ -1154,6 +1154,17 @@ export const AppProvider = ({ children }) => {
     setPurchaseOrders(prev => [newPo, ...prev]);
   };
 
+  const addCustomer = (customerData) => {
+    const newCust = {
+      id: `cust-${Date.now().toString().slice(-4)}`,
+      name: customerData.name,
+      phone: customerData.phone || '-',
+      address: customerData.address || '-',
+      creditLimit: Number(customerData.creditLimit) || 1000000
+    };
+    setCustomers(prev => [...prev, newCust]);
+  };
+
   const resetToDefaultData = () => {
     setInventory(initialInventory);
     setEquipment(initialEquipment);
@@ -1187,6 +1198,7 @@ export const AppProvider = ({ children }) => {
       deleteInventoryBatch,
       editInventoryBatch,
       checkCreditLimit,
+      addCustomer,
       addOffcut,
       consumeOffcut,
       updatePreflightCheck,

@@ -17,7 +17,6 @@ export default function EquipmentTable({ machines, onMaintenance }) {
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black uppercase text-slate-500 tracking-wider">
               <th className="py-4 px-6">{t('inventory_status.item_sku')}</th>
               <th className="py-4 px-6">{t('inventory.material_cat')}</th>
-              <th className="py-4 px-6">{t('equipment_mapping.linked_material')}</th>
               <th className="py-4 px-6">{t('equipment_mapping.operational_params')}</th>
               <th className="py-4 px-6">{t('equipment_mapping.sla_status')}</th>
               <th className="py-4 px-6 text-right">{t('inventory_status.actions')}</th>
@@ -58,15 +57,7 @@ export default function EquipmentTable({ machines, onMaintenance }) {
                         {eq.category}
                       </span>
                     </td>
-                    <td className="py-4.5 px-6">
-                      {eq.linkedMaterialSku ? (
-                        <span className="font-mono text-xs text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded uppercase font-bold">
-                          {eq.linkedMaterialSku}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 italic text-xs">{t('equipment_mapping.no_linked_material')}</span>
-                      )}
-                    </td>
+
                     <td className="py-4.5 px-6 text-xs text-slate-500 font-semibold font-sans">
                       {paramsSummary}
                     </td>

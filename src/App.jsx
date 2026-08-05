@@ -5,6 +5,7 @@ import DashboardOverview from './components/DashboardOverview';
 import InboundManagement from './components/inbound/InboundManagement';
 import InventoryManagement from './components/inventory/InventoryManagement';
 import EquipmentOverhead from './components/equipment/EquipmentManagement';
+import CustomerManagement from './components/customers/CustomerManagement';
 import CustomerOrders from './components/CustomerOrders';
 import ProfitCalculator from './components/ProfitCalculator';
 import HistoryAnalytics from './components/HistoryAnalytics';
@@ -32,6 +33,7 @@ function AppContent() {
           {activeTab === 'inbound' && <InboundManagement />}
           {activeTab === 'inventory' && <InventoryManagement />}
           {activeTab === 'equipment' && <EquipmentOverhead />}
+          {activeTab === 'crm' && <CustomerManagement />}
           {activeTab === 'orders' && <CustomerOrders />}
           {activeTab === 'calculator' && <ProfitCalculator />}
           {activeTab === 'reports' && <HistoryAnalytics />}

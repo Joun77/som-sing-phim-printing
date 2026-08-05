@@ -14,8 +14,10 @@ import {
   BarChart3,
   ChevronLeft,
   ChevronRight,
-  Truck
+  Truck,
+  User
 } from 'lucide-react';
+import logoImg from '../assets/Final.png';
 
 export default function Sidebar() {
   const { activeTab, setActiveTab, resetToDefaultData } = useApp();
@@ -65,6 +67,12 @@ export default function Sidebar() {
       icon: Cpu,
     },
     {
+      id: 'crm',
+      labelKey: 'sidebar.crm',
+      subText: 'Client Directory (CRM)',
+      icon: User,
+    },
+    {
       id: 'orders',
       labelKey: 'sidebar.orders',
       subText: 'Customers & Orders',
@@ -103,7 +111,7 @@ export default function Sidebar() {
       {/* Mobile Header Nav */}
       <div className="lg:hidden flex items-center justify-between p-4 bg-primary-navy text-white shadow-md sticky top-0 z-40">
         <div className="flex items-center gap-2">
-          <Printer className="w-6 h-6 text-accent-sky" />
+          <img src={logoImg} alt="Som Sing Phim Logo" className="w-8 h-8 object-contain" />
           <span className="font-bold text-lg tracking-wider">{t('common.app_name')}</span>
         </div>
         <div className="flex items-center gap-3">
@@ -145,11 +153,11 @@ export default function Sidebar() {
           {isCollapsed ? (
             <>
               <div 
-                className="p-2.5 bg-accent-sky/20 rounded-xl border border-accent-sky/30 cursor-pointer hover:bg-accent-sky/30 transition"
+                className="cursor-pointer hover:opacity-80 transition"
                 onClick={toggleCollapse}
                 title="Expand Sidebar"
               >
-                <Printer className="w-6 h-6 text-accent-sky" />
+                <img src={logoImg} alt="Som Sing Phim Logo" className="w-10 h-10 object-contain" />
               </div>
               <button 
                 onClick={toggleLanguage}
@@ -169,9 +177,7 @@ export default function Sidebar() {
           ) : (
             <>
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-accent-sky/20 rounded-xl border border-accent-sky/30">
-                  <Printer className="w-7 h-7 text-accent-sky" />
-                </div>
+                <img src={logoImg} alt="Som Sing Phim Logo" className="w-12 h-12 object-contain" />
                 <div>
                   <h1 className="font-bold text-lg tracking-wide font-sans">{t('common.app_name')}</h1>
                   <p className="text-[10px] text-white/50 font-medium">Som Sing Printing</p>

@@ -27,6 +27,7 @@
   "sidebar": {
     "dashboard": "Dashboard Overview",
     "inbound": "Inbound Procurement",
+    "crm": "Customer Directory (CRM)",
     "inventory": "Stock & Supplies",
     "equipment": "Assets & SLA",
     "orders": "Customer Orders",

@@ -27,9 +27,10 @@
   "sidebar": {
     "dashboard": "ແຜງຄວບຄຸມ (Dashboard)",
     "inbound": "ນຳເຂົ້າສິນຄ້າ (Inbound)",
+    "crm": "ຈັດການລູກຄ້າ (CRM)",
     "inventory": "ຄັງສິນຄ້າ (Inventory)",
     "equipment": "ເຄື່ອງຈັກ (Equipment)",
-    "orders": "ຈັດການອໍເດີ (Customer Orders)",
+    "orders": "ຈັດการອໍເດີ (Customer Orders)",
     "estimator": "ເຄື່ອງຄິດໄລ່ (Profit Estimator)",
     "reports": "ລາຍງານວິເຄາະ (BI Reports)"
   },

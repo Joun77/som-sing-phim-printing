@@ -25,9 +25,6 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
   const [speedMPerMin, setSpeedMPerMin] = useState(15);
   const [warmUpTime, setWarmUpTime] = useState(10);
 
-  // Material Linkage
-  const [linkedMaterialSku, setLinkedMaterialSku] = useState('');
-
   if (!isOpen) return null;
 
   const handleSubmit = (e) => {
@@ -50,11 +47,10 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
       purchaseCost: Number(purchaseCost),
       lifespanYears: Number(lifespanYears),
       printedPagesCapacity: Number(printedPagesCapacity),
-      linkedMaterialSku,
       ...categoryParams
     });
 
-    showToast('Machinery registered with linked material successfully!', 'success');
+    showToast('Machinery registered successfully!', 'success');
     onClose();
   };
 
@@ -106,24 +102,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
               </select>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-slate-500 uppercase block flex items-center gap-1.5">
-                <LinkIcon className="w-3.5 h-3.5 text-indigo-500" />
-                <span>Link Material SKU</span>
-              </label>
-              <select
-                value={linkedMaterialSku}
-                onChange={(e) => setLinkedMaterialSku(e.target.value)}
-                className="w-full px-3 py-2 border rounded-xl focus:outline-none bg-white font-semibold text-sm font-sans"
-              >
-                <option value="">-- No Linked SKU --</option>
-                {inventory.map(item => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} ({item.category})
-                  </option>
-                ))}
-              </select>
-            </div>
+
           </div>
 
           {/* Dynamic Configuration fields based on category selection */}
