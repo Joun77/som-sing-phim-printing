@@ -217,7 +217,18 @@
     "total_unit_cost": "ຕົ້ນທຶນສະເລ່ຍ/ແຜ່ນ (Total Unit):",
     "profit_total": "ກຳໄລລວມທັງໝົດ:",
     "suggestion": "ຄຳແນະນຳ (Suggestion): ລາຄາຂາຍທີ່ເໝາະສົມຄວນຈະມີອັດຕາກຳໄລຢ່າງໜ້ອຍ",
-    "breakdown_title": "ລາຍລະອຽດຕົ້ນທຶນຍ່ອຍ (Total Job Costs)"
+    "breakdown_title": "ລາຍລະອຽດຕົ້ນທຶນຍ່ອຍ (Total Job Costs)",
+    "single_sided": "ພິມໜ້າດຽວ",
+    "double_sided": "ພິມສອງໜ້າ",
+    "finished_size": "ຂະໜາດສຳເລັດຮູບ",
+    "printer": "ເຄື່ອງພິມ",
+    "ink_set": "ຊຸດນ້ຳໝຶກທີ່ຮອງຮັບ",
+    "coverage_mode": "ໂຫມດຄວາມເຂັ້ມສີ",
+    "avg_coverage": "ຄວາມເຂັ້ມສະເລ່ຍ",
+    "print_sides": "ໜ້າພິມ",
+    "sec_material": "1. ວັດສະດຸ ແລະ ຂະໜາດ (Material & Sizing)",
+    "sec_printing": "2. ການພิມ ແລະ ໝຶກພິມ (Printing & Ink)",
+    "sec_volume": "3. ຈຳນວນ ແລະ ການຕົບແຕ່ງ (Volume & Finishing)"
   },
   "reports": {
     "title": "ປະຫວັດການເງິນ & ບົດວິເຄາະລາຍງານ (History & Reports)",

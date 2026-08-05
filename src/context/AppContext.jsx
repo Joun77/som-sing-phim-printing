@@ -82,56 +82,134 @@ const initialInventory = [
     ]
   },
   {
-    id: 'ink-cyan',
-    name: 'ນ້ຳໝຶກ Konica Cyan',
+    id: 'ink-konica-cyan-oem',
+    name: 'ນ້ຳໝຶກ Konica Cyan OEM',
     category: 'Ink',
+    inkSet: 'Konica C6085 OEM Set',
     stockQty: 120,
     consumptionUnit: 'ml',
     purchaseUnit: 'Bottle (100ml)',
     purchaseMultiplier: 100,
-    costPerPurchaseUnit: 120000,
-    costPerConsumptionUnit: 1200,
+    costPerPurchaseUnit: 180000,
+    costPerConsumptionUnit: 1800,
     reorderThreshold: 50,
-    batches: []
+    batches: [
+      { id: 'LOT-KCY-OEM-01', purchaseDate: '2026-07-10', supplierName: 'Konica Lao', purchasePricePerReam: 180000, costPerSheet: 1800, initialQty: 100, currentQty: 60 },
+      { id: 'LOT-KCY-OEM-02', purchaseDate: '2026-07-28', supplierName: 'Konica Lao', purchasePricePerReam: 180000, costPerSheet: 1800, initialQty: 100, currentQty: 60 }
+    ]
   },
   {
-    id: 'ink-magenta',
-    name: 'ນ້ຳໝຶກ Konica Magenta',
+    id: 'ink-konica-magenta-oem',
+    name: 'ນ້ຳໝຶກ Konica Magenta OEM',
     category: 'Ink',
+    inkSet: 'Konica C6085 OEM Set',
     stockQty: 85,
     consumptionUnit: 'ml',
     purchaseUnit: 'Bottle (100ml)',
     purchaseMultiplier: 100,
-    costPerPurchaseUnit: 120000,
-    costPerConsumptionUnit: 1200,
+    costPerPurchaseUnit: 180000,
+    costPerConsumptionUnit: 1800,
     reorderThreshold: 50,
-    batches: []
+    batches: [
+      { id: 'LOT-KMG-OEM-01', purchaseDate: '2026-07-10', supplierName: 'Konica Lao', purchasePricePerReam: 180000, costPerSheet: 1800, initialQty: 100, currentQty: 85 }
+    ]
   },
   {
-    id: 'ink-yellow',
-    name: 'ນ້ຳໝຶກ Konica Yellow',
+    id: 'ink-konica-yellow-oem',
+    name: 'ນ້ຳໝຶກ Konica Yellow OEM',
     category: 'Ink',
+    inkSet: 'Konica C6085 OEM Set',
     stockQty: 140,
     consumptionUnit: 'ml',
     purchaseUnit: 'Bottle (100ml)',
     purchaseMultiplier: 100,
-    costPerPurchaseUnit: 120000,
-    costPerConsumptionUnit: 1200,
+    costPerPurchaseUnit: 180000,
+    costPerConsumptionUnit: 1800,
     reorderThreshold: 50,
-    batches: []
+    batches: [
+      { id: 'LOT-KYL-OEM-01', purchaseDate: '2026-07-10', supplierName: 'Konica Lao', purchasePricePerReam: 180000, costPerSheet: 1800, initialQty: 100, currentQty: 100 },
+      { id: 'LOT-KYL-OEM-02', purchaseDate: '2026-07-28', supplierName: 'Konica Lao', purchasePricePerReam: 180000, costPerSheet: 1800, initialQty: 100, currentQty: 40 }
+    ]
   },
   {
-    id: 'ink-black',
-    name: 'ນ້ຳໝຶກ Konica Black',
+    id: 'ink-konica-black-oem',
+    name: 'ນ້ຳໝຶກ Konica Black OEM',
     category: 'Ink',
+    inkSet: 'Konica C6085 OEM Set',
     stockQty: 45,
+    consumptionUnit: 'ml',
+    purchaseUnit: 'Bottle (100ml)',
+    purchaseMultiplier: 100,
+    costPerPurchaseUnit: 180000,
+    costPerConsumptionUnit: 1800,
+    reorderThreshold: 50,
+    batches: [
+      { id: 'LOT-KBK-OEM-01', purchaseDate: '2026-07-10', supplierName: 'Konica Lao', purchasePricePerReam: 180000, costPerSheet: 1800, initialQty: 100, currentQty: 45 }
+    ]
+  },
+  {
+    id: 'ink-konica-cyan-comp',
+    name: 'ນ້ຳໝຶກ Konica Cyan Compatible',
+    category: 'Ink',
+    inkSet: 'Konica C6085 Compatible Set',
+    stockQty: 200,
     consumptionUnit: 'ml',
     purchaseUnit: 'Bottle (100ml)',
     purchaseMultiplier: 100,
     costPerPurchaseUnit: 120000,
     costPerConsumptionUnit: 1200,
     reorderThreshold: 50,
-    batches: []
+    batches: [
+      { id: 'LOT-KCY-COMP-01', purchaseDate: '2026-07-12', supplierName: 'Vientiane Supply', purchasePricePerReam: 120000, costPerSheet: 1200, initialQty: 200, currentQty: 200 }
+    ]
+  },
+  {
+    id: 'ink-konica-magenta-comp',
+    name: 'ນ້ຳໝຶກ Konica Magenta Compatible',
+    category: 'Ink',
+    inkSet: 'Konica C6085 Compatible Set',
+    stockQty: 190,
+    consumptionUnit: 'ml',
+    purchaseUnit: 'Bottle (100ml)',
+    purchaseMultiplier: 100,
+    costPerPurchaseUnit: 120000,
+    costPerConsumptionUnit: 1200,
+    reorderThreshold: 50,
+    batches: [
+      { id: 'LOT-KMG-COMP-01', purchaseDate: '2026-07-12', supplierName: 'Vientiane Supply', purchasePricePerReam: 120000, costPerSheet: 1200, initialQty: 200, currentQty: 190 }
+    ]
+  },
+  {
+    id: 'ink-konica-yellow-comp',
+    name: 'ນ້ຳໝຶກ Konica Yellow Compatible',
+    category: 'Ink',
+    inkSet: 'Konica C6085 Compatible Set',
+    stockQty: 210,
+    consumptionUnit: 'ml',
+    purchaseUnit: 'Bottle (100ml)',
+    purchaseMultiplier: 100,
+    costPerPurchaseUnit: 120000,
+    costPerConsumptionUnit: 1200,
+    reorderThreshold: 50,
+    batches: [
+      { id: 'LOT-KYL-COMP-01', purchaseDate: '2026-07-12', supplierName: 'Vientiane Supply', purchasePricePerReam: 120000, costPerSheet: 1200, initialQty: 220, currentQty: 210 }
+    ]
+  },
+  {
+    id: 'ink-konica-black-comp',
+    name: 'ນ້ຳໝຶກ Konica Black Compatible',
+    category: 'Ink',
+    inkSet: 'Konica C6085 Compatible Set',
+    stockQty: 180,
+    consumptionUnit: 'ml',
+    purchaseUnit: 'Bottle (100ml)',
+    purchaseMultiplier: 100,
+    costPerPurchaseUnit: 120000,
+    costPerConsumptionUnit: 1200,
+    reorderThreshold: 50,
+    batches: [
+      { id: 'LOT-KBK-COMP-01', purchaseDate: '2026-07-12', supplierName: 'Vientiane Supply', purchasePricePerReam: 120000, costPerSheet: 1200, initialQty: 200, currentQty: 180 }
+    ]
   },
   {
     id: 'spiral-8',
@@ -182,6 +260,7 @@ const initialEquipment = [
     calculatedCostPerPage: 90,
     category: 'Printer',
     printerType: 'Laser',
+    supportedInkSets: ['Konica C6085 OEM Set', 'Konica C6085 Compatible Set'],
     purchaseDate: '2024-05-15',
     warrantyExpiration: '2027-05-15',
     lastMaintenanceDate: '2026-07-10',
@@ -387,61 +466,61 @@ export const AppProvider = ({ children }) => {
   };
 
   const [inventory, setInventory] = useState(() => {
-    const saved = localStorage.getItem('ss_print_inventory_v4');
+    const saved = localStorage.getItem('ss_print_inventory_v5');
     return saved ? JSON.parse(saved) : initialInventory;
   });
   const [equipment, setEquipment] = useState(() => {
-    const saved = localStorage.getItem('ss_print_equipment_v4');
+    const saved = localStorage.getItem('ss_print_equipment_v5');
     return saved ? JSON.parse(saved) : initialEquipment;
   });
   const [orders, setOrders] = useState(() => {
-    const saved = localStorage.getItem('ss_print_orders_v4');
+    const saved = localStorage.getItem('ss_print_orders_v5');
     return saved ? JSON.parse(saved) : initialOrders;
   });
   const [spoilageLogs, setSpoilageLogs] = useState(() => {
-    const saved = localStorage.getItem('ss_print_spoilage_v4');
+    const saved = localStorage.getItem('ss_print_spoilage_v5');
     return saved ? JSON.parse(saved) : initialSpoilageLogs;
   });
   const [vendorPrices, setVendorPrices] = useState(() => {
-    const saved = localStorage.getItem('ss_print_vendor_prices_v4');
+    const saved = localStorage.getItem('ss_print_vendor_prices_v5');
     return saved ? JSON.parse(saved) : initialVendorPrices;
   });
   const [customers, setCustomers] = useState(() => {
-    const saved = localStorage.getItem('ss_print_customers_v4');
+    const saved = localStorage.getItem('ss_print_customers_v5');
     return saved ? JSON.parse(saved) : initialCustomers;
   });
   const [offcuts, setOffcuts] = useState(() => {
-    const saved = localStorage.getItem('ss_print_offcuts_v4');
+    const saved = localStorage.getItem('ss_print_offcuts_v5');
     return saved ? JSON.parse(saved) : initialOffcuts;
   });
 
   // Sync to localstorage
   useEffect(() => {
-    localStorage.setItem('ss_print_inventory_v4', JSON.stringify(inventory));
+    localStorage.setItem('ss_print_inventory_v5', JSON.stringify(inventory));
   }, [inventory]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_equipment_v4', JSON.stringify(equipment));
+    localStorage.setItem('ss_print_equipment_v5', JSON.stringify(equipment));
   }, [equipment]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_orders_v4', JSON.stringify(orders));
+    localStorage.setItem('ss_print_orders_v5', JSON.stringify(orders));
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_spoilage_v4', JSON.stringify(spoilageLogs));
+    localStorage.setItem('ss_print_spoilage_v5', JSON.stringify(spoilageLogs));
   }, [spoilageLogs]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_vendor_prices_v4', JSON.stringify(vendorPrices));
+    localStorage.setItem('ss_print_vendor_prices_v5', JSON.stringify(vendorPrices));
   }, [vendorPrices]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_customers_v4', JSON.stringify(customers));
+    localStorage.setItem('ss_print_customers_v5', JSON.stringify(customers));
   }, [customers]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_offcuts_v4', JSON.stringify(offcuts));
+    localStorage.setItem('ss_print_offcuts_v5', JSON.stringify(offcuts));
   }, [offcuts]);
 
   // Solver for overdue orders

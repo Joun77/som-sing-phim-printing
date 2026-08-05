@@ -217,7 +217,18 @@
     "total_unit_cost": "Average Total Cost / Sheet:",
     "profit_total": "Net Profit Total:",
     "suggestion": "Recommendation: Selling price should achieve at least a safety margin of",
-    "breakdown_title": "Subcost Breakdowns"
+    "breakdown_title": "Subcost Breakdowns",
+    "single_sided": "Single-Sided",
+    "double_sided": "Double-Sided",
+    "finished_size": "Finished Job Sizing",
+    "printer": "Printer Machine",
+    "ink_set": "Compatible Ink Set",
+    "coverage_mode": "Coverage Mode",
+    "avg_coverage": "Average Coverage",
+    "print_sides": "Print Sides",
+    "sec_material": "1. Material & Sizing Specifications",
+    "sec_printing": "2. Printing & Ink Calibration",
+    "sec_volume": "3. Volume & Finishing Addons"
   },
   "reports": {
     "title": "Financial Trends & Reports Overview",
