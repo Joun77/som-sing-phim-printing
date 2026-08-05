@@ -918,6 +918,30 @@ export const AppProvider = ({ children }) => {
       return `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
     };
 
+    const itemsWithLots = orderData.items.map(orderedItem => {
+      const item = inventory.find(i => i.id === orderedItem.id);
+      let remaining = orderedItem.quantity;
+      const lotsUsed = [];
+      if (item && item.batches && item.batches.length > 0) {
+        const sorted = [...item.batches].sort((a,b) => a.purchaseDate.localeCompare(b.purchaseDate));
+        for (let b of sorted) {
+          if (b.currentQty > 0) {
+            const take = Math.min(remaining, b.currentQty);
+            lotsUsed.push({ lotId: b.id, qty: take, cost: b.costPerSheet });
+            remaining -= take;
+            if (remaining <= 0) break;
+          }
+        }
+      }
+      if (remaining > 0) {
+        lotsUsed.push({ lotId: 'RESERVE', qty: remaining, cost: item ? item.costPerConsumptionUnit : 0 });
+      }
+      return {
+        ...orderedItem,
+        lotsUsed
+      };
+    });
+
     const newOrder = {
       id: `ord-${Date.now().toString().slice(-4)}`,
       date: new Date().toISOString().split('T')[0],
@@ -935,11 +959,12 @@ export const AppProvider = ({ children }) => {
           { url: orderData.artworkLink || 'https://drive.google.com/som-sing-proof.pdf', version: 1, uploadedAt: formatDateTime() }
         ]
       },
-      ...orderData
+      ...orderData,
+      items: itemsWithLots
     };
     
     if (autoDeduct) {
-      orderData.items.forEach(orderedItem => {
+      newOrder.items.forEach(orderedItem => {
         deductStockFIFO(orderedItem.id, orderedItem.quantity);
       });
 

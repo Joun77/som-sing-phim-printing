@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Calendar, Trash2, Edit3, Save, X, Link as LinkIcon, CheckCircle2, Play, CircleAlert } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
 
 export default function InventoryTable({ items, onRestockItem }) {
+  const { t } = useTranslation();
   const { equipment, deleteInventoryBatch, editInventoryBatch } = useApp();
   
   // Edit mode states
@@ -74,15 +76,15 @@ export default function InventoryTable({ items, onRestockItem }) {
         <table className="w-full text-left border-collapse text-slate-800">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black uppercase text-slate-500 tracking-wider">
-              <th className="py-4 px-6">Lot / Batch ID</th>
-              <th className="py-4 px-6">Item Name & SKU</th>
-              <th className="py-4 px-6">Category</th>
-              <th className="py-4 px-6">Received / Initial</th>
-              <th className="py-4 px-6">Remaining Qty</th>
-              <th className="py-4 px-6">Unit Cost</th>
-              <th className="py-4 px-6">Linked Machine</th>
-              <th className="py-4 px-6">Status</th>
-              <th className="py-4 px-6 text-right">Actions</th>
+              <th className="py-4 px-6">{t('inventory_status.lot_id')}</th>
+              <th className="py-4 px-6">{t('inventory_status.item_sku')}</th>
+              <th className="py-4 px-6">{t('inventory.material_cat')}</th>
+              <th className="py-4 px-6">{t('inventory_status.received_initial')}</th>
+              <th className="py-4 px-6">{t('inventory_status.remaining_qty')}</th>
+              <th className="py-4 px-6">{t('inventory_status.unit_cost')}</th>
+              <th className="py-4 px-6">{t('equipment_mapping.linked_material')}</th>
+              <th className="py-4 px-6">{t('inventory.material_status')}</th>
+              <th className="py-4 px-6 text-right">{t('inventory_status.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-sm font-semibold text-slate-700">
@@ -132,7 +134,7 @@ export default function InventoryTable({ items, onRestockItem }) {
                       </span>
                     </td>
 
-                    {/* Received Date & Initial */}
+                     {/* Received Date & Initial */}
                     <td className="py-4.5 px-6">
                       <div>
                         <span className="font-bold text-slate-700 block">{lot.purchaseDate}</span>
@@ -179,7 +181,7 @@ export default function InventoryTable({ items, onRestockItem }) {
                           <span className="truncate max-w-[120px]">{linkedMachine.name}</span>
                         </div>
                       ) : (
-                        <span className="text-slate-400 italic text-xs">Unlinked</span>
+                        <span className="text-slate-400 italic text-xs">{t('inventory_status.unlinked')}</span>
                       )}
                     </td>
 
@@ -195,17 +197,17 @@ export default function InventoryTable({ items, onRestockItem }) {
                         {status === 'In Use' ? (
                           <>
                             <Play className="w-3 h-3 fill-current" />
-                            <span>In Use</span>
+                            <span>{t('inventory_status.in_use')}</span>
                           </>
                         ) : status === 'Unopened' ? (
                           <>
                             <CheckCircle2 className="w-3 h-3" />
-                            <span>Unopened</span>
+                            <span>{t('inventory_status.unopened')}</span>
                           </>
                         ) : (
                           <>
                             <CircleAlert className="w-3 h-3" />
-                            <span>Depleted</span>
+                            <span>{t('inventory_status.depleted')}</span>
                           </>
                         )}
                       </span>

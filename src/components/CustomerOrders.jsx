@@ -20,7 +20,8 @@ import {
   ChevronRight,
   ChevronLeft,
   ClipboardList,
-  CreditCard
+  CreditCard,
+  Boxes
 } from 'lucide-react';
 
 export default function CustomerOrders() {
@@ -51,6 +52,7 @@ export default function CustomerOrders() {
 
   // Print view state
   const [printType, setPrintType] = useState(null);
+  const [consumptionReportOrder, setConsumptionReportOrder] = useState(null);
 
   // Pre-flight file add state
   const [newVersionUrl, setNewVersionUrl] = useState('');
@@ -746,6 +748,65 @@ export default function CustomerOrders() {
             </div>
           </div>
         </dialog>
+      )}
+
+      {/* 📦 MATERIAL CONSUMPTION REPORT MODAL */}
+      {consumptionReportOrder && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-100 p-6 space-y-5 animate-scale-up relative">
+            <div className="flex justify-between items-center border-b pb-4">
+              <div>
+                <h3 className="font-extrabold text-lg text-slate-900 tracking-tight flex items-center gap-2">
+                  <Boxes className="w-6 h-6 text-emerald-600 animate-bounce" />
+                  <span>{currentLang === 'lo' ? 'ໃບບິນລາຍງານການຊົມໃຊ້ວັດຖຸດິບ' : 'Material Consumption Report'}</span>
+                </h3>
+                <p className="text-xs font-semibold text-slate-400 mt-1">
+                  Order #{consumptionReportOrder.id} • {consumptionReportOrder.customerName}
+                </p>
+              </div>
+              <button
+                onClick={() => setConsumptionReportOrder(null)}
+                className="p-1.5 bg-slate-50 hover:bg-slate-100 border rounded-xl transition text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-xs text-slate-500 font-bold leading-relaxed">
+                {currentLang === 'lo' 
+                  ? 'ການຜະລິດສຳເລັດແລ້ວ! ລະບົບໄດ້ທຳການຫັກສະຕ໋ອກຕາມລັອດຈັດຊື້ (FIFO Lots) ດັ່ງລາຍລະອຽດຕໍ່ໄປນີ້:' 
+                  : 'Production is complete! The system has deducted lot inventories under FIFO rules as follows:'}
+              </p>
+
+              <div className="space-y-3.5 divide-y divide-slate-100">
+                {consumptionReportOrder.items.map((item, idx) => (
+                  <div key={idx} className="pt-3 first:pt-0 space-y-1.5">
+                    <div className="flex justify-between text-sm font-extrabold text-slate-800">
+                      <span>{item.name}</span>
+                      <span className="font-sans text-slate-900">{item.quantity} {t('units') || 'Units'}</span>
+                    </div>
+                    <div className="pl-4 border-l-2 border-emerald-500 space-y-1">
+                      {(item.lotsUsed || []).map((lot, lIdx) => (
+                        <div key={lIdx} className="flex justify-between text-xs font-semibold text-slate-500">
+                          <span className="font-mono">#{lot.lotId}</span>
+                          <span className="font-sans text-slate-700">{lot.qty} {t('units') || 'Units'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={() => setConsumptionReportOrder(null)}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-sm tracking-wide transition shadow-sm"
+            >
+              {currentLang === 'lo' ? 'ຢືນຢັນການຕັດສະຕ໋ອກ' : 'Confirm Inventory Depletion'}
+            </button>
+          </div>
+        </div>
       )}
 
       {/* PRINT VIEW PREVIEWS */}

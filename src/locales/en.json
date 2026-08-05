@@ -262,5 +262,43 @@
     "Deposit Paid": "Deposit Paid",
     "Fully Paid": "Fully Paid",
     "Overdue": "Overdue"
+  },
+  "inbound": {
+    "title": "Inbound Procurement Portal",
+    "subtitle": "Log raw stock replenishment, machinery purchases, and track vendor invoices",
+    "total_spent_month": "Total Spent This Month",
+    "spent_materials": "Material Stock Spent",
+    "spent_machinery": "Machinery Investments",
+    "target_destination": "Inbound Destination Target",
+    "material_stock": "Material Stock",
+    "machinery_asset": "Machinery Asset",
+    "replenish_existing": "Replenish Existing SKU",
+    "register_new": "Register New SKU",
+    "po_number": "PO Number / Code",
+    "po_supplier": "Inbound Supplier",
+    "po_qty": "Inbound Volume Qty",
+    "po_cost": "Total Cost (LAK)",
+    "btn_submit": "Log Inbound Transaction",
+    "po_history_title": "Purchase Order Logs",
+    "po_history_subtitle": "Filter and query historical inbound records",
+    "po_placeholder": "Search PO#, items, or suppliers..."
+  },
+  "inventory_status": {
+    "in_use": "In Use",
+    "unopened": "Unopened",
+    "depleted": "Depleted",
+    "unlinked": "Unlinked",
+    "actions": "Actions",
+    "unit_cost": "Unit Cost",
+    "remaining_qty": "Remaining Qty",
+    "received_initial": "Received / Initial",
+    "item_sku": "Item Name & SKU",
+    "lot_id": "Lot / Batch ID"
+  },
+  "equipment_mapping": {
+    "linked_material": "Linked Material SKU",
+    "no_linked_material": "No linked material",
+    "operational_params": "Operational parameters",
+    "sla_status": "SLA Status"
   }
 }

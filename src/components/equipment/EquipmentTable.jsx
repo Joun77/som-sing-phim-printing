@@ -1,7 +1,10 @@
 import React from 'react';
-import { ShieldAlert, CheckCircle, Wrench, Settings } from 'lucide-react';
+import { ShieldAlert, CheckCircle, Wrench } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
-export default function EquipmentTable({ machines, onMaintenance, onUpdateComponent }) {
+export default function EquipmentTable({ machines, onMaintenance }) {
+  const { t } = useTranslation();
+
   const formatLAK = (num) => {
     return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(num).replace('LAK', '₭');
   };
@@ -12,27 +15,25 @@ export default function EquipmentTable({ machines, onMaintenance, onUpdateCompon
         <table className="w-full text-left border-collapse text-slate-800">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black uppercase text-slate-500 tracking-wider">
-              <th className="py-4 px-6">Asset Name</th>
-              <th className="py-4 px-6">Category</th>
-              <th className="py-4 px-6">Linked Material SKU</th>
-              <th className="py-4 px-6">Operational parameters</th>
-              <th className="py-4 px-6">SLA Status</th>
-              <th className="py-4 px-6 text-right">Actions</th>
+              <th className="py-4 px-6">{t('inventory_status.item_sku')}</th>
+              <th className="py-4 px-6">{t('inventory.material_cat')}</th>
+              <th className="py-4 px-6">{t('equipment_mapping.linked_material')}</th>
+              <th className="py-4 px-6">{t('equipment_mapping.operational_params')}</th>
+              <th className="py-4 px-6">{t('equipment_mapping.sla_status')}</th>
+              <th className="py-4 px-6 text-right">{t('inventory_status.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-sm font-semibold">
             {machines.length === 0 ? (
               <tr>
                 <td colSpan="6" className="py-12 text-center text-slate-400 font-bold">
-                  No machinery registered. Click "+ Add Machine" to begin.
+                  No machinery registered. Use Inbound Procurement to purchase new assets.
                 </td>
               </tr>
             ) : (
               machines.map(eq => {
-                // Status checks based on component wear
                 const isCritical = eq.components && eq.components.some(c => c.usage >= (c.threshold || 90));
                 
-                // Categorized parameters summary
                 let paramsSummary = '-';
                 if (eq.category === 'Printer') {
                   paramsSummary = `${eq.speedPpm || 0} PPM / Max Width ${eq.maxWidth || 'A3'}`;
@@ -63,7 +64,7 @@ export default function EquipmentTable({ machines, onMaintenance, onUpdateCompon
                           {eq.linkedMaterialSku}
                         </span>
                       ) : (
-                        <span className="text-slate-400 italic">None linked</span>
+                        <span className="text-slate-400 italic text-xs">{t('equipment_mapping.no_linked_material')}</span>
                       )}
                     </td>
                     <td className="py-4.5 px-6 text-xs text-slate-500 font-semibold font-sans">
