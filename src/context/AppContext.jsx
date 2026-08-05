@@ -239,15 +239,7 @@ const initialInventory = [
   }
 ];
 
-const initialVendorPrices = [
-  { itemId: 'paper-a4-80', vendorName: 'Lao Paper Supplier', pricePerReam: 45000, lastUpdated: '2026-07-10' },
-  { itemId: 'paper-a4-80', vendorName: 'Vientiane Import', pricePerReam: 50000, lastUpdated: '2026-07-28' },
-  { itemId: 'paper-a4-80', vendorName: 'Sengsavanh Stationery', pricePerReam: 48000, lastUpdated: '2026-08-02' },
-  
-  { itemId: 'paper-a3-120', vendorName: 'Lao Paper Supplier', pricePerReam: 110000, lastUpdated: '2026-07-15' },
-  { itemId: 'paper-a3-120', vendorName: 'Sengsavanh Stationery', pricePerReam: 115000, lastUpdated: '2026-08-01' },
-  { itemId: 'paper-a3-120', vendorName: 'Vientiane Import', pricePerReam: 112000, lastUpdated: '2026-07-25' },
-];
+
 
 const initialEquipment = [
   {
@@ -466,61 +458,53 @@ export const AppProvider = ({ children }) => {
   };
 
   const [inventory, setInventory] = useState(() => {
-    const saved = localStorage.getItem('ss_print_inventory_v5');
+    const saved = localStorage.getItem('ss_print_inventory_v6');
     return saved ? JSON.parse(saved) : initialInventory;
   });
   const [equipment, setEquipment] = useState(() => {
-    const saved = localStorage.getItem('ss_print_equipment_v5');
+    const saved = localStorage.getItem('ss_print_equipment_v6');
     return saved ? JSON.parse(saved) : initialEquipment;
   });
   const [orders, setOrders] = useState(() => {
-    const saved = localStorage.getItem('ss_print_orders_v5');
+    const saved = localStorage.getItem('ss_print_orders_v6');
     return saved ? JSON.parse(saved) : initialOrders;
   });
   const [spoilageLogs, setSpoilageLogs] = useState(() => {
-    const saved = localStorage.getItem('ss_print_spoilage_v5');
+    const saved = localStorage.getItem('ss_print_spoilage_v6');
     return saved ? JSON.parse(saved) : initialSpoilageLogs;
   });
-  const [vendorPrices, setVendorPrices] = useState(() => {
-    const saved = localStorage.getItem('ss_print_vendor_prices_v5');
-    return saved ? JSON.parse(saved) : initialVendorPrices;
-  });
   const [customers, setCustomers] = useState(() => {
-    const saved = localStorage.getItem('ss_print_customers_v5');
+    const saved = localStorage.getItem('ss_print_customers_v6');
     return saved ? JSON.parse(saved) : initialCustomers;
   });
   const [offcuts, setOffcuts] = useState(() => {
-    const saved = localStorage.getItem('ss_print_offcuts_v5');
+    const saved = localStorage.getItem('ss_print_offcuts_v6');
     return saved ? JSON.parse(saved) : initialOffcuts;
   });
 
   // Sync to localstorage
   useEffect(() => {
-    localStorage.setItem('ss_print_inventory_v5', JSON.stringify(inventory));
+    localStorage.setItem('ss_print_inventory_v6', JSON.stringify(inventory));
   }, [inventory]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_equipment_v5', JSON.stringify(equipment));
+    localStorage.setItem('ss_print_equipment_v6', JSON.stringify(equipment));
   }, [equipment]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_orders_v5', JSON.stringify(orders));
+    localStorage.setItem('ss_print_orders_v6', JSON.stringify(orders));
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_spoilage_v5', JSON.stringify(spoilageLogs));
+    localStorage.setItem('ss_print_spoilage_v6', JSON.stringify(spoilageLogs));
   }, [spoilageLogs]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_vendor_prices_v5', JSON.stringify(vendorPrices));
-  }, [vendorPrices]);
-
-  useEffect(() => {
-    localStorage.setItem('ss_print_customers_v5', JSON.stringify(customers));
+    localStorage.setItem('ss_print_customers_v6', JSON.stringify(customers));
   }, [customers]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_offcuts_v5', JSON.stringify(offcuts));
+    localStorage.setItem('ss_print_offcuts_v6', JSON.stringify(offcuts));
   }, [offcuts]);
 
   // Solver for overdue orders
@@ -649,24 +633,25 @@ export const AppProvider = ({ children }) => {
         };
       });
     });
-
-    updateVendorPrice(itemId, batchData.supplierName, batchData.purchasePrice);
   };
 
-  const updateVendorPrice = (itemId, vendorName, pricePerReam) => {
-    setVendorPrices(prev => {
-      const idx = prev.findIndex(v => v.itemId === itemId && v.vendorName === vendorName);
-      const newEntry = {
-        itemId,
-        vendorName,
-        pricePerReam: Number(pricePerReam),
-        lastUpdated: new Date().toISOString().split('T')[0]
-      };
-      if (idx !== -1) {
-        return prev.map((v, i) => i === idx ? newEntry : v);
-      }
-      return [...prev, newEntry];
-    });
+  // Add a new SKU/Material Definition
+  const addInventorySku = (itemData) => {
+    const newSku = {
+      id: itemData.id || `${itemData.category.toLowerCase()}-${Date.now().toString().slice(-4)}`,
+      name: itemData.name,
+      category: itemData.category,
+      stockQty: 0,
+      consumptionUnit: itemData.consumptionUnit || 'Sheet',
+      purchaseUnit: itemData.purchaseUnit || 'Pack',
+      purchaseMultiplier: Number(itemData.purchaseMultiplier) || 1,
+      costPerPurchaseUnit: Number(itemData.costPerPurchaseUnit) || 0,
+      costPerConsumptionUnit: Number(itemData.costPerConsumptionUnit) || 0,
+      reorderThreshold: Number(itemData.reorderThreshold) || 10,
+      batches: [],
+      ...itemData
+    };
+    setInventory(prev => [...prev, newSku]);
   };
 
   // CRM Credit Limit Check
@@ -1066,7 +1051,6 @@ export const AppProvider = ({ children }) => {
     setEquipment(initialEquipment);
     setOrders(initialOrders);
     setSpoilageLogs(initialSpoilageLogs);
-    setVendorPrices(initialVendorPrices);
     setCustomers(initialCustomers);
     setOffcuts(initialOffcuts);
   };
@@ -1079,7 +1063,6 @@ export const AppProvider = ({ children }) => {
       equipment,
       orders,
       spoilageLogs,
-      vendorPrices,
       customers,
       offcuts,
       toast,
@@ -1090,7 +1073,7 @@ export const AppProvider = ({ children }) => {
       getDashboardStats,
       getFIFOCostPerSheet,
       addInventoryBatch,
-      updateVendorPrice,
+      addInventorySku,
       checkCreditLimit,
       addOffcut,
       consumeOffcut,

@@ -183,9 +183,23 @@ export default function ProfitCalculator() {
   const totalPaperCost = paperUnitCost * totalParentSheetsToUse;
 
   // Ink calculation based on selected Ink Set SKU prices
+  const activePrinter = equipment.find(e => e.id === selectedPrinterId);
+
   const getInkSKUsOfSet = (set) => {
-    // Finds SKUs in inventory representing C, M, Y, K under the selected inkSet
-    const setInks = inventory.filter(item => item.category === 'Ink' && item.inkSet === set);
+    // Prioritize printer's linked material SKU if it represents an ink set or color channel
+    const linkedMaterialId = activePrinter?.linkedMaterialSku;
+    const linkedItem = inventory.find(i => i.id === linkedMaterialId);
+
+    let setInks = inventory.filter(item => 
+      item.category === 'Ink' && 
+      (item.inkSet === linkedMaterialId || (linkedItem && item.inkSet === linkedItem.inkSet) || item.inkSet === set)
+    );
+
+    // Fallback if none found
+    if (setInks.length === 0) {
+      setInks = inventory.filter(item => item.category === 'Ink');
+    }
+
     const cyan = setInks.find(i => i.id.toLowerCase().includes('cyan')) || setInks[0];
     const magenta = setInks.find(i => i.id.toLowerCase().includes('magenta')) || setInks[1];
     const yellow = setInks.find(i => i.id.toLowerCase().includes('yellow')) || setInks[2];
@@ -220,9 +234,6 @@ export default function ProfitCalculator() {
   const yellowCost = yellowMl * yellowPrice;
   const blackCost = blackMl * blackPrice;
   const totalInkCost = cyanCost + magentaCost + yellowCost + blackCost;
-
-  // Machine Depreciation + Power + Maintenance
-  const activePrinter = equipment.find(e => e.id === selectedPrinterId);
   const depreciationRate = activePrinter ? activePrinter.calculatedCostPerPage : 90;
   const deprCost = printVolume * depreciationRate;
   const electricityCost = printVolume * Number(electricityCostPerSheet);
@@ -502,6 +513,11 @@ export default function ProfitCalculator() {
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
+                {activePrinter?.linkedMaterialSku && (
+                  <p className="text-[10px] text-indigo-500 font-bold mt-1 font-sans">
+                    🔗 Linked Ink SKU/Set: {activePrinter.linkedMaterialSku}
+                  </p>
+                )}
               </div>
 
               {/* Ink Set Selection - Dynamic Filtered */}
