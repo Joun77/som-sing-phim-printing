@@ -314,6 +314,29 @@ const initialOffcuts = [
   { id: 'off-2', name: 'ເສດເຈ້ຍສະຕິກເກີ (150x150mm)', qty: 80, paperId: 'sticker-a4', notes: 'ຕັດເຫຼືອຈາກງານຕັດສະຕິກເກີ' }
 ];
 
+const initialPurchaseOrders = [
+  {
+    poId: 'PO-260801-01',
+    purchaseDate: '2026-08-01',
+    itemType: 'Material',
+    itemName: 'ເຈ້ຍ A4 Double A 80gsm',
+    supplierName: 'Lao Paper Supplier',
+    totalCost: 90000,
+    qty: 2,
+    unitName: 'Ream'
+  },
+  {
+    poId: 'PO-260802-01',
+    purchaseDate: '2026-08-02',
+    itemType: 'Equipment',
+    itemName: 'Epson L15150 Printer',
+    supplierName: 'Epson Lao Outlet',
+    totalCost: 15000000,
+    qty: 1,
+    unitName: 'Unit'
+  }
+];
+
 const initialOrders = [
   {
     id: 'ord-1001',
@@ -481,6 +504,10 @@ export const AppProvider = ({ children }) => {
     const saved = localStorage.getItem('ss_print_offcuts_v6');
     return saved ? JSON.parse(saved) : initialOffcuts;
   });
+  const [purchaseOrders, setPurchaseOrders] = useState(() => {
+    const saved = localStorage.getItem('ss_print_purchase_orders_v6');
+    return saved ? JSON.parse(saved) : initialPurchaseOrders;
+  });
 
   // Sync to localstorage
   useEffect(() => {
@@ -506,6 +533,10 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem('ss_print_offcuts_v6', JSON.stringify(offcuts));
   }, [offcuts]);
+
+  useEffect(() => {
+    localStorage.setItem('ss_print_purchase_orders_v6', JSON.stringify(purchaseOrders));
+  }, [purchaseOrders]);
 
   // Solver for overdue orders
   useEffect(() => {
@@ -652,6 +683,44 @@ export const AppProvider = ({ children }) => {
       ...itemData
     };
     setInventory(prev => [...prev, newSku]);
+  };
+
+  const deleteInventoryBatch = (itemId, batchId) => {
+    setInventory(prev => {
+      return prev.map(item => {
+        if (item.id !== itemId) return item;
+        const updatedBatches = (item.batches || []).filter(b => b.id !== batchId);
+        const newStockQty = updatedBatches.reduce((sum, b) => sum + b.currentQty, 0);
+        return {
+          ...item,
+          batches: updatedBatches,
+          stockQty: newStockQty
+        };
+      });
+    });
+  };
+
+  const editInventoryBatch = (itemId, batchId, updatedFields) => {
+    setInventory(prev => {
+      return prev.map(item => {
+        if (item.id !== itemId) return item;
+        const updatedBatches = (item.batches || []).map(b => {
+          if (b.id !== batchId) return b;
+          const updated = { ...b, ...updatedFields };
+          if (updatedFields.purchasePricePerReam !== undefined) {
+            const multiplier = item.purchaseMultiplier || 1;
+            updated.costPerSheet = Math.round(Number(updated.purchasePricePerReam) / multiplier);
+          }
+          return updated;
+        });
+        const newStockQty = updatedBatches.reduce((sum, b) => sum + b.currentQty, 0);
+        return {
+          ...item,
+          batches: updatedBatches,
+          stockQty: newStockQty
+        };
+      });
+    });
   };
 
   // CRM Credit Limit Check
@@ -1046,6 +1115,20 @@ export const AppProvider = ({ children }) => {
     }));
   };
 
+  const addPurchaseOrder = (poData) => {
+    const newPo = {
+      poId: poData.poId || `PO-${Date.now().toString().slice(-6)}`,
+      purchaseDate: poData.purchaseDate || new Date().toISOString().split('T')[0],
+      itemType: poData.itemType,
+      itemName: poData.itemName,
+      supplierName: poData.supplierName,
+      totalCost: Number(poData.totalCost),
+      qty: Number(poData.qty),
+      unitName: poData.unitName || 'Unit'
+    };
+    setPurchaseOrders(prev => [newPo, ...prev]);
+  };
+
   const resetToDefaultData = () => {
     setInventory(initialInventory);
     setEquipment(initialEquipment);
@@ -1053,6 +1136,7 @@ export const AppProvider = ({ children }) => {
     setSpoilageLogs(initialSpoilageLogs);
     setCustomers(initialCustomers);
     setOffcuts(initialOffcuts);
+    setPurchaseOrders(initialPurchaseOrders);
   };
 
   return (
@@ -1065,6 +1149,7 @@ export const AppProvider = ({ children }) => {
       spoilageLogs,
       customers,
       offcuts,
+      purchaseOrders,
       toast,
       setToast,
       confirmDialog,
@@ -1074,6 +1159,8 @@ export const AppProvider = ({ children }) => {
       getFIFOCostPerSheet,
       addInventoryBatch,
       addInventorySku,
+      deleteInventoryBatch,
+      editInventoryBatch,
       checkCreditLimit,
       addOffcut,
       consumeOffcut,
@@ -1086,6 +1173,7 @@ export const AppProvider = ({ children }) => {
       addSpoilageLog,
       addStock,
       addEquipment,
+      addPurchaseOrder,
       updateEquipmentComponentUsage,
       resetEquipmentComponent,
       updateEquipmentMaintenance,

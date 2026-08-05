@@ -26,6 +26,7 @@
   },
   "sidebar": {
     "dashboard": "Dashboard Overview",
+    "inbound": "Inbound Procurement",
     "inventory": "Stock & Supplies",
     "equipment": "Assets & SLA",
     "orders": "Customer Orders",

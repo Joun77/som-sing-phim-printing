@@ -13,7 +13,8 @@ import {
   Printer,
   BarChart3,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Truck
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -44,6 +45,12 @@ export default function Sidebar() {
       labelKey: 'sidebar.dashboard',
       subText: 'Dashboard Overview',
       icon: LayoutDashboard,
+    },
+    {
+      id: 'inbound',
+      labelKey: 'sidebar.inbound',
+      subText: 'Inbound Procurement',
+      icon: Truck,
     },
     {
       id: 'inventory',

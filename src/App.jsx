@@ -2,6 +2,7 @@ import React from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import Sidebar from './components/Sidebar';
 import DashboardOverview from './components/DashboardOverview';
+import InboundManagement from './components/inbound/InboundManagement';
 import InventoryManagement from './components/inventory/InventoryManagement';
 import EquipmentOverhead from './components/equipment/EquipmentManagement';
 import CustomerOrders from './components/CustomerOrders';
@@ -28,6 +29,7 @@ function AppContent() {
       <main className="flex-1 h-screen overflow-y-auto px-6 py-8 md:px-8">
         <div className="max-w-6xl mx-auto">
           {activeTab === 'dashboard' && <DashboardOverview />}
+          {activeTab === 'inbound' && <InboundManagement />}
           {activeTab === 'inventory' && <InventoryManagement />}
           {activeTab === 'equipment' && <EquipmentOverhead />}
           {activeTab === 'orders' && <CustomerOrders />}

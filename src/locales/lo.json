@@ -26,6 +26,7 @@
   },
   "sidebar": {
     "dashboard": "ແຜງຄວບຄຸມ (Dashboard)",
+    "inbound": "ນຳເຂົ້າສິນຄ້າ (Inbound)",
     "inventory": "ຄັງສິນຄ້າ (Inventory)",
     "equipment": "ເຄື່ອງຈັກ (Equipment)",
     "orders": "ຈັດການອໍເດີ (Customer Orders)",
