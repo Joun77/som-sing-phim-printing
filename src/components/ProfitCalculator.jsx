@@ -34,7 +34,9 @@ export default function ProfitCalculator() {
     customers, 
     addOrder,
     showToast,
-    askConfirmation
+    askConfirmation,
+    preselectedCustomerName,
+    setPreselectedCustomerName
   } = useApp();
   
   const { t, i18n } = useTranslation();
@@ -48,6 +50,14 @@ export default function ProfitCalculator() {
   const [selectedCustomerId, setSelectedCustomerId] = useState(customers[0]?.name || '');
   const [selectedPaperId, setSelectedPaperId] = useState(papers[0]?.id || '');
   const [selectedPrinterId, setSelectedPrinterId] = useState(printers[0]?.id || '');
+
+  // Auto-fill from CRM redirection
+  useEffect(() => {
+    if (preselectedCustomerName) {
+      setSelectedCustomerId(preselectedCustomerName);
+      setPreselectedCustomerName('');
+    }
+  }, [preselectedCustomerName, setPreselectedCustomerName]);
   
   // Ink sets filtering
   const selectedPrinterObj = equipment.find(e => e.id === selectedPrinterId);

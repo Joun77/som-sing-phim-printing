@@ -17,7 +17,7 @@ import {
   Truck,
   User
 } from 'lucide-react';
-import logoImg from '../assets/Final.png';
+
 
 export default function Sidebar() {
   const { activeTab, setActiveTab, resetToDefaultData } = useApp();
@@ -111,7 +111,7 @@ export default function Sidebar() {
       {/* Mobile Header Nav */}
       <div className="lg:hidden flex items-center justify-between p-4 bg-primary-navy text-white shadow-md sticky top-0 z-40">
         <div className="flex items-center gap-2">
-          <img src={logoImg} alt="Som Sing Phim Logo" className="w-8 h-8 object-contain" />
+          <div className="w-8 h-8 bg-accent-sky rounded-lg flex items-center justify-center shrink-0"><Printer className="w-5 h-5 text-white" /></div>
           <span className="font-bold text-lg tracking-wider">{t('common.app_name')}</span>
         </div>
         <div className="flex items-center gap-3">
@@ -157,7 +157,7 @@ export default function Sidebar() {
                 onClick={toggleCollapse}
                 title="Expand Sidebar"
               >
-                <img src={logoImg} alt="Som Sing Phim Logo" className="w-10 h-10 object-contain" />
+                <div className="w-10 h-10 bg-accent-sky rounded-xl flex items-center justify-center shrink-0"><Printer className="w-6 h-6 text-white" /></div>
               </div>
               <button 
                 onClick={toggleLanguage}
@@ -177,7 +177,7 @@ export default function Sidebar() {
           ) : (
             <>
               <div className="flex items-center gap-3">
-                <img src={logoImg} alt="Som Sing Phim Logo" className="w-12 h-12 object-contain" />
+                <div className="w-12 h-12 bg-accent-sky rounded-xl flex items-center justify-center shrink-0"><Printer className="w-7 h-7 text-white" /></div>
                 <div>
                   <h1 className="font-bold text-lg tracking-wide font-sans">{t('common.app_name')}</h1>
                   <p className="text-[10px] text-white/50 font-medium">Som Sing Printing</p>

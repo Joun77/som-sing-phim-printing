@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from 'react-i18next';
 import { 
@@ -34,7 +34,9 @@ export default function CustomerOrders() {
     addOrderVersion,
     inventory,
     showToast,
-    askConfirmation
+    askConfirmation,
+    focusOrderId,
+    setFocusOrderId
   } = useApp();
 
   const { t, i18n } = useTranslation();
@@ -42,6 +44,21 @@ export default function CustomerOrders() {
 
   const [filterStatus, setFilterStatus] = useState('All');
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const focusRef = useRef(null);
+
+  // Auto-select order when navigated from CRM
+  useEffect(() => {
+    if (focusOrderId) {
+      const target = orders.find(o => o.id === focusOrderId);
+      if (target) {
+        setFilterStatus('All');
+        setSelectedOrder(target);
+        setTimeout(() => focusRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
+      }
+      setFocusOrderId(null);
+    }
+  }, [focusOrderId]);
+
   
   // Settle Balance Wizard states
   const [isSettleOpen, setIsSettleOpen] = useState(false);
@@ -212,10 +229,12 @@ export default function CustomerOrders() {
           
           return (
             <div 
-              key={ord.id} 
+              key={ord.id}
+              ref={selectedOrder?.id === ord.id ? focusRef : null}
               className={`
                 bg-white p-6 rounded-3xl border transition-all duration-300 flex flex-col justify-between hover:shadow-md shadow-sm
                 ${isOverdue ? 'border-red-300 bg-red-50/10' : 'border-slate-100'}
+                ${selectedOrder?.id === ord.id ? 'ring-2 ring-accent-sky ring-offset-2' : ''}
               `}
             >
               <div className="space-y-5">

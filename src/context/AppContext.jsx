@@ -303,10 +303,10 @@ const initialEquipment = [
 ];
 
 const initialCustomers = [
-  { id: 'cust-1', name: 'ສົມພອນ ສີວິໄລ', phone: '020 55667788', address: 'ບ້ານສີຫອມ, ເມືອງຈັນທະບູລີ, ນະຄອນຫຼວງວຽງຈັນ', creditLimit: 2000000 },
-  { id: 'cust-2', name: 'ນາງ ແສງດາວ', phone: '020 22334455', address: 'ບ້ານທົ່ງຂັນຄຳ, ເມືອງທ່າແຂກ, ແຂວງຄຳມ່ວນ', creditLimit: 1000000 },
-  { id: 'cust-3', name: 'ຮ້ານອາຫານ ທ່າທາງ', phone: '020 99887766', address: 'ບ້ານດົງໂດກ, ເມືອງໄຊທານີ, ນະຄອນຫຼວງວຽງຈັນ', creditLimit: 3000000 },
-  { id: 'cust-4', name: 'ໂຮງແຮມ ລ້ານຊ້າງ', phone: '020 77889900', address: 'ຖະໜົນລ້ານຊ້າງ, ເມືອງສີສັດຕະນາກ, ນະຄອນຫຼວງວຽງຈັນ', creditLimit: 5000000 }
+  { id: 'cust-1', name: 'ສົມພອນ ສີວິໄລ', phone: '020 55667788', address: 'ບ້ານສີຫອມ, ເມືອງຈັນທະບູລີ, ນະຄອນຫຼວງວຽງຈັນ', creditLimit: 2000000, instagram: 'somphone_sivichai', line: 'somphone_sv', facebook: 'Somphone Sivichai' },
+  { id: 'cust-2', name: 'ນາງ ແສງດາວ', phone: '020 22334455', address: 'ບ້ານທົ່ງຂັນຄຳ, ເມືອງທ່າແຂກ, ແຂວງຄຳມ່ວນ', creditLimit: 1000000, instagram: 'saengdao_lao', line: 'dao_saeng', facebook: 'Sengdao Lao' },
+  { id: 'cust-3', name: 'ຮ້ານອາຫານ ທ່າທາງ', phone: '020 99887766', address: 'ບ້ານດົງໂດກ, ເມືອງໄຊທານີ, ນະຄອນຫຼວງວຽງຈັນ', creditLimit: 3000000, instagram: 'thatang_restaurant', line: 'thatang_res', facebook: 'Thatang Restaurant' },
+  { id: 'cust-4', name: 'ໂຮງແຮມ ລ້ານຊ້າງ', phone: '020 77889900', address: 'ຖະໜົນລ້ານຊ້າງ, ເມືອງສີສັດຕະນາກ, ນະຄອນຫຼວງວຽງຈັນ', creditLimit: 5000000, instagram: 'lanexang_hotel_vte', line: 'lx_hotel', facebook: 'Lane Xang Hotel' }
 ];
 
 const initialOffcuts = [
@@ -351,9 +351,11 @@ const initialOrders = [
     depositAmountPaid: 70000,
     remainingUnpaidBalance: 80000,
     paymentMethod: 'BCEL One',
+    bankName: 'BCEL',
     paymentStatus: 'Deposit Paid',
     paidDateTime: getPastDateTimeString(2, 9, 45),
     paymentSlipNote: 'ໂອນ BCEL One - ໃບບິນ #8832',
+    paymentSlipUrl: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=800',
     status: 'Ready',
     artworkLink: 'https://drive.google.com/somphone-brochure.pdf',
     notes: 'ພິມສີຄຸນນະພາບສູງ ພັບເຄິ່ງ',
@@ -385,9 +387,11 @@ const initialOrders = [
     depositAmountPaid: 400000,
     remainingUnpaidBalance: 0,
     paymentMethod: 'Cash',
+    bankName: '',
     paymentStatus: 'Fully Paid',
     paidDateTime: getPastDateTimeString(0, 8, 45),
     paymentSlipNote: 'ຈ່າຍເງິນສົດໜ້າຮ້ານ',
+    paymentSlipUrl: '',
     status: 'Printing',
     artworkLink: 'https://drive.google.com/sengdao-stickers.ai',
     notes: 'ຕັດຫຼ່ຽມມົນ ກັນນ້ຳ',
@@ -420,9 +424,11 @@ const initialOrders = [
     depositAmountPaid: 450000,
     remainingUnpaidBalance: 0,
     paymentMethod: 'BCEL One',
+    bankName: 'BCEL',
     paymentStatus: 'Fully Paid',
     paidDateTime: getPastDateTimeString(3, 10, 10),
     paymentSlipNote: 'ໂອນຜ່ານ App - ໃບບິນ #1129',
+    paymentSlipUrl: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800',
     status: 'Delivered',
     artworkLink: 'https://drive.google.com/menu-v2.pdf',
     notes: 'ປົກແຂງ ເຄືອບເງົາ',
@@ -459,6 +465,8 @@ const initialSpoilageLogs = [
 
 export const AppProvider = ({ children }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [focusOrderId, setFocusOrderId] = useState(null);
+  const [preselectedCustomerName, setPreselectedCustomerName] = useState('');
   const [toast, setToast] = useState(null); // { message: '', type: 'success' | 'warning' }
   const [confirmDialog, setConfirmDialog] = useState(null); // { message: '', onConfirm: () => void, onCancel: () => void }
 
@@ -498,7 +506,21 @@ export const AppProvider = ({ children }) => {
   });
   const [customers, setCustomers] = useState(() => {
     const saved = localStorage.getItem('ss_print_customers_v6');
-    return saved ? JSON.parse(saved) : initialCustomers;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.map((c, idx) => ({
+          instagram: '',
+          line: '',
+          facebook: '',
+          ...c,
+          id: c.id || `cust-${idx}-${Date.now().toString().slice(-4)}`
+        }));
+      } catch (e) {
+        return initialCustomers;
+      }
+    }
+    return initialCustomers;
   });
   const [offcuts, setOffcuts] = useState(() => {
     const saved = localStorage.getItem('ss_print_offcuts_v6');
@@ -1160,9 +1182,20 @@ export const AppProvider = ({ children }) => {
       name: customerData.name,
       phone: customerData.phone || '-',
       address: customerData.address || '-',
-      creditLimit: Number(customerData.creditLimit) || 1000000
+      creditLimit: Number(customerData.creditLimit) || 1000000,
+      instagram: customerData.instagram || '',
+      line: customerData.line || '',
+      facebook: customerData.facebook || ''
     };
     setCustomers(prev => [...prev, newCust]);
+  };
+
+  const updateCustomer = (customerId, updatedFields) => {
+    setCustomers(prev => prev.map(c => c.id === customerId ? { ...c, ...updatedFields } : c));
+  };
+
+  const deleteCustomer = (customerId) => {
+    setCustomers(prev => prev.filter(c => c.id !== customerId));
   };
 
   const resetToDefaultData = () => {
@@ -1179,6 +1212,10 @@ export const AppProvider = ({ children }) => {
     <AppContext.Provider value={{
       activeTab,
       setActiveTab,
+      focusOrderId,
+      setFocusOrderId,
+      preselectedCustomerName,
+      setPreselectedCustomerName,
       inventory,
       equipment,
       orders,
@@ -1199,6 +1236,8 @@ export const AppProvider = ({ children }) => {
       editInventoryBatch,
       checkCreditLimit,
       addCustomer,
+      updateCustomer,
+      deleteCustomer,
       addOffcut,
       consumeOffcut,
       updatePreflightCheck,
