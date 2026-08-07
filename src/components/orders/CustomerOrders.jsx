@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import OrdersTable from './OrdersTable';
 import CreateOrderPage from './CreateOrderPage';
-import OrderDetailsModal from './OrderDetailsModal';
+import OrderDetailsPage from './OrderDetailsPage';
 import Lightbox from './Lightbox';
 
 export default function CustomerOrders({ initialSubTab = 'orders' }) {
@@ -238,7 +238,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             onClose={() => setLightbox(null)}
           />
         )}
-        <OrderDetailsModal 
+        <OrderDetailsPage 
           order={selectedOrder} 
           onBack={() => setSelectedOrder(null)} 
           formatLAK={formatLAK}
@@ -257,19 +257,9 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
           getStatusIcon={getStatusIcon}
           getPaymentStatusBadge={getPaymentStatusBadge}
           getPaymentStatusIcon={getPaymentStatusIcon}
-          isProductionView={initialSubTab === 'production'}
-          onNavigateDelivery={(orderId) => {
-            setSelectedOrder(null);
-            setFilterStatus('Ready');
-            const target = orders.find(o => o.id === orderId);
-            if (target) {
-              setSelectedOrder(target);
-            }
-            showToast(currentLang === 'lo' ? 'ນຳທາງໄປໜ້າຈັດສົ່ງ...' : 'Redirecting to delivery...', 'info');
-          }}
         />
 
-        {/* ACCESSIBLE STEP-BY-STEP BALANCE SETTLEMENT DIALOG */}
+        {/* STEP-BY-STEP BALANCE SETTLEMENT DIALOG */}
         {isSettleOpen && (
           <dialog
             className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-transparent outline-none border-none w-full h-full"
@@ -568,17 +558,197 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
           getPaymentStatusBadge={getPaymentStatusBadge}
           getPaymentStatusIcon={getPaymentStatusIcon}
           onViewDetails={setSelectedOrder}
-          onNavigateDelivery={(orderId) => {
-            setSelectedOrder(null);
-            setFilterStatus('Ready');
-            // If in standalone OrderApp or App navigation
-            const target = orders.find(o => o.id === orderId);
-            if (target) {
-              setSelectedOrder(target);
-            }
-            showToast(currentLang === 'lo' ? 'ນຳທາງໄປໜ້າຈັດສົ່ງ...' : 'Redirecting to delivery...', 'info');
-          }}
         />
+      )}
+
+      {/* Lightbox Modal */}
+      {lightbox && (
+        <Lightbox
+          src={lightbox.src}
+          title={lightbox.title}
+          onClose={() => setLightbox(null)}
+        />
+      )}
+
+      {/* Order Details Interactive Modal Overlay */}
+      {selectedOrder && (
+        <OrderDetailsModal 
+          order={selectedOrder} 
+          onBack={() => setSelectedOrder(null)} 
+          formatLAK={formatLAK}
+          t={t}
+          currentLang={currentLang}
+          handleStatusChange={handleStatusChange}
+          handlePreflightToggle={handlePreflightToggle}
+          deleteOrder={deleteOrder}
+          showToast={showToast}
+          askConfirmation={askConfirmation}
+          setLightbox={setLightbox}
+          setIsSettleOpen={setIsSettleOpen}
+          setSettleAmount={setSettleAmount}
+          setSettleStep={setSettleStep}
+          getStatusBadgeClass={getStatusBadgeClass}
+          getStatusIcon={getStatusIcon}
+          getPaymentStatusBadge={getPaymentStatusBadge}
+          getPaymentStatusIcon={getPaymentStatusIcon}
+          isProductionView={initialSubTab === 'production'}
+        />
+      )}
+
+      {/* STEP-BY-STEP BALANCE SETTLEMENT DIALOG */}
+      {isSettleOpen && selectedOrder && (
+        <dialog
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-transparent outline-none border-none w-full h-full"
+          open
+        >
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsSettleOpen(false)} />
+          
+          <div className="relative bg-white w-full max-w-sm rounded-3xl shadow-2xl p-8 z-10 border border-slate-100 animate-fade-in flex flex-col justify-between">
+            <div>
+              <div className="flex justify-between items-center border-b pb-4 mb-5">
+                <div>
+                  <span className="text-xs uppercase font-extrabold text-emerald-600 tracking-wider font-sans">
+                    {t('orders.step')} {settleStep} {t('orders.of')} 2
+                  </span>
+                  <h3 className="text-lg font-black text-primary-navy mt-1">
+                    {t('orders.settle_title')}
+                  </h3>
+                </div>
+                <button 
+                  onClick={() => setIsSettleOpen(false)}
+                  className="p-2 hover:bg-slate-100 rounded-xl text-slate-400"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="flex gap-2 mb-6">
+                {[1, 2].map(st => (
+                  <div 
+                    key={st} 
+                    className={`h-2 flex-1 rounded-full transition-all duration-300 ${st <= settleStep ? 'bg-emerald-500' : 'bg-slate-100'}`}
+                  />
+                ))}
+              </div>
+
+              <form onSubmit={handleSettleSubmit} className="space-y-4 text-xs sm:text-sm">
+                {settleStep === 1 && (
+                  <div className="space-y-4 animate-fade-in">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{t('orders.unpaid_balance')}</label>
+                      <p className="text-lg font-black text-red-600 font-sans bg-red-50/50 p-4 rounded-2xl border border-red-100">
+                        {formatLAK(selectedOrder.remainingUnpaidBalance)}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{t('orders.amount_to_pay')} *</label>
+                      <input
+                        type="number"
+                        required
+                        min="1000"
+                        max={selectedOrder.remainingUnpaidBalance}
+                        value={settleAmount}
+                        onChange={(e) => setSettleAmount(Number(e.target.value))}
+                        className="w-full min-h-[50px] px-4 py-3 border-2 rounded-2xl focus:outline-none text-base font-black font-sans text-slate-900"
+                      />
+
+                      <div className="flex gap-2 pt-1.5">
+                        <button
+                          type="button"
+                          onClick={() => applySettlePreset(50)}
+                          className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 border rounded-xl text-xs font-bold transition active:scale-95"
+                        >
+                          {t('orders.pay_50')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => applySettlePreset(100)}
+                          className="px-4 py-2.5 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold transition active:scale-95"
+                        >
+                          {t('orders.pay_100')}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {settleStep === 2 && (
+                  <div className="space-y-4 animate-fade-in">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{t('orders.payment_method')}</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {['BCEL One', 'Cash', 'Transfer'].map(method => {
+                          const active = settleMethod === method;
+                          return (
+                            <button
+                              key={method}
+                              type="button"
+                              onClick={() => setSettleMethod(method)}
+                              className={`p-3 border-2 rounded-xl font-bold text-xs transition flex flex-col items-center justify-center gap-1.5 ${
+                                active 
+                                  ? 'border-accent-sky bg-blue-50/50 text-primary-navy shadow-sm' 
+                                  : 'border-slate-200 hover:border-slate-300 text-slate-500 bg-white'
+                              }`}
+                            >
+                              <span>{method}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Slip Reference Note</label>
+                      <input
+                        type="text"
+                        value={settleSlip}
+                        onChange={(e) => setSettleSlip(e.target.value)}
+                        placeholder="Note or reference..."
+                        className="w-full px-3 py-2 border-2 rounded-xl focus:outline-none text-xs font-bold"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  {settleStep === 2 && (
+                    <button
+                      type="button"
+                      onClick={() => setSettleStep(1)}
+                      className="px-4 py-2 border rounded-xl text-slate-500 hover:bg-slate-50 text-xs font-bold transition"
+                    >
+                      Back
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsSettleOpen(false)}
+                    className="px-4 py-2 border rounded-xl text-slate-400 hover:bg-slate-50 text-xs font-bold transition"
+                  >
+                    Cancel
+                  </button>
+                  {settleStep === 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => setSettleStep(2)}
+                      className="px-5 py-2 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-bold transition shadow-md"
+                    >
+                      Next
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-md"
+                    >
+                      Settle Balance
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+          </div>
+        </dialog>
       )}
     </div>
   );
