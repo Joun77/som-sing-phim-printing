@@ -7,12 +7,19 @@ import {
   Plus, 
   Trash2,
   CheckCircle2,
-  DollarSign
+  DollarSign,
+  Package,
+  Scissors,
+  Layers,
+  Settings,
+  HelpCircle,
+  FileText
 } from 'lucide-react';
 
 export default function CreateOrderPage({
   onBack,
   inventory,
+  equipment,
   customers,
   addCustomer,
   addOrder,
@@ -35,9 +42,24 @@ export default function CreateOrderPage({
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
 
-  // STEP 2: Print Specifications & Dynamic Cost Engine State
+  // STEP 2: Categorized Print Specifications & Costing Engine State
   const [items, setItems] = useState([
-    { id: '', name: '', quantity: 500, unitCost: 0, specs: 'A4 Standard', isManualPrice: false }
+    {
+      id: '',
+      name: '',
+      quantity: 500,
+      paperId: '',
+      printerId: '',
+      colorMode: 'CMYK', // CMYK | Mono
+      printSides: 'Duplex', // Simplex | Duplex
+      lamination: 'None', // None | Glossy | Matte
+      folding: 'None', // None | Half | TriFold
+      binding: 'None', // None | Staple | Spiral | Perfect
+      jobWidth: 210,
+      jobHeight: 297,
+      unitCost: 0,
+      isManualPrice: false
+    }
   ]);
 
   // Pre-fill specs if passed from QuotationManager
@@ -45,14 +67,22 @@ export default function CreateOrderPage({
     if (prefilledSpecs && prefilledSpecs.paperId) {
       setItems([{
         id: prefilledSpecs.paperId,
+        paperId: prefilledSpecs.paperId,
+        printerId: equipment && equipment.length > 0 ? equipment[0].id : '',
         name: prefilledSpecs.paperName || 'Custom Print Job',
         quantity: prefilledSpecs.quantity || 500,
+        colorMode: 'CMYK',
+        printSides: 'Duplex',
+        lamination: 'None',
+        folding: 'None',
+        binding: 'None',
+        jobWidth: 210,
+        jobHeight: 297,
         unitCost: prefilledSpecs.unitCost || 2000,
-        specs: prefilledSpecs.specs || 'A4 Print Job',
         isManualPrice: true
       }]);
     }
-  }, [prefilledSpecs]);
+  }, [prefilledSpecs, equipment]);
 
   // Auto-fill existing customer fields
   useEffect(() => {
@@ -68,48 +98,79 @@ export default function CreateOrderPage({
     }
   }, [selectedCustomerId, customerType, customers]);
 
-  // Dynamic Pricing Engine
-  const calculateEstimatedUnitPrice = (skuId, qty) => {
-    const paper = inventory.find(p => p.id === skuId);
-    if (!paper) return 2000;
-    const baseCost = paper.costPerSheet || paper.costPerConsumptionUnit || 1500;
-    let markup = 1.8;
-    if (qty >= 1000) markup = 1.25;
-    else if (qty >= 500) markup = 1.35;
-    else if (qty >= 100) markup = 1.5;
-    return Math.round(baseCost * markup);
+  // Filter Categorized Stock & Equipment
+  const paperStocks = inventory ? inventory.filter(i => i.category === 'Paper' || i.name.includes('A4') || i.name.includes('A3') || i.id.startsWith('LOT-')) : [];
+  const printerEquipment = equipment ? equipment.filter(e => e.category === 'Printer' || e.printerType || e.name.includes('C6085') || e.name.includes('Printer')) : [];
+
+  // Dynamic Comprehensive Pricing Calculator
+  const calculateDetailedItemUnitPrice = (item) => {
+    const paper = inventory ? inventory.find(p => p.id === item.paperId) : null;
+    const paperBaseCost = paper ? (paper.costPerSheet || paper.costPerConsumptionUnit || 1500) : 1200;
+
+    const printer = equipment ? equipment.find(e => e.id === item.printerId) : null;
+    const printerDepreciation = printer ? (printer.calculatedCostPerPage || 90) : 80;
+
+    const sidesMult = item.printSides === 'Duplex' ? 2 : 1;
+    const inkCost = item.colorMode === 'CMYK' ? 250 : 80;
+
+    let finishingAddon = 0;
+    if (item.lamination === 'Glossy') finishingAddon += 300;
+    if (item.lamination === 'Matte') finishingAddon += 450;
+    if (item.folding !== 'None') finishingAddon += 100;
+    if (item.binding === 'Staple') finishingAddon += 200;
+    if (item.binding === 'Spiral') finishingAddon += 2500;
+    if (item.binding === 'Perfect') finishingAddon += 1500;
+
+    const netUnitCost = paperBaseCost + (printerDepreciation * sidesMult) + (inkCost * sidesMult) + finishingAddon;
+    
+    let markup = 1.6;
+    if (item.quantity >= 1000) markup = 1.25;
+    else if (item.quantity >= 500) markup = 1.35;
+    else if (item.quantity >= 100) markup = 1.45;
+
+    return Math.round(netUnitCost * markup);
   };
 
   const handleItemChange = (index, field, value) => {
     const updated = [...items];
-    if (field === 'id') {
-      const selectedInv = inventory.find(p => p.id === value);
-      updated[index].id = value;
-      updated[index].name = selectedInv ? selectedInv.name : '';
-      
-      const fetchedPrice = selectedInv 
-        ? (selectedInv.costPerSheet || selectedInv.costPerConsumptionUnit || calculateEstimatedUnitPrice(value, updated[index].quantity))
-        : 0;
+    updated[index][field] = value;
 
-      updated[index].unitCost = fetchedPrice;
-      updated[index].isManualPrice = false;
-    } else if (field === 'quantity') {
-      const qty = Math.max(1, Number(value));
-      updated[index].quantity = qty;
-      if (updated[index].id && !updated[index].isManualPrice) {
-        updated[index].unitCost = calculateEstimatedUnitPrice(updated[index].id, qty);
+    if (field === 'paperId') {
+      const selectedPaper = inventory.find(p => p.id === value);
+      updated[index].id = value;
+      updated[index].name = selectedPaper ? selectedPaper.name : 'Print Job';
+      if (!updated[index].isManualPrice) {
+        updated[index].unitCost = calculateDetailedItemUnitPrice(updated[index]);
+      }
+    } else if (field === 'quantity' || field === 'printerId' || field === 'colorMode' || field === 'printSides' || field === 'lamination' || field === 'binding') {
+      if (!updated[index].isManualPrice) {
+        updated[index].unitCost = calculateDetailedItemUnitPrice(updated[index]);
       }
     } else if (field === 'unitCost') {
       updated[index].unitCost = Math.max(0, Number(value));
       updated[index].isManualPrice = true;
-    } else if (field === 'specs') {
-      updated[index].specs = value;
     }
+
     setItems(updated);
   };
 
   const addItemRow = () => {
-    setItems([...items, { id: '', name: '', quantity: 500, unitCost: 0, specs: 'A4 Standard', isManualPrice: false }]);
+    setItems([...items, {
+      id: '',
+      name: '',
+      quantity: 500,
+      paperId: '',
+      printerId: printerEquipment.length > 0 ? printerEquipment[0].id : '',
+      colorMode: 'CMYK',
+      printSides: 'Duplex',
+      lamination: 'None',
+      folding: 'None',
+      binding: 'None',
+      jobWidth: 210,
+      jobHeight: 297,
+      unitCost: 0,
+      isManualPrice: false
+    }]);
   };
 
   const removeItemRow = (index) => {
@@ -146,9 +207,9 @@ export default function CreateOrderPage({
   };
 
   const handleNextToStep3 = () => {
-    const validItems = items.filter(item => item.id);
+    const validItems = items.filter(item => item.paperId || item.id);
     if (validItems.length === 0) {
-      showToast(currentLang === 'lo' ? 'ກະລຸນາເລືອກລາຍການພິມຢ່າງໜ້ອຍ 1 รายการ' : 'Please add at least one print item', 'warning');
+      showToast(currentLang === 'lo' ? 'ກະລຸນາເລືອກລາຍການພິມຢ່າງໜ້ອຍ 1 รายการ' : 'Please select paper stock for print items', 'warning');
       return;
     }
     setCurrentStep(3);
@@ -181,7 +242,13 @@ export default function CreateOrderPage({
       }
     }
 
-    const validItems = items.filter(item => item.id);
+    const validItems = items.map(item => ({
+      id: item.paperId || item.id,
+      name: item.name || 'Custom Print Job',
+      quantity: item.quantity,
+      unitCost: item.unitCost,
+      specs: `${item.colorMode}, ${item.printSides}, ${item.lamination !== 'None' ? item.lamination + ' Lam' : 'No Lam'}, ${item.binding !== 'None' ? item.binding + ' Binding' : 'No Binding'}`
+    }));
 
     const orderData = {
       customerName: finalCustomerName,
@@ -208,8 +275,6 @@ export default function CreateOrderPage({
     onBack();
   };
 
-  const paperStocks = inventory.filter(i => i.id.startsWith('LOT-') || i.id.startsWith('sku-') || i.name);
-
   return (
     <div className="space-y-6 animate-fade-in w-full">
       {/* Top Header Card */}
@@ -223,7 +288,7 @@ export default function CreateOrderPage({
         </button>
         <div>
           <span className="text-xs uppercase font-extrabold text-accent-sky tracking-wider font-sans block text-right">
-            Step {currentStep} of 3
+            Wizard Step {currentStep} of 3
           </span>
           <h3 className="text-2xl font-black text-primary-navy mt-0.5">
             {currentLang === 'lo' ? 'ຟອມສ້າງອໍເດີໃໝ່' : 'Create New Order Wizard'}
@@ -235,8 +300,8 @@ export default function CreateOrderPage({
       <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex gap-3">
         {[
           { step: 1, label: currentLang === 'lo' ? '1. ເລືອກລູກຄ້າ' : '1. Customer Info' },
-          { step: 2, label: currentLang === 'lo' ? '2. สเปกงานพิมพ์ & ราคา' : '2. Print Specs & Pricing' },
-          { step: 3, label: currentLang === 'lo' ? '3. สรุปยอด & ตัดสต็อก' : '3. Summary & Deduction' }
+          { step: 2, label: currentLang === 'lo' ? '2. สเปกงานพิมพ์ & ราคา' : '2. Categorized Print Specs' },
+          { step: 3, label: currentLang === 'lo' ? '3. สรุปยอด & ตัดสต็อก' : '3. Summary & Stock Trigger' }
         ].map(s => (
           <div 
             key={s.step}
@@ -342,21 +407,21 @@ export default function CreateOrderPage({
               onClick={handleNextToStep2}
               className="flex items-center gap-2 px-6 py-3 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black shadow-md transition active:scale-95"
             >
-              <span>Next: Print Specs Engine</span>
+              <span>Next: Categorized Specs Engine</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
 
-      {/* STEP 2: PRINT SPECS & DYNAMIC COST ENGINE */}
+      {/* STEP 2: CATEGORIZED SPECS & DYNAMIC COST ENGINE */}
       {currentStep === 2 && (
         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6 animate-fade-in">
           <div className="flex justify-between items-center border-b border-slate-100 pb-4">
             <div className="flex items-center gap-2">
               <Printer className="w-6 h-6 text-indigo-600" />
               <h4 className="font-black text-slate-800 text-base">
-                Step 2: {currentLang === 'lo' ? 'กำหนดสเปกและคำนวณราคา' : 'Print Specifications & Cost Engine'}
+                Step 2: {currentLang === 'lo' ? 'กำหนดสเปกแยกตามประเภทและคำนวณราคา' : 'Categorized Print Specs & Pricing'}
               </h4>
             </div>
             <button
@@ -368,67 +433,197 @@ export default function CreateOrderPage({
             </button>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-6">
             {items.map((item, idx) => (
-              <div key={idx} className="bg-slate-50/60 p-5 rounded-2xl border border-slate-100 grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
-                <div className="sm:col-span-5 space-y-1">
-                  <label className="block text-xs font-black text-slate-500">Paper SKU Stock *</label>
-                  <select
-                    required
-                    value={item.id}
-                    onChange={(e) => handleItemChange(idx, 'id', e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent font-bold text-xs transition"
-                  >
-                    <option value="">-- Select Paper Stock --</option>
-                    {paperStocks.map(p => (
-                      <option key={p.id} value={p.id}>{p.name} ({formatLAK(p.costPerSheet || 1000)}/sheet)</option>
-                    ))}
-                  </select>
+              <div key={idx} className="bg-slate-50/60 p-6 rounded-2xl border border-slate-200/80 space-y-5">
+                <div className="flex justify-between items-center border-b border-slate-200 pb-3">
+                  <span className="text-xs font-black text-indigo-900 uppercase tracking-wider">
+                    Item #{idx + 1} Specification Breakdown
+                  </span>
+                  {items.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeItemRow(idx)}
+                      className="text-red-500 hover:text-red-700 font-bold text-xs flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Remove Item</span>
+                    </button>
+                  )}
                 </div>
 
-                <div className="sm:col-span-2 space-y-1">
-                  <label className="block text-xs font-black text-slate-500">Qty (Copies) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    value={item.quantity}
-                    onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent font-bold text-xs font-sans transition"
-                  />
-                </div>
+                {/* Sub-grid 4 Sections */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs font-bold text-slate-700">
+                  
+                  {/* 1. Paper Specs (Filtered by Category Paper) */}
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+                    <div className="flex items-center gap-1.5 text-accent-sky border-b pb-2">
+                      <Package className="w-4 h-4" />
+                      <span className="font-black">1. Paper Stock (คลังสินค้า - กระดาษ)</span>
+                    </div>
 
-                <div className="sm:col-span-2 space-y-1">
-                  <div className="flex justify-between items-center">
-                    <label className="block text-xs font-black text-slate-500">Unit Price (₭) *</label>
-                    {item.isManualPrice && (
-                      <span className="text-[9px] font-extrabold text-amber-600 bg-amber-50 px-1 rounded">Manual</span>
-                    )}
+                    <div className="space-y-1">
+                      <label className="block text-[11px] text-slate-500 font-black">Select Paper SKU *</label>
+                      <select
+                        required
+                        value={item.paperId}
+                        onChange={(e) => handleItemChange(idx, 'paperId', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold text-xs transition"
+                      >
+                        <option value="">-- Choose Paper Stock --</option>
+                        {paperStocks.map(p => (
+                          <option key={p.id} value={p.id}>{p.name} ({formatLAK(p.costPerSheet || 1000)}/sheet)</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="block text-[11px] text-slate-500 font-black">Print Qty (Copies) *</label>
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => handleItemChange(idx, 'quantity', Number(e.target.value))}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold text-xs font-sans"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    value={item.unitCost}
-                    onChange={(e) => handleItemChange(idx, 'unitCost', e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent font-bold text-xs font-sans transition"
-                  />
+
+                  {/* 2. Printer & Ink Specs (Filtered by Equipment Printer) */}
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+                    <div className="flex items-center gap-1.5 text-purple-600 border-b pb-2">
+                      <Printer className="w-4 h-4" />
+                      <span className="font-black">2. Printer & Ink (เครื่องจักร - เครื่องพิมพ์)</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[11px] text-slate-500 font-black">Printer Equipment *</label>
+                      <select
+                        value={item.printerId}
+                        onChange={(e) => handleItemChange(idx, 'printerId', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold text-xs transition"
+                      >
+                        {printerEquipment.map(e => (
+                          <option key={e.id} value={e.id}>{e.name} ({formatLAK(e.calculatedCostPerPage || 90)}/page cost)</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="block text-[11px] text-slate-500 font-black">Color Mode</label>
+                        <select
+                          value={item.colorMode}
+                          onChange={(e) => handleItemChange(idx, 'colorMode', e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none font-bold text-xs"
+                        >
+                          <option value="CMYK">Full Color CMYK</option>
+                          <option value="Mono">Monochrome (ขาวดำ)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[11px] text-slate-500 font-black">Sides</label>
+                        <select
+                          value={item.printSides}
+                          onChange={(e) => handleItemChange(idx, 'printSides', e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none font-bold text-xs"
+                        >
+                          <option value="Simplex">1 หน้า (Simplex)</option>
+                          <option value="Duplex">2 หน้า (Duplex)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. Post-Press Finishing */}
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+                    <div className="flex items-center gap-1.5 text-emerald-600 border-b pb-2">
+                      <Scissors className="w-4 h-4" />
+                      <span className="font-black">3. Finishing (บริการเคลือบ / พับ)</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="block text-[11px] text-slate-500 font-black">Lamination (เคลือบ)</label>
+                        <select
+                          value={item.lamination}
+                          onChange={(e) => handleItemChange(idx, 'lamination', e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none font-bold text-xs"
+                        >
+                          <option value="None">ไม่เคลือบ (None)</option>
+                          <option value="Glossy">เคลือบเงา (Glossy)</option>
+                          <option value="Matte">เคลือบด้าน (Matte)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[11px] text-slate-500 font-black">Folding (การพับ)</label>
+                        <select
+                          value={item.folding}
+                          onChange={(e) => handleItemChange(idx, 'folding', e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none font-bold text-xs"
+                        >
+                          <option value="None">ไม่พับ (Flat)</option>
+                          <option value="Half">พับครึ่ง (Half-fold)</option>
+                          <option value="TriFold">พับ 3 ตอน (Tri-fold)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. Binding Services */}
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+                    <div className="flex items-center gap-1.5 text-amber-600 border-b pb-2">
+                      <Layers className="w-4 h-4" />
+                      <span className="font-black">4. Binding Services (การเข้าเล่ม)</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[11px] text-slate-500 font-black">Binding Type</label>
+                      <select
+                        value={item.binding}
+                        onChange={(e) => handleItemChange(idx, 'binding', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none font-bold text-xs"
+                      >
+                        <option value="None">ไม่เข้าเล่ม (No Binding)</option>
+                        <option value="Staple">เย็บแม็กกลาง / สัน (Staple)</option>
+                        <option value="Spiral">เข้าเล่มกระดูกงู (Spiral Wire-O)</option>
+                        <option value="Perfect">เข้าเล่มไสสลักกาว (Perfect Binding)</option>
+                      </select>
+                    </div>
+                  </div>
+
                 </div>
 
-                <div className="sm:col-span-2 text-right py-1 whitespace-nowrap text-sm font-black text-slate-900">
-                  <span className="block text-[10px] text-slate-400 font-bold uppercase">Subtotal</span>
-                  {formatLAK(item.quantity * item.unitCost)}
-                </div>
+                {/* Real-time Item Pricing Output */}
+                <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-slate-500">Unit Selling Price (₭):</span>
+                      {item.isManualPrice && (
+                        <span className="text-[9px] font-extrabold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                          Manual Override
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      value={item.unitCost}
+                      onChange={(e) => handleItemChange(idx, 'unitCost', e.target.value)}
+                      className="w-48 px-3.5 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold text-sm font-sans"
+                    />
+                  </div>
 
-                <div className="sm:col-span-1 text-center">
-                  <button
-                    type="button"
-                    disabled={items.length <= 1}
-                    onClick={() => removeItemRow(idx)}
-                    className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl font-black text-xs disabled:opacity-30 transition"
-                  >
-                    ✕
-                  </button>
+                  <div className="text-right">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Item Subtotal</span>
+                    <span className="text-lg font-black text-slate-900 font-sans">{formatLAK(item.quantity * item.unitCost)}</span>
+                  </div>
                 </div>
               </div>
             ))}

@@ -22,6 +22,7 @@ export default function CustomerOrders() {
     deleteOrder, 
     updatePreflightCheck,
     inventory,
+    equipment,
     showToast,
     askConfirmation,
     focusOrderId,
@@ -176,6 +177,7 @@ export default function CustomerOrders() {
       <CreateOrderPage
         onBack={() => { setIsAddOrderOpen(false); setPrefilledOrderSpecs(null); }}
         inventory={inventory}
+        equipment={equipment}
         customers={customers}
         addCustomer={addCustomer}
         addOrder={addOrder}
