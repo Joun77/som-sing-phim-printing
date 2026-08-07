@@ -41,7 +41,7 @@ export default function CreateOrderModal({
 
   // STEP 2: Print Specifications & Dynamic Cost Engine State
   const [items, setItems] = useState([
-    { id: '', name: '', quantity: 500, unitCost: 0, specs: 'A4 Standard' }
+    { id: '', name: '', quantity: 500, unitCost: 0, specs: 'A4 Standard', isManualPrice: false }
   ]);
 
   // Pre-fill specs if passed from QuotationManager
@@ -52,7 +52,8 @@ export default function CreateOrderModal({
         name: prefilledSpecs.paperName || 'Custom Print Job',
         quantity: prefilledSpecs.quantity || 500,
         unitCost: prefilledSpecs.unitCost || 2000,
-        specs: prefilledSpecs.specs || 'A4 Print Job'
+        specs: prefilledSpecs.specs || 'A4 Print Job',
+        isManualPrice: true
       }]);
     }
   }, [prefilledSpecs]);
@@ -75,7 +76,7 @@ export default function CreateOrderModal({
   const calculateEstimatedUnitPrice = (skuId, qty) => {
     const paper = inventory.find(p => p.id === skuId);
     if (!paper) return 2000;
-    const baseCost = paper.costPerSheet || 1500;
+    const baseCost = paper.costPerSheet || paper.costPerConsumptionUnit || 1500;
     let markup = 1.8;
     if (qty >= 1000) markup = 1.25;
     else if (qty >= 500) markup = 1.35;
@@ -89,15 +90,24 @@ export default function CreateOrderModal({
       const selectedInv = inventory.find(p => p.id === value);
       updated[index].id = value;
       updated[index].name = selectedInv ? selectedInv.name : '';
-      updated[index].unitCost = calculateEstimatedUnitPrice(value, updated[index].quantity);
+      
+      // Auto-fill default unit price from inventory stock item
+      const fetchedPrice = selectedInv 
+        ? (selectedInv.costPerSheet || selectedInv.costPerConsumptionUnit || calculateEstimatedUnitPrice(value, updated[index].quantity))
+        : 0;
+
+      updated[index].unitCost = fetchedPrice;
+      updated[index].isManualPrice = false;
     } else if (field === 'quantity') {
       const qty = Math.max(1, Number(value));
       updated[index].quantity = qty;
-      if (updated[index].id) {
+      // Auto recalculate price unless user manually overrode it
+      if (updated[index].id && !updated[index].isManualPrice) {
         updated[index].unitCost = calculateEstimatedUnitPrice(updated[index].id, qty);
       }
     } else if (field === 'unitCost') {
       updated[index].unitCost = Math.max(0, Number(value));
+      updated[index].isManualPrice = true; // Mark as user override
     } else if (field === 'specs') {
       updated[index].specs = value;
     }
@@ -105,7 +115,7 @@ export default function CreateOrderModal({
   };
 
   const addItemRow = () => {
-    setItems([...items, { id: '', name: '', quantity: 500, unitCost: 0, specs: 'A4 Standard' }]);
+    setItems([...items, { id: '', name: '', quantity: 500, unitCost: 0, specs: 'A4 Standard', isManualPrice: false }]);
   };
 
   const removeItemRow = (index) => {
@@ -218,7 +228,7 @@ export default function CreateOrderModal({
       <div className="relative bg-white w-full max-w-4xl rounded-3xl shadow-2xl p-6 sm:p-8 md:p-10 overflow-y-auto max-h-[95vh] z-10 border border-slate-100 animate-fade-in flex flex-col justify-between space-y-6">
         
         {/* Modal Header */}
-        <div className="flex justify-between items-center border-b pb-4">
+        <div className="flex justify-between items-center border-b border-slate-100 pb-4">
           <div>
             <span className="text-xs uppercase font-extrabold text-accent-sky tracking-wider font-sans">
               Wizard Step {currentStep} of 3
@@ -227,7 +237,7 @@ export default function CreateOrderModal({
               {currentLang === 'lo' ? 'ຟອມສ້າງອໍເດີໃໝ່ (Create Order)' : 'Create New Order Wizard'}
             </h3>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition text-2xl font-black">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition text-2xl font-black p-1 rounded-lg">
             ✕
           </button>
         </div>
@@ -247,7 +257,7 @@ export default function CreateOrderModal({
         {/* STEP 1: CUSTOMER SELECTION */}
         {currentStep === 1 && (
           <div className="space-y-6 animate-fade-in">
-            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4">
+            <div className="bg-slate-50/70 p-6 rounded-2xl border border-slate-200/80 space-y-4">
               <div className="flex items-center gap-2">
                 <User className="w-5 h-5 text-accent-sky" />
                 <h4 className="font-black text-slate-800 text-sm">
@@ -256,25 +266,25 @@ export default function CreateOrderModal({
               </div>
 
               <div className="flex gap-6">
-                <label className="flex items-center gap-2 font-bold cursor-pointer text-sm">
+                <label className="flex items-center gap-2 font-bold cursor-pointer text-sm text-slate-700">
                   <input
                     type="radio"
                     name="custType"
                     value="existing"
                     checked={customerType === 'existing'}
                     onChange={() => setCustomerType('existing')}
-                    className="w-4 h-4 text-accent-sky"
+                    className="w-4 h-4 text-accent-sky focus:ring-accent-sky"
                   />
                   <span>{currentLang === 'lo' ? 'ລູກຄ້າເກົ່າ (Existing Customer)' : 'Existing Customer'}</span>
                 </label>
-                <label className="flex items-center gap-2 font-bold cursor-pointer text-sm">
+                <label className="flex items-center gap-2 font-bold cursor-pointer text-sm text-slate-700">
                   <input
                     type="radio"
                     name="custType"
                     value="new"
                     checked={customerType === 'new'}
                     onChange={() => setCustomerType('new')}
-                    className="w-4 h-4 text-accent-sky"
+                    className="w-4 h-4 text-accent-sky focus:ring-accent-sky"
                   />
                   <span>{currentLang === 'lo' ? 'ລູກຄ້າໃໝ່ (New Customer)' : 'New Customer'}</span>
                 </label>
@@ -287,7 +297,7 @@ export default function CreateOrderModal({
                     required
                     value={selectedCustomerId}
                     onChange={(e) => setSelectedCustomerId(e.target.value)}
-                    className="w-full px-4 py-3 border-2 rounded-xl bg-white focus:outline-none focus:border-accent-sky font-bold text-sm"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent font-bold text-sm transition"
                   >
                     <option value="">-- Choose Existing Customer --</option>
                     {customers.map(c => (
@@ -304,7 +314,7 @@ export default function CreateOrderModal({
                       required
                       value={newCustName}
                       onChange={(e) => setNewCustName(e.target.value)}
-                      className="w-full px-4 py-2.5 border-2 rounded-xl focus:outline-none focus:border-accent-sky font-bold text-sm"
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent font-bold text-sm transition"
                     />
                   </div>
                   <div className="space-y-1">
@@ -313,7 +323,7 @@ export default function CreateOrderModal({
                       type="text"
                       value={newCustPhone}
                       onChange={(e) => setNewCustPhone(e.target.value)}
-                      className="w-full px-4 py-2.5 border-2 rounded-xl focus:outline-none focus:border-accent-sky font-bold text-sm font-sans"
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent font-bold text-sm font-sans transition"
                     />
                   </div>
                   <div className="space-y-1 sm:col-span-2">
@@ -322,18 +332,18 @@ export default function CreateOrderModal({
                       type="text"
                       value={newCustAddress}
                       onChange={(e) => setNewCustAddress(e.target.value)}
-                      className="w-full px-4 py-2.5 border-2 rounded-xl focus:outline-none focus:border-accent-sky font-bold text-sm"
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent font-bold text-sm transition"
                     />
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="flex justify-end pt-4 border-t">
+            <div className="flex justify-end pt-4 border-t border-slate-100">
               <button
                 type="button"
                 onClick={handleNextToStep2}
-                className="flex items-center gap-2 px-6 py-3 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black shadow-md transition"
+                className="flex items-center gap-2 px-6 py-3 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black shadow-md transition active:scale-95"
               >
                 <span>Next: Print Specs Engine</span>
                 <ChevronRight className="w-4 h-4" />
@@ -345,8 +355,8 @@ export default function CreateOrderModal({
         {/* STEP 2: PRINT SPECS & DYNAMIC COST ENGINE */}
         {currentStep === 2 && (
           <div className="space-y-6 animate-fade-in">
-            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4">
-              <div className="flex justify-between items-center border-b pb-3">
+            <div className="bg-slate-50/70 p-6 rounded-2xl border border-slate-200/80 space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-200 pb-3">
                 <div className="flex items-center gap-2">
                   <Printer className="w-5 h-5 text-indigo-600" />
                   <h4 className="font-black text-slate-800 text-sm">
@@ -364,14 +374,14 @@ export default function CreateOrderModal({
 
               <div className="space-y-4">
                 {items.map((item, idx) => (
-                  <div key={idx} className="bg-white p-4 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                  <div key={idx} className="bg-white p-4 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-12 gap-3 items-end shadow-sm">
                     <div className="sm:col-span-5 space-y-1">
                       <label className="block text-[10px] font-black text-slate-500">Paper SKU Stock *</label>
                       <select
                         required
                         value={item.id}
                         onChange={(e) => handleItemChange(idx, 'id', e.target.value)}
-                        className="w-full px-3 py-2 border-2 rounded-lg bg-white focus:outline-none font-bold text-xs"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent font-bold text-xs transition"
                       >
                         <option value="">-- Select Paper Stock --</option>
                         {paperStocks.map(p => (
@@ -388,19 +398,24 @@ export default function CreateOrderModal({
                         min="1"
                         value={item.quantity}
                         onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
-                        className="w-full px-3 py-2 border-2 rounded-lg focus:outline-none font-bold text-xs font-sans"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent font-bold text-xs font-sans transition"
                       />
                     </div>
 
                     <div className="sm:col-span-2 space-y-1">
-                      <label className="block text-[10px] font-black text-slate-500">Unit Price (₭) *</label>
+                      <div className="flex justify-between items-center">
+                        <label className="block text-[10px] font-black text-slate-500">Unit Price (₭) *</label>
+                        {item.isManualPrice && (
+                          <span className="text-[9px] font-extrabold text-amber-600 bg-amber-50 px-1 rounded">Manual</span>
+                        )}
+                      </div>
                       <input
                         type="number"
                         required
                         min="0"
                         value={item.unitCost}
                         onChange={(e) => handleItemChange(idx, 'unitCost', e.target.value)}
-                        className="w-full px-3 py-2 border-2 rounded-lg focus:outline-none font-bold text-xs font-sans"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent font-bold text-xs font-sans transition"
                       />
                     </div>
 
@@ -414,7 +429,7 @@ export default function CreateOrderModal({
                         type="button"
                         disabled={items.length <= 1}
                         onClick={() => removeItemRow(idx)}
-                        className="text-red-500 hover:text-red-700 font-black text-xs disabled:opacity-30"
+                        className="text-red-500 hover:text-red-700 font-black text-xs disabled:opacity-30 transition"
                       >
                         ✕
                       </button>
@@ -423,17 +438,17 @@ export default function CreateOrderModal({
                 ))}
               </div>
 
-              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex justify-between items-center text-xs font-black text-emerald-900">
+              <div className="bg-emerald-50/70 p-4 rounded-xl border border-emerald-200/80 flex justify-between items-center text-xs font-black text-emerald-900">
                 <span>Calculated Order Bill Total:</span>
                 <span className="text-base font-sans font-black text-emerald-700">{formatLAK(totalAmount)}</span>
               </div>
             </div>
 
-            <div className="flex justify-between pt-4 border-t">
+            <div className="flex justify-between pt-4 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setCurrentStep(1)}
-                className="flex items-center gap-1 px-4 py-2.5 border rounded-xl text-slate-500 text-xs font-bold"
+                className="flex items-center gap-1 px-4 py-2.5 border border-slate-200 rounded-xl text-slate-600 text-xs font-bold hover:bg-slate-50 transition"
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span>Back</span>
@@ -441,7 +456,7 @@ export default function CreateOrderModal({
               <button
                 type="button"
                 onClick={handleNextToStep3}
-                className="flex items-center gap-2 px-6 py-3 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black shadow-md transition"
+                className="flex items-center gap-2 px-6 py-3 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black shadow-md transition active:scale-95"
               >
                 <span>Next: Order Summary & Stock Deduction</span>
                 <ChevronRight className="w-4 h-4" />
@@ -453,9 +468,9 @@ export default function CreateOrderModal({
         {/* STEP 3: ORDER SUMMARY & STOCK DEDUCTION */}
         {currentStep === 3 && (
           <form onSubmit={handleSubmitFinal} className="space-y-6 animate-fade-in text-sm">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/70 p-6 rounded-2xl border border-slate-200/80">
               <div className="space-y-3">
-                <h4 className="font-black text-slate-800 uppercase tracking-wider text-xs border-b pb-2">
+                <h4 className="font-black text-slate-800 uppercase tracking-wider text-xs border-b border-slate-200 pb-2">
                   Step 3: Scheduling & Details
                 </h4>
                 <div className="space-y-1">
@@ -465,7 +480,7 @@ export default function CreateOrderModal({
                     required
                     value={promisedDeliveryDate}
                     onChange={(e) => setPromisedDeliveryDate(e.target.value)}
-                    className="w-full px-3 py-2 border-2 rounded-xl focus:outline-none font-bold font-sans text-xs"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent font-bold font-sans text-xs bg-white transition"
                   />
                 </div>
                 <div className="space-y-1">
@@ -473,7 +488,7 @@ export default function CreateOrderModal({
                   <select
                     value={deliveryMethod}
                     onChange={(e) => setDeliveryMethod(e.target.value)}
-                    className="w-full px-3 py-2 border-2 rounded-xl bg-white focus:outline-none font-bold text-xs"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent font-bold text-xs transition"
                   >
                     <option value="Pickup">Pickup at Shop</option>
                     <option value="Kerry Lao">Kerry Lao</option>
@@ -482,8 +497,8 @@ export default function CreateOrderModal({
                 </div>
               </div>
 
-              <div className="space-y-3 border-l border-slate-200 pl-0 sm:pl-4">
-                <h4 className="font-black text-slate-800 uppercase tracking-wider text-xs border-b pb-2">
+              <div className="space-y-3 border-l border-slate-200/80 pl-0 sm:pl-4">
+                <h4 className="font-black text-slate-800 uppercase tracking-wider text-xs border-b border-slate-200 pb-2">
                   Order Summary & Stock Trigger
                 </h4>
                 <div className="space-y-2 text-xs font-semibold text-slate-600">
@@ -491,7 +506,7 @@ export default function CreateOrderModal({
                     <span>Total Order Bill:</span>
                     <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(totalAmount)}</span>
                   </div>
-                  <div className="space-y-1 pt-1.5 border-t">
+                  <div className="space-y-1 pt-1.5 border-t border-slate-200">
                     <label className="block text-[10px] font-black text-slate-400 uppercase">Payment Status</label>
                     <select
                       value={paymentStatus}
@@ -500,7 +515,7 @@ export default function CreateOrderModal({
                         if (e.target.value === 'Fully Paid') setDepositAmountPaid(totalAmount);
                         else if (e.target.value === 'Pending') setDepositAmountPaid(0);
                       }}
-                      className="w-full px-2.5 py-1.5 border-2 rounded-lg bg-white focus:outline-none text-xs font-bold"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent text-xs font-bold transition"
                     >
                       <option value="Pending">Pending (ยังไม่จ่าย)</option>
                       <option value="Deposit Paid">Deposit Paid (มัดจำ)</option>
@@ -517,7 +532,7 @@ export default function CreateOrderModal({
                         max={totalAmount}
                         value={depositAmountPaid}
                         onChange={(e) => setDepositAmountPaid(Number(e.target.value))}
-                        className="w-full px-3 py-1.5 border-2 rounded-lg focus:outline-none font-bold text-xs font-sans"
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent font-bold text-xs font-sans transition"
                       />
                     </div>
                   )}
@@ -533,16 +548,16 @@ export default function CreateOrderModal({
                 placeholder="https://drive.google.com/..."
                 value={artworkLink}
                 onChange={(e) => setArtworkLink(e.target.value)}
-                className="w-full px-4 py-2.5 border-2 rounded-xl focus:outline-none focus:border-accent-sky font-bold font-sans text-xs"
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent font-bold font-sans text-xs transition"
               />
             </div>
 
             {/* Form Actions */}
-            <div className="flex justify-between pt-4 border-t">
+            <div className="flex justify-between pt-4 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setCurrentStep(2)}
-                className="flex items-center gap-1 px-4 py-2.5 border rounded-xl text-slate-500 text-xs font-bold"
+                className="flex items-center gap-1 px-4 py-2.5 border border-slate-200 rounded-xl text-slate-600 text-xs font-bold hover:bg-slate-50 transition"
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span>Back</span>
