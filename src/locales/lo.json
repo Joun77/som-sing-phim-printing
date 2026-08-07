@@ -290,9 +290,9 @@
     "delete_record": "ລົບລາຍການ"
   },
   "inventory_status": {
-    "in_use": "ກຳລັງໃຊ້ງານ (In Use)",
-    "unopened": "ຍັງບໍ່ໄດ້ເປີດ (Unopened)",
-    "depleted": "ໝົດແລ້ວ (Depleted)",
+    "in_use": "ກຳລັງໃຊ້ງານ",
+    "unopened": "ຍັງບໍ່ໄດ້ເປີດ",
+    "depleted": "ໝົດແລ້ວ",
     "unlinked": "ບໍ່ໄດ້ເຊື່ອມໂຍງ",
     "actions": "ການຈັດການ",
     "unit_cost": "ຕົ້ນທຶນ/ໜ່ວຍ",
@@ -300,6 +300,11 @@
     "received_initial": "ວັນທີຮັບ / ເລີ່ມຕົ້ນ",
     "item_sku": "ຊື່ລາຍການ & SKU",
     "lot_id": "ລະຫັດລັອດ"
+  },
+  "stock_status": {
+    "ready": "ພ້ອມໃຊ້ງານ",
+    "low_stock": "ຍັງເຫຼືອໜ້ອຍ",
+    "out_of_stock": "ໝົດແລ້ວ"
   },
   "equipment_mapping": {
     "linked_material": "ວັດສະດຸທີ່ເຊື່ອມໂຍງ",

@@ -39,12 +39,12 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
   if (!machine) {
     return (
       <div className="p-8 text-center bg-white rounded-3xl border border-slate-200 space-y-4">
-        <p className="text-slate-500 font-bold">ไม่พบข้อมูลโปรไฟล์เครื่องพิมพ์ (Machine Profile Not Found)</p>
+        <p className="text-slate-500 font-bold">ບໍ່ພົບຂໍ້ມູນໂປຣໄຟລ໌ເຄື່ອງພິມ (Machine Profile Not Found)</p>
         <button
           onClick={onBack}
           className="px-4 py-2 bg-sky-600 text-white rounded-xl text-xs font-bold"
         >
-          กลับสู่รายการเครื่องพิมพ์
+          ກັບຄືນຮາຍການເຄື່ອງພິມ
         </button>
       </div>
     );
@@ -58,7 +58,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
 
   const handleMaintenanceReset = () => {
     updateEquipmentMaintenance(machine.id);
-    showToast(`รีเซ็ตค่าเสื่อมและบำรุงรักษาเครื่อง "${machine.name}" สำเร็จ!`, 'success');
+    showToast(`ຣີເຊັດຄ່າເສື່ອມ ແລະ ບຳລຸງຮັກສາເຄື່ອງ "${machine.name}" ສຳເລັດ!`, 'success');
   };
 
   const handleImageUpload = (e) => {
@@ -92,7 +92,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
     }));
 
     setIsEditing(false);
-    showToast(`อัปเดตโปรไฟล์เครื่องพิมพ์ "${editName}" สำเร็จ!`, 'success');
+    showToast(`ອັບເດດໂປຣໄຟລ໌ເຄື່ອງພິມ "${editName}" ສຳເລັດ!`, 'success');
   };
 
   return (
@@ -105,7 +105,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
             className="flex items-center gap-2 text-xs sm:text-sm font-black text-slate-600 hover:text-slate-900 transition py-2.5 px-4 bg-slate-100 rounded-2xl border border-slate-200 active:scale-95"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>← กลับหน้าจัดรายการเครื่องพิมพ์ (Back to Directory)</span>
+            <span>← ກັບໜ້າຈັດຮາຍການເຄື່ອງພິມ (Back to Directory)</span>
           </button>
         </div>
 
@@ -115,7 +115,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
             className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-xs shadow-md transition active:scale-95"
           >
             <Edit3 className="w-4 h-4" />
-            <span>แก้ไขข้อมูล (Edit Profile)</span>
+            <span>ແກ້ໄຂຂໍ້ມູນ (Edit Profile)</span>
           </button>
           <button
             onClick={handleMaintenanceReset}
@@ -140,7 +140,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
           ) : (
             <div className="w-full h-56 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/80 flex flex-col items-center justify-center text-slate-400 gap-2">
               <Printer className="w-12 h-12 text-slate-300" />
-              <span className="text-xs font-bold">ไม่มีรูปถ่ายเครื่องพิมพ์ (No Image)</span>
+              <span className="text-xs font-bold">ບໍ່ມີຮູບຖ່າຍເຄື່ອງພິມ (No Image)</span>
             </div>
           )}
         </div>
@@ -157,7 +157,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
                 : 'text-emerald-700 bg-emerald-50 border-emerald-200'
             }`}>
               {isCritical ? <ShieldAlert className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
-              <span>{isCritical ? 'Service Required' : 'Operational (พร้อมใช้งาน)'}</span>
+              <span>{isCritical ? 'Service Required' : 'Operational (ພ້ອມໃຊ້ງານ)'}</span>
             </span>
           </div>
 
@@ -172,23 +172,23 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
             <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <span className="text-[10px] text-slate-500 uppercase font-black block">ความเร็วพิมพ์</span>
+              <span className="text-[10px] text-slate-500 uppercase font-black block">ຄວາມໄວພິມ</span>
               <span className="text-sm font-black text-slate-900 font-sans">{machine.speedPpm || 32} PPM</span>
             </div>
 
             <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <span className="text-[10px] text-slate-500 uppercase font-black block">หน้ากว้างสูงสุด</span>
+              <span className="text-[10px] text-slate-500 uppercase font-black block">ໜ້າກວ້າງສູງສຸດ</span>
               <span className="text-sm font-black text-slate-900 font-sans">{machine.maxWidth || 'A3+'}</span>
             </div>
 
             <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <span className="text-[10px] text-slate-500 uppercase font-black block">ชนิดหมึกพิมพ์</span>
+              <span className="text-[10px] text-slate-500 uppercase font-black block">ຊະນິດໝຶກພິມ</span>
               <span className="text-sm font-black text-slate-900">{machine.inkType || 'Pigment'}</span>
             </div>
 
             <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <span className="text-[10px] text-slate-500 uppercase font-black block">อายุการใช้งาน</span>
-              <span className="text-sm font-black text-slate-900 font-sans">{machine.lifespanYears || 5} ปี</span>
+              <span className="text-[10px] text-slate-500 uppercase font-black block">ອາຍຸການໃຊ້ງານ</span>
+              <span className="text-sm font-black text-slate-900 font-sans">{machine.lifespanYears || 5} ປີ</span>
             </div>
           </div>
         </div>
@@ -203,32 +203,32 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
               <Zap className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="font-black text-sm text-slate-900">อัตราการสิ้นเปลืองหมึกพิมพ์ (Technical Ink Rates)</h4>
+              <h4 className="font-black text-sm text-slate-900">ອັດຕາການສິ້ນເປືອງໝຶກພິມ (Technical Ink Rates)</h4>
               <p className="text-[11px] text-slate-400 font-semibold">ISO 5% Standard Coverage Rates</p>
             </div>
           </div>
 
           <div className="space-y-3 text-xs font-bold text-slate-700">
             <div className="flex justify-between items-center bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
-              <span className="text-slate-600">อัตราหมึกดำ (Black Ink Rate @ 5%):</span>
+              <span className="text-slate-600">ອັດຕາໝຶກດຳ (Black Ink Rate @ 5%):</span>
               <span className="font-sans font-black text-purple-700 text-sm">
-                {(machine.blackMlPerSheet || 0.0169).toFixed(4)} ml / แผ่น
+                {(machine.blackMlPerSheet || 0.0169).toFixed(4)} ml / ແຜ່ນ
               </span>
             </div>
 
             <div className="flex justify-between items-center bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
-              <span className="text-slate-600">อัตราหมึกชุดสี (Color Set Rate @ 5%):</span>
+              <span className="text-slate-600">ອັດຕາໝຶກຊຸດສີ (Color Set Rate @ 5%):</span>
               <span className="font-sans font-black text-purple-700 text-sm">
-                {(machine.colorMlPerSheet || machine.inkConsumptionStandard || 0.035).toFixed(4)} ml / แผ่น
+                {(machine.colorMlPerSheet || machine.inkConsumptionStandard || 0.035).toFixed(4)} ml / ແຜ່ນ
               </span>
             </div>
 
             {/* Linked Inventory Ink Item */}
             <div className="bg-purple-50/60 p-4 rounded-2xl border border-purple-100 space-y-1">
-              <span className="text-[10px] text-purple-700 uppercase font-black block">รายการหมึกพิมพ์ที่ลิงก์จากคลัง (Linked Inventory Ink SKU):</span>
+              <span className="text-[10px] text-purple-700 uppercase font-black block">ຮາຍການໝຶກພິມທີ່ລີ້ງຈາກຄັງ (Linked Inventory Ink SKU):</span>
               <div className="flex justify-between items-center pt-1">
                 <span className="text-xs font-bold text-slate-900">
-                  {linkedInkItem ? `${linkedInkItem.name} (${linkedInkItem.id})` : (machine.linkedInkSku || 'ยังไม่ได้ลิงก์ SKU')}
+                  {linkedInkItem ? `${linkedInkItem.name} (${linkedInkItem.id})` : (machine.linkedInkSku || 'ຍັງບໍ່ໄດ້ລີ້ງ SKU')}
                 </span>
                 {linkedInkItem && (
                   <span className="text-xs font-mono font-black text-emerald-600">
@@ -247,7 +247,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
               <Clock className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="font-black text-sm text-slate-900">สถานะอะไหล่ & การเสื่อมสภาพ (SLA Component Wear)</h4>
+              <h4 className="font-black text-sm text-slate-900">ສະຖານະອາໄຫຼ່ & ການເສື່ອມສະພາບ (SLA Component Wear)</h4>
               <p className="text-[11px] text-slate-400 font-semibold">Track wear percentages & component SLA thresholds</p>
             </div>
           </div>
@@ -273,7 +273,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
                 </div>
               ))
             ) : (
-              <p className="text-xs text-slate-400 font-semibold">ไม่มีข้อมูลสถานะชิ้นส่วนอะไหล่</p>
+              <p className="text-xs text-slate-400 font-semibold">ບໍ່ມີຂໍ້ມູນສະຖານະຊິ້ນສ່ວນອາໄຫຼ່</p>
             )}
           </div>
         </div>
@@ -284,7 +284,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-100 p-6 space-y-4">
             <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-black text-base text-slate-900">แก้ไขข้อมูลเครื่องพิมพ์ ({machine.name})</h3>
+              <h3 className="font-black text-base text-slate-900">ແກ້ໄຂຂໍ້ມູນເຄື່ອງພິມ ({machine.name})</h3>
               <button onClick={() => setIsEditing(false)} className="p-1 hover:bg-slate-100 rounded-lg">
                 <X className="w-5 h-5 text-slate-400" />
               </button>
@@ -292,7 +292,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
 
             <form onSubmit={handleSaveProfile} className="space-y-4 text-xs font-bold">
               <div className="space-y-1">
-                <label className="text-slate-600 block">ชื่อเครื่องพิมพ์ (Machine Name)</label>
+                <label className="text-slate-600 block">ຊື່ເຄື່ອງພິມ (Machine Name)</label>
                 <input
                   type="text"
                   required
@@ -303,13 +303,13 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-600 block">ลิงก์หมึกพิมพ์จากคลัง (Link Ink SKU)</label>
+                <label className="text-slate-600 block">ລີ້ງໝຶກພິມຈາກຄັງ (Link Ink SKU)</label>
                 <select
                   value={editInkSku}
                   onChange={(e) => setEditInkSku(e.target.value)}
                   className="w-full px-3.5 py-2.5 border rounded-xl font-bold bg-white text-xs"
                 >
-                  <option value="">-- เลือกหมึกพิมพ์จาก Inventory --</option>
+                  <option value="">-- ເລືອກໝຶກພິມຈາກ Inventory --</option>
                   {inventory && inventory.map(item => (
                     <option key={item.id} value={item.id}>
                       {item.name} ({item.id})
@@ -320,7 +320,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
 
               {/* Image Upload Input */}
               <div className="space-y-1">
-                <label className="text-slate-600 block">รูปถ่ายเครื่องพิมพ์ (Machine Photo)</label>
+                <label className="text-slate-600 block">ຮູບຖ່າຍເຄື່ອງພິມ (Machine Photo)</label>
                 <div className="flex items-center gap-3">
                   <input
                     type="file"
@@ -336,7 +336,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-slate-600 block">ราคาจัดซื้อ (LAK)</label>
+                  <label className="text-slate-600 block">ລາຄາຈັດຊື້ (LAK)</label>
                   <input
                     type="number"
                     value={editPurchaseCost}
@@ -345,7 +345,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-slate-600 block">อายุใช้งาน (ปี)</label>
+                  <label className="text-slate-600 block">ອາຍຸໃຊ້ງານ (ປີ)</label>
                   <input
                     type="number"
                     value={editLifespanYears}
@@ -361,13 +361,13 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
                   onClick={() => setIsEditing(false)}
                   className="px-4 py-2 border rounded-xl font-bold"
                 >
-                  ยกเลิก
+                  ຍົກເລີກ
                 </button>
                 <button
                   type="submit"
                   className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-black shadow-md"
                 >
-                  บันทึกข้อมูล (Save Changes)
+                  ບັນທຶກຂໍ້ມູນ (Save Changes)
                 </button>
               </div>
             </form>

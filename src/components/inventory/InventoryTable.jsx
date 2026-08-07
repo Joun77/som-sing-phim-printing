@@ -1,19 +1,20 @@
 import React, { useState } from 'react';
-import { Calendar, Trash2, Edit3, Save, X, Link as LinkIcon, CheckCircle2, Play, CircleAlert } from 'lucide-react';
+import { Eye, Edit3 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
+import InventoryDetailsModal from './InventoryDetailsModal';
+import EditMaterialModal from './EditMaterialModal';
 
-export default function InventoryTable({ items, onRestockItem }) {
+export default function InventoryTable({ items, onRestockItem, onViewDetails }) {
   const { t } = useTranslation();
-  const { equipment, deleteInventoryBatch, editInventoryBatch } = useApp();
+  const { editInventoryBatch, showToast } = useApp();
   
-  // Edit mode states
-  const [editingLotId, setEditingLotId] = useState(null);
-  const [editPrice, setEditPrice] = useState('');
-  const [editQty, setEditQty] = useState('');
+  // Selected lot states for modal popups
+  const [selectedLotModal, setSelectedLotModal] = useState(null);
+  const [editingLotModal, setEditingLotModal] = useState(null);
 
   const formatLAK = (num) => {
-    return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(num).replace('LAK', '₭');
+    return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(num || 0).replace('LAK', '₭');
   };
 
   // Flatten all lots from all filtered items
@@ -41,33 +42,85 @@ export default function InventoryTable({ items, onRestockItem }) {
     }
   });
 
-  // Sort flat lots: Active first (In Use, Unopened) then Depleted, then by purchase date
-  const getLotStatus = (parentItem, lotId, currentQty, purchaseDate) => {
-    if (currentQty <= 0) return 'Depleted';
-    
-    // Oldest active lot (where currentQty > 0) for this parent SKU is "In Use"
-    const activeLots = (parentItem.batches || [])
-      .filter(b => b.currentQty > 0)
-      .sort((a, b) => new Date(a.purchaseDate) - new Date(b.purchaseDate));
+  // Calculate stock status with quantity & thresholds
+  const getStockStatusDetails = (parentItem, lotId, currentQty) => {
+    const reorderThreshold = parentItem.reorderThreshold || 50;
 
-    if (activeLots.length > 0 && activeLots[0].id === lotId) {
-      return 'In Use';
+    if (currentQty <= 0) {
+      return {
+        label: t('stock_status.out_of_stock'),
+        className: 'bg-rose-50 text-rose-700 border-rose-200'
+      };
     }
-    return 'Unopened';
+
+    if (currentQty < reorderThreshold) {
+      return {
+        label: t('stock_status.low_stock'),
+        className: 'bg-amber-50 text-amber-700 border-amber-200'
+      };
+    }
+
+    return {
+      label: t('stock_status.ready'),
+      className: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    };
   };
 
-  const handleStartEdit = (lot) => {
-    setEditingLotId(lot.id);
-    setEditPrice(lot.purchasePricePerReam);
-    setEditQty(lot.currentQty);
+  const renderDualUnitQuantity = (currentQty, parentItem) => {
+    const category = parentItem.category;
+    const purchaseUnit = parentItem.purchaseUnit;
+    const consumptionUnit = parentItem.consumptionUnit || 'Units';
+    const itemsPerPurchaseUnit = parentItem.itemsPerPurchaseUnit || 500;
+
+    if (category === 'Paper') {
+      const reams = Math.floor(currentQty / itemsPerPurchaseUnit);
+      return (
+        <div>
+          <span className="font-mono font-black text-slate-800 block">
+            {reams > 0 ? `${reams} ${purchaseUnit || 'Ream'}` : `${currentQty} ${consumptionUnit}`}
+          </span>
+          <span className="text-[10px] text-slate-400 block font-bold">
+            ({currentQty} {consumptionUnit})
+          </span>
+        </div>
+      );
+    }
+
+    if (category === 'Ink') {
+      const bottles = Math.floor(currentQty / 1000) || 1;
+      return (
+        <div>
+          <span className="font-mono font-black text-slate-800 block">
+            {bottles} ${purchaseUnit || 'Bottle'}
+          </span>
+          <span className="text-[10px] text-slate-400 block font-bold">
+            ({currentQty} {consumptionUnit || 'ml'})
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <span className="font-mono font-black text-slate-800">
+        {currentQty} {consumptionUnit}
+      </span>
+    );
   };
 
-  const handleSaveEdit = (parentItemId, lotId) => {
-    editInventoryBatch(parentItemId, lotId, {
-      purchasePricePerReam: Number(editPrice),
-      currentQty: Number(editQty)
-    });
-    setEditingLotId(null);
+  const handleSaveEditModal = (updatedLotData) => {
+    const parentId = updatedLotData.parentItem?.id;
+    const lotId = updatedLotData.id;
+
+    if (parentId && lotId) {
+      editInventoryBatch(parentId, lotId, {
+        currentQty: updatedLotData.currentQty,
+        costPerSheet: updatedLotData.costPerSheet,
+        purchasePricePerReam: updatedLotData.purchasePricePerReam,
+        supplierName: updatedLotData.supplierName
+      });
+      showToast(t('common.save') + ' ' + t('common.details'), 'success');
+      setEditingLotModal(null);
+    }
   };
 
   return (
@@ -81,8 +134,6 @@ export default function InventoryTable({ items, onRestockItem }) {
               <th className="py-4 px-6">{t('inventory.material_cat')}</th>
               <th className="py-4 px-6">{t('inventory_status.received_initial')}</th>
               <th className="py-4 px-6">{t('inventory_status.remaining_qty')}</th>
-              <th className="py-4 px-6">{t('inventory_status.unit_cost')}</th>
-              <th className="py-4 px-6">{t('equipment_mapping.linked_material')}</th>
               <th className="py-4 px-6">{t('inventory.material_status')}</th>
               <th className="py-4 px-6 text-right">{t('inventory_status.actions')}</th>
             </tr>
@@ -90,18 +141,14 @@ export default function InventoryTable({ items, onRestockItem }) {
           <tbody className="divide-y divide-slate-100 text-sm font-semibold text-slate-700">
             {flatLots.length === 0 ? (
               <tr>
-                <td colSpan="9" className="py-12 text-center text-slate-400 font-bold">
+                <td colSpan="7" className="py-12 text-center text-slate-400 font-bold">
                   No inventory batches logged.
                 </td>
               </tr>
             ) : (
               flatLots.map((lot, idx) => {
                 const parent = lot.parentItem;
-                const status = getLotStatus(parent, lot.id, lot.currentQty, lot.purchaseDate);
-                const isEditing = editingLotId === lot.id;
-                
-                // Find linked machine
-                const linkedMachine = equipment.find(eq => eq.linkedMaterialSku === parent.id);
+                const statusDetails = getStockStatusDetails(parent, lot.id, lot.currentQty);
 
                 return (
                   <tr key={`${lot.id}-${idx}`} className="hover:bg-slate-50/50 transition">
@@ -111,7 +158,7 @@ export default function InventoryTable({ items, onRestockItem }) {
                       #{lot.id}
                     </td>
                     
-                    {/* Item Name */}
+                    {/* Item Name & SKU */}
                     <td className="py-4.5 px-6">
                       <div>
                         <span className="font-extrabold text-slate-800 block leading-tight">{parent.name}</span>
@@ -121,7 +168,7 @@ export default function InventoryTable({ items, onRestockItem }) {
 
                     {/* Category */}
                     <td className="py-4.5 px-6">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${
                         parent.category === 'Paper' 
                           ? 'bg-blue-50 text-blue-700 border-blue-100'
                           : parent.category === 'Ink'
@@ -134,126 +181,41 @@ export default function InventoryTable({ items, onRestockItem }) {
                       </span>
                     </td>
 
-                     {/* Received Date & Initial */}
+                    {/* Received Date & Initial Qty */}
                     <td className="py-4.5 px-6">
                       <div>
-                        <span className="font-bold text-slate-700 block">{lot.purchaseDate}</span>
+                        <span className="font-bold text-slate-700 block font-mono text-xs">{lot.purchaseDate}</span>
                         <span className="text-[10px] text-slate-400 block font-sans">Init: {lot.initialQty} {parent.consumptionUnit}</span>
                       </div>
                     </td>
 
                     {/* Remaining Qty */}
                     <td className="py-4.5 px-6">
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          value={editQty}
-                          onChange={(e) => setEditQty(e.target.value)}
-                          className="w-20 px-2 py-1 border rounded font-sans text-xs font-bold focus:outline-none"
-                        />
-                      ) : (
-                        <span className="font-sans font-black text-slate-800">
-                          {lot.currentQty} {parent.consumptionUnit}
-                        </span>
-                      )}
+                      {renderDualUnitQuantity(lot.currentQty, parent)}
                     </td>
 
-                    {/* Unit Cost */}
-                    <td className="py-4.5 px-6 font-sans font-black text-slate-800">
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          value={editPrice}
-                          onChange={(e) => setEditPrice(e.target.value)}
-                          className="w-24 px-2 py-1 border rounded font-sans text-xs font-bold focus:outline-none"
-                        />
-                      ) : (
-                        <span>{formatLAK(lot.costPerSheet)}</span>
-                      )}
-                      <span className="text-[10px] text-slate-400 font-bold block">/{parent.consumptionUnit}</span>
-                    </td>
-
-                    {/* Linked Machine */}
+                    {/* Stock Status Column */}
                     <td className="py-4.5 px-6">
-                      {linkedMachine ? (
-                        <div className="flex items-center gap-1 text-xs text-indigo-600 font-bold">
-                          <LinkIcon className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate max-w-[120px]">{linkedMachine.name}</span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 italic text-xs">{t('inventory_status.unlinked')}</span>
-                      )}
-                    </td>
-
-                    {/* Status Tag */}
-                    <td className="py-4.5 px-6">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black border ${
-                        status === 'In Use'
-                          ? 'text-green-700 bg-green-50 border-green-200'
-                          : status === 'Unopened'
-                          ? 'text-slate-600 bg-slate-100 border-slate-200'
-                          : 'text-red-700 bg-red-50 border-red-200'
-                      }`}>
-                        {status === 'In Use' ? (
-                          <>
-                            <Play className="w-3 h-3 fill-current" />
-                            <span>{t('inventory_status.in_use')}</span>
-                          </>
-                        ) : status === 'Unopened' ? (
-                          <>
-                            <CheckCircle2 className="w-3 h-3" />
-                            <span>{t('inventory_status.unopened')}</span>
-                          </>
-                        ) : (
-                          <>
-                            <CircleAlert className="w-3 h-3" />
-                            <span>{t('inventory_status.depleted')}</span>
-                          </>
-                        )}
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black border ${statusDetails.className}`}>
+                        <span>{statusDetails.label}</span>
                       </span>
                     </td>
 
-                    {/* Actions */}
+                    {/* Action Column: Clean Details Button */}
                     <td className="py-4.5 px-6 text-right">
-                      {isEditing ? (
-                        <div className="flex justify-end gap-1">
-                          <button
-                            onClick={() => handleSaveEdit(parent.id, lot.id)}
-                            className="p-1.5 bg-green-50 border border-green-200 text-green-700 rounded-lg hover:bg-green-100"
-                            title="Save"
-                          >
-                            <Save className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => setEditingLotId(null)}
-                            className="p-1.5 bg-slate-50 border rounded-lg hover:bg-slate-100"
-                            title="Cancel"
-                          >
-                            <X className="w-3.5 h-3.5 text-slate-400" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex justify-end gap-1.5">
-                          {status === 'Unopened' && (
-                            <>
-                              <button
-                                onClick={() => handleStartEdit(lot)}
-                                className="p-1.5 hover:bg-slate-100 border rounded-lg transition"
-                                title="Edit Lot Details"
-                              >
-                                <Edit3 className="w-3.5 h-3.5 text-slate-500" />
-                              </button>
-                              <button
-                                onClick={() => deleteInventoryBatch(parent.id, lot.id)}
-                                className="p-1.5 hover:bg-red-50 border border-transparent hover:border-red-200 text-red-500 rounded-lg transition"
-                                title="Delete Reserve Lot"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      )}
+                      <button
+                        onClick={() => {
+                          if (onViewDetails) {
+                            onViewDetails(lot);
+                          } else {
+                            setSelectedLotModal(lot);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition active:scale-95 border border-slate-200"
+                      >
+                        <Eye className="w-4 h-4 text-slate-600" />
+                        <span>{t('common.details')}</span>
+                      </button>
                     </td>
 
                   </tr>
@@ -263,6 +225,30 @@ export default function InventoryTable({ items, onRestockItem }) {
           </tbody>
         </table>
       </div>
+
+      {/* Fallback Modal Details if onViewDetails not provided */}
+      {selectedLotModal && (
+        <InventoryDetailsModal
+          lot={selectedLotModal}
+          onClose={() => setSelectedLotModal(null)}
+          onEdit={(lotToEdit) => {
+            setSelectedLotModal(null);
+            setEditingLotModal(lotToEdit);
+          }}
+        />
+      )}
+
+      {/* Dedicated Edit Modal */}
+      {editingLotModal && (
+        <EditMaterialModal
+          isOpen={Boolean(editingLotModal)}
+          materialData={editingLotModal}
+          onSave={handleSaveEditModal}
+          onClose={() => setEditingLotModal(null)}
+        />
+      )}
     </div>
   );
 }
+
+

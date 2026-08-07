@@ -321,21 +321,37 @@ const initialOffcuts = [
 const initialPurchaseOrders = [
   {
     poId: 'PO-260801-01',
+    id: 'PO-260801-01',
+    date: '2026-08-01',
     purchaseDate: '2026-08-01',
     itemType: 'Material',
+    categoryType: 'Materials',
+    materialType: 'Paper',
+    paperSpec: 'Inkjet Paper',
     itemName: 'ເຈ້ຍ A4 Double A 80gsm',
     supplierName: 'Lao Paper Supplier',
+    supplierContact: '020 55667788',
+    unitPrice: 45000,
+    costPerUnit: 45000,
     totalCost: 90000,
+    totalPrice: 90000,
     qty: 2,
     unitName: 'Ream'
   },
   {
     poId: 'PO-260802-01',
+    id: 'PO-260802-01',
+    date: '2026-08-02',
     purchaseDate: '2026-08-02',
     itemType: 'Equipment',
+    categoryType: 'Machinery',
     itemName: 'Epson L15150 Printer',
     supplierName: 'Epson Lao Outlet',
+    supplierContact: '020 99887766',
+    unitPrice: 15000000,
+    costPerUnit: 15000000,
     totalCost: 15000000,
+    totalPrice: 15000000,
     qty: 1,
     unitName: 'Unit'
   }

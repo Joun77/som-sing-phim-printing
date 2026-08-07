@@ -433,7 +433,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
           <p className="text-xs sm:text-sm text-slate-500 font-semibold leading-relaxed">
             {initialSubTab === 'production' && 'ກວດສອບຈຳນວນຜະລິດ, ຄວາມຄືບໜ້າແຕ່ລະຂັ້ນຕອນ ແລະ ອັບເດດສະຖານະແທ່ນພິມ'}
             {initialSubTab === 'deliveries' && 'ຕິດຕາມການສົ່ງມອບສິນຄ້າ, ຊຳຣະຍອດຄ້າງ ແລະ ແຈ້ງອັບເດດສະຖານະການຂົນສົ່ງ'}
-            {initialSubTab === 'completed' && 'ປະຫວັດອໍເດີທີ່ສົ່ງມອບສິນຄ້າ ແລະ ຊຳຣະເງິນຄົບ 100% เรียบร้อยแล้ว'}
+            {initialSubTab === 'completed' && 'ປະຫວັດອໍເດີທີ່ສົ່ງມອບສິນຄ້າ ແລະ ຊຳຣະເງິນຄົບ 100% ສຳເລັດແລ້ວ'}
             {initialSubTab === 'cancelled' && 'ລາຍການອໍເດີທີ່ຖືກຍົກເລີກ ພ້ອມໝາຍເຫດເຫດຜົນ'}
             {initialSubTab === 'orders' && t('orders.subtitle')}
           </p>
@@ -510,7 +510,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
                       {ord.remainingUnpaidBalance > 0 ? (
                         <span className="text-red-600 font-black">{formatLAK(ord.remainingUnpaidBalance)}</span>
                       ) : (
-                        <span className="text-emerald-600 font-black">✓ ชำระครบแล้ว</span>
+                        <span className="text-emerald-600 font-black">✓ ຊຳຣະຄົບແລ້ວ</span>
                       )}
                     </td>
                     <td className="px-4 py-3.5 text-center flex items-center justify-center gap-2">

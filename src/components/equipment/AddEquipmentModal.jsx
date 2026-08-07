@@ -127,7 +127,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
       ...categoryParams
     });
 
-    showToast(`ลงทะเบียนโปรไฟล์เครื่องจิน "${name}" สำเร็จ!`, 'success');
+    showToast(`ລົງທະບຽນໂປຣໄຟລ໌ເຄື່ອງຈັກ "${name}" ສຳເລັດ!`, 'success');
     onClose();
   };
 
@@ -140,7 +140,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
           <div className="flex items-center gap-2">
             <Settings className="w-5 h-5 text-sky-600" />
             <div>
-              <h3 className="font-extrabold text-base text-slate-800 font-sans">ลงทะเบียนโปรไฟล์เครื่องจิน (Register Machine Profile)</h3>
+              <h3 className="font-extrabold text-base text-slate-800 font-sans">ລົງທະບຽນໂປຣໄຟລ໌ເຄື່ອງຈັກ (Register Machine Profile)</h3>
               <p className="text-[10px] font-bold text-slate-400 mt-0.5">Decoupled Technical Ink Yield & Inventory Linking Engine</p>
             </div>
           </div>
@@ -153,20 +153,20 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-slate-800 overflow-y-auto flex-1 text-xs font-bold">
           
           <div className="space-y-1">
-            <label className="text-slate-600 uppercase block font-black">ชื่อเครื่องพิมพ์ / อุปกรณ์ (Machine Name) *</label>
+            <label className="text-slate-600 uppercase block font-black">ຊື່ເຄື່ອງພິມ / ອຸປະກອນ (Machine Name) *</label>
             <input
               type="text"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="เช่น: Epson EcoTank L15150"
+              placeholder="ເຊັ່ນ: Epson EcoTank L15150"
               className="w-full px-3.5 py-2.5 border rounded-xl focus:outline-none font-bold text-sm bg-white"
             />
           </div>
 
           {/* Machine Photo Upload */}
           <div className="space-y-1">
-            <label className="text-slate-600 uppercase block font-black">รูปถ่ายเครื่องพิมพ์ (Machine Photo)</label>
+            <label className="text-slate-600 uppercase block font-black">ຮູບຖ່າຍເຄື່ອງພິມ (Machine Photo)</label>
             <div className="flex items-center gap-3">
               <input
                 type="file"
@@ -181,13 +181,13 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
           </div>
 
           <div className="space-y-1">
-            <label className="text-slate-600 uppercase block font-black">ประเภทหมวดหมู่ (Category Type) *</label>
+            <label className="text-slate-600 uppercase block font-black">ປະເພດໝວດໝູ່ (Category Type) *</label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
-                { id: 'Printer', label: 'เครื่องพิมพ์', icon: Printer },
-                { id: 'Cutter', label: 'เครื่องตัด', icon: Scissors },
-                { id: 'Laminator', label: 'เครื่องเคลือบ', icon: Layers },
-                { id: 'Binder', label: 'เครื่องเข้าเล่ม', icon: BookOpen }
+                { id: 'Printer', label: 'ເຄື່ອງພິມ', icon: Printer },
+                { id: 'Cutter', label: 'ເຄື່ອງຕັດ', icon: Scissors },
+                { id: 'Laminator', label: 'ເຄື່ອງເຄືອບ', icon: Layers },
+                { id: 'Binder', label: 'ເຄື່ອງເຂົ້າເລົ່ມ', icon: BookOpen }
               ].map(cat => {
                 const IconComp = cat.icon;
                 const isSelected = category === cat.id;
@@ -220,27 +220,27 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[10px]">ชนิดหมึกพิมพ์ (Ink Type)</label>
+                  <label className="text-slate-600 uppercase block text-[10px]">ຊະນິດໝຶກພິມ (Ink Type)</label>
                   <select
                     value={inkType}
                     onChange={(e) => setInkType(e.target.value)}
                     className="w-full px-3 py-2 border rounded-xl focus:outline-none bg-white text-xs font-bold"
                   >
-                    <option value="Pigment">หมึกกันน้ำ (Pigment Ink)</option>
-                    <option value="Dye">หมึกธรรมดา (Dye Ink)</option>
-                    <option value="Laser">หมึกผง (Laser Toner)</option>
+                    <option value="Pigment">ໝຶກກັນນ້ຳ (Pigment Ink)</option>
+                    <option value="Dye">ໝຶກທຳມະດາ (Dye Ink)</option>
+                    <option value="Laser">ໝຶກຜົງ (Laser Toner)</option>
                   </select>
                 </div>
 
                 {/* Linked Inventory Ink SKU Dropdown */}
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[10px]">ลิงก์รายการหมึกจากคลัง (Link Ink SKU)</label>
+                  <label className="text-slate-600 uppercase block text-[10px]">ລີ້ງຮາຍການໝຶກຈາກຄັງ (Link Ink SKU)</label>
                   <select
                     value={linkedInkSku}
                     onChange={(e) => setLinkedInkSku(e.target.value)}
                     className="w-full px-3 py-2 border rounded-xl focus:outline-none bg-white text-xs font-bold"
                   >
-                    <option value="">-- เลือกรายการหมึกจาก Inventory --</option>
+                    <option value="">-- ເລືອກຮາຍການໝຶກຈາກ Inventory --</option>
                     {inventory && inventory.map(item => (
                       <option key={item.id} value={item.id}>
                         {item.name} ({item.id})
@@ -253,7 +253,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
               {/* Yield & Bottle Capacity Specs (Technical Only) */}
               <div className="grid grid-cols-2 gap-3 pt-1 border-t border-purple-200/60">
                 <div className="space-y-2">
-                  <span className="text-[11px] font-black text-slate-800 block">หมึกสีดำ (Black Ink Technical Specs):</span>
+                  <span className="text-[11px] font-black text-slate-800 block">ໝຶກສີດຳ (Black Ink Technical Specs):</span>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
                       <label className="text-[9px] text-slate-500 uppercase block">Yield (Pages)</label>
@@ -277,7 +277,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
                 </div>
 
                 <div className="space-y-2">
-                  <span className="text-[11px] font-black text-purple-800 block">หมึกชุดสี (Color Set Technical Specs):</span>
+                  <span className="text-[11px] font-black text-purple-800 block">ໝຶກຊຸດສີ (Color Set Technical Specs):</span>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
                       <label className="text-[9px] text-slate-500 uppercase block">Yield (Pages)</label>
@@ -325,7 +325,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[10px]">จำนวนแผ่นตัดสูงสุด/ครั้ง (Max Sheet Pass Capacity)</label>
+                  <label className="text-slate-600 uppercase block text-[10px]">ຈຳນວນແຜ່ນຕັດສູງສຸດ/ຄັ້ງ (Max Sheet Pass Capacity)</label>
                   <input
                     type="number"
                     value={cutCapacity}
@@ -334,7 +334,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[10px]">ค่าเสื่อมใบมีดต่อการตัด (Blade Wear / Cut LAK)</label>
+                  <label className="text-slate-600 uppercase block text-[10px]">ຄ່າເສື່ອມໃບມີດຕໍ່ການຕັດ (Blade Wear / Cut LAK)</label>
                   <input
                     type="number"
                     value={bladeDepreciationPerCut}
@@ -356,7 +356,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[9px]">ขนาดกว้างสูงสุด (Max Width)</label>
+                  <label className="text-slate-600 uppercase block text-[9px]">ຂະໜາດກວ້າງສູງສຸດ (Max Width)</label>
                   <input
                     type="text"
                     value={laminationWidth}
@@ -365,7 +365,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[9px]">เวลาอุ่นเครื่อง (Warm-up mins)</label>
+                  <label className="text-slate-600 uppercase block text-[9px]">ເວລາອຸ່ນເຄື່ອງ (Warm-up mins)</label>
                   <input
                     type="number"
                     value={warmUpTime}
@@ -374,7 +374,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[9px]">ความเร็ว (Speed m/min)</label>
+                  <label className="text-slate-600 uppercase block text-[9px]">ຄວາມໄວ (Speed m/min)</label>
                   <input
                     type="number"
                     value={speedMPerMin}
@@ -396,20 +396,20 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[9px]">รูปแบบการเข้าเล่ม (Method)</label>
+                  <label className="text-slate-600 uppercase block text-[9px]">ຮູບແບບການເຂົ້າເລົ່ມ (Method)</label>
                   <select
                     value={bindingMethod}
                     onChange={(e) => setBindingMethod(e.target.value)}
                     className="w-full px-2 py-2 border rounded-xl bg-white text-xs font-bold"
                   >
-                    <option value="Perfect Glue">สันกาวร้อน (Perfect Glue)</option>
-                    <option value="Spiral">สันห่วง (Spiral)</option>
-                    <option value="Calendar">สันปฏิทิน (Calendar)</option>
-                    <option value="Staple">มุงหลังคา (Staple)</option>
+                    <option value="Perfect Glue">ສັ້ນກາວຮ້ອນ (Perfect Glue)</option>
+                    <option value="Spiral">ສັ້ນຫ່ວງ (Spiral)</option>
+                    <option value="Calendar">ສັ້ນປະຕິທິນ (Calendar)</option>
+                    <option value="Staple">ມຸງຫຼັງຄາ (Staple)</option>
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[9px]">ความจุสูงสุด (Max Sheets/Book)</label>
+                  <label className="text-slate-600 uppercase block text-[9px]">ຄວາມຈຸສູງສຸດ (Max Sheets/Book)</label>
                   <input
                     type="number"
                     value={maxBookSheets}
@@ -418,7 +418,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[9px]">เวลาเฉลี่ย/เล่ม (Mins/Book)</label>
+                  <label className="text-slate-600 uppercase block text-[9px]">ເວລາສະເລ່ຍ/ເລົ່ມ (Mins/Book)</label>
                   <input
                     type="number"
                     value={avgTimePerBook}
@@ -467,13 +467,13 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
               onClick={onClose}
               className="px-4 py-2.5 border rounded-xl font-bold hover:bg-slate-50 transition"
             >
-              ยกเลิก
+              ຍົກເລີກ
             </button>
             <button
               type="submit"
               className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-black shadow-md transition"
             >
-              ลงทะเบียนโปรไฟล์เครื่องจิน (Add Machine Profile)
+              ລົງທະບຽນໂປຣໄຟລ໌ເຄື່ອງຈັກ (Add Machine Profile)
             </button>
           </div>
 

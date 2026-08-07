@@ -301,6 +301,11 @@
     "item_sku": "Item Name & SKU",
     "lot_id": "Lot / Batch ID"
   },
+  "stock_status": {
+    "ready": "Ready",
+    "low_stock": "Low Stock",
+    "out_of_stock": "Out of Stock"
+  },
   "equipment_mapping": {
     "linked_material": "Linked Material SKU",
     "no_linked_material": "No linked material",

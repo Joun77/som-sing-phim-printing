@@ -13,7 +13,9 @@ import {
   Boxes, 
   Plus, 
   DollarSign, 
-  CheckCircle2 
+  CheckCircle2,
+  Upload,
+  X 
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -25,9 +27,27 @@ export default function InboundEntryPage({ onBack }) {
 
   // Category A: Materials & Supplies States
   const [materialType, setMaterialType] = useState('Paper'); // Paper, Ink, Film, Chemical
+  const [paperSpec, setPaperSpec] = useState('Inkjet Paper'); // Inkjet Paper, Laser Paper, Sticker Paper, Art Card Paper, Bond Paper
   const [materialName, setMaterialName] = useState('');
   const [supplierName, setSupplierName] = useState('Vientiane Supply Co.');
+  const [supplierContact, setSupplierContact] = useState(''); // Optional Phone / Contact Link
   const [lotId, setLotId] = useState(`LOT-${Date.now().toString().slice(-6)}`);
+  
+  // File upload states
+  const [itemPhoto, setItemPhoto] = useState(null);
+  const [paymentSlip, setPaymentSlip] = useState(null);
+
+  const handleFileUpload = (e, setter) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setter(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const [materialUnitCost, setMaterialUnitCost] = useState(120000);
   const [quantity, setQuantity] = useState(50);
   const [purchaseUnit, setPurchaseUnit] = useState('Ream');
@@ -80,7 +100,7 @@ export default function InboundEntryPage({ onBack }) {
     if (inboundCategory === 'Materials') {
       // Create new inventory batch
       if (!materialName.trim()) {
-        showToast('กรุณาระบุชื่อวัสดุที่นำเข้า', 'warning');
+        showToast('ກະລຸນາລະບຸຊື່ວັດສະດຸທີ່ນຳເຂົ້າ', 'warning');
         return;
       }
 
@@ -101,19 +121,32 @@ export default function InboundEntryPage({ onBack }) {
       if (addPurchaseOrder) {
         addPurchaseOrder({
           id: `PO-${Date.now().toString().slice(-6)}`,
+          poId: `PO-${Date.now().toString().slice(-6)}`,
           type: 'Material',
+          categoryType: 'Materials',
+          materialType,
+          paperSpec: materialType === 'Paper' ? paperSpec : undefined,
+          itemName: materialName,
           name: materialName,
           supplierName,
+          supplierContact,
+          unitPrice: Number(materialUnitCost),
+          costPerUnit: Number(materialUnitCost),
+          qty: Number(quantity),
+          unitName: purchaseUnit || 'Units',
+          totalCost: Number(materialUnitCost) * Number(quantity),
           totalPrice: Number(materialUnitCost) * Number(quantity),
-          date: new Date().toISOString().split('T')[0]
+          date: new Date().toISOString().split('T')[0],
+          itemPhoto,
+          paymentSlip
         });
       }
 
-      showToast(`บันทึกนำเข้าวัสดุ "${materialName}" สำเร็จ!`, 'success');
+      showToast(`ບັນທຶກນຳເຂົ້າວັດສະດຸ "${materialName}" ສຳເລັດ!`, 'success');
     } else {
       // Create new Machinery Asset in Equipment Directory
       if (!machineName.trim()) {
-        showToast('กรุณาระบุชื่อเครื่องจักร', 'warning');
+        showToast('ກະລຸນາລະບຸຊື່ເຄື່ອງຈັກ', 'warning');
         return;
       }
 
@@ -146,10 +179,14 @@ export default function InboundEntryPage({ onBack }) {
         addEquipment({
           name: machineName,
           category: machineCategory,
-          imageUrl,
+          imageUrl: itemPhoto || imageUrl,
+          itemPhoto,
+          paymentSlip,
           purchaseCost: Number(purchaseCost),
           lifespanYears: Number(lifespanYears),
           printedPagesCapacity: Number(lifetimeCapacity),
+          supplierName,
+          supplierContact,
           ...categoryParams
         });
       }
@@ -157,22 +194,30 @@ export default function InboundEntryPage({ onBack }) {
       if (addPurchaseOrder) {
         addPurchaseOrder({
           id: `PO-EQ-${Date.now().toString().slice(-6)}`,
+          poId: `PO-EQ-${Date.now().toString().slice(-6)}`,
           type: 'Equipment',
+          categoryType: 'Machinery',
+          itemName: machineName,
           name: machineName,
+          itemType: machineCategory,
           supplierName,
+          supplierContact,
+          unitPrice: Number(purchaseCost),
+          costPerUnit: Number(purchaseCost),
+          qty: 1,
+          unitName: 'Unit',
+          totalCost: Number(purchaseCost),
           totalPrice: Number(purchaseCost),
-          date: new Date().toISOString().split('T')[0]
+          date: new Date().toISOString().split('T')[0],
+          itemPhoto,
+          paymentSlip
         });
       }
 
-      showToast(`บันทึกนำเข้าเครื่องจักร "${machineName}" เข้าคลังอุปกรณ์สำเร็จ!`, 'success');
+      showToast(`ບັນທຶກນຳເຂົ້າເຄື່ອງຈັກ "${machineName}" ເຂົ້າຄັງອຸປະກອນສຳເລັດ!`, 'success');
     }
 
     onBack();
-  };
-
-  const formatLAK = (num) => {
-    return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(num || 0).replace('LAK', '₭');
   };
 
   return (
@@ -186,14 +231,14 @@ export default function InboundEntryPage({ onBack }) {
             className="flex items-center gap-2 text-xs sm:text-sm font-black text-slate-600 hover:text-slate-900 transition py-2.5 px-4 bg-slate-100 rounded-2xl border border-slate-200 active:scale-95"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>← กลับหน้าการนำเข้า (Back to Inbound Procurement)</span>
+            <span>ກັບໜ້າການນຳເຂົ້າ (Back to Inbound Procurement)</span>
           </button>
         </div>
 
         <div>
           <h3 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">
             <Truck className="w-6 h-6 text-sky-600" />
-            <span>ฟอร์มบันทึกนำเข้าสินค้า & เครื่องจักร (Inbound Entry Form)</span>
+            <span>ຟອມບັນທຶກນຳເຂົ້າສິນຄ້າ & ເຄື່ອງຈັກ (Inbound Entry Form)</span>
           </h3>
         </div>
       </div>
@@ -202,7 +247,7 @@ export default function InboundEntryPage({ onBack }) {
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
         <div className="space-y-2">
           <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
-            เลือกประเภทการนำเข้า (Inbound Category Type) *
+            ເລືອກປະເພດການນຳເຂົ້າ (Inbound Category Type) *
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <button
@@ -219,10 +264,10 @@ export default function InboundEntryPage({ onBack }) {
               </div>
               <div>
                 <span className="font-black text-sm text-slate-900 block">
-                  หมวด A: วัสดุ & วัสดุสิ้นเปลือง (Materials & Supplies)
+                  ໝວດ A: ວັດສະດຸ & ວັດສະດຸສິ້ນເປືອງ (Materials & Supplies)
                 </span>
                 <span className="text-xs text-slate-500 font-semibold mt-0.5 block">
-                  นำเข้ากระดาษ หมึกพิมพ์ ฟิล์มเคลือบ เคมีภัณฑ์ สำหรับคลังสินค้า (Inventory Stock)
+                  ນຳເຂົ້າເຈ້ຍ, ໝຶກພິມ, ຟິມເຄືອບ, ເຄມີພັນ ສຳລັບຄັງສິນຄ້າ (Inventory Stock)
                 </span>
               </div>
             </button>
@@ -241,10 +286,10 @@ export default function InboundEntryPage({ onBack }) {
               </div>
               <div>
                 <span className="font-black text-sm text-slate-900 block">
-                  หมวด B: เครื่องจักร & อุปกรณ์ (Machinery & Assets)
+                  ໝວດ B: ເຄື່ອງຈັກ & ອຸປະກອນ (Machinery & Assets)
                 </span>
                 <span className="text-xs text-slate-500 font-semibold mt-0.5 block">
-                  นำเข้าเครื่องพิมพ์ เครื่องตัด เครื่องเคลือบ เครื่องเข้าเล่ม เพื่อบันทึกเข้า Equipment Directory
+                  ນຳເຂົ້າເຄື່ອງພິມ, ເຄື່ອງຕັດ, ເຄື່ອງເຄືອບ, ເຄື່ອງເຂົ້າເລົ່ມ ເພື່ອບັນທຶກເຂົ້າ Equipment Directory
                 </span>
               </div>
             </button>
@@ -258,50 +303,62 @@ export default function InboundEntryPage({ onBack }) {
             <div className="space-y-4 animate-fade-in text-xs font-bold">
               <div className="flex items-center gap-2 border-b pb-3">
                 <Package className="w-5 h-5 text-sky-600" />
-                <h4 className="font-black text-sm text-slate-900">รายละเอียดวัสดุ (Materials & Consumables Entry)</h4>
+                <h4 className="font-black text-sm text-slate-900">ລາຍລະອຽດວັດສະດຸ (Materials & Consumables Entry)</h4>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* 1. Material Category First */}
                 <div className="space-y-1">
-                  <label className="block text-slate-600">ชนิดวัสดุ (Material Sub-Category)</label>
+                  <label className="block text-slate-600">1. ໝວດວັດສະດຸ (Material Category)</label>
                   <select
                     value={materialType}
                     onChange={(e) => setMaterialType(e.target.value)}
                     className="w-full px-3.5 py-2.5 border rounded-xl bg-white font-bold text-xs focus:outline-none"
                   >
-                    <option value="Paper">กระดาษ (Paper Stock)</option>
-                    <option value="Ink">หมึกพิมพ์ (Ink Bottles/Cartridges)</option>
-                    <option value="Film">ฟิล์มเคลือบ (Lamination Film)</option>
-                    <option value="Chemical">เคมีภัณฑ์ (Chemicals & Consumables)</option>
+                    <option value="Paper">ເຈ້ຍ (Paper Stock)</option>
+                    <option value="Ink">ໝຶກພິມ (Ink Bottles/Cartridges)</option>
+                    <option value="Film">ຟິມເຄືອບ (Lamination Film)</option>
+                    <option value="Chemical">ເຄມີພັນ (Chemicals & Consumables)</option>
                   </select>
                 </div>
 
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="block text-slate-600">ชื่อรายการวัสดุ (Material Item Name) *</label>
+                {/* 2. Item Name Second */}
+                <div className={`space-y-1 ${materialType === 'Paper' ? '' : 'sm:col-span-2'}`}>
+                  <label className="block text-slate-600">2. ຊື່ລາຍການວັດສະດຸ (Material Item Name) *</label>
                   <input
                     type="text"
                     required
                     value={materialName}
                     onChange={(e) => setMaterialName(e.target.value)}
-                    placeholder="เช่น: กระดาษ A4 Double A 80gsm, หมึกสีดำ Konica C6085..."
+                    placeholder="ເຊັ່ນ: ເຈ້ຍ A4 Double A 80gsm, ໝຶກສີດຳ Konica C6085..."
                     className="w-full px-3.5 py-2.5 border rounded-xl font-bold bg-white text-xs"
                   />
                 </div>
+
+                {/* 3. Paper Type Spec Third (For Paper Only) */}
+                {materialType === 'Paper' && (
+                  <div className="space-y-1">
+                    <label className="block text-slate-600">3. ປະເພດເຈ້ຍ (Paper Type Spec)</label>
+                    <select
+                      value={paperSpec}
+                      onChange={(e) => setPaperSpec(e.target.value)}
+                      className="w-full px-3.5 py-2.5 border rounded-xl bg-white font-bold text-xs focus:outline-none"
+                    >
+                      <option value="Inkjet Paper">ເຈ້ຍອິງເຈັດ (Inkjet Paper)</option>
+                      <option value="Laser Paper">ເຈ້ຍເລເຊີ (Laser Paper)</option>
+                      <option value="Sticker Paper">ເຈ້ຍສະຕິກເກີ (Sticker Paper)</option>
+                      <option value="Art Card Paper">ເຈ້ຍອາດກາດ / Art Card</option>
+                      <option value="Bond Paper">ເຈ້ຍປອນ / Bond Paper</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Row 2: Financials & Supplier Details */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                {/* 4. Unit Price */}
                 <div className="space-y-1">
-                  <label className="block text-slate-600">ซัพพลายเออร์ (Supplier Name)</label>
-                  <input
-                    type="text"
-                    value={supplierName}
-                    onChange={(e) => setSupplierName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border rounded-xl font-bold bg-white text-xs"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block text-slate-600">ราคาซื้อต่อหน่วย (Unit Price LAK)</label>
+                  <label className="block text-slate-600">4. ລາຄາຊື້ຕໍ່ໜ່ວຍ (Unit Price LAK) *</label>
                   <input
                     type="number"
                     required
@@ -311,8 +368,9 @@ export default function InboundEntryPage({ onBack }) {
                   />
                 </div>
 
+                {/* 5. Inbound Quantity */}
                 <div className="space-y-1">
-                  <label className="block text-slate-600">จำนวนนำเข้า (Quantity)</label>
+                  <label className="block text-slate-600">5. ຈຳນວນນຳເຂົ້າ (Inbound Qty) *</label>
                   <input
                     type="number"
                     required
@@ -322,6 +380,30 @@ export default function InboundEntryPage({ onBack }) {
                     className="w-full px-3.5 py-2.5 border rounded-xl font-mono text-center font-bold bg-white text-xs"
                   />
                 </div>
+
+                {/* 6. Supplier Name */}
+                <div className="space-y-1">
+                  <label className="block text-slate-600">6. ຊື່ຜູ້ສະໜອງ (Supplier Name)</label>
+                  <input
+                    type="text"
+                    value={supplierName}
+                    onChange={(e) => setSupplierName(e.target.value)}
+                    placeholder="ເຊັ່ນ: Vientiane Supply Co."
+                    className="w-full px-3.5 py-2.5 border rounded-xl font-bold bg-white text-xs"
+                  />
+                </div>
+
+                {/* 7. Supplier Contact / Phone / Link (Optional) */}
+                <div className="space-y-1">
+                  <label className="block text-slate-600">7. ຊ່ອງທາງຕິດຕໍ່ / ເບີໂທ / ລີ້ງ (Optional)</label>
+                  <input
+                    type="text"
+                    value={supplierContact}
+                    onChange={(e) => setSupplierContact(e.target.value)}
+                    placeholder="ເບີໂທ, WhatsApp ຫຼື Link..."
+                    className="w-full px-3.5 py-2.5 border rounded-xl font-bold bg-white text-xs"
+                  />
+                </div>
               </div>
             </div>
           ) : (
@@ -329,32 +411,32 @@ export default function InboundEntryPage({ onBack }) {
             <div className="space-y-6 animate-fade-in text-xs font-bold">
               <div className="flex items-center gap-2 border-b pb-3">
                 <Printer className="w-5 h-5 text-purple-600" />
-                <h4 className="font-black text-sm text-slate-900">รายละเอียดเครื่องจักร & อุปกรณ์ (Machinery Asset Entry)</h4>
+                <h4 className="font-black text-sm text-slate-900">ລາຍລະອຽດເຄື່ອງຈັກ & ອຸປະກອນ (Machinery Asset Entry)</h4>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1">
-                  <label className="block text-slate-600">หมวดเครื่องจักร (Equipment Category)</label>
+                  <label className="block text-slate-600">ໝວດເຄື່ອງຈັກ (Equipment Category)</label>
                   <select
                     value={machineCategory}
                     onChange={(e) => setMachineCategory(e.target.value)}
                     className="w-full px-3.5 py-2.5 border rounded-xl bg-white font-bold text-xs focus:outline-none"
                   >
-                    <option value="Printer">เครื่องพิมพ์ (Printing Machine)</option>
-                    <option value="Cutter">เครื่องตัด (Cutting Machine)</option>
-                    <option value="Laminator">เครื่องเคลือบ (Laminating Machine)</option>
-                    <option value="Binder">เครื่องเข้าเล่ม (Binding Machine)</option>
+                    <option value="Printer">ເຄື່ອງພິມ (Printing Machine)</option>
+                    <option value="Cutter">ເຄື່ອງຕັດ (Cutting Machine)</option>
+                    <option value="Laminator">ເຄື່ອງເຄືອບ (Laminating Machine)</option>
+                    <option value="Binder">ເຄື່ອງເຂົ້າເລົ່ມ (Binding Machine)</option>
                   </select>
                 </div>
 
                 <div className="space-y-1 sm:col-span-2">
-                  <label className="block text-slate-600">ชื่อเครื่องพิมพ์ / อุปกรณ์ (Machine Name) *</label>
+                  <label className="block text-slate-600">ຊື່ເຄື່ອງພິມ / ອຸປະກອນ (Machine Name) *</label>
                   <input
                     type="text"
                     required
                     value={machineName}
                     onChange={(e) => setMachineName(e.target.value)}
-                    placeholder="เช่น: Epson EcoTank L15150, EBA 5560 Cutter..."
+                    placeholder="ເຊັ່ນ: Epson EcoTank L15150, EBA 5560 Cutter..."
                     className="w-full px-3.5 py-2.5 border rounded-xl font-bold bg-white text-xs"
                   />
                 </div>
@@ -362,7 +444,7 @@ export default function InboundEntryPage({ onBack }) {
 
               {/* Machinery Photo Upload Field */}
               <div className="space-y-1">
-                <label className="block text-slate-600">รูปถ่ายเครื่องพิมพ์ / อุปกรณ์ (Machine Photo)</label>
+                <label className="block text-slate-600">ຮູບຖ່າຍເຄື່ອງພິມ / ອຸປະກອນ (Machine Photo)</label>
                 <div className="flex items-center gap-3">
                   <input
                     type="file"
@@ -386,26 +468,26 @@ export default function InboundEntryPage({ onBack }) {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="block text-slate-600 text-[10px]">ชนิดหมึกพิมพ์ (Ink Type)</label>
+                      <label className="block text-slate-600 text-[10px]">ຊະນິດໝຶກພິມ (Ink Type)</label>
                       <select
                         value={inkType}
                         onChange={(e) => setInkType(e.target.value)}
                         className="w-full px-3 py-2 border rounded-xl bg-white font-bold text-xs"
                       >
-                        <option value="Pigment">หมึกกันน้ำ (Pigment Ink)</option>
-                        <option value="Dye">หมึกธรรมดา (Dye Ink)</option>
-                        <option value="Laser">หมึกผง (Laser Toner)</option>
+                        <option value="Pigment">ໝຶກກັນນ້ຳ (Pigment Ink)</option>
+                        <option value="Dye">ໝຶກທຳມະດາ (Dye Ink)</option>
+                        <option value="Laser">ໝຶກຜົງ (Laser Toner)</option>
                       </select>
                     </div>
 
                     <div className="space-y-1">
-                      <label className="block text-slate-600 text-[10px]">ลิงก์รายการหมึกจากคลัง (Link Ink SKU)</label>
+                      <label className="block text-slate-600 text-[10px]">ລີ້ງຮາຍການໝຶກຈາກຄັງ (Link Ink SKU)</label>
                       <select
                         value={linkedInkSku}
                         onChange={(e) => setLinkedInkSku(e.target.value)}
                         className="w-full px-3 py-2 border rounded-xl bg-white font-bold text-xs"
                       >
-                        <option value="">-- เลือกรายการหมึกจาก Inventory --</option>
+                        <option value="">-- ເລືອກຮາຍການໝຶກຈາກ Inventory --</option>
                         {inventory && inventory.map(item => (
                           <option key={item.id} value={item.id}>
                             {item.name} ({item.id})
@@ -418,7 +500,7 @@ export default function InboundEntryPage({ onBack }) {
                   {/* Yield & Capacity Inputs */}
                   <div className="grid grid-cols-2 gap-4 pt-2 border-t border-purple-200/60">
                     <div className="space-y-2">
-                      <span className="text-[11px] font-black text-slate-800 block">หมึกสีดำ (Black Ink Technical Specs):</span>
+                      <span className="text-[11px] font-black text-slate-800 block">ໝຶກສີດຳ (Black Ink Technical Specs):</span>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
                           <label className="text-[9px] text-slate-500 uppercase block">Yield (Pages)</label>
@@ -442,7 +524,7 @@ export default function InboundEntryPage({ onBack }) {
                     </div>
 
                     <div className="space-y-2">
-                      <span className="text-[11px] font-black text-purple-800 block">หมึกชุดสี (Color Set Technical Specs):</span>
+                      <span className="text-[11px] font-black text-purple-800 block">ໝຶກຊຸດສີ (Color Set Technical Specs):</span>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
                           <label className="text-[9px] text-slate-500 uppercase block">Yield (Pages)</label>
@@ -482,7 +564,7 @@ export default function InboundEntryPage({ onBack }) {
               {/* Asset Financials */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1">
-                  <label className="block text-slate-600">ราคาจัดซื้อ (Purchase Cost LAK)</label>
+                  <label className="block text-slate-600">ລາຄາຈັດຊື້ (Purchase Cost LAK)</label>
                   <input
                     type="number"
                     required
@@ -493,7 +575,7 @@ export default function InboundEntryPage({ onBack }) {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-slate-600">อายุการใช้งาน (Lifespan Years)</label>
+                  <label className="block text-slate-600">ອາຍຸການໃຊ້ງານ (Lifespan Years)</label>
                   <input
                     type="number"
                     required
@@ -504,7 +586,7 @@ export default function InboundEntryPage({ onBack }) {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-slate-600">ความจุแผ่นพิมพ์รวม (Lifetime Capacity)</label>
+                  <label className="block text-slate-600">ຄວາມຈຸແຜ່ນພິມລວມ (Lifetime Capacity)</label>
                   <input
                     type="number"
                     required
@@ -517,6 +599,70 @@ export default function InboundEntryPage({ onBack }) {
             </div>
           )}
 
+          {/* Dual Image Uploads Section */}
+          <div className="pt-4 border-t border-slate-100 space-y-3">
+            <span className="text-xs font-black text-slate-800 uppercase tracking-wider block">
+              ຮູບພາບ & ຫຼັກຖານການຈ່າຍເງິນ (Images & Attachments)
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Item Photo Upload Dropzone */}
+              <div className="border-2 border-dashed border-slate-200 hover:border-sky-500 rounded-2xl p-4 transition bg-slate-50/50 flex flex-col items-center justify-center text-center space-y-2 relative overflow-hidden">
+                {itemPhoto ? (
+                  <div className="relative w-full h-32">
+                    <img src={itemPhoto} alt="Item Preview" className="w-full h-full object-contain rounded-xl" />
+                    <button
+                      type="button"
+                      onClick={() => setItemPhoto(null)}
+                      className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-full shadow-sm hover:bg-red-700"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer flex flex-col items-center justify-center w-full h-32 space-y-1">
+                    <Upload className="w-6 h-6 text-slate-400" />
+                    <span className="text-xs font-bold text-slate-700">ຮູບພາບສິນຄ້າ (Item Photo)</span>
+                    <span className="text-[10px] text-slate-400">Click to upload product image</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleFileUpload(e, setItemPhoto)}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+
+              {/* Payment Slip Upload Dropzone */}
+              <div className="border-2 border-dashed border-slate-200 hover:border-sky-500 rounded-2xl p-4 transition bg-slate-50/50 flex flex-col items-center justify-center text-center space-y-2 relative overflow-hidden">
+                {paymentSlip ? (
+                  <div className="relative w-full h-32">
+                    <img src={paymentSlip} alt="Slip Preview" className="w-full h-full object-contain rounded-xl" />
+                    <button
+                      type="button"
+                      onClick={() => setPaymentSlip(null)}
+                      className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-full shadow-sm hover:bg-red-700"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer flex flex-col items-center justify-center w-full h-32 space-y-1">
+                    <Upload className="w-6 h-6 text-slate-400" />
+                    <span className="text-xs font-bold text-slate-700">ຫຼັກຖານການຈ່າຍເງິນ / ສະລິບ (Payment Slip)</span>
+                    <span className="text-[10px] text-slate-400">Click to upload transaction slip</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleFileUpload(e, setPaymentSlip)}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Submit Action */}
           <div className="flex justify-between items-center pt-6 border-t border-slate-100">
             <button
@@ -524,7 +670,7 @@ export default function InboundEntryPage({ onBack }) {
               onClick={onBack}
               className="px-5 py-3 border rounded-2xl font-black text-xs hover:bg-slate-50 transition"
             >
-              ยกเลิก
+              ຍົກເລີກ
             </button>
 
             <button
@@ -532,7 +678,7 @@ export default function InboundEntryPage({ onBack }) {
               className="px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs shadow-lg shadow-emerald-500/20 transition active:scale-95 flex items-center gap-2"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>ยืนยันบันทึกการนำเข้า (Confirm Inbound Procurement)</span>
+              <span>ຢືນຢັນບັນທຶກການນຳເຂົ້າ (Confirm Inbound Procurement)</span>
             </button>
           </div>
         </form>

@@ -307,7 +307,7 @@ export default function InboundManagement() {
               className="min-h-[44px] px-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs flex items-center justify-center gap-1.5 shadow-md transition"
             >
               <Plus className="w-4 h-4" />
-              <span>+ นำเข้าสินค้า / อุปกรณ์ใหม่ (Inbound Procurement Entry)</span>
+              <span>+ ນຳເຂົ້າສິນຄ້າ / ອຸປະກອນໃຫມ່ (Inbound Entry)</span>
             </button>
           </div>
         </div>

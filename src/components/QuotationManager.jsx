@@ -350,7 +350,7 @@ export default function QuotationManager({ onConvertToOrder }) {
             {currentLang === 'lo' ? 'ຄິດໄລ່ຕົ້ນທຶນ & ອອກໃບສະເໜີລາຄາ' : 'Cost Estimator & Quotation Desk'}
           </h2>
           <p className="text-base text-slate-500 font-semibold leading-relaxed">
-            {currentLang === 'lo' ? 'ຄຳນວນລະອຽด, ປັບປ່ຽນອັດຕາກຳໄລ, ອອກໃบສະເໜີ ແລະ ຕັດສະຕ໋ອກ FIFO ໃນຄລິກດຽວ' : 'High-fidelity print pricing engine linked with real-time FIFO stock and machinery depreciation.'}
+            {currentLang === 'lo' ? 'ຄຳນວນລະອຽດ, ປັບປ່ຽນອັດຕາກຳໄລ, ອອກໃບສະເໜີ ແລະ ຕັດສະຕ໋ອກ FIFO ໃນຄລິກດຽວ' : 'High-fidelity print pricing engine linked with real-time FIFO stock and machinery depreciation.'}
           </p>
         </div>
         <div>

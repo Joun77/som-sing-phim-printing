@@ -62,10 +62,10 @@ export default function OrderDetailsPage({
     let finishing = 'Standard Cutting';
     
     if (name.includes('double a')) paper = 'Double A 80gsm';
-    if (name.includes('glossy') || name.includes('ภาพ')) paper = 'Glossy Photo 230gsm';
-    if (name.includes('card') || name.includes('นามบัตร')) paper = 'Art Card 300gsm';
-    if (name.includes('spiral') || name.includes('เข้าเล่ม')) finishing = 'Spiral Binding';
-    if (name.includes('พับ') || name.includes('ພັບ')) finishing = 'Tri-fold Finishing';
+    if (name.includes('glossy') || name.includes('ຮູບ')) paper = 'Glossy Photo 230gsm';
+    if (name.includes('card') || name.includes('ນາມບັດ')) paper = 'Art Card 300gsm';
+    if (name.includes('spiral') || name.includes('ເຂົ້າເລົ່ມ')) finishing = 'Spiral Binding';
+    if (name.includes('ພັບ')) finishing = 'Tri-fold Finishing';
     if (name.includes('a3')) size = 'A3';
     if (name.includes('a5')) size = 'A5';
     
@@ -159,7 +159,7 @@ export default function OrderDetailsPage({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* BLOCK 1: PRODUCTION PROCESS (ขบวนการผลิต/พิมพ์) */}
+          {/* BLOCK 1: PRODUCTION PROCESS (ຂະບວນການຜະລິດ/ພິມ) */}
           <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-5 shadow-sm flex flex-col justify-between">
             <div>
               <div className="flex justify-between items-center border-b border-slate-100 pb-4">
@@ -297,7 +297,7 @@ export default function OrderDetailsPage({
             )}
           </div>
 
-          {/* BLOCK 2: SHIPPING & DELIVERY PROCESS (ขบวนการจัดส่ง) */}
+          {/* BLOCK 2: SHIPPING & DELIVERY PROCESS (ຂະບວນການຈັດສົ່ງ) */}
           <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-5 shadow-sm flex flex-col justify-between">
             <div>
               <div className="flex justify-between items-center border-b border-slate-100 pb-4">
@@ -412,7 +412,7 @@ export default function OrderDetailsPage({
             )}
           </div>
 
-          {/* BLOCK 3: PAYMENT STATUS PROCESS (ขบวนการชำระเงิน) */}
+          {/* BLOCK 3: PAYMENT STATUS PROCESS (ຂະບວນການຊຳຣະເງິນ) */}
           <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-5 shadow-sm flex flex-col justify-between">
             <div>
               <div className="flex justify-between items-center border-b border-slate-100 pb-4">
@@ -545,7 +545,7 @@ export default function OrderDetailsPage({
             <button
               type="button"
               onClick={() => {
-                showToast('กำลังพิมพ์: Detailed Spec Quote', 'info');
+                showToast('ກຳລັງພິມ: Detailed Spec Quote', 'info');
                 window.print();
               }}
               className="flex items-center gap-2 px-4 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 rounded-xl text-xs font-black transition active:scale-95 shadow-sm"
@@ -556,7 +556,7 @@ export default function OrderDetailsPage({
             <button
               type="button"
               onClick={() => {
-                showToast('กำลังพิมพ์: Summary Invoice', 'info');
+                showToast('ກຳລັງພິມ: Summary Invoice', 'info');
                 window.print();
               }}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-black transition active:scale-95 shadow-sm"

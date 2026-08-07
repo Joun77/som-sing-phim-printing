@@ -3,6 +3,7 @@ import { Boxes, Plus, Scissors, RotateCw, AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
 import InventoryTable from './InventoryTable';
+import MaterialDetailsPage from './MaterialDetailsPage';
 import AddMaterialModal from './AddMaterialModal';
 import OffcutModal from './OffcutModal';
 
@@ -11,16 +12,16 @@ export default function InventoryManagement() {
     inventory, 
     offcuts, 
     addInventoryBatch, 
-    showToast,
-    resetToDefaultData 
+    showToast 
   } = useApp();
 
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
 
-  // Navigation tabs
+  // Navigation tabs & detail view state
   const [activeTab, setActiveTab] = useState('All'); // All, Paper, Ink, Film, Finishing
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDetailLot, setSelectedDetailLot] = useState(null);
 
   // Modals state
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
@@ -60,6 +61,17 @@ export default function InventoryManagement() {
     setSelectedRestockItem(null);
   };
 
+  // Render standalone detail page if a material lot is selected
+  if (selectedDetailLot) {
+    return (
+      <MaterialDetailsPage
+        lotId={selectedDetailLot.id}
+        parentSkuId={selectedDetailLot.parentItem?.id}
+        onBack={() => setSelectedDetailLot(null)}
+      />
+    );
+  }
+
   // Filter logic
   const filteredItems = inventory.filter(item => {
     const matchesTab = activeTab === 'All' || item.category === activeTab;
@@ -67,10 +79,6 @@ export default function InventoryManagement() {
                           item.id.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesTab && matchesSearch;
   });
-
-  const formatLAK = (num) => {
-    return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(num).replace('LAK', '₭');
-  };
 
   return (
     <div className="space-y-6 text-slate-800">
@@ -129,7 +137,11 @@ export default function InventoryManagement() {
       </div>
 
       {/* Main ledger table */}
-      <InventoryTable items={filteredItems} onRestockItem={handleOpenRestock} />
+      <InventoryTable 
+        items={filteredItems} 
+        onRestockItem={handleOpenRestock}
+        onViewDetails={(lot) => setSelectedDetailLot(lot)}
+      />
 
       {/* Offcut Summary Grid */}
       {offcuts && offcuts.length > 0 && (

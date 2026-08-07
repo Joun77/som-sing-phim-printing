@@ -95,10 +95,10 @@ export default function EquipmentTable({ machines, onMaintenance, onViewDetails 
                           <button
                             onClick={() => onViewDetails(eq)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition shadow-sm"
-                            title="รายละเอียดเพิ่มเติม"
+                            title="ລາຍລະອຽດເພີ່ມເຕີມ"
                           >
                             <Eye className="w-3.5 h-3.5" />
-                            <span>รายละเอียดเพิ่มเติม</span>
+                            <span>ລາຍລະອຽດເພີ່ມເຕີມ</span>
                           </button>
                         )}
                       </div>

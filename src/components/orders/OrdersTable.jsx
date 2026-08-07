@@ -22,7 +22,7 @@ export default function OrdersTable({
             <th className="px-6 py-4">Order ID / Date</th>
             <th className="px-6 py-4">ຊື່ລູກຄ້າ / ເບີໂທ</th>
             <th className="px-6 py-4">ລາຍການສັ່ງພິມ</th>
-            <th className="px-6 py-4">การชำระเงิน</th>
+            <th className="px-6 py-4">ສະຖານະການຊຳຣະ</th>
             <th className="px-6 py-4">ສະຖານະການຜະລິດ</th>
             <th className="px-6 py-4 text-right">ຍອດລວມ (LAK)</th>
             <th className="px-6 py-4 text-center">ຈັດການ</th>

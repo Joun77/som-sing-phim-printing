@@ -178,9 +178,9 @@ export default function ItemSpecConfigurator({
   showToast
 }) {
   const papers = inventory ? inventory.filter(p => p.category === 'Paper' || p.name.includes('A4') || p.name.includes('A3') || p.id.startsWith('LOT-')) : [];
-  const rolls = inventory ? inventory.filter(p => p.category === 'Roll' || p.category === 'Vinyl' || p.category === 'Flex' || p.name.includes('ม้วน') || p.name.includes('Vinyl')) : papers;
+  const rolls = inventory ? inventory.filter(p => p.category === 'Roll' || p.category === 'Vinyl' || p.category === 'Flex' || p.name.includes('ມ້ວນ') || p.name.includes('Vinyl')) : papers;
   const printers = equipment ? equipment.filter(eq => eq.category === 'Printer' || eq.printerType || eq.name.includes('C6085') || eq.name.toLowerCase().includes('print')) : [];
-  const cutters = equipment ? equipment.filter(eq => eq.category === 'Cutter' || eq.name.includes('ตัด') || eq.name.toLowerCase().includes('cut')) : [];
+  const cutters = equipment ? equipment.filter(eq => eq.category === 'Cutter' || eq.name.includes('ຕັດ') || eq.name.toLowerCase().includes('cut')) : [];
 
   const defaultPaperId = papers.length > 0 ? papers[0].id : '';
   const defaultPrinterId = printers.length > 0 ? printers[0].id : '';
@@ -256,7 +256,7 @@ export default function ItemSpecConfigurator({
       manualUnitPrice: sourceItem.manualUnitPrice
     }));
 
-    if (showToast) showToast(`คัดลอกสเปกจาก "${sourceItem.name}" สำเร็จ!`, 'info');
+    if (showToast) showToast(`ຄັດລອກສະເປັກຈາກ "${sourceItem.name}" ສຳເລັດ!`, 'info');
   };
 
   const handleSave = () => {
@@ -283,14 +283,14 @@ export default function ItemSpecConfigurator({
             className="flex items-center gap-2 text-xs sm:text-sm font-black text-white hover:bg-emerald-600 transition py-2.5 px-5 bg-emerald-500 rounded-2xl shadow-md active:scale-95"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>← บันทึก & กลับไปรายการสินค้า (Save & Return)</span>
+            <span>← ບັນທຶກ & ກັບໄປຮາຍການສິນຄ້າ (Save & Return)</span>
           </button>
           <button
             type="button"
             onClick={onCancel}
             className="text-xs font-bold text-slate-600 hover:text-slate-900 transition px-4 py-2.5 bg-slate-100 rounded-2xl border border-slate-200"
           >
-            ยกเลิก
+            ຍົກເລີກ
           </button>
         </div>
 
@@ -298,55 +298,43 @@ export default function ItemSpecConfigurator({
           <span className="text-xs uppercase font-extrabold text-sky-600 tracking-wider font-sans block">
             Item Spec Configurator #{itemIndex + 1}
           </span>
-          <h3 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5 flex items-center gap-2">
-            <Sliders className="w-6 h-6 text-purple-600" />
-            <span>ตั้งค่าสเปกการพิมพ์: <strong className="text-sky-600">"{tempItem.name}"</strong></span>
+          <h3 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
+            <Sliders className="w-5 h-5 text-sky-600" />
+            <span>ຕັ້ງຄ່າສະເປັກການພິມ: <strong className="text-sky-600">"{tempItem.name}"</strong></span>
           </h3>
         </div>
       </div>
 
-      {/* Toolbar Bar: Duplicate Specs & Status Badge */}
-      <div className="bg-white p-4 sm:px-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3">
-        <div className="flex items-center gap-2 text-xs font-bold text-slate-600 w-full sm:w-auto">
-          <Copy className="w-4 h-4 text-purple-600 shrink-0" />
-          <span>Duplicate Specs From...:</span>
+      {/* Duplicate Specs Toolbar */}
+      {allItems && allItems.length > 1 && (
+        <div className="bg-sky-50/70 border border-sky-200 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs font-bold text-sky-900 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Copy className="w-4 h-4 text-sky-600" />
+            <span>ຄັດລອກສະເປັກຈາກຮາຍການອື່ນ (Duplicate Specs from Another Item):</span>
+          </div>
           <select
             onChange={(e) => handleDuplicateSpecsFrom(e.target.value)}
             defaultValue=""
-            className="px-3 py-2 border border-slate-200 rounded-xl bg-white text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500 max-w-xs"
+            className="w-full sm:w-auto px-3.5 py-2 border border-sky-300 rounded-xl bg-white text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-400"
           >
-            <option value="" disabled>-- เลือกรายการที่ต้องการคัดลอกสเปก --</option>
+            <option value="" disabled>-- ເລືອກຮາຍການທີ່ຕ້ອງການຄັດລອກສະເປັກ --</option>
             {allItems.map((it, idx) => {
               if (idx === itemIndex) return null;
               return (
                 <option key={it.id || idx} value={idx}>
-                  Item #{idx + 1}: {it.name} ({it.isConfigured ? '✓ Configured' : 'Pending'})
+                  Item #{idx + 1}: {it.name} ({it.isConfigured ? 'Configured' : 'Pending'})
                 </option>
               );
             })}
           </select>
         </div>
+      )}
 
-        <div className="text-xs font-black">
-          {tempItem.isConfigured ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <Check className="w-3.5 h-3.5" />
-              <span>Specs Configured</span>
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-              <AlertCircle className="w-3.5 h-3.5" />
-              <span>Pending Specs</span>
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Main Grid Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Column 1: Steps 1 to 5 Workflow Forms */}
+      {/* Main 2-Column Grid Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Column 1: Configurator Inputs Form (Steps 1 to 5) */}
         <div className="lg:col-span-7 space-y-6">
-          {/* STEP 1: Paper Stock & Quantity (ต้นทุนกระดาษ) */}
+          {/* STEP 1: Paper Stock & Quantity (ຕົ້ນທຶນເຈ້ຍ) */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
@@ -355,7 +343,7 @@ export default function ItemSpecConfigurator({
                 </div>
                 <div>
                   <span className="text-[10px] font-black text-sky-600 uppercase block">Step 1</span>
-                  <h4 className="font-black text-sm text-slate-900">กระดาษ & จำนวนแผ่นที่ใช้ (Paper Stock & Quantity)</h4>
+                  <h4 className="font-black text-sm text-slate-900">ເຈ້ຍ & ຈຳນວນແຜ່ນທີ່ໃຊ້ (Paper Stock & Quantity)</h4>
                 </div>
               </div>
             </div>
@@ -363,7 +351,7 @@ export default function ItemSpecConfigurator({
             <div className="space-y-4 text-xs font-bold text-slate-700">
               {/* Media Type Selector Toggle */}
               <div className="space-y-1">
-                <label className="block text-slate-600 font-black">ประเภทมีเดีย / ชนิดกระดาษ (Media Type) *</label>
+                <label className="block text-slate-600 font-black">ປະເພດມີເດຍ / ຊະນິດເຈ້ຍ (Media Type) *</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
@@ -375,7 +363,7 @@ export default function ItemSpecConfigurator({
                     }`}
                   >
                     <Package className="w-4 h-4" />
-                    <span>📄 กระดาษแผ่น (Sheet-fed)</span>
+                    <span>📄 ເຈ້ຍແຜ່ນ (Sheet-fed)</span>
                   </button>
 
                   <button
@@ -388,7 +376,7 @@ export default function ItemSpecConfigurator({
                     }`}
                   >
                     <Maximize2 className="w-4 h-4" />
-                    <span>🌀 กระดาษม้วน / ป้าย (Roll-fed)</span>
+                    <span>🌀 ເຈ້ຍມ້ວນ / ປ້າຍ (Roll-fed)</span>
                   </button>
                 </div>
               </div>
@@ -398,16 +386,16 @@ export default function ItemSpecConfigurator({
                 /* ROLL-FED / WIDE FORMAT CALCULATION INPUTS */
                 <div className="space-y-4 animate-fade-in bg-purple-50/40 p-4 rounded-2xl border border-purple-100">
                   <div className="space-y-1">
-                    <label className="block text-slate-600">ม้วนมีเดีย / ไวนิล (Roll Stock from Inventory) *</label>
+                    <label className="block text-slate-600">ມ້ວນມີເດຍ / ໄວນິລ (Roll Stock from Inventory) *</label>
                     <select
                       value={tempItem.paperId}
                       onChange={(e) => setTempItem({ ...tempItem, paperId: e.target.value })}
                       className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white font-bold text-xs focus:outline-none"
                     >
-                      <option value="">-- เลือกมีเดียม้วนจาก Master Inventory --</option>
+                      <option value="">-- ເລືອກມີເດຍມ້ວນຈາກ Master Inventory --</option>
                       {activeStockList.map(p => (
                         <option key={p.id} value={p.id}>
-                          {p.name} (ต้นทุน: {formatLAK(p.costPerM2 || p.costPerSheet || 15000)}/m²)
+                          {p.name} (ຕົ້ນທຶນ: {formatLAK(p.costPerM2 || p.costPerSheet || 15000)}/m²)
                         </option>
                       ))}
                     </select>
@@ -435,7 +423,7 @@ export default function ItemSpecConfigurator({
                   </div>
 
                   <div className="bg-purple-100/60 p-3.5 rounded-xl border border-purple-200 flex justify-between items-center text-purple-900 font-bold">
-                    <span>พื้นที่รวม (Total Surface Area):</span>
+                    <span>ເນື້ອທີ່ລວມ (Total Surface Area):</span>
                     <span className="font-sans font-black text-sm text-purple-800">{costing.totalSqMeters} m²</span>
                   </div>
                 </div>
@@ -443,18 +431,18 @@ export default function ItemSpecConfigurator({
                 /* SHEET-FED CALCULATION INPUTS */
                 <div className="space-y-4 animate-fade-in">
                   <div className="space-y-1">
-                    <label className="block text-slate-600">กระดาษที่ใช้พิมพ์ (Paper Stock from Inventory) *</label>
+                    <label className="block text-slate-600">ເຈ້ຍທີ່ໃຊ້ພິມ (Paper Stock from Inventory) *</label>
                     <select
                       value={tempItem.paperId}
                       onChange={(e) => setTempItem({ ...tempItem, paperId: e.target.value })}
                       className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white font-bold text-xs focus:outline-none focus:ring-2 focus:ring-sky-500"
                     >
-                      <option value="">-- เลือกชนิดกระดาษจาก Master Inventory --</option>
+                      <option value="">-- ເລືອກຊະນິດເຈ້ຍຈາກ Master Inventory --</option>
                       {papers.map(p => {
                         const unitPrice = p.costPerSheet || p.costPerConsumptionUnit || p.unitCost || 1200;
                         return (
                           <option key={p.id} value={p.id}>
-                            {p.name} — ต้นทุน: {formatLAK(unitPrice)}/แผ่น
+                            {p.name} — ຕົ້ນທຶນ: {formatLAK(unitPrice)}/ແຜ່ນ
                           </option>
                         );
                       })}
@@ -462,7 +450,7 @@ export default function ItemSpecConfigurator({
                     {selectedPaper && (
                       <p className="text-[11px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
                         <Check className="w-3.5 h-3.5" />
-                        <span>ดึงต้นทุนกระดาษจาก Inventory: <strong>{formatLAK(costing.paperUnitCost)}</strong> / แผ่น</span>
+                        <span>ດຶງຕົ້ນທຶນເຈ້ຍຈາກ Inventory: <strong>{formatLAK(costing.paperUnitCost)}</strong> / ແຜ່ນ</span>
                       </p>
                     )}
                   </div>
@@ -502,7 +490,7 @@ export default function ItemSpecConfigurator({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
                     <div className="space-y-1">
                       <label className="block text-slate-700 font-black">
-                        จำนวนชิ้นต่อแผ่น (Items per Sheet / Up Count) *
+                        ຈຳນວນຊິ້ນຕໍ່ແຜ່ນ (Items per Sheet / Up Count) *
                       </label>
                       <input
                         type="number"
@@ -524,7 +512,7 @@ export default function ItemSpecConfigurator({
 
                     <div className="space-y-1">
                       <label className="block text-slate-700 font-black">
-                        จำนวนกระดาษที่ใช้พิมพ์รวม (Total Paper Sheets) *
+                        ຈຳນວນເຈ້ຍທີ່ໃຊ້ພິມລວມ (Total Paper Sheets) *
                       </label>
                       <input
                         type="number"
@@ -545,13 +533,13 @@ export default function ItemSpecConfigurator({
 
               {/* Step 1 Paper Cost Summary Banner */}
               <div className="bg-sky-50/80 p-4 rounded-2xl border border-sky-100 flex justify-between items-center text-xs font-black">
-                <span className="text-sky-800">ต้นทุนกระดาษรวม (Step 1 Paper Cost):</span>
+                <span className="text-sky-800">ຕົ້ນທຶນເຈ້ຍລວມ (Step 1 Paper Cost):</span>
                 <span className="text-base font-sans text-sky-900">{formatLAK(costing.totalPaperCost)}</span>
               </div>
             </div>
           </div>
 
-          {/* STEP 2: Printing Equipment & Dynamic Ink Calculation (เครื่องพิมพ์ & ต้นทุนหมึกพิมพ์) */}
+          {/* STEP 2: Printing Equipment & Dynamic Ink Calculation (ເຄື່ອງພິມ & ຕົ້ນທຶນໝຶກພິມ) */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
               <div className="p-2 bg-purple-50 text-purple-600 rounded-xl border border-purple-100">
@@ -559,20 +547,20 @@ export default function ItemSpecConfigurator({
               </div>
               <div>
                 <span className="text-[10px] font-black text-purple-600 uppercase block">Step 2</span>
-                <h4 className="font-black text-sm text-slate-900">เครื่องพิมพ์ & คำนวณหมึกพิมพ์ (Printer Equipment & Ink Calculation)</h4>
+                <h4 className="font-black text-sm text-slate-900">ເຄື່ອງພິມ & ຄຳນວນໝຶກພິມ (Printer Equipment & Ink Calculation)</h4>
               </div>
             </div>
 
             <div className="space-y-4 text-xs font-bold text-slate-700">
               {/* Printer Selection */}
               <div className="space-y-1">
-                <label className="block text-slate-600">เครื่องพิมพ์ (Printing Machine Profile) *</label>
+                <label className="block text-slate-600">ເຄື່ອງພິມ (Printing Machine Profile) *</label>
                 <select
                   value={tempItem.printerId}
                   onChange={(e) => setTempItem({ ...tempItem, printerId: e.target.value })}
                   className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white font-bold text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
-                  <option value="">-- เลือกเครื่องพิมพ์จาก Master Equipment --</option>
+                  <option value="">-- ເລືອກເຄື່ອງພິມຈາກ Master Equipment --</option>
                   {printers.map(pr => (
                     <option key={pr.id} value={pr.id}>
                       {pr.name} (Std Ink: {pr.inkConsumptionStandard || 0.05} ml @ 5% | ₭{pr.inkUnitCostMl || 500}/ml)
@@ -595,7 +583,7 @@ export default function ItemSpecConfigurator({
               {/* Print Mode & Coverage Controls */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="block text-slate-600">โหมดสีพิมพ์ (Color Mode)</label>
+                  <label className="block text-slate-600">ໂໝດສີພິມ (Color Mode)</label>
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -605,7 +593,7 @@ export default function ItemSpecConfigurator({
                       }`}
                     >
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>พิมพ์สี (Color)</span>
+                      <span>ພິມສີ (Color)</span>
                     </button>
                     <button
                       type="button"
@@ -615,13 +603,13 @@ export default function ItemSpecConfigurator({
                       }`}
                     >
                       <Printer className="w-3.5 h-3.5" />
-                      <span>ขาว-ดำ (B&W)</span>
+                      <span>ຂາວ-ດຳ (B&W)</span>
                     </button>
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-slate-600">หน้าพิมพ์ (Sides) & การครอบคลุม %</label>
+                  <label className="block text-slate-600">ໜ້າພິມ (Sides) & ການຄອບຄຸມ %</label>
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -630,7 +618,7 @@ export default function ItemSpecConfigurator({
                         tempItem.isDoubleSided ? 'bg-purple-600 text-white border-purple-600' : 'bg-slate-50 text-slate-600 border-slate-200'
                       }`}
                     >
-                      {tempItem.isDoubleSided ? '2 หน้า' : '1 หน้า'}
+                      {tempItem.isDoubleSided ? '2 ໜ້າ' : '1 ໜ້າ'}
                     </button>
                     <input
                       type="number"
@@ -648,9 +636,9 @@ export default function ItemSpecConfigurator({
               {/* Step 2 Dynamic Ink Cost Result Banner */}
               <div className="bg-purple-50/80 p-4 rounded-2xl border border-purple-100 flex justify-between items-center text-xs font-black">
                 <div>
-                  <span className="text-purple-900 block">ต้นทุนหมึกพิมพ์รวม (Step 2 Ink Cost):</span>
+                  <span className="text-purple-900 block">ຕົ້ນທຶນໝຶກພິມລວມ (Step 2 Ink Cost):</span>
                   <span className="text-[10px] text-purple-700 font-mono font-normal">
-                    (Formula: {tempItem.avgCoverage}% / 5% × {costing.printerStdMl}ml × ₭{costing.inkCostPerMl} × {tempItem.isDoubleSided ? '2' : '1'}) = {formatLAK(costing.inkUnitCost)}/แผ่น
+                    (Formula: {tempItem.avgCoverage}% / 5% × {costing.printerStdMl}ml × ₭{costing.inkCostPerMl} × {tempItem.isDoubleSided ? '2' : '1'}) = {formatLAK(costing.inkUnitCost)}/ແຜ່ນ
                   </span>
                 </div>
                 <span className="text-base font-sans text-purple-900">{formatLAK(costing.totalInkCost)}</span>
@@ -658,7 +646,7 @@ export default function ItemSpecConfigurator({
             </div>
           </div>
 
-          {/* STEP 3: Cutting Process (กระบวนการตัด) */}
+          {/* STEP 3: Cutting Process (ກະບວນການຕັດ) */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
@@ -667,7 +655,7 @@ export default function ItemSpecConfigurator({
                 </div>
                 <div>
                   <span className="text-[10px] font-black text-emerald-600 uppercase block">Step 3</span>
-                  <h4 className="font-black text-sm text-slate-900">กระบวนการตัด (Cutting Process)</h4>
+                  <h4 className="font-black text-sm text-slate-900">ກະບວນການຕັດ (Cutting Process)</h4>
                 </div>
               </div>
 
@@ -679,34 +667,34 @@ export default function ItemSpecConfigurator({
                   onChange={(e) => setTempItem({ ...tempItem, skipCutting: e.target.checked })}
                   className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
                 />
-                <span>ไม่ใช้เครื่องตัด (Skip Cutting)</span>
+                <span>ບໍ່ໃຊ້ເຄື່ອງຕັດ (Skip Cutting)</span>
               </label>
             </div>
 
             {!tempItem.skipCutting && (
               <div className="space-y-3 text-xs font-bold text-slate-700 animate-fade-in">
                 <div className="space-y-1">
-                  <label className="block text-slate-600">เครื่องตัดที่ใช้ (Cutting Equipment)</label>
+                  <label className="block text-slate-600">ເຄື່ອງຕັດທີ່ໃຊ້ (Cutting Equipment)</label>
                   <select
                     value={tempItem.cuttingEquipmentId}
                     onChange={(e) => setTempItem({ ...tempItem, cuttingEquipmentId: e.target.value })}
                     className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-white font-bold text-xs focus:outline-none focus:ring-2 focus:ring-sky-500"
                   >
-                    <option value="">-- เลือกเครื่องตัดจาก Master Equipment --</option>
+                    <option value="">-- ເລືອກເຄື່ອງຕັດຈາກ Master Equipment --</option>
                     {cutters.map(ct => (
                       <option key={ct.id} value={ct.id}>{ct.name}</option>
                     ))}
                   </select>
                 </div>
                 <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
-                  <span className="text-slate-500">ค่าบริการตัดชิ้นงาน (Flat Cutting Fee):</span>
+                  <span className="text-slate-500">ຄ່າບໍລິການຕັດຊິ້ນງານ (Flat Cutting Fee):</span>
                   <span className="font-mono font-black text-emerald-700">{formatLAK(tempItem.cuttingFee || 5000)}</span>
                 </div>
               </div>
             )}
           </div>
 
-          {/* STEP 4: Lamination / Coating (การเคลือบผิว) */}
+          {/* STEP 4: Lamination / Coating (ການເຄືອບຜິວ) */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
@@ -715,7 +703,7 @@ export default function ItemSpecConfigurator({
                 </div>
                 <div>
                   <span className="text-[10px] font-black text-amber-600 uppercase block">Step 4</span>
-                  <h4 className="font-black text-sm text-slate-900">การเคลือบผิว (Lamination & Coating)</h4>
+                  <h4 className="font-black text-sm text-slate-900">ການເຄືອບຜິວ (Lamination & Coating)</h4>
                 </div>
               </div>
 
@@ -727,26 +715,26 @@ export default function ItemSpecConfigurator({
                   onChange={(e) => setTempItem({ ...tempItem, noCoating: e.target.checked, useLamination: !e.target.checked })}
                   className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500"
                 />
-                <span>ไม่มีการเคลือบ (No Coating)</span>
+                <span>ບໍ່ມີການເຄືອບ (No Coating)</span>
               </label>
             </div>
 
             {!tempItem.noCoating && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-bold text-slate-700 animate-fade-in">
                 <div className="space-y-1">
-                  <label className="block text-slate-600">ประเภทการเคลือบ (Coating Type)</label>
+                  <label className="block text-slate-600">ປະເພດການເຄືອບ (Coating Type)</label>
                   <select
                     value={tempItem.laminationType || 'Glossy'}
                     onChange={(e) => setTempItem({ ...tempItem, laminationType: e.target.value, useLamination: true })}
                     className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-white font-bold text-xs focus:outline-none"
                   >
-                    <option value="Glossy">เคลือบเงา (Glossy Lamination)</option>
-                    <option value="Matte">เคลือบด้าน (Matte Lamination)</option>
+                    <option value="Glossy">ເຄືອບເງົາ (Glossy Lamination)</option>
+                    <option value="Matte">ເຄືອບດ້ານ (Matte Lamination)</option>
                     <option value="SoftTouch">Soft Touch Velvet</option>
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-slate-600">จำนวนแผ่นเป้าหมาย (Coating Sheets)</label>
+                  <label className="block text-slate-600">ຈຳນວນແຜ່ນເປົ້າໝາຍ (Coating Sheets)</label>
                   <input
                     type="number"
                     value={tempItem.coatingSheets || costing.totalParentSheets}
@@ -758,7 +746,7 @@ export default function ItemSpecConfigurator({
             )}
           </div>
 
-          {/* STEP 5: Binding Process (การเข้าเล่ม) */}
+          {/* STEP 5: Binding Process (ການເຂົ້າເລົ່ມ) */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
@@ -767,7 +755,7 @@ export default function ItemSpecConfigurator({
                 </div>
                 <div>
                   <span className="text-[10px] font-black text-indigo-600 uppercase block">Step 5</span>
-                  <h4 className="font-black text-sm text-slate-900">กระบวนการเข้าเล่ม (Binding Process)</h4>
+                  <h4 className="font-black text-sm text-slate-900">ກະບວນການເຂົ້າເລົ່ມ (Binding Process)</h4>
                 </div>
               </div>
 
@@ -779,19 +767,19 @@ export default function ItemSpecConfigurator({
                   onChange={(e) => setTempItem({ ...tempItem, noBinding: e.target.checked, useBinding: !e.target.checked })}
                   className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
                 />
-                <span>ไม่มีการเข้าเล่ม (No Binding)</span>
+                <span>ບໍ່ມີການເຂົ້າເລົ່ມ (No Binding)</span>
               </label>
             </div>
 
             {!tempItem.noBinding && (
               <div className="space-y-3 text-xs font-bold text-slate-700 animate-fade-in">
-                <label className="block text-slate-600">รูปแบบการเข้าเล่ม (Binding Style)</label>
+                <label className="block text-slate-600">ຮູບແບບການເຂົ້າເລົ່ມ (Binding Style)</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
-                    { id: 'Staple', name: 'มุงหลังคา' },
-                    { id: 'Perfect', name: 'ไส้กาวร้อน' },
-                    { id: 'Spiral', name: 'ไส้ห่วง' },
-                    { id: 'Calendar', name: 'เข้าเล่มปฏิทิน' }
+                    { id: 'Staple', name: 'ມຸງຫຼັງຄາ' },
+                    { id: 'Perfect', name: 'ສັ້ນກາວຮ້ອນ' },
+                    { id: 'Spiral', name: 'ສັ້ນຫ່ວງ' },
+                    { id: 'Calendar', name: 'ເຂົ້າເລົ່ມປະຕິທິນ' }
                   ].map(style => (
                     <button
                       key={style.id}
@@ -830,7 +818,7 @@ export default function ItemSpecConfigurator({
               <div className="space-y-3 text-xs font-semibold text-slate-700">
                 <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80 space-y-1">
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-800 font-bold">1. ต้นทุนกระดาษ & หมึกพิมพ์รวม:</span>
+                    <span className="text-slate-800 font-bold">1. ຕົ້ນທຶນເຈ້ຍ & ໝຶກພິມລວມ:</span>
                     <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.totalPaperInkCost)}</span>
                   </div>
                   <div className="text-[10px] text-slate-500 font-mono font-normal flex items-center gap-1">
@@ -842,17 +830,17 @@ export default function ItemSpecConfigurator({
                 </div>
 
                 <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
-                  <span className="text-slate-600">2. ค่าบริการตัด (Cutting Cost):</span>
+                  <span className="text-slate-600">2. ຄ່າບໍລິການຕັດ (Cutting Cost):</span>
                   <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.cuttingCost)}</span>
                 </div>
 
                 <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
-                  <span className="text-slate-600">3. ค่าเคลือบผิว (Coating Cost):</span>
+                  <span className="text-slate-600">3. ຄ່າເຄືອບຜິວ (Coating Cost):</span>
                   <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.laminationCost)}</span>
                 </div>
 
                 <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
-                  <span className="text-slate-600">4. ค่าเข้าเล่ม (Binding Cost):</span>
+                  <span className="text-slate-600">4. ຄ່າເຂົ້າເລົ່ມ (Binding Cost):</span>
                   <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.bindingCost)}</span>
                 </div>
               </div>
@@ -880,12 +868,12 @@ export default function ItemSpecConfigurator({
 
                 <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 space-y-2 mt-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-emerald-800">ราคาสินค้ารวม (Item Subtotal):</span>
+                    <span className="text-xs font-bold text-emerald-800">ລາຄາສິນຄ້າລວມ (Item Subtotal):</span>
                     <span className="text-2xl font-black text-emerald-700 font-sans">{formatLAK(costing.finalPrice)}</span>
                   </div>
                   <div className="flex justify-between items-center text-xs text-emerald-800/80 font-bold border-t border-emerald-200/60 pt-2 mt-1">
-                    <span>ราคาเฉลี่ยต่อหน่วย (Unit Price):</span>
-                    <span className="font-sans font-black text-emerald-900">{formatLAK(costing.unitPrice)} / ชิ้น</span>
+                    <span>ລາຄາສະເລ່ຍຕໍ່ໜ່ວຍ (Unit Price):</span>
+                    <span className="font-sans font-black text-emerald-900">{formatLAK(costing.unitPrice)} / ຊິ້ນ</span>
                   </div>
                 </div>
               </div>
@@ -899,7 +887,7 @@ export default function ItemSpecConfigurator({
                 className="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black text-xs transition active:scale-95 flex items-center justify-center gap-2 border border-slate-200"
               >
                 <ArrowLeft className="w-4 h-4" />
-                <span>ยกเลิก / กลับคืน</span>
+                <span>ຍົກເລີກ / ກັບຄືນ</span>
               </button>
               <button
                 type="button"
@@ -907,7 +895,7 @@ export default function ItemSpecConfigurator({
                 className="flex-2 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs shadow-md transition active:scale-95 flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>บันทึกสเปก (Save Specs)</span>
+                <span>ບັນທຶກສະເປັກ (Save Specs)</span>
               </button>
             </div>
           </div>

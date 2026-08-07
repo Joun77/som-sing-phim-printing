@@ -519,9 +519,9 @@ export default function HistoryAnalytics() {
                   onChange={(e) => setSettleMethod(e.target.value)}
                   className="w-full px-3 py-2 border rounded-xl focus:outline-none text-sm bg-white"
                 >
-                  <option value="BCEL One">BCEL One (โอน)</option>
-                  <option value="Cash">Cash (เงินสด)</option>
-                  <option value="Transfer">Transfer (โอนบัญชีธนาคาร)</option>
+                  <option value="BCEL One">BCEL One (ໂອນ)</option>
+                  <option value="Cash">Cash (ເງິນສົດ)</option>
+                  <option value="Transfer">Transfer (ໂອນບັນຊີທະນາຄານ)</option>
                 </select>
               </div>
 
