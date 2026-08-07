@@ -187,6 +187,14 @@ export default function InboundEntryPage({ onBack }) {
           printedPagesCapacity: Number(lifetimeCapacity),
           supplierName,
           supplierContact,
+          inkType,
+          linkedInkSku,
+          blackYieldPages: Number(blackYieldPages),
+          blackCapacityMl: Number(blackCapacityMl),
+          colorYieldPages: Number(colorYieldPages),
+          colorCapacityMl: Number(colorCapacityMl),
+          blackMlPerSheet,
+          colorMlPerSheet,
           ...categoryParams
         });
       }
@@ -210,7 +218,15 @@ export default function InboundEntryPage({ onBack }) {
           totalPrice: Number(purchaseCost),
           date: new Date().toISOString().split('T')[0],
           itemPhoto,
-          paymentSlip
+          paymentSlip,
+          inkType,
+          linkedInkSku,
+          blackYieldPages: Number(blackYieldPages),
+          blackCapacityMl: Number(blackCapacityMl),
+          colorYieldPages: Number(colorYieldPages),
+          colorCapacityMl: Number(colorCapacityMl),
+          blackMlPerSheet,
+          colorMlPerSheet
         });
       }
 

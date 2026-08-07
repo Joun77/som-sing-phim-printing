@@ -16,7 +16,8 @@ import {
   DollarSign, 
   Camera, 
   X, 
-  Check 
+  Check,
+  Trash2
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -98,33 +99,14 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
   return (
     <div className="space-y-6 animate-fade-in text-slate-800 font-sans pb-12">
       {/* Top Header Card */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white px-6 py-5 rounded-3xl border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-2 text-xs sm:text-sm font-black text-slate-600 hover:text-slate-900 transition py-2.5 px-4 bg-slate-100 rounded-2xl border border-slate-200 active:scale-95"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>← ກັບໜ້າຈັດຮາຍການເຄື່ອງພິມ (Back to Directory)</span>
-          </button>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsEditing(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-xs shadow-md transition active:scale-95"
-          >
-            <Edit3 className="w-4 h-4" />
-            <span>ແກ້ໄຂຂໍ້ມູນ (Edit Profile)</span>
-          </button>
-          <button
-            onClick={handleMaintenanceReset}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs shadow-md transition active:scale-95"
-          >
-            <Wrench className="w-4 h-4" />
-            <span>SLA Reset</span>
-          </button>
-        </div>
+      <div className="flex items-center justify-between gap-4 bg-white px-6 py-5 rounded-3xl border border-slate-200 shadow-sm">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 text-xs sm:text-sm font-black text-slate-600 hover:text-slate-900 transition py-2.5 px-4 bg-slate-100 rounded-2xl border border-slate-200 active:scale-95 w-fit"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>ກັບໜ້າຈັດຮາຍການເຄື່ອງພິມ (Back to Directory)</span>
+        </button>
       </div>
 
       {/* Main Machine Banner Card */}
@@ -277,6 +259,37 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Bottom Action Footer */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-end gap-3">
+        <button
+          onClick={() => {
+            if (setEquipment) {
+              setEquipment(prev => prev.filter(eq => eq.id !== machine.id));
+              showToast(`ລຶບຂໍ້ມູນເຄື່ອງພິມ "${machine.name}" ສຳເລັດ!`, 'info');
+              onBack();
+            }
+          }}
+          className="flex items-center gap-2 px-5 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-2xl font-black text-xs transition active:scale-95"
+        >
+          <Trash2 className="w-4 h-4" />
+          <span>ລຶບລາຍການ (Delete Machine)</span>
+        </button>
+        <button
+          onClick={handleMaintenanceReset}
+          className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs shadow-sm transition active:scale-95"
+        >
+          <Wrench className="w-4 h-4" />
+          <span>SLA Reset</span>
+        </button>
+        <button
+          onClick={() => setIsEditing(true)}
+          className="flex items-center gap-2 px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-2xl font-black text-xs shadow-sm transition active:scale-95"
+        >
+          <Edit3 className="w-4 h-4" />
+          <span>ແກ້ໄຂຂໍ້ມູນ (Edit Profile)</span>
+        </button>
       </div>
 
       {/* Edit Profile Modal */}
