@@ -10,7 +10,7 @@ import {
   Layers
 } from 'lucide-react';
 import OrdersTable from './OrdersTable';
-import CreateOrderModal from './CreateOrderModal';
+import CreateOrderPage from './CreateOrderPage';
 import OrderDetailsModal from './OrderDetailsModal';
 import Lightbox from './Lightbox';
 
@@ -165,7 +165,24 @@ export default function CustomerOrders() {
   };
 
   const applySettlePreset = (pct) => {
-    if (selectedOrder) {
+    if (isAddOrderOpen) {
+    return (
+      <CreateOrderPage
+        onBack={() => { setIsAddOrderOpen(false); setPrefilledOrderSpecs(null); }}
+        inventory={inventory}
+        customers={customers}
+        addCustomer={addCustomer}
+        addOrder={addOrder}
+        showToast={showToast}
+        formatLAK={formatLAK}
+        currentLang={currentLang}
+        t={t}
+        prefilledSpecs={prefilledOrderSpecs}
+      />
+    );
+  }
+
+  if (selectedOrder) {
       if (pct === 100) setSettleAmount(selectedOrder.remainingUnpaidBalance);
       else if (pct === 50) setSettleAmount(Math.round(selectedOrder.remainingUnpaidBalance / 2));
     }
@@ -416,21 +433,7 @@ export default function CustomerOrders() {
         onViewDetails={setSelectedOrder}
       />
 
-      {/* CREATE ORDER MODAL */}
-      {isAddOrderOpen && (
-        <CreateOrderModal
-          onClose={() => { setIsAddOrderOpen(false); setPrefilledOrderSpecs(null); }}
-          inventory={inventory}
-          customers={customers}
-          addCustomer={addCustomer}
-          addOrder={addOrder}
-          showToast={showToast}
-          formatLAK={formatLAK}
-          currentLang={currentLang}
-          t={t}
-          prefilledSpecs={prefilledOrderSpecs}
-        />
-      )}
+
     </div>
   );
 }
