@@ -221,376 +221,424 @@ export default function CustomerOrders() {
         ))}
       </div>
 
-      {/* Orders Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredOrders.map(ord => {
-          const isOverdue = ord.paymentStatus === 'Overdue';
-          const preflightComplete = ord.preflight?.cmyk === 'Pass' && ord.preflight?.bleed === 'Pass' && ord.preflight?.resolution === 'Pass';
-          
-          return (
-            <div 
-              key={ord.id}
-              ref={selectedOrder?.id === ord.id ? focusRef : null}
-              className={`
-                bg-white p-6 rounded-3xl border transition-all duration-300 flex flex-col justify-between hover:shadow-md shadow-sm
-                ${isOverdue ? 'border-red-300 bg-red-50/10' : 'border-slate-100'}
-                ${selectedOrder?.id === ord.id ? 'ring-2 ring-accent-sky ring-offset-2' : ''}
-              `}
-            >
-              <div className="space-y-5">
-                <div className="flex justify-between items-center gap-2">
-                  <span className={`px-3 py-1 rounded-xl text-xs font-black border flex items-center gap-1.5 ${getStatusBadgeClass(ord.status)}`}>
-                    {getStatusIcon(ord.status)}
-                    <span>{t(`status.${ord.status}`)}</span>
-                  </span>
-                  <span className={`px-3 py-1 rounded-xl text-[10px] font-black border flex items-center gap-1 ${getPaymentStatusBadge(ord.paymentStatus)}`}>
-                    {getPaymentStatusIcon(ord.paymentStatus)}
-                    <span>{t(`payment.${ord.paymentStatus}`)}</span>
-                  </span>
-                </div>
+      {/* Orders Table View */}
+      <div className="w-full overflow-x-auto rounded-3xl border border-slate-100 bg-white shadow-sm">
+        <table className="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr className="bg-slate-50/70 text-xs lg:text-sm font-black uppercase text-slate-500 tracking-wider border-b border-slate-100">
+              <th className="px-6 py-4">Order ID / Date</th>
+              <th className="px-6 py-4">ຊື່ລູກຄ້າ / ເບີໂທ</th>
+              <th className="px-6 py-4">ລາຍການສັ່ງພິມ</th>
+              <th className="px-6 py-4">ການຊຳລະເງິນ</th>
+              <th className="px-6 py-4">ສະຖານະການຜະລິດ</th>
+              <th className="px-6 py-4 text-right">ຍອດລວມ (LAK)</th>
+              <th className="px-6 py-4 text-center">ຈັດການ</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-slate-700">
+            {filteredOrders.map(ord => {
+              const isOverdue = ord.paymentStatus === 'Overdue';
+              const itemsSummary = () => {
+                if (!ord.items || ord.items.length === 0) return '-';
+                const firstItem = ord.items[0];
+                const summary = `${firstItem.name} (x${firstItem.quantity})`;
+                if (ord.items.length > 1) {
+                  return `${summary} (+${ord.items.length - 1} ${currentLang === 'lo' ? 'ລາຍການ' : 'items'})`;
+                }
+                return summary;
+              };
 
-                <div className="space-y-1">
-                  <h4 className="font-black text-slate-900 text-lg flex items-center gap-2">
-                    <User className="w-5 h-5 text-slate-400 shrink-0" />
-                    <span>{ord.customerName}</span>
-                  </h4>
-                  <p className="text-sm text-slate-400 font-sans font-semibold leading-none">{ord.phone}</p>
-                </div>
-
-                <div className="bg-slate-50 p-4 rounded-2xl border space-y-2">
-                  {ord.items.map((item, i) => (
-                    <div key={i} className="flex justify-between text-sm font-semibold text-slate-600">
-                      <span className="truncate max-w-[150px]">{item.name}</span>
-                      <span className="font-black text-slate-900 font-sans">x{item.quantity}</span>
-                    </div>
-                  ))}
-                  <div className="border-t border-slate-200 mt-3 pt-2 flex justify-between text-sm font-black text-slate-950">
-                    <span>{t('orders.total_price')}:</span>
-                    <span className="font-sans text-accent-sky text-base">{formatLAK(ord.totalPriceCharged)}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-xs p-3 bg-slate-100 rounded-2xl font-bold">
-                  <span className="text-slate-500 uppercase tracking-wider">{t('orders.preflight')}:</span>
-                  <span className={`font-black flex items-center gap-1 ${preflightComplete ? 'text-emerald-700' : 'text-amber-700'}`}>
-                    {preflightComplete ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
-                    {preflightComplete ? t('orders.preflight_complete') : t('orders.preflight_pending')}
-                  </span>
-                </div>
-
-                <div className="flex flex-col gap-1 text-xs text-slate-400 font-bold font-sans">
-                  <span>Due Date: {ord.promisedDeliveryDate}</span>
-                  {ord.installationSchedule && (
-                    <span className="text-indigo-600 flex items-center gap-1">
-                      🛠️ Installation: {ord.installationSchedule.replace('T', ' ')}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-slate-100 flex gap-2">
-                <button
-                  onClick={() => setSelectedOrder(ord)}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-sm font-extrabold transition min-h-[44px] active:scale-95"
+              return (
+                <tr 
+                  key={ord.id}
+                  ref={selectedOrder?.id === ord.id ? focusRef : null}
+                  className={`hover:bg-slate-50/30 transition ${
+                    isOverdue ? 'bg-red-50/10' : ''
+                  } ${selectedOrder?.id === ord.id ? 'bg-sky-50/20' : ''}`}
                 >
-                  <Eye className="w-5 h-5 shrink-0 text-slate-500" />
-                  <span>{t('orders.btn_details')}</span>
-                </button>
-                
-                {ord.status !== 'Delivered' && (
-                  <button
-                    onClick={() => handleStatusChange(ord.id, ord.status)}
-                    className="px-4 py-3 bg-accent-sky text-white rounded-2xl text-sm font-extrabold hover:bg-accent-sky/95 transition flex items-center gap-1.5 min-h-[44px] active:scale-95"
-                  >
-                    <span>{t('orders.btn_next_step')}</span>
-                    <ChevronRight className="w-4 h-4 shrink-0" />
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+                  {/* Order ID & Date */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="font-mono font-black text-slate-900 block text-sm lg:text-base">#{ord.id}</span>
+                    <span className="text-xs text-slate-400 block font-sans mt-1">Due: {ord.promisedDeliveryDate}</span>
+                  </td>
+                  {/* Customer Info */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="font-bold text-slate-900 block">{ord.customerName}</span>
+                    <span className="text-xs text-slate-400 block font-sans mt-0.5">{ord.phone}</span>
+                  </td>
+                  {/* Print Items Summary */}
+                  <td className="px-6 py-4 min-w-[200px]">
+                    <span className="font-semibold text-slate-800 line-clamp-1">{itemsSummary()}</span>
+                  </td>
+                  {/* Payment Status */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 rounded-[8px] text-[10px] sm:text-xs font-extrabold uppercase border ${getPaymentStatusBadge(ord.paymentStatus)}`}>
+                      {getPaymentStatusIcon(ord.paymentStatus)}
+                      <span className="ml-1">{t(`payment.${ord.paymentStatus}`)}</span>
+                    </span>
+                  </td>
+                  {/* Production Status */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2.5 py-1 rounded-[8px] text-[10px] sm:text-xs font-extrabold uppercase border ${getStatusBadgeClass(ord.status)}`}>
+                      {getStatusIcon(ord.status)}
+                      <span className="ml-1">{t(`status.${ord.status}`)}</span>
+                    </span>
+                  </td>
+                  {/* Total Price */}
+                  <td className="px-6 py-4 text-right font-sans font-black text-slate-900 whitespace-nowrap">
+                    <span className="block text-sm lg:text-base">{formatLAK(ord.totalPriceCharged)}</span>
+                    {ord.remainingUnpaidBalance > 0 && (
+                      <span className="text-xs font-sans font-bold text-red-500 block mt-1">
+                        {currentLang === 'lo' ? 'ຄ້າງ:' : 'Unpaid:'} {formatLAK(ord.remainingUnpaidBalance)}
+                      </span>
+                    )}
+                  </td>
+                  {/* View Details Action */}
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <button
+                      onClick={() => setSelectedOrder(ord)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-accent-sky hover:text-white rounded-xl text-xs font-black text-slate-600 transition shadow-sm border border-slate-100"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>{currentLang === 'lo' ? 'ເບິ່ງລາຍລະອຽດ' : 'View Details'}</span>
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
-      {/* LIFE-CYCLE DETAIL MODAL */}
-      {selectedOrder && (
-        <dialog 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent outline-none border-none w-full h-full"
-          open
-        >
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setSelectedOrder(null)} />
+      {/* COMPREHENSIVE ORDER DETAILS MODAL / DRAWER */}
+      {selectedOrder && (() => {
+        const preflightComplete = selectedOrder.preflight?.cmyk === 'Pass' && selectedOrder.preflight?.bleed === 'Pass' && selectedOrder.preflight?.resolution === 'Pass';
+        
+        const getItemSpecs = (item) => {
+          const name = item.name.toLowerCase();
+          let paper = 'Standard';
+          let size = 'A4';
+          let finishing = 'None';
           
-          <div className="relative bg-white w-full max-w-2xl rounded-3xl shadow-2xl p-8 overflow-y-auto max-h-[90vh] z-10 border border-slate-100 animate-fade-in space-y-6">
-            <div className="flex justify-between items-start border-b pb-4">
-              <div>
-                <span className="text-xs text-slate-400 font-mono font-bold uppercase">Order Tracker ID: {selectedOrder.id}</span>
-                <h3 className="text-2xl font-black text-primary-navy mt-1">
-                  {t('orders.modal_title')}
-                </h3>
-              </div>
-              <button 
-                onClick={() => setSelectedOrder(null)}
-                className="p-2 hover:bg-slate-100 rounded-xl text-slate-400"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
+          if (name.includes('double a')) paper = 'Double A 80gsm';
+          if (name.includes('glossy')) paper = 'Glossy Photo Paper';
+          if (name.includes('spiral')) finishing = 'Spiral Binding';
+          if (name.includes('ພັບ')) finishing = 'Folding';
+          if (name.includes('a3')) size = 'A3';
+          
+          return { paper, size, finishing };
+        };
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                {/* Customer card */}
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-3">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Client Info</h4>
-                  <div className="text-sm space-y-1.5 font-bold">
-                    <p className="text-slate-900 text-base">{selectedOrder.customerName}</p>
-                    <p className="text-slate-500 font-sans text-xs">{selectedOrder.phone}</p>
-                    <p className="text-slate-400 font-sans text-xs">Created: {selectedOrder.date} {selectedOrder.createdTime}</p>
+        return (
+          <dialog 
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent outline-none border-none w-full h-full"
+            open
+          >
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setSelectedOrder(null)} />
+            
+            <div className="relative bg-white w-full max-w-5xl rounded-3xl shadow-2xl p-6 sm:p-8 md:p-10 overflow-y-auto max-h-[95vh] z-10 border border-slate-100 animate-fade-in flex flex-col justify-between">
+              {/* Header section */}
+              <div className="flex justify-between items-start border-b pb-4 mb-6">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono font-bold uppercase">
+                    <span>Order Tracker ID: {selectedOrder.id}</span>
+                    <span>•</span>
+                    <span>Created: {selectedOrder.date} {selectedOrder.createdTime}</span>
                   </div>
-                </div>
-
-                {/* Items card */}
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-3">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Prints list</h4>
-                  <div className="space-y-2 text-sm font-semibold">
-                    {selectedOrder.items.map((item, idx) => (
-                      <div key={idx} className="flex justify-between border-b pb-1 text-slate-600">
-                        <span>{item.name} (x{item.quantity})</span>
-                        <span className="font-black text-slate-950 font-sans">{formatLAK(item.quantity * item.unitCost)}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between text-base font-black text-slate-950 pt-2 border-t">
-                      <span>Total Charged:</span>
-                      <span className="font-sans text-accent-sky text-lg">{formatLAK(selectedOrder.totalPriceCharged)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Payment card */}
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t('orders.payment_status')}</h4>
-                    <span className={`px-3 py-1 rounded-xl text-xs font-black border flex items-center gap-1.5 ${getPaymentStatusBadge(selectedOrder.paymentStatus)}`}>
-                      {getPaymentStatusIcon(selectedOrder.paymentStatus)}
-                      <span>{t(`payment.${selectedOrder.paymentStatus}`)}</span>
+                  <h3 className="text-2xl font-black text-primary-navy mt-1.5 flex items-center gap-3">
+                    <span>{t('orders.modal_title')}</span>
+                    <span className={`px-2.5 py-0.5 rounded-[8px] text-xs font-black border uppercase ${getStatusBadgeClass(selectedOrder.status)}`}>
+                      {t(`status.${selectedOrder.status}`)}
                     </span>
-                  </div>
-
-                  <div className="text-sm font-bold space-y-1.5 text-slate-600">
-                    <div className="flex justify-between">
-                      <span>Amount Paid:</span>
-                      <span className="font-sans text-slate-900 font-black">{formatLAK(selectedOrder.depositAmountPaid)}</span>
-                    </div>
-                    <div className="flex justify-between text-red-600 font-black">
-                      <span>{t('orders.unpaid_balance')}:</span>
-                      <span className="font-sans text-base">{formatLAK(selectedOrder.remainingUnpaidBalance)}</span>
-                    </div>
-                  </div>
-
-                  {selectedOrder.remainingUnpaidBalance > 0 && (
-                    <button
-                      onClick={() => {
-                        setSettleAmount(selectedOrder.remainingUnpaidBalance);
-                        setSettleStep(1);
-                        setIsSettleOpen(true);
-                      }}
-                      className="w-full mt-3 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-sm font-extrabold shadow-lg shadow-emerald-500/15 transition active:scale-95 min-h-[48px]"
-                    >
-                      {t('orders.btn_settle')}
-                    </button>
-                  )}
+                  </h3>
                 </div>
+                <button 
+                  onClick={() => setSelectedOrder(null)}
+                  className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition"
+                >
+                  <X className="w-6 h-6" />
+                </button>
               </div>
 
-              <div className="space-y-4">
-                {/* Pre-flight checklist card (No Emojis) */}
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-4">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <ClipboardList className="w-5 h-5 text-accent-sky" />
-                    <span>{t('orders.preflight_checklist')}</span>
-                  </h4>
-
-                  <div className="space-y-3.5 text-sm font-bold text-slate-700">
-                    {/* CMYK Check */}
-                    <div className="flex items-center justify-between">
-                      <span>{t('orders.cmyk_mode')}</span>
-                      <div className="flex gap-1.5">
-                        {['Pass', 'Fail', 'Not Checked'].map(val => (
-                          <button
-                            key={val}
-                            type="button"
-                            onClick={() => handlePreflightToggle('cmyk', val)}
-                            className={`px-3 py-1 rounded-xl text-xs font-black border transition min-h-[36px] ${
-                              selectedOrder.preflight?.cmyk === val 
-                                ? val === 'Pass' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : val === 'Fail' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-200 text-slate-800'
-                                : 'bg-white text-slate-400 border-slate-200'
-                            }`}
-                          >
-                            {val}
-                          </button>
-                        ))}
-                      </div>
+              {/* Grid Content */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                {/* Part 1: Details Table & Customer Info (col-span-8) */}
+                <div className="lg:col-span-8 space-y-6">
+                  {/* Customer contact card */}
+                  <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs font-black text-slate-400 uppercase tracking-wider block">Customer Info</span>
+                      <span className="font-extrabold text-slate-900 text-base mt-1 block">{selectedOrder.customerName}</span>
+                      <span className="text-sm text-slate-500 font-sans block mt-0.5">{selectedOrder.phone}</span>
                     </div>
-
-                    {/* Bleed check */}
-                    <div className="flex items-center justify-between">
-                      <span>{t('orders.bleed_status')}</span>
-                      <div className="flex gap-1.5">
-                        {['Pass', 'Fail', 'Not Checked'].map(val => (
-                          <button
-                            key={val}
-                            type="button"
-                            onClick={() => handlePreflightToggle('bleed', val)}
-                            className={`px-3 py-1 rounded-xl text-xs font-black border transition min-h-[36px] ${
-                              selectedOrder.preflight?.bleed === val 
-                                ? val === 'Pass' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : val === 'Fail' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-200 text-slate-800'
-                                : 'bg-white text-slate-400 border-slate-200'
-                            }`}
-                          >
-                            {val}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Resolution check */}
-                    <div className="flex items-center justify-between">
-                      <span>{t('orders.resolution_check')}</span>
-                      <div className="flex gap-1.5">
-                        {['Pass', 'Fail', 'Not Checked'].map(val => (
-                          <button
-                            key={val}
-                            type="button"
-                            onClick={() => handlePreflightToggle('resolution', val)}
-                            className={`px-3 py-1 rounded-xl text-xs font-black border transition min-h-[36px] ${
-                              selectedOrder.preflight?.resolution === val 
-                                ? val === 'Pass' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : val === 'Fail' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-200 text-slate-800'
-                                : 'bg-white text-slate-400 border-slate-200'
-                            }`}
-                          >
-                            {val}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Approved Proof */}
-                    <div className="flex flex-col gap-2 pt-3 border-t text-xs text-slate-400 font-bold">
-                      <div className="flex justify-between items-center">
-                        <span>{t('orders.approved_timestamp')}</span>
-                        <span className="font-black text-slate-700 font-sans">
-                          {selectedOrder.preflight?.approvedTimestamp || 'Awaiting customer proof...'}
+                    <div>
+                      <span className="text-xs font-black text-slate-400 uppercase tracking-wider block">Delivery Schedule</span>
+                      <span className="text-sm text-slate-700 font-bold block mt-1">Due Date: {selectedOrder.promisedDeliveryDate}</span>
+                      {selectedOrder.installationSchedule && (
+                        <span className="text-xs text-indigo-600 font-bold block mt-1">
+                          🛠️ Installation: {selectedOrder.installationSchedule.replace('T', ' ')}
                         </span>
-                      </div>
-                      {!selectedOrder.preflight?.approvedTimestamp && (
-                        <button
-                          type="button"
-                          onClick={() => handlePreflightToggle('approvedTimestamp', new Date().toISOString().replace('T', ' ').slice(0, 16))}
-                          className="w-full py-2.5 bg-accent-sky hover:bg-accent-sky/90 text-white rounded-xl text-xs font-extrabold transition min-h-[40px] shadow-md shadow-accent-sky/15"
-                        >
-                          {t('orders.btn_approve_proof')}
-                        </button>
                       )}
                     </div>
                   </div>
+
+                  {/* Detailed Items Table */}
+                  <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                    <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 text-xs font-black text-slate-500 uppercase tracking-wider border-b">
+                          <th className="px-4 py-3">Item Name</th>
+                          <th className="px-4 py-3">Specifications</th>
+                          <th className="px-4 py-3 text-center">Qty</th>
+                          <th className="px-4 py-3 text-right">Unit Price</th>
+                          <th className="px-4 py-3 text-right">Total Price</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-600">
+                        {selectedOrder.items.map((item, idx) => {
+                          const specs = getItemSpecs(item);
+                          return (
+                            <tr key={item.id || idx} className="hover:bg-slate-50/30 transition">
+                              <td className="px-4 py-3.5 font-bold text-slate-900">{item.name}</td>
+                              <td className="px-4 py-3.5 text-slate-500 font-sans text-xs">
+                                <span>{specs.paper}</span> • <span>{specs.size}</span> • <span>{specs.finishing}</span>
+                              </td>
+                              <td className="px-4 py-3.5 text-center font-sans font-bold text-slate-900">x{item.quantity}</td>
+                              <td className="px-4 py-3.5 text-right font-sans">{formatLAK(item.unitCost)}</td>
+                              <td className="px-4 py-3.5 text-right font-sans font-black text-slate-900">{formatLAK(item.quantity * item.unitCost)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Shipping / Delivery details */}
+                  <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 space-y-2">
+                    <span className="text-xs font-black text-slate-400 uppercase tracking-wider block">Delivery & Shipping Address</span>
+                    <p className="text-sm font-semibold text-slate-700 leading-relaxed">
+                      {selectedOrder.deliveryMethod === 'Pickup' ? '🏪 Pickup at Shop' : `🚚 Shipping (${selectedOrder.deliveryMethod || 'Kerry Lao'})`}
+                    </p>
+                    {selectedOrder.address && (
+                      <p className="text-xs text-slate-500 italic mt-1 font-semibold">{selectedOrder.address}</p>
+                    )}
+                  </div>
                 </div>
 
-                {/* Versions list */}
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-4">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Link className="w-5 h-5 text-emerald-600" />
-                    <span>{t('orders.version_control')}</span>
-                  </h4>
+                {/* Part 2: Preflight checks, Payments & Versions (col-span-4) */}
+                <div className="lg:col-span-4 space-y-6">
+                  {/* Preflight card */}
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-4">
+                    <div className="flex justify-between items-center border-b pb-2">
+                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider">Pre-flight check</h4>
+                      <span className={`font-black flex items-center gap-1 text-xs ${preflightComplete ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        {preflightComplete ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                        {preflightComplete ? t('orders.preflight_complete') : t('orders.preflight_pending')}
+                      </span>
+                    </div>
 
-                  <form onSubmit={handleAddVersion} className="flex gap-2">
-                    <input
-                      type="text"
-                      required
-                      placeholder="Artwork link URL..."
-                      value={newVersionUrl}
-                      onChange={(e) => setNewVersionUrl(e.target.value)}
-                      className="flex-1 px-3 py-2 border-2 rounded-xl text-xs bg-white font-semibold focus:outline-none focus:ring-2 focus:ring-accent-sky"
-                    />
-                    <button
-                      type="submit"
-                      className="px-4 bg-accent-sky hover:bg-accent-sky/95 text-white text-xs font-extrabold rounded-xl transition"
-                    >
-                      {t('orders.btn_add_version')}
-                    </button>
-                  </form>
-
-                  <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-                    {selectedOrder.preflight?.versions?.map((ver, idx) => (
-                      <div key={idx} className="p-3 bg-white rounded-xl border flex items-center justify-between text-xs font-semibold">
-                        <span className="font-black text-slate-900 font-mono">v{ver.version}</span>
-                        <a 
-                          href={ver.url} 
-                          target="_blank" 
-                          rel="noreferrer" 
-                          className="text-accent-sky hover:underline truncate max-w-[125px] ml-2"
-                        >
-                          {ver.url}
-                        </a>
-                        <span className="text-slate-400 font-sans">{ver.uploadedAt}</span>
+                    <div className="space-y-3 text-xs font-bold text-slate-600">
+                      {/* CMYK */}
+                      <div className="flex items-center justify-between">
+                        <span>{t('orders.cmyk_check')}</span>
+                        <div className="flex gap-1">
+                          {['Pass', 'Fail', 'Not Checked'].map(val => (
+                            <button
+                              key={val}
+                              type="button"
+                              onClick={() => handlePreflightToggle('cmyk', val)}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-black border transition ${
+                                selectedOrder.preflight?.cmyk === val 
+                                  ? val === 'Pass' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : val === 'Fail' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-200 text-slate-800'
+                                  : 'bg-white text-slate-400 border-slate-200'
+                              }`}
+                            >
+                              {val}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    ))}
+
+                      {/* Bleed */}
+                      <div className="flex items-center justify-between">
+                        <span>{t('orders.bleed_check')}</span>
+                        <div className="flex gap-1">
+                          {['Pass', 'Fail', 'Not Checked'].map(val => (
+                            <button
+                              key={val}
+                              type="button"
+                              onClick={() => handlePreflightToggle('bleed', val)}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-black border transition ${
+                                selectedOrder.preflight?.bleed === val 
+                                  ? val === 'Pass' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : val === 'Fail' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-200 text-slate-800'
+                                  : 'bg-white text-slate-400 border-slate-200'
+                              }`}
+                            >
+                              {val}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Resolution */}
+                      <div className="flex items-center justify-between">
+                        <span>{t('orders.resolution_check')}</span>
+                        <div className="flex gap-1">
+                          {['Pass', 'Fail', 'Not Checked'].map(val => (
+                            <button
+                              key={val}
+                              type="button"
+                              onClick={() => handlePreflightToggle('resolution', val)}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-black border transition ${
+                                selectedOrder.preflight?.resolution === val 
+                                  ? val === 'Pass' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : val === 'Fail' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-200 text-slate-800'
+                                  : 'bg-white text-slate-400 border-slate-200'
+                              }`}
+                            >
+                              {val}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment Card & Slip Preview */}
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-4">
+                    <div className="flex justify-between items-center border-b pb-2">
+                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider">{t('orders.payment_status')}</h4>
+                      <span className={`inline-flex px-2 py-0.5 rounded-[6px] text-[10px] font-black border ${getPaymentStatusBadge(selectedOrder.paymentStatus)}`}>
+                        {t(`payment.${selectedOrder.paymentStatus}`)}
+                      </span>
+                    </div>
+
+                    <div className="text-xs font-bold space-y-2 text-slate-600">
+                      <div className="flex justify-between">
+                        <span>Total Price:</span>
+                        <span className="font-sans text-slate-900 font-black text-sm">{formatLAK(selectedOrder.totalPriceCharged)}</span>
+                      </div>
+                      <div className="flex justify-between text-red-600 font-black">
+                        <span>Remaining:</span>
+                        <span className="font-sans text-slate-900 text-sm">{formatLAK(selectedOrder.remainingUnpaidBalance)}</span>
+                      </div>
+                    </div>
+
+                    {selectedOrder.paymentSlipUrl && (
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Receipt Slip</span>
+                        <button
+                          onClick={() => setLightbox({ src: selectedOrder.paymentSlipUrl, title: `Payment Slip: #${selectedOrder.id}` })}
+                          className="w-full relative rounded-xl border border-slate-200 overflow-hidden shadow-sm hover:opacity-90 transition group"
+                        >
+                          <img src={selectedOrder.paymentSlipUrl} alt="Slip" className="w-full h-24 object-cover" />
+                          <div className="absolute inset-0 bg-slate-950/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition text-xs font-bold">
+                            View Slip
+                          </div>
+                        </button>
+                      </div>
+                    )}
+
+                    {selectedOrder.remainingUnpaidBalance > 0 && (
+                      <button
+                        onClick={() => {
+                          setSettleAmount(selectedOrder.remainingUnpaidBalance);
+                          setSettleStep(1);
+                          setIsSettleOpen(true);
+                        }}
+                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-500/15 transition active:scale-95"
+                      >
+                        {t('orders.btn_settle')}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Versions history */}
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-3">
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      <Link className="w-4 h-4 text-emerald-600" />
+                      <span>{t('orders.version_control')}</span>
+                    </h4>
+
+                    {selectedOrder.artworkLink && (
+                      <div className="pt-1">
+                        <a
+                          href={selectedOrder.artworkLink}
+                          download
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center justify-center gap-1.5 w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-black transition"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Download Artwork File
+                        </a>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Receipt & Delivery actions */}
-            <div className="flex flex-wrap justify-between items-center gap-4 pt-4 border-t">
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setPrintType('receipt');
-                    setTimeout(() => window.print(), 100);
-                  }}
-                  className="flex items-center gap-2 px-5 py-3 border-2 border-slate-200 rounded-2xl text-slate-700 hover:bg-slate-50 text-xs font-extrabold transition active:scale-95 min-h-[44px]"
-                >
-                  <Printer className="w-5 h-5 text-indigo-500" />
-                  <span>{t('orders.btn_print_receipt')}</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setPrintType('delivery');
-                    setTimeout(() => window.print(), 100);
-                  }}
-                  className="flex items-center gap-2 px-5 py-3 border-2 border-slate-200 rounded-2xl text-slate-700 hover:bg-slate-50 text-xs font-extrabold transition active:scale-95 min-h-[44px]"
-                >
-                  <Printer className="w-5 h-5 text-emerald-500" />
-                  <span>{t('orders.btn_print_delivery')}</span>
-                </button>
+              {/* Slide-over Footer controls */}
+              <div className="flex flex-wrap justify-between items-center gap-4 pt-5 mt-6 border-t">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setPrintType('receipt');
+                      setTimeout(() => window.print(), 100);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 text-xs font-black transition active:scale-95"
+                  >
+                    <Printer className="w-4 h-4 text-indigo-500" />
+                    <span>{t('orders.btn_print_receipt')}</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPrintType('delivery');
+                      setTimeout(() => window.print(), 100);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 text-xs font-black transition active:scale-95"
+                  >
+                    <Printer className="w-4 h-4 text-emerald-500" />
+                    <span>{t('orders.btn_print_delivery')}</span>
+                  </button>
+                </div>
+
+                <div className="flex gap-2 items-center">
+                  {selectedOrder.status !== 'Delivered' && (
+                    <button
+                      onClick={() => handleStatusChange(selectedOrder.id, selectedOrder.status)}
+                      className="px-5 py-2.5 bg-accent-sky text-white rounded-xl text-xs font-black hover:bg-sky-600 transition flex items-center gap-1"
+                    >
+                      <span>Update Production Status</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      const msg = currentLang === 'lo' ? 'ທ່ານຕ້ອງການລຶບອໍເດີນີ້ແທ້ ຫຼື ບໍ່?' : 'Delete this order permanently?';
+                      askConfirmation(msg, () => {
+                        deleteOrder(selectedOrder.id);
+                        setSelectedOrder(null);
+                        showToast(currentLang === 'lo' ? 'ລຶບອໍເດີສຳເລັດ!' : 'Order deleted successfully!', 'success');
+                      });
+                    }}
+                    className="p-2.5 text-red-500 hover:bg-red-50 hover:text-red-700 border border-transparent hover:border-red-200 rounded-xl transition"
+                    title="Delete Order"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setSelectedOrder(null)}
+                    className="px-4 py-2.5 border rounded-xl text-slate-500 hover:bg-slate-50 text-xs font-black"
+                  >
+                    {t('common.close')}
+                  </button>
+                </div>
               </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    const msg = currentLang === 'lo' ? 'ທ່ານຕ້ອງການລຶບອໍເດີນີ້ແທ້ ຫຼື ບໍ່?' : 'Delete this order permanently?';
-                    askConfirmation(msg, () => {
-                      deleteOrder(selectedOrder.id);
-                      setSelectedOrder(null);
-                      showToast(currentLang === 'lo' ? 'ລຶບອໍເດີສຳເລັດ!' : 'Order deleted successfully!', 'success');
-                    });
-                  }}
-                  className="p-3 text-red-500 hover:bg-red-50 hover:text-red-700 border border-transparent hover:border-red-200 rounded-2xl transition"
-                  title="Delete Order"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => setSelectedOrder(null)}
-                  className="px-5 py-3 border rounded-2xl text-slate-500 hover:bg-slate-50 text-xs font-bold min-h-[44px]"
-                >
-                  {t('common.close')}
-                </button>
-              </div>
             </div>
-          </div>
-        </dialog>
-      )}
-
-      {/* ACCESSIBLE STEP-BY-STEP BALANCE SETTLEMENT DIALOG */}
+          </dialog>
+        );
+      })()}      {/* ACCESSIBLE STEP-BY-STEP BALANCE SETTLEMENT DIALOG */}
       {isSettleOpen && selectedOrder && (
         <dialog
           className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-transparent outline-none border-none w-full h-full"
