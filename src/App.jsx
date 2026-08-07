@@ -28,7 +28,7 @@ function AppContent() {
 
       {/* Main Contents view */}
       <main className="flex-1 h-screen overflow-y-auto px-6 py-8 md:px-8">
-        <div className="max-w-6xl mx-auto">
+        <div className={activeTab === 'crm' ? "w-full" : "max-w-6xl mx-auto"}>
           {activeTab === 'dashboard' && <DashboardOverview />}
           {activeTab === 'inbound' && <InboundManagement />}
           {activeTab === 'inventory' && <InventoryManagement />}

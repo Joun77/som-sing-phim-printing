@@ -482,17 +482,10 @@ export default function CustomerManagement() {
                             {c.id}
                           </td>
                           <td className="py-4.5 px-6 font-extrabold text-slate-900">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-xs font-black shrink-0">
-                                {getInitials(c.name)}
-                              </div>
-                              <div>
-                                <span className="block">{c.name}</span>
-                                {c.instagram && (
-                                  <span className="block text-[10px] text-pink-500 font-bold">@{c.instagram}</span>
-                                )}
-                              </div>
-                            </div>
+                            <span className="block">{c.name}</span>
+                            {c.instagram && (
+                              <span className="block text-[10px] text-pink-500 font-bold">@{c.instagram}</span>
+                            )}
                           </td>
                           <td className="py-4.5 px-6 font-sans">
                             {c.phone}
