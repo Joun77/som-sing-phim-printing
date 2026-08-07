@@ -13,7 +13,14 @@ import {
   Layers,
   Settings,
   HelpCircle,
-  FileText
+  FileText,
+  Calculator,
+  Info,
+  Sliders,
+  Sparkles,
+  Download,
+  ShoppingCart,
+  PercentSquare
 } from 'lucide-react';
 
 export default function CreateOrderPage({
@@ -32,8 +39,8 @@ export default function CreateOrderPage({
   const [currentStep, setCurrentStep] = useState(1);
 
   // STEP 1: Customer State
-  const [customerType, setCustomerType] = useState('existing'); // existing | new
-  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [customerType, setCustomerType] = useState('existing');
+  const [selectedCustomerId, setSelectedCustomerId] = useState(customers[0]?.name || '');
   const [newCustName, setNewCustName] = useState('');
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustAddress, setNewCustAddress] = useState('');
@@ -42,52 +49,10 @@ export default function CreateOrderPage({
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
 
-  // STEP 2: Categorized Print Specifications & Costing Engine State
-  const [items, setItems] = useState([
-    {
-      id: '',
-      name: '',
-      quantity: 500,
-      paperId: '',
-      printerId: '',
-      colorMode: 'CMYK', // CMYK | Mono
-      printSides: 'Duplex', // Simplex | Duplex
-      lamination: 'None', // None | Glossy | Matte
-      folding: 'None', // None | Half | TriFold
-      binding: 'None', // None | Staple | Spiral | Perfect
-      jobWidth: 210,
-      jobHeight: 297,
-      unitCost: 0,
-      isManualPrice: false
-    }
-  ]);
-
-  // Pre-fill specs if passed from QuotationManager
-  useEffect(() => {
-    if (prefilledSpecs && prefilledSpecs.paperId) {
-      setItems([{
-        id: prefilledSpecs.paperId,
-        paperId: prefilledSpecs.paperId,
-        printerId: equipment && equipment.length > 0 ? equipment[0].id : '',
-        name: prefilledSpecs.paperName || 'Custom Print Job',
-        quantity: prefilledSpecs.quantity || 500,
-        colorMode: 'CMYK',
-        printSides: 'Duplex',
-        lamination: 'None',
-        folding: 'None',
-        binding: 'None',
-        jobWidth: 210,
-        jobHeight: 297,
-        unitCost: prefilledSpecs.unitCost || 2000,
-        isManualPrice: true
-      }]);
-    }
-  }, [prefilledSpecs, equipment]);
-
   // Auto-fill existing customer fields
   useEffect(() => {
     if (customerType === 'existing' && selectedCustomerId) {
-      const cust = customers.find(c => c.id === selectedCustomerId);
+      const cust = customers.find(c => c.id === selectedCustomerId || c.name === selectedCustomerId);
       if (cust) {
         setPhone(cust.phone || '');
         setAddress(cust.address || '');
@@ -98,86 +63,138 @@ export default function CreateOrderPage({
     }
   }, [selectedCustomerId, customerType, customers]);
 
-  // Filter Categorized Stock & Equipment
-  const paperStocks = inventory ? inventory.filter(i => i.category === 'Paper' || i.name.includes('A4') || i.name.includes('A3') || i.id.startsWith('LOT-')) : [];
-  const printerEquipment = equipment ? equipment.filter(e => e.category === 'Printer' || e.printerType || e.name.includes('C6085') || e.name.includes('Printer')) : [];
+  // STEP 2: Ultra-Detailed Print Specifications & Cost Engine State
+  const papers = inventory ? inventory.filter(item => item.category === 'Paper' || item.name.includes('A4') || item.name.includes('A3') || item.id.startsWith('LOT-')) : [];
+  const printers = equipment ? equipment.filter(eq => eq.category === 'Printer' || eq.printerType || eq.name.includes('C6085')) : [];
 
-  // Dynamic Comprehensive Pricing Calculator
-  const calculateDetailedItemUnitPrice = (item) => {
-    const paper = inventory ? inventory.find(p => p.id === item.paperId) : null;
-    const paperBaseCost = paper ? (paper.costPerSheet || paper.costPerConsumptionUnit || 1500) : 1200;
+  const [selectedPaperId, setSelectedPaperId] = useState(papers[0]?.id || '');
+  const [selectedPrinterId, setSelectedPrinterId] = useState(printers[0]?.id || '');
 
-    const printer = equipment ? equipment.find(e => e.id === item.printerId) : null;
-    const printerDepreciation = printer ? (printer.calculatedCostPerPage || 90) : 80;
+  const [jobWidth, setJobWidth] = useState(210);
+  const [jobHeight, setJobHeight] = useState(297);
+  const [bleedMargin, setBleedMargin] = useState(2);
+  const [printVolume, setPrintVolume] = useState(500);
+  const [isDoubleSided, setIsDoubleSided] = useState(false);
 
-    const sidesMult = item.printSides === 'Duplex' ? 2 : 1;
-    const inkCost = item.colorMode === 'CMYK' ? 250 : 80;
+  const selectedPrinterObj = equipment ? equipment.find(e => e.id === selectedPrinterId) : null;
+  const supportedInkSets = selectedPrinterObj?.supportedInkSets || ['Konica C6085 OEM Set'];
+  const [selectedInkSet, setSelectedInkSet] = useState(supportedInkSets[0] || '');
 
-    let finishingAddon = 0;
-    if (item.lamination === 'Glossy') finishingAddon += 300;
-    if (item.lamination === 'Matte') finishingAddon += 450;
-    if (item.folding !== 'None') finishingAddon += 100;
-    if (item.binding === 'Staple') finishingAddon += 200;
-    if (item.binding === 'Spiral') finishingAddon += 2500;
-    if (item.binding === 'Perfect') finishingAddon += 1500;
+  const [avgCoverage, setAvgCoverage] = useState(15);
 
-    const netUnitCost = paperBaseCost + (printerDepreciation * sidesMult) + (inkCost * sidesMult) + finishingAddon;
-    
-    let markup = 1.6;
-    if (item.quantity >= 1000) markup = 1.25;
-    else if (item.quantity >= 500) markup = 1.35;
-    else if (item.quantity >= 100) markup = 1.45;
+  const [useLamination, setUseLamination] = useState(false);
+  const [laminationType, setLaminationType] = useState('Glossy');
+  const [useFolding, setUseFolding] = useState(false);
+  const [useBinding, setUseBinding] = useState(false);
+  const [bindingType, setBindingType] = useState('Staple');
 
-    return Math.round(netUnitCost * markup);
-  };
+  const [targetMarginPercent, setTargetMarginPercent] = useState(35);
+  const [manualPriceOverride, setManualPriceOverride] = useState(null);
 
-  const handleItemChange = (index, field, value) => {
-    const updated = [...items];
-    updated[index][field] = value;
+  // Calibrations
+  const spoilageTiers = [
+    { min: 1, max: 100, rate: 10 },
+    { min: 101, max: 500, rate: 5 },
+    { min: 501, max: 2000, rate: 3 },
+    { min: 2001, max: 100000, rate: 1 }
+  ];
+  const inkYieldPerMl = 50;
+  const electricityCostPerSheet = 25;
+  const maintenanceCostPerSheet = 15;
+  const laminationRatePerSqm = 4000;
+  const setupFeeLabor = 15000;
+  const laborCostPerSheet = 10;
 
-    if (field === 'paperId') {
-      const selectedPaper = inventory.find(p => p.id === value);
-      updated[index].id = value;
-      updated[index].name = selectedPaper ? selectedPaper.name : 'Print Job';
-      if (!updated[index].isManualPrice) {
-        updated[index].unitCost = calculateDetailedItemUnitPrice(updated[index]);
-      }
-    } else if (field === 'quantity' || field === 'printerId' || field === 'colorMode' || field === 'printSides' || field === 'lamination' || field === 'binding') {
-      if (!updated[index].isManualPrice) {
-        updated[index].unitCost = calculateDetailedItemUnitPrice(updated[index]);
-      }
-    } else if (field === 'unitCost') {
-      updated[index].unitCost = Math.max(0, Number(value));
-      updated[index].isManualPrice = true;
+  // Pre-fill specs if passed from QuotationManager
+  useEffect(() => {
+    if (prefilledSpecs && prefilledSpecs.paperId) {
+      setSelectedPaperId(prefilledSpecs.paperId);
+      if (prefilledSpecs.quantity) setPrintVolume(prefilledSpecs.quantity);
+      if (prefilledSpecs.unitCost) setManualPriceOverride(prefilledSpecs.unitCost * prefilledSpecs.quantity);
+    }
+  }, [prefilledSpecs]);
+
+  // Calculations
+  const calculateCutsPerSheet = () => {
+    const paperItem = inventory ? inventory.find(p => p.id === selectedPaperId) : null;
+    if (!paperItem) return 1;
+
+    let parentW = 297;
+    let parentH = 420;
+    if (paperItem.name.includes('A4')) {
+      parentW = 210;
+      parentH = 297;
+    } else if (paperItem.name.includes('A3')) {
+      parentW = 297;
+      parentH = 420;
     }
 
-    setItems(updated);
+    const currentJobW = Number(jobWidth) + (Number(bleedMargin) * 2);
+    const currentJobH = Number(jobHeight) + (Number(bleedMargin) * 2);
+
+    const portraitCuts = Math.floor(parentW / currentJobW) * Math.floor(parentH / currentJobH);
+    const landscapeCuts = Math.floor(parentW / currentJobH) * Math.floor(parentH / currentJobW);
+
+    const cuts = Math.max(portraitCuts, landscapeCuts);
+    return cuts > 0 ? cuts : 1;
   };
 
-  const addItemRow = () => {
-    setItems([...items, {
-      id: '',
-      name: '',
-      quantity: 500,
-      paperId: '',
-      printerId: printerEquipment.length > 0 ? printerEquipment[0].id : '',
-      colorMode: 'CMYK',
-      printSides: 'Duplex',
-      lamination: 'None',
-      folding: 'None',
-      binding: 'None',
-      jobWidth: 210,
-      jobHeight: 297,
-      unitCost: 0,
-      isManualPrice: false
-    }]);
+  const cutsPerParentSheet = calculateCutsPerSheet();
+  const parentSheetsNeeded = Math.ceil(printVolume / cutsPerParentSheet);
+
+  const getActiveSpoilageRate = () => {
+    const tier = spoilageTiers.find(t => printVolume >= t.min && printVolume <= t.max);
+    return tier ? tier.rate : 2;
   };
 
-  const removeItemRow = (index) => {
-    if (items.length > 1) {
-      setItems(items.filter((_, i) => i !== index));
-    }
-  };
+  const spoilageRate = getActiveSpoilageRate();
+  const spoilageSheets = Math.ceil(parentSheetsNeeded * (spoilageRate / 100));
+  const totalParentSheets = parentSheetsNeeded + spoilageSheets;
+
+  const paperItem = inventory ? inventory.find(p => p.id === selectedPaperId) : null;
+  const paperUnitCost = paperItem ? (paperItem.costPerSheet || 1200) : 1200;
+  const totalPaperCost = totalParentSheets * paperUnitCost;
+
+  const inkCostPerMl = 500;
+  const sidesMultiplier = isDoubleSided ? 2 : 1;
+  const totalImpressions = printVolume * sidesMultiplier;
+  const mlPerImpression = (avgCoverage / 100) / inkYieldPerMl;
+  const totalMlNeeded = totalImpressions * mlPerImpression;
+  const totalInkCost = totalMlNeeded * inkCostPerMl;
+
+  const printerItem = equipment ? equipment.find(e => e.id === selectedPrinterId) : null;
+  const printerDepreciationPerSheet = printerItem ? (printerItem.calculatedCostPerPage || 20) : 15;
+  const totalDepreciationCost = totalImpressions * printerDepreciationPerSheet;
+  const totalPowerMaintCost = totalImpressions * (electricityCostPerSheet + maintenanceCostPerSheet);
+
+  let laminationTotalCost = 0;
+  if (useLamination) {
+    const jobSqmPerSheet = (jobWidth / 1000) * (jobHeight / 1000);
+    const totalSqm = jobSqmPerSheet * printVolume * (laminationType === 'Matte' ? 1.1 : 1.0);
+    laminationTotalCost = totalSqm * laminationRatePerSqm;
+  }
+
+  let foldingTotalCost = useFolding ? printVolume * 25 : 0;
+  let bindingTotalCost = 0;
+  if (useBinding) {
+    if (bindingType === 'Staple') bindingTotalCost = printVolume * 150;
+    else if (bindingType === 'Spiral') bindingTotalCost = printVolume * 2500;
+    else if (bindingType === 'Perfect') bindingTotalCost = printVolume * 1200;
+  }
+
+  const totalFinishingCost = laminationTotalCost + foldingTotalCost + bindingTotalCost;
+  const totalLaborCost = setupFeeLabor + (totalImpressions * laborCostPerSheet);
+
+  const netTotalCost = totalPaperCost + totalInkCost + totalDepreciationCost + totalPowerMaintCost + totalFinishingCost + totalLaborCost;
+  const unitNetCost = printVolume > 0 ? netTotalCost / printVolume : 0;
+
+  const suggestedSellingPriceTotal = netTotalCost / (1 - (targetMarginPercent / 100));
+  const suggestedUnitPrice = printVolume > 0 ? suggestedSellingPriceTotal / printVolume : 0;
+
+  const finalQuotedTotalPrice = manualPriceOverride !== null ? Number(manualPriceOverride) : suggestedSellingPriceTotal;
+  const finalQuotedUnitPrice = printVolume > 0 ? finalQuotedTotalPrice / printVolume : 0;
+
+  const actualProfitTotal = finalQuotedTotalPrice - netTotalCost;
 
   // STEP 3: Order Details & Payment
   const [promisedDeliveryDate, setPromisedDeliveryDate] = useState(
@@ -187,9 +204,6 @@ export default function CreateOrderPage({
   const [paymentStatus, setPaymentStatus] = useState('Pending');
   const [depositAmountPaid, setDepositAmountPaid] = useState(0);
   const [artworkLink, setArtworkLink] = useState('');
-
-  const totalAmount = items.reduce((sum, item) => sum + (item.quantity * item.unitCost), 0);
-  const remainingBalance = Math.max(0, totalAmount - Number(depositAmountPaid));
 
   const handleNextToStep2 = () => {
     if (customerType === 'new') {
@@ -207,11 +221,6 @@ export default function CreateOrderPage({
   };
 
   const handleNextToStep3 = () => {
-    const validItems = items.filter(item => item.paperId || item.id);
-    if (validItems.length === 0) {
-      showToast(currentLang === 'lo' ? 'ກະລຸນາເລືອກລາຍການພິມຢ່າງໜ້ອຍ 1 รายการ' : 'Please select paper stock for print items', 'warning');
-      return;
-    }
     setCurrentStep(3);
   };
 
@@ -234,30 +243,32 @@ export default function CreateOrderPage({
         creditLimit: newCustCredit
       });
     } else {
-      const cust = customers.find(c => c.id === selectedCustomerId);
+      const cust = customers.find(c => c.id === selectedCustomerId || c.name === selectedCustomerId);
       if (cust) {
         finalCustomerName = cust.name;
         finalPhone = cust.phone;
         finalAddress = cust.address;
+      } else {
+        finalCustomerName = selectedCustomerId;
       }
     }
 
-    const validItems = items.map(item => ({
-      id: item.paperId || item.id,
-      name: item.name || 'Custom Print Job',
-      quantity: item.quantity,
-      unitCost: item.unitCost,
-      specs: `${item.colorMode}, ${item.printSides}, ${item.lamination !== 'None' ? item.lamination + ' Lam' : 'No Lam'}, ${item.binding !== 'None' ? item.binding + ' Binding' : 'No Binding'}`
-    }));
+    const validItems = [{
+      id: selectedPaperId || 'paper-a4-80',
+      name: paperItem ? paperItem.name : 'Custom Print Job Specification',
+      quantity: printVolume,
+      unitCost: Math.round(finalQuotedUnitPrice),
+      specs: `${jobWidth}x${jobHeight}mm, ${isDoubleSided ? 'Double-sided' : 'Single-sided'}, ${useLamination ? laminationType + ' Lamination' : 'No Lamination'}`
+    }];
 
     const orderData = {
       customerName: finalCustomerName,
       phone: finalPhone,
       address: finalAddress,
       items: validItems,
-      totalPriceCharged: totalAmount,
+      totalPriceCharged: finalQuotedTotalPrice,
       depositAmountPaid: Number(depositAmountPaid),
-      remainingUnpaidBalance: remainingBalance,
+      remainingUnpaidBalance: Math.max(0, finalQuotedTotalPrice - Number(depositAmountPaid)),
       paymentMethod: 'BCEL One',
       bankName: 'BCEL',
       paymentStatus: paymentStatus,
@@ -300,8 +311,8 @@ export default function CreateOrderPage({
       <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex gap-3">
         {[
           { step: 1, label: currentLang === 'lo' ? '1. ເລືອກລູກຄ້າ' : '1. Customer Info' },
-          { step: 2, label: currentLang === 'lo' ? '2. สเปกงานพิมพ์ & ราคา' : '2. Categorized Print Specs' },
-          { step: 3, label: currentLang === 'lo' ? '3. สรุปยอด & ตัดสต็อก' : '3. Summary & Stock Trigger' }
+          { step: 2, label: currentLang === 'lo' ? '2. สเปกงานพิมพ์ & คำนวณต้นทุน' : '2. Ultra-Detailed Print Specs' },
+          { step: 3, label: currentLang === 'lo' ? '3. สรุปยอด & ตัดสต็อก' : '3. Summary & Stock Deduction' }
         ].map(s => (
           <div 
             key={s.step}
@@ -364,7 +375,7 @@ export default function CreateOrderPage({
               >
                 <option value="">-- Choose Existing Customer --</option>
                 {customers.map(c => (
-                  <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
+                  <option key={c.id} value={c.name}>{c.name} ({c.phone})</option>
                 ))}
               </select>
             </div>
@@ -407,231 +418,306 @@ export default function CreateOrderPage({
               onClick={handleNextToStep2}
               className="flex items-center gap-2 px-6 py-3 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black shadow-md transition active:scale-95"
             >
-              <span>Next: Categorized Specs Engine</span>
+              <span>Next: Ultra-Detailed Specs Engine</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
 
-      {/* STEP 2: CATEGORIZED SPECS & DYNAMIC COST ENGINE */}
+      {/* STEP 2: ULTRA-DETAILED 3-COLUMN SPECS & COST ENGINE */}
       {currentStep === 2 && (
-        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6 animate-fade-in">
-          <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-2">
-              <Printer className="w-6 h-6 text-indigo-600" />
-              <h4 className="font-black text-slate-800 text-base">
-                Step 2: {currentLang === 'lo' ? 'กำหนดสเปกแยกตามประเภทและคำนวณราคา' : 'Categorized Print Specs & Pricing'}
-              </h4>
-            </div>
-            <button
-              type="button"
-              onClick={addItemRow}
-              className="flex items-center gap-1.5 px-4 py-2 bg-slate-50 hover:bg-slate-100 text-accent-sky border border-slate-100 rounded-xl text-xs font-black transition"
-            >
-              + Add Item Row
-            </button>
-          </div>
-
-          <div className="space-y-6">
-            {items.map((item, idx) => (
-              <div key={idx} className="bg-slate-50/60 p-6 rounded-2xl border border-slate-200/80 space-y-5">
-                <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-                  <span className="text-xs font-black text-indigo-900 uppercase tracking-wider">
-                    Item #{idx + 1} Specification Breakdown
-                  </span>
-                  {items.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeItemRow(idx)}
-                      className="text-red-500 hover:text-red-700 font-bold text-xs flex items-center gap-1"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Remove Item</span>
-                    </button>
-                  )}
+        <div className="space-y-6 animate-fade-in">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Column 1: Print Job Specifications Inputs */}
+            <div className="lg:col-span-5 space-y-6">
+              {/* Section 1: Material & Sizing */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 border-b pb-3">
+                  <Calculator className="w-5 h-5 text-accent-sky" />
+                  <h3 className="font-black text-slate-800 text-base">1. วัสดุ และ ขนาด (Material & Sizing)</h3>
                 </div>
 
-                {/* Sub-grid 4 Sections */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs font-bold text-slate-700">
-                  
-                  {/* 1. Paper Specs (Filtered by Category Paper) */}
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
-                    <div className="flex items-center gap-1.5 text-accent-sky border-b pb-2">
-                      <Package className="w-4 h-4" />
-                      <span className="font-black">1. Paper Stock (คลังสินค้า - กระดาษ)</span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="block text-[11px] text-slate-500 font-black">Select Paper SKU *</label>
-                      <select
-                        required
-                        value={item.paperId}
-                        onChange={(e) => handleItemChange(idx, 'paperId', e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold text-xs transition"
-                      >
-                        <option value="">-- Choose Paper Stock --</option>
-                        {paperStocks.map(p => (
-                          <option key={p.id} value={p.id}>{p.name} ({formatLAK(p.costPerSheet || 1000)}/sheet)</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <label className="block text-[11px] text-slate-500 font-black">Print Qty (Copies) *</label>
-                        <input
-                          type="number"
-                          required
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => handleItemChange(idx, 'quantity', Number(e.target.value))}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold text-xs font-sans"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 2. Printer & Ink Specs (Filtered by Equipment Printer) */}
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
-                    <div className="flex items-center gap-1.5 text-purple-600 border-b pb-2">
-                      <Printer className="w-4 h-4" />
-                      <span className="font-black">2. Printer & Ink (เครื่องจักร - เครื่องพิมพ์)</span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="block text-[11px] text-slate-500 font-black">Printer Equipment *</label>
-                      <select
-                        value={item.printerId}
-                        onChange={(e) => handleItemChange(idx, 'printerId', e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold text-xs transition"
-                      >
-                        {printerEquipment.map(e => (
-                          <option key={e.id} value={e.id}>{e.name} ({formatLAK(e.calculatedCostPerPage || 90)}/page cost)</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <label className="block text-[11px] text-slate-500 font-black">Color Mode</label>
-                        <select
-                          value={item.colorMode}
-                          onChange={(e) => handleItemChange(idx, 'colorMode', e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none font-bold text-xs"
-                        >
-                          <option value="CMYK">Full Color CMYK</option>
-                          <option value="Mono">Monochrome (ขาวดำ)</option>
-                        </select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="block text-[11px] text-slate-500 font-black">Sides</label>
-                        <select
-                          value={item.printSides}
-                          onChange={(e) => handleItemChange(idx, 'printSides', e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none font-bold text-xs"
-                        >
-                          <option value="Simplex">1 หน้า (Simplex)</option>
-                          <option value="Duplex">2 หน้า (Duplex)</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 3. Post-Press Finishing */}
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
-                    <div className="flex items-center gap-1.5 text-emerald-600 border-b pb-2">
-                      <Scissors className="w-4 h-4" />
-                      <span className="font-black">3. Finishing (บริการเคลือบ / พับ)</span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <label className="block text-[11px] text-slate-500 font-black">Lamination (เคลือบ)</label>
-                        <select
-                          value={item.lamination}
-                          onChange={(e) => handleItemChange(idx, 'lamination', e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none font-bold text-xs"
-                        >
-                          <option value="None">ไม่เคลือบ (None)</option>
-                          <option value="Glossy">เคลือบเงา (Glossy)</option>
-                          <option value="Matte">เคลือบด้าน (Matte)</option>
-                        </select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="block text-[11px] text-slate-500 font-black">Folding (การพับ)</label>
-                        <select
-                          value={item.folding}
-                          onChange={(e) => handleItemChange(idx, 'folding', e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none font-bold text-xs"
-                        >
-                          <option value="None">ไม่พับ (Flat)</option>
-                          <option value="Half">พับครึ่ง (Half-fold)</option>
-                          <option value="TriFold">พับ 3 ตอน (Tri-fold)</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 4. Binding Services */}
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
-                    <div className="flex items-center gap-1.5 text-amber-600 border-b pb-2">
-                      <Layers className="w-4 h-4" />
-                      <span className="font-black">4. Binding Services (การเข้าเล่ม)</span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="block text-[11px] text-slate-500 font-black">Binding Type</label>
-                      <select
-                        value={item.binding}
-                        onChange={(e) => handleItemChange(idx, 'binding', e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none font-bold text-xs"
-                      >
-                        <option value="None">ไม่เข้าเล่ม (No Binding)</option>
-                        <option value="Staple">เย็บแม็กกลาง / สัน (Staple)</option>
-                        <option value="Spiral">เข้าเล่มกระดูกงู (Spiral Wire-O)</option>
-                        <option value="Perfect">เข้าเล่มไสสลักกาว (Perfect Binding)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Real-time Item Pricing Output */}
-                <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div className="space-y-3 text-xs font-bold text-slate-600">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-slate-500">Unit Selling Price (₭):</span>
-                      {item.isManualPrice && (
-                        <span className="text-[9px] font-extrabold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                          Manual Override
-                        </span>
-                      )}
-                    </div>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      value={item.unitCost}
-                      onChange={(e) => handleItemChange(idx, 'unitCost', e.target.value)}
-                      className="w-48 px-3.5 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold text-sm font-sans"
-                    />
+                    <label className="block text-slate-500">เลือกเจี้ยที่ใช้พิมพ์ *</label>
+                    <select
+                      value={selectedPaperId}
+                      onChange={(e) => setSelectedPaperId(e.target.value)}
+                      className="w-full min-h-[42px] px-3.5 border-2 border-slate-200 focus:border-accent-sky rounded-xl bg-white font-bold"
+                    >
+                      {papers.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
                   </div>
 
-                  <div className="text-right">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Item Subtotal</span>
-                    <span className="text-lg font-black text-slate-900 font-sans">{formatLAK(item.quantity * item.unitCost)}</span>
+                  <div className="space-y-1">
+                    <label className="block text-slate-500">ขนาดหน้าตัดงาน:</label>
+                    <div className="flex gap-2">
+                      {['A3', 'A4', 'A5', 'A6', 'Custom'].map(sz => (
+                        <button
+                          key={sz}
+                          type="button"
+                          onClick={() => {
+                            if (sz === 'A3') { setJobWidth(297); setJobHeight(420); }
+                            else if (sz === 'A4') { setJobWidth(210); setJobHeight(297); }
+                            else if (sz === 'A5') { setJobWidth(148); setJobHeight(210); }
+                            else if (sz === 'A6') { setJobWidth(105); setJobHeight(148); }
+                          }}
+                          className={`px-3 py-1.5 rounded-lg border font-black text-xs ${
+                            (sz === 'A4' && jobWidth === 210) || (sz === 'A3' && jobWidth === 297)
+                              ? 'bg-accent-sky text-white border-accent-sky'
+                              : 'bg-slate-50 text-slate-600 border-slate-200'
+                          }`}
+                        >
+                          {sz}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] text-slate-500">Width (mm):</label>
+                      <input
+                        type="number"
+                        value={jobWidth}
+                        onChange={(e) => setJobWidth(Number(e.target.value))}
+                        className="w-full px-3 py-2 border-2 rounded-lg font-sans text-xs font-black"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[10px] text-slate-500">Height (mm):</label>
+                      <input
+                        type="number"
+                        value={jobHeight}
+                        onChange={(e) => setJobHeight(Number(e.target.value))}
+                        className="w-full px-3 py-2 border-2 rounded-lg font-sans text-xs font-black"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[10px] text-slate-500">Print Vol:</label>
+                      <input
+                        type="number"
+                        value={printVolume}
+                        onChange={(e) => setPrintVolume(Number(e.target.value))}
+                        className="w-full px-3 py-2 border-2 rounded-lg font-sans text-xs font-black text-accent-sky"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Cuts calculator card */}
+                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-1.5 text-[11px]">
+                    <div className="flex justify-between">
+                      <span>ตัดได้เลเอาต์จริง:</span>
+                      <span className="font-black text-accent-sky">{cutsPerParentSheet} cuts/sheet</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>ชิ้นเริ่มต้นต่อแผ่นแม่:</span>
+                      <span className="font-sans font-bold">{parentSheetsNeeded} แผ่น</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>เผื่อเสียตาม Tier:</span>
+                      <span className="font-sans font-bold text-amber-600">+{spoilageSheets} แผ่น ({spoilageRate}%)</span>
+                    </div>
+                    <div className="flex justify-between border-t pt-1 font-black text-slate-900">
+                      <span>ยอดตัดสต็อกรวม (FIFO):</span>
+                      <span className="font-sans text-indigo-600">{totalParentSheets} แผ่น</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
 
-          <div className="bg-emerald-50/70 p-5 rounded-2xl border border-emerald-100 flex justify-between items-center text-sm font-black text-emerald-900">
-            <span>Calculated Order Bill Total:</span>
-            <span className="text-xl font-sans font-black text-emerald-700">{formatLAK(totalAmount)}</span>
+              {/* Section 2: Printing & Ink */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 border-b pb-3">
+                  <Printer className="w-5 h-5 text-purple-600" />
+                  <h3 className="font-black text-slate-800 text-base">2. ภาพพิมพ์ และ หมึกพิมพ์ (Printing & Ink)</h3>
+                </div>
+
+                <div className="space-y-3 text-xs font-bold text-slate-600">
+                  <div className="space-y-1">
+                    <label className="block text-slate-500">เลือกเครื่องพิมพ์ *</label>
+                    <select
+                      value={selectedPrinterId}
+                      onChange={(e) => setSelectedPrinterId(e.target.value)}
+                      className="w-full min-h-[42px] px-3.5 border-2 border-slate-200 focus:border-accent-sky rounded-xl bg-white font-bold"
+                    >
+                      {printers.map(pr => (
+                        <option key={pr.id} value={pr.id}>{pr.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-slate-500">โหมดการพิมพ์:</label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsDoubleSided(false)}
+                        className={`flex-1 py-2 rounded-xl border text-xs font-black ${!isDoubleSided ? 'bg-purple-600 text-white border-purple-600' : 'bg-slate-50 text-slate-600'}`}
+                      >
+                        พิมพ์ 1 หน้า (Simplex)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsDoubleSided(true)}
+                        className={`flex-1 py-2 rounded-xl border text-xs font-black ${isDoubleSided ? 'bg-purple-600 text-white border-purple-600' : 'bg-slate-50 text-slate-600'}`}
+                      >
+                        พิมพ์ 2 หน้า (Duplex)
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <label className="text-slate-500">Ink Density / Coverage (%):</label>
+                      <span className="text-purple-600 font-black">{avgCoverage}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="5"
+                      max="100"
+                      value={avgCoverage}
+                      onChange={(e) => setAvgCoverage(Number(e.target.value))}
+                      className="w-full accent-purple-600 cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Finishing & Assembly */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 border-b pb-3">
+                  <Scissors className="w-5 h-5 text-emerald-600" />
+                  <h3 className="font-black text-slate-800 text-base">3. งานหลังพิมพ์ และ การประกอบเล่ม</h3>
+                </div>
+
+                <div className="space-y-3 text-xs font-bold text-slate-700">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useLamination}
+                      onChange={(e) => setUseLamination(e.target.checked)}
+                      className="w-4 h-4 rounded text-emerald-600"
+                    />
+                    <span>เคลือบเงา / ด้าน (Lamination)</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useBinding}
+                      onChange={(e) => setUseBinding(e.target.checked)}
+                      className="w-4 h-4 rounded text-emerald-600"
+                    />
+                    <span>เข้าเล่ม (Binding)</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Column 2: Internal Cost & Yields (Dark Navy Card) */}
+            <div className="lg:col-span-4 space-y-6">
+              <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl space-y-5 border border-slate-800">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+                    <span className="font-black text-xs uppercase tracking-wider text-slate-300">Internal Cost & Yields</span>
+                  </div>
+                  <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-[10px] font-black rounded border border-red-500/30 uppercase">
+                    Internal Use Only
+                  </span>
+                </div>
+
+                <div className="space-y-3 text-xs font-semibold text-slate-300">
+                  <div className="flex justify-between items-center">
+                    <span>1. Paper Cost (with {spoilageRate}% Spoilage):</span>
+                    <span className="font-sans font-black text-white">{formatLAK(totalPaperCost)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>2. Ink set cost (Average):</span>
+                    <span className="font-sans font-black text-white">{formatLAK(totalInkCost)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>3. Machine depr. & utility:</span>
+                    <span className="font-sans font-black text-white">{formatLAK(totalDepreciationCost + totalPowerMaintCost)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>4. Finishing addons:</span>
+                    <span className="font-sans font-black text-white">{formatLAK(totalFinishingCost)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>5. Operator setups & labor:</span>
+                    <span className="font-sans font-black text-white">{formatLAK(totalLaborCost)}</span>
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-800 pt-4 flex justify-between items-center">
+                  <span className="font-black text-sm text-sky-400">Net Internal Cost (Net Cost):</span>
+                  <span className="text-xl font-black font-sans text-sky-400">{formatLAK(netTotalCost)}</span>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-slate-800">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span>Markup Profit Margin:</span>
+                    <span className="text-emerald-400 font-black">{targetMarginPercent}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="10"
+                    max="80"
+                    value={targetMarginPercent}
+                    onChange={(e) => setTargetMarginPercent(Number(e.target.value))}
+                    className="w-full accent-emerald-500 cursor-pointer"
+                  />
+                  <div className="flex justify-between items-center pt-2">
+                    <span className="text-xs text-slate-400">Est. Profit Yield:</span>
+                    <span className="font-sans font-black text-emerald-400 text-base">{formatLAK(actualProfitTotal)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Column 3: Quotation Summary Card */}
+            <div className="lg:col-span-3 space-y-6">
+              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl space-y-5 sticky top-6">
+                <div className="border-b pb-3">
+                  <h3 className="font-black text-primary-navy text-lg">สมสิ่งพิมพ์</h3>
+                  <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block">Quotation Summary</span>
+                </div>
+
+                <div className="space-y-2 text-xs text-slate-600 font-semibold">
+                  <div>
+                    <span className="text-slate-400 font-bold block text-[10px]">CUSTOMER NAME</span>
+                    <span className="font-black text-slate-900 text-sm block">{selectedCustomerId}</span>
+                  </div>
+                  <div className="pt-2 border-t">
+                    <span className="text-slate-400 font-bold block text-[10px]">JOB SPECIFICATION</span>
+                    <span className="font-bold text-slate-800 block mt-0.5">{paperItem ? paperItem.name : 'A4 Job'}</span>
+                    <span className="text-xs text-slate-500 font-sans block">{jobWidth}x{jobHeight}mm • {printVolume} units</span>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Grand Total Bill</span>
+                  <span className="text-2xl font-black text-emerald-600 font-sans block">{formatLAK(finalQuotedTotalPrice)}</span>
+                  <span className="text-xs text-slate-500 font-bold block">~ {formatLAK(finalQuotedUnitPrice)} / unit</span>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleNextToStep3}
+                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs shadow-lg shadow-emerald-600/20 transition active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <span>Proceed to Step 3 (Summary & Stock)</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-between pt-6 border-t border-slate-100">
@@ -642,14 +728,6 @@ export default function CreateOrderPage({
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleNextToStep3}
-              className="flex items-center gap-2 px-6 py-3 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black shadow-md transition active:scale-95"
-            >
-              <span>Next: Order Summary & Stock Deduction</span>
-              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -694,7 +772,7 @@ export default function CreateOrderPage({
               <div className="space-y-3 text-xs font-semibold text-slate-600">
                 <div className="flex justify-between items-center">
                   <span>Total Order Bill:</span>
-                  <span className="font-sans font-black text-slate-900 text-base">{formatLAK(totalAmount)}</span>
+                  <span className="font-sans font-black text-slate-900 text-base">{formatLAK(finalQuotedTotalPrice)}</span>
                 </div>
                 <div className="space-y-1 pt-2 border-t border-slate-200">
                   <label className="block text-[10px] font-black text-slate-400 uppercase">Payment Status</label>
@@ -702,7 +780,7 @@ export default function CreateOrderPage({
                     value={paymentStatus}
                     onChange={(e) => {
                       setPaymentStatus(e.target.value);
-                      if (e.target.value === 'Fully Paid') setDepositAmountPaid(totalAmount);
+                      if (e.target.value === 'Fully Paid') setDepositAmountPaid(finalQuotedTotalPrice);
                       else if (e.target.value === 'Pending') setDepositAmountPaid(0);
                     }}
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent text-xs font-bold transition"
@@ -719,7 +797,7 @@ export default function CreateOrderPage({
                       type="number"
                       required
                       min="1000"
-                      max={totalAmount}
+                      max={finalQuotedTotalPrice}
                       value={depositAmountPaid}
                       onChange={(e) => setDepositAmountPaid(Number(e.target.value))}
                       className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-sky focus:border-transparent font-bold text-xs font-sans transition"
