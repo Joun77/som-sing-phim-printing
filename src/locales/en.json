@@ -30,7 +30,10 @@
     "crm": "Customer Directory (CRM)",
     "inventory": "Stock & Supplies",
     "equipment": "Assets & SLA",
-    "orders": "Customer Orders",
+    "orders": "Order Directory",
+    "create_order": "Create New Order",
+    "production": "Production Workflow",
+    "deliveries": "Delivery Tracking",
     "estimator": "Profit Estimator",
     "reports": "History & BI Reports"
   },

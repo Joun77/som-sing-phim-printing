@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useTranslation } from 'react-i18next';
 import { 
@@ -14,7 +14,7 @@ import CreateOrderPage from './CreateOrderPage';
 import OrderDetailsModal from './OrderDetailsModal';
 import Lightbox from './Lightbox';
 
-export default function CustomerOrders() {
+export default function CustomerOrders({ initialSubTab = 'orders' }) {
   const { 
     orders, 
     updateOrderStatus, 
@@ -37,11 +37,27 @@ export default function CustomerOrders() {
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
 
-  const [filterStatus, setFilterStatus] = useState('All');
+  const [filterStatus, setFilterStatus] = useState(
+    initialSubTab === 'production' ? 'Printing' : initialSubTab === 'deliveries' ? 'Ready' : 'All'
+  );
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [isAddOrderOpen, setIsAddOrderOpen] = useState(false);
+  const [isAddOrderOpen, setIsAddOrderOpen] = useState(initialSubTab === 'create_order');
   const [lightbox, setLightbox] = useState(null);
   const focusRef = useRef(null);
+
+  useEffect(() => {
+    if (initialSubTab === 'create_order') {
+      setIsAddOrderOpen(true);
+    } else if (initialSubTab === 'production') {
+      setFilterStatus('Printing');
+      setIsAddOrderOpen(false);
+    } else if (initialSubTab === 'deliveries') {
+      setFilterStatus('Ready');
+      setIsAddOrderOpen(false);
+    } else if (initialSubTab === 'orders') {
+      setIsAddOrderOpen(false);
+    }
+  }, [initialSubTab]);
 
   // Settle Balance Wizard states
   const [isSettleOpen, setIsSettleOpen] = useState(false);
@@ -76,10 +92,6 @@ export default function CustomerOrders() {
 
   const statuses = ['All', 'Received', 'Printing', 'Cutting', 'Ready', 'Delivered'];
 
-  const filteredOrders = filterStatus === 'All' 
-    ? orders 
-    : orders.filter(ord => ord.status === filterStatus);
-
   const handleStatusChange = useCallback((orderId, currentStatus) => {
     let nextStatus = 'Received';
     if (currentStatus === 'Received') nextStatus = 'Printing';
@@ -97,6 +109,7 @@ export default function CustomerOrders() {
   }, [orders, selectedOrder, updateOrderStatus, showToast, currentLang]);
 
   const handlePreflightToggle = useCallback((field, value) => {
+    if (!selectedOrder) return;
     updatePreflightCheck(selectedOrder.id, field, value);
     showToast(currentLang === 'lo' ? 'ອັບເດດສະຖານະປຼູຟສຳເລັດ!' : 'Pre-flight updated!', 'success');
     
@@ -172,6 +185,31 @@ export default function CustomerOrders() {
     }
   };
 
+  const filteredOrders = useMemo(() => {
+    if (initialSubTab === 'completed') {
+      return orders.filter(o => o.status === 'Delivered' && o.paymentStatus === 'Fully Paid');
+    }
+    if (initialSubTab === 'cancelled') {
+      return orders.filter(o => o.status === 'Cancelled');
+    }
+    if (initialSubTab === 'production') {
+      return orders.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled');
+    }
+    if (initialSubTab === 'deliveries') {
+      return orders.filter(o => o.status !== 'Cancelled');
+    }
+    if (filterStatus === 'All') {
+      return orders.filter(o => o.status !== 'Cancelled');
+    }
+    return orders.filter(ord => ord.status === filterStatus);
+  }, [orders, initialSubTab, filterStatus]);
+
+  const handleToggleDeliveryStatus = (orderId, currentStatus) => {
+    const nextStatus = currentStatus === 'Delivered' ? 'Ready' : 'Delivered';
+    updateOrderStatus(orderId, nextStatus);
+    showToast(`ອັບເດດສະຖານະການຈັດສົ່ງເປັນ: ${nextStatus === 'Delivered' ? 'ສົ່ງມອບແລ້ວ (Delivered)' : 'ກຳລັງຂົນສົ່ງ (In Transit)'}`, 'success');
+  };
+
   if (isAddOrderOpen) {
     return (
       <CreateOrderPage
@@ -219,6 +257,16 @@ export default function CustomerOrders() {
           getStatusIcon={getStatusIcon}
           getPaymentStatusBadge={getPaymentStatusBadge}
           getPaymentStatusIcon={getPaymentStatusIcon}
+          isProductionView={initialSubTab === 'production'}
+          onNavigateDelivery={(orderId) => {
+            setSelectedOrder(null);
+            setFilterStatus('Ready');
+            const target = orders.find(o => o.id === orderId);
+            if (target) {
+              setSelectedOrder(target);
+            }
+            showToast(currentLang === 'lo' ? 'ນຳທາງໄປໜ້າຈັດສົ່ງ...' : 'Redirecting to delivery...', 'info');
+          }}
         />
 
         {/* ACCESSIBLE STEP-BY-STEP BALANCE SETTLEMENT DIALOG */}
@@ -382,60 +430,156 @@ export default function CustomerOrders() {
 
   return (
     <div className="space-y-8 animate-fade-in print:hidden text-slate-800 w-full">
-      {/* Header card */}
+      {/* Dynamic Header Card based on subTab */}
       <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="space-y-1">
-          <h2 className="text-3xl font-black text-primary-navy tracking-tight">
-            {t('orders.title')}
+          <h2 className="text-2xl sm:text-3xl font-black text-primary-navy tracking-tight font-sans">
+            {initialSubTab === 'production' && '🏭 ຕິດຕາມການຜະລິດ (Production Tracker)'}
+            {initialSubTab === 'deliveries' && '🚚 ຕິດຕາມການຈັດສົ່ງ & ຊຳຣະເງິນ (Deliveries & Payment)'}
+            {initialSubTab === 'completed' && '✅ ລາຍການຈັດສົ່ງສໍາເລັດ (Completed Orders)'}
+            {initialSubTab === 'cancelled' && '❌ ລາຍການຍົກເລີກ (Cancelled Orders)'}
+            {initialSubTab === 'orders' && t('orders.title')}
           </h2>
-          <p className="text-base text-slate-500 font-semibold leading-relaxed">
-            {t('orders.subtitle')}
+          <p className="text-xs sm:text-sm text-slate-500 font-semibold leading-relaxed">
+            {initialSubTab === 'production' && 'ກວດສອບຈຳນວນຜະລິດ, ຄວາມຄືບໜ້າແຕ່ລະຂັ້ນຕອນ ແລະ ອັບເດດສະຖານະແທ່ນພິມ'}
+            {initialSubTab === 'deliveries' && 'ຕິດຕາມການສົ່ງມອບສິນຄ້າ, ຊຳຣະຍອດຄ້າງ ແລະ ແຈ້ງອັບເດດສະຖານະການຂົນສົ່ງ'}
+            {initialSubTab === 'completed' && 'ປະຫວັດອໍເດີທີ່ສົ່ງມອບສິນຄ້າ ແລະ ຊຳຣະເງິນຄົບ 100% เรียบร้อยแล้ว'}
+            {initialSubTab === 'cancelled' && 'ລາຍການອໍເດີທີ່ຖືກຍົກເລີກ ພ້ອມໝາຍເຫດເຫດຜົນ'}
+            {initialSubTab === 'orders' && t('orders.subtitle')}
           </p>
         </div>
         <button
           onClick={() => setIsAddOrderOpen(true)}
-          className="flex items-center gap-2.5 px-6 py-3.5 bg-accent-sky hover:bg-sky-600 text-white rounded-2xl text-base font-black shadow-lg shadow-sky-600/10 transition active:scale-95 shrink-0"
+          className="flex items-center gap-2.5 px-6 py-3.5 bg-accent-sky hover:bg-sky-600 text-white rounded-2xl text-sm font-black shadow-lg shadow-sky-600/10 transition active:scale-95 shrink-0"
         >
           <Plus className="w-5 h-5" />
           <span>{currentLang === 'lo' ? 'ເພີ່ມອໍເດີໃໝ່' : 'Add New Order'}</span>
         </button>
       </div>
 
-      {/* Filter tab bar with large buttons */}
-      <div className="flex flex-wrap gap-1.5 p-1 bg-white rounded-2xl border max-w-3xl">
-        {statuses.map(st => (
-          <button
-            key={st}
-            onClick={() => setFilterStatus(st)}
-            className={`
-              px-5 py-3 rounded-xl text-sm font-extrabold transition-all min-h-[46px]
-              ${filterStatus === st 
-                ? 'bg-primary-navy text-white shadow-md' 
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-              }
-            `}
-          >
-            {st === 'All' ? (currentLang === 'lo' ? 'ທັງໝົດ' : 'All') : t(`status.${st}`)}
-          </button>
-        ))}
-      </div>
+      {/* Filter tab bar only on 'orders' tab */}
+      {initialSubTab === 'orders' && (
+        <div className="flex flex-wrap gap-1.5 p-1 bg-white rounded-2xl border max-w-3xl">
+          {statuses.map(st => (
+            <button
+              key={st}
+              onClick={() => setFilterStatus(st)}
+              className={`
+                px-5 py-3 rounded-xl text-xs sm:text-sm font-extrabold transition-all min-h-[46px]
+                ${filterStatus === st 
+                  ? 'bg-primary-navy text-white shadow-md' 
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                }
+              `}
+            >
+              {st === 'All' ? (currentLang === 'lo' ? 'ທັງໝົດ' : 'All') : t(`status.${st}`)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Delivery Custom Actions Table when in 'deliveries' tab */}
+      {initialSubTab === 'deliveries' && (
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">
+            ລາຍການຕິດຕາມການຈັດສົ່ງ & ຮັບເງິນມັດຈຳ (Delivery & Payment Tracker)
+          </h3>
+          <div className="overflow-x-auto rounded-2xl border border-slate-100">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 font-black uppercase border-b">
+                  <th className="px-4 py-3">Order ID</th>
+                  <th className="px-4 py-3">ລູກຄ້າ</th>
+                  <th className="px-4 py-3 text-center">ສະຖານະຈັດສົ່ງ</th>
+                  <th className="px-4 py-3 text-right">ຍອດຄ້າງຊຳຣະ</th>
+                  <th className="px-4 py-3 text-center">ຈັດການ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
+                {filteredOrders.map(ord => (
+                  <tr key={ord.id} className="hover:bg-slate-50/50 transition">
+                    <td className="px-4 py-3.5 font-mono font-black text-slate-900">#{ord.id}</td>
+                    <td className="px-4 py-3.5">
+                      <span className="block font-bold text-slate-900">{ord.customerName}</span>
+                      <span className="block text-[10px] text-slate-400 font-sans">{ord.phone}</span>
+                    </td>
+                    <td className="px-4 py-3.5 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleDeliveryStatus(ord.id, ord.status)}
+                        className={`px-3 py-1.5 rounded-xl font-black text-[11px] transition shadow-sm border ${
+                          ord.status === 'Delivered'
+                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                            : 'bg-amber-100 text-amber-800 border-amber-200'
+                        }`}
+                      >
+                        {ord.status === 'Delivered' ? '✓ ສົ່ງມອບແລ້ວ (Delivered)' : '🚚 ກຳລັງຂົນສົ່ງ (In Transit)'}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3.5 text-right font-sans">
+                      {ord.remainingUnpaidBalance > 0 ? (
+                        <span className="text-red-600 font-black">{formatLAK(ord.remainingUnpaidBalance)}</span>
+                      ) : (
+                        <span className="text-emerald-600 font-black">✓ ชำระครบแล้ว</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5 text-center flex items-center justify-center gap-2">
+                      {ord.remainingUnpaidBalance > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedOrder(ord);
+                            setSettleAmount(ord.remainingUnpaidBalance);
+                            setSettleStep(1);
+                            setIsSettleOpen(true);
+                          }}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-[11px] transition shadow-sm"
+                        >
+                          ຊຳຣະຍອດຄ້າງ
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOrder(ord)}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-[11px] transition"
+                      >
+                        ເບິ່ງລາຍລະອຽດ
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Orders Table Component */}
-      <OrdersTable
-        filteredOrders={filteredOrders}
-        selectedOrder={selectedOrder}
-        focusRef={focusRef}
-        currentLang={currentLang}
-        formatLAK={formatLAK}
-        t={t}
-        getStatusBadgeClass={getStatusBadgeClass}
-        getStatusIcon={getStatusIcon}
-        getPaymentStatusBadge={getPaymentStatusBadge}
-        getPaymentStatusIcon={getPaymentStatusIcon}
-        onViewDetails={setSelectedOrder}
-      />
-
-
+      {initialSubTab !== 'deliveries' && (
+        <OrdersTable
+          filteredOrders={filteredOrders}
+          selectedOrder={selectedOrder}
+          focusRef={focusRef}
+          currentLang={currentLang}
+          formatLAK={formatLAK}
+          t={t}
+          getStatusBadgeClass={getStatusBadgeClass}
+          getStatusIcon={getStatusIcon}
+          getPaymentStatusBadge={getPaymentStatusBadge}
+          getPaymentStatusIcon={getPaymentStatusIcon}
+          onViewDetails={setSelectedOrder}
+          onNavigateDelivery={(orderId) => {
+            setSelectedOrder(null);
+            setFilterStatus('Ready');
+            // If in standalone OrderApp or App navigation
+            const target = orders.find(o => o.id === orderId);
+            if (target) {
+              setSelectedOrder(target);
+            }
+            showToast(currentLang === 'lo' ? 'ນຳທາງໄປໜ້າຈັດສົ່ງ...' : 'Redirecting to delivery...', 'info');
+          }}
+        />
+      )}
     </div>
   );
 }

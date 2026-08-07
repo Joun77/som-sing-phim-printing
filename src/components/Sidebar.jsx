@@ -41,12 +41,29 @@ export default function Sidebar() {
     localStorage.setItem('somsing_sidebar_collapsed', String(nextVal));
   };
 
+  const handleOpenOrderSystem = (item) => {
+    if (item.isExternal) {
+      window.open(item.externalUrl || '/orders.html', '_blank');
+      return;
+    }
+    setActiveTab(item.id);
+    setIsOpen(false);
+  };
+
   const menuItems = [
     {
       id: 'dashboard',
       labelKey: 'sidebar.dashboard',
       subText: 'Dashboard Overview',
       icon: LayoutDashboard,
+    },
+    {
+      id: 'orders',
+      labelKey: 'sidebar.orders',
+      subText: 'Launch Order Management Web App 🚀',
+      icon: ShoppingCart,
+      isExternal: true,
+      externalUrl: '/orders.html',
     },
     {
       id: 'inbound',
@@ -71,12 +88,6 @@ export default function Sidebar() {
       labelKey: 'sidebar.crm',
       subText: 'Client Directory (CRM)',
       icon: User,
-    },
-    {
-      id: 'orders',
-      labelKey: 'sidebar.orders',
-      subText: 'Customers & Orders',
-      icon: ShoppingCart,
     },
     {
       id: 'calculator',
@@ -212,10 +223,7 @@ export default function Sidebar() {
             return (
               <button
                 key={item.id}
-                onClick={() => {
-                  setActiveTab(item.id);
-                  setIsOpen(false);
-                }}
+                onClick={() => handleOpenOrderSystem(item)}
                 title={isCollapsed ? t(item.labelKey) : undefined}
                 className={`
                   w-full flex items-center rounded-xl transition-all duration-200 group

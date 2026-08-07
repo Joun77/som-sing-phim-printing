@@ -30,11 +30,13 @@ function AppContent() {
       <main className="flex-1 h-screen overflow-y-auto px-6 py-8 md:px-8">
         <div className="w-full">
           {activeTab === 'dashboard' && <DashboardOverview />}
+          {(activeTab === 'orders' || activeTab === 'create_order' || activeTab === 'production' || activeTab === 'deliveries') && (
+            <CustomerOrders initialSubTab={activeTab} />
+          )}
           {activeTab === 'inbound' && <InboundManagement />}
           {activeTab === 'inventory' && <InventoryManagement />}
           {activeTab === 'equipment' && <EquipmentOverhead />}
           {activeTab === 'crm' && <CustomerManagement />}
-          {activeTab === 'orders' && <CustomerOrders />}
           {activeTab === 'calculator' && <QuotationManager />}
           {activeTab === 'reports' && <HistoryAnalytics />}
         </div>

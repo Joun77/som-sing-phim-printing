@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye } from 'lucide-react';
+import { Eye, Truck } from 'lucide-react';
 
 const OrderRow = React.memo(({
   ord,
@@ -11,6 +11,7 @@ const OrderRow = React.memo(({
   getPaymentStatusBadge,
   getPaymentStatusIcon,
   onViewDetails,
+  onNavigateDelivery,
   isSelected
 }) => {
   const isOverdue = ord.paymentStatus === 'Overdue';
@@ -67,15 +68,31 @@ const OrderRow = React.memo(({
           </span>
         )}
       </td>
-      {/* View Details Action */}
+      {/* View Details & Delivery Actions */}
       <td className="px-6 py-4 whitespace-nowrap text-center">
-        <button
-          onClick={() => onViewDetails(ord)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-accent-sky hover:text-white rounded-xl text-xs font-black text-slate-600 transition shadow-sm border border-slate-100"
-        >
-          <Eye className="w-3.5 h-3.5" />
-          <span>{currentLang === 'lo' ? 'ເບິ່ງລາຍລະອຽດ' : 'View Details'}</span>
-        </button>
+        <div className="flex items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => onViewDetails(ord)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-200 hover:text-slate-900 rounded-xl text-xs font-black text-slate-700 transition shadow-sm border border-slate-200"
+            title={currentLang === 'lo' ? 'ເບິ່ງລາຍລະອຽດ' : 'View Details'}
+          >
+            <Eye className="w-3.5 h-3.5" />
+            <span>👁️ {currentLang === 'lo' ? 'ເບິ່ງລາຍລະອຽດ' : 'View Details'}</span>
+          </button>
+
+          {onNavigateDelivery && (
+            <button
+              type="button"
+              onClick={() => onNavigateDelivery(ord.id)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-black transition shadow-sm border border-amber-200 active:scale-95"
+              title={currentLang === 'lo' ? 'ໄປໜ້າຈັດສົ່ງ' : 'Go to Delivery'}
+            >
+              <Truck className="w-3.5 h-3.5" />
+              <span>🚚 ไปหน้าจัดส่ง (Go to Delivery)</span>
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );

@@ -30,7 +30,10 @@
     "crm": "ຈັດການລູກຄ້າ (CRM)",
     "inventory": "ຄັງສິນຄ້າ (Inventory)",
     "equipment": "ເຄື່ອງຈັກ (Equipment)",
-    "orders": "ຈັດการອໍເດີ (Customer Orders)",
+    "orders": "ຈັດການອໍເດີ (Order Directory)",
+    "create_order": "ເພີ່ມອໍເດີໃໝ່ (Create Order)",
+    "production": "ຕິດຕາມການຜະລິດ (Production)",
+    "deliveries": "ຕິດຕາມການຈັດສົ່ງ (Deliveries)",
     "estimator": "ເຄື່ອງຄິດໄລ່ (Profit Estimator)",
     "reports": "ລາຍງານວິເຄາະ (BI Reports)"
   },

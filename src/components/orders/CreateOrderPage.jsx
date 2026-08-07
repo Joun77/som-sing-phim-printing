@@ -21,8 +21,14 @@ import {
   Download,
   ShoppingCart,
   PercentSquare,
-  Edit3
+  Edit3,
+  Copy,
+  X,
+  AlertCircle,
+  Check
 } from 'lucide-react';
+
+import ItemSpecConfigurator, { calculateItemCosting } from './ItemSpecConfigurator';
 
 export default function CreateOrderPage({
   onBack,
@@ -69,10 +75,11 @@ export default function CreateOrderPage({
   const defaultPaperId = papers[0]?.id || '';
   const defaultPrinterId = printers[0]?.id || '';
 
-  const createDefaultItem = (name = 'ປຶ້ມ / ສຕິກເກີ ໃໝ່') => ({
+  const createDefaultItem = (name = 'ປຶ້ມ / ສຕິກເກີ ໃໝ່', isConfigured = false) => ({
     id: `item-${Date.now()}-${Math.random().toString().slice(-4)}`,
     name: name,
     quantity: 500,
+    isConfigured: isConfigured,
     paperId: defaultPaperId,
     printerId: defaultPrinterId,
     jobWidth: 210,
@@ -92,15 +99,16 @@ export default function CreateOrderPage({
   });
 
   const [items, setItems] = useState([
-    createDefaultItem('ປຶ້ມ A4 Double A')
+    createDefaultItem('ປຶ້ມ A4 Double A', false)
   ]);
 
-  const [activeItemIndex, setActiveItemIndex] = useState(0);
+  // Modal / Sub-view state for single item spec configurator
+  const [editingItemIndex, setEditingItemIndex] = useState(null);
 
   // Pre-fill specs if passed from QuotationManager
   useEffect(() => {
     if (prefilledSpecs && prefilledSpecs.paperId) {
-      const newItem = createDefaultItem(prefilledSpecs.paperName || 'ໃບສະເໜີລາຄາ (Quotation Job)');
+      const newItem = createDefaultItem(prefilledSpecs.paperName || 'ໃບສະເໜີລາຄາ (Quotation Job)', true);
       newItem.paperId = prefilledSpecs.paperId;
       if (prefilledSpecs.quantity) newItem.quantity = prefilledSpecs.quantity;
       if (prefilledSpecs.unitCost) newItem.manualUnitPrice = prefilledSpecs.unitCost;
@@ -109,16 +117,14 @@ export default function CreateOrderPage({
   }, [prefilledSpecs]);
 
   const handleAddItemRow = () => {
-    const newItem = createDefaultItem(`ລາຍການທີ ${items.length + 1}`);
+    const newItem = createDefaultItem(`ລາຍການທີ ${items.length + 1}`, false);
     setItems(prev => [...prev, newItem]);
-    setActiveItemIndex(items.length);
   };
 
   const handleRemoveItemRow = (index) => {
     if (items.length > 1) {
       const updated = items.filter((_, i) => i !== index);
       setItems(updated);
-      setActiveItemIndex(Math.max(0, index - 1));
     }
   };
 
@@ -130,68 +136,28 @@ export default function CreateOrderPage({
     });
   };
 
-  // Calculation logic for each item
-  const calculateItemCosting = (item) => {
-    if (!item) return { netCost: 0, finalPrice: 0, unitPrice: 0, cuts: 1, totalParentSheets: 0 };
+  const getItemCosting = (item) => calculateItemCosting(item, inventory, equipment);
 
-    const paperItem = inventory ? inventory.find(p => p.id === item.paperId) : null;
-    let parentW = 297, parentH = 420;
-    if (paperItem && paperItem.name.includes('A4')) { parentW = 210; parentH = 297; }
+  const grandTotalBill = items.reduce((sum, it) => sum + getItemCosting(it).finalPrice, 0);
+  const allItemsConfigured = items.every(it => it.isConfigured);
 
-    const currentJobW = Number(item.jobWidth) + (Number(item.bleedMargin) * 2);
-    const currentJobH = Number(item.jobHeight) + (Number(item.bleedMargin) * 2);
-    const portraitCuts = Math.floor(parentW / currentJobW) * Math.floor(parentH / currentJobH);
-    const landscapeCuts = Math.floor(parentW / currentJobH) * Math.floor(parentH / currentJobW);
-    const cuts = Math.max(1, Math.max(portraitCuts, landscapeCuts));
-
-    const parentSheetsNeeded = Math.ceil(item.quantity / cuts);
-    const spoilageSheets = Math.ceil(parentSheetsNeeded * (Number(item.spoilageRate) / 100));
-    const totalParentSheets = parentSheetsNeeded + spoilageSheets;
-
-    const paperUnitCost = paperItem ? (paperItem.costPerSheet || 1200) : 1200;
-    const totalPaperCost = totalParentSheets * paperUnitCost;
-
-    const sidesMultiplier = item.isDoubleSided ? 2 : 1;
-    const totalImpressions = item.quantity * sidesMultiplier;
-    const totalInkCost = totalImpressions * ((item.avgCoverage / 100) / 50) * 500;
-
-    const printerItem = equipment ? equipment.find(e => e.id === item.printerId) : null;
-    const printerDepr = printerItem ? (printerItem.calculatedCostPerPage || 20) : 15;
-    const totalDepreciationCost = totalImpressions * printerDepr;
-    const totalPowerMaint = totalImpressions * 40;
-
-    let finishingCost = 0;
-    if (item.useLamination) finishingCost += ((item.jobWidth / 1000) * (item.jobHeight / 1000) * item.quantity) * 4000;
-    if (item.useFolding) finishingCost += item.quantity * 25;
-    if (item.useBinding) {
-      if (item.bindingType === 'Staple') finishingCost += item.quantity * 150;
-      else if (item.bindingType === 'Spiral') finishingCost += item.quantity * 2500;
-      else if (item.bindingType === 'Perfect') finishingCost += item.quantity * 1200;
-    }
-
-    const netCost = totalPaperCost + totalInkCost + totalDepreciationCost + totalPowerMaint + finishingCost + 15000;
-    const suggestedPrice = netCost / (1 - (Number(item.targetMarginPercent) / 100));
-    const finalPrice = item.manualUnitPrice !== null ? (Number(item.manualUnitPrice) * item.quantity) : suggestedPrice;
-    const unitPrice = item.quantity > 0 ? finalPrice / item.quantity : 0;
-
-    return {
-      cuts,
-      totalParentSheets,
-      totalPaperCost,
-      totalInkCost,
-      totalDepreciationCost,
-      totalPowerMaint,
-      finishingCost,
-      netCost,
-      finalPrice,
-      unitPrice
-    };
+  // Modal spec handlers
+  const handleOpenSpecModal = (index) => {
+    setEditingItemIndex(index);
   };
 
-  const activeItem = items[activeItemIndex] || items[0];
-  const activeCosting = calculateItemCosting(activeItem);
+  const handleSaveSpecModal = (updatedItem) => {
+    if (editingItemIndex !== null) {
+      setItems(prev => {
+        const copy = [...prev];
+        copy[editingItemIndex] = updatedItem;
+        return copy;
+      });
+      setEditingItemIndex(null);
+      if (showToast) showToast(`ບັນທຶກສເປກ "${updatedItem.name}" ສຳເລັດ!`, 'success');
+    }
+  };
 
-  const grandTotalBill = items.reduce((sum, it) => sum + calculateItemCosting(it).finalPrice, 0);
 
   // STEP 3: Order Details & Payment
   const [promisedDeliveryDate, setPromisedDeliveryDate] = useState(
@@ -215,6 +181,11 @@ export default function CreateOrderPage({
   };
 
   const handleNextToStep3 = () => {
+    const unconfiguredItem = items.find(it => !it.isConfigured);
+    if (unconfiguredItem) {
+      showToast(`ກະລຸນາກຳນົດສເປກສິນຄ້າ "${unconfiguredItem.name}" ໃຫ້ครบก่อนดำเนินการต่อ`, 'warning');
+      return;
+    }
     setCurrentStep(3);
   };
 
@@ -275,6 +246,22 @@ export default function CreateOrderPage({
     showToast('ເພີ່ມອໍເດີໃໝ່ ແລະ ຕັດສະຕ໋ອກ FIFO ສຳເລັດ!', 'success');
     onBack();
   };
+
+  if (editingItemIndex !== null && items[editingItemIndex]) {
+    return (
+      <ItemSpecConfigurator
+        item={items[editingItemIndex]}
+        itemIndex={editingItemIndex}
+        allItems={items}
+        inventory={inventory}
+        equipment={equipment}
+        formatLAK={formatLAK}
+        onSave={handleSaveSpecModal}
+        onCancel={() => setEditingItemIndex(null)}
+        showToast={showToast}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in w-full text-slate-800">
@@ -415,66 +402,65 @@ export default function CreateOrderPage({
         </div>
       )}
 
-      {/* STEP 2: CUSTOMER ORDERED ITEMS TABLE & SPECS DRAWER */}
+      {/* STEP 2: MASTER ITEM LIST VIEW */}
       {currentStep === 2 && (
         <div className="space-y-6 animate-fade-in">
-          {/* Main Card: Item Entry Table / Block */}
+          {/* Master Item List View */}
           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-slate-100 pb-4">
               <div>
                 <h4 className="font-black text-slate-800 text-lg flex items-center gap-2">
                   <Package className="w-6 h-6 text-accent-sky" />
-                  <span>ລາຍການສິນຄ້າທີ່ລູກຄ້າສັ່ງ (Customer Order Item Block List)</span>
+                  <span>รายการสินค้าที่ลูกค้าสั่ง (Master Order Item List)</span>
                 </h4>
                 <p className="text-xs font-semibold text-slate-400 mt-0.5">
-                  ເພີ່ມຊື່ລາຍການສິນຄ້າ, ຈຳນວນອັນ, ແລະ ກົດປຸ່ມ "ກຳນົດສເປກ" ເພື່ອຄິດໄລ່ຕົ້ນທຶນແຕ່ລະລາຍການ
+                  เพิ่มรายการสินค้า กำหนดจำนวน และกดปุ่ม "[⚙️ กำหนดสเปก]" เพื่อตั้งค่าสเปกการพิมพ์และคำนวณต้นทุน
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleAddItemRow}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black shadow-md transition active:scale-95 w-fit"
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black shadow-md shadow-accent-sky/20 transition active:scale-95 w-fit"
               >
                 <Plus className="w-4 h-4" />
-                <span>+ ເພີ່ມລາຍການສິນຄ້າ (Add Item)</span>
+                <span>+ เพิ่มรายการสินค้า (Add New Item)</span>
               </button>
             </div>
 
             {/* Item Rows Table */}
             <div className="space-y-3">
               {items.map((it, idx) => {
-                const costing = calculateItemCosting(it);
-                const isActive = activeItemIndex === idx;
+                const costing = calculateItemCosting(it, inventory, equipment);
 
                 return (
                   <div 
                     key={it.id}
                     className={`p-4 rounded-2xl border transition-all ${
-                      isActive 
-                        ? 'bg-sky-50/40 border-accent-sky shadow-sm' 
-                        : 'bg-slate-50/70 border-slate-200 hover:border-slate-300'
+                      it.isConfigured 
+                        ? 'bg-emerald-50/30 border-emerald-200/80 shadow-sm' 
+                        : 'bg-amber-50/30 border-amber-200/80 shadow-sm'
                     }`}
                   >
                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-                      {/* Column 1: Item Name / Description input */}
-                      <div className="sm:col-span-5 space-y-1">
+                      {/* Item Name / Title */}
+                      <div className="sm:col-span-4 space-y-1">
                         <label className="block text-[10px] font-black text-slate-400 uppercase">
-                          {idx + 1}. ຊື່ລາຍການສິນຄ້າ (Item Name / Description) *
+                          Item #{idx + 1}: ชื่อรายการสินค้า (Item Name) *
                         </label>
                         <input
                           type="text"
                           required
                           value={it.name}
                           onChange={(e) => updateItemField(idx, 'name', e.target.value)}
-                          placeholder="ເຊັ່ນ: ປຶ້ມ A4 100 ໜ້າ, ສຕິກເກີ 5x5cm..."
+                          placeholder="เช่น: หนังสือภาษาลาว, หนังสือภาษาไทย..."
                           className="w-full px-3.5 py-2 border border-slate-200 rounded-xl font-bold text-xs bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky"
                         />
                       </div>
 
-                      {/* Column 2: Quantity Input */}
+                      {/* Quantity Input */}
                       <div className="sm:col-span-2 space-y-1">
                         <label className="block text-[10px] font-black text-slate-400 uppercase">
-                          ຈຳນວນ (QTY/ອັນ) *
+                          จำนวน (Quantity) *
                         </label>
                         <input
                           type="number"
@@ -486,32 +472,47 @@ export default function CreateOrderPage({
                         />
                       </div>
 
-                      {/* Column 3: Calculated Unit Price & Subtotal */}
-                      <div className="sm:col-span-3 text-right space-y-0.5">
+                      {/* Calculated Subtotal */}
+                      <div className="sm:col-span-2 text-right space-y-0.5">
                         <span className="block text-[10px] font-black text-slate-400 uppercase">
-                          ລາຄາລວມ (Subtotal)
+                          ราคารวม (Subtotal)
                         </span>
                         <span className="text-base font-black text-slate-900 font-sans block">
                           {formatLAK(costing.finalPrice)}
                         </span>
                         <span className="text-[10px] text-slate-400 font-bold block">
-                          (~ {formatLAK(costing.unitPrice)} / ຊຸດ)
+                          (~ {formatLAK(costing.unitPrice)} / ชิ้น)
                         </span>
                       </div>
 
-                      {/* Column 4: Configure Specs & Delete Actions */}
+                      {/* Status Badge */}
+                      <div className="sm:col-span-2 flex items-center justify-center">
+                        {it.isConfigured ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-700 border border-emerald-200">
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Configured - {formatLAK(costing.finalPrice)}</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-black bg-amber-100 text-amber-700 border border-amber-200 animate-pulse">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            <span>Pending Specs</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Config & Delete Actions */}
                       <div className="sm:col-span-2 flex items-center justify-end gap-2">
                         <button
                           type="button"
-                          onClick={() => setActiveItemIndex(idx)}
-                          className={`px-3 py-2 rounded-xl text-xs font-black transition flex items-center gap-1 ${
-                            isActive 
-                              ? 'bg-primary-navy text-white shadow-md' 
-                              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                          onClick={() => handleOpenSpecModal(idx)}
+                          className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-sm ${
+                            it.isConfigured
+                              ? 'bg-primary-navy hover:bg-slate-800 text-white'
+                              : 'bg-accent-sky hover:bg-sky-600 text-white'
                           }`}
                         >
                           <Settings className="w-3.5 h-3.5" />
-                          <span>{isActive ? 'ກຳລັງຕັ້ງສເປກ' : 'ຕັ້ງສເປກ'}</span>
+                          <span>[⚙️ กำหนดสเปก]</span>
                         </button>
 
                         {items.length > 1 && (
@@ -519,6 +520,7 @@ export default function CreateOrderPage({
                             type="button"
                             onClick={() => handleRemoveItemRow(idx)}
                             className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition"
+                            title="ลบรายการนี้"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -529,179 +531,43 @@ export default function CreateOrderPage({
                 );
               })}
             </div>
-          </div>
 
-          {/* Active Item Specs Engine (3-Column Detailed Calculator) */}
-          <div className="bg-slate-50/50 p-6 rounded-3xl border border-slate-200 space-y-6">
-            <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-              <h4 className="font-black text-slate-800 text-sm flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-purple-600" />
-                <span>ຕັ້ງຄ່າສເປກ & ຕົ້ນທຶນສຳລັບ: <strong className="text-accent-sky font-black">"{activeItem?.name}"</strong></span>
-              </h4>
-              <span className="text-xs font-bold text-slate-400 font-sans">
-                Item #{activeItemIndex + 1} of {items.length}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              {/* Column 1: Print Job Specs */}
-              <div className="lg:col-span-5 space-y-6">
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-4">
-                  <div className="flex items-center gap-2 border-b pb-2">
-                    <Package className="w-4 h-4 text-accent-sky" />
-                    <span className="font-black text-xs text-slate-700">1. ເລືອກເຈ້ຍ (Paper Stock)</span>
-                  </div>
-
-                  <div className="space-y-3 text-xs font-bold text-slate-600">
-                    <div className="space-y-1">
-                      <label className="block text-slate-500">ເຈ້ຍທີ່ໃຊ້ພິມ *</label>
-                      <select
-                        value={activeItem?.paperId}
-                        onChange={(e) => updateItemField(activeItemIndex, 'paperId', e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-bold"
-                      >
-                        {papers.map(p => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <label className="block text-[10px] text-slate-500">Width (mm):</label>
-                        <input
-                          type="number"
-                          value={activeItem?.jobWidth}
-                          onChange={(e) => updateItemField(activeItemIndex, 'jobWidth', Number(e.target.value))}
-                          className="w-full px-3 py-1.5 border rounded-lg font-sans font-bold"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="block text-[10px] text-slate-500">Height (mm):</label>
-                        <input
-                          type="number"
-                          value={activeItem?.jobHeight}
-                          onChange={(e) => updateItemField(activeItemIndex, 'jobHeight', Number(e.target.value))}
-                          className="w-full px-3 py-1.5 border rounded-lg font-sans font-bold"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-4">
-                  <div className="flex items-center gap-2 border-b pb-2">
-                    <Printer className="w-4 h-4 text-purple-600" />
-                    <span className="font-black text-xs text-slate-700">2. ເຄື່ອງພິມ & ໂໝດສີ</span>
-                  </div>
-
-                  <div className="space-y-3 text-xs font-bold text-slate-600">
-                    <select
-                      value={activeItem?.printerId}
-                      onChange={(e) => updateItemField(activeItemIndex, 'printerId', e.target.value)}
-                      className="w-full px-3 py-2 border rounded-xl bg-white font-bold"
-                    >
-                      {printers.map(pr => (
-                        <option key={pr.id} value={pr.id}>{pr.name}</option>
-                      ))}
-                    </select>
-
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => updateItemField(activeItemIndex, 'isDoubleSided', false)}
-                        className={`flex-1 py-1.5 rounded-lg border text-xs font-black ${!activeItem?.isDoubleSided ? 'bg-purple-600 text-white' : 'bg-slate-50'}`}
-                      >
-                        1 ໜ້າ
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateItemField(activeItemIndex, 'isDoubleSided', true)}
-                        className={`flex-1 py-1.5 rounded-lg border text-xs font-black ${activeItem?.isDoubleSided ? 'bg-purple-600 text-white' : 'bg-slate-50'}`}
-                      >
-                        2 ໜ້າ
-                      </button>
-                    </div>
-                  </div>
-                </div>
+            {/* Dynamic Grand Total Bill Card */}
+            <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl flex flex-col sm:flex-row justify-between items-center gap-4">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                  Grand Total Bill ({items.length} items)
+                </span>
+                <span className="text-2xl sm:text-3xl font-black font-sans text-emerald-400 mt-1 block">
+                  {formatLAK(grandTotalBill)}
+                </span>
               </div>
-
-              {/* Column 2: Internal Cost Breakdown */}
-              <div className="lg:col-span-4 space-y-6">
-                <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl space-y-4 border border-slate-800">
-                  <span className="font-black text-xs uppercase tracking-wider text-slate-300 block border-b border-slate-800 pb-2">
-                    Internal Cost Breakdown
-                  </span>
-                  <div className="space-y-2 text-xs font-semibold text-slate-300">
-                    <div className="flex justify-between">
-                      <span>ຕົ້ນທຶນເຈ້ຍ:</span>
-                      <span className="font-sans font-black">{formatLAK(activeCosting.totalPaperCost)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>ຕົ້ນທຶນໝຶກ:</span>
-                      <span className="font-sans font-black">{formatLAK(activeCosting.totalInkCost)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>ຄ່າເສື່ອມ & ໄຟຟ້າ:</span>
-                      <span className="font-sans font-black">{formatLAK(activeCosting.totalDepreciationCost + activeCosting.totalPowerMaint)}</span>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-slate-800 pt-3 flex justify-between items-center text-sky-400 font-black text-xs">
-                    <span>Net Internal Cost:</span>
-                    <span className="text-base font-sans font-black">{formatLAK(activeCosting.netCost)}</span>
-                  </div>
-
-                  <div className="space-y-2 pt-2 border-t border-slate-800">
-                    <div className="flex justify-between text-xs font-bold">
-                      <span>Margin (%):</span>
-                      <span className="text-emerald-400 font-black">{activeItem?.targetMarginPercent}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="10"
-                      max="80"
-                      value={activeItem?.targetMarginPercent}
-                      onChange={(e) => updateItemField(activeItemIndex, 'targetMarginPercent', Number(e.target.value))}
-                      className="w-full accent-emerald-500 cursor-pointer"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Column 3: Overall Order Summary & Next Button */}
-              <div className="lg:col-span-3 space-y-6">
-                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl space-y-4">
-                  <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block border-b pb-2">
-                    Grand Total Bill ({items.length} items)
-                  </span>
-
-                  <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 space-y-1">
-                    <span className="text-[10px] font-black text-emerald-800 uppercase block">ຍອດລວມທັງໝົດ</span>
-                    <span className="text-2xl font-black text-emerald-600 font-sans block">{formatLAK(grandTotalBill)}</span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleNextToStep3}
-                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs shadow-lg shadow-emerald-600/20 transition active:scale-95 flex items-center justify-center gap-2"
-                  >
-                    <span>ຕໍ່ໄປ: ສະຫຼຸບຍອດ & ຕັດສະຕ໋ອກ (Step 3)</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleNextToStep3}
+                  className={`px-6 py-3.5 rounded-2xl font-black text-xs shadow-lg transition active:scale-95 flex items-center gap-2 ${
+                    allItemsConfigured
+                      ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/25'
+                      : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
+                  }`}
+                >
+                  <span>ต่อไป: สรุปยอด & ตัดสต็อก (Step 3)</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
               </div>
             </div>
           </div>
 
-          <div className="flex justify-between pt-6 border-t border-slate-100">
+          {/* Navigation Controls */}
+          <div className="flex justify-between pt-2 border-t border-slate-100">
             <button
               type="button"
               onClick={() => setCurrentStep(1)}
               className="flex items-center gap-1.5 px-4 py-2.5 border border-slate-200 rounded-xl text-slate-600 text-xs font-bold hover:bg-slate-50 transition"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>ກັບຄືນ (Back)</span>
+              <span>ย้อนกลับ (Back)</span>
             </button>
           </div>
         </div>
@@ -814,3 +680,4 @@ export default function CreateOrderPage({
     </div>
   );
 }
+
