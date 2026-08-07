@@ -1,8 +1,8 @@
 import React from 'react';
-import { ShieldAlert, CheckCircle, Wrench } from 'lucide-react';
+import { ShieldAlert, CheckCircle, Wrench, Eye } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-export default function EquipmentTable({ machines, onMaintenance }) {
+export default function EquipmentTable({ machines, onMaintenance, onViewDetails }) {
   const { t } = useTranslation();
 
   const formatLAK = (num) => {
@@ -35,7 +35,7 @@ export default function EquipmentTable({ machines, onMaintenance }) {
                 
                 let paramsSummary = '-';
                 if (eq.category === 'Printer') {
-                  paramsSummary = `${eq.speedPpm || 0} PPM / Max Width ${eq.maxWidth || 'A3'}`;
+                  paramsSummary = `Std Ink: ${eq.inkConsumptionStandard || 0.05} ml/sheet @ 5% | Click: ₭${eq.clickRateColor || 500}`;
                 } else if (eq.category === 'Cutter') {
                   paramsSummary = `Capacity: ${eq.cutCapacity || 0} sheets / Blade: ${eq.bladeDepreciationPerCut || 0}₭`;
                 } else if (eq.category === 'Binder') {
@@ -47,9 +47,18 @@ export default function EquipmentTable({ machines, onMaintenance }) {
                 return (
                   <tr key={eq.id} className="hover:bg-slate-50/50 transition">
                     <td className="py-4.5 px-6">
-                      <div>
-                        <span className="font-extrabold text-slate-800 block leading-tight">{eq.name}</span>
-                        <span className="text-[10px] font-mono font-bold text-slate-400 block mt-1 uppercase">{eq.id}</span>
+                      <div className="flex items-center gap-3">
+                        {eq.imageUrl ? (
+                          <img src={eq.imageUrl} alt={eq.name} className="w-10 h-10 object-cover rounded-xl border border-slate-200" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 font-bold text-xs">
+                            {eq.name.slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <div>
+                          <span className="font-extrabold text-slate-800 block leading-tight">{eq.name}</span>
+                          <span className="text-[10px] font-mono font-bold text-slate-400 block mt-1 uppercase">{eq.id}</span>
+                        </div>
                       </div>
                     </td>
                     <td className="py-4.5 px-6">
@@ -82,14 +91,16 @@ export default function EquipmentTable({ machines, onMaintenance }) {
                     </td>
                     <td className="py-4.5 px-6 text-right">
                       <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => onMaintenance(eq.id)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 border hover:bg-slate-200 text-xs font-bold text-slate-700 rounded-xl transition"
-                          title="Schedule Maintenance"
-                        >
-                          <Wrench className="w-3.5 h-3.5" />
-                          <span>SLA Reset</span>
-                        </button>
+                        {onViewDetails && (
+                          <button
+                            onClick={() => onViewDetails(eq)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition shadow-sm"
+                            title="รายละเอียดเพิ่มเติม"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>รายละเอียดเพิ่มเติม</span>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

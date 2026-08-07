@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
 import EquipmentTable from './EquipmentTable';
 import AddEquipmentModal from './AddEquipmentModal';
+import EquipmentDetailsPage from './EquipmentDetailsPage';
 
 export default function EquipmentManagement() {
   const { equipment, updateEquipmentMaintenance, showToast } = useApp();
@@ -12,15 +13,29 @@ export default function EquipmentManagement() {
 
   const [activeCategory, setActiveCategory] = useState('All'); // All, Printer, Cutter, Binder, Laminator
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState(null);
 
   const handleMaintenanceReset = (eqId) => {
     updateEquipmentMaintenance(eqId);
     showToast('Machinery components wear resets back to 0% SLA health!', 'success');
   };
 
+  const handleViewDetails = (eq) => {
+    setSelectedEquipmentId(eq.id);
+  };
+
   const filteredMachines = activeCategory === 'All'
     ? equipment
     : equipment.filter(eq => eq.category === activeCategory);
+
+  if (selectedEquipmentId) {
+    return (
+      <EquipmentDetailsPage 
+        equipmentId={selectedEquipmentId} 
+        onBack={() => setSelectedEquipmentId(null)} 
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 text-slate-800">
@@ -34,13 +49,6 @@ export default function EquipmentManagement() {
           </h2>
           <p className="text-sm font-semibold text-slate-400 mt-1">Track SLA operation parameters, equipment wear, & component metrics</p>
         </div>
-        <button
-          onClick={() => setIsAddOpen(true)}
-          className="flex items-center gap-1.5 px-4.5 py-2.5 bg-accent-sky hover:bg-sky-600 text-white font-bold text-xs rounded-2xl transition shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ Add Machine Profile</span>
-        </button>
       </div>
 
       {/* Category filters */}
@@ -75,6 +83,7 @@ export default function EquipmentManagement() {
       <EquipmentTable 
         machines={filteredMachines} 
         onMaintenance={handleMaintenanceReset}
+        onViewDetails={handleViewDetails}
       />
 
       {/* Add modal wizard */}

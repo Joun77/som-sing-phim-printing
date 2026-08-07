@@ -252,6 +252,10 @@ const initialEquipment = [
     calculatedCostPerPage: 90,
     category: 'Printer',
     printerType: 'Laser',
+    inkConsumptionStandard: 0.05, // 0.05 ml per A4 @ 5% coverage
+    inkUnitCostMl: 500, // 500 LAK per ml
+    clickRateColor: 500,
+    clickRateBW: 150,
     supportedInkSets: ['Konica C6085 OEM Set', 'Konica C6085 Compatible Set'],
     purchaseDate: '2024-05-15',
     warrantyExpiration: '2027-05-15',

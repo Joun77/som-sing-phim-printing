@@ -136,9 +136,25 @@ export default function CreateOrderPage({
     });
   };
 
+  // Order-Level Operating Costs & Overhead State (Step 2)
+  const [orderOverheadMode, setOrderOverheadMode] = useState('Standard');
+  const [customSetupFee, setCustomSetupFee] = useState(10000);
+  const [customLaborFee, setCustomLaborFee] = useState(25000);
+  const [customDeprPowerFee, setCustomDeprPowerFee] = useState(15000);
+  const [customSpoilageFee, setCustomSpoilageFee] = useState(10000);
+
+  const isCustomOverhead = orderOverheadMode === 'Custom';
+  const setupFee = isCustomOverhead ? Number(customSetupFee) : 10000;
+  const laborFee = isCustomOverhead ? Number(customLaborFee) : (20000 + (items.length * 5000));
+  const deprPowerFee = isCustomOverhead ? Number(customDeprPowerFee) : (15000 + (items.reduce((acc, it) => acc + Number(it.quantity || 0), 0) * 5));
+  const spoilageFee = isCustomOverhead ? Number(customSpoilageFee) : 10000;
+
+  const orderOperatingOverhead = setupFee + laborFee + deprPowerFee + spoilageFee;
+
   const getItemCosting = (item) => calculateItemCosting(item, inventory, equipment);
 
-  const grandTotalBill = items.reduce((sum, it) => sum + getItemCosting(it).finalPrice, 0);
+  const sumItemSubtotals = items.reduce((sum, it) => sum + getItemCosting(it).finalPrice, 0);
+  const grandTotalBill = sumItemSubtotals + orderOperatingOverhead;
   const allItemsConfigured = items.every(it => it.isConfigured);
 
   // Modal spec handlers
@@ -532,14 +548,115 @@ export default function CreateOrderPage({
               })}
             </div>
 
+            {/* Order Operating Costs & Overhead Section */}
+            <div className="bg-slate-50/80 p-6 rounded-3xl border border-slate-200 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-slate-200/80 pb-3">
+                <div>
+                  <h4 className="font-black text-slate-900 text-sm flex items-center gap-2">
+                    <Settings className="w-5 h-5 text-rose-600" />
+                    <span>ค่าดำเนินการรวมออร์เดอร์ (Order Operating Costs & Overhead)</span>
+                  </h4>
+                  <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                    คำนวณค่าแรง ค่าตั้งเครื่อง ค่าเสื่อม และค่าเผื่อเสีย รวมระดับออร์เดอร์ (ไม่ต้องคิดซ้ำในแต่ละสินค้า)
+                  </p>
+                </div>
+                <div className="flex bg-white p-1 rounded-xl border border-slate-200 text-xs font-bold shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setOrderOverheadMode('Standard')}
+                    className={`px-3 py-1.5 rounded-lg transition ${!isCustomOverhead ? 'bg-primary-navy text-white font-black' : 'text-slate-500 hover:text-slate-800'}`}
+                  >
+                    สเปกมาตรฐาน (Standard Preset)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOrderOverheadMode('Custom')}
+                    className={`px-3 py-1.5 rounded-lg transition ${isCustomOverhead ? 'bg-primary-navy text-white font-black' : 'text-slate-500 hover:text-slate-800'}`}
+                  >
+                    กำหนดเอง (Custom Spec)
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-bold text-slate-700">
+                {/* 1. Setup Fee */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-1">
+                  <span className="text-slate-500 text-[10px] uppercase font-black block">1. ค่าตั้งเครื่อง & เตรียมงาน</span>
+                  {isCustomOverhead ? (
+                    <input
+                      type="number"
+                      value={customSetupFee}
+                      onChange={(e) => setCustomSetupFee(Number(e.target.value))}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-xl font-mono text-xs font-black focus:outline-none"
+                    />
+                  ) : (
+                    <span className="text-sm font-black text-slate-900 font-sans block">{formatLAK(setupFee)}</span>
+                  )}
+                </div>
+
+                {/* 2. Labor Fee */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-1">
+                  <span className="text-slate-500 text-[10px] uppercase font-black block">2. ค่าแรงงานช่างรวม</span>
+                  {isCustomOverhead ? (
+                    <input
+                      type="number"
+                      value={customLaborFee}
+                      onChange={(e) => setCustomLaborFee(Number(e.target.value))}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-xl font-mono text-xs font-black focus:outline-none"
+                    />
+                  ) : (
+                    <span className="text-sm font-black text-slate-900 font-sans block">{formatLAK(laborFee)}</span>
+                  )}
+                </div>
+
+                {/* 3. Depreciation & Power Fee */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-1">
+                  <span className="text-slate-500 text-[10px] uppercase font-black block">3. ค่าเสื่อมเครื่อง & ไฟฟ้ารวม</span>
+                  {isCustomOverhead ? (
+                    <input
+                      type="number"
+                      value={customDeprPowerFee}
+                      onChange={(e) => setCustomDeprPowerFee(Number(e.target.value))}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-xl font-mono text-xs font-black focus:outline-none"
+                    />
+                  ) : (
+                    <span className="text-sm font-black text-slate-900 font-sans block">{formatLAK(deprPowerFee)}</span>
+                  )}
+                </div>
+
+                {/* 4. Spoilage Fee */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-1">
+                  <span className="text-slate-500 text-[10px] uppercase font-black block">4. ค่าเผื่อเสียรวม</span>
+                  {isCustomOverhead ? (
+                    <input
+                      type="number"
+                      value={customSpoilageFee}
+                      onChange={(e) => setCustomSpoilageFee(Number(e.target.value))}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-xl font-mono text-xs font-black focus:outline-none"
+                    />
+                  ) : (
+                    <span className="text-sm font-black text-slate-900 font-sans block">{formatLAK(spoilageFee)}</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 text-xs font-black">
+                <span className="text-slate-600">รวมค่าดำเนินการระดับออร์เดอร์ (Order Overhead Sum):</span>
+                <span className="text-base font-sans text-rose-600 font-black">{formatLAK(orderOperatingOverhead)}</span>
+              </div>
+            </div>
+
             {/* Dynamic Grand Total Bill Card */}
-            <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl flex flex-col sm:flex-row justify-between items-center gap-4">
-              <div>
+            <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div className="space-y-1">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
                   Grand Total Bill ({items.length} items)
                 </span>
                 <span className="text-2xl sm:text-3xl font-black font-sans text-emerald-400 mt-1 block">
                   {formatLAK(grandTotalBill)}
+                </span>
+                <span className="text-[11px] text-slate-400 font-mono block">
+                  (Items Subtotal: {formatLAK(sumItemSubtotals)} + Order Overhead: {formatLAK(orderOperatingOverhead)})
                 </span>
               </div>
               <div className="flex items-center gap-3">

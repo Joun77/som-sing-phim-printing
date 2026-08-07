@@ -279,13 +279,15 @@
     "replenish_existing": "Replenish Existing SKU",
     "register_new": "Register New SKU",
     "po_number": "PO Number / Code",
-    "po_supplier": "Inbound Supplier",
+    "po_supplier": "Supplier Name",
     "po_qty": "Inbound Volume Qty",
     "po_cost": "Total Cost (LAK)",
-    "btn_submit": "Log Inbound Transaction",
+    "btn_submit": "+ Inbound Procurement Entry",
     "po_history_title": "Purchase Order Logs",
     "po_history_subtitle": "Filter and query historical inbound records",
-    "po_placeholder": "Search PO#, items, or suppliers..."
+    "po_placeholder": "Search PO#, items, or suppliers...",
+    "view_details": "View Details",
+    "delete_record": "Delete Record"
   },
   "inventory_status": {
     "in_use": "In Use",

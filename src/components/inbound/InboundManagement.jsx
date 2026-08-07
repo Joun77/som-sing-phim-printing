@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Truck, Plus, CheckCircle, Boxes, Cpu, ArrowUpRight, DollarSign, X } from 'lucide-react';
+import { Truck, Plus, CheckCircle, Boxes, Cpu, ArrowUpRight, DollarSign, X, Eye } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
+import InboundEntryPage from './InboundEntryPage';
+import InboundDetailsPage from './InboundDetailsPage';
 
 export default function InboundManagement() {
   const { 
@@ -17,6 +19,10 @@ export default function InboundManagement() {
 
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
+
+  // Full-page entry & details states
+  const [isEntryPageOpen, setIsEntryPageOpen] = useState(false);
+  const [selectedPoId, setSelectedPoId] = useState(null);
 
   // Modal toggle state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -225,6 +231,19 @@ export default function InboundManagement() {
            po.supplierName.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
+  if (isEntryPageOpen) {
+    return <InboundEntryPage onBack={() => setIsEntryPageOpen(false)} />;
+  }
+
+  if (selectedPoId) {
+    return (
+      <InboundDetailsPage 
+        poId={selectedPoId} 
+        onBack={() => setSelectedPoId(null)} 
+      />
+    );
+  }
+
   return (
     <div className="space-y-6 text-slate-800">
       
@@ -284,11 +303,11 @@ export default function InboundManagement() {
               className="w-full sm:w-64 min-h-[44px] px-3.5 border-2 rounded-xl focus:outline-none text-xs font-semibold"
             />
             <button
-              onClick={() => setIsModalOpen(true)}
-              className="min-h-[44px] px-5 bg-accent-sky hover:bg-sky-600 text-white rounded-xl font-black text-xs flex items-center justify-center gap-1.5 shadow-sm transition"
+              onClick={() => setIsEntryPageOpen(true)}
+              className="min-h-[44px] px-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs flex items-center justify-center gap-1.5 shadow-md transition"
             >
               <Plus className="w-4 h-4" />
-              <span>{t('inbound.btn_submit')}</span>
+              <span>+ นำเข้าสินค้า / อุปกรณ์ใหม่ (Inbound Procurement Entry)</span>
             </button>
           </div>
         </div>
@@ -305,48 +324,62 @@ export default function InboundManagement() {
                   <th className="py-4 px-6">{t('inventory_status.item_sku')}</th>
                   <th className="py-4 px-6">{t('inbound.po_qty')}</th>
                   <th className="py-4 px-6">{t('inbound.po_supplier')}</th>
-                  <th className="py-4 px-6 text-right">{t('inbound.po_cost')}</th>
+                  <th className="py-4 px-6">{t('inbound.po_cost')}</th>
+                  <th className="py-4 px-6 text-right">{t('inventory_status.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm font-semibold text-slate-700">
                 {filteredPO.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="py-12 text-center text-slate-400 font-bold">
+                    <td colSpan="8" className="py-12 text-center text-slate-400 font-bold">
                       No purchase orders logged.
                     </td>
                   </tr>
                 ) : (
-                  filteredPO.map(po => (
-                    <tr key={po.poId} className="hover:bg-slate-50/50 transition">
-                      <td className="py-4.5 px-6 font-mono text-xs text-slate-500 font-extrabold">
-                        #{po.poId}
-                      </td>
-                      <td className="py-4.5 px-6 font-sans">
-                        {po.purchaseDate}
-                      </td>
-                      <td className="py-4.5 px-6">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
-                          po.itemType === 'Material'
-                            ? 'bg-green-50 text-green-700 border-green-100'
-                            : 'bg-indigo-50 text-indigo-700 border-indigo-100'
-                        }`}>
-                          {po.itemType}
-                        </span>
-                      </td>
-                      <td className="py-4.5 px-6 font-extrabold text-slate-800">
-                        {po.itemName}
-                      </td>
-                      <td className="py-4.5 px-6 font-sans">
-                        {po.qty} {po.unitName || 'Units'}
-                      </td>
-                      <td className="py-4.5 px-6 truncate max-w-[150px]" title={po.supplierName}>
-                        {po.supplierName}
-                      </td>
-                      <td className="py-4.5 px-6 font-sans font-black text-slate-900 text-right">
-                        {formatLAK(po.totalCost)}
-                      </td>
-                    </tr>
-                  ))
+                  filteredPO.map(po => {
+                    const currentPoId = po.poId || po.id;
+                    return (
+                      <tr key={currentPoId} className="hover:bg-slate-50/50 transition">
+                        <td className="py-4.5 px-6 font-mono text-xs text-slate-500 font-extrabold">
+                          #{currentPoId}
+                        </td>
+                        <td className="py-4.5 px-6 font-sans">
+                          {po.purchaseDate || po.date}
+                        </td>
+                        <td className="py-4.5 px-6">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
+                            (po.itemType || po.type) === 'Material'
+                              ? 'bg-green-50 text-green-700 border-green-100'
+                              : 'bg-indigo-50 text-indigo-700 border-indigo-100'
+                          }`}>
+                            {po.itemType || po.type || 'Material'}
+                          </span>
+                        </td>
+                        <td className="py-4.5 px-6 font-extrabold text-slate-800">
+                          {po.itemName || po.name}
+                        </td>
+                        <td className="py-4.5 px-6 font-sans">
+                          {po.qty} {po.unitName || 'Units'}
+                        </td>
+                        <td className="py-4.5 px-6 truncate max-w-[150px]" title={po.supplierName}>
+                          {po.supplierName}
+                        </td>
+                        <td className="py-4.5 px-6 font-sans font-black text-slate-900">
+                          {formatLAK(po.totalCost || po.totalPrice)}
+                        </td>
+                        <td className="py-4.5 px-6 text-right">
+                          <button
+                            onClick={() => setSelectedPoId(currentPoId)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition shadow-sm"
+                            title={t('inbound.view_details')}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>{t('inbound.view_details')}</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
