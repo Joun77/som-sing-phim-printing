@@ -165,7 +165,13 @@ export default function CustomerOrders() {
   };
 
   const applySettlePreset = (pct) => {
-    if (isAddOrderOpen) {
+    if (selectedOrder) {
+      if (pct === 100) setSettleAmount(selectedOrder.remainingUnpaidBalance);
+      else if (pct === 50) setSettleAmount(Math.round(selectedOrder.remainingUnpaidBalance / 2));
+    }
+  };
+
+  if (isAddOrderOpen) {
     return (
       <CreateOrderPage
         onBack={() => { setIsAddOrderOpen(false); setPrefilledOrderSpecs(null); }}
@@ -181,12 +187,6 @@ export default function CustomerOrders() {
       />
     );
   }
-
-  if (selectedOrder) {
-      if (pct === 100) setSettleAmount(selectedOrder.remainingUnpaidBalance);
-      else if (pct === 50) setSettleAmount(Math.round(selectedOrder.remainingUnpaidBalance / 2));
-    }
-  };
 
   if (selectedOrder) {
     return (
