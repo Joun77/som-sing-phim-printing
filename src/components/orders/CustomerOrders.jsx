@@ -28,7 +28,9 @@ export default function CustomerOrders() {
     setFocusOrderId,
     addOrder,
     customers,
-    addCustomer
+    addCustomer,
+    prefilledOrderSpecs,
+    setPrefilledOrderSpecs
   } = useApp();
 
   const { t, i18n } = useTranslation();
@@ -46,6 +48,13 @@ export default function CustomerOrders() {
   const [settleAmount, setSettleAmount] = useState(0);
   const [settleMethod, setSettleMethod] = useState('BCEL One');
   const [settleSlip, setSettleSlip] = useState('');
+
+  // Auto-open modal when quote converted to order
+  useEffect(() => {
+    if (prefilledOrderSpecs) {
+      setIsAddOrderOpen(true);
+    }
+  }, [prefilledOrderSpecs]);
 
   // Auto-select order when navigated from CRM
   useEffect(() => {
@@ -410,7 +419,7 @@ export default function CustomerOrders() {
       {/* CREATE ORDER MODAL */}
       {isAddOrderOpen && (
         <CreateOrderModal
-          onClose={() => setIsAddOrderOpen(false)}
+          onClose={() => { setIsAddOrderOpen(false); setPrefilledOrderSpecs(null); }}
           inventory={inventory}
           customers={customers}
           addCustomer={addCustomer}
@@ -419,6 +428,7 @@ export default function CustomerOrders() {
           formatLAK={formatLAK}
           currentLang={currentLang}
           t={t}
+          prefilledSpecs={prefilledOrderSpecs}
         />
       )}
     </div>

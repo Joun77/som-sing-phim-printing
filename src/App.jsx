@@ -7,7 +7,7 @@ import InventoryManagement from './components/inventory/InventoryManagement';
 import EquipmentOverhead from './components/equipment/EquipmentManagement';
 import CustomerManagement from './components/customers/CustomerManagement';
 import CustomerOrders from './components/orders/CustomerOrders';
-import ProfitCalculator from './components/ProfitCalculator';
+import QuotationManager from './components/QuotationManager';
 import HistoryAnalytics from './components/HistoryAnalytics';
 import { useTranslation } from 'react-i18next';
 import { 
@@ -35,7 +35,7 @@ function AppContent() {
           {activeTab === 'equipment' && <EquipmentOverhead />}
           {activeTab === 'crm' && <CustomerManagement />}
           {activeTab === 'orders' && <CustomerOrders />}
-          {activeTab === 'calculator' && <ProfitCalculator />}
+          {activeTab === 'calculator' && <QuotationManager />}
           {activeTab === 'reports' && <HistoryAnalytics />}
         </div>
       </main>

@@ -467,6 +467,7 @@ export const AppProvider = ({ children }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [focusOrderId, setFocusOrderId] = useState(null);
   const [preselectedCustomerName, setPreselectedCustomerName] = useState('');
+  const [prefilledOrderSpecs, setPrefilledOrderSpecs] = useState(null);
   const [toast, setToast] = useState(null); // { message: '', type: 'success' | 'warning' }
   const [confirmDialog, setConfirmDialog] = useState(null); // { message: '', onConfirm: () => void, onCancel: () => void }
 
@@ -1216,6 +1217,8 @@ export const AppProvider = ({ children }) => {
       setFocusOrderId,
       preselectedCustomerName,
       setPreselectedCustomerName,
+      prefilledOrderSpecs,
+      setPrefilledOrderSpecs,
       inventory,
       equipment,
       orders,

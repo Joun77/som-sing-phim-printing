@@ -1,0 +1,134 @@
+Created At: 2026-08-06T17:09:27Z
+Completed At: 2026-08-06T17:09:27Z
+File Path: `file:///Users/joun/Documents/%E0%BA%AA%E0%BA%BB%E0%BA%A1%E0%BA%AA%E0%BA%B4%E0%BB%88%E0%BA%87%E0%BA%9E%E0%BA%B4%E0%BA%A1/src/components/customers/CustomerManagement.jsx`
+Total Lines: 1025
+Total Bytes: 52355
+Showing lines 640 to 765
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+640:                   {/* Contact Channels */}
+641:                   <div className="border-t border-slate-100 pt-6 space-y-3">
+642:                     <span className="text-xs text-slate-400 font-black uppercase tracking-wider block">ຊ່ອງທາງການຕິດຕໍ່ອື່ນໆ</span>
+643:                     <div className="flex flex-wrap gap-3">
+644:                       <SocialLink type="instagram" value={selectedCustomerObj.instagram} />
+645:                       <SocialLink type="line" value={selectedCustomerObj.line} />
+646:                       <SocialLink type="facebook" value={selectedCustomerObj.facebook} />
+647:                       {!selectedCustomerObj.instagram && !selectedCustomerObj.line && !selectedCustomerObj.facebook && (
+648:                         <span className="text-sm text-slate-400 italic font-semibold">ບໍ່ມີຂໍ້ມູນຊ່ອງທາງຕິດຕໍ່ອື່ນໆ</span>
+649:                       )}
+650:                     </div>
+651:                   </div>
+652:                 </div>
+653:               </div>
+654: 
+655:               {/* Action Button: Place Order */}
+656:               <div className="p-8 border-t border-slate-100 bg-slate-50/50">
+657:                 <button
+658:                   onClick={() => handleCreateOrderRedirect(selectedCustomerObj.name)}
+659:                   className="w-full min-h-[56px] bg-accent-sky hover:bg-sky-600 text-white rounded-2xl font-black text-base flex items-center justify-center gap-2.5 shadow-lg shadow-sky-600/10 hover:shadow-sky-600/20 transition active:scale-95 py-3.5 px-6"
+660:                 >
+661:                   <Plus className="w-5 h-5" />
+662:                   <span>{currentLang === 'lo' ? 'ສ້າງອໍເດີໃໝ່ໃຫ້ລູກຄ່ານີ້' : 'Create New Order'}</span>
+663:                 </button>
+664:               </div>
+665:             </div>
+666: 
+667:             {/* Part B: History & Orders Section (Spacious Redesign) */}
+668:             <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100 shadow-sm p-8 md:p-10 space-y-8 flex flex-col justify-between min-h-[750px]">
+669:               <div className="space-y-6">
+670:                 <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+671:                   <ClipboardList className="w-6 h-6 text-slate-400" />
+672:                   <h5 className="text-sm font-black uppercase text-slate-600 tracking-wider">
+673:                     {currentLang === 'lo' ? 'ປະຫວັດການສັ່ງຊື້ທັງໝົດ' : 'Billing & Order History Log'} ({activeStats.totalOrders})
+674:                   </h5>
+675:                 </div>
+676: 
+677:                 {activeStats.custOrders.length === 0 ? (
+678:                   <div className="py-36 text-center space-y-3">
+679:                     <div className="w-16 h-16 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-300">
+680:                       <Receipt className="w-7 h-7" />
+681:                     </div>
+682:                     <p className="text-sm text-slate-400 font-bold italic">ຍັງບໍ່ມີປະຫວັດການສັ່ງຊື້ສຳລັບລູກຄ່ານີ້</p>
+683:                   </div>
+684:                 ) : (
+685:                   <div className="overflow-x-auto rounded-2xl border border-slate-100">
+686:                     <table className="w-full text-left border-collapse text-sm">
+687:                       <thead>
+688:                         <tr className="bg-slate-50/70 text-xs lg:text-sm font-black uppercase text-slate-500 tracking-wider border-b border-slate-100">
+689:                           <th className="py-5 px-6">Order ID / Date</th>
+690:                           <th className="py-5 px-6">ລາຍການສັ່ງພິມ</th>
+691:                           <th className="py-5 px-6">ການຊຳລະເງິນ</th>
+692:                           <th className="py-5 px-6">ຫຼັກຖານ / ຟາຍ</th>
+693:                           <th className="py-5 px-6 text-right">ຍອດລວມ (LAK)</th>
+694:                           <th className="py-5 px-6 text-center">ບິນ</th>
+695:                         </tr>
+696:                       </thead>
+697:                       <tbody className="divide-y divide-slate-100 text-base text-slate-700">
+698:                         {activeStats.custOrders.map((o, idx) => {
+699:                           const hasSlip = !!o.paymentSlipUrl;
+700:                           return (
+701:                             <tr key={o.id || idx} className="hover:bg-slate-50/30 transition">
+702:                               {/* Order ID & Date */}
+703:                               <td className="py-6 px-6">
+704:                                 <span className="font-mono font-black text-slate-900 block text-sm lg:text-base">#{o.id}</span>
+705:                                 <span className="text-xs lg:text-sm text-slate-400 block font-sans mt-1">{o.date}</span>
+706:                               </td>
+707:                               {/* Items list */}
+708:                               <td className="py-6 px-6 max-w-[220px]">
+709:                                 <p className="font-bold text-slate-800 text-sm lg:text-base truncate leading-snug">
+710:                                   {o.items.map(item => item.name).join(', ')}
+711:                                 </p>
+712:                                 {o.notes && (
+713:                                   <p className="text-xs text-slate-400 font-semibold italic mt-1 truncate leading-none" title={o.notes}>
+714:                                     {o.notes}
+715:                                   </p>
+716:                                 )}
+717:                               </td>
+718:                               {/* Payment details */}
+719:                               <td className="py-6 px-6">
+720:                                 <span className={`inline-flex px-3.5 py-1.5 rounded-[8px] text-xs lg:text-sm font-extrabold uppercase border ${
+721:                                   o.paymentStatus === 'Fully Paid'
+722:                                     ? 'bg-green-50 text-green-700 border-green-100'
+723:                                     : o.paymentStatus === 'Deposit Paid'
+724:                                     ? 'bg-indigo-50 text-indigo-700 border-indigo-100'
+725:                                     : 'bg-red-50 text-red-700 border-red-100'
+726:                                 }`}>
+727:                                   {o.paymentStatus === 'Fully Paid' ? 'ຊຳລະແລ້ວ' : o.paymentStatus === 'Deposit Paid' ? 'ມັດຈຳ' : 'ລໍຖ້າຈ່າຍ'}
+728:                                 </span>
+729:                                 <span className="block text-xs text-slate-400 font-sans font-bold mt-2">
+730:                                   {o.paymentMethod} {o.bankName ? `(${o.bankName})` : ''}
+731:                                 </span>
+732:                               </td>
+733:                               {/* Document & Slip thumbnails */}
+734:                               <td className="py-6 px-6 space-y-2">
+735:                                 {o.artworkLink && (
+736:                                   <button
+737:                                     onClick={() => setLightbox({ src: o.artworkLink, title: `Artwork File: #${o.id}` })}
+738:                                     className="flex items-center gap-2 text-xs lg:text-sm font-black text-violet-600 bg-violet-50 hover:bg-violet-100 border border-violet-100 px-3 py-1.5 rounded-lg transition"
+739:                                   >
+740:                                     <ImageIcon className="w-4 h-4 shrink-0" />
+741:                                     <span>Artwork</span>
+742:                                   </button>
+743:                                 )}
+744:                                 {hasSlip ? (
+745:                                   <button
+746:                                     onClick={() => setLightbox({ src: o.paymentSlipUrl, title: `Payment Slip: #${o.id}` })}
+747:                                     className="flex items-center gap-2 text-xs lg:text-sm font-black text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 px-3 py-1.5 rounded-lg transition"
+748:                                   >
+749:                                     <Receipt className="w-4 h-4 shrink-0" />
+750:                                     <span>Slip View</span>
+751:                                   </button>
+752:                                 ) : (
+753:                                   <span className="text-xs text-slate-300 italic block pl-1">ບໍ່ມີສລິບ</span>
+754:                                 )}
+755:                               </td>
+756:                               {/* Price charged */}
+757:                               <td className="py-6 px-6 text-right font-sans font-black text-slate-900">
+758:                                 <span className="block text-base lg:text-lg">{formatLAK(o.totalPriceCharged)}</span>
+759:                                 {o.remainingUnpaidBalance > 0 && (
+760:                                   <span className="text-xs font-sans font-bold text-red-500 block mt-1.5">
+761:                                     ຄ້າງ: {formatLAK(o.remainingUnpaidBalance)}
+762:                                   </span>
+763:                                 )}
+764:                               </td>
+765:                               {/* View Invoice Receipt */}
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.
