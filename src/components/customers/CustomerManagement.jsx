@@ -379,8 +379,8 @@ export default function CustomerManagement() {
   };
 
   const filteredCustomers = customers.filter(c =>
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.phone.includes(searchQuery)
+    (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.phone || '').includes(searchQuery)
   );
 
   const selectedCustomerObj = customers.find(c => c.id === selectedDetailCustomerId);
