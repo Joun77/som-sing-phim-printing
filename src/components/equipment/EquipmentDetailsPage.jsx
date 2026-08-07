@@ -113,9 +113,9 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
       <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
         {/* Machine Image Display */}
         <div className="md:col-span-4 flex flex-col items-center justify-center">
-          {machine.imageUrl ? (
+          {machine.imageUrl || machine.itemPhoto ? (
             <img 
-              src={machine.imageUrl} 
+              src={machine.imageUrl || machine.itemPhoto} 
               alt={machine.name} 
               className="w-full h-56 object-contain rounded-2xl border border-slate-200 bg-slate-50 p-2 shadow-inner"
             />
@@ -152,27 +152,39 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <span className="text-[10px] text-slate-500 uppercase font-black block">ຄວາມໄວພິມ</span>
-              <span className="text-sm font-black text-slate-900 font-sans">{machine.speedPpm || 32} PPM</span>
-            </div>
-
-            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <span className="text-[10px] text-slate-500 uppercase font-black block">ໜ້າກວ້າງສູງສຸດ</span>
-              <span className="text-sm font-black text-slate-900 font-sans">{machine.maxWidth || 'A3+'}</span>
-            </div>
-
-            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <span className="text-[10px] text-slate-500 uppercase font-black block">ຊະນິດໝຶກພິມ</span>
-              <span className="text-sm font-black text-slate-900">{machine.inkType || 'Pigment'}</span>
-            </div>
-
-            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <span className="text-[10px] text-slate-500 uppercase font-black block">ອາຍຸການໃຊ້ງານ</span>
-              <span className="text-sm font-black text-slate-900 font-sans">{machine.lifespanYears || 5} ປີ</span>
-            </div>
-          </div>
+          {/* Dynamic spec summary — renders only fields that have a value */}
+          {(() => {
+            const specMap = machine.category === 'Printer' ? [
+              { label: 'ໜ້າກວ້າງສູງສຸດ', value: machine.maxWidth },
+              { label: 'ຊະນິດໝຶກ', value: machine.inkType },
+              { label: 'ເຕັກໂນໂລຊີພິມ', value: machine.printTech },
+              { label: 'ອາຍຸໃຊ້ງານ', value: machine.lifespanYears ? `${machine.lifespanYears} ປີ` : null },
+            ] : machine.category === 'Cutter' ? [
+              { label: 'ຄວາມຈຸຕັດ', value: machine.cutCapacity ? `${machine.cutCapacity} ແຜ່ນ` : null },
+              { label: 'ຄ່າເສື່ອມ/ຕັດ', value: machine.bladeDepreciationPerCut ? formatLAK(machine.bladeDepreciationPerCut) : null },
+              { label: 'ອາຍຸໃຊ້ງານ', value: machine.lifespanYears ? `${machine.lifespanYears} ປີ` : null },
+            ] : machine.category === 'Laminator' ? [
+              { label: 'ຄວາມກວ້າງ', value: machine.laminationWidth },
+              { label: 'ອາຍຸໃຊ້ງານ', value: machine.lifespanYears ? `${machine.lifespanYears} ປີ` : null },
+            ] : machine.category === 'Binder' ? [
+              { label: 'ວິທີເຂົ້າຫົວ', value: machine.bindingMethod },
+              { label: 'ອາຍຸໃຊ້ງານ', value: machine.lifespanYears ? `${machine.lifespanYears} ປີ` : null },
+            ] : [
+              { label: 'ອາຍຸໃຊ້ງານ', value: machine.lifespanYears ? `${machine.lifespanYears} ປີ` : null },
+            ];
+            const filled = specMap.filter(s => s.value != null);
+            if (!filled.length) return null;
+            return (
+              <div className={`grid gap-3 pt-2 grid-cols-2 sm:grid-cols-${Math.min(filled.length, 4)}`}>
+                {filled.map((spec, i) => (
+                  <div key={i} className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                    <span className="text-[10px] text-slate-500 uppercase font-black block">{spec.label}</span>
+                    <span className="text-sm font-black text-slate-900">{spec.value}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -260,6 +272,19 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
           </div>
         </div>
       </div>
+
+      {/* Payment Slip Attachment Card */}
+      {machine.paymentSlip && (
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+          <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+            <Camera className="w-4 h-4 text-emerald-600" />
+            ຫຼັກຖານການຈ່າຍເງິນ / ສະລິບ (Payment Slip)
+          </h4>
+          <div className="h-52 bg-slate-50 rounded-xl p-2 border border-slate-100 flex items-center justify-center">
+            <img src={machine.paymentSlip} alt="Payment Slip" className="w-full h-full object-contain rounded-lg" />
+          </div>
+        </div>
+      )}
 
       {/* Bottom Action Footer */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-end gap-3">

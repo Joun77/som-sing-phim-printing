@@ -173,6 +173,9 @@ export default function InventoryDetailsModal({ lot, onClose, onEdit }) {
                 <div>
                   <span className="text-[10px] text-slate-500 uppercase block font-mono font-bold">SKU ID: {parent.id || '-'}</span>
                   <h3 className="text-lg font-black text-slate-900 mt-0.5">{parent.name || 'Material'}</h3>
+                  {parent.paperSpec && (
+                    <span className="text-[11px] text-sky-700 font-bold block mt-1">{parent.paperSpec}</span>
+                  )}
                 </div>
                 <span className="px-2.5 py-1 bg-sky-50 text-sky-700 border border-sky-200 rounded-full font-black text-[10px] uppercase">
                   {parent.category || 'General'}
@@ -212,10 +215,63 @@ export default function InventoryDetailsModal({ lot, onClose, onEdit }) {
               <div className="bg-white p-3.5 rounded-2xl border border-slate-200 space-y-1">
                 <span className="text-[10px] text-slate-500 font-bold uppercase block">{t('inventory.supplier_name')}</span>
                 <span className="text-xs font-black text-slate-800 block truncate">
-                  {lot.supplierName || 'Supplier'}
+                  {lot.supplierName || parent.supplierName || 'Supplier'}
                 </span>
               </div>
             </div>
+
+            {/* Sub-type specific spec block */}
+            {parent.category === 'Paper' && (parent.paperSpec || parent.purchaseUnit || parent.purchaseMultiplier) && (
+              <div className="bg-sky-50/60 p-4 rounded-2xl border border-sky-100 space-y-2">
+                <span className="text-[10px] text-sky-700 font-black uppercase block">ສະເປັກກະດາດ (Paper Spec)</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {parent.paperSpec && (
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">ປະເພດ</span>
+                      <span className="font-black text-slate-900">{parent.paperSpec}</span>
+                    </div>
+                  )}
+                  {parent.purchaseUnit && (
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">ໜ່ວຍຊື້</span>
+                      <span className="font-black text-slate-900">{parent.purchaseUnit}</span>
+                    </div>
+                  )}
+                  {parent.purchaseMultiplier && (
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">ຈຳນວນ/ຊຸດ</span>
+                      <span className="font-black text-slate-900">{parent.purchaseMultiplier} ແຜ່ນ</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {parent.category === 'Ink' && (
+              <div className="bg-indigo-50/60 p-4 rounded-2xl border border-indigo-100 space-y-2">
+                <span className="text-[10px] text-indigo-700 font-black uppercase block">ຂໍ້ມູນໝຶກພິມ (Ink Info)</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {parent.inkSet && (
+                    <div className="col-span-2">
+                      <span className="text-[10px] text-slate-500 block">ຊຸດໝຶກ (Ink Set)</span>
+                      <span className="font-black text-slate-900">{parent.inkSet}</span>
+                    </div>
+                  )}
+                  {parent.consumptionUnit && (
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">ໜ່ວຍ</span>
+                      <span className="font-black text-slate-900">{parent.consumptionUnit}</span>
+                    </div>
+                  )}
+                  {parent.purchaseUnit && (
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">ໜ່ວຍຊື້</span>
+                      <span className="font-black text-slate-900">{parent.purchaseUnit}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Compatible Machinery Info - Render ONLY for Ink Category */}
             {isInkCategory && (
@@ -224,6 +280,24 @@ export default function InventoryDetailsModal({ lot, onClose, onEdit }) {
                 <p className="text-xs font-bold text-indigo-950">
                   {linkedMachine ? `${linkedMachine.name} (${linkedMachine.id})` : t('equipment_mapping.no_linked_material')}
                 </p>
+              </div>
+            )}
+
+            {/* Item Photo from parent SKU */}
+            {parent.itemPhoto && (
+              <div className="space-y-1.5">
+                <span className="text-[10px] text-slate-500 font-black uppercase block">ຮູບພາບສິນຄ້າ (Item Photo)</span>
+                <div className="h-44 bg-slate-50 rounded-xl p-2 border border-slate-100 flex items-center justify-center">
+                  <img src={parent.itemPhoto} alt="Item" className="w-full h-full object-contain rounded-lg" />
+                </div>
+              </div>
+            )}
+
+            {/* Supplier contact */}
+            {parent.supplierContact && (
+              <div className="bg-white p-3.5 rounded-2xl border border-slate-200 space-y-1">
+                <span className="text-[10px] text-slate-500 font-bold uppercase block">ຊ່ອງທາງຕິດຕໍ່ (Supplier Contact)</span>
+                <span className="text-xs font-bold text-sky-700 block">{parent.supplierContact}</span>
               </div>
             )}
 

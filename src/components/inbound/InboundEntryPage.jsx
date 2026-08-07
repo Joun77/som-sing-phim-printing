@@ -20,7 +20,7 @@ import {
 import { useApp } from '../../context/AppContext';
 
 export default function InboundEntryPage({ onBack }) {
-  const { inventory, equipment, addInventoryBatch, addEquipment, addPurchaseOrder, showToast } = useApp();
+  const { inventory, equipment, addInventorySku, addEquipment, addPurchaseOrder, showToast } = useApp();
 
   // Top Category Selection: Category A (Materials & Supplies) vs Category B (Machinery & Equipment)
   const [inboundCategory, setInboundCategory] = useState('Materials'); // 'Materials' | 'Machinery'
@@ -94,6 +94,43 @@ export default function InboundEntryPage({ onBack }) {
   const blackMlPerSheet = Number(blackYieldPages) > 0 ? (Number(blackCapacityMl) / Number(blackYieldPages)) : 0.0169;
   const colorMlPerSheet = Number(colorYieldPages) > 0 ? (Number(colorCapacityMl) / Number(colorYieldPages)) : 0.035;
 
+  // Reset spec states when top-level category changes
+  const handleCategoryChange = (cat) => {
+    setInboundCategory(cat);
+    // Clear shared file uploads so they don't bleed across categories
+    setItemPhoto(null);
+    setPaymentSlip(null);
+    setSupplierContact('');
+  };
+
+  // Reset machine-specific spec states when machine sub-category changes
+  const handleMachineCategoryChange = (cat) => {
+    setMachineCategory(cat);
+    // Clear all sub-category-specific fields to prevent contamination
+    setMaxWidth('A3+');
+    setInkType('Pigment');
+    setPrintTech('Color');
+    setBlackYieldPages(7500);
+    setBlackCapacityMl(127);
+    setColorYieldPages(6000);
+    setColorCapacityMl(210);
+    setClickRateColor(500);
+    setClickRateBW(150);
+    setLinkedInkSku('');
+    setCutCapacity(500);
+    setBladeDepreciationPerCut(300);
+    setLaminationWidth('A3 (330mm)');
+    setBindingMethod('Perfect Glue');
+  };
+
+  // Strip all undefined / null / empty-string fields before persisting
+  const sanitizePayload = (obj) =>
+    Object.fromEntries(
+      Object.entries(obj).filter(([, v]) =>
+        v !== undefined && v !== null && v !== '' && v !== 0
+      )
+    );
+
   const handleSubmit = (e) => {
     e.preventDefault();
 
@@ -104,22 +141,42 @@ export default function InboundEntryPage({ onBack }) {
         return;
       }
 
-      if (addInventoryBatch) {
-        addInventoryBatch({
+      if (addInventorySku) {
+        addInventorySku(sanitizePayload({
           id: lotId || `LOT-${Date.now()}`,
           name: materialName,
           category: materialType,
+          paperSpec: materialType === 'Paper' ? paperSpec : undefined,
           supplierName,
+          supplierContact: supplierContact || undefined,
+          itemPhoto: itemPhoto || undefined,
+          paymentSlip: paymentSlip || undefined,
           purchasePrice: Number(materialUnitCost),
           costPerSheet: Math.round(Number(materialUnitCost) / (purchaseUnit === 'Ream' ? 500 : 1)),
+          costPerPurchaseUnit: Number(materialUnitCost),
+          costPerConsumptionUnit: Math.round(Number(materialUnitCost) / (purchaseUnit === 'Ream' ? 500 : 1)),
           initialQty: Number(quantity),
           currentQty: Number(quantity),
+          stockQty: Number(quantity),
+          purchaseUnit,
+          unitName: purchaseUnit,
+          purchaseMultiplier: purchaseUnit === 'Ream' ? 500 : 1,
+          reorderThreshold: 100,
+          batches: [{
+            id: `${lotId}-B1`,
+            purchaseDate: new Date().toISOString().split('T')[0],
+            supplierName,
+            purchasePricePerReam: Number(materialUnitCost),
+            costPerSheet: Math.round(Number(materialUnitCost) / (purchaseUnit === 'Ream' ? 500 : 1)),
+            initialQty: Number(quantity),
+            currentQty: Number(quantity)
+          }],
           purchaseDate: new Date().toISOString().split('T')[0]
-        });
+        }));
       }
 
       if (addPurchaseOrder) {
-        addPurchaseOrder({
+        addPurchaseOrder(sanitizePayload({
           id: `PO-${Date.now().toString().slice(-6)}`,
           poId: `PO-${Date.now().toString().slice(-6)}`,
           type: 'Material',
@@ -129,7 +186,7 @@ export default function InboundEntryPage({ onBack }) {
           itemName: materialName,
           name: materialName,
           supplierName,
-          supplierContact,
+          supplierContact: supplierContact || undefined,
           unitPrice: Number(materialUnitCost),
           costPerUnit: Number(materialUnitCost),
           qty: Number(quantity),
@@ -137,9 +194,9 @@ export default function InboundEntryPage({ onBack }) {
           totalCost: Number(materialUnitCost) * Number(quantity),
           totalPrice: Number(materialUnitCost) * Number(quantity),
           date: new Date().toISOString().split('T')[0],
-          itemPhoto,
-          paymentSlip
-        });
+          itemPhoto: itemPhoto || undefined,
+          paymentSlip: paymentSlip || undefined
+        }));
       }
 
       showToast(`ບັນທຶກນຳເຂົ້າວັດສະດຸ "${materialName}" ສຳເລັດ!`, 'success');
@@ -176,31 +233,23 @@ export default function InboundEntryPage({ onBack }) {
       }
 
       if (addEquipment) {
-        addEquipment({
+        addEquipment(sanitizePayload({
           name: machineName,
           category: machineCategory,
-          imageUrl: itemPhoto || imageUrl,
-          itemPhoto,
-          paymentSlip,
+          imageUrl: itemPhoto || imageUrl || undefined,
+          itemPhoto: itemPhoto || undefined,
+          paymentSlip: paymentSlip || undefined,
           purchaseCost: Number(purchaseCost),
           lifespanYears: Number(lifespanYears),
           printedPagesCapacity: Number(lifetimeCapacity),
           supplierName,
-          supplierContact,
-          inkType,
-          linkedInkSku,
-          blackYieldPages: Number(blackYieldPages),
-          blackCapacityMl: Number(blackCapacityMl),
-          colorYieldPages: Number(colorYieldPages),
-          colorCapacityMl: Number(colorCapacityMl),
-          blackMlPerSheet,
-          colorMlPerSheet,
+          supplierContact: supplierContact || undefined,
           ...categoryParams
-        });
+        }));
       }
 
       if (addPurchaseOrder) {
-        addPurchaseOrder({
+        addPurchaseOrder(sanitizePayload({
           id: `PO-EQ-${Date.now().toString().slice(-6)}`,
           poId: `PO-EQ-${Date.now().toString().slice(-6)}`,
           type: 'Equipment',
@@ -208,8 +257,11 @@ export default function InboundEntryPage({ onBack }) {
           itemName: machineName,
           name: machineName,
           itemType: machineCategory,
+          lifespanYears: Number(lifespanYears),
+          lifetimeCapacity: Number(lifetimeCapacity),
+          purchaseCost: Number(purchaseCost),
           supplierName,
-          supplierContact,
+          supplierContact: supplierContact || undefined,
           unitPrice: Number(purchaseCost),
           costPerUnit: Number(purchaseCost),
           qty: 1,
@@ -217,17 +269,10 @@ export default function InboundEntryPage({ onBack }) {
           totalCost: Number(purchaseCost),
           totalPrice: Number(purchaseCost),
           date: new Date().toISOString().split('T')[0],
-          itemPhoto,
-          paymentSlip,
-          inkType,
-          linkedInkSku,
-          blackYieldPages: Number(blackYieldPages),
-          blackCapacityMl: Number(blackCapacityMl),
-          colorYieldPages: Number(colorYieldPages),
-          colorCapacityMl: Number(colorCapacityMl),
-          blackMlPerSheet,
-          colorMlPerSheet
-        });
+          itemPhoto: itemPhoto || undefined,
+          paymentSlip: paymentSlip || undefined,
+          ...categoryParams
+        }));
       }
 
       showToast(`ບັນທຶກນຳເຂົ້າເຄື່ອງຈັກ "${machineName}" ເຂົ້າຄັງອຸປະກອນສຳເລັດ!`, 'success');
@@ -268,7 +313,7 @@ export default function InboundEntryPage({ onBack }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <button
               type="button"
-              onClick={() => setInboundCategory('Materials')}
+              onClick={() => handleCategoryChange('Materials')}
               className={`p-5 rounded-2xl border transition text-left flex items-start gap-4 ${
                 inboundCategory === 'Materials'
                   ? 'bg-sky-50 border-sky-500 shadow-md ring-2 ring-sky-500/20'
@@ -290,7 +335,7 @@ export default function InboundEntryPage({ onBack }) {
 
             <button
               type="button"
-              onClick={() => setInboundCategory('Machinery')}
+              onClick={() => handleCategoryChange('Machinery')}
               className={`p-5 rounded-2xl border transition text-left flex items-start gap-4 ${
                 inboundCategory === 'Machinery'
                   ? 'bg-purple-50 border-purple-500 shadow-md ring-2 ring-purple-500/20'
@@ -435,7 +480,7 @@ export default function InboundEntryPage({ onBack }) {
                   <label className="block text-slate-600">ໝວດເຄື່ອງຈັກ (Equipment Category)</label>
                   <select
                     value={machineCategory}
-                    onChange={(e) => setMachineCategory(e.target.value)}
+                    onChange={(e) => handleMachineCategoryChange(e.target.value)}
                     className="w-full px-3.5 py-2.5 border rounded-xl bg-white font-bold text-xs focus:outline-none"
                   >
                     <option value="Printer">ເຄື່ອງພິມ (Printing Machine)</option>

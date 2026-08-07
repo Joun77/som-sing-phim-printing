@@ -20,43 +20,59 @@ import {
 import { useApp } from '../../context/AppContext';
 import InboundEditForm from './InboundEditForm';
 
-// 1. Helper to safely pick values from record across all possible key aliases
+// 1. Helper — returns null (hidden) if no value found across all aliases
 const getValue = (record, keys) => {
   for (const k of keys) {
-    if (record?.[k] !== undefined && record?.[k] !== null && record?.[k] !== '') {
-      return record[k];
-    }
+    const v = record?.[k];
+    if (v !== undefined && v !== null && v !== '') return v;
   }
-  return '-';
+  return null;
 };
 
-// 2. Define Dynamic Schema Engine according to Item Type & Sub-Category
+// 2. Dynamic Schema Engine — exact keys saved by InboundEntryPage
 const getFieldSchema = (record) => {
-  const isCategoryA = record?.categoryType === 'Materials' || record?.categoryType === 'CATEGORY_A' || record?.type === 'Material' || record?.materialType;
-  
+  const isCategoryA =
+    record?.categoryType === 'Materials' ||
+    record?.type === 'Material' ||
+    (record?.materialType && record?.categoryType !== 'Machinery');
+
   if (isCategoryA) {
     return [
-      { label: 'ໝວດໝູ່ (Category)', keys: ['subCategory', 'materialType', 'categoryType', 'category'], icon: Tag },
-      { label: 'ຊື່ລາຍການ (Item Name)', keys: ['itemName', 'name', 'title'], icon: Package },
-      { label: 'ສະເປັກສະເພາະ (Spec)', keys: ['paperSpec', 'paperTypeSpec', 'spec', 'technicalSpec'], icon: Layers },
-      { label: 'ລາຄາ/ໜ່ວຍ (Unit Price)', keys: ['unitPrice', 'costPerUnit', 'price'], isCurrency: true, icon: DollarSign },
-      { label: 'ຈຳນວນນຳເຂົ້າ (Quantity)', keys: ['qty', 'quantity', 'inboundQty'], suffix: ` ${record?.unitName || 'Units'}`, icon: Boxes },
-      { label: 'ຜູ້ສະໜອງ (Supplier)', keys: ['supplierName', 'supplier'], icon: Truck },
-      { label: 'ຊ່ອງທາງຕິດຕໍ່/ໝາຍເຫດ (Note/Link)', keys: ['supplierContact', 'contactLink', 'note', 'link'], icon: PhoneCall, isFullWidth: true },
+      { label: 'ໝວດໝູ່ (Category)', keys: ['materialType', 'category'], icon: Tag },
+      { label: 'ຊື່ລາຍການ (Item Name)', keys: ['itemName', 'name'], icon: Package },
+      { label: 'ສະເປັກ (Spec)', keys: ['paperSpec'], icon: Layers },
+      { label: 'ລາຄາ/ໜ່ວຍ (Unit Price)', keys: ['unitPrice', 'costPerUnit'], isCurrency: true, icon: DollarSign },
+      { label: 'ຈຳນວນ (Qty)', keys: ['qty'], suffix: ` ${record?.unitName || 'Units'}`, icon: Boxes },
+      { label: 'ຜູ້ສະໜອງ (Supplier)', keys: ['supplierName'], icon: Truck },
+      { label: 'ຕິດຕໍ່/ໝາຍເຫດ', keys: ['supplierContact'], icon: PhoneCall, isFullWidth: true },
     ];
   }
 
-  // Category B: Machinery & Equipment
-  return [
-    { label: 'ໝວດໝູ່ເຄື່ອງຈັກ (Equipment Type)', keys: ['itemType', 'machineCategory', 'equipmentCategory', 'subCategory'], icon: Tag },
-    { label: 'ຊື່ເຄື່ອງຈັກ (Machine Name)', keys: ['machineName', 'itemName', 'name', 'title'], icon: Package },
-    { label: 'ລາຄາຊື້ (Purchase Cost)', keys: ['totalCost', 'purchaseCost', 'unitPrice', 'costPerUnit', 'price'], isCurrency: true, icon: DollarSign },
-    { label: 'ອາຍຸການໃຊ້ງານ (Lifespan Years)', keys: ['lifespanYears', 'lifespan'], suffix: ' ປີ (Years)', icon: Clock },
-    { label: 'ຄວາມຈຸແຜ່ນພິມລວມ (Lifetime Capacity)', keys: ['printedPagesCapacity', 'lifetimeCapacity', 'capacity'], isNumberFormat: true, suffix: ' ແຜ່ນ (Sheets)', icon: Layers },
-    { label: 'ຜູ້ສະໜອງ (Supplier)', keys: ['supplierName', 'supplier'], icon: Truck },
-    { label: 'ຊ່ອງທາງຕິດຕໍ່/ໝາຍເຫດ (Note/Link)', keys: ['supplierContact', 'contactLink', 'note', 'link'], icon: PhoneCall, isFullWidth: true },
+  // Category B base fields (all equipment types)
+  const baseB = [
+    { label: 'ປະເພດ (Type)', keys: ['itemType'], icon: Tag },
+    { label: 'ຊື່ (Name)', keys: ['itemName', 'name'], icon: Package },
+    { label: 'ລາຄາຊື້ (Cost)', keys: ['totalCost', 'purchaseCost', 'unitPrice'], isCurrency: true, icon: DollarSign },
+    { label: 'ອາຍຸໃຊ້ງານ (Lifespan)', keys: ['lifespanYears'], suffix: ' ປີ', icon: Clock },
+    { label: 'ຄວາມຈຸລວມ (Capacity)', keys: ['lifetimeCapacity', 'printedPagesCapacity'], isNumberFormat: true, suffix: ' ແຜ່ນ', icon: Layers },
+    { label: 'ຜູ້ສະໜອງ (Supplier)', keys: ['supplierName'], icon: Truck },
+    { label: 'ຕິດຕໍ່/ໝາຍເຫດ', keys: ['supplierContact'], icon: PhoneCall, isFullWidth: true },
   ];
+
+  if (record?.itemType === 'Cutter') {
+    baseB.push(
+      { label: 'ຄວາມຈຸຕັດ (Cut Capacity)', keys: ['cutCapacity'], suffix: ' ແຜ່ນ', icon: Layers },
+      { label: 'ຄ່າເສື່ອມ/ຕັດ (Blade Dep.)', keys: ['bladeDepreciationPerCut'], isCurrency: true, icon: DollarSign },
+    );
+  } else if (record?.itemType === 'Laminator') {
+    baseB.push({ label: 'ໜ້າກວ້າງ (Width)', keys: ['laminationWidth'], icon: Layers });
+  } else if (record?.itemType === 'Binder') {
+    baseB.push({ label: 'ວິທີເຂົ້າຫົວ (Method)', keys: ['bindingMethod'], icon: Layers });
+  }
+
+  return baseB;
 };
+
 
 export default function InboundDetailsPage({ poId, onBack }) {
   const { purchaseOrders, setPurchaseOrders, showToast } = useApp();
@@ -112,8 +128,9 @@ export default function InboundDetailsPage({ poId, onBack }) {
     onBack();
   };
 
-  const isMachinery = po.categoryType === 'Machinery' || po.type === 'Equipment' || po.itemType === 'Printer' || po.itemType === 'Cutter' || po.itemType === 'Laminator' || po.itemType === 'Binder';
-  const isPrinter = isMachinery && (po.itemType === 'Printer' || po.machineCategory === 'Printer' || po.subCategory === 'Printer' || po.equipmentCategory === 'Printing Machine' || po.inkType || po.blackYieldPages);
+  const isMachinery = po.categoryType === 'Machinery' || po.type === 'Equipment';
+  // isPrinter: must have itemType === 'Printer' AND actual printer data (blackYieldPages) saved
+  const isPrinter = isMachinery && po.itemType === 'Printer' && (po.blackYieldPages || po.inkType);
 
   const getCategoryBadge = () => {
     if (isPrinter) return 'ໝວດ B: ເຄື່ອງພິມ (Printing Machine)';
@@ -151,7 +168,7 @@ export default function InboundDetailsPage({ poId, onBack }) {
               {getCategoryBadge()}
             </span>
             <h2 className="text-2xl sm:text-3xl font-black text-slate-900 mt-1">
-              {getValue(po, ['itemName', 'machineName', 'name', 'title'])}
+              {getValue(po, ['itemName', 'name']) || getValue(po, ['machineName']) || '-'}
             </h2>
           </div>
         </div>
@@ -162,29 +179,29 @@ export default function InboundDetailsPage({ poId, onBack }) {
             <span>ລາຍລະອຽດຂໍ້ມູນນຳເຂົ້າ (Inbound Specifications)</span>
           </h3>
 
-          {/* Dynamic Grid Mapping over getFieldSchema */}
+          {/* Dynamic Grid — hides any field whose value is null */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {activeSchema.map((field, idx) => {
-              const rawValue = getValue(po, field.keys);
+            {activeSchema
+              .map((field) => ({ field, rawValue: getValue(po, field.keys) }))
+              .filter(({ rawValue }) => rawValue !== null)
+              .map(({ field, rawValue }, idx) => {
               let displayValue = rawValue;
 
-              if (field.isCurrency && rawValue !== '-') {
+              if (field.isCurrency) {
                 displayValue = formatLAK(Number(rawValue));
-              } else if (field.isNumberFormat && rawValue !== '-') {
+              } else if (field.isNumberFormat) {
                 displayValue = Number(rawValue).toLocaleString();
               }
 
-              if (rawValue !== '-' && field.suffix) {
-                displayValue = `${displayValue}${field.suffix}`;
-              }
+              if (field.suffix) displayValue = `${displayValue}${field.suffix}`;
 
               const IconComp = field.icon;
 
               return (
-                <div 
-                  key={idx} 
+                <div
+                  key={idx}
                   className={`bg-white border border-slate-200 rounded-2xl p-4 space-y-1.5 shadow-sm ${
-                    field.isFullWidth ? 'sm:col-span-2' : ''
+                    field.isFullWidth ? 'sm:col-span-2 lg:col-span-2' : ''
                   }`}
                 >
                   <div className="flex items-center gap-2 text-slate-500">
@@ -194,7 +211,7 @@ export default function InboundDetailsPage({ poId, onBack }) {
                     </span>
                   </div>
                   <p className={`text-sm font-black truncate ${field.isCurrency ? 'font-mono text-emerald-700' : 'text-slate-900'}`}>
-                    {displayValue}
+                    {String(displayValue)}
                   </p>
                 </div>
               );
@@ -215,35 +232,39 @@ export default function InboundDetailsPage({ poId, onBack }) {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-bold">
                 <div className="bg-white p-3.5 rounded-2xl border border-purple-100 space-y-1">
-                  <p className="text-[10px] text-slate-500 uppercase">ប្រភេទໝຶກ (Ink Type)</p>
-                  <p className="font-black text-slate-900 text-sm">{getValue(po, ['inkType'])}</p>
+                  <p className="text-[10px] text-slate-500 uppercase">ປະເພດໝຶກ (Ink Type)</p>
+                  <p className="font-black text-slate-900 text-sm">{po.inkType || '-'}</p>
                 </div>
 
                 <div className="bg-white p-3.5 rounded-2xl border border-purple-100 space-y-1">
-                  <p className="text-[10px] text-slate-500 uppercase">ໝຶກດຳ (Black Yield / Bottle ml)</p>
+                  <p className="text-[10px] text-slate-500 uppercase">ໝຶກດຳ (Black Yield / ml)</p>
                   <p className="font-black text-slate-900 text-sm">
-                    {getValue(po, ['blackYieldPages', 'blackYield'])} pages / {getValue(po, ['blackBottleMl', 'blackCapacityMl'])} ml
+                    {po.blackYieldPages || '-'} pages / {po.blackCapacityMl || '-'} ml
                   </p>
-                  <p className="text-[11px] text-purple-700 font-mono font-black pt-0.5">
-                    Rate: {po.blackTechnicalRate || po.blackMlPerSheet || ((Number(getValue(po, ['blackBottleMl', 'blackCapacityMl'])) || 127) / (Number(getValue(po, ['blackYieldPages', 'blackYield'])) || 6000)).toFixed(4)} ml/sheet
-                  </p>
+                  {po.blackMlPerSheet && (
+                    <p className="text-[11px] text-purple-700 font-mono font-black pt-0.5">
+                      Rate: {Number(po.blackMlPerSheet).toFixed(4)} ml/ແຜ່ນ
+                    </p>
+                  )}
                 </div>
 
                 <div className="bg-white p-3.5 rounded-2xl border border-purple-100 space-y-1">
-                  <p className="text-[10px] text-purple-700 uppercase">ຊຸດໝຶກສີ (Color Yield / Total ml)</p>
+                  <p className="text-[10px] text-purple-700 uppercase">ຊຸດໝຶກສີ (Color Yield / ml)</p>
                   <p className="font-black text-purple-900 text-sm">
-                    {getValue(po, ['colorYieldPages', 'colorYield'])} pages / {getValue(po, ['colorTotalMl', 'colorCapacityMl'])} ml
+                    {po.colorYieldPages || '-'} pages / {po.colorCapacityMl || '-'} ml
                   </p>
-                  <p className="text-[11px] text-purple-700 font-mono font-black pt-0.5">
-                    Rate: {po.colorTechnicalRate || po.colorMlPerSheet || ((Number(getValue(po, ['colorTotalMl', 'colorCapacityMl'])) || 210) / (Number(getValue(po, ['colorYieldPages', 'colorYield'])) || 6000)).toFixed(4)} ml/sheet
-                  </p>
+                  {po.colorMlPerSheet && (
+                    <p className="text-[11px] text-purple-700 font-mono font-black pt-0.5">
+                      Rate: {Number(po.colorMlPerSheet).toFixed(4)} ml/ແຜ່ນ
+                    </p>
+                  )}
                 </div>
               </div>
 
-              {getValue(po, ['linkedInkSku']) !== '-' && (
+              {po.linkedInkSku && (
                 <div className="bg-white p-3 rounded-2xl border border-purple-200 flex justify-between items-center text-xs">
                   <span className="text-slate-500 font-bold">ລະຫັດໝຶກໃນຄັງ (Linked Ink SKU):</span>
-                  <span className="font-mono font-black text-purple-800">{getValue(po, ['linkedInkSku'])}</span>
+                  <span className="font-mono font-black text-purple-800">{po.linkedInkSku}</span>
                 </div>
               )}
             </div>

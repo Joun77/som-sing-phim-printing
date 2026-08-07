@@ -1184,14 +1184,13 @@ export const AppProvider = ({ children }) => {
   };
 
   const addPurchaseOrder = (poData) => {
+    // Spread ALL fields from poData so Detail Views can render every submitted field
     const newPo = {
+      ...poData,
       poId: poData.poId || `PO-${Date.now().toString().slice(-6)}`,
       purchaseDate: poData.purchaseDate || new Date().toISOString().split('T')[0],
-      itemType: poData.itemType,
-      itemName: poData.itemName,
-      supplierName: poData.supplierName,
-      totalCost: Number(poData.totalCost),
-      qty: Number(poData.qty),
+      totalCost: Number(poData.totalCost || 0),
+      qty: Number(poData.qty || 1),
       unitName: poData.unitName || 'Unit'
     };
     setPurchaseOrders(prev => [newPo, ...prev]);
@@ -1273,6 +1272,7 @@ export const AppProvider = ({ children }) => {
       addStock,
       addEquipment,
       addPurchaseOrder,
+      addInventorySku,
       updateEquipmentComponentUsage,
       resetEquipmentComponent,
       updateEquipmentMaintenance,
