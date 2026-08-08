@@ -1,5 +1,6 @@
 import React from 'react';
 import { Printer, Zap, Upload, X } from 'lucide-react';
+import { PREDEFINED_STANDARD_SPECS } from './BilingualFormBuilder';
 
 export default function EquipmentInboundForm({
   machineCategory,
@@ -53,13 +54,35 @@ export default function EquipmentInboundForm({
   setItemPhoto,
   paymentSlip,
   setPaymentSlip,
-  handleFileUpload
+  handleFileUpload,
+  // Template & Custom Specs State
+  activeTemplate,
+  customSpecsValues,
+  setCustomSpecsValues,
+  lang = 'lo'
 }) {
+  const updateCustomSpecValue = (fieldKey, value, labelObj) => {
+    setCustomSpecsValues(prev => ({
+      ...prev,
+      [fieldKey]: {
+        label: labelObj,
+        value
+      }
+    }));
+  };
+
+  const selectedSpecs = activeTemplate?.selectedSpecs || [];
+  const customFields = activeTemplate?.customFields || [];
+
   return (
     <div className="space-y-6 animate-fade-in text-xs font-bold">
       <div className="flex items-center gap-2 border-b pb-3">
         <Printer className="w-5 h-5 text-purple-600" />
-        <h4 className="font-black text-sm text-slate-900">ລາຍລະອຽດເຄື່ອງຈັກ & ອຸປະກອນ (Machinery Asset Entry)</h4>
+        <h4 className="font-black text-sm text-slate-900">
+          {activeTemplate
+            ? (lang === 'en' ? activeTemplate.nameEn : activeTemplate.nameLo)
+            : 'ລາຍລະອຽດເຄື່ອງຈັກ & ອຸປະກອນ (Machinery Asset Entry)'}
+        </h4>
       </div>
 
       {/* Row 1: Category & Name */}
@@ -206,7 +229,6 @@ export default function EquipmentInboundForm({
 
           {/* Black & Color Ink Yield Specs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-            {/* Black Ink Spec */}
             <div className="bg-white p-3 rounded-xl border border-purple-200 space-y-2">
               <span className="text-[11px] font-black text-slate-800 block border-b pb-1">
                 ໝຶກດຳ (Black Ink Bottle / Cartridge Spec)
@@ -236,7 +258,6 @@ export default function EquipmentInboundForm({
               </div>
             </div>
 
-            {/* Color Ink Spec */}
             <div className="bg-white p-3 rounded-xl border border-purple-200 space-y-2">
               <span className="text-[11px] font-black text-purple-900 block border-b pb-1">
                 ຊຸດໝຶກສີ (Color Ink Set Spec - CMY)
@@ -266,90 +287,66 @@ export default function EquipmentInboundForm({
               </div>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Click Rates & SKU link */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-            <div>
-              <label className="block text-[10px] text-purple-900 font-bold">Click Rate/BW (₭/sheet)</label>
-              <input
-                type="number"
-                value={clickRateBW}
-                onChange={(e) => setClickRateBW(Number(e.target.value))}
-                className="w-full px-3 py-1.5 border border-purple-200 rounded-xl font-mono text-center text-xs font-bold bg-white"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] text-purple-900 font-bold">Click Rate/Color (₭/sheet)</label>
-              <input
-                type="number"
-                value={clickRateColor}
-                onChange={(e) => setClickRateColor(Number(e.target.value))}
-                className="w-full px-3 py-1.5 border border-purple-200 rounded-xl font-mono text-center text-xs font-bold bg-white"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] text-purple-900 font-bold">Linked Ink SKU (Option)</label>
-              <input
-                type="text"
-                value={linkedInkSku}
-                onChange={(e) => setLinkedInkSku(e.target.value)}
-                placeholder="ເຊັ່ນ: INK-EPSON-664..."
-                className="w-full px-3 py-1.5 border border-purple-200 rounded-xl font-mono text-xs font-bold bg-white"
-              />
-            </div>
+      {/* Selected Predefined Standard Attributes from Active Template */}
+      {selectedSpecs.length > 0 && (
+        <div className="bg-purple-50/60 border border-purple-200 p-4 rounded-2xl space-y-3">
+          <span className="text-[11px] font-black text-purple-900 uppercase block">
+            {lang === 'en' ? 'Template Standard Attributes' : 'ຄຸນລັກສະນະມາດຕະຖານຕາມເທັມເພຼັດ'}
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {selectedSpecs.map(specId => {
+              const specMeta = PREDEFINED_STANDARD_SPECS.find(s => s.id === specId);
+              if (!specMeta) return null;
+              const labelText = lang === 'en' ? specMeta.nameEn : specMeta.nameLo;
+
+              return (
+                <div key={specId} className="space-y-1">
+                  <label className="block text-slate-600">{labelText}</label>
+                  <input
+                    type="text"
+                    value={customSpecsValues?.[specId]?.value || ''}
+                    onChange={(e) => updateCustomSpecValue(specId, e.target.value, { lo: specMeta.nameLo, en: specMeta.nameEn })}
+                    placeholder={`Enter ${labelText}...`}
+                    className="w-full px-3 py-2 border rounded-xl bg-white text-xs font-bold"
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Cutter Specifics */}
-      {machineCategory === 'Cutter' && (
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <label className="block text-slate-600">ຄວາມຈຸໃນການຕັດ (Cut Capacity Pages)</label>
-            <input
-              type="number"
-              value={cutCapacity}
-              onChange={(e) => setCutCapacity(Number(e.target.value))}
-              className="w-full px-3.5 py-2.5 border rounded-xl font-mono text-center font-bold bg-white text-xs"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="block text-slate-600">ຄ່າເສື່ອມໃບມີດ/ຄັ້ງຕັດ (Blade Dep. LAK)</label>
-            <input
-              type="number"
-              value={bladeDepreciationPerCut}
-              onChange={(e) => setBladeDepreciationPerCut(Number(e.target.value))}
-              className="w-full px-3.5 py-2.5 border rounded-xl font-mono text-center font-bold bg-white text-xs"
-            />
-          </div>
-        </div>
-      )}
+      {/* Custom Field Rows from Active Template */}
+      {customFields.length > 0 && (
+        <div className="bg-purple-50/60 border border-purple-200 p-4 rounded-2xl space-y-3">
+          <span className="text-[11px] font-black text-purple-900 uppercase block">
+            {lang === 'en' ? 'Template Custom Fields' : 'ຟິວ custom ຕາມເທັມເພຼັດ'}
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {customFields.map(field => {
+              const labelText = lang === 'en' ? (field.labelEn || field.labelLo) : (field.labelLo || field.labelEn);
+              const fieldVal = customSpecsValues?.[field.id]?.value || '';
 
-      {/* Laminator Specifics */}
-      {machineCategory === 'Laminator' && (
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-1">
-          <label className="block text-slate-600">ໜ້າກວ້າງເຄື່ອງເຄືອບ (Lamination Width Spec)</label>
-          <input
-            type="text"
-            value={laminationWidth}
-            onChange={(e) => setLaminationWidth(e.target.value)}
-            placeholder="ເຊັ່ນ: A3 (330mm), Roll 650mm..."
-            className="w-full px-3.5 py-2.5 border rounded-xl font-bold bg-white text-xs"
-          />
-        </div>
-      )}
-
-      {/* Binder Specifics */}
-      {machineCategory === 'Binder' && (
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-1">
-          <label className="block text-slate-600">ວິທີເຂົ້າເລົ່ມ (Binding Method Spec)</label>
-          <input
-            type="text"
-            value={bindingMethod}
-            onChange={(e) => setBindingMethod(e.target.value)}
-            placeholder="ເຊັ່ນ: Perfect Glue, Wire-O, Spiral..."
-            className="w-full px-3.5 py-2.5 border rounded-xl font-bold bg-white text-xs"
-          />
+              return (
+                <div key={field.id} className="space-y-1">
+                  <label className="block text-slate-700">
+                    {labelText} {field.required ? '*' : ''}
+                  </label>
+                  <input
+                    type={field.type === 'Number' ? 'number' : field.type === 'Date' ? 'date' : 'text'}
+                    required={field.required}
+                    value={fieldVal}
+                    onChange={(e) => updateCustomSpecValue(field.id, e.target.value, { lo: field.labelLo, en: field.labelEn })}
+                    placeholder={`Enter ${labelText}...`}
+                    className="w-full px-3.5 py-2 border rounded-xl bg-white text-xs font-bold"
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

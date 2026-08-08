@@ -1,14 +1,34 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Truck, Boxes, Printer } from 'lucide-react';
+import { ArrowLeft, Truck, Boxes, Printer, Plus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
 import MaterialInboundForm from './forms/MaterialInboundForm';
 import EquipmentInboundForm from './forms/EquipmentInboundForm';
+import CategoryBuilder, { INITIAL_PRESET_CATEGORIES, INITIAL_STANDARD_SPECS } from './forms/CategoryBuilder';
 
 export default function InboundEntryPage({ onBack }) {
   const { addInventorySku, addEquipment, addPurchaseOrder, showToast } = useApp();
+  const { i18n } = useTranslation();
+  const currentLang = i18n?.language || 'lo';
 
-  // Category Selector State: Category A ('Materials') vs Category B ('Machinery')
+  // Entry Mode Selection: 'entry_form' (Case 1) vs 'category_builder' (Case 2)
+  const [viewMode, setViewMode] = useState('entry_form');
+
+  // Categories Master Registry State
+  const [categories, setCategories] = useState(INITIAL_PRESET_CATEGORIES);
+
+  // Master Custom Field Pool State (Stores predefined specs + newly added custom fields)
+  const [masterSpecsPool, setMasterSpecsPool] = useState(INITIAL_STANDARD_SPECS);
+
+  // Selected Primary Section (Category A: Materials vs Category B: Machinery)
   const [inboundCategory, setInboundCategory] = useState('Materials');
+
+  // Filter Categories matching current Section
+  const sectionCategories = categories.filter(c => c.targetSection === inboundCategory);
+  const [selectedCategoryId, setSelectedCategoryId] = useState(sectionCategories[0]?.id || INITIAL_PRESET_CATEGORIES[0].id);
+
+  // Custom Specs Values Keyed by Field ID
+  const [customSpecsValues, setCustomSpecsValues] = useState({});
 
   // Category A States
   const [materialType, setMaterialType] = useState('Paper');
@@ -50,6 +70,8 @@ export default function InboundEntryPage({ onBack }) {
   const [laminationWidth, setLaminationWidth] = useState('A3 (330mm)');
   const [bindingMethod, setBindingMethod] = useState('Perfect Glue');
 
+  const activeCategoryRecord = categories.find(c => c.id === selectedCategoryId) || sectionCategories[0] || null;
+
   // File Upload Helper
   const handleFileUpload = (e, setter) => {
     const file = e.target.files?.[0];
@@ -66,11 +88,17 @@ export default function InboundEntryPage({ onBack }) {
   const blackMlPerSheet = Number(blackYieldPages) > 0 ? (Number(blackCapacityMl) / Number(blackYieldPages)) : 0.0169;
   const colorMlPerSheet = Number(colorYieldPages) > 0 ? (Number(colorCapacityMl) / Number(colorYieldPages)) : 0.035;
 
-  const handleCategoryChange = (cat) => {
-    setInboundCategory(cat);
+  const handleSectionChange = (section) => {
+    setInboundCategory(section);
     setItemPhoto(null);
     setPaymentSlip(null);
     setSupplierContact('');
+    setCustomSpecsValues({});
+
+    const matchingCats = categories.filter(c => c.targetSection === section);
+    if (matchingCats.length > 0) {
+      setSelectedCategoryId(matchingCats[0].id);
+    }
   };
 
   const handleMachineCategoryChange = (cat) => {
@@ -91,6 +119,38 @@ export default function InboundEntryPage({ onBack }) {
     setBindingMethod('Perfect Glue');
   };
 
+  // Delete custom field permanently from Master Spec Pool
+  const handleDeleteSpecFromPool = (specId) => {
+    setMasterSpecsPool(prev => prev.filter(s => s.id !== specId));
+    showToast('ລຶບ Custom Field ຈາກ Master Pool ສຳເລັດ!', 'info');
+  };
+
+  // Step 2.5: Save Category & Auto-populate Custom Fields to Master Pool & Auto-Redirect back to Case 1 View Mode
+  const handleSaveCategoryRecord = (newCat) => {
+    // Extract new custom fields from this category and push into Master Specs Pool
+    if (newCat.customFields && newCat.customFields.length > 0) {
+      const newPoolEntries = newCat.customFields.map(f => ({
+        id: f.id,
+        nameLo: f.labelLo || f.labelEn,
+        nameEn: f.labelEn || f.labelLo,
+        category: newCat.targetSection,
+        isCustom: true
+      }));
+
+      setMasterSpecsPool(prev => {
+        const existingIds = new Set(prev.map(p => p.id));
+        const filteredNew = newPoolEntries.filter(e => !existingIds.has(e.id));
+        return [...prev, ...filteredNew];
+      });
+    }
+
+    setCategories(prev => [newCat, ...prev]);
+    setInboundCategory(newCat.targetSection);
+    setSelectedCategoryId(newCat.id);
+    setViewMode('entry_form');
+    showToast(`ບັນທຶກໝວດ "${currentLang === 'en' ? newCat.nameEn : newCat.nameLo}" ສຳເລັດ!`, 'success');
+  };
+
   const sanitizePayload = (obj) =>
     Object.fromEntries(
       Object.entries(obj).filter(([, v]) =>
@@ -107,11 +167,15 @@ export default function InboundEntryPage({ onBack }) {
         return;
       }
 
+      const activeCatName = activeCategoryRecord
+        ? (currentLang === 'en' ? activeCategoryRecord.nameEn : activeCategoryRecord.nameLo)
+        : materialType;
+
       if (addInventorySku) {
         addInventorySku(sanitizePayload({
           id: lotId || `LOT-${Date.now()}`,
           name: materialName,
-          category: materialType,
+          category: activeCatName,
           paperSpec: materialType === 'Paper' ? paperSpec : undefined,
           supplierName,
           supplierContact: supplierContact || undefined,
@@ -128,6 +192,7 @@ export default function InboundEntryPage({ onBack }) {
           unitName: purchaseUnit,
           purchaseMultiplier: purchaseUnit === 'Ream' ? 500 : 1,
           reorderThreshold: 100,
+          customSpecs: customSpecsValues,
           batches: [{
             id: `${lotId}-B1`,
             purchaseDate: new Date().toISOString().split('T')[0],
@@ -147,7 +212,7 @@ export default function InboundEntryPage({ onBack }) {
           poId: `PO-${Date.now().toString().slice(-6)}`,
           type: 'Material',
           categoryType: 'Materials',
-          materialType,
+          materialType: activeCatName,
           paperSpec: materialType === 'Paper' ? paperSpec : undefined,
           itemName: materialName,
           name: materialName,
@@ -161,7 +226,8 @@ export default function InboundEntryPage({ onBack }) {
           totalPrice: Number(materialUnitCost) * Number(quantity),
           date: new Date().toISOString().split('T')[0],
           itemPhoto: itemPhoto || undefined,
-          paymentSlip: paymentSlip || undefined
+          paymentSlip: paymentSlip || undefined,
+          customSpecs: customSpecsValues
         }));
       }
 
@@ -172,8 +238,12 @@ export default function InboundEntryPage({ onBack }) {
         return;
       }
 
+      const activeEqCatName = activeCategoryRecord
+        ? (currentLang === 'en' ? activeCategoryRecord.nameEn : activeCategoryRecord.nameLo)
+        : machineCategory;
+
       let categoryParams = {};
-      if (machineCategory === 'Printer') {
+      if (machineCategory === 'Printer' || activeEqCatName.toLowerCase().includes('printer')) {
         categoryParams = {
           maxWidth,
           inkType,
@@ -189,7 +259,7 @@ export default function InboundEntryPage({ onBack }) {
           clickRateColor: Number(clickRateColor || 500),
           clickRateBW: Number(clickRateBW || 150)
         };
-      } else if (machineCategory === 'Cutter') {
+      } else if (machineCategory === 'Cutter' || activeEqCatName.toLowerCase().includes('cutter')) {
         categoryParams = { cutCapacity: Number(cutCapacity), bladeDepreciationPerCut: Number(bladeDepreciationPerCut) };
       } else if (machineCategory === 'Laminator') {
         categoryParams = { laminationWidth };
@@ -200,7 +270,7 @@ export default function InboundEntryPage({ onBack }) {
       if (addEquipment) {
         addEquipment(sanitizePayload({
           name: machineName,
-          category: machineCategory,
+          category: activeEqCatName,
           imageUrl: itemPhoto || undefined,
           itemPhoto: itemPhoto || undefined,
           paymentSlip: paymentSlip || undefined,
@@ -209,6 +279,7 @@ export default function InboundEntryPage({ onBack }) {
           printedPagesCapacity: Number(lifetimeCapacity),
           supplierName,
           supplierContact: supplierContact || undefined,
+          customSpecs: customSpecsValues,
           ...categoryParams
         }));
       }
@@ -221,7 +292,7 @@ export default function InboundEntryPage({ onBack }) {
           categoryType: 'Machinery',
           itemName: machineName,
           name: machineName,
-          itemType: machineCategory,
+          itemType: activeEqCatName,
           lifespanYears: Number(lifespanYears),
           lifetimeCapacity: Number(lifetimeCapacity),
           purchaseCost: Number(purchaseCost),
@@ -236,6 +307,7 @@ export default function InboundEntryPage({ onBack }) {
           date: new Date().toISOString().split('T')[0],
           itemPhoto: itemPhoto || undefined,
           paymentSlip: paymentSlip || undefined,
+          customSpecs: customSpecsValues,
           ...categoryParams
         }));
       }
@@ -264,160 +336,213 @@ export default function InboundEntryPage({ onBack }) {
         <div>
           <h3 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">
             <Truck className="w-6 h-6 text-sky-600" />
-            <span>ຟອມບັນທຶກນຳເຂົ້າສິນຄ້າ & ເຄື່ອງຈັກ (Inbound Entry Form)</span>
+            <span>ຟອມບັນທຶກນຳເຂົ້າສິນຄ້າ & ເຄື່ອງຈັກ (Inbound Category System)</span>
           </h3>
         </div>
       </div>
 
-      {/* Main Inbound Category Selector (Category A vs Category B) */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-        <div className="space-y-2">
-          <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
-            ເລືອກປະເພດການນຳເຂົ້າ (Inbound Category Type) *
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <button
-              type="button"
-              onClick={() => handleCategoryChange('Materials')}
-              className={`p-5 rounded-2xl border transition text-left flex items-start gap-4 ${
-                inboundCategory === 'Materials'
-                  ? 'bg-sky-50 border-sky-500 shadow-md ring-2 ring-sky-500/20'
-                  : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-              }`}
-            >
-              <div className="p-3 bg-sky-500 text-white rounded-xl shadow-sm">
-                <Boxes className="w-6 h-6" />
-              </div>
-              <div>
-                <span className="font-black text-sm text-slate-900 block">
-                  ໝວດ A: ວັດສະດຸ & ວັດສະດຸສິ້ນເປືອງ (Materials & Supplies)
-                </span>
-                <span className="text-xs text-slate-500 font-semibold mt-0.5 block">
-                  ນຳເຂົ້າເຈ້ຍ, ໝຶກພິມ, ຟິມເຄືອບ, ເຄມີພັນ ສຳລັບຄັງສິນຄ້າ (Inventory Stock)
-                </span>
-              </div>
-            </button>
+      {/* Case 2: Category Builder View Mode */}
+      {viewMode === 'category_builder' ? (
+        <CategoryBuilder
+          initialTargetSection={inboundCategory}
+          masterSpecsPool={masterSpecsPool}
+          onDeleteSpecFromPool={handleDeleteSpecFromPool}
+          onSaveCategory={handleSaveCategoryRecord}
+          onCancel={() => setViewMode('entry_form')}
+          lang={currentLang}
+        />
+      ) : (
+        /* Case 1: Primary View Mode */
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+          {/* Section Selection Bar */}
+          <div className="space-y-2">
+            <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
+              1. ເລືອກໝວດຫຼັກການນຳເຂົ້າ (Select Section) *
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => handleSectionChange('Materials')}
+                className={`p-5 rounded-2xl border transition text-left flex items-start gap-4 ${
+                  inboundCategory === 'Materials'
+                    ? 'bg-sky-50 border-sky-500 shadow-md ring-2 ring-sky-500/20'
+                    : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <div className="p-3 bg-sky-500 text-white rounded-xl shadow-sm">
+                  <Boxes className="w-6 h-6" />
+                </div>
+                <div>
+                  <span className="font-black text-sm text-slate-900 block">
+                    ໝວດ A: ວັດສະດຸ & ວັດສະດຸສິ້ນເປືອງ (Materials & Supplies)
+                  </span>
+                  <span className="text-xs text-slate-500 font-semibold mt-0.5 block">
+                    ເຈ້ຍ, ໝຶກພິມ, ຟິມເຄືອບ, ເຄມີພັນ, ວັດສະດຸ custom
+                  </span>
+                </div>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => handleCategoryChange('Machinery')}
-              className={`p-5 rounded-2xl border transition text-left flex items-start gap-4 ${
-                inboundCategory === 'Machinery'
-                  ? 'bg-purple-50 border-purple-500 shadow-md ring-2 ring-purple-500/20'
-                  : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-              }`}
-            >
-              <div className="p-3 bg-purple-600 text-white rounded-xl shadow-sm">
-                <Printer className="w-6 h-6" />
-              </div>
-              <div>
-                <span className="font-black text-sm text-slate-900 block">
-                  ໝວດ B: ເຄື່ອງຈັກ & ອຸປະກອນ (Machinery & Assets)
-                </span>
-                <span className="text-xs text-slate-500 font-semibold mt-0.5 block">
-                  ນຳເຂົ້າເຄື່ອງພິມ, ເຄື່ອງຕັດ, ເຄື່ອງເຄືອບ, ເຄື່ອງເຂົ້າເລົ່ມ ເພື່ອບັນທຶກເຂົ້າ Equipment Directory
-                </span>
-              </div>
-            </button>
+              <button
+                type="button"
+                onClick={() => handleSectionChange('Machinery')}
+                className={`p-5 rounded-2xl border transition text-left flex items-start gap-4 ${
+                  inboundCategory === 'Machinery'
+                    ? 'bg-purple-50 border-purple-500 shadow-md ring-2 ring-purple-500/20'
+                    : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <div className="p-3 bg-purple-600 text-white rounded-xl shadow-sm">
+                  <Printer className="w-6 h-6" />
+                </div>
+                <div>
+                  <span className="font-black text-sm text-slate-900 block">
+                    ໝວດ B: ເຄື່ອງຈັກ & ອຸປະກອນ (Machinery & Assets)
+                  </span>
+                  <span className="text-xs text-slate-500 font-semibold mt-0.5 block">
+                    ເຄື່ອງພິມ, ເຄື່ອງຕັດ, ເຄື່ອງເຄືອບ, ອຸປະກອນ custom
+                  </span>
+                </div>
+              </button>
+            </div>
           </div>
+
+          {/* Sub-Category Dropdown Selector & Category Creator Trigger Button */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+            <div className="space-y-1 flex-1">
+              <label className="block text-xs font-black text-slate-700 uppercase">
+                2. ເລືອກໝວດ / ປະເພດ ({inboundCategory === 'Materials' ? 'Material Category' : 'Equipment Category'}) *
+              </label>
+              <select
+                value={selectedCategoryId}
+                onChange={(e) => setSelectedCategoryId(e.target.value)}
+                className="w-full px-4 py-2.5 border border-slate-300 rounded-xl bg-white font-bold text-xs focus:outline-none focus:ring-2 focus:ring-sky-500"
+              >
+                {sectionCategories.map(cat => (
+                  <option key={cat.id} value={cat.id}>
+                    {currentLang === 'en' ? cat.nameEn : cat.nameLo}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="sm:pt-5">
+              <button
+                type="button"
+                onClick={() => setViewMode('category_builder')}
+                className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-black text-xs shadow-md transition active:scale-95 w-full sm:w-auto"
+              >
+                <Plus className="w-4 h-4" />
+                <span>➕ Add New Category/Type</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Form Entry Body */}
+          <form onSubmit={handleSubmit} className="space-y-6 pt-4 border-t border-slate-100">
+            {inboundCategory === 'Materials' ? (
+              <MaterialInboundForm
+                materialType={materialType}
+                setMaterialType={setMaterialType}
+                materialName={materialName}
+                setMaterialName={setMaterialName}
+                paperSpec={paperSpec}
+                setPaperSpec={setPaperSpec}
+                materialUnitCost={materialUnitCost}
+                setMaterialUnitCost={setMaterialUnitCost}
+                quantity={quantity}
+                setQuantity={setQuantity}
+                supplierName={supplierName}
+                setSupplierName={setSupplierName}
+                supplierContact={supplierContact}
+                setSupplierContact={setSupplierContact}
+                itemPhoto={itemPhoto}
+                setItemPhoto={setItemPhoto}
+                paymentSlip={paymentSlip}
+                setPaymentSlip={setPaymentSlip}
+                handleFileUpload={handleFileUpload}
+                activeTemplate={activeCategoryRecord}
+                customSpecsValues={customSpecsValues}
+                setCustomSpecsValues={setCustomSpecsValues}
+                masterSpecsPool={masterSpecsPool}
+                lang={currentLang}
+              />
+            ) : (
+              <EquipmentInboundForm
+                machineCategory={machineCategory}
+                handleMachineCategoryChange={handleMachineCategoryChange}
+                machineName={machineName}
+                setMachineName={setMachineName}
+                purchaseCost={purchaseCost}
+                setPurchaseCost={setPurchaseCost}
+                lifespanYears={lifespanYears}
+                setLifespanYears={setLifespanYears}
+                lifetimeCapacity={lifetimeCapacity}
+                setLifetimeCapacity={setLifetimeCapacity}
+                supplierName={supplierName}
+                setSupplierName={setSupplierName}
+                supplierContact={supplierContact}
+                setSupplierContact={setSupplierContact}
+                inkType={inkType}
+                setInkType={setInkType}
+                printTech={printTech}
+                setPrintTech={setPrintTech}
+                maxWidth={maxWidth}
+                setMaxWidth={setMaxWidth}
+                blackYieldPages={blackYieldPages}
+                setBlackYieldPages={setBlackYieldPages}
+                blackCapacityMl={blackCapacityMl}
+                setBlackCapacityMl={setBlackCapacityMl}
+                colorYieldPages={colorYieldPages}
+                setColorYieldPages={setColorYieldPages}
+                colorCapacityMl={colorCapacityMl}
+                setColorCapacityMl={setColorCapacityMl}
+                clickRateBW={clickRateBW}
+                setClickRateBW={setClickRateBW}
+                clickRateColor={clickRateColor}
+                setClickRateColor={setClickRateColor}
+                linkedInkSku={linkedInkSku}
+                setLinkedInkSku={setLinkedInkSku}
+                blackMlPerSheet={blackMlPerSheet}
+                colorMlPerSheet={colorMlPerSheet}
+                cutCapacity={cutCapacity}
+                setCutCapacity={setCutCapacity}
+                bladeDepreciationPerCut={bladeDepreciationPerCut}
+                setBladeDepreciationPerCut={setBladeDepreciationPerCut}
+                laminationWidth={laminationWidth}
+                setLaminationWidth={setLaminationWidth}
+                bindingMethod={bindingMethod}
+                setBindingMethod={setBindingMethod}
+                itemPhoto={itemPhoto}
+                setItemPhoto={setItemPhoto}
+                paymentSlip={paymentSlip}
+                setPaymentSlip={setPaymentSlip}
+                handleFileUpload={handleFileUpload}
+                activeTemplate={activeCategoryRecord}
+                customSpecsValues={customSpecsValues}
+                setCustomSpecsValues={setCustomSpecsValues}
+                masterSpecsPool={masterSpecsPool}
+                lang={currentLang}
+              />
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={onBack}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition"
+              >
+                ຍົກເລີກ (Cancel)
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-black text-xs shadow-md transition active:scale-95"
+              >
+                ບັນທຶກນຳເຂົ້າ ({inboundCategory === 'Materials' ? 'Save Material Stock' : 'Save Machinery Asset'})
+              </button>
+            </div>
+          </form>
         </div>
-
-        {/* Dynamic Form Body */}
-        <form onSubmit={handleSubmit} className="space-y-6 pt-4 border-t border-slate-100">
-          {inboundCategory === 'Materials' ? (
-            <MaterialInboundForm
-              materialType={materialType}
-              setMaterialType={setMaterialType}
-              materialName={materialName}
-              setMaterialName={setMaterialName}
-              paperSpec={paperSpec}
-              setPaperSpec={setPaperSpec}
-              materialUnitCost={materialUnitCost}
-              setMaterialUnitCost={setMaterialUnitCost}
-              quantity={quantity}
-              setQuantity={setQuantity}
-              supplierName={supplierName}
-              setSupplierName={setSupplierName}
-              supplierContact={supplierContact}
-              setSupplierContact={setSupplierContact}
-              itemPhoto={itemPhoto}
-              setItemPhoto={setItemPhoto}
-              paymentSlip={paymentSlip}
-              setPaymentSlip={setPaymentSlip}
-              handleFileUpload={handleFileUpload}
-            />
-          ) : (
-            <EquipmentInboundForm
-              machineCategory={machineCategory}
-              handleMachineCategoryChange={handleMachineCategoryChange}
-              machineName={machineName}
-              setMachineName={setMachineName}
-              purchaseCost={purchaseCost}
-              setPurchaseCost={setPurchaseCost}
-              lifespanYears={lifespanYears}
-              setLifespanYears={setLifespanYears}
-              lifetimeCapacity={lifetimeCapacity}
-              setLifetimeCapacity={setLifetimeCapacity}
-              supplierName={supplierName}
-              setSupplierName={setSupplierName}
-              supplierContact={supplierContact}
-              setSupplierContact={setSupplierContact}
-              inkType={inkType}
-              setInkType={setInkType}
-              printTech={printTech}
-              setPrintTech={setPrintTech}
-              maxWidth={maxWidth}
-              setMaxWidth={setMaxWidth}
-              blackYieldPages={blackYieldPages}
-              setBlackYieldPages={setBlackYieldPages}
-              blackCapacityMl={blackCapacityMl}
-              setBlackCapacityMl={setBlackCapacityMl}
-              colorYieldPages={colorYieldPages}
-              setColorYieldPages={setColorYieldPages}
-              colorCapacityMl={colorCapacityMl}
-              setColorCapacityMl={setColorCapacityMl}
-              clickRateBW={clickRateBW}
-              setClickRateBW={setClickRateBW}
-              clickRateColor={clickRateColor}
-              setClickRateColor={setClickRateColor}
-              linkedInkSku={linkedInkSku}
-              setLinkedInkSku={setLinkedInkSku}
-              blackMlPerSheet={blackMlPerSheet}
-              colorMlPerSheet={colorMlPerSheet}
-              cutCapacity={cutCapacity}
-              setCutCapacity={setCutCapacity}
-              bladeDepreciationPerCut={bladeDepreciationPerCut}
-              setBladeDepreciationPerCut={setBladeDepreciationPerCut}
-              laminationWidth={laminationWidth}
-              setLaminationWidth={setLaminationWidth}
-              bindingMethod={bindingMethod}
-              setBindingMethod={setBindingMethod}
-              itemPhoto={itemPhoto}
-              setItemPhoto={setItemPhoto}
-              paymentSlip={paymentSlip}
-              setPaymentSlip={setPaymentSlip}
-              handleFileUpload={handleFileUpload}
-            />
-          )}
-
-          {/* Form Action Controls */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onBack}
-              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition"
-            >
-              ຍົກເລີກ (Cancel)
-            </button>
-            <button
-              type="submit"
-              className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-black text-xs shadow-md transition active:scale-95"
-            >
-              ບັນທຶກນຳເຂົ້າ ({inboundCategory === 'Materials' ? 'Save Material Stock' : 'Save Machinery Asset'})
-            </button>
-          </div>
-        </form>
-      </div>
+      )}
     </div>
   );
 }

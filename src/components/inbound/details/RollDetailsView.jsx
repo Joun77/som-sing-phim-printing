@@ -1,0 +1,70 @@
+import React from 'react';
+import { Package, Disc, Tag, DollarSign, Boxes, Truck, PhoneCall } from 'lucide-react';
+import InboundStatusBadge from '../components/InboundStatusBadge';
+import InboundMediaPreview from '../components/InboundMediaPreview';
+import DynamicKeyValueGrid from './DynamicKeyValueGrid';
+
+export default function RollDetailsView({ item }) {
+  const formatLAK = (num) => new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(num || 0).replace('LAK', '₭');
+
+  const itemName = item?.itemName || item?.name || 'Unassigned Roll Item';
+  const rollSpec = item?.rollSpec || item?.paperSpec || item?.spec || '-';
+  const unitPrice = item?.unitPrice || item?.costPerUnit || item?.purchasePrice;
+  const qty = item?.qty || item?.quantity || item?.initialQty;
+  const unitName = item?.unitName || item?.purchaseUnit || 'Roll';
+  const supplierName = item?.supplierName || '-';
+  const supplierContact = item?.supplierContact || item?.note || '-';
+
+  return (
+    <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+      <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <InboundStatusBadge categoryType="Materials" materialType="Film / Roll" labelOverride="ໝວດ A: ຟິມ/ມ້ວນ (Film / Roll)" />
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 mt-1">{itemName}</h2>
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+          <Disc className="w-4 h-4 text-sky-600" />
+          <span>ລາຍລະອຽດຟິມ/ມ້ວນ (Roll & Film Specifications)</span>
+        </h3>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-1 shadow-sm">
+            <div className="flex items-center gap-2 text-slate-500"><Tag className="w-4 h-4 text-sky-600" /><span className="text-[10px] font-black uppercase">ໝວດໝູ່ (Category)</span></div>
+            <p className="text-sm font-black text-slate-900">ຟິມເຄືອບ / ມ້ວນ (Film / Roll)</p>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-1 shadow-sm">
+            <div className="flex items-center gap-2 text-slate-500"><Disc className="w-4 h-4 text-sky-600" /><span className="text-[10px] font-black uppercase">ສະເປັກ (Spec)</span></div>
+            <p className="text-sm font-black text-slate-900">{rollSpec}</p>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-1 shadow-sm">
+            <div className="flex items-center gap-2 text-slate-500"><DollarSign className="w-4 h-4 text-sky-600" /><span className="text-[10px] font-black uppercase">ລາຄາ/ໜ່ວຍ (Unit Price)</span></div>
+            <p className="text-sm font-black font-mono text-emerald-700">{formatLAK(unitPrice)}</p>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-1 shadow-sm">
+            <div className="flex items-center gap-2 text-slate-500"><Boxes className="w-4 h-4 text-sky-600" /><span className="text-[10px] font-black uppercase">ຈຳນວນນຳເຂົ້າ (Quantity)</span></div>
+            <p className="text-sm font-black text-slate-900">{qty ? `${Number(qty).toLocaleString()} ${unitName}` : '-'}</p>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-1 shadow-sm sm:col-span-2">
+            <div className="flex items-center gap-2 text-slate-500"><Truck className="w-4 h-4 text-sky-600" /><span className="text-[10px] font-black uppercase">ຜູ້ສະໜອງ (Supplier)</span></div>
+            <p className="text-sm font-black text-slate-900">{supplierName}</p>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-1 shadow-sm sm:col-span-2">
+            <div className="flex items-center gap-2 text-slate-500"><PhoneCall className="w-4 h-4 text-sky-600" /><span className="text-[10px] font-black uppercase">ຕິດຕໍ່/ໝາຍເຫດ (Contact / Note)</span></div>
+            <p className="text-sm font-black text-slate-900">{supplierContact}</p>
+          </div>
+        </div>
+
+        <DynamicKeyValueGrid item={item} />
+        <InboundMediaPreview itemPhoto={item?.itemPhoto || item?.imageUrl} paymentSlip={item?.paymentSlip} />
+      </div>
+    </div>
+  );
+}
