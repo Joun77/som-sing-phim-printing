@@ -150,8 +150,8 @@ export default function InboundDetailsPage({ poId, onBack }) {
 
       {/* Delete Confirmation Modal */}
       {isDeleteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-xl overflow-hidden border border-slate-200 p-6 space-y-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100 p-6 space-y-4">
             <div className="flex items-center gap-3 text-red-600">
               <ShieldAlert className="w-7 h-7" />
               <div>
@@ -159,7 +159,7 @@ export default function InboundDetailsPage({ poId, onBack }) {
                   {currentLang === 'en' ? 'Confirm Deletion' : 'ຢືນຢັນການລຶບລາຍການ'}
                 </h3>
                 <p className="text-xs text-slate-500 font-semibold">
-                  {currentLang === 'en' ? 'Are you sure you want to delete this record?' : 'ທ່ານແນ່ໃຈຫຼືບໍ່ວ່າຕ້ອງການລຶບລາຍການນີ້?'}
+                  {currentLang === 'en' ? 'Are you sure you want to delete this record?' : 'ທ່ານແန່ໃຈຫຼືບໍ່ວ່າຕ້ອງການລຶບລາຍການນີ້?'}
                 </p>
               </div>
             </div>

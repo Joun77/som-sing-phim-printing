@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Truck, Boxes, Printer, Plus } from 'lucide-react';
+import { ArrowLeft, Truck, Boxes, Printer, Plus, RefreshCw, Layers } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
 import MaterialInboundForm from './forms/MaterialInboundForm';
@@ -7,18 +7,51 @@ import EquipmentInboundForm from './forms/EquipmentInboundForm';
 import CategoryBuilder, { INITIAL_PRESET_CATEGORIES, INITIAL_STANDARD_SPECS } from './forms/CategoryBuilder';
 
 export default function InboundEntryPage({ onBack }) {
-  const { addInventorySku, addEquipment, addPurchaseOrder, showToast } = useApp();
+  const { 
+    inventory, 
+    equipment, 
+    addInventoryBatch, 
+    addInventorySku, 
+    addEquipment, 
+    addPurchaseOrder, 
+    customCategories, 
+    setCustomCategories, 
+    masterSpecsPool: ctxMasterSpecsPool, 
+    setMasterSpecsPool: setCtxMasterSpecsPool, 
+    showToast 
+  } = useApp();
+
   const { i18n } = useTranslation();
   const currentLang = i18n?.language || 'lo';
 
   // Entry Mode Selection: 'entry_form' (Case 1) vs 'category_builder' (Case 2)
   const [viewMode, setViewMode] = useState('entry_form');
 
-  // Categories Master Registry State
-  const [categories, setCategories] = useState(INITIAL_PRESET_CATEGORIES);
+  // Unified Reorder Selector: 'reorder_existing' vs 'inbound_new'
+  const [inboundFlowMode, setInboundFlowMode] = useState('inbound_new');
 
-  // Master Custom Field Pool State (Stores predefined specs + newly added custom fields)
-  const [masterSpecsPool, setMasterSpecsPool] = useState(INITIAL_STANDARD_SPECS);
+  // Selected Existing Item ID for Reorder Flow
+  const [reorderItemId, setReorderItemId] = useState('');
+
+  // Categories Master Registry State (Uses context/localStorage if present)
+  const [categories, setCategories] = useState(() => {
+    return customCategories && customCategories.length > 0 ? customCategories : INITIAL_PRESET_CATEGORIES;
+  });
+
+  // Master Custom Field Pool State
+  const [masterSpecsPool, setMasterSpecsPoolState] = useState(() => {
+    return ctxMasterSpecsPool && ctxMasterSpecsPool.length > 0 ? ctxMasterSpecsPool : INITIAL_STANDARD_SPECS;
+  });
+
+  const updateMasterSpecsPool = (newPool) => {
+    setMasterSpecsPoolState(newPool);
+    if (setCtxMasterSpecsPool) setCtxMasterSpecsPool(newPool);
+  };
+
+  const updateCategories = (newCats) => {
+    setCategories(newCats);
+    if (setCustomCategories) setCustomCategories(newCats);
+  };
 
   // Selected Primary Section (Category A: Materials vs Category B: Machinery)
   const [inboundCategory, setInboundCategory] = useState('Materials');
@@ -84,12 +117,45 @@ export default function InboundEntryPage({ onBack }) {
     }
   };
 
-  // Computations
+  // Auto Computations
   const blackMlPerSheet = Number(blackYieldPages) > 0 ? (Number(blackCapacityMl) / Number(blackYieldPages)) : 0.0169;
   const colorMlPerSheet = Number(colorYieldPages) > 0 ? (Number(colorCapacityMl) / Number(colorYieldPages)) : 0.035;
 
+  // Reorder Item Selector Change Event
+  const handleSelectReorderItem = (itemId) => {
+    setReorderItemId(itemId);
+    if (!itemId) return;
+
+    if (inboundCategory === 'Materials') {
+      const existing = inventory.find(i => i.id === itemId);
+      if (existing) {
+        setMaterialName(existing.name);
+        setMaterialType(existing.category || 'Paper');
+        setSupplierName(existing.supplierName || 'Vientiane Supply Co.');
+        setSupplierContact(existing.supplierContact || '');
+        setMaterialUnitCost(existing.costPerPurchaseUnit || existing.purchasePrice || 120000);
+        setItemPhoto(existing.itemPhoto || existing.imageUrl || null);
+        if (existing.customSpecs) setCustomSpecsValues(existing.customSpecs);
+      }
+    } else {
+      const existing = equipment.find(e => e.id === itemId);
+      if (existing) {
+        setMachineName(existing.name);
+        setMachineCategory(existing.category || 'Printer');
+        setSupplierName(existing.supplierName || 'Lao Tech Machinery');
+        setSupplierContact(existing.supplierContact || '');
+        setPurchaseCost(existing.purchaseCost || 15000000);
+        setLifespanYears(existing.lifespanYears || 5);
+        setLifetimeCapacity(existing.printedPagesCapacity || existing.lifetimeCapacity || 500000);
+        setItemPhoto(existing.itemPhoto || existing.imageUrl || null);
+        if (existing.customSpecs) setCustomSpecsValues(existing.customSpecs);
+      }
+    }
+  };
+
   const handleSectionChange = (section) => {
     setInboundCategory(section);
+    setReorderItemId('');
     setItemPhoto(null);
     setPaymentSlip(null);
     setSupplierContact('');
@@ -121,13 +187,13 @@ export default function InboundEntryPage({ onBack }) {
 
   // Delete custom field permanently from Master Spec Pool
   const handleDeleteSpecFromPool = (specId) => {
-    setMasterSpecsPool(prev => prev.filter(s => s.id !== specId));
+    const updated = masterSpecsPool.filter(s => s.id !== specId);
+    updateMasterSpecsPool(updated);
     showToast('ລຶບ Custom Field ຈາກ Master Pool ສຳເລັດ!', 'info');
   };
 
   // Step 2.5: Save Category & Auto-populate Custom Fields to Master Pool & Auto-Redirect back to Case 1 View Mode
   const handleSaveCategoryRecord = (newCat) => {
-    // Extract new custom fields from this category and push into Master Specs Pool
     if (newCat.customFields && newCat.customFields.length > 0) {
       const newPoolEntries = newCat.customFields.map(f => ({
         id: f.id,
@@ -137,14 +203,13 @@ export default function InboundEntryPage({ onBack }) {
         isCustom: true
       }));
 
-      setMasterSpecsPool(prev => {
-        const existingIds = new Set(prev.map(p => p.id));
-        const filteredNew = newPoolEntries.filter(e => !existingIds.has(e.id));
-        return [...prev, ...filteredNew];
-      });
+      const existingIds = new Set(masterSpecsPool.map(p => p.id));
+      const filteredNew = newPoolEntries.filter(e => !existingIds.has(e.id));
+      updateMasterSpecsPool([...masterSpecsPool, ...filteredNew]);
     }
 
-    setCategories(prev => [newCat, ...prev]);
+    const updatedCats = [newCat, ...categories];
+    updateCategories(updatedCats);
     setInboundCategory(newCat.targetSection);
     setSelectedCategoryId(newCat.id);
     setViewMode('entry_form');
@@ -161,9 +226,15 @@ export default function InboundEntryPage({ onBack }) {
   const handleSubmit = (e) => {
     e.preventDefault();
 
+    // Payment Slip Required Validation
+    if (!paymentSlip) {
+      showToast(currentLang === 'en' ? 'Please upload a Payment Slip for this transaction' : 'ກະລຸນາອັບໂຫຼດສະລິບການຈ່າຍເງິນ', 'warning');
+      return;
+    }
+
     if (inboundCategory === 'Materials') {
       if (!materialName.trim()) {
-        showToast('ກະລຸນາລະບຸຊື່ວັດສະດຸທີ່ນຳເຂົ້າ', 'warning');
+        showToast(currentLang === 'en' ? 'Please specify material item name' : 'ກະລຸນາລະບຸຊື່ວັດສະດຸທີ່ນຳເຂົ້າ', 'warning');
         return;
       }
 
@@ -171,7 +242,39 @@ export default function InboundEntryPage({ onBack }) {
         ? (currentLang === 'en' ? activeCategoryRecord.nameEn : activeCategoryRecord.nameLo)
         : materialType;
 
-      if (addInventorySku) {
+      const poRecord = sanitizePayload({
+        id: `PO-${Date.now().toString().slice(-6)}`,
+        poId: `PO-${Date.now().toString().slice(-6)}`,
+        type: 'Material',
+        categoryType: 'Materials',
+        materialType: activeCatName,
+        paperSpec: materialType === 'Paper' ? paperSpec : undefined,
+        itemName: materialName,
+        name: materialName,
+        supplierName,
+        supplierContact: supplierContact || undefined,
+        unitPrice: Number(materialUnitCost),
+        costPerUnit: Number(materialUnitCost),
+        qty: Number(quantity),
+        unitName: purchaseUnit || 'Units',
+        totalCost: Number(materialUnitCost) * Number(quantity),
+        totalPrice: Number(materialUnitCost) * Number(quantity),
+        date: new Date().toISOString().split('T')[0],
+        itemPhoto: itemPhoto || undefined,
+        paymentSlip: paymentSlip || undefined,
+        customSpecs: customSpecsValues
+      });
+
+      if (inboundFlowMode === 'reorder_existing' && reorderItemId && addInventoryBatch) {
+        addInventoryBatch(reorderItemId, {
+          batchId: `LOT-${reorderItemId.slice(-4).toUpperCase()}-${Date.now().toString().slice(-4)}`,
+          purchaseDate: new Date().toISOString().split('T')[0],
+          supplierName,
+          purchasePrice: Number(materialUnitCost),
+          purchaseQty: Number(quantity),
+          paymentSlip
+        });
+      } else if (addInventorySku) {
         addInventorySku(sanitizePayload({
           id: lotId || `LOT-${Date.now()}`,
           name: materialName,
@@ -206,35 +309,11 @@ export default function InboundEntryPage({ onBack }) {
         }));
       }
 
-      if (addPurchaseOrder) {
-        addPurchaseOrder(sanitizePayload({
-          id: `PO-${Date.now().toString().slice(-6)}`,
-          poId: `PO-${Date.now().toString().slice(-6)}`,
-          type: 'Material',
-          categoryType: 'Materials',
-          materialType: activeCatName,
-          paperSpec: materialType === 'Paper' ? paperSpec : undefined,
-          itemName: materialName,
-          name: materialName,
-          supplierName,
-          supplierContact: supplierContact || undefined,
-          unitPrice: Number(materialUnitCost),
-          costPerUnit: Number(materialUnitCost),
-          qty: Number(quantity),
-          unitName: purchaseUnit || 'Units',
-          totalCost: Number(materialUnitCost) * Number(quantity),
-          totalPrice: Number(materialUnitCost) * Number(quantity),
-          date: new Date().toISOString().split('T')[0],
-          itemPhoto: itemPhoto || undefined,
-          paymentSlip: paymentSlip || undefined,
-          customSpecs: customSpecsValues
-        }));
-      }
-
-      showToast(`ບັນທຶກນຳເຂົ້າວັດສະດຸ "${materialName}" ສຳເລັດ!`, 'success');
+      if (addPurchaseOrder) addPurchaseOrder(poRecord);
+      showToast(currentLang === 'en' ? `Material inbound record "${materialName}" saved!` : `ບັນທຶກນຳເຂົ້າວັດສະດຸ "${materialName}" ສຳເລັດ!`, 'success');
     } else {
       if (!machineName.trim()) {
-        showToast('ກະລຸນາລະບຸຊື່ເຄື່ອງຈັກ', 'warning');
+        showToast(currentLang === 'en' ? 'Please specify machine name' : 'ກະລຸນາລະບຸຊື່ເຄື່ອງຈັກ', 'warning');
         return;
       }
 
@@ -267,7 +346,33 @@ export default function InboundEntryPage({ onBack }) {
         categoryParams = { bindingMethod };
       }
 
-      if (addEquipment) {
+      const poRecord = sanitizePayload({
+        id: `PO-EQ-${Date.now().toString().slice(-6)}`,
+        poId: `PO-EQ-${Date.now().toString().slice(-6)}`,
+        type: 'Equipment',
+        categoryType: 'Machinery',
+        itemName: machineName,
+        name: machineName,
+        itemType: activeEqCatName,
+        lifespanYears: Number(lifespanYears),
+        lifetimeCapacity: Number(lifetimeCapacity),
+        purchaseCost: Number(purchaseCost),
+        supplierName,
+        supplierContact: supplierContact || undefined,
+        unitPrice: Number(purchaseCost),
+        costPerUnit: Number(purchaseCost),
+        qty: Number(quantity || 1),
+        unitName: 'Unit',
+        totalCost: Number(purchaseCost) * Number(quantity || 1),
+        totalPrice: Number(purchaseCost) * Number(quantity || 1),
+        date: new Date().toISOString().split('T')[0],
+        itemPhoto: itemPhoto || undefined,
+        paymentSlip: paymentSlip || undefined,
+        customSpecs: customSpecsValues,
+        ...categoryParams
+      });
+
+      if (inboundFlowMode !== 'reorder_existing' && addEquipment) {
         addEquipment(sanitizePayload({
           name: machineName,
           category: activeEqCatName,
@@ -284,35 +389,8 @@ export default function InboundEntryPage({ onBack }) {
         }));
       }
 
-      if (addPurchaseOrder) {
-        addPurchaseOrder(sanitizePayload({
-          id: `PO-EQ-${Date.now().toString().slice(-6)}`,
-          poId: `PO-EQ-${Date.now().toString().slice(-6)}`,
-          type: 'Equipment',
-          categoryType: 'Machinery',
-          itemName: machineName,
-          name: machineName,
-          itemType: activeEqCatName,
-          lifespanYears: Number(lifespanYears),
-          lifetimeCapacity: Number(lifetimeCapacity),
-          purchaseCost: Number(purchaseCost),
-          supplierName,
-          supplierContact: supplierContact || undefined,
-          unitPrice: Number(purchaseCost),
-          costPerUnit: Number(purchaseCost),
-          qty: 1,
-          unitName: 'Unit',
-          totalCost: Number(purchaseCost),
-          totalPrice: Number(purchaseCost),
-          date: new Date().toISOString().split('T')[0],
-          itemPhoto: itemPhoto || undefined,
-          paymentSlip: paymentSlip || undefined,
-          customSpecs: customSpecsValues,
-          ...categoryParams
-        }));
-      }
-
-      showToast(`ບັນທຶກນຳເຂົ້າເຄື່ອງຈັກ "${machineName}" ເຂົ້າຄັງອຸປະກອນສຳເລັດ!`, 'success');
+      if (addPurchaseOrder) addPurchaseOrder(poRecord);
+      showToast(currentLang === 'en' ? `Machinery inbound record "${machineName}" saved!` : `ບັນທຶກນຳເຂົ້າເຄື່ອງຈັກ "${machineName}" ສຳເລັດ!`, 'success');
     }
 
     onBack();
@@ -329,14 +407,14 @@ export default function InboundEntryPage({ onBack }) {
             className="flex items-center gap-2 text-xs sm:text-sm font-black text-slate-600 hover:text-slate-900 transition py-2.5 px-4 bg-slate-100 rounded-2xl border border-slate-200 active:scale-95"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>ກັບໜ້າການນຳເຂົ້າ (Back to Inbound Procurement)</span>
+            <span>{currentLang === 'en' ? 'Back to Inbound Procurement' : 'ກັບໜ້າການນຳເຂົ້າ'}</span>
           </button>
         </div>
 
         <div>
           <h3 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">
             <Truck className="w-6 h-6 text-sky-600" />
-            <span>ຟອມບັນທຶກນຳເຂົ້າສິນຄ້າ & ເຄື່ອງຈັກ (Inbound Category System)</span>
+            <span>{currentLang === 'en' ? 'Inbound Category & Entry System' : 'ຟອມບັນທຶກນຳເຂົ້າສິນຄ້າ & ເຄື່ອງຈັກ'}</span>
           </h3>
         </div>
       </div>
@@ -354,6 +432,39 @@ export default function InboundEntryPage({ onBack }) {
       ) : (
         /* Case 1: Primary View Mode */
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+          {/* Reorder Existing vs Inbound New Item Workflow Selector */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <label className="text-xs font-black text-slate-700 uppercase tracking-wider block">
+              {currentLang === 'en' ? 'Workflow Action' : 'ເລືອກຮູບແບບການນຳເຂົ້າ'} *
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => { setInboundFlowMode('inbound_new'); setReorderItemId(''); }}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition ${
+                  inboundFlowMode === 'inbound_new'
+                    ? 'bg-sky-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <Plus className="w-4 h-4" />
+                <span>{currentLang === 'en' ? 'Option 2: Inbound New Item / Category' : 'ນຳເຂົ້າສິນຄ້າ/ໝວດໃໝ່'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setInboundFlowMode('reorder_existing')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition ${
+                  inboundFlowMode === 'reorder_existing'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>{currentLang === 'en' ? 'Option 1: Reorder Existing Item / Asset' : 'ນຳເຂົ້າເພີ່ມສິນຄ້າທີ່ມີໃນຄັງ'}</span>
+              </button>
+            </div>
+          </div>
+
           {/* Section Selection Bar */}
           <div className="space-y-2">
             <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
@@ -405,6 +516,35 @@ export default function InboundEntryPage({ onBack }) {
               </button>
             </div>
           </div>
+
+          {/* Reorder Searchable Dropdown Selector (Active when Option 1 is selected) */}
+          {inboundFlowMode === 'reorder_existing' && (
+            <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-2xl space-y-2">
+              <label className="block text-xs font-black text-purple-950 uppercase">
+                {currentLang === 'en' ? 'Select Existing Item to Reorder' : 'ເລືອກລາຍການທີ່ມີໃນຄັງເພື່ອຮຽກນຳເຂົ້າເພີ່ມ (Reorder Item)'} *
+              </label>
+              <select
+                value={reorderItemId}
+                onChange={(e) => handleSelectReorderItem(e.target.value)}
+                className="w-full px-4 py-2.5 border border-purple-200 rounded-xl bg-white font-bold text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="">-- {currentLang === 'en' ? 'Select Existing Item' : 'ເລືອກລາຍການ'} --</option>
+                {inboundCategory === 'Materials' ? (
+                  inventory.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} ({item.category}) - {currentLang === 'en' ? 'Current Stock' : 'ຄັງເຫຼືອ'}: {item.stockQty}
+                    </option>
+                  ))
+                ) : (
+                  equipment.map(eq => (
+                    <option key={eq.id} value={eq.id}>
+                      {eq.name} ({eq.category})
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+          )}
 
           {/* Sub-Category Dropdown Selector & Category Creator Trigger Button */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
@@ -531,13 +671,13 @@ export default function InboundEntryPage({ onBack }) {
                 onClick={onBack}
                 className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition"
               >
-                ຍົກເລີກ (Cancel)
+                {currentLang === 'en' ? 'Cancel' : 'ຍົກເລີກ'}
               </button>
               <button
                 type="submit"
                 className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-black text-xs shadow-md transition active:scale-95"
               >
-                ບັນທຶກນຳເຂົ້າ ({inboundCategory === 'Materials' ? 'Save Material Stock' : 'Save Machinery Asset'})
+                {currentLang === 'en' ? 'Save Inbound Transaction' : `ບັນທຶກນຳເຂົ້າ (${inboundCategory === 'Materials' ? 'Save Material Stock' : 'Save Machinery Asset'})`}
               </button>
             </div>
           </form>

@@ -1,39 +1,39 @@
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
-import { X, Save, Upload, Zap, Printer, Package } from 'lucide-react';
+import { X, Save, Upload, Lock } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { resolveBilingualLabel, formatValue } from './details/UniversalFieldRenderer';
 
 export default function InboundEditForm({ initialData, onSave, onCancel }) {
-  const isMachineryRecord = initialData?.categoryType === 'Machinery' || initialData?.type === 'Equipment' || initialData?.itemType === 'Printer' || initialData?.itemType === 'Cutter' || initialData?.itemType === 'Laminator' || initialData?.itemType === 'Binder';
+  const { i18n } = useTranslation();
+  const currentLang = i18n?.language || 'lo';
 
-  // Category A fields
-  const [materialType, setMaterialType] = useState(initialData?.materialType || initialData?.categoryType || 'Paper');
-  const [itemName, setItemName] = useState(initialData?.itemName || initialData?.name || '');
-  const [paperSpec, setPaperSpec] = useState(initialData?.paperSpec || 'Inkjet Paper');
-  const [supplierName, setSupplierName] = useState(initialData?.supplierName || '');
-  const [supplierContact, setSupplierContact] = useState(initialData?.supplierContact || '');
-  const [qty, setQty] = useState(initialData?.qty || 1);
-  const [unitPrice, setUnitPrice] = useState(
-    initialData?.unitPrice || (initialData?.qty ? (initialData?.totalCost || initialData?.totalPrice || 0) / initialData.qty : 0)
-  );
-  const [totalCost, setTotalCost] = useState(initialData?.totalCost || initialData?.totalPrice || 0);
+  // Base Top-Level State
+  const [formData, setFormData] = useState({
+    itemName: initialData?.itemName || initialData?.name || initialData?.machineName || '',
+    category: initialData?.category || initialData?.materialType || initialData?.itemType || initialData?.machineCategory || '',
+    unitPrice: initialData?.unitPrice || initialData?.costPerUnit || initialData?.purchaseCost || 0,
+    qty: initialData?.qty || initialData?.quantity || 1,
+    supplierName: initialData?.supplierName || '',
+    supplierContact: initialData?.supplierContact || initialData?.note || ''
+  });
 
-  // Category B Machinery & Printer fields
-  const [machineCategory, setMachineCategory] = useState(initialData?.itemType || initialData?.machineCategory || 'Printer');
-  const [purchaseCost, setPurchaseCost] = useState(initialData?.totalCost || initialData?.unitPrice || 0);
-  const [lifespanYears, setLifespanYears] = useState(initialData?.lifespanYears || 5);
-  const [printedPagesCapacity, setPrintedPagesCapacity] = useState(initialData?.printedPagesCapacity || 500000);
-  
-  // Printer Tech Specs
-  const [inkType, setInkType] = useState(initialData?.inkType || 'Pigment');
-  const [linkedInkSku, setLinkedInkSku] = useState(initialData?.linkedInkSku || '');
-  const [blackYieldPages, setBlackYieldPages] = useState(initialData?.blackYieldPages || 6000);
-  const [blackCapacityMl, setBlackCapacityMl] = useState(initialData?.blackCapacityMl || 127);
-  const [colorYieldPages, setColorYieldPages] = useState(initialData?.colorYieldPages || 6000);
-  const [colorCapacityMl, setColorCapacityMl] = useState(initialData?.colorCapacityMl || 210);
+  // Photo & Slip State
+  const [itemPhoto, setItemPhoto] = useState(initialData?.itemPhoto || initialData?.imageUrl || null);
 
-  // Dual Image states
-  const [itemPhoto, setItemPhoto] = useState(initialData?.itemPhoto || null);
-  const [paymentSlip, setPaymentSlip] = useState(initialData?.paymentSlip || null);
+  // Dynamic customSpecs state map
+  const [customSpecsState, setCustomSpecsState] = useState(() => {
+    const specs = initialData?.customSpecs || {};
+    const result = {};
+    Object.entries(specs).forEach(([k, v]) => {
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        result[k] = { label: v.label, value: v.value };
+      } else {
+        result[k] = { label: { lo: k, en: k }, value: v };
+      }
+    });
+    return result;
+  });
 
   const handleFileUpload = (e, setter) => {
     const file = e.target.files?.[0];
@@ -44,82 +44,65 @@ export default function InboundEditForm({ initialData, onSave, onCancel }) {
     }
   };
 
-  const handleQtyChange = (val) => {
-    const q = Number(val);
-    setQty(q);
-    setTotalCost(q * unitPrice);
-  };
-
-  const handleUnitPriceChange = (val) => {
-    const p = Number(val);
-    setUnitPrice(p);
-    setTotalCost(qty * p);
+  const handleCustomSpecChange = (key, val) => {
+    setCustomSpecsState(prev => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        value: val
+      }
+    }));
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    if (isMachineryRecord) {
-      const blackMlPerSheet = blackYieldPages > 0 ? Number(blackCapacityMl) / Number(blackYieldPages) : 0.0169;
-      const colorMlPerSheet = colorYieldPages > 0 ? Number(colorCapacityMl) / Number(colorYieldPages) : 0.035;
+    const updatedUnitPrice = Number(formData.unitPrice);
+    const updatedQty = Number(formData.qty);
+    const updatedTotalCost = updatedUnitPrice * updatedQty;
 
-      onSave({
-        ...initialData,
-        itemName,
-        name: itemName,
-        itemType: machineCategory,
-        machineCategory,
-        supplierName,
-        supplierContact,
-        unitPrice: Number(purchaseCost),
-        totalCost: Number(purchaseCost),
-        totalPrice: Number(purchaseCost),
-        lifespanYears: Number(lifespanYears),
-        printedPagesCapacity: Number(printedPagesCapacity),
-        inkType,
-        linkedInkSku,
-        blackYieldPages: Number(blackYieldPages),
-        blackCapacityMl: Number(blackCapacityMl),
-        colorYieldPages: Number(colorYieldPages),
-        colorCapacityMl: Number(colorCapacityMl),
-        blackMlPerSheet,
-        colorMlPerSheet,
-        itemPhoto,
-        paymentSlip
-      });
-    } else {
-      onSave({
-        ...initialData,
-        materialType,
-        itemName,
-        name: itemName,
-        paperSpec: materialType === 'Paper' ? paperSpec : undefined,
-        supplierName,
-        supplierContact,
-        qty: Number(qty),
-        unitPrice: Number(unitPrice),
-        totalCost: Number(totalCost),
-        totalPrice: Number(totalCost),
-        itemPhoto,
-        paymentSlip
-      });
-    }
+    onSave({
+      ...initialData,
+      itemName: formData.itemName,
+      name: formData.itemName,
+      machineName: formData.itemName,
+      category: formData.category,
+      materialType: formData.category,
+      itemType: formData.category,
+      machineCategory: formData.category,
+      unitPrice: updatedUnitPrice,
+      costPerUnit: updatedUnitPrice,
+      purchaseCost: updatedUnitPrice,
+      qty: updatedQty,
+      quantity: updatedQty,
+      totalCost: updatedTotalCost,
+      totalPrice: updatedTotalCost,
+      supplierName: formData.supplierName,
+      supplierContact: formData.supplierContact,
+      itemPhoto,
+      customSpecs: customSpecsState
+    });
   };
 
   const modalContent = (
     <div 
       onClick={onCancel}
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-fade-in font-sans"
+      className="fixed inset-0 z-[9999] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in font-sans"
     >
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="bg-white w-full max-w-xl rounded-3xl shadow-2xl shadow-slate-900/10 border border-slate-100 overflow-hidden max-h-[90vh] flex flex-col"
+        className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-100 overflow-hidden max-h-[90vh] flex flex-col"
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-          <h2 className="text-base font-black text-slate-900">
-            ແກ້ໄຂຂໍ້ມູນ PO #{initialData?.poId || initialData?.id}
-          </h2>
+          <div>
+            <h2 className="text-base font-black text-slate-900">
+              {currentLang === 'en' ? 'Form-Driven Inbound Editor' : 'ແກ້ໄຂຂໍ້ມູນການນຳເຂົ້າ'}
+            </h2>
+            <p className="text-[11px] text-slate-400 font-bold">
+              PO #{initialData?.poId || initialData?.id}
+            </p>
+          </div>
           <button
             type="button"
             onClick={onCancel}
@@ -129,311 +112,190 @@ export default function InboundEditForm({ initialData, onSave, onCancel }) {
           </button>
         </div>
 
-        {/* Modal Body / Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs font-bold overflow-y-auto">
-          {!isMachineryRecord ? (
-            /* CATEGORY A EDIT FIELDS */
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-slate-700 block">1. ໝວດວັດສະດຸ</label>
-                  <select
-                    value={materialType}
-                    onChange={(e) => setMaterialType(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white text-slate-900 font-bold"
-                  >
-                    <option value="Paper">ເຈ້ຍ</option>
-                    <option value="Ink">ໝຶກພິມ</option>
-                    <option value="Film">ຟິມເຄືອບ</option>
-                    <option value="Chemical">ເຄມີພັນ</option>
-                  </select>
-                </div>
-
-                {materialType === 'Paper' && (
-                  <div className="space-y-1.5">
-                    <label className="text-slate-700 block">3. ປະເພດເຈ້ຍ (Paper Spec)</label>
-                    <input
-                      type="text"
-                      value={paperSpec}
-                      onChange={(e) => setPaperSpec(e.target.value)}
-                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white text-slate-900"
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-slate-700 block">2. ຊື່ລາຍການ *</label>
-                <input
-                  type="text"
-                  required
-                  value={itemName}
-                  onChange={(e) => setItemName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white text-slate-900"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-slate-700 block">4. ລາຄາຕໍ່ໜ່ວຍ</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={unitPrice}
-                    onChange={(e) => handleUnitPriceChange(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white font-mono text-slate-900"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-slate-700 block">5. ຈຳນວນ *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={qty}
-                    onChange={(e) => handleQtyChange(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white font-mono text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-slate-700 block">6. ຊື່ຜູ້ສະໜອງ</label>
-                  <input
-                    type="text"
-                    value={supplierName}
-                    onChange={(e) => setSupplierName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white text-slate-900"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-slate-700 block">7. ເບີໂທ / ລີ້ງ (Optional)</label>
-                  <input
-                    type="text"
-                    value={supplierContact}
-                    onChange={(e) => setSupplierContact(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white text-slate-900"
-                  />
-                </div>
-              </div>
-            </div>
-          ) : (
-            /* CATEGORY B MACHINERY & PRINTER SPECS EDIT FIELDS */
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-slate-700 block">1. ໝວດເຄື່ອງຈັກ</label>
-                  <select
-                    value={machineCategory}
-                    onChange={(e) => setMachineCategory(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white text-slate-900 font-bold"
-                  >
-                    <option value="Printer">ເຄື່ອງພິມ</option>
-                    <option value="Cutter">ເຄື່ອງຕັດ</option>
-                    <option value="Laminator">ເຄື່ອງເຄືອບ</option>
-                    <option value="Binder">ເຄື່ອງເຂົ້າເລົ່ມ</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-slate-700 block">2. ຊື່ເຄື່ອງຈັກ *</label>
-                  <input
-                    type="text"
-                    required
-                    value={itemName}
-                    onChange={(e) => setItemName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-slate-700 block">3. ລາຄາຈັດຊື້ (LAK)</label>
-                  <input
-                    type="number"
-                    value={purchaseCost}
-                    onChange={(e) => setPurchaseCost(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl font-mono text-slate-900"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-slate-700 block">4. ອາຍຸໃຊ້ງານ (ປີ)</label>
-                  <input
-                    type="number"
-                    value={lifespanYears}
-                    onChange={(e) => setLifespanYears(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl font-mono text-slate-900"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-slate-700 block">5. ຄວາມຈຸແຜ່ນພິມ</label>
-                  <input
-                    type="number"
-                    value={printedPagesCapacity}
-                    onChange={(e) => setPrintedPagesCapacity(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl font-mono text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-slate-700 block">6. ຊື່ຜູ້ສະໜອງ</label>
-                  <input
-                    type="text"
-                    value={supplierName}
-                    onChange={(e) => setSupplierName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 text-slate-900"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-slate-700 block">7. ເບີໂທ / ຊ່ອງທາງຕິດຕໍ່</label>
-                  <input
-                    type="text"
-                    value={supplierContact}
-                    onChange={(e) => setSupplierContact(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              {/* Printer Special Technical Yield Parameters */}
-              {machineCategory === 'Printer' && (
-                <div className="p-4 bg-purple-50/70 border border-purple-100 rounded-2xl space-y-3">
-                  <span className="text-[11px] font-black text-purple-900 uppercase tracking-wider block flex items-center gap-1.5">
-                    <Zap className="w-4 h-4 text-purple-600" />
-                    <span>Printer Technical Specs & Ink Yield Rates</span>
-                  </span>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-slate-600 block">ຊະນິດໝຶກ</label>
-                      <select
-                        value={inkType}
-                        onChange={(e) => setInkType(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-xl bg-white font-bold text-xs"
-                      >
-                        <option value="Pigment">Pigment Ink</option>
-                        <option value="Dye">Dye Ink</option>
-                        <option value="Laser">Laser Toner</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-slate-600 block">Linked Ink SKU</label>
-                      <input
-                        type="text"
-                        value={linkedInkSku}
-                        onChange={(e) => setLinkedInkSku(e.target.value)}
-                        placeholder="e.g. INK-EP-001"
-                        className="w-full px-3 py-2 border rounded-xl bg-white font-mono text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 pt-1 border-t border-purple-200/60">
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-black text-slate-700 block">Black Ink (Yield / ml):</span>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <input
-                          type="number"
-                          value={blackYieldPages}
-                          onChange={(e) => setBlackYieldPages(Number(e.target.value))}
-                          placeholder="Pages"
-                          className="px-2 py-1.5 border rounded-lg font-mono text-center"
-                        />
-                        <input
-                          type="number"
-                          value={blackCapacityMl}
-                          onChange={(e) => setBlackCapacityMl(Number(e.target.value))}
-                          placeholder="ml"
-                          className="px-2 py-1.5 border rounded-lg font-mono text-center"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-black text-purple-800 block">Color Ink (Yield / ml):</span>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <input
-                          type="number"
-                          value={colorYieldPages}
-                          onChange={(e) => setColorYieldPages(Number(e.target.value))}
-                          placeholder="Pages"
-                          className="px-2 py-1.5 border rounded-lg font-mono text-center"
-                        />
-                        <input
-                          type="number"
-                          value={colorCapacityMl}
-                          onChange={(e) => setColorCapacityMl(Number(e.target.value))}
-                          placeholder="ml"
-                          className="px-2 py-1.5 border rounded-lg font-mono text-center"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Dual Image Uploaders */}
-          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+        {/* Modal Body / Universal N-Loop Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-6 text-xs font-bold overflow-y-auto">
+          {/* Read-Only Locked Fields */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-2xl">
             <div className="space-y-1">
-              <label className="text-slate-700 block">ຮູບພາບສິນຄ້າ / ເຄື່ອງຈັກ</label>
-              {itemPhoto ? (
-                <div className="relative h-24 border rounded-xl overflow-hidden bg-slate-50">
-                  <img src={itemPhoto} alt="Item" className="w-full h-full object-contain" />
-                  <button type="button" onClick={() => setItemPhoto(null)} className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full text-[10px]">✕</button>
-                </div>
-              ) : (
-                <label className="cursor-pointer border-2 border-dashed rounded-xl h-24 flex flex-col items-center justify-center text-slate-400 hover:border-sky-500">
-                  <Upload className="w-4 h-4" />
-                  <span className="text-[10px] mt-1">Upload Photo</span>
-                  <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, setItemPhoto)} className="hidden" />
-                </label>
-              )}
+              <span className="text-[10px] text-slate-400 font-black uppercase flex items-center gap-1">
+                <Lock className="w-3 h-3 text-slate-400" />
+                <span>PO ID (Locked)</span>
+              </span>
+              <p className="font-mono font-black text-slate-800 text-xs">
+                {initialData?.poId || initialData?.id}
+              </p>
             </div>
-
             <div className="space-y-1">
-              <label className="text-slate-700 block">ສະລິບການຈ່າຍເງິນ</label>
-              {paymentSlip ? (
-                <div className="relative h-24 border rounded-xl overflow-hidden bg-slate-50">
-                  <img src={paymentSlip} alt="Slip" className="w-full h-full object-contain" />
-                  <button type="button" onClick={() => setPaymentSlip(null)} className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full text-[10px]">✕</button>
-                </div>
-              ) : (
-                <label className="cursor-pointer border-2 border-dashed rounded-xl h-24 flex flex-col items-center justify-center text-slate-400 hover:border-sky-500">
-                  <Upload className="w-4 h-4" />
-                  <span className="text-[10px] mt-1">Upload Slip</span>
-                  <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, setPaymentSlip)} className="hidden" />
-                </label>
-              )}
+              <span className="text-[10px] text-slate-400 font-black uppercase flex items-center gap-1">
+                <Lock className="w-3 h-3 text-slate-400" />
+                <span>Payment Slip Status (Locked)</span>
+              </span>
+              <p className="font-mono font-black text-emerald-700 text-xs">
+                {initialData?.paymentSlip ? 'Uploaded & Locked' : 'No Slip Attached'}
+              </p>
             </div>
           </div>
 
-          {/* Modal Action Buttons */}
+          {/* Core Editable Form Fields */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+              {currentLang === 'en' ? 'Core Inbound Parameters' : 'ຂໍ້ມູນຫຼັກການນຳເຂົ້າ'}
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-slate-700 block">
+                  {currentLang === 'en' ? 'Item / Machine Name *' : 'ຊື່ລາຍການ / ອຸປະກອນ *'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.itemName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, itemName: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-slate-900 font-bold"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-700 block">
+                  {currentLang === 'en' ? 'Category / Type' : 'ໝວດ / ປະເພດ'}
+                </label>
+                <input
+                  type="text"
+                  value={formData.category}
+                  onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-slate-900 font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-slate-700 block">
+                  {currentLang === 'en' ? 'Unit Price (LAK)' : 'ລາຄາຕໍ່ໜ່ວຍ'}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.unitPrice}
+                  onChange={(e) => setFormData(prev => ({ ...prev, unitPrice: Number(e.target.value) }))}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white font-mono text-slate-900 font-bold"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-700 block">
+                  {currentLang === 'en' ? 'Quantity *' : 'ຈຳນວນນຳເຂົ້າ *'}
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={formData.qty}
+                  onChange={(e) => setFormData(prev => ({ ...prev, qty: Number(e.target.value) }))}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white font-mono text-slate-900 font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-slate-700 block">
+                  {currentLang === 'en' ? 'Supplier Name' : 'ຊື່ຜູ້ສະໜອງ'}
+                </label>
+                <input
+                  type="text"
+                  value={formData.supplierName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, supplierName: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-slate-900 font-bold"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-700 block">
+                  {currentLang === 'en' ? 'Supplier Contact / Note' : 'ຊ່ອງທາງຕິດຕໍ່ / ໝາຍເຫດ'}
+                </label>
+                <input
+                  type="text"
+                  value={formData.supplierContact}
+                  onChange={(e) => setFormData(prev => ({ ...prev, supplierContact: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-slate-900 font-bold"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Dynamic N-Loop Custom Specs Form Fields */}
+          {Object.keys(customSpecsState).length > 0 && (
+            <div className="space-y-3 bg-purple-50/60 border border-purple-200 p-4 rounded-2xl">
+              <h3 className="text-xs font-black text-purple-950 uppercase tracking-wider">
+                {currentLang === 'en' ? 'Dynamic Custom Specifications' : 'ຄຸນລັກສະນະ Custom ທີບັນທຶກ'}
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {Object.entries(customSpecsState).map(([specKey, specObj]) => {
+                  const labelObj = specObj?.label;
+                  const labelText = typeof labelObj === 'object' && labelObj !== null
+                    ? (currentLang === 'en' ? (labelObj.en || labelObj.lo) : (labelObj.lo || labelObj.en))
+                    : resolveBilingualLabel(specKey, currentLang);
+
+                  return (
+                    <div key={specKey} className="space-y-1">
+                      <label className="text-purple-900 block">{labelText}</label>
+                      <input
+                        type="text"
+                        value={specObj?.value || ''}
+                        onChange={(e) => handleCustomSpecChange(specKey, e.target.value)}
+                        className="w-full px-3.5 py-2 border border-purple-200 rounded-xl bg-white text-slate-900 font-bold text-xs"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Item Photo Re-uploader */}
+          <div className="space-y-1 pt-2 border-t border-slate-100">
+            <label className="text-slate-700 block">
+              {currentLang === 'en' ? 'Item Photo (Editable)' : 'ຮູບພາບສິນຄ້າ / ເຄື່ອງຈັກ'}
+            </label>
+            {itemPhoto ? (
+              <div className="relative h-28 border rounded-xl overflow-hidden bg-slate-50 flex items-center justify-center">
+                <img src={itemPhoto} alt="Item" className="w-full h-full object-contain" />
+                <button
+                  type="button"
+                  onClick={() => setItemPhoto(null)}
+                  className="absolute top-1.5 right-1.5 bg-red-600 text-white p-1 rounded-full text-xs font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <label className="cursor-pointer border-2 border-dashed rounded-xl h-24 flex flex-col items-center justify-center text-slate-400 hover:border-sky-500 hover:bg-sky-50/50 transition">
+                <Upload className="w-4 h-4" />
+                <span className="text-[10px] font-bold mt-1">
+                  {currentLang === 'en' ? 'Upload New Photo' : 'ອັບໂຫຼດຮູບພາບໃໝ່'}
+                </span>
+                <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, setItemPhoto)} className="hidden" />
+              </label>
+            )}
+          </div>
+
+          {/* Modal Actions */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
             <button
               type="button"
               onClick={onCancel}
               className="px-5 py-2.5 border border-slate-200 rounded-2xl text-slate-700 hover:bg-slate-100 font-black text-xs transition"
             >
-              ຍົກເລີກ
+              {currentLang === 'en' ? 'Cancel' : 'ຍົກເລີກ'}
             </button>
             <button
               type="submit"
               className="flex items-center gap-1.5 px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-2xl font-black text-xs shadow-sm transition active:scale-95"
             >
               <Save className="w-4 h-4" />
-              <span>ບັນທຶກ</span>
+              <span>{currentLang === 'en' ? 'Save Changes' : 'ບັນທຶກການແກ້ໄຂ'}</span>
             </button>
           </div>
         </form>
@@ -443,5 +305,3 @@ export default function InboundEditForm({ initialData, onSave, onCancel }) {
 
   return ReactDOM.createPortal(modalContent, document.body);
 }
-
-

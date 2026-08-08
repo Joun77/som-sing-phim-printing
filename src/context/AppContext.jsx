@@ -581,6 +581,25 @@ export const AppProvider = ({ children }) => {
     localStorage.setItem('ss_print_purchase_orders_v6', JSON.stringify(purchaseOrders));
   }, [purchaseOrders]);
 
+  // Master Categories Registry & Specs Pool Persistence
+  const [customCategories, setCustomCategories] = useState(() => {
+    const saved = localStorage.getItem('ss_print_custom_categories_v6');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [masterSpecsPool, setMasterSpecsPool] = useState(() => {
+    const saved = localStorage.getItem('ss_print_master_specs_pool_v6');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('ss_print_custom_categories_v6', JSON.stringify(customCategories));
+  }, [customCategories]);
+
+  useEffect(() => {
+    localStorage.setItem('ss_print_master_specs_pool_v6', JSON.stringify(masterSpecsPool));
+  }, [masterSpecsPool]);
+
   // Solver for overdue orders
   useEffect(() => {
     const todayStr = '2026-08-04';
@@ -1245,6 +1264,10 @@ export const AppProvider = ({ children }) => {
       customers,
       offcuts,
       purchaseOrders,
+      customCategories,
+      setCustomCategories,
+      masterSpecsPool,
+      setMasterSpecsPool,
       toast,
       setToast,
       confirmDialog,
