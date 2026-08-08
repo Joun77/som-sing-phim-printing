@@ -1,66 +1,38 @@
 import React, { useState } from 'react';
-import { 
-  ArrowLeft, 
-  Truck, 
-  Package, 
-  Printer, 
-  Scissors, 
-  Layers, 
-  BookOpen, 
-  Check, 
-  Camera, 
-  Zap, 
-  Boxes, 
-  Plus, 
-  DollarSign, 
-  CheckCircle2,
-  Upload,
-  X 
-} from 'lucide-react';
+import { ArrowLeft, Truck, Boxes, Printer } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import MaterialInboundForm from './forms/MaterialInboundForm';
+import EquipmentInboundForm from './forms/EquipmentInboundForm';
 
 export default function InboundEntryPage({ onBack }) {
-  const { inventory, equipment, addInventorySku, addEquipment, addPurchaseOrder, showToast } = useApp();
+  const { addInventorySku, addEquipment, addPurchaseOrder, showToast } = useApp();
 
-  // Top Category Selection: Category A (Materials & Supplies) vs Category B (Machinery & Equipment)
-  const [inboundCategory, setInboundCategory] = useState('Materials'); // 'Materials' | 'Machinery'
+  // Category Selector State: Category A ('Materials') vs Category B ('Machinery')
+  const [inboundCategory, setInboundCategory] = useState('Materials');
 
-  // Category A: Materials & Supplies States
-  const [materialType, setMaterialType] = useState('Paper'); // Paper, Ink, Film, Chemical
-  const [paperSpec, setPaperSpec] = useState('Inkjet Paper'); // Inkjet Paper, Laser Paper, Sticker Paper, Art Card Paper, Bond Paper
+  // Category A States
+  const [materialType, setMaterialType] = useState('Paper');
+  const [paperSpec, setPaperSpec] = useState('Inkjet Paper');
   const [materialName, setMaterialName] = useState('');
   const [supplierName, setSupplierName] = useState('Vientiane Supply Co.');
-  const [supplierContact, setSupplierContact] = useState(''); // Optional Phone / Contact Link
-  const [lotId, setLotId] = useState(`LOT-${Date.now().toString().slice(-6)}`);
-  
-  // File upload states
+  const [supplierContact, setSupplierContact] = useState('');
+  const [lotId] = useState(`LOT-${Date.now().toString().slice(-6)}`);
+  const [materialUnitCost, setMaterialUnitCost] = useState(120000);
+  const [quantity, setQuantity] = useState(50);
+  const [purchaseUnit] = useState('Ream');
+
+  // Shared Media Attachments
   const [itemPhoto, setItemPhoto] = useState(null);
   const [paymentSlip, setPaymentSlip] = useState(null);
 
-  const handleFileUpload = (e, setter) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setter(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const [materialUnitCost, setMaterialUnitCost] = useState(120000);
-  const [quantity, setQuantity] = useState(50);
-  const [purchaseUnit, setPurchaseUnit] = useState('Ream');
-
-  // Category B: Machinery & Equipment States
+  // Category B States
   const [machineName, setMachineName] = useState('Epson EcoTank L15150');
-  const [machineCategory, setMachineCategory] = useState('Printer'); // Printer, Cutter, Laminator, Binder
+  const [machineCategory, setMachineCategory] = useState('Printer');
   const [purchaseCost, setPurchaseCost] = useState(15000000);
   const [lifespanYears, setLifespanYears] = useState(5);
   const [lifetimeCapacity, setLifetimeCapacity] = useState(500000);
-  const [imageUrl, setImageUrl] = useState('');
 
-  // Printer Technical Spec Form States
+  // Printer Tech Spec States
   const [inkType, setInkType] = useState('Pigment');
   const [printTech, setPrintTech] = useState('Color');
   const [maxWidth, setMaxWidth] = useState('A3+');
@@ -72,41 +44,37 @@ export default function InboundEntryPage({ onBack }) {
   const [clickRateBW, setClickRateBW] = useState(150);
   const [linkedInkSku, setLinkedInkSku] = useState('');
 
-  // Cutter & Finishing Specific States
+  // Cutter / Laminator / Binder States
   const [cutCapacity, setCutCapacity] = useState(500);
   const [bladeDepreciationPerCut, setBladeDepreciationPerCut] = useState(300);
   const [laminationWidth, setLaminationWidth] = useState('A3 (330mm)');
   const [bindingMethod, setBindingMethod] = useState('Perfect Glue');
 
-  // Image Upload Handler
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
+  // File Upload Helper
+  const handleFileUpload = (e, setter) => {
+    const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setImageUrl(reader.result);
+        setter(reader.result);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  // Auto Computations for Printer Ink Rates
+  // Computations
   const blackMlPerSheet = Number(blackYieldPages) > 0 ? (Number(blackCapacityMl) / Number(blackYieldPages)) : 0.0169;
   const colorMlPerSheet = Number(colorYieldPages) > 0 ? (Number(colorCapacityMl) / Number(colorYieldPages)) : 0.035;
 
-  // Reset spec states when top-level category changes
   const handleCategoryChange = (cat) => {
     setInboundCategory(cat);
-    // Clear shared file uploads so they don't bleed across categories
     setItemPhoto(null);
     setPaymentSlip(null);
     setSupplierContact('');
   };
 
-  // Reset machine-specific spec states when machine sub-category changes
   const handleMachineCategoryChange = (cat) => {
     setMachineCategory(cat);
-    // Clear all sub-category-specific fields to prevent contamination
     setMaxWidth('A3+');
     setInkType('Pigment');
     setPrintTech('Color');
@@ -123,7 +91,6 @@ export default function InboundEntryPage({ onBack }) {
     setBindingMethod('Perfect Glue');
   };
 
-  // Strip all undefined / null / empty-string fields before persisting
   const sanitizePayload = (obj) =>
     Object.fromEntries(
       Object.entries(obj).filter(([, v]) =>
@@ -135,7 +102,6 @@ export default function InboundEntryPage({ onBack }) {
     e.preventDefault();
 
     if (inboundCategory === 'Materials') {
-      // Create new inventory batch
       if (!materialName.trim()) {
         showToast('ກະລຸນາລະບຸຊື່ວັດສະດຸທີ່ນຳເຂົ້າ', 'warning');
         return;
@@ -201,7 +167,6 @@ export default function InboundEntryPage({ onBack }) {
 
       showToast(`ບັນທຶກນຳເຂົ້າວັດສະດຸ "${materialName}" ສຳເລັດ!`, 'success');
     } else {
-      // Create new Machinery Asset in Equipment Directory
       if (!machineName.trim()) {
         showToast('ກະລຸນາລະບຸຊື່ເຄື່ອງຈັກ', 'warning');
         return;
@@ -236,7 +201,7 @@ export default function InboundEntryPage({ onBack }) {
         addEquipment(sanitizePayload({
           name: machineName,
           category: machineCategory,
-          imageUrl: itemPhoto || imageUrl || undefined,
+          imageUrl: itemPhoto || undefined,
           itemPhoto: itemPhoto || undefined,
           paymentSlip: paymentSlip || undefined,
           purchaseCost: Number(purchaseCost),
@@ -360,386 +325,95 @@ export default function InboundEntryPage({ onBack }) {
         {/* Dynamic Form Body */}
         <form onSubmit={handleSubmit} className="space-y-6 pt-4 border-t border-slate-100">
           {inboundCategory === 'Materials' ? (
-            /* FORM CATEGORY A: MATERIALS & SUPPLIES */
-            <div className="space-y-4 animate-fade-in text-xs font-bold">
-              <div className="flex items-center gap-2 border-b pb-3">
-                <Package className="w-5 h-5 text-sky-600" />
-                <h4 className="font-black text-sm text-slate-900">ລາຍລະອຽດວັດສະດຸ (Materials & Consumables Entry)</h4>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* 1. Material Category First */}
-                <div className="space-y-1">
-                  <label className="block text-slate-600">1. ໝວດວັດສະດຸ (Material Category)</label>
-                  <select
-                    value={materialType}
-                    onChange={(e) => setMaterialType(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border rounded-xl bg-white font-bold text-xs focus:outline-none"
-                  >
-                    <option value="Paper">ເຈ້ຍ (Paper Stock)</option>
-                    <option value="Ink">ໝຶກພິມ (Ink Bottles/Cartridges)</option>
-                    <option value="Film">ຟິມເຄືອບ (Lamination Film)</option>
-                    <option value="Chemical">ເຄມີພັນ (Chemicals & Consumables)</option>
-                  </select>
-                </div>
-
-                {/* 2. Item Name Second */}
-                <div className={`space-y-1 ${materialType === 'Paper' ? '' : 'sm:col-span-2'}`}>
-                  <label className="block text-slate-600">2. ຊື່ລາຍການວັດສະດຸ (Material Item Name) *</label>
-                  <input
-                    type="text"
-                    required
-                    value={materialName}
-                    onChange={(e) => setMaterialName(e.target.value)}
-                    placeholder="ເຊັ່ນ: ເຈ້ຍ A4 Double A 80gsm, ໝຶກສີດຳ Konica C6085..."
-                    className="w-full px-3.5 py-2.5 border rounded-xl font-bold bg-white text-xs"
-                  />
-                </div>
-
-                {/* 3. Paper Type Spec Third (For Paper Only) */}
-                {materialType === 'Paper' && (
-                  <div className="space-y-1">
-                    <label className="block text-slate-600">3. ປະເພດເຈ້ຍ (Paper Type Spec)</label>
-                    <select
-                      value={paperSpec}
-                      onChange={(e) => setPaperSpec(e.target.value)}
-                      className="w-full px-3.5 py-2.5 border rounded-xl bg-white font-bold text-xs focus:outline-none"
-                    >
-                      <option value="Inkjet Paper">ເຈ້ຍອິງເຈັດ (Inkjet Paper)</option>
-                      <option value="Laser Paper">ເຈ້ຍເລເຊີ (Laser Paper)</option>
-                      <option value="Sticker Paper">ເຈ້ຍສະຕິກເກີ (Sticker Paper)</option>
-                      <option value="Art Card Paper">ເຈ້ຍອາດກາດ / Art Card</option>
-                      <option value="Bond Paper">ເຈ້ຍປອນ / Bond Paper</option>
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              {/* Row 2: Financials & Supplier Details */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                {/* 4. Unit Price */}
-                <div className="space-y-1">
-                  <label className="block text-slate-600">4. ລາຄາຊື້ຕໍ່ໜ່ວຍ (Unit Price LAK) *</label>
-                  <input
-                    type="number"
-                    required
-                    value={materialUnitCost}
-                    onChange={(e) => setMaterialUnitCost(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 border rounded-xl font-mono text-center font-bold bg-white text-xs"
-                  />
-                </div>
-
-                {/* 5. Inbound Quantity */}
-                <div className="space-y-1">
-                  <label className="block text-slate-600">5. ຈຳນວນນຳເຂົ້າ (Inbound Qty) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    value={quantity}
-                    onChange={(e) => setQuantity(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 border rounded-xl font-mono text-center font-bold bg-white text-xs"
-                  />
-                </div>
-
-                {/* 6. Supplier Name */}
-                <div className="space-y-1">
-                  <label className="block text-slate-600">6. ຊື່ຜູ້ສະໜອງ (Supplier Name)</label>
-                  <input
-                    type="text"
-                    value={supplierName}
-                    onChange={(e) => setSupplierName(e.target.value)}
-                    placeholder="ເຊັ່ນ: Vientiane Supply Co."
-                    className="w-full px-3.5 py-2.5 border rounded-xl font-bold bg-white text-xs"
-                  />
-                </div>
-
-                {/* 7. Supplier Contact / Phone / Link (Optional) */}
-                <div className="space-y-1">
-                  <label className="block text-slate-600">7. ຊ່ອງທາງຕິດຕໍ່ / ເບີໂທ / ລີ້ງ (Optional)</label>
-                  <input
-                    type="text"
-                    value={supplierContact}
-                    onChange={(e) => setSupplierContact(e.target.value)}
-                    placeholder="ເບີໂທ, WhatsApp ຫຼື Link..."
-                    className="w-full px-3.5 py-2.5 border rounded-xl font-bold bg-white text-xs"
-                  />
-                </div>
-              </div>
-            </div>
+            <MaterialInboundForm
+              materialType={materialType}
+              setMaterialType={setMaterialType}
+              materialName={materialName}
+              setMaterialName={setMaterialName}
+              paperSpec={paperSpec}
+              setPaperSpec={setPaperSpec}
+              materialUnitCost={materialUnitCost}
+              setMaterialUnitCost={setMaterialUnitCost}
+              quantity={quantity}
+              setQuantity={setQuantity}
+              supplierName={supplierName}
+              setSupplierName={setSupplierName}
+              supplierContact={supplierContact}
+              setSupplierContact={setSupplierContact}
+              itemPhoto={itemPhoto}
+              setItemPhoto={setItemPhoto}
+              paymentSlip={paymentSlip}
+              setPaymentSlip={setPaymentSlip}
+              handleFileUpload={handleFileUpload}
+            />
           ) : (
-            /* FORM CATEGORY B: MACHINERY & EQUIPMENT ASSETS */
-            <div className="space-y-6 animate-fade-in text-xs font-bold">
-              <div className="flex items-center gap-2 border-b pb-3">
-                <Printer className="w-5 h-5 text-purple-600" />
-                <h4 className="font-black text-sm text-slate-900">ລາຍລະອຽດເຄື່ອງຈັກ & ອຸປະກອນ (Machinery Asset Entry)</h4>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <label className="block text-slate-600">ໝວດເຄື່ອງຈັກ (Equipment Category)</label>
-                  <select
-                    value={machineCategory}
-                    onChange={(e) => handleMachineCategoryChange(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border rounded-xl bg-white font-bold text-xs focus:outline-none"
-                  >
-                    <option value="Printer">ເຄື່ອງພິມ (Printing Machine)</option>
-                    <option value="Cutter">ເຄື່ອງຕັດ (Cutting Machine)</option>
-                    <option value="Laminator">ເຄື່ອງເຄືອບ (Laminating Machine)</option>
-                    <option value="Binder">ເຄື່ອງເຂົ້າເລົ່ມ (Binding Machine)</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="block text-slate-600">ຊື່ເຄື່ອງພິມ / ອຸປະກອນ (Machine Name) *</label>
-                  <input
-                    type="text"
-                    required
-                    value={machineName}
-                    onChange={(e) => setMachineName(e.target.value)}
-                    placeholder="ເຊັ່ນ: Epson EcoTank L15150, EBA 5560 Cutter..."
-                    className="w-full px-3.5 py-2.5 border rounded-xl font-bold bg-white text-xs"
-                  />
-                </div>
-              </div>
-
-              {/* Machinery Photo Upload Field */}
-              <div className="space-y-1">
-                <label className="block text-slate-600">ຮູບຖ່າຍເຄື່ອງພິມ / ອຸປະກອນ (Machine Photo)</label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100"
-                  />
-                  {imageUrl && (
-                    <img src={imageUrl} alt="Preview" className="w-12 h-12 object-cover rounded-xl border border-slate-200" />
-                  )}
-                </div>
-              </div>
-
-              {/* SPECIAL SUB-FORM: PRINTING MACHINE TECH SPECS */}
-              {machineCategory === 'Printer' && (
-                <div className="p-5 bg-purple-50/60 border border-purple-100 rounded-3xl space-y-4">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 block border-b border-purple-200 pb-2 flex items-center gap-1.5">
-                    <Zap className="w-4 h-4 text-purple-600" />
-                    <span>Printer Technical Specs & Ink Yield Parameters (ISO 5% Standard)</span>
-                  </span>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="block text-slate-600 text-[10px]">ຊະນິດໝຶກພິມ (Ink Type)</label>
-                      <select
-                        value={inkType}
-                        onChange={(e) => setInkType(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-xl bg-white font-bold text-xs"
-                      >
-                        <option value="Pigment">ໝຶກກັນນ້ຳ (Pigment Ink)</option>
-                        <option value="Dye">ໝຶກທຳມະດາ (Dye Ink)</option>
-                        <option value="Laser">ໝຶກຜົງ (Laser Toner)</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="block text-slate-600 text-[10px]">ລີ້ງຮາຍການໝຶກຈາກຄັງ (Link Ink SKU)</label>
-                      <select
-                        value={linkedInkSku}
-                        onChange={(e) => setLinkedInkSku(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-xl bg-white font-bold text-xs"
-                      >
-                        <option value="">-- ເລືອກຮາຍການໝຶກຈາກ Inventory --</option>
-                        {inventory && inventory.map(item => (
-                          <option key={item.id} value={item.id}>
-                            {item.name} ({item.id})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Yield & Capacity Inputs */}
-                  <div className="grid grid-cols-2 gap-4 pt-2 border-t border-purple-200/60">
-                    <div className="space-y-2">
-                      <span className="text-[11px] font-black text-slate-800 block">ໝຶກສີດຳ (Black Ink Technical Specs):</span>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <label className="text-[9px] text-slate-500 uppercase block">Yield (Pages)</label>
-                          <input
-                            type="number"
-                            value={blackYieldPages}
-                            onChange={(e) => setBlackYieldPages(Number(e.target.value))}
-                            className="w-full px-2.5 py-1.5 border rounded-lg font-mono text-center font-bold bg-white"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] text-slate-500 uppercase block">Bottle (ml)</label>
-                          <input
-                            type="number"
-                            value={blackCapacityMl}
-                            onChange={(e) => setBlackCapacityMl(Number(e.target.value))}
-                            className="w-full px-2.5 py-1.5 border rounded-lg font-mono text-center font-bold bg-white"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <span className="text-[11px] font-black text-purple-800 block">ໝຶກຊຸດສີ (Color Set Technical Specs):</span>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <label className="text-[9px] text-slate-500 uppercase block">Yield (Pages)</label>
-                          <input
-                            type="number"
-                            value={colorYieldPages}
-                            onChange={(e) => setColorYieldPages(Number(e.target.value))}
-                            className="w-full px-2.5 py-1.5 border rounded-lg font-mono text-center font-bold bg-white"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] text-slate-500 uppercase block">Total (ml)</label>
-                          <input
-                            type="number"
-                            value={colorCapacityMl}
-                            onChange={(e) => setColorCapacityMl(Number(e.target.value))}
-                            className="w-full px-2.5 py-1.5 border rounded-lg font-mono text-center font-bold bg-white"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-3 rounded-2xl border border-purple-200 space-y-1 text-[10px] text-purple-900 font-mono">
-                    <div className="flex justify-between items-center">
-                      <span>Black Technical Rate @ 5% ISO:</span>
-                      <span className="font-black">{blackMlPerSheet.toFixed(4)} ml / sheet</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Color Technical Rate @ 5% ISO:</span>
-                      <span className="font-black">{colorMlPerSheet.toFixed(4)} ml / sheet</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Asset Financials */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <label className="block text-slate-600">ລາຄາຈັດຊື້ (Purchase Cost LAK)</label>
-                  <input
-                    type="number"
-                    required
-                    value={purchaseCost}
-                    onChange={(e) => setPurchaseCost(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 border rounded-xl font-mono text-center font-bold bg-white"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block text-slate-600">ອາຍຸການໃຊ້ງານ (Lifespan Years)</label>
-                  <input
-                    type="number"
-                    required
-                    value={lifespanYears}
-                    onChange={(e) => setLifespanYears(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 border rounded-xl font-mono text-center font-bold bg-white"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block text-slate-600">ຄວາມຈຸແຜ່ນພິມລວມ (Lifetime Capacity)</label>
-                  <input
-                    type="number"
-                    required
-                    value={lifetimeCapacity}
-                    onChange={(e) => setLifetimeCapacity(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 border rounded-xl font-mono text-center font-bold bg-white"
-                  />
-                </div>
-              </div>
-            </div>
+            <EquipmentInboundForm
+              machineCategory={machineCategory}
+              handleMachineCategoryChange={handleMachineCategoryChange}
+              machineName={machineName}
+              setMachineName={setMachineName}
+              purchaseCost={purchaseCost}
+              setPurchaseCost={setPurchaseCost}
+              lifespanYears={lifespanYears}
+              setLifespanYears={setLifespanYears}
+              lifetimeCapacity={lifetimeCapacity}
+              setLifetimeCapacity={setLifetimeCapacity}
+              supplierName={supplierName}
+              setSupplierName={setSupplierName}
+              supplierContact={supplierContact}
+              setSupplierContact={setSupplierContact}
+              inkType={inkType}
+              setInkType={setInkType}
+              printTech={printTech}
+              setPrintTech={setPrintTech}
+              maxWidth={maxWidth}
+              setMaxWidth={setMaxWidth}
+              blackYieldPages={blackYieldPages}
+              setBlackYieldPages={setBlackYieldPages}
+              blackCapacityMl={blackCapacityMl}
+              setBlackCapacityMl={setBlackCapacityMl}
+              colorYieldPages={colorYieldPages}
+              setColorYieldPages={setColorYieldPages}
+              colorCapacityMl={colorCapacityMl}
+              setColorCapacityMl={setColorCapacityMl}
+              clickRateBW={clickRateBW}
+              setClickRateBW={setClickRateBW}
+              clickRateColor={clickRateColor}
+              setClickRateColor={setClickRateColor}
+              linkedInkSku={linkedInkSku}
+              setLinkedInkSku={setLinkedInkSku}
+              blackMlPerSheet={blackMlPerSheet}
+              colorMlPerSheet={colorMlPerSheet}
+              cutCapacity={cutCapacity}
+              setCutCapacity={setCutCapacity}
+              bladeDepreciationPerCut={bladeDepreciationPerCut}
+              setBladeDepreciationPerCut={setBladeDepreciationPerCut}
+              laminationWidth={laminationWidth}
+              setLaminationWidth={setLaminationWidth}
+              bindingMethod={bindingMethod}
+              setBindingMethod={setBindingMethod}
+              itemPhoto={itemPhoto}
+              setItemPhoto={setItemPhoto}
+              paymentSlip={paymentSlip}
+              setPaymentSlip={setPaymentSlip}
+              handleFileUpload={handleFileUpload}
+            />
           )}
 
-          {/* Dual Image Uploads Section */}
-          <div className="pt-4 border-t border-slate-100 space-y-3">
-            <span className="text-xs font-black text-slate-800 uppercase tracking-wider block">
-              ຮູບພາບ & ຫຼັກຖານການຈ່າຍເງິນ (Images & Attachments)
-            </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Item Photo Upload Dropzone */}
-              <div className="border-2 border-dashed border-slate-200 hover:border-sky-500 rounded-2xl p-4 transition bg-slate-50/50 flex flex-col items-center justify-center text-center space-y-2 relative overflow-hidden">
-                {itemPhoto ? (
-                  <div className="relative w-full h-32">
-                    <img src={itemPhoto} alt="Item Preview" className="w-full h-full object-contain rounded-xl" />
-                    <button
-                      type="button"
-                      onClick={() => setItemPhoto(null)}
-                      className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-full shadow-sm hover:bg-red-700"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ) : (
-                  <label className="cursor-pointer flex flex-col items-center justify-center w-full h-32 space-y-1">
-                    <Upload className="w-6 h-6 text-slate-400" />
-                    <span className="text-xs font-bold text-slate-700">ຮູບພາບສິນຄ້າ (Item Photo)</span>
-                    <span className="text-[10px] text-slate-400">Click to upload product image</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleFileUpload(e, setItemPhoto)}
-                      className="hidden"
-                    />
-                  </label>
-                )}
-              </div>
-
-              {/* Payment Slip Upload Dropzone */}
-              <div className="border-2 border-dashed border-slate-200 hover:border-sky-500 rounded-2xl p-4 transition bg-slate-50/50 flex flex-col items-center justify-center text-center space-y-2 relative overflow-hidden">
-                {paymentSlip ? (
-                  <div className="relative w-full h-32">
-                    <img src={paymentSlip} alt="Slip Preview" className="w-full h-full object-contain rounded-xl" />
-                    <button
-                      type="button"
-                      onClick={() => setPaymentSlip(null)}
-                      className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-full shadow-sm hover:bg-red-700"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ) : (
-                  <label className="cursor-pointer flex flex-col items-center justify-center w-full h-32 space-y-1">
-                    <Upload className="w-6 h-6 text-slate-400" />
-                    <span className="text-xs font-bold text-slate-700">ຫຼັກຖານການຈ່າຍເງິນ / ສະລິບ (Payment Slip)</span>
-                    <span className="text-[10px] text-slate-400">Click to upload transaction slip</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleFileUpload(e, setPaymentSlip)}
-                      className="hidden"
-                    />
-                  </label>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Submit Action */}
-          <div className="flex justify-between items-center pt-6 border-t border-slate-100">
+          {/* Form Action Controls */}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
             <button
               type="button"
               onClick={onBack}
-              className="px-5 py-3 border rounded-2xl font-black text-xs hover:bg-slate-50 transition"
+              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition"
             >
-              ຍົກເລີກ
+              ຍົກເລີກ (Cancel)
             </button>
-
             <button
               type="submit"
-              className="px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs shadow-lg shadow-emerald-500/20 transition active:scale-95 flex items-center gap-2"
+              className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-black text-xs shadow-md transition active:scale-95"
             >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>ຢືນຢັນບັນທຶກການນຳເຂົ້າ (Confirm Inbound Procurement)</span>
+              ບັນທຶກນຳເຂົ້າ ({inboundCategory === 'Materials' ? 'Save Material Stock' : 'Save Machinery Asset'})
             </button>
           </div>
         </form>
