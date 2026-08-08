@@ -3,9 +3,10 @@ import { ArrowLeft, Trash2, Edit3, ShieldAlert, Package, Calendar, Truck, Layers
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
 import EditMaterialModal from './EditMaterialModal';
+import ConfirmDeleteModal, { DeleteActionButton } from '../common/ConfirmDeleteModal';
 
 export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { inventory, deleteInventoryBatch, editInventoryBatch, equipment, showToast } = useApp();
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -127,148 +128,245 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
     }
   };
 
+  const currentLang = i18n.language || 'lo';
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 space-y-6 animate-fade-in text-slate-800 font-sans pb-12">
       {/* Header & Back Navigation */}
       <div className="flex items-center justify-between gap-4 bg-white px-6 py-5 rounded-3xl border border-slate-200 shadow-sm">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-xs sm:text-sm font-black text-slate-600 hover:text-slate-900 transition py-2.5 px-4 bg-slate-100 rounded-2xl border border-slate-200 active:scale-95 w-fit"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>{t('common.back')}</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 text-xs sm:text-sm font-black text-slate-600 hover:text-slate-900 transition py-2.5 px-4 bg-slate-100 rounded-2xl border border-slate-200 active:scale-95 cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>{t('common.back')}</span>
+          </button>
+          <div>
+            <h2 className="text-xl font-black text-slate-900">{targetItem.name}</h2>
+            <span className="text-xs font-mono text-slate-400 font-bold">SKU: {targetItem.id || lotData.id}</span>
+          </div>
+        </div>
+
+        <span className="px-3 py-1 bg-sky-50 text-sky-700 font-mono font-black text-xs rounded-full border border-sky-200 uppercase">
+          {targetItem.category || 'General'}
+        </span>
       </div>
 
-      {/* Main Material Overview Layout: 2-Column Grid */}
-      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
-          {/* Left Column: Product Image Card */}
-          <div className="space-y-3">
-            <span className="text-xs font-black text-slate-700 uppercase tracking-wider block">
-              ຮູບພາບສິນຄ້າ (Product Image)
+      {/* Top Warehouse KPI Metrics: On-Hand Stock (Dual-Unit), Unit Cost, Stock Status */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* KPI 1: Dual Unit Current Stock */}
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider block">
+              {currentLang === 'lo' ? 'ຈຳນວນສະຕ໋ອກຄົງເຫຼືອ (On-Hand Stock)' : 'On-Hand Stock'}
             </span>
-            <div className="bg-slate-50 border border-slate-200 rounded-3xl p-4 flex items-center justify-center min-h-[260px] relative overflow-hidden">
-              {(targetItem.itemPhoto || lotData.itemPhoto) ? (
-                <img 
-                  src={targetItem.itemPhoto || lotData.itemPhoto} 
-                  alt={targetItem.name}
-                  className="w-full h-64 object-contain rounded-2xl" 
-                />
-              ) : (
-                <div className="text-center space-y-2 p-6">
-                  <Package className="w-12 h-12 text-slate-300 mx-auto" />
-                  <span className="text-xs font-bold text-slate-400 block">
-                    ບໍ່ມີຮູບພາບສິນຄ້າ (No Product Image)
-                  </span>
-                </div>
+            <div className="mt-1">
+              {renderDualUnitQuantity(
+                lotData.currentQty || targetItem.currentStock || 0,
+                targetItem.category,
+                targetItem.purchaseUnit,
+                targetItem.consumptionUnit,
+                targetItem.itemsPerPurchaseUnit
               )}
             </div>
           </div>
+          <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-900 shrink-0">
+            <Package className="w-5 h-5" />
+          </div>
+        </div>
 
-          {/* Right Column: Material Parameters & Specifications */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-              <div className="space-y-1">
-                <span className="inline-flex items-center px-3 py-1 bg-sky-50 text-sky-700 font-mono font-black text-xs rounded-full border border-sky-200 uppercase">
-                  {targetItem.category || 'General'}
-                </span>
-                <h2 className="text-2xl sm:text-3xl font-black text-slate-900 mt-1">
-                  {targetItem.name}
-                </h2>
-              </div>
+        {/* KPI 2: Unit Cost LAK */}
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider block">
+              {currentLang === 'lo' ? 'ຕົ້ນທຶນຕໍ່ໜ່ວຍເບີກ (Unit Cost)' : 'Consumption Unit Cost'}
+            </span>
+            <span className="text-xl font-black text-emerald-600 font-mono block mt-1">
+              {formatLAK(lotData.costPerSheet || targetItem.costPerConsumptionUnit)}
+              <span className="text-xs text-slate-400 font-bold ml-1">/{targetItem.consumptionUnit || 'แผ่น'}</span>
+            </span>
+          </div>
+          <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
+            <Truck className="w-5 h-5" />
+          </div>
+        </div>
 
-              <div className="text-right font-mono">
-                <span className="text-[10px] text-slate-400 font-black block uppercase">SKU / LOT</span>
-                <span className="text-sm font-black text-slate-800">{lotData.id}</span>
-              </div>
-            </div>
-
-            {/* Key Metrics Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-slate-50 p-4.5 rounded-2xl border border-slate-200">
-                <span className="text-[10px] text-slate-500 font-bold uppercase block">{t('inventory_status.remaining_qty')}</span>
-                <div className="mt-1">
-                  {renderDualUnitQuantity(
-                    lotData.currentQty,
-                    targetItem.category,
-                    targetItem.purchaseUnit,
-                    targetItem.consumptionUnit,
-                    targetItem.itemsPerPurchaseUnit
-                  )}
-                </div>
-              </div>
-
-              <div className="bg-emerald-50/70 p-4.5 rounded-2xl border border-emerald-200">
-                <span className="text-[10px] text-emerald-700 font-black uppercase block">{t('inventory_status.unit_cost')}</span>
-                <span className="text-xl font-black text-emerald-800 block mt-1 font-mono">
-                  {formatLAK(lotData.costPerSheet || targetItem.costPerConsumptionUnit)}
-                </span>
-                <span className="text-[10px] text-emerald-600 block font-semibold">/{targetItem.consumptionUnit || 'Unit'}</span>
-              </div>
-
-              <div className="bg-slate-50 p-4.5 rounded-2xl border border-slate-200">
-                <span className="text-[10px] text-slate-500 font-bold uppercase block">{t('inventory_status.received_initial')}</span>
-                <span className="text-sm font-black text-slate-900 block mt-1 font-mono">{lotData.purchaseDate || '-'}</span>
-              </div>
-
-              <div className="bg-slate-50 p-4.5 rounded-2xl border border-slate-200">
-                <span className="text-[10px] text-slate-500 font-bold uppercase block">{t('inventory.supplier_name')}</span>
-                <span className="text-sm font-black text-slate-900 block mt-1 truncate">{lotData.supplierName || 'Vientiane Supply'}</span>
-                {(lotData.supplierContact || targetItem.supplierContact) && (
-                  <span className="text-[10px] font-mono text-sky-600 font-bold block mt-0.5 truncate">
-                    📞 {lotData.supplierContact || targetItem.supplierContact}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Conditional Multi-Select Machinery Link Section - Ink Category Only */}
-            {isInkCategory && (
-              <div className="bg-indigo-50/50 p-5 rounded-2xl border border-indigo-100 space-y-2">
-                <span className="text-xs text-indigo-700 font-black uppercase block">{t('equipment_mapping.linked_material')}</span>
-                {(() => {
-                  const machineIds = targetItem.linkedMachineIds || (targetItem.linkedMachineId ? [targetItem.linkedMachineId] : []);
-                  const machines = equipment?.filter(eq => machineIds.includes(eq.id) || eq.linkedMaterialSku === targetItem.id);
-
-                  if (machines && machines.length > 0) {
-                    return (
-                      <div className="flex flex-wrap gap-2">
-                        {machines.map(m => (
-                          <span key={m.id} className="px-3 py-1 bg-white border border-indigo-200 text-indigo-900 rounded-xl text-xs font-black shadow-sm">
-                            🖨️ {m.name} ({m.id})
-                          </span>
-                        ))}
-                      </div>
-                    );
-                  }
+        {/* KPI 3: Stock Level Status */}
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider block">
+              {currentLang === 'lo' ? 'ສະຖານະສະຕ໋ອກ (Stock Level)' : 'Stock Level Status'}
+            </span>
+            <div className="mt-1.5">
+              {(() => {
+                const qty = lotData.currentQty || targetItem.currentStock || 0;
+                if (qty <= 0) {
                   return (
-                    <p className="text-xs font-bold text-slate-400">
-                      {t('equipment_mapping.no_linked_material')}
-                    </p>
+                    <span className="px-3 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-full text-xs font-black">
+                      🔴 {currentLang === 'lo' ? 'ໝົດສະຕ໋ອກ (Out of Stock)' : 'Out of Stock'}
+                    </span>
                   );
-                })()}
+                }
+                if (qty < 100) {
+                  return (
+                    <span className="px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-black">
+                      ⚠️ {currentLang === 'lo' ? 'ໃກ້ໝົດສະຕ໋ອກ (Low Stock Warning)' : 'Low Stock Warning'}
+                    </span>
+                  );
+                }
+                return (
+                  <span className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-black">
+                    🟢 {currentLang === 'lo' ? 'ພ້ອມໃຊ້ງານ (In Stock)' : 'In Stock'}
+                  </span>
+                );
+              })()}
+            </div>
+          </div>
+          <div className="w-11 h-11 rounded-2xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-700 shrink-0">
+            <Layers className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* Main Details Card */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-6">
+        {/* Main Details Grid: 2 Columns */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Card 1: Procurement & Master Info */}
+          <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-3 flex items-center gap-2">
+              <Package className="w-4 h-4 text-sky-600" />
+              <span>{currentLang === 'lo' ? 'ລາຍລະອຽດການສັ່ງຊື້ & ຜູ້ສະໜອງ' : 'Procurement & Supplier Info'}</span>
+            </h3>
+            <div className="grid grid-cols-2 gap-4 text-xs font-medium">
+              <div>
+                <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ລະຫັດ PO / Ref ID:' : 'PO / Ref ID:'}</span>
+                <span className="font-mono text-slate-900 font-bold">{lotData.poNumber || lotData.id || '-'}</span>
               </div>
-            )}
+              <div>
+                <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ວັນທີຮັບ/ຕິດຕັ້ງ:' : 'Receipt Date:'}</span>
+                <span className="text-slate-900 font-bold">{lotData.purchaseDate || '-'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ຜູ້ສະໜອງ/ร้านค้า:' : 'Supplier Name:'}</span>
+                <span className="text-slate-900 font-bold">{lotData.supplierName || targetItem.supplierName || '-'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ช่องทางชำระเงิน:' : 'Payment Method:'}</span>
+                <span className="font-bold text-slate-900">
+                  {lotData.paymentMethod === 'CASH' ? (currentLang === 'lo' ? 'เงินสด (Cash)' : 'Cash') : (currentLang === 'lo' ? 'ໂອນเงิน (Bank Transfer)' : 'Bank Transfer')}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ຈຳນວນນຳເຂົ້າเริ่มต้น:' : 'Initial Received Qty:'}</span>
+                <span className="font-mono text-slate-900 font-bold">{lotData.initialQty || lotData.currentQty || 1} {targetItem.unit || targetItem.purchaseUnit || 'Units'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ມູນຄ່ານຳເຂົ້າລວມ:' : 'Total Purchase Value:'}</span>
+                <span className="font-mono text-emerald-600 font-black text-sm block">
+                  {formatLAK(lotData.purchasePrice || lotData.costPerSheet || targetItem.costPerConsumptionUnit)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: ERP Technical Specs */}
+          <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-3 flex items-center gap-2">
+              <Layers className="w-4 h-4 text-purple-600" />
+              <span>{currentLang === 'lo' ? 'ສະເປັກທາງເຕັກນິກ (ERP Technical Specs)' : 'ERP Technical Specs'}</span>
+            </h3>
+            <div className="grid grid-cols-2 gap-4 text-xs font-medium">
+              {Object.entries(targetItem.specs || lotData.specs || {}).map(([key, val]) => {
+                if (!val || key === 'tariffRate' || key === 'clickRate') return null;
+                
+                const labelMap = {
+                  formFactor: currentLang === 'lo' ? 'ຮູບແບບບັນຈຸພັນ' : 'Form Factor',
+                  grammage: currentLang === 'lo' ? 'ຄວາມໜາ/ນ້ຳໜັກ (GSM)' : 'Grammage (GSM)',
+                  standardSize: currentLang === 'lo' ? 'ຂະໜາດມາດຕະຖານ' : 'Standard Size',
+                  widthMm: currentLang === 'lo' ? 'ໜ້າກວ້າງ (mm)' : 'Width (mm)',
+                  length: currentLang === 'lo' ? 'ຄວາມຍາວລວມ (m)' : 'Length (m)',
+                  packQty: currentLang === 'lo' ? 'ຈຳນວນແຜ່ນຕໍ່ຣີມ' : 'Pack Qty',
+                  inkType: currentLang === 'lo' ? 'ປະເພດໝຶກພິມ' : 'Ink Type',
+                  colorModel: currentLang === 'lo' ? 'เฉดสี / ຕະລັບສີ' : 'Color Option',
+                  volumePerBottle: currentLang === 'lo' ? 'ບໍລິມາດບັນຈຸ' : 'Volume/Bottle',
+                  compatiblePrinter: currentLang === 'lo' ? 'ເຄື່ອງພິມທີ່ເຊື່ອມໂຍງ' : 'Linked Printer',
+                  hwType: currentLang === 'lo' ? 'ໝວດໝູ່ອຸປະກອນ' : 'Hardware Type',
+                  hwSpec: currentLang === 'lo' ? 'ເບີ/ສະເປັກສະເພາະ' : 'Hardware Spec',
+                  packCount: currentLang === 'lo' ? 'ຈຳນວນບັນຈຸຕໍ່ກ່ອງ' : 'Pack Count',
+                  containerWeight: currentLang === 'lo' ? 'ນ້ຳໜັກບັນຈຸ' : 'Container Weight'
+                };
+
+                return (
+                  <div key={key} className="bg-white p-3 rounded-2xl border border-slate-200">
+                    <span className="text-slate-400 block text-[10px] font-semibold">
+                      {labelMap[key] || key.replace(/([A-Z])/g, ' $1')}:
+                    </span>
+                    <span className="text-slate-900 font-bold block mt-0.5">
+                      {Array.isArray(val) ? val.join(', ') : val}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Card 3: FIFO Job Order Usage Ledger Table */}
+          <div className="lg:col-span-2 bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-3 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-sky-600" />
+                <span>{currentLang === 'lo' ? 'ປະວັດການເບີກໃຊ້ງານຜະລິດ (FIFO Consumption Ledger)' : 'FIFO Job Order Consumption Ledger'}</span>
+              </span>
+              <span className="text-[10px] font-bold text-slate-400 bg-white px-2.5 py-1 rounded-full border border-slate-200">
+                Real-time Stock Deductions
+              </span>
+            </h3>
+
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                    <th className="py-3 px-4">ວັນທີເບີກ</th>
+                    <th className="py-3 px-4">ລະຫັດໃບສັ່ງພິມ (Job Order Ref)</th>
+                    <th className="py-3 px-4">ລາຍລະອຽດການຜະລິດ</th>
+                    <th className="py-3 px-4 text-right">ຈຳນວນເບີກ</th>
+                    <th className="py-3 px-4 text-right">ຕົ້ນທຶນรวม (LAK ₭)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {lotData.usageHistory && lotData.usageHistory.length > 0 ? (
+                    lotData.usageHistory.map((u, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50 transition">
+                        <td className="py-3 px-4 font-mono font-bold text-slate-600">{u.date}</td>
+                        <td className="py-3 px-4 font-mono font-bold text-sky-600">{u.jobId}</td>
+                        <td className="py-3 px-4 text-slate-800">{u.description || 'Production Printing Job'}</td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">{u.qty} {targetItem.consumptionUnit || 'Units'}</td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600">{formatLAK(u.cost)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="5" className="py-8 text-center text-slate-400 font-semibold">
+                        {currentLang === 'lo' ? 'ຍັງບໍ່ມີປະວັດການເບີກໃຊ້ງານສິນຄ້ານີ້' : 'No consumption history recorded yet'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
         {/* Bottom Action Footer */}
-        <div className="flex items-center justify-end gap-3 pt-6 border-t border-slate-100">
-          <button
-            onClick={() => setIsDeleteModalOpen(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-2xl font-black text-xs transition active:scale-95"
-          >
-            <Trash2 className="w-4 h-4" />
-            <span>{t('common.delete')}</span>
-          </button>
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+          <DeleteActionButton onClick={() => setIsDeleteModalOpen(true)} />
           
-          {/* Edit button allowed only for Ink category to update Multi-Select Printer Links */}
           {isInkCategory ? (
             <button
               onClick={() => setIsEditModalOpen(true)}
-              className="flex items-center gap-2 px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-2xl font-black text-xs shadow-sm transition active:scale-95"
+              className="flex items-center gap-2 px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-2xl font-black text-xs shadow-sm transition active:scale-95 cursor-pointer"
             >
               <Edit3 className="w-4 h-4" />
               <span>{t('common.edit')} (Link Printers)</span>
@@ -291,37 +389,13 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
         />
       )}
 
-      {/* Delete Confirmation Modal */}
-      {isDeleteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-xl overflow-hidden border border-slate-200 p-6 space-y-4">
-            <div className="flex items-center gap-3 text-red-600">
-              <ShieldAlert className="w-7 h-7" />
-              <div>
-                <h3 className="font-black text-base text-slate-900">{t('common.confirm')} {t('common.delete')}</h3>
-                <p className="text-xs text-slate-500 font-semibold">{targetItem.name} (#{lotData.id})</p>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsDeleteModalOpen(false)}
-                className="px-4 py-2 border border-slate-200 rounded-xl font-bold text-xs text-slate-700 hover:bg-slate-50"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteRecord}
-                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black text-xs shadow-sm"
-              >
-                {t('common.delete')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Reusable Confirm Delete Modal Component */}
+      <ConfirmDeleteModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleDeleteRecord}
+        itemName={`${targetItem.name} (${lotData.id})`}
+      />
     </div>
   );
 }

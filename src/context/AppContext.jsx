@@ -543,6 +543,28 @@ export const AppProvider = ({ children }) => {
     }
     return initialCustomers;
   });
+  const [linkedInboundEntries, setLinkedInboundEntries] = useState([
+    {
+      id: 'INB-INK-001',
+      poNumber: '#LOT-INK-001',
+      receiptDate: '2026-08-01',
+      category: 'INK',
+      name: 'น้ำหมึก Epson 003 Genuine CMYK Ink Set',
+      sku: 'INK-EP-003',
+      linkedPrinterId: 'mc-epson-l15150',
+      linkedPrinterName: 'Epson EcoTank L15150 (A3+ Multi-Function)',
+      colorModel: 'Full CMYK Set',
+      isoStandardYieldSheets: 7500,
+      totalPrice: 450000, // LAK
+      unitCostPerPage: 60, // 450,000 / 7,500 = ₭60 / sheet
+      paymentMethod: 'TRANSFER',
+      supplier: 'Epson Lao Official',
+      docs: {
+        productPhoto: 'https://images.unsplash.com/photo-1563089145-599997674d42?w=500&auto=format&fit=crop',
+        paymentSlip: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=500&auto=format&fit=crop'
+      }
+    }
+  ]);
   const [offcuts, setOffcuts] = useState(() => {
     const saved = localStorage.getItem('ss_print_offcuts_v6');
     return saved ? JSON.parse(saved) : initialOffcuts;
@@ -1231,9 +1253,13 @@ export const AppProvider = ({ children }) => {
       purchaseDate: poData.purchaseDate || new Date().toISOString().split('T')[0],
       totalCost: Number(poData.totalCost || 0),
       qty: Number(poData.qty || 1),
-      unitName: poData.unitName || 'Unit'
+      unitName: poData.unitName || ''
     };
     setPurchaseOrders(prev => [newPo, ...prev]);
+  };
+
+  const deletePurchaseOrder = (targetId) => {
+    setPurchaseOrders(prev => prev.filter(p => (p.poId !== targetId && p.id !== targetId)));
   };
 
   const addCustomer = (customerData) => {
@@ -1285,6 +1311,8 @@ export const AppProvider = ({ children }) => {
       customers,
       offcuts,
       purchaseOrders,
+      setPurchaseOrders,
+      deletePurchaseOrder,
       customCategories,
       setCustomCategories,
       masterSpecsPool,

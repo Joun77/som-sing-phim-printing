@@ -72,8 +72,14 @@ export default function InventoryManagement() {
     );
   }
 
-  // Filter logic
+  // Category tabs for Inventory (Excludes Machinery: Printer, Cutter, Laminator)
+  const categoryTabs = ['All', 'Paper', 'Ink', 'Hardware', 'Finishing'];
+
+  // Filter logic: Exclude Machinery items (category PRINTER or CUTTER) from warehouse inventory
   const filteredItems = inventory.filter(item => {
+    const isMachinery = item.category === 'PRINTER' || item.category === 'CUTTER' || item.category === 'Equipment';
+    if (isMachinery) return false;
+
     const matchesTab = activeTab === 'All' || item.category === activeTab;
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           item.id.toLowerCase().includes(searchQuery.toLowerCase());
@@ -88,9 +94,11 @@ export default function InventoryManagement() {
         <div>
           <h2 className="font-extrabold text-2xl text-slate-900 tracking-tight flex items-center gap-2">
             <Boxes className="w-8 h-8 text-accent-sky" />
-            <span>{currentLang === 'lo' ? 'ຈັດການສະຕ໋ອກ & ວັດຖຸດິບ' : 'Warehouse Inventory'}</span>
+            <span>{currentLang === 'lo' ? 'ຈັດການສະຕ໋ອກ & ວັດຖຸດິບ (ຄັງສິນຄ້າ)' : 'Warehouse Inventory & Materials'}</span>
           </h2>
-          <p className="text-sm font-semibold text-slate-400 mt-1">FIFO Stock Ledger, Dynamic Batches, & Offcut leftovers</p>
+          <p className="text-sm font-semibold text-slate-400 mt-1">
+            {currentLang === 'lo' ? 'ສະຕ໋ອກເຈ້ຍ, ໝຶກພິມ, ແລະ ອຸປະກອນ (ບໍ່ລວມເຄື່ອງຈັກ)' : 'Paper, Inks, & Consumables Ledger (Excluding Machinery)'}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2.5">
           <button
@@ -113,7 +121,7 @@ export default function InventoryManagement() {
       {/* Tabs & Search */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 border border-slate-200/60 rounded-2xl font-bold text-xs">
-          {['All', 'Paper', 'Ink', 'Film', 'Finishing'].map(tab => (
+          {categoryTabs.map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -123,7 +131,7 @@ export default function InventoryManagement() {
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              {tab === 'All' ? 'All Items' : tab}
+              {tab === 'All' ? (currentLang === 'lo' ? 'ທັງໝົດ' : 'All Items') : tab}
             </button>
           ))}
         </div>
