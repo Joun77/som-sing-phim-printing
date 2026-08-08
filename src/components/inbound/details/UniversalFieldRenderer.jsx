@@ -86,14 +86,20 @@ export function formatValue(value, key = '', item = {}, lang = 'lo') {
     if (k.includes('cost') || k.includes('price') || k.includes('rate') || k.includes('depreciation')) {
       return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(value).replace('LAK', '₭');
     }
-    // Only append unitName if explicitly saved in item, otherwise display raw numeric quantity
+    // Only append unitName if explicitly recorded on item
     if ((key === 'qty' || key === 'quantity') && item.unitName) {
       return `${value.toLocaleString()} ${item.unitName}`;
     }
     return value.toLocaleString();
   }
 
-  if (typeof value === 'object') return JSON.stringify(value);
+  if (typeof value === 'object' && value !== null) {
+    if (value.lo || value.en) {
+      return lang === 'en' ? (value.en || value.lo) : (value.lo || value.en);
+    }
+    return JSON.stringify(value);
+  }
+
   return String(value);
 }
 
@@ -103,7 +109,7 @@ export default function UniversalFieldRenderer({ item, lang = 'lo' }) {
   const seenCanonicalKeys = new Set();
   const fieldsList = [];
 
-  // 1. Process customSpecs entries first (dynamic bilingual field objects)
+  // 1. Process customSpecs entries dynamically
   if (item.customSpecs && typeof item.customSpecs === 'object') {
     Object.entries(item.customSpecs).forEach(([key, specObj]) => {
       const canonicalKey = ALIAS_MAP[key] || key;
@@ -112,7 +118,7 @@ export default function UniversalFieldRenderer({ item, lang = 'lo' }) {
       let labelText = resolveBilingualLabel(canonicalKey, lang);
       let valText = specObj;
 
-      if (specObj && typeof specObj === 'object' && !Array.isArray(specObj)) {
+      if (specObj && typeof specObj === 'object' && !Array.isArray(specObj) && (specObj.label !== undefined || specObj.value !== undefined)) {
         const labelObj = specObj.label;
         if (labelObj && typeof labelObj === 'object') {
           labelText = lang === 'en' ? (labelObj.en || labelObj.lo) : (labelObj.lo || labelObj.en);

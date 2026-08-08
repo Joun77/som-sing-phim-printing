@@ -290,6 +290,8 @@ export default function CategoryBuilder({
                     <option value="Text">Text</option>
                     <option value="Number">Number</option>
                     <option value="Date">Date</option>
+                    <option value="Link">Link (URL)</option>
+                    <option value="Image">Image (URL)</option>
                     <option value="Select">Select</option>
                   </select>
 
