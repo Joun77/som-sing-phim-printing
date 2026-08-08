@@ -117,7 +117,7 @@ export default function InboundDetailsPage({ poId, onBack }) {
           <UniversalFieldRenderer item={po} lang={currentLang} />
 
           {/* Media Attachments Section */}
-          <InboundMediaPreview itemPhoto={itemPhoto} paymentSlip={paymentSlip} />
+          <InboundMediaPreview itemPhoto={itemPhoto} paymentSlip={paymentSlip} lang={currentLang} />
         </div>
       </div>
 

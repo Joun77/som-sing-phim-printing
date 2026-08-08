@@ -552,33 +552,54 @@ export const AppProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : initialPurchaseOrders;
   });
 
-  // Sync to localstorage
+  // Safe LocalStorage setter with fallback to prevent QuotaExceededError when storing Base64 images
+  const safeSetItem = (key, data) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (err) {
+      console.warn(`[LocalStorage] Quota exceeded on key "${key}". Stripping large image payloads to fit quota...`, err);
+      try {
+        // Strip heavy Base64 strings from objects if localStorage is full
+        const sanitized = JSON.parse(JSON.stringify(data, (k, v) => {
+          if (typeof v === 'string' && v.startsWith('data:image/') && v.length > 5000) {
+            return '[IMAGE_PAYLOAD_TRUNCATED_TO_SAVE_SPACE]';
+          }
+          return v;
+        }));
+        localStorage.setItem(key, JSON.stringify(sanitized));
+      } catch (innerErr) {
+        console.error(`[LocalStorage] Unable to write key "${key}" even after image sanitization.`, innerErr);
+      }
+    }
+  };
+
+  // Sync to localstorage safely
   useEffect(() => {
-    localStorage.setItem('ss_print_inventory_v6', JSON.stringify(inventory));
+    safeSetItem('ss_print_inventory_v6', inventory);
   }, [inventory]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_equipment_v6', JSON.stringify(equipment));
+    safeSetItem('ss_print_equipment_v6', equipment);
   }, [equipment]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_orders_v6', JSON.stringify(orders));
+    safeSetItem('ss_print_orders_v6', orders);
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_spoilage_v6', JSON.stringify(spoilageLogs));
+    safeSetItem('ss_print_spoilage_v6', spoilageLogs);
   }, [spoilageLogs]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_customers_v6', JSON.stringify(customers));
+    safeSetItem('ss_print_customers_v6', customers);
   }, [customers]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_offcuts_v6', JSON.stringify(offcuts));
+    safeSetItem('ss_print_offcuts_v6', offcuts);
   }, [offcuts]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_purchase_orders_v6', JSON.stringify(purchaseOrders));
+    safeSetItem('ss_print_purchase_orders_v6', purchaseOrders);
   }, [purchaseOrders]);
 
   // Master Categories Registry & Specs Pool Persistence
@@ -593,11 +614,11 @@ export const AppProvider = ({ children }) => {
   });
 
   useEffect(() => {
-    localStorage.setItem('ss_print_custom_categories_v6', JSON.stringify(customCategories));
+    safeSetItem('ss_print_custom_categories_v6', customCategories);
   }, [customCategories]);
 
   useEffect(() => {
-    localStorage.setItem('ss_print_master_specs_pool_v6', JSON.stringify(masterSpecsPool));
+    safeSetItem('ss_print_master_specs_pool_v6', masterSpecsPool);
   }, [masterSpecsPool]);
 
   // Solver for overdue orders

@@ -71,16 +71,28 @@ export function resolveBilingualLabel(canonicalKey, lang = 'lo') {
     .trim();
 }
 
-export function formatValue(value, key = '') {
-  if (value === null || value === undefined) return '-';
+export function formatValue(value, key = '', item = {}, lang = 'lo') {
+  const emptyPlaceholder = lang === 'en' ? 'No Data' : 'ບໍ່ມີຂໍ້ມູນ';
+  const isEmptyValue = value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+
+  if (isEmptyValue) {
+    return <span className="text-slate-400 italic font-normal">{emptyPlaceholder}</span>;
+  }
+
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+
   if (typeof value === 'number') {
     const k = key.toLowerCase();
     if (k.includes('cost') || k.includes('price') || k.includes('rate') || k.includes('depreciation')) {
       return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(value).replace('LAK', '₭');
     }
+    // Only append unitName if explicitly saved in item, otherwise display raw numeric quantity
+    if ((key === 'qty' || key === 'quantity') && item.unitName) {
+      return `${value.toLocaleString()} ${item.unitName}`;
+    }
     return value.toLocaleString();
   }
+
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
 }
@@ -110,22 +122,19 @@ export default function UniversalFieldRenderer({ item, lang = 'lo' }) {
         valText = specObj.value;
       }
 
-      if (valText !== undefined && valText !== null && valText !== '') {
-        seenCanonicalKeys.add(canonicalKey);
-        fieldsList.push({
-          key: canonicalKey,
-          label: labelText,
-          value: formatValue(valText, canonicalKey),
-          isCustom: true
-        });
-      }
+      seenCanonicalKeys.add(canonicalKey);
+      fieldsList.push({
+        key: canonicalKey,
+        label: labelText,
+        value: formatValue(valText, canonicalKey, item, lang),
+        isCustom: true
+      });
     });
   }
 
   // 2. Process top-level item properties with deduplication
   Object.entries(item).forEach(([key, val]) => {
     if (EXCLUDED_KEYS.has(key) || key === 'customSpecs') return;
-    if (val === undefined || val === null || val === '') return;
 
     const canonicalKey = ALIAS_MAP[key] || key;
     if (seenCanonicalKeys.has(canonicalKey) || EXCLUDED_KEYS.has(canonicalKey)) return;
@@ -134,7 +143,7 @@ export default function UniversalFieldRenderer({ item, lang = 'lo' }) {
     fieldsList.push({
       key: canonicalKey,
       label: resolveBilingualLabel(canonicalKey, lang),
-      value: formatValue(val, canonicalKey),
+      value: formatValue(val, canonicalKey, item, lang),
       isCustom: false
     });
   });
@@ -165,9 +174,9 @@ export default function UniversalFieldRenderer({ item, lang = 'lo' }) {
             }`}>
               {field.label}
             </span>
-            <p className="text-sm font-black text-slate-900 mt-1 break-words">
+            <div className="text-sm font-black text-slate-900 mt-1 break-words">
               {field.value}
-            </p>
+            </div>
           </div>
         ))}
       </div>
