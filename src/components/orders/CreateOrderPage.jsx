@@ -196,13 +196,63 @@ export default function CreateOrderPage({
     setCurrentStep(2);
   };
 
-  const handleNextToStep3 = () => {
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [backendCalculationBreakdown, setBackendCalculationBreakdown] = useState([]);
+
+  const handleNextToStep3 = async () => {
     const unconfiguredItem = items.find(it => !it.isConfigured);
     if (unconfiguredItem) {
       showToast(`ກະລຸນາກຳນົດສເປກສິນຄ້າ "${unconfiguredItem.name}" ໃຫ້ຄົບກ່ອນດຳເນີນການຕໍ່`, 'warning');
       return;
     }
-    setCurrentStep(3);
+
+    setIsCalculating(true);
+    try {
+      const breakdowns = [];
+      for (const it of items) {
+        const paperItem = inventory ? inventory.find(p => p.id === it.paperId) : null;
+        const paperCost = paperItem ? (paperItem.costPerConsumptionUnit || 90) : 100;
+        const printerItem = equipment ? equipment.find(e => e.id === it.printerId) : null;
+        const inkCostPerMl = printerItem ? (printerItem.inkUnitCostMl || 500) : 500;
+
+        const payload = {
+          job_name: it.name,
+          quantity: Number(it.quantity || 1),
+          paper_sku: it.paperId || 'default-paper',
+          paper_cost_per_unit: paperCost,
+          paper_format: it.mediaType === 'Roll-fed' ? 'roll' : 'sheet',
+          ink_coverage_percent: Number(it.avgCoverage || 15),
+          ink_cost_per_ml: inkCostPerMl,
+          lamination_type: it.useLamination ? (it.laminationType || 'Glossy') : 'none',
+          lamination_cost: it.useLamination ? 150.0 : 0.0,
+          binding_type: it.useBinding ? (it.bindingType || 'Staple') : 'none',
+          binding_cost: it.useBinding ? 200.0 : 0.0,
+          labor_cost_per_hour: 25000.0,
+          estimated_hours: 0.5,
+          markup_margin: (Number(it.targetMarginPercent) || 35) / 100.0
+        };
+
+        const response = await fetch('http://localhost:8080/api/pricing/calculate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error('Backend pricing failure');
+        const data = await response.json();
+        breakdowns.push(data);
+      }
+
+      setBackendCalculationBreakdown(breakdowns);
+      setCurrentStep(3);
+      showToast('Calculated prices from backend pricing engine!', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Using local pricing fallback due to offline server.', 'warning');
+      setCurrentStep(3);
+    } finally {
+      setIsCalculating(false);
+    }
   };
 
   const handleSubmitFinal = (e) => {
@@ -230,37 +280,135 @@ export default function CreateOrderPage({
       finalAddress = cust ? cust.address : address;
     }
 
-    const orderItems = items.map(it => {
-      const costing = calculateItemCosting(it);
-      return {
+    const payload = {
+      customer_name: finalCustomerName,
+      customer_phone: finalPhone,
+      google_drive_link: artworkLink,
+      items: items.map(it => {
+        const paperItem = inventory ? inventory.find(p => p.id === it.paperId) : null;
+        const paperCost = paperItem ? (paperItem.costPerConsumptionUnit || 90) : 100;
+        const printerItem = equipment ? equipment.find(e => e.id === it.printerId) : null;
+        const inkCostPerMl = printerItem ? (printerItem.inkUnitCostMl || 500) : 500;
+
+        return {
+          job_name: it.name,
+          quantity: Number(it.quantity || 1),
+          paper_sku: it.paperId || 'default-paper',
+          paper_cost_per_unit: paperCost,
+          paper_format: it.mediaType === 'Roll-fed' ? 'roll' : 'sheet',
+          ink_coverage_percent: Number(it.avgCoverage || 15),
+          ink_cost_per_ml: inkCostPerMl,
+          lamination_type: it.useLamination ? (it.laminationType || 'Glossy') : 'none',
+          lamination_cost: it.useLamination ? 150.0 : 0.0,
+          binding_type: it.useBinding ? (it.bindingType || 'Staple') : 'none',
+          binding_cost: it.useBinding ? 200.0 : 0.0,
+          labor_cost_per_hour: 25000.0,
+          estimated_hours: 0.5,
+          markup_margin: (Number(it.targetMarginPercent) || 35) / 100.0,
+          specs: {
+            dimensions: `${it.jobWidth}x${it.jobHeight}mm`,
+            double_sided: it.isDoubleSided
+          }
+        };
+      })
+    };
+
+    fetch('http://localhost:8080/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(res => {
+      if (!res.ok) throw new Error('Order creation failed');
+      return res.json();
+    })
+    .then(orderData => {
+      if (paymentStatus === 'Deposit Paid' && depositAmountPaid > 0) {
+        return fetch(`http://localhost:8080/api/orders/${orderData.id}/deposit`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deposit_amount: Number(depositAmountPaid) })
+        })
+        .then(res => res.json())
+        .then(updatedOrder => {
+          addOrder({
+            id: updatedOrder.id,
+            orderNumber: updatedOrder.order_number,
+            customerName: updatedOrder.customer_name,
+            phone: updatedOrder.customer_phone,
+            items: updatedOrder.items.map(it => ({
+              id: it.id,
+              name: it.job_name,
+              quantity: it.quantity,
+              unitCost: it.unit_price_snapshot,
+              specs: 'Synced'
+            })),
+            totalPriceCharged: updatedOrder.total_price,
+            depositAmountPaid: updatedOrder.deposit_amount,
+            remainingUnpaidBalance: Math.max(0, updatedOrder.total_price - updatedOrder.deposit_amount),
+            paymentStatus: 'Deposit Paid',
+            status: 'Received',
+            promisedDeliveryDate: promisedDeliveryDate,
+            deliveryMethod: deliveryMethod,
+            artworkLink: updatedOrder.google_drive_link
+          });
+        });
+      } else {
+        addOrder({
+          id: orderData.id,
+          orderNumber: orderData.order_number,
+          customerName: orderData.customer_name,
+          phone: orderData.customer_phone,
+          items: orderData.items.map(it => ({
+            id: it.id,
+            name: it.job_name,
+            quantity: it.quantity,
+            unitCost: it.unit_price_snapshot,
+            specs: 'Synced'
+          })),
+          totalPriceCharged: orderData.total_price,
+          depositAmountPaid: orderData.deposit_amount,
+          remainingUnpaidBalance: orderData.total_price,
+          paymentStatus: paymentStatus === 'Fully Paid' ? 'Fully Paid' : 'Pending',
+          status: 'Received',
+          promisedDeliveryDate: promisedDeliveryDate,
+          deliveryMethod: deliveryMethod,
+          artworkLink: orderData.google_drive_link
+        });
+      }
+    })
+    .then(() => {
+      showToast('ເພີ່ມອໍເດີໃໝ່ ແລະ ຕັດສະຕ໋ອກ FIFO ສຳເລັດ!', 'success');
+      onBack();
+    })
+    .catch(err => {
+      console.error(err);
+      showToast('Sync failure. Defaulting order creation to local state storage.', 'warning');
+      const fallbackItems = items.map(it => ({
         id: it.paperId || 'paper-a4-80',
         name: it.name,
         quantity: it.quantity,
-        unitCost: Math.round(costing.unitPrice),
-        specs: `${it.jobWidth}x${it.jobHeight}mm, ${it.isDoubleSided ? '2 ໜ້າ' : '1 ໜ້າ'}, ${it.useLamination ? it.laminationType + ' ເຄືອບ' : 'ບໍ່ເຄືອບ'}`
-      };
+        unitCost: 15000,
+        specs: `${it.jobWidth}x${it.jobHeight}mm`
+      }));
+      addOrder({
+        customerName: finalCustomerName,
+        phone: finalPhone,
+        address: finalAddress,
+        items: fallbackItems,
+        totalPriceCharged: grandTotalBill,
+        depositAmountPaid: Number(depositAmountPaid),
+        remainingUnpaidBalance: Math.max(0, grandTotalBill - Number(depositAmountPaid)),
+        paymentMethod: 'BCEL One',
+        bankName: 'BCEL',
+        paymentStatus: paymentStatus,
+        artworkLink: artworkLink,
+        promisedDeliveryDate: promisedDeliveryDate || new Date().toISOString().split('T')[0],
+        deliveryMethod: deliveryMethod,
+        status: 'Received'
+      });
+      onBack();
     });
-
-    const orderData = {
-      customerName: finalCustomerName,
-      phone: finalPhone,
-      address: finalAddress,
-      items: orderItems,
-      totalPriceCharged: grandTotalBill,
-      depositAmountPaid: Number(depositAmountPaid),
-      remainingUnpaidBalance: Math.max(0, grandTotalBill - Number(depositAmountPaid)),
-      paymentMethod: 'BCEL One',
-      bankName: 'BCEL',
-      paymentStatus: paymentStatus,
-      artworkLink: artworkLink,
-      promisedDeliveryDate: promisedDeliveryDate || new Date().toISOString().split('T')[0],
-      deliveryMethod: deliveryMethod,
-      status: 'Received'
-    };
-
-    addOrder(orderData);
-    showToast('ເພີ່ມອໍເດີໃໝ່ ແລະ ຕັດສະຕ໋ອກ FIFO ສຳເລັດ!', 'success');
-    onBack();
   };
 
   if (editingItemIndex !== null && items[editingItemIndex]) {
@@ -693,6 +841,45 @@ export default function CreateOrderPage({
       {/* STEP 3: ORDER SUMMARY & STOCK DEDUCTION */}
       {currentStep === 3 && (
         <form onSubmit={handleSubmitFinal} className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6 animate-fade-in text-sm">
+          {backendCalculationBreakdown.length > 0 && (
+            <div className="space-y-3 bg-white p-5 rounded-2xl border border-slate-200/80">
+              <h5 className="font-black text-xs text-sky-950 uppercase tracking-wider flex items-center gap-1.5 border-b pb-2">
+                <Calculator className="w-4 h-4 text-sky-600" />
+                <span>ສະຫຼຸບການຄຳນວນລາຄາຈາກລະບົບຫຼັງບ້ານ (Backend Pricing Breakdown)</span>
+              </h5>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs font-semibold text-slate-700">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase">
+                      <th className="py-2 text-left">ລາຍການ (Job)</th>
+                      <th className="py-2 text-right">ເຈ້ย (Paper)</th>
+                      <th className="py-2 text-right">ໝຶກ (Ink)</th>
+                      <th className="py-2 text-right">ເຄືອບ (Lam)</th>
+                      <th className="py-2 text-right">ເຂົ້າເລັ້ມ (Bind)</th>
+                      <th className="py-2 text-right">ຄ່າແຮງ (Labor)</th>
+                      <th className="py-2 text-right">ຕົ້ນທຶນລວມ (Total Cost)</th>
+                      <th className="py-2 text-right">ລາຄາຂາຍ (Sale Price)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {backendCalculationBreakdown.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="py-2.5 font-bold text-slate-900">{item.job_name} ({item.quantity} units)</td>
+                        <td className="py-2.5 text-right font-mono">{formatLAK(item.paper_cost)}</td>
+                        <td className="py-2.5 text-right font-mono">{formatLAK(item.ink_cost)}</td>
+                        <td className="py-2.5 text-right font-mono">{formatLAK(item.lamination_cost)}</td>
+                        <td className="py-2.5 text-right font-mono">{formatLAK(item.binding_cost)}</td>
+                        <td className="py-2.5 text-right font-mono">{formatLAK(item.labor_cost)}</td>
+                        <td className="py-2.5 text-right font-mono text-rose-600 font-bold">{formatLAK(item.total_cost)}</td>
+                        <td className="py-2.5 text-right font-mono text-emerald-600 font-bold">{formatLAK(item.sale_price)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-slate-50/60 p-6 rounded-2xl border border-slate-100">
             <div className="space-y-4">
               <h4 className="font-black text-slate-800 uppercase tracking-wider text-xs border-b border-slate-200 pb-2">

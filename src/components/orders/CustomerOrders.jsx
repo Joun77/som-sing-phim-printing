@@ -16,6 +16,7 @@ import OrderDetailsPage from './OrderDetailsPage';
 import Lightbox from './Lightbox';
 import OrderDetailsModal from './OrderDetailsModal';
 import QuotationManager from '../QuotationManager';
+import ProductionBoard from '../production/ProductionBoard';
 
 export default function CustomerOrders({ initialSubTab = 'orders' }) {
   const { 
@@ -42,6 +43,12 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
 
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
+
+  if (initialSubTab === 'production') {
+    return (
+      <ProductionBoard showToast={showToast} formatLAK={formatCurrency} />
+    );
+  }
 
   const [showQuotation, setShowQuotation] = useState(initialSubTab === 'quotation');
   const [filterStatus, setFilterStatus] = useState(
@@ -179,16 +186,40 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
       return;
     }
 
-    settleOrderBalance(selectedOrder.id, Number(settleAmount), settleMethod, settleSlip);
-    showToast(currentLang === 'lo' ? 'ຊຳຣະລ້ຽງໜີ້ສຳເລັດ!' : 'Balance settled successfully!', 'success');
-    
-    const updated = orders.find(o => o.id === selectedOrder.id);
-    if (updated) setSelectedOrder(updated);
-
-    setIsSettleOpen(false);
-    setSettleAmount(0);
-    setSettleSlip('');
-    setSettleStep(1);
+    fetch(`http://localhost:8080/api/orders/${selectedOrder.id}/deposit`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deposit_amount: Number(settleAmount) })
+    })
+    .then(res => {
+      if (!res.ok) throw new Error('Deposit failed');
+      return res.json();
+    })
+    .then(updatedOrder => {
+      settleOrderBalance(selectedOrder.id, Number(settleAmount), settleMethod, settleSlip);
+      showToast(currentLang === 'lo' ? 'ຊຳຣະລ້ຽງໜີ້ສຳເລັດ!' : 'Balance settled successfully!', 'success');
+      const updated = orders.find(o => o.id === selectedOrder.id);
+      if (updated) {
+        setSelectedOrder({
+          ...updated,
+          status: updatedOrder.status === 'PREPRESS_CHECK' ? 'Prepress' : updated.status,
+          depositAmountPaid: updatedOrder.deposit_amount
+        });
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      settleOrderBalance(selectedOrder.id, Number(settleAmount), settleMethod, settleSlip);
+      showToast(currentLang === 'lo' ? 'ຊຳຣະລ້ຽງໜີ້ສຳເລັດ!' : 'Balance settled successfully!', 'success');
+      const updated = orders.find(o => o.id === selectedOrder.id);
+      if (updated) setSelectedOrder(updated);
+    })
+    .finally(() => {
+      setIsSettleOpen(false);
+      setSettleAmount(0);
+      setSettleSlip('');
+      setSettleStep(1);
+    });
   };
 
   const applySettlePreset = (pct) => {
