@@ -16,12 +16,15 @@ import {
   ChevronRight,
   Truck,
   User,
-  Users
+  Users,
+  Coins
 } from 'lucide-react';
 
 
 export default function Sidebar() {
-  const { activeTab, setActiveTab, resetToDefaultData } = useApp();
+  const { activeTab, setActiveTab, resetToDefaultData, setIsRatesOpen, currency, exchangeRates, rateMode } = useApp();
+
+  const currentRate = currency === 'LAK' ? 1 : ((exchangeRates[currency] && exchangeRates[currency][rateMode]) || 0);
   const [isOpen, setIsOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(
     localStorage.getItem('somsing_sidebar_collapsed') === 'true'
@@ -243,6 +246,22 @@ export default function Sidebar() {
 
         {/* Footer Actions */}
         <div className={`p-4 border-t border-white/10 bg-black/10 flex flex-col ${isCollapsed ? 'items-center gap-3' : 'space-y-3'}`}>
+          <button
+            onClick={() => setIsRatesOpen(true)}
+            title={isCollapsed ? (currentLang === 'lo' ? 'ອັດຕາແລກປ່ຽນ' : 'Exchange Rates') : undefined}
+            className={`
+              flex items-center justify-center bg-white/5 border border-white/10 text-emerald-300 rounded-xl hover:bg-white/10 transition-all font-medium
+              ${isCollapsed ? 'p-3.5 w-11 h-11' : 'w-full gap-2.5 px-4 py-3 text-xs'}
+            `}
+          >
+            <Coins className="w-4 h-4 shrink-0" />
+            {!isCollapsed && (
+              <span className="font-sans">
+                {currentLang === 'lo' ? 'ອັດຕາແລກປ່ຽນ' : 'Exchange Rates'} · {currency} 1={currentRate ? `${currentRate.toLocaleString()}₭` : '—'}
+              </span>
+            )}
+          </button>
+
           <button
             onClick={handleReset}
             title={isCollapsed ? (currentLang === 'lo' ? 'ຣີເຊັດຂໍ້ມູນສາທິດ' : 'Reset Demo Data') : undefined}

@@ -115,11 +115,6 @@ const SHIFTS = [
 const getRoleInfo = (roleId) => ROLES.find(r => r.id === roleId) || ROLES[0];
 const getShiftInfo = (shiftId) => SHIFTS.find(s => s.id === shiftId) || SHIFTS[0];
 
-const formatLAK = (n) => {
-  if (!n && n !== 0) return '—';
-  return new Intl.NumberFormat('lo-LA').format(n) + ' ກີບ';
-};
-
 // ========== EMPTY FORM ==========
 const emptyForm = {
   name: '', nameEn: '', role: 'press_operator', phone: '', address: '',
@@ -160,9 +155,12 @@ function StatCard({ icon: Icon, label, value, sub, color }) {
 
 // ========== MAIN COMPONENT ==========
 export default function EmployeeManagement() {
-  const { showToast, askConfirmation } = useApp();
+  const { showToast, askConfirmation, formatCurrency } = useApp();
   const { i18n } = useTranslation();
   const lang = i18n.language || 'lo';
+
+  // Multi-currency salary formatting (keeps the '—' guard for empty values)
+  const formatLAK = (n) => (n || n === 0) ? formatCurrency(n) : '—';
 
   const [employees, setEmployees] = useState(INITIAL_EMPLOYEES);
   const [search, setSearch] = useState('');

@@ -7,15 +7,13 @@ import EditMaterialModal from './EditMaterialModal';
 
 export default function InventoryTable({ items, onRestockItem, onViewDetails }) {
   const { t } = useTranslation();
-  const { editInventoryBatch, editInventorySku, showToast } = useApp();
+  const { editInventoryBatch, editInventorySku, showToast, formatCurrency } = useApp();
   
   // Selected lot states for modal popups
   const [selectedLotModal, setSelectedLotModal] = useState(null);
   const [editingLotModal, setEditingLotModal] = useState(null);
 
-  const formatLAK = (num) => {
-    return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(num || 0).replace('LAK', '₭');
-  };
+  const formatLAK = formatCurrency;
 
   // Flatten all lots from all filtered items
   const flatLots = [];

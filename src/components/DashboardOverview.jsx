@@ -36,7 +36,8 @@ export default function DashboardOverview() {
     addSpoilageLog,
     customers,
     showToast,
-    askConfirmation
+    askConfirmation,
+    formatCurrency
   } = useApp();
 
   const { t, i18n } = useTranslation();
@@ -79,9 +80,7 @@ export default function DashboardOverview() {
     return sum + (Number(item.quantity) * Number(item.unitCost));
   }, 0);
 
-  const formatLAK = (num) => {
-    return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(num).replace('LAK', '₭');
-  };
+  const formatLAK = formatCurrency;
 
   const lowStockItems = inventory.filter(item => item.stockQty <= item.reorderThreshold);
 

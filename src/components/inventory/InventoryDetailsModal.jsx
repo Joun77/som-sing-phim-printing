@@ -6,7 +6,7 @@ import { useApp } from '../../context/AppContext';
 
 export default function InventoryDetailsModal({ lot, onClose, onEdit }) {
   const { t } = useTranslation();
-  const { deleteInventoryBatch, editInventoryBatch, equipment, showToast } = useApp();
+  const { deleteInventoryBatch, editInventoryBatch, equipment, showToast, formatCurrency } = useApp();
 
   const [isEditingInline, setIsEditingInline] = useState(false);
 
@@ -22,9 +22,7 @@ export default function InventoryDetailsModal({ lot, onClose, onEdit }) {
   const isInkCategory = parent.category === 'Ink';
   const linkedMachine = equipment?.find(eq => eq.linkedMaterialSku === parent.id);
 
-  const formatLAK = (num) => {
-    return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(num || 0).replace('LAK', '₭');
-  };
+  const formatLAK = formatCurrency;
 
   const renderDualUnitQuantity = (currentQty, category, purchaseUnit, consumptionUnit, itemsPerPurchaseUnit = 500) => {
     if (category === 'Paper') {

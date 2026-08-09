@@ -36,7 +36,8 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
     addCustomer,
     prefilledOrderSpecs,
     setPrefilledOrderSpecs,
-    addSpoilageLog
+    addSpoilageLog,
+    formatCurrency
   } = useApp();
 
   const { t, i18n } = useTranslation();
@@ -99,9 +100,8 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
     }
   }, [focusOrderId, orders, setFocusOrderId]);
 
-  const formatLAK = useCallback((num) => {
-    return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(num).replace('LAK', '₭');
-  }, []);
+  // Multi-currency formatter from context (prop name kept as formatLAK for downstream components)
+  const formatLAK = formatCurrency;
 
   const statuses = ['All', 'Received', 'Printing', 'Cutting', 'Ready', 'Delivered'];
 

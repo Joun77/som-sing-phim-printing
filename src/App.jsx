@@ -10,6 +10,7 @@ import CustomerOrders from './components/orders/CustomerOrders';
 import QuotationManager from './components/QuotationManager';
 import HistoryAnalytics from './components/HistoryAnalytics';
 import EmployeeManagement from './components/hr/EmployeeManagement';
+import CurrencyRatesModal from './components/common/CurrencyRatesModal';
 import { useTranslation } from 'react-i18next';
 import { 
   CheckCircle2, 
@@ -109,6 +110,9 @@ function AppContent() {
           </div>
         </div>
       )}
+
+      {/* MULTI-CURRENCY RATE MANAGEMENT MODAL */}
+      <CurrencyRatesModal />
     </div>
   );
 }

@@ -2,12 +2,8 @@ import React from 'react';
 import { ShieldAlert, CheckCircle, Wrench, Eye } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-export default function EquipmentTable({ machines, onMaintenance, onViewDetails }) {
+export default function EquipmentTable({ machines, onMaintenance, onViewDetails, formatLAK }) {
   const { t } = useTranslation();
-
-  const formatLAK = (num) => {
-    return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(num).replace('LAK', '₭');
-  };
 
   return (
     <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm">

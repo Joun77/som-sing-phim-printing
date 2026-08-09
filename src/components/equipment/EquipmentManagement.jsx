@@ -7,7 +7,7 @@ import AddEquipmentModal from './AddEquipmentModal';
 import EquipmentDetailsPage from './EquipmentDetailsPage';
 
 export default function EquipmentManagement() {
-  const { equipment, updateEquipmentMaintenance, showToast } = useApp();
+  const { equipment, updateEquipmentMaintenance, showToast, formatCurrency } = useApp();
   const { i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
 
@@ -93,6 +93,7 @@ export default function EquipmentManagement() {
         machines={filteredMachines} 
         onMaintenance={handleMaintenanceReset}
         onViewDetails={handleViewDetails}
+        formatLAK={formatCurrency}
       />
 
       {/* Add modal wizard */}

@@ -15,7 +15,7 @@ import { useApp } from '../../context/AppContext';
 import ConfirmDeleteModal, { DeleteActionButton } from '../common/ConfirmDeleteModal';
 
 export default function EquipmentDetailsPage({ equipmentId, onBack }) {
-  const { equipment, inventory, updateEquipmentMaintenance, setEquipment, showToast } = useApp();
+  const { equipment, inventory, updateEquipmentMaintenance, setEquipment, showToast, formatCurrency } = useApp();
   const { i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
   
@@ -47,9 +47,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
     );
   }
 
-  const formatLAK = (num) => {
-    return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(num || 0).replace('LAK', '₭');
-  };
+  const formatLAK = formatCurrency;
 
   const isCritical = machine.components && machine.components.some(c => c.usage >= (c.threshold || 90));
 

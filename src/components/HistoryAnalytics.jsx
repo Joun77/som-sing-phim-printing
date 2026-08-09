@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 
 export default function HistoryAnalytics({ hideHeader = false }) {
-  const { orders, spoilageLogs, inventory, settleOrderBalance } = useApp();
+  const { orders, spoilageLogs, inventory, settleOrderBalance, formatCurrency } = useApp();
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
 
@@ -26,9 +26,7 @@ export default function HistoryAnalytics({ hideHeader = false }) {
   const [settleMethod, setSettleMethod] = useState('BCEL One');
   const [settleSlip, setSettleSlip] = useState('');
 
-  const formatLAK = (num) => {
-    return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(num).replace('LAK', '₭');
-  };
+  const formatLAK = formatCurrency;
 
   const getTrendData = () => {
     if (timeframe === '7day') {

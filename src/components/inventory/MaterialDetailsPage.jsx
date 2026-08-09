@@ -7,7 +7,7 @@ import ConfirmDeleteModal, { DeleteActionButton } from '../common/ConfirmDeleteM
 
 export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
   const { t, i18n } = useTranslation();
-  const { inventory, deleteInventoryBatch, editInventoryBatch, equipment, showToast } = useApp();
+  const { inventory, deleteInventoryBatch, editInventoryBatch, equipment, showToast, formatCurrency } = useApp();
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -66,9 +66,7 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
   const isInkCategory = targetItem.category === 'Ink';
   const linkedMachine = equipment?.find(eq => eq.linkedMaterialSku === targetItem.id);
 
-  const formatLAK = (num) => {
-    return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(num || 0).replace('LAK', '₭');
-  };
+  const formatLAK = formatCurrency;
 
   const renderDualUnitQuantity = (currentQty, category, purchaseUnit, consumptionUnit, itemsPerPurchaseUnit = 500) => {
     if (category === 'Paper') {

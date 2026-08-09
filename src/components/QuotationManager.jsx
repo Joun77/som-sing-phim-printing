@@ -134,9 +134,6 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
   const [isQuotationListOpen, setIsQuotationListOpen] = useState(false);
 
   // Helpers
-  const formatLAK = (num) => {
-    return new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' }).format(num).replace('LAK', '₭');
-  };
 
   // Dimensions Map
   const getPresetDimensions = (preset) => {
@@ -313,8 +310,8 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
   // Confirm order and deduct FIFO stock
   const handleConfirmOrder = () => {
     const msg = currentLang === 'lo'
-      ? `ຢືນຢັນການບັນທຶກອໍເດີ ແລະ ຕັດສະຕ໋ອກສິນຄ້າ FIFO? ຍອດລວມ: ${formatLAK(finalGrandTotal)}`
-      : `Confirm order creation and auto-deduct FIFO stock? Total: ${formatLAK(finalGrandTotal)}`;
+      ? `ຢືນຢັນການບັນທຶກອໍເດີ ແລະ ຕັດສະຕ໋ອກສິນຄ້າ FIFO? ຍອດລວມ: ${formatCurrency(finalGrandTotal)}`
+      : `Confirm order creation and auto-deduct FIFO stock? Total: ${formatCurrency(finalGrandTotal)}`;
 
     askConfirmation(msg, () => {
       // Build order item breakdown
@@ -497,8 +494,8 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
             <p className="font-extrabold text-base">{currentLang === 'lo' ? 'ວົງເງິນສິນເຊື່ອເກີນກຳນົດ!' : 'Credit Limit Exceeded Alert'}</p>
             <p className="leading-relaxed">
               {currentLang === 'lo'
-                ? `ລູກຄ້າ ${selectedCustomerId} ມິດຈຳກັດສິນເຊື່ອ ${formatLAK(creditStatus.limit)}. ຍອດຄ້າງຊຳຣະປັດຈຸບັນ ${formatLAK(creditStatus.currentUnpaid)} ລວມກັບໃບບິນນີ້ຈະເປັນ ${formatLAK(creditStatus.totalPotential)}.`
-                : `Customer ${selectedCustomerId} has a credit limit of ${formatLAK(creditStatus.limit)}. Outstanding balance is ${formatLAK(creditStatus.currentUnpaid)}. Total exposure would reach ${formatLAK(creditStatus.totalPotential)}.`
+                ? `ລູກຄ້າ ${selectedCustomerId} ມິດຈຳກັດສິນເຊື່ອ ${formatCurrency(creditStatus.limit)}. ຍອດຄ້າງຊຳຣະປັດຈຸບັນ ${formatCurrency(creditStatus.currentUnpaid)} ລວມກັບໃບບິນນີ້ຈະເປັນ ${formatCurrency(creditStatus.totalPotential)}.`
+                : `Customer ${selectedCustomerId} has a credit limit of ${formatCurrency(creditStatus.limit)}. Outstanding balance is ${formatCurrency(creditStatus.currentUnpaid)}. Total exposure would reach ${formatCurrency(creditStatus.totalPotential)}.`
               }
             </p>
           </div>
@@ -845,7 +842,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                   <div>
                     <span className="text-sm font-extrabold block leading-none">{t('estimator.finishing_lam')}</span>
                     <span className="block text-[10px] text-slate-400 font-bold mt-1 font-sans">
-                      +{(laminationRatePerSqm).toLocaleString()}₭ / sqm ({formatLAK(Math.round(sqmPerPage * laminationRatePerSqm))} per page)
+                      +{formatCurrency(laminationRatePerSqm)} / sqm ({formatCurrency(Math.round(sqmPerPage * laminationRatePerSqm))} per page)
                     </span>
                   </div>
                 </label>
@@ -907,7 +904,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                   <div className="flex justify-between border-b border-white/5 pb-2">
                     <span className="text-white/60">1. Paper Cost (with {activeSpoilageRate}% Spoilage):</span>
                     <div className="text-right">
-                      <span className="text-white font-sans font-black block">{formatLAK(Math.round(totalPaperCost))}</span>
+                      <span className="text-white font-sans font-black block">{formatCurrency(Math.round(totalPaperCost))}</span>
                       <span className="text-[10px] text-white/40 block font-sans">{totalParentSheetsToUse} sheets ({wastedSheets} waste)</span>
                     </div>
                   </div>
@@ -915,7 +912,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                   <div className="flex justify-between border-b border-white/5 pb-2">
                     <span className="text-white/60">2. Ink set cost ({coverageMode === 'default' ? 'Average' : 'CMYK'}):</span>
                     <div className="text-right">
-                      <span className="text-white font-sans font-black block">{formatLAK(Math.round(totalInkCost))}</span>
+                      <span className="text-white font-sans font-black block">{formatCurrency(Math.round(totalInkCost))}</span>
                       <span className="text-[10px] text-white/40 block font-sans">
                         C:{cyanMl.toFixed(1)}ml M:{magentaMl.toFixed(1)}ml Y:{yellowMl.toFixed(1)}ml K:{blackMl.toFixed(1)}ml
                       </span>
@@ -925,9 +922,9 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                   <div className="flex justify-between border-b border-white/5 pb-2">
                     <span className="text-white/60">3. Machine depr. & utility:</span>
                     <div className="text-right">
-                      <span className="text-white font-sans font-black block">{formatLAK(Math.round(totalMachineOverhead))}</span>
+                      <span className="text-white font-sans font-black block">{formatCurrency(Math.round(totalMachineOverhead))}</span>
                       <span className="text-[10px] text-white/40 block font-sans">
-                        Depr: {formatLAK(deprCost)} + Pwr/Maint: {formatLAK(electricityCost+maintenanceCost)}
+                        Depr: {formatCurrency(deprCost)} + Pwr/Maint: {formatCurrency(electricityCost+maintenanceCost)}
                       </span>
                     </div>
                   </div>
@@ -935,7 +932,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                   <div className="flex justify-between border-b border-white/5 pb-2">
                     <span className="text-white/60">4. Finishing addons:</span>
                     <div className="text-right">
-                      <span className="text-white font-sans font-black block">{formatLAK(Math.round(totalFinishingCost))}</span>
+                      <span className="text-white font-sans font-black block">{formatCurrency(Math.round(totalFinishingCost))}</span>
                       {hasLamination && <span className="text-[10px] text-emerald-400 block font-sans">Lamination active</span>}
                     </div>
                   </div>
@@ -943,14 +940,14 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                   <div className="flex justify-between border-b border-white/5 pb-2">
                     <span className="text-white/60">5. Operator setups & labor:</span>
                     <div className="text-right">
-                      <span className="text-white font-sans font-black block">{formatLAK(Math.round(setupLaborCost))}</span>
-                      <span className="text-[10px] text-white/40 block font-sans">Flat fee: {formatLAK(setupFeeLabor)} + Labor: {formatLAK(laborCostPerSheet*printVolume)}</span>
+                      <span className="text-white font-sans font-black block">{formatCurrency(Math.round(setupLaborCost))}</span>
+                      <span className="text-[10px] text-white/40 block font-sans">Flat fee: {formatCurrency(setupFeeLabor)} + Labor: {formatCurrency(laborCostPerSheet*printVolume)}</span>
                     </div>
                   </div>
 
                   <div className="flex justify-between text-base pt-2 text-accent-sky border-t border-white/10 font-black">
                     <span>Net Internal Cost (Net Cost):</span>
-                    <span className="font-sans">{formatLAK(Math.round(netInternalCost))}</span>
+                    <span className="font-sans">{formatCurrency(Math.round(netInternalCost))}</span>
                   </div>
                 </div>
 
@@ -976,7 +973,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
 
                   <div className="flex justify-between items-center text-xs font-bold pt-1.5 border-t border-white/5">
                     <span className="text-white/60">Est. Profit Yield:</span>
-                    <span className="font-sans text-emerald-400 text-base font-black">{formatLAK(Math.round(netJobProfit))}</span>
+                    <span className="font-sans text-emerald-400 text-base font-black">{formatCurrency(Math.round(netJobProfit))}</span>
                   </div>
 
                   <div className="flex justify-between items-center text-xs font-bold">
@@ -1542,7 +1539,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <span>Electricity overhead per sheet (LAK):</span>
+                      <span>Electricity overhead per sheet (LAK base):</span>
                       <input
                         type="number"
                         value={electricityCostPerSheet}
@@ -1551,7 +1548,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                       />
                     </div>
                     <div className="space-y-1">
-                      <span>Maintenance overhead per sheet (LAK):</span>
+                      <span>Maintenance overhead per sheet (LAK base):</span>
                       <input
                         type="number"
                         value={maintenanceCostPerSheet}
@@ -1575,7 +1572,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <span>Lamination rate per sqm (LAK):</span>
+                      <span>Lamination rate per sqm (LAK base):</span>
                       <input
                         type="number"
                         value={laminationRatePerSqm}
@@ -1584,7 +1581,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                       />
                     </div>
                     <div className="space-y-1">
-                      <span>Flat Operator Setup Fee (LAK):</span>
+                      <span>Flat Operator Setup Fee (LAK base):</span>
                       <input
                         type="number"
                         value={setupFeeLabor}
@@ -1593,7 +1590,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                       />
                     </div>
                     <div className="space-y-1">
-                      <span>Operator Labor fee per page (LAK):</span>
+                      <span>Operator Labor fee per page (LAK base):</span>
                       <input
                         type="number"
                         value={laborCostPerSheet}

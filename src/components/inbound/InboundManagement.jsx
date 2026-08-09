@@ -23,7 +23,7 @@ import { useApp } from '../../context/AppContext';
 import { sampleInboundData } from '../../data/sampleInboundData';
 
 export default function InboundManagement() {
-  const { showToast, askConfirmation } = useApp();
+  const { showToast, askConfirmation, formatCurrency } = useApp();
   const { i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
 
@@ -110,10 +110,8 @@ export default function InboundManagement() {
   const [specSetupTime, setSpecSetupTime] = useState('');
   const [specLaborCostCutter, setSpecLaborCostCutter] = useState('');
 
-  // Format currency in LAK ₭
-  const formatLAK = (num) => {
-    return '₭' + (Number(num) || 0).toLocaleString('en-US');
-  };
+  // Multi-currency formatter from context
+  const formatLAK = formatCurrency;
 
   // Calculate Net Landed Cost
   const calculateLandedCost = (item) => {
@@ -415,7 +413,7 @@ export default function InboundManagement() {
               {currentLang === 'lo' ? 'ສຸຣຸບຍອດມູນຄ່ານຳເຂົ້າທັງໝົດ' : 'Total Inbound Value'}
             </span>
             <span className="text-2xl font-black text-emerald-600 font-mono block">
-              ₭{totalInboundValue.toLocaleString()}
+              {formatLAK(totalInboundValue)}
             </span>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
@@ -546,7 +544,7 @@ export default function InboundManagement() {
                     </td>
                     <td className="py-4 px-6 text-right">
                       <span className="font-mono font-black text-emerald-600 block">
-                        ₭{(Number(item.totalPrice) || 0).toLocaleString()}
+                        {formatLAK(Number(item.totalPrice) || 0)}
                       </span>
                     </td>
                     <td className="py-4 px-6 text-right">

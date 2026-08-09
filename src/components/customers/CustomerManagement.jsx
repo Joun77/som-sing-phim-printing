@@ -262,7 +262,8 @@ export default function CustomerManagement() {
     showToast,
     setActiveTab,
     setPreselectedCustomerName,
-    askConfirmation
+    askConfirmation,
+    formatCurrency
   } = useApp();
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
@@ -295,9 +296,7 @@ export default function CustomerManagement() {
   const [editFacebook, setEditFacebook] = useState('');
   const [editCreditLimit, setEditCreditLimit] = useState(2000000);
 
-  const formatLAK = (num) =>
-    new Intl.NumberFormat('lo-LA', { style: 'currency', currency: 'LAK' })
-      .format(num).replace('LAK', '₭');
+  const formatLAK = formatCurrency;
 
   const handleCreateCustomer = (e) => {
     e.preventDefault();

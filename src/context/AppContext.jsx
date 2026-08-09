@@ -752,9 +752,80 @@ export const AppProvider = ({ children }) => {
     safeSetItem('ss_print_currency_v6', currency);
   }, [currency]);
 
+  // Daily exchange-rate table with BUY & SELL rates (LAK per 1 unit) for THB & USD.
+  // LAK is the base currency and is always fixed at 1 / 1.
+  const DEFAULT_RATES = {
+    THB: { buy: 680, sell: 700 },
+    USD: { buy: 21000, sell: 21800 },
+  };
+
+  // Normalize persisted (or legacy flat) rate values into { buy, sell } objects
+  const normalizeRate = (val) => {
+    if (val && typeof val === 'object' && 'buy' in val && 'sell' in val) {
+      return { buy: Math.max(1, Math.round(Number(val.buy) || 0)), sell: Math.max(1, Math.round(Number(val.sell) || 0)) };
+    }
+    const flat = Math.max(1, Math.round(Number(val) || 0));
+    return { buy: flat, sell: flat };
+  };
+
+  const [exchangeRates, setExchangeRates] = useState(() => {
+    const saved = localStorage.getItem('ss_print_rates_v1');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const out = {};
+        ['THB', 'USD'].forEach(code => {
+          out[code] = normalizeRate(parsed[code]);
+        });
+        return out;
+      } catch (e) { /* fall through to defaults */ }
+    }
+    return DEFAULT_RATES;
+  });
+
+  // Which side of the rate is used to convert internal LAK amounts for display.
+  // 'sell' = price shown in foreign currency uses the shop's sell rate (default).
+  const [rateMode, setRateMode] = useState(() => {
+    const saved = localStorage.getItem('ss_print_rate_mode_v1');
+    return saved === 'buy' || saved === 'sell' ? saved : 'sell';
+  });
+
+  const [ratesUpdatedAt, setRatesUpdatedAt] = useState(() => {
+    return localStorage.getItem('ss_print_rates_updated_v1') || '';
+  });
+  const [isRatesOpen, setIsRatesOpen] = useState(false);
+
+  useEffect(() => {
+    safeSetItem('ss_print_rates_v1', JSON.stringify(exchangeRates));
+  }, [exchangeRates]);
+
+  useEffect(() => {
+    safeSetItem('ss_print_rate_mode_v1', rateMode);
+  }, [rateMode]);
+
+  useEffect(() => {
+    safeSetItem('ss_print_rates_updated_v1', ratesUpdatedAt);
+  }, [ratesUpdatedAt]);
+
+  // Manual rate update for one side of a currency (buy / sell)
+  const updateExchangeRate = (code, side, rate) => {
+    const num = Math.max(1, Math.round(Number(rate) || 0));
+    setExchangeRates(prev => {
+      const cur = normalizeRate(prev[code]);
+      return { ...prev, [code]: { buy: cur.buy, sell: cur.sell, [side]: num } };
+    });
+    setRatesUpdatedAt(new Date().toISOString());
+  };
+
+  const getRate = (code) => {
+    if (code === 'LAK') return 1;
+    const cur = normalizeRate(exchangeRates[code]);
+    return rateMode === 'buy' ? cur.buy : cur.sell;
+  };
+
   const formatCurrency = (num) => {
     const meta = CURRENCY_META[currency] || CURRENCY_META.LAK;
-    const converted = (Number(num) || 0) / meta.rate;
+    const converted = (Number(num) || 0) / getRate(currency);
     const options = {
       style: 'currency',
       currency: meta.currency,
@@ -769,8 +840,7 @@ export const AppProvider = ({ children }) => {
   };
 
   const convertToCurrency = (num) => {
-    const meta = CURRENCY_META[currency] || CURRENCY_META.LAK;
-    return (Number(num) || 0) / meta.rate;
+    return (Number(num) || 0) / getRate(currency);
   };
 
   // ---- Quotations (versioning / expiry / convert-to-order) ----
@@ -1969,6 +2039,9 @@ export const AppProvider = ({ children }) => {
     setDowntimeLogs(initialDowntimeLogs);
     setPurchaseRequisitions(initialPurchaseRequisitions);
     setDeliveries(initialDeliveries);
+    setExchangeRates(DEFAULT_RATES);
+    setRatesUpdatedAt('');
+    setRateMode('sell');
   };
 
   return (
@@ -1985,6 +2058,13 @@ export const AppProvider = ({ children }) => {
       setCurrency,
       formatCurrency,
       convertToCurrency,
+      exchangeRates,
+      ratesUpdatedAt,
+      updateExchangeRate,
+      rateMode,
+      setRateMode,
+      isRatesOpen,
+      setIsRatesOpen,
       quotations,
       setQuotations,
       addQuotation,

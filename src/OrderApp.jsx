@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import CustomerOrders from './components/orders/CustomerOrders';
+import CurrencyRatesModal from './components/common/CurrencyRatesModal';
 import './i18n.js';
 import { useTranslation } from 'react-i18next';
 import { 
@@ -167,6 +168,9 @@ function OrderAppContent() {
           </div>
         </div>
       )}
+
+      {/* MULTI-CURRENCY RATE MANAGEMENT MODAL */}
+      <CurrencyRatesModal />
     </div>
   );
 }
