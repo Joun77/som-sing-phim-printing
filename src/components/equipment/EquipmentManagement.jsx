@@ -15,6 +15,12 @@ export default function EquipmentManagement() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedEquipmentId, setSelectedEquipmentId] = useState(null);
 
+  // Search & Filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All'); // All, In Use, Spare, Under Repair, Retired
+  const [printerCategoryFilter, setPrinterCategoryFilter] = useState('All');
+  const [locationFilter, setLocationFilter] = useState('');
+
   const handleMaintenanceReset = (eqId) => {
     updateEquipmentMaintenance(eqId);
     showToast('Machinery components wear resets back to 0% SLA health!', 'success');
@@ -24,9 +30,18 @@ export default function EquipmentManagement() {
     setSelectedEquipmentId(eq.id);
   };
 
-  const filteredMachines = activeCategory === 'All'
-    ? equipment
-    : equipment.filter(eq => eq.category === activeCategory);
+  const filteredMachines = equipment.filter(eq => {
+    const matchesCategory = activeCategory === 'All' || eq.category === activeCategory;
+    const matchesStatus = statusFilter === 'All' || eq.status === statusFilter;
+    const matchesPrinterCategory = activeCategory !== 'Printer' || printerCategoryFilter === 'All' || eq.printerCategory === printerCategoryFilter;
+    const matchesLocation = !locationFilter || (eq.location && eq.location.toLowerCase().includes(locationFilter.toLowerCase()));
+    const matchesSearch = !searchQuery || 
+      eq.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      eq.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (eq.serialNumber && eq.serialNumber.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    return matchesCategory && matchesStatus && matchesPrinterCategory && matchesLocation && matchesSearch;
+  });
 
   if (selectedEquipmentId) {
     return (
@@ -60,21 +75,85 @@ export default function EquipmentManagement() {
         </div>
       </div>
 
-      {/* Category filters */}
-      <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 border border-slate-200/60 rounded-2xl font-bold text-xs w-max">
-        {['All', 'Printer', 'Cutter', 'Binder', 'Laminator'].map(cat => (
-          <button
-            key={cat}
-            onClick={() => setActiveCategory(cat)}
-            className={`px-4.5 py-2 rounded-xl transition ${
-              activeCategory === cat 
-                ? 'bg-white text-slate-800 shadow-sm' 
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
+      {/* Category filters & Search controls row */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
+        {/* Category Tab Selector */}
+        <div className="flex flex-col">
+          <label className="text-[10px] font-black text-slate-400 uppercase mb-1">Category</label>
+          <select
+            value={activeCategory}
+            onChange={(e) => {
+              setActiveCategory(e.target.value);
+              setPrinterCategoryFilter('All');
+            }}
+            className="px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50 focus:outline-none focus:border-sky-500"
           >
-            {cat === 'All' ? 'All Machinery' : cat}
-          </button>
-        ))}
+            <option value="All">All Machinery</option>
+            <option value="Printer">Printer</option>
+            <option value="Cutter">Cutter</option>
+            <option value="Binder">Binder</option>
+            <option value="Laminator">Laminator</option>
+          </select>
+        </div>
+
+        {/* Status Filter */}
+        <div className="flex flex-col">
+          <label className="text-[10px] font-black text-slate-400 uppercase mb-1">Status</label>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50 focus:outline-none focus:border-sky-500"
+          >
+            <option value="All">All Statuses</option>
+            <option value="In Use">In Use</option>
+            <option value="Spare">Spare</option>
+            <option value="Under Repair">Under Repair</option>
+            <option value="Retired">Retired</option>
+          </select>
+        </div>
+
+        {/* Printer Type Filter */}
+        <div className="flex flex-col">
+          <label className="text-[10px] font-black text-slate-400 uppercase mb-1">Printer Type</label>
+          <select
+            value={printerCategoryFilter}
+            onChange={(e) => setPrinterCategoryFilter(e.target.value)}
+            disabled={activeCategory !== 'Printer'}
+            className="px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50 focus:outline-none focus:border-sky-500 disabled:opacity-50"
+          >
+            <option value="All">All Types</option>
+            <option value="Laser">Laser</option>
+            <option value="Inkjet">Inkjet</option>
+            <option value="MFP">MFP</option>
+            <option value="Plotter">Plotter</option>
+            <option value="UV Flatbed">UV Flatbed</option>
+            <option value="Sublimation">Sublimation</option>
+          </select>
+        </div>
+
+        {/* Location Filter */}
+        <div className="flex flex-col">
+          <label className="text-[10px] font-black text-slate-400 uppercase mb-1">Location / Dept</label>
+          <input
+            type="text"
+            value={locationFilter}
+            onChange={(e) => setLocationFilter(e.target.value)}
+            placeholder="e.g. Main Dept"
+            className="px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50 focus:outline-none focus:border-sky-500"
+          />
+        </div>
+
+        {/* General Search Input */}
+        <div className="flex flex-col">
+          <label className="text-[10px] font-black text-slate-400 uppercase mb-1">Search Keywords</label>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search Brand, Model, S/N..."
+            className="px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50 focus:outline-none focus:border-sky-500"
+          />
+        </div>
       </div>
 
       {/* SLA Alert banner if wear thresholds exceed */}

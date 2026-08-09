@@ -312,5 +312,19 @@
     "no_linked_material": "ບໍ່ມີການເຊື່ອມໂຍງ",
     "operational_params": "ພາຣາມິເຕີການໃຊ້ງານ",
     "sla_status": "ສະຖານະ SLA"
+  },
+  "printer_management": {
+    "color_scheme": "ລະບົບສີ",
+    "total_slots": "ຊ່ອງສີທັງໝົດ",
+    "linked_inks": "ໝຶກທີ່ເຊື່ອມໂຍງ",
+    "oem_compatible": "ປະເພດໝຶກ (OEM/Compatible)",
+    "target_printer": "ເຄື່ອງພິມທີ່ຜູກມັດ",
+    "receipt_link": "ລິ້ງໃບບິນ/ໃບຮັບເງິນ",
+    "ip_address": "IP Address",
+    "mac_address": "MAC Address",
+    "ink_base_type": "ປະເພດພື້ນຖານໝຶກ",
+    "image_preview": "ຮູບພາບຕົວຢ່າງ",
+    "quick_adjust": "ປັບສະຕ໋ອກໄວ",
+    "low_stock_warning": "ແຈ້ງເຕືອນສະຕ໋ອກຕໍ່າ"
   }
 }

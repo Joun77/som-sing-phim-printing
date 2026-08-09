@@ -726,6 +726,13 @@ const initialDeliveries = [
   }
 ];
 
+const initialPrinterColorLinks = [
+  { id: 'lnk-1', assetId: 'eq-konica', inkCode: 'ink-konica-cyan-oem', slotPosition: 'Cyan (C)', notes: 'OEM Ink for C6085' },
+  { id: 'lnk-2', assetId: 'eq-konica', inkCode: 'ink-konica-magenta-oem', slotPosition: 'Magenta (M)', notes: 'OEM Ink for C6085' },
+  { id: 'lnk-3', assetId: 'eq-konica', inkCode: 'ink-konica-yellow-oem', slotPosition: 'Yellow (Y)', notes: 'OEM Ink for C6085' },
+  { id: 'lnk-4', assetId: 'eq-konica', inkCode: 'ink-konica-black-oem', slotPosition: 'Black (K)', notes: 'OEM Ink for C6085' }
+];
+
 const ROLE_OPTIONS = [
   { id: 'admin', labelLo: 'ຜູ້ບໍລິຫານ (Admin)', labelEn: 'Admin' },
   { id: 'sales', labelLo: 'ຝ່າຍຂາຍ (Sales)', labelEn: 'Sales' },
@@ -946,7 +953,23 @@ export const AppProvider = ({ children }) => {
 
   const [inventory, setInventory] = useState(() => {
     const saved = localStorage.getItem('ss_print_inventory_v6');
-    return saved ? JSON.parse(saved) : initialInventory;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const unique = [];
+        const seen = new Set();
+        for (const item of parsed) {
+          if (item && item.id && !seen.has(item.id)) {
+            seen.add(item.id);
+            unique.push(item);
+          }
+        }
+        return unique;
+      } catch (e) {
+        return initialInventory;
+      }
+    }
+    return initialInventory;
   });
   const [equipment, setEquipment] = useState(() => {
     const saved = localStorage.getItem('ss_print_equipment_v6');
@@ -982,6 +1005,10 @@ export const AppProvider = ({ children }) => {
     const saved = localStorage.getItem('ss_print_inbound_entries_v6');
     return saved ? JSON.parse(saved) : sampleInboundData;
   });
+  const [printerColorLinks, setPrinterColorLinks] = useState(() => {
+    const saved = localStorage.getItem('ss_print_color_links_v6');
+    return saved ? JSON.parse(saved) : initialPrinterColorLinks;
+  });
   const [offcuts, setOffcuts] = useState(() => {
     const saved = localStorage.getItem('ss_print_offcuts_v6');
     return saved ? JSON.parse(saved) : initialOffcuts;
@@ -991,23 +1018,57 @@ export const AppProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : initialPurchaseOrders;
   });
 
+  // Free up space by stripping base64 images from large keys
+  const freeLocalStorageSpace = () => {
+    try {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('ss_print_')) {
+          const val = localStorage.getItem(key);
+          keys.push({ key, size: val ? val.length : 0, val });
+        }
+      }
+      keys.sort((a, b) => b.size - a.size);
+      for (const item of keys) {
+        if (item.size > 15000) {
+          try {
+            const parsed = JSON.parse(item.val);
+            const sanitizeValue = (val) => {
+              if (typeof val === 'string' && val.length > 1000 && (val.startsWith('data:image/') || val.includes(';base64,'))) {
+                return '[TRUNCATED_TO_FREE_SPACE]';
+              }
+              if (Array.isArray(val)) return val.map(sanitizeValue);
+              if (val !== null && typeof val === 'object') {
+                const res = {};
+                for (const k in val) res[k] = sanitizeValue(val[k]);
+                return res;
+              }
+              return val;
+            };
+            const sanitized = sanitizeValue(parsed);
+            localStorage.setItem(item.key, JSON.stringify(sanitized));
+            console.log(`[LocalStorage] Cleaned up large key to free space: "${item.key}"`);
+          } catch (e) {}
+        }
+      }
+    } catch (err) {
+      console.error('[LocalStorage] Error during space recovery', err);
+    }
+  };
+
   // Safe LocalStorage setter with fallback to prevent QuotaExceededError when storing Base64 images
   const safeSetItem = (key, data) => {
+    const serialized = typeof data === 'string' ? data : JSON.stringify(data);
     try {
-      localStorage.setItem(key, JSON.stringify(data));
+      localStorage.setItem(key, serialized);
     } catch (err) {
-      console.warn(`[LocalStorage] Quota exceeded on key "${key}". Stripping large image payloads to fit quota...`, err);
+      console.warn(`[LocalStorage] Quota exceeded on key "${key}". Attempting to free space...`, err);
+      freeLocalStorageSpace();
       try {
-        // Strip heavy Base64 strings from objects if localStorage is full
-        const sanitized = JSON.parse(JSON.stringify(data, (k, v) => {
-          if (typeof v === 'string' && v.startsWith('data:image/') && v.length > 5000) {
-            return '[IMAGE_PAYLOAD_TRUNCATED_TO_SAVE_SPACE]';
-          }
-          return v;
-        }));
-        localStorage.setItem(key, JSON.stringify(sanitized));
-      } catch (innerErr) {
-        console.error(`[LocalStorage] Unable to write key "${key}" even after image sanitization.`, innerErr);
+        localStorage.setItem(key, serialized);
+      } catch (retryErr) {
+        console.error(`[LocalStorage] Still unable to write key "${key}" after freeing space.`, retryErr);
       }
     }
   };
@@ -1044,6 +1105,10 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     safeSetItem('ss_print_inbound_entries_v6', linkedInboundEntries);
   }, [linkedInboundEntries]);
+
+  useEffect(() => {
+    safeSetItem('ss_print_color_links_v6', printerColorLinks);
+  }, [printerColorLinks]);
 
   // Master Categories Registry & Specs Pool Persistence
   const [customCategories, setCustomCategories] = useState(() => {
@@ -1209,6 +1274,19 @@ export const AppProvider = ({ children }) => {
       ...itemData
     };
     setInventory(prev => [...prev, newSku]);
+  };
+
+  const quickAdjustStock = (itemId, adjustment) => {
+    setInventory(prev => prev.map(item => {
+      if (item.id === itemId) {
+        const newQty = Math.max(0, item.stockQty + adjustment);
+        return {
+          ...item,
+          stockQty: newQty
+        };
+      }
+      return item;
+    }));
   };
 
   const deleteInventoryBatch = (itemId, batchId) => {
@@ -1763,6 +1841,21 @@ export const AppProvider = ({ children }) => {
     setEquipment(prev => [...prev, newEq]);
   };
 
+  const addPrinterColorLink = (linkData) => {
+    const newLink = {
+      id: linkData.id || `lnk-${Date.now().toString().slice(-4)}`,
+      assetId: linkData.assetId,
+      inkCode: linkData.inkCode,
+      slotPosition: linkData.slotPosition || 'CMYK Slot',
+      notes: linkData.notes || ''
+    };
+    setPrinterColorLinks(prev => [...prev, newLink]);
+  };
+
+  const deletePrinterColorLink = (linkId) => {
+    setPrinterColorLinks(prev => prev.filter(lnk => lnk.id !== linkId));
+  };
+
   const addInboundEntry = (entry) => {
     setLinkedInboundEntries(prev => [entry, ...prev]);
   };
@@ -2028,6 +2121,7 @@ export const AppProvider = ({ children }) => {
   const resetToDefaultData = () => {
     setInventory(initialInventory);
     setEquipment(initialEquipment);
+    setPrinterColorLinks(initialPrinterColorLinks);
     setOrders(initialOrders);
     setSpoilageLogs(initialSpoilageLogs);
     setCustomers(initialCustomers);
@@ -2139,6 +2233,11 @@ export const AppProvider = ({ children }) => {
       addStock,
       addEquipment,
       addInboundEntry,
+      printerColorLinks,
+      setPrinterColorLinks,
+      addPrinterColorLink,
+      deletePrinterColorLink,
+      quickAdjustStock,
       editInboundEntry,
       deleteInboundEntry,
       addPurchaseOrder,

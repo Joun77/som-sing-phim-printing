@@ -21,9 +21,10 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
 import { sampleInboundData } from '../../data/sampleInboundData';
+import ImportForm from './ImportForm';
 
 export default function InboundManagement() {
-  const { showToast, askConfirmation, formatCurrency } = useApp();
+   const { showToast, askConfirmation, formatCurrency, addEquipment, addInventorySku, inventory, addStock, addPrinterColorLink } = useApp();
   const { i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
 
@@ -237,6 +238,89 @@ export default function InboundManagement() {
       setSpecLaborCostCutter('');
     }
     setIsModalOpen(true);
+  };
+
+  const handleImportSubmit = (type, data) => {
+    const logId = `INB-${Date.now().toString().slice(-4)}`;
+    const newLog = {
+      id: logId,
+      poNumber: logId,
+      receiptDate: new Date().toISOString().split('T')[0],
+      category: type,
+      categoryPill: type,
+      name: data.name,
+      sku: data.id,
+      currentQty: type === 'PRINTER' ? 1 : data.stockQty,
+      initialQty: type === 'PRINTER' ? 1 : data.stockQty,
+      unit: type === 'PRINTER' ? 'Unit' : 'Bottle',
+      subUnit: type === 'PRINTER' ? '(1 Unit)' : `(${data.stockQty} Bottle)`,
+      supplier: data.supplier || data.vendor || 'Supplier',
+      totalPrice: type === 'PRINTER' ? data.price : (data.stockQty * data.unitPrice),
+      paymentMethod: 'TRANSFER',
+      origin: 'TH',
+      tariffRate: 0,
+      freightCharge: 0,
+      specs: {},
+      docs: {
+        productPhoto: data.imageUrl || 'https://via.placeholder.com/300?text=Product+Photo',
+        paymentSlip: data.receiptUrl || ''
+      },
+      receiptUrl: data.receiptUrl || ''
+    };
+
+    setInboundList(prev => [newLog, ...prev]);
+
+    if (type === 'PRINTER') {
+      addEquipment(data);
+      showToast('Printer registered successfully in assets!', 'success');
+    } else {
+      const existingInk = inventory.find(item => item.id === data.id);
+      if (existingInk) {
+        addStock(data.id, data.stockQty);
+      } else {
+        addInventorySku({
+          id: data.id,
+          name: data.name,
+          category: 'Ink',
+          stockQty: data.stockQty,
+          consumptionUnit: 'ml',
+          purchaseUnit: `Bottle (${data.volume}ml)`,
+          purchaseMultiplier: data.volume,
+          costPerPurchaseUnit: data.unitPrice,
+          costPerConsumptionUnit: Math.round(data.unitPrice / data.volume),
+          reorderThreshold: 50,
+          imageUrl: data.imageUrl,
+          receiptUrl: data.receiptUrl,
+          supplier: data.supplier,
+          inkBaseType: data.inkBaseType,
+          isCompatible: data.isCompatible,
+          batches: [
+            {
+              id: `LOT-${data.id.slice(-4)}-001`,
+              purchaseDate: new Date().toISOString().split('T')[0],
+              supplierName: data.supplier,
+              purchasePricePerReam: data.unitPrice,
+              costPerSheet: Math.round(data.unitPrice / data.volume),
+              initialQty: data.stockQty,
+              currentQty: data.stockQty
+            }
+          ]
+        });
+      }
+
+      if (data.targetPrinterId) {
+        addPrinterColorLink({
+          assetId: data.targetPrinterId,
+          inkCode: data.id,
+          slotPosition: `${data.colorGroup} (${data.colorName})`,
+          notes: data.isCompatible ? 'Compatible Ink' : 'OEM Ink'
+        });
+      }
+
+      showToast('Ink stock recorded and linked successfully!', 'success');
+    }
+
+    setIsModalOpen(false);
   };
 
   // Submit Add / Edit
@@ -500,19 +584,20 @@ export default function InboundManagement() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
-                <th className="py-4 px-6">ລະຫັດ PO / Ref</th>
-                <th className="py-4 px-6">ຊື່ລາຍການ & SKU</th>
-                <th className="py-4 px-6 text-center">ໝວດໝູ່</th>
-                <th className="py-4 px-6">ວັນທີຮັບ/ຕິດຕັ້ງ</th>
-                <th className="py-4 px-6 text-right">ຈຳນວນນຳເຂົ້າ</th>
-                <th className="py-4 px-6 text-right">ມູນຄ່ານຳເຂົ້າ (LAK ₭)</th>
-                <th className="py-4 px-6 text-right">ການຈັດການ</th>
+                <th className="py-4 px-6">{currentLang === 'lo' ? 'ວັນທີນຳເຂົ້າ' : 'Import Date'}</th>
+                <th className="py-4 px-6 text-center">{currentLang === 'lo' ? 'ປະເພດ' : 'Type'}</th>
+                <th className="py-4 px-6">{currentLang === 'lo' ? 'ລະຫັດສິນຄ້າ' : 'Item Code'}</th>
+                <th className="py-4 px-6">{currentLang === 'lo' ? 'ชື່ / ລຸ້ນ' : 'Name/Model'}</th>
+                <th className="py-4 px-6 text-right">{currentLang === 'lo' ? 'ຈຳນວນ' : 'Quantity/Unit'}</th>
+                <th className="py-4 px-6 text-right">{currentLang === 'lo' ? 'ມູນຄ່າລວມ' : 'Total Value'}</th>
+                <th className="py-4 px-6 text-center">{currentLang === 'lo' ? 'ໃບບິນ' : 'Receipt Link'}</th>
+                <th className="py-4 px-6 text-right">{currentLang === 'lo' ? 'ການຈັດການ' : 'Actions'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium">
               {filteredData.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-16 text-center text-slate-400">
+                  <td colSpan="8" className="py-16 text-center text-slate-400">
                     <Boxes className="w-10 h-10 mx-auto mb-3 text-slate-300" />
                     <p className="text-xs font-bold text-slate-500">ບໍ່ພົບຂໍ້ມູນລາຍການນຳເຂົ້າສິນຄ້າ</p>
                   </td>
@@ -520,10 +605,8 @@ export default function InboundManagement() {
               ) : (
                 filteredData.map(item => (
                   <tr key={item.id} className="hover:bg-slate-50/80 transition group">
-                    <td className="py-4 px-6 font-mono font-bold text-slate-600">{item.poNumber}</td>
                     <td className="py-4 px-6">
-                      <span className="font-bold text-slate-900 block group-hover:text-sky-600 transition">{item.name}</span>
-                      <span className="font-mono text-[10px] text-slate-400 font-bold block uppercase">{item.sku}</span>
+                      <span className="font-mono font-bold text-slate-800 block">{item.receiptDate}</span>
                     </td>
                     <td className="py-4 px-6 text-center">
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
@@ -536,8 +619,9 @@ export default function InboundManagement() {
                         {item.categoryPill || item.category}
                       </span>
                     </td>
+                    <td className="py-4 px-6 font-mono font-bold text-slate-600">{item.sku || item.poNumber}</td>
                     <td className="py-4 px-6">
-                      <span className="font-mono font-bold text-slate-800 block">{item.receiptDate}</span>
+                      <span className="font-bold text-slate-900 block group-hover:text-sky-600 transition">{item.name}</span>
                     </td>
                     <td className="py-4 px-6 text-right">
                       <span className="font-mono font-black text-slate-900 block">{item.initialQty} {item.unit}</span>
@@ -547,6 +631,20 @@ export default function InboundManagement() {
                         {formatLAK(Number(item.totalPrice) || 0)}
                       </span>
                     </td>
+                    <td className="py-4 px-6 text-center">
+                      {item.receiptUrl || item.docs?.paymentSlip ? (
+                        <a
+                          href={item.receiptUrl || item.docs?.paymentSlip}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-sky-600 hover:underline font-bold text-xs"
+                        >
+                          View Link
+                        </a>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </td>
                     <td className="py-4 px-6 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
@@ -554,13 +652,7 @@ export default function InboundManagement() {
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5 text-slate-500" />
-                          <span>{currentLang === 'lo' ? 'ສາຍລະອຽດ' : 'View Details'}</span>
-                        </button>
-                        <button
-                          onClick={() => handleOpenModal(item)}
-                          className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
-                        >
-                          <Edit3 className="w-4 h-4" />
+                          <span>{currentLang === 'lo' ? 'ລາຍລະອຽດ' : 'View Details'}</span>
                         </button>
                         <button
                           onClick={() => handleDeleteItem(item.id)}
@@ -781,438 +873,25 @@ export default function InboundManagement() {
       {/* Full Add / Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-fade-in">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-4xl max-h-[95vh] flex flex-col shadow-2xl overflow-hidden animate-fade-in">
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
                 <Boxes className="w-5 h-5 text-blue-900" />
-                <span>{editingItem ? `ແກ້ໄຂລາຍການ: ${editingItem.poNumber}` : '+ ນຳເຂົ້າສິນຄ້າ / ອຸປະກອນໃໝ່'}</span>
+                <span>+ ນຳເຂົ້າສິນຄ້າ / ອຸປະກອນໃໝ່ (New Inbound Procurement)</span>
               </h3>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-700 transition">
                 <X className="w-5 h-5" />
               </button>
             </div>
-
-            <form onSubmit={handleSubmitForm} className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin">
-              {/* Section 1: Category Option Selector */}
-              <div>
-                <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-2.5">
-                  {currentLang === 'lo' ? 'ເລືອກໝວດໝູ່ ERP Master (Module A & B Options)' : 'Select ERP Category'}
-                </label>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
-                  {[
-                    { id: 'MATERIAL', label: currentLang === 'lo' ? '1. ເຈ້ຍ/ວັດສະດຸ' : '1. Paper/Material', color: 'text-emerald-700' },
-                    { id: 'INK', label: currentLang === 'lo' ? '2. ໝຶກພິມ' : '2. Printing Ink', color: 'text-amber-700' },
-                    { id: 'HARDWARE', label: currentLang === 'lo' ? '3. ອຸປະກອນ/ກາວ' : '3. Hardware/Glue', color: 'text-teal-700' },
-                    { id: 'PRINTER', label: currentLang === 'lo' ? '4. ເຄື່ອງພິມ (B.1)' : '4. Printer (B.1)', color: 'text-purple-700' },
-                    { id: 'CUTTER', label: currentLang === 'lo' ? '5. ເຄື່ອງຕັດ (B.2)' : '5. Cutter (B.2)', color: 'text-indigo-700' }
-                  ].map(cat => (
-                    <label key={cat.id} className="relative flex items-center p-3 rounded-2xl border border-slate-200 bg-slate-50/50 cursor-pointer hover:border-sky-500 transition font-bold">
-                      <input 
-                        type="radio" 
-                        name="category" 
-                        value={cat.id} 
-                        checked={formCategory === cat.id}
-                        onChange={() => setFormCategory(cat.id)}
-                        className="text-sky-600 focus:ring-sky-500 border-slate-300"
-                      />
-                      <span className={`ml-2 text-[11px] ${cat.color}`}>{cat.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Section 2: General Procurement Info */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
-                  1. ข้อมูลส่วนกลางและการสั่งซื้อนำเข้า (Common Master & Procurement)
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-medium">
-                  <div>
-                    <label className="block text-slate-600 mb-1">เลขที่ PO / Ref ID *</label>
-                    <input type="text" required value={formPo} onChange={(e) => setFormPo(e.target.value)} placeholder="PO-789818" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 mb-1">วันที่รับ/ติดตั้ง *</label>
-                    <input type="date" required value={formDate} onChange={(e) => setFormDate(e.target.value)} className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 mb-1">SKU Code *</label>
-                    <input type="text" required value={formSku} onChange={(e) => setFormSku(e.target.value)} placeholder="MAT-PAP-A4" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none font-mono" />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-slate-600 mb-1">ชื่อรายการนำเข้า *</label>
-                    <input type="text" required value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="กระดาษ A4 / หมึก UV / สันห่วง" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 mb-1">ผู้จัดจำหน่าย/ร้านค้า *</label>
-                    <input type="text" required value={formSupplier} onChange={(e) => setFormSupplier(e.target.value)} placeholder="Double A Official / Mimaki" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 mb-1">จำนวนนำเข้า *</label>
-                    <input type="number" min="1" required value={formQty} onChange={(e) => setFormQty(e.target.value)} className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 mb-1">หน่วยนับ *</label>
-                    <select value={formUnit} onChange={(e) => setFormUnit(e.target.value)} className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none">
-                      <option value="Ream">Ream (รีม)</option>
-                      <option value="Sheet">Sheet (แผ่น)</option>
-                      <option value="Roll">Roll (ม้วน)</option>
-                      <option value="Bottle">Bottle (ขวด)</option>
-                      <option value="Box">Box (กล่อง)</option>
-                      <option value="Unit">Unit (เครื่อง/ตัว)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 mb-1">ราคาสั่งซื้อรวม (LAK ₭) *</label>
-                    <input type="number" min="0" step="100" required value={formTotalPrice} onChange={(e) => setFormTotalPrice(e.target.value)} className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none font-semibold" />
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 mb-1 font-bold text-sky-900">ช่องทางการชำระเงิน *</label>
-                    <select value={formPaymentMethod} onChange={(e) => setFormPaymentMethod(e.target.value)} className="w-full bg-sky-50 text-sky-900 p-3 rounded-2xl border border-sky-300 focus:border-sky-500 outline-none font-extrabold">
-                      <option value="TRANSFER">โอนเงินผ่านธนาคาร (Bank Transfer)</option>
-                      <option value="CASH">เงินสด (Cash)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 3: Dynamic Category Specifications */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2 flex items-center justify-between">
-                  <span>2. สเปกเฉพาะตามประเภทสินค้า (Dynamic Product Spec Options)</span>
-                  <span className="text-[10px] text-sky-600 font-bold bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200 flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> Auto-Switch Form
-                  </span>
-                </h4>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-medium">
-                  {/* Group 1: Material (Sheet & Roll) */}
-                  {formCategory === 'MATERIAL' && (
-                    <>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">รูปแบบบรรจุภัณฑ์ (form_factor) *</label>
-                        <select value={specFormFactor} onChange={(e) => setSpecFormFactor(e.target.value)} className="w-full bg-sky-50 text-sky-900 p-3 rounded-2xl border border-sky-300 focus:border-sky-500 outline-none font-extrabold">
-                          <option value="SHEET">SHEET (แบบแผ่น)</option>
-                          <option value="ROLL">ROLL (แบบม้วน)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">ความหนา/น้ำหนัก (grammage_gsm) *</label>
-                        <input type="text" value={specGrammage} onChange={(e) => setSpecGrammage(e.target.value)} placeholder="e.g. 80 GSM, 300 GSM, 120 Micron" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                      </div>
-
-                      {specFormFactor === 'SHEET' && (
-                        <>
-                          <div>
-                            <label className="block text-slate-600 mb-1 font-bold">ขนาดมาตรฐาน (size_preset)</label>
-                            <select value={specSizePreset} onChange={(e) => setSpecSizePreset(e.target.value)} className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none">
-                              <option value="A4">A4 (210 x 297 mm)</option>
-                              <option value="A3">A3 (297 x 420 mm)</option>
-                              <option value="A3+">A3+ (330 x 483 mm)</option>
-                              <option value="31x43">31 x 43 นิ้ว (กระดาษใหญ่)</option>
-                              <option value="24x35">24 x 35 นิ้ว (กระดาษใหญ่)</option>
-                              <option value="CUSTOM">CUSTOM (กำหนดเอง)</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-slate-600 mb-1 font-bold">จำนวนแผ่นต่อรีม/แพ็ค (pack_qty) *</label>
-                            <input type="number" value={specPackQty} onChange={(e) => setSpecPackQty(e.target.value)} placeholder="e.g. 500 sheets/ream" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                          </div>
-                          <div>
-                            <label className="block text-slate-600 mb-1 font-bold">ความกว้างแผ่น (sheet_width_mm)</label>
-                            <input type="number" value={specWidthMm} onChange={(e) => setSpecWidthMm(e.target.value)} placeholder="e.g. 210 mm" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                          </div>
-                          <div>
-                            <label className="block text-slate-600 mb-1 font-bold">ความยาวแผ่น (sheet_length_mm)</label>
-                            <input type="number" value={specLength} onChange={(e) => setSpecLength(e.target.value)} placeholder="e.g. 297 mm" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                          </div>
-                        </>
-                      )}
-
-                      {specFormFactor === 'ROLL' && (
-                        <>
-                          <div>
-                            <label className="block text-slate-600 mb-1 font-bold">หน้ากว้างม้วน (roll_width_mm) *</label>
-                            <input type="number" value={specWidthMm} onChange={(e) => setSpecWidthMm(e.target.value)} placeholder="e.g. 610 mm, 1270 mm" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                          </div>
-                          <div>
-                            <label className="block text-slate-600 mb-1 font-bold">ความยาวรวมต่อม้วน (roll_length_m) *</label>
-                            <input type="number" value={specLength} onChange={(e) => setSpecLength(e.target.value)} placeholder="e.g. 50 เมตร, 100 เมตร" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                          </div>
-                        </>
-                      )}
-                    </>
-                  )}
-
-                  {/* Group 2: Printing Ink Specific (Linked to Equipment Master) */}
-                  {formCategory === 'INK' && (
-                    <>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold text-sky-900">เชื่อมโยงกับเครื่องพิมพ์ (Linked Printer) *</label>
-                        <select 
-                          value={specCompatiblePrinter} 
-                          onChange={(e) => setSpecCompatiblePrinter(e.target.value)} 
-                          className="w-full bg-sky-50 text-sky-900 p-3 rounded-2xl border border-sky-300 focus:border-sky-500 outline-none font-bold"
-                        >
-                          <option value="">-- เลือกเครื่องพิมพ์ที่ใช้หมึกนี้ --</option>
-                          <option value="Epson EcoTank L15150">Epson EcoTank L15150 (A3+ Multi-Function)</option>
-                          <option value="Konica Minolta AccurioPress C1100">Konica Minolta AccurioPress C1100 (Digital Press)</option>
-                          <option value="Mimaki JFX200-2513 UV">Mimaki JFX200-2513 UV Large Format</option>
-                          <option value="Roland TrueVIS VG3-640 Eco-Solvent">Roland TrueVIS VG3-640 Eco-Solvent</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">ประเภทหมึกพิมพ์ (ink_type) *</label>
-                        <select value={specInkType} onChange={(e) => setSpecInkType(e.target.value)} className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none font-bold">
-                          <option value="Waterproof Pigment Ink">หมึกพิกเมนต์กันน้ำ (Waterproof Pigment Ink)</option>
-                          <option value="Eco-Solvent Ink">หมึกน้ำมัน Eco-Solvent (กันน้ำ/ภายนอก)</option>
-                          <option value="Full Solvent Ink">หมึกโซลเว้นท์เข้มข้น (Full Solvent Ink)</option>
-                          <option value="UV Curable Ink">หมึก UV (UV Curable Ink)</option>
-
-                          <option value="Dye Ink">หมึกดิสเพิร์ส / หมึกน้ำ (Dye-Based Ink)</option>
-                          <option value="DTF / DTG Textile Ink">หมึกพิมพ์สกรีนเสื้อ (DTF / DTG Ink)</option>
-                          <option value="Sublimation Ink">หมึกซับลิเมชั่น (Sublimation Ink)</option>
-                          <option value="Offset Oil Ink">หมึกพิมพ์ออฟเซ็ทฐานน้ำมัน (Offset Ink)</option>
-                          <option value="Laser Toner Powder">ผงหมึกเลเซอร์ (Laser Toner Powder)</option>
-                          <option value="OTHER">อื่นๆ (Custom Ink Type)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">เฉดสี / ตลับสีที่ซื้อ (Color Option) *</label>
-                        <select value={specColorModel} onChange={(e) => setSpecColorModel(e.target.value)} className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none font-bold">
-                          <option value="Full CMYK Set">ซื้อยกชุด (Full Set / Full CMYK)</option>
-                          {printerColorSlots.map((colorSlot, idx) => (
-                            <option key={idx} value={colorSlot}>เฉพาะสี {colorSlot}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">มาตรฐานการพิมพ์ (ISO/IEC Page Yield Count) *</label>
-                        <input 
-                          type="number" 
-                          value={specVolumeBottle} 
-                          onChange={(e) => setSpecVolumeBottle(e.target.value)} 
-                          placeholder="e.g. 7500 แผ่น (5% ISO Coverage)" 
-                          className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" 
-                        />
-                      </div>
-                      <div className="md:col-span-2 bg-emerald-50 p-4 rounded-2xl border border-emerald-200 flex items-center justify-between">
-                        <div>
-                          <span className="text-[11px] font-bold text-emerald-800 block">ต้นทุนหมึกพิมพ์ต่อแผ่นจริง (Calculated Cost Per Page - CPP):</span>
-                          <span className="text-xs text-emerald-600 font-semibold">คำนวณจาก (ราคาสั่งซื้อรวม ÷ จำนวนแผ่นมาตรฐาน ISO)</span>
-                        </div>
-                        <span className="text-lg font-black text-emerald-950 font-mono">
-                          {formatLAK(formTotalPrice / (Number(specVolumeBottle) || 7500))} / แผ่น
-                        </span>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Group 3: Hardware, Glues & Equipment */}
-                  {formCategory === 'HARDWARE' && (
-                    <>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">หมวดหมู่อุปกรณ์ (hardware_type) *</label>
-                        <select value={specHwType} onChange={(e) => setSpecHwType(e.target.value)} className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none">
-                          <option value="GLUE_ADHESIVE">กาว/เคมีภัณฑ์ (กาวร้อน, กาวลาเท็กซ์)</option>
-                          <option value="FASTENER">อุปกรณ์ยึดติด (สันห่วง, ลวดแม็ก, สก๊อตเทป)</option>
-                          <option value="CUTTING_TOOL">อุปกรณ์ตัด/กรรไกร (ใบมีดคัตเตอร์, กรรไกร)</option>
-                          <option value="PACKAGING">บรรจุภัณฑ์ (กล่องพัสดุ, ฟิล์มยืด)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">เบอร์/สเปกเฉพาะ (hardware_spec)</label>
-                        <input type="text" value={specHwSpec} onChange={(e) => setSpecHwSpec(e.target.value)} placeholder="e.g. ลวดแม็ก 24/6, สันห่วง 10mm" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">จำนวนบรรจุต่อกล่อง (pack_count)</label>
-                        <input type="number" value={specPackCount} onChange={(e) => setSpecPackCount(e.target.value)} placeholder="e.g. 1000 Pcs/Box" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">น้ำหนัก/ขนาดบรรจุ (container_weight)</label>
-                        <input type="text" value={specContainerWeight} onChange={(e) => setSpecContainerWeight(e.target.value)} placeholder="e.g. 1 กิโลกรัม, 500 กรัม" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                      </div>
-                    </>
-                  )}
-
-                  {/* Group 4: Printers */}
-                  {formCategory === 'PRINTER' && (
-                    <>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">ชนิดหมึกที่เครื่องใช้ (Supported Ink Types)</label>
-                        <select className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none font-bold">
-                          <option value="Waterproof Pigment Ink">หมึกพิกเมนต์กันน้ำ (Waterproof Pigment Ink)</option>
-                          <option value="Eco-Solvent Ink">หมึกน้ำมัน Eco-Solvent (กันน้ำ/งานภายนอก)</option>
-                          <option value="UV Curable Ink">หมึก UV (UV Curable Ink)</option>
-                          <option value="Dye Ink">หมึกน้ำ (Dye Base Ink)</option>
-                          <option value="Toner Powder">ผงหมึกเลเซอร์ (Laser Toner Powder)</option>
-                        </select>
-                      </div>
-                      <div className="md:col-span-2 space-y-2">
-                        <label className="block text-slate-600 font-bold">สล็อตสีหมึกประจำเครื่อง (Dynamic Printer Color Slots) *</label>
-                        <p className="text-[11px] text-slate-400">มาตรฐาน 4 สี CMYK หรือกด + เพิ่มสล็อตสีพิเศษ (เช่น White, Varnish, Light Cyan)</p>
-                        
-                        {/* List of active color slots */}
-                        <div className="flex flex-wrap gap-2 pt-1">
-                          {printerColorSlots.map((colorName, idx) => (
-                            <span 
-                              key={idx} 
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-50 text-sky-900 border border-sky-200 shadow-2xs"
-                            >
-                              <span>{colorName}</span>
-                              <button 
-                                type="button" 
-                                onClick={() => handleRemoveColorSlot(colorName)}
-                                className="text-sky-400 hover:text-rose-600 transition"
-                                title="Remove Slot"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-
-                        {/* Input to add new custom color slot */}
-                        <div className="flex items-center gap-2 pt-2">
-                          <input 
-                            type="text" 
-                            value={newColorInput} 
-                            onChange={(e) => setNewColorInput(e.target.value)} 
-                            placeholder="เพิ่มสล็อตสีใหม่ (e.g. White, Varnish, Light Magenta)" 
-                            className="flex-1 bg-slate-50 text-slate-900 p-2.5 rounded-2xl border border-slate-200 text-xs focus:border-sky-500 outline-none"
-                          />
-                          <button 
-                            type="button" 
-                            onClick={handleAddColorSlot}
-                            className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-bold transition flex items-center gap-1 shrink-0"
-                          >
-                            <Plus className="w-4 h-4" /> เพิ่มสล็อตสี
-                          </button>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">ขนาดพิมพ์สูงสุด (max_paper_size)</label>
-                        <input type="text" value={specMaxPaperSize} onChange={(e) => setSpecMaxPaperSize(e.target.value)} placeholder="e.g. A3+ (330x483mm), หน้ากว้าง 1.6m" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">มาตรฐานปริมาณพิมพ์หมึกดำ (ISO Black Page Yield) *</label>
-                        <input type="number" placeholder="e.g. 7500 แผ่น (5% ISO Coverage)" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none font-bold" />
-                      </div>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">มาตรฐานปริมาณพิมพ์หมึกสี (ISO CMY Page Yield) *</label>
-                        <input type="number" placeholder="e.g. 6000 แผ่น (5% ISO Coverage)" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none font-bold" />
-                      </div>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">ความเร็วพิมพ์สี (PPM / sqm_hr) [เก็บข้อมูลอ้างอิง]</label>
-                        <input type="text" value={specPrintSpeed} onChange={(e) => setSpecPrintSpeed(e.target.value)} placeholder="e.g. 35 PPM สี" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">ความเร็วพิมพ์ขาวดำ (PPM) [เก็บข้อมูลอ้างอิง]</label>
-                        <input type="text" value={specClickBw} onChange={(e) => setSpecClickBw(e.target.value)} placeholder="e.g. 60 PPM ขาวดำ" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                      </div>
-                    </>
-                  )}
-
-                  {/* Group 5: Cutters & Processing Machines */}
-                  {formCategory === 'CUTTER' && (
-                    <>
-                      <div>
-                        <label className="block text-slate-600 mb-1 font-bold">หน้ากว้างตัดสูงสุด (Max Cut Width) *</label>
-                        <input type="text" value={specMaxCutWidth} onChange={(e) => setSpecMaxCutWidth(e.target.value)} placeholder="e.g. 1150 mm, หน้ากว้าง 60 นิ้ว" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none font-bold" />
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-slate-600 mb-1 font-bold">ข้อมูลการทำงานทั่วไป / ทำอะไรได้บ้าง (Machine Functionality) *</label>
-                        <textarea 
-                          rows="3" 
-                          value={specCuttingSpeed} 
-                          onChange={(e) => setSpecCuttingSpeed(e.target.value)} 
-                          placeholder="ระบุการทำงานทั่วไป เช่น: ตัดกระดาษหน้ากว้างไดคัทได้, เจาะกระดาษแบบสันห่วง, เข้าเล่มกาวร้อน" 
-                          className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none"
-                        />
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Section 4: Shipping Freight Charges */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
-                  3. ข้อมูลประเทศต้นทางและค่าขนส่ง (Freight Charges)
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-medium">
-                  <div>
-                    <label className="block text-slate-600 mb-1">ประเทศผู้ผลิต / ต้นทาง (origin_country)</label>
-                    <input type="text" value={formOrigin} onChange={(e) => setFormOrigin(e.target.value)} placeholder="TH, CN, JP" className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none uppercase" />
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 mb-1">ค่าขนส่ง/ชิปปิ้ง (freight LAK ₭)</label>
-                    <input type="number" min="0" step="100" value={formFreight} onChange={(e) => setFormFreight(e.target.value)} className="w-full bg-slate-50 text-slate-900 p-3 rounded-2xl border border-slate-200 focus:border-sky-500 outline-none" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 5: Real File Uploads (Product Image & Bank Slip) */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
-                  4. แนบรูปถ่ายสินค้าจริง และ สลิปโอนเงิน (Real Image Uploads)
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-medium">
-                  {/* Real Product Photo Upload */}
-                  <div className="space-y-2">
-                    <label className="block text-slate-600 font-bold">รูปถ่ายสินค้าจริง (Product Photo)</label>
-                    <div className="flex items-center gap-3">
-                      <label className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold cursor-pointer transition">
-                        <Upload className="w-4 h-4" />
-                        <span>อัปโหลดรูปสินค้า</span>
-                        <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, setFormImgProduct)} className="hidden" />
-                      </label>
-                      {formImgProduct && (
-                        <div className="w-12 h-12 rounded-xl border border-slate-200 overflow-hidden shrink-0">
-                          <img src={formImgProduct} alt="Preview" className="w-full h-full object-cover" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Payment Slip Upload (Conditional on TRANSFER) */}
-                  {formPaymentMethod === 'TRANSFER' && (
-                    <div className="space-y-2">
-                      <label className="block text-slate-600 font-bold text-sky-900">หลักฐานสลิปโอนเงิน (Payment Slip)</label>
-                      <div className="flex items-center gap-3">
-                        <label className="flex items-center gap-2 px-4 py-2.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-2xl font-bold cursor-pointer transition">
-                          <Upload className="w-4 h-4" />
-                          <span>อัปโหลดสลิปโอนเงิน</span>
-                          <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, setFormImgSlip)} className="hidden" />
-                        </label>
-                        {formImgSlip && (
-                          <div className="w-12 h-12 rounded-xl border border-sky-200 overflow-hidden shrink-0">
-                            <img src={formImgSlip} alt="Slip Preview" className="w-full h-full object-cover" />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div className="pt-4 border-t border-slate-100 flex justify-end gap-3 font-bold">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded-2xl transition cursor-pointer"
-                >
-                  ຍົກເລີກ (Cancel)
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-3 bg-sky-600 hover:bg-sky-700 text-white text-xs rounded-2xl shadow-md shadow-sky-600/20 transition cursor-pointer"
-                >
-                  ບັນທຶກລາຍການນຳເຂົ້າ (Save Inbound)
-                </button>
-              </div>
-            </form>
+            <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50">
+              <ImportForm 
+                onSubmit={(type, data) => {
+                  handleImportSubmit(type, data);
+                  setIsModalOpen(false);
+                }}
+                onCancel={() => setIsModalOpen(false)}
+              />
+            </div>
           </div>
         </div>
       )}

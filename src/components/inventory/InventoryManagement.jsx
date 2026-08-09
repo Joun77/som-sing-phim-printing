@@ -147,6 +147,7 @@ export default function InventoryManagement() {
       {/* Main ledger table */}
       <InventoryTable 
         items={filteredItems} 
+        activeTab={activeTab}
         onRestockItem={handleOpenRestock}
         onViewDetails={(lot) => setSelectedDetailLot(lot)}
       />

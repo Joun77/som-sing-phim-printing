@@ -311,5 +311,19 @@
     "no_linked_material": "No linked material",
     "operational_params": "Operational parameters",
     "sla_status": "SLA Status"
+  },
+  "printer_management": {
+    "color_scheme": "Color Scheme",
+    "total_slots": "Total Slots",
+    "linked_inks": "Linked Inks",
+    "oem_compatible": "OEM/Compatible",
+    "target_printer": "Linked Printer",
+    "receipt_link": "Receipt/Invoice Link",
+    "ip_address": "IP Address",
+    "mac_address": "MAC Address",
+    "ink_base_type": "Ink Base Type",
+    "image_preview": "Image Preview",
+    "quick_adjust": "Quick Adjust",
+    "low_stock_warning": "Low Stock Warning"
   }
 }

@@ -5,32 +5,25 @@ import {
   ShieldAlert, 
   Wrench, 
   Printer, 
-  Scissors, 
   Layers, 
   Clock, 
-  Camera
+  Camera, 
+  FileText,
+  ExternalLink,
+  Laptop
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
 import ConfirmDeleteModal, { DeleteActionButton } from '../common/ConfirmDeleteModal';
 
 export default function EquipmentDetailsPage({ equipmentId, onBack }) {
-  const { equipment, inventory, updateEquipmentMaintenance, setEquipment, showToast, formatCurrency } = useApp();
+  const { equipment, inventory, printerColorLinks, updateEquipmentMaintenance, setEquipment, showToast, formatCurrency } = useApp();
   const { i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
   
   const machine = equipment ? equipment.find(eq => eq.id === equipmentId) : null;
-  const linkedInks = (machine && inventory) 
-    ? inventory.filter(i => 
-        i.category === 'Ink' && (
-          i.id === machine.linkedInkSku || 
-          i.linkedInkSku === machine.id ||
-          (i.linkedMachineIds && i.linkedMachineIds.includes(machine.id)) ||
-          i.linkedMachineId === machine.id
-        )
-      ) 
-    : [];
-
+  const formatLAK = formatCurrency;
+  
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   if (!machine) {
@@ -47,8 +40,6 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
     );
   }
 
-  const formatLAK = formatCurrency;
-
   const isCritical = machine.components && machine.components.some(c => c.usage >= (c.threshold || 90));
 
   const handleDeleteEquipment = () => {
@@ -58,6 +49,9 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
       onBack();
     }
   };
+
+  // Get printer linked inks
+  const linkedLinks = printerColorLinks.filter(lnk => lnk.assetId === machine.id);
 
   return (
     <div className="space-y-6 animate-fade-in text-slate-800 font-sans pb-12">
@@ -71,249 +65,292 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
           <span>{currentLang === 'lo' ? 'ກັບໜ້າຈັດຮາຍການເຄື່ອງຈັກ (Back to Machinery)' : 'Back to Machinery'}</span>
         </button>
 
-        <span className="px-3 py-1 bg-sky-50 text-sky-700 font-mono font-black text-xs rounded-full border border-sky-200 uppercase">
-          {machine.category}
-        </span>
-      </div>
-
-      {/* Main Machine Overview Grid */}
-      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
-        {/* Machine Image Display */}
-        <div className="md:col-span-4 flex flex-col items-center justify-center">
-          {machine.imageUrl || machine.itemPhoto ? (
-            <img 
-              src={machine.imageUrl || machine.itemPhoto} 
-              alt={machine.name} 
-              className="w-full h-56 object-contain rounded-2xl border border-slate-200 bg-slate-50 p-2 shadow-inner"
-            />
-          ) : (
-            <div className="w-full h-56 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/80 flex flex-col items-center justify-center text-slate-400 gap-2">
-              {machine.category === 'Cutter' ? <Scissors className="w-12 h-12 text-slate-300" /> : <Printer className="w-12 h-12 text-slate-300" />}
-              <span className="text-xs font-bold">{currentLang === 'lo' ? 'ບໍ່ມີຮູບຖ່າຍເຄື່ອງຈັກ' : 'No Machine Image'}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Machine Details Overview */}
-        <div className="md:col-span-8 space-y-4">
-          <div className="flex items-center gap-2">
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border ${
-              isCritical 
-                ? 'text-red-600 bg-red-50 border-red-200 animate-pulse' 
-                : 'text-emerald-700 bg-emerald-50 border-emerald-200'
-            }`}>
-              {isCritical ? <ShieldAlert className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
-              <span>{isCritical ? 'Service Required' : (currentLang === 'lo' ? 'ພ້ອມໃຊ້ງານ (Operational)' : 'Operational')}</span>
-            </span>
-          </div>
-
-          <div>
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 leading-tight">
-              {machine.name}
-            </h2>
-            <p className="text-xs font-mono font-bold text-slate-400 mt-1 uppercase">
-              SKU / Asset ID: {machine.id}
-            </p>
-          </div>
-
-          {/* Dedicated Machine Specs rendering: Printer vs Cutter vs General */}
-          {machine.category === 'Printer' ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2">
-              <div className="bg-purple-50/60 p-3 rounded-2xl border border-purple-100">
-                <span className="text-[10px] text-purple-700 uppercase font-black block">{currentLang === 'lo' ? 'ໝຶກທີ່ຮອງຮັບ' : 'Supported Ink'}</span>
-                <span className="text-xs font-bold text-slate-900 block mt-0.5">{machine.specs?.supportedInkType || machine.inkType || 'Pigment Waterproof Ink'}</span>
-              </div>
-              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                <span className="text-[10px] text-slate-500 uppercase font-black block">{currentLang === 'lo' ? 'ຄວາມໄວພິມ' : 'Print Speed'}</span>
-                <span className="text-xs font-bold text-slate-900 block mt-0.5">{machine.specs?.printSpeedColor || machine.printSpeed || '25 PPM'}</span>
-              </div>
-              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                <span className="text-[10px] text-slate-500 uppercase font-black block">{currentLang === 'lo' ? 'ຂະໜາດພິມສູງສຸດ' : 'Max Print Size'}</span>
-                <span className="text-xs font-bold text-slate-900 block mt-0.5">{machine.specs?.maxPaperSize || machine.maxWidth || 'A3+ (330x483mm)'}</span>
-              </div>
-            </div>
-          ) : machine.category === 'Cutter' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-              <div className="bg-teal-50/60 p-3 rounded-2xl border border-teal-100">
-                <span className="text-[10px] text-teal-700 uppercase font-black block">{currentLang === 'lo' ? 'ໜ້າກວ້າງຕັດສູງສຸດ (Max Cut Width)' : 'Max Cut Width'}</span>
-                <span className="text-sm font-black text-slate-900 block mt-0.5">{machine.specs?.maxCutWidthMm || machine.cutCapacity || '480'} mm</span>
-              </div>
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-1">
-                <span className="text-[10px] text-slate-500 uppercase font-black block">{currentLang === 'lo' ? 'ຂໍ້ມູນທົ່ວໄປ & ຟັງຊັນການເຮັດງານ (Machine Functionality)' : 'Machine Functionality'}</span>
-                <p className="text-xs font-semibold text-slate-700 leading-relaxed">
-                  {machine.specs?.cuttingSpeed || machine.functionality || 'ເຄື່ອງຕັດເຈາະກະດາດອັດສະລິຍະ ຮອງຮັບການຕັດກະດາດຄວາມໜາສູງສຸດ 400 gsm'}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <span className="text-[10px] text-slate-500 uppercase font-black block">{currentLang === 'lo' ? 'ອາຍຸການໃຊ້ງານ' : 'Lifespan'}</span>
-              <span className="text-sm font-black text-slate-900">{machine.lifespanYears || 5} ປີ</span>
-            </div>
-          )}
+        <div className="flex items-center gap-3">
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border ${
+            isCritical 
+              ? 'text-red-600 bg-red-50 border-red-200 animate-pulse' 
+              : 'text-emerald-700 bg-emerald-50 border-emerald-200'
+          }`}>
+            {isCritical ? <ShieldAlert className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+            <span>{isCritical ? 'Service Required' : (currentLang === 'lo' ? 'ພ້ອມໃຊ້ງານ' : 'Operational')}</span>
+          </span>
+          <span className="px-3 py-1 bg-sky-50 text-sky-700 font-mono font-black text-xs rounded-full border border-sky-200 uppercase">
+            {machine.category}
+          </span>
         </div>
       </div>
 
-      {/* Printer Color Slots Pills Display (For Printer category only) */}
-      {machine.category === 'Printer' && (
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-3">
-          <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-            <Layers className="w-4 h-4 text-purple-600" />
-            <span>{currentLang === 'lo' ? 'Slot ສີໝຶກປະຈຳເຄື່ອງ (Color Slots)' : 'Printer Color Slots'}</span>
-          </h4>
-          <div className="flex flex-wrap gap-2">
-            {(machine.specs?.colorSlots || ['Cyan (C)', 'Magenta (M)', 'Yellow (Y)', 'Black (K)']).map((slot, idx) => (
-              <span key={idx} className="px-3.5 py-1.5 rounded-full text-xs font-black bg-purple-50 text-purple-900 border border-purple-200 shadow-2xs">
-                🎨 {slot}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Printer Ink Consumption Technical Rates (Printer only) */}
-      {machine.category === 'Printer' && (
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <div className="p-2 bg-purple-50 text-purple-600 rounded-xl border border-purple-100">
-              <Printer className="w-5 h-5" />
-            </div>
-            <div>
-              <h4 className="font-black text-sm text-slate-900">{currentLang === 'lo' ? 'ອັດຕາການສິ້ນເປືອງໝຶກພິມ (Technical Ink Rates)' : 'Technical Ink Rates'}</h4>
-              <p className="text-[11px] text-slate-400 font-semibold">ISO 5% Standard Coverage Rates</p>
-            </div>
-          </div>
-
-          <div className="space-y-3 text-xs font-bold text-slate-700">
-            <div className="flex justify-between items-center bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
-              <span className="text-slate-600">{currentLang === 'lo' ? 'ອັດຕາໝຶກດຳ (Black Ink Rate @ 5%):' : 'Black Ink Rate @ 5%:'}</span>
-              <span className="font-sans font-black text-purple-700 text-sm">
-                {(machine.blackMlPerSheet || 0.0169).toFixed(4)} ml / {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheet'}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
-              <span className="text-slate-600">{currentLang === 'lo' ? 'ອັດຕາໝຶກຊຸດສີ (Color Set Rate @ 5%):' : 'Color Set Rate @ 5%:'}</span>
-              <span className="font-sans font-black text-purple-700 text-sm">
-                {(machine.colorMlPerSheet || machine.inkConsumptionStandard || 0.035).toFixed(4)} ml / {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheet'}
-              </span>
-            </div>
-
-            {/* Linked Inventory Ink Items (CMYK / Individual Colors) */}
-            <div className="bg-purple-50/60 p-4 rounded-2xl border border-purple-100 space-y-3">
-              <span className="text-[10px] text-purple-700 uppercase font-black block">
-                {currentLang === 'lo' ? 'ລາຍການນ້ຳໝຶກທີ່ເຊື່ອมໂຍງ (Linked CMYK Inks):' : 'Linked CMYK Inks:'}
-              </span>
-              {linkedInks.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {linkedInks.map(ink => {
-                    const colorModel = ink.colorModel || ink.specs?.colorModel || ink.inkColor || '';
-                    const isCyan = colorModel.toLowerCase().includes('cyan') || ink.name.toLowerCase().includes('cyan');
-                    const isMagenta = colorModel.toLowerCase().includes('magenta') || ink.name.toLowerCase().includes('magenta');
-                    const isYellow = colorModel.toLowerCase().includes('yellow') || ink.name.toLowerCase().includes('yellow');
-                    const isBlack = colorModel.toLowerCase().includes('black') || ink.name.toLowerCase().includes('black');
-                    
-                    let colorPill = 'bg-slate-100 text-slate-800';
-                    if (isCyan) colorPill = 'bg-cyan-100 text-cyan-800 border border-cyan-200';
-                    else if (isMagenta) colorPill = 'bg-pink-100 text-pink-800 border border-pink-200';
-                    else if (isYellow) colorPill = 'bg-yellow-100 text-yellow-800 border border-yellow-200';
-                    else if (isBlack) colorPill = 'bg-neutral-900 text-white border border-neutral-800';
-
-                    return (
-                      <div key={ink.id} className="bg-white p-3 rounded-xl border border-purple-200/40 flex flex-col justify-between space-y-1.5 shadow-2xs">
-                        <div className="flex justify-between items-start gap-1">
-                          <span className="font-extrabold text-slate-800 text-[11px] leading-tight block truncate max-w-[150px]" title={ink.name}>
-                            {ink.name}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase shrink-0 ${colorPill}`}>
-                            {colorModel || 'Ink'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center text-[10px]">
-                          <span className="text-slate-400 font-mono">{ink.id}</span>
-                          <span className="font-black text-emerald-600 font-sans">
-                            {ink.stockQty.toLocaleString()} ml
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+      {/* Vertical Form Spec Sheet (5 Categories) */}
+      <div className="space-y-6">
+        
+        {/* CATEGORY 1: General & Visuals */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-6">
+          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 flex items-center gap-2">
+            <Camera className="w-4 h-4 text-sky-600" />
+            <span>Category 1: General & Visuals</span>
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+            <div className="md:col-span-4 flex justify-center">
+              {machine.imageUrl || machine.itemPhoto ? (
+                <img 
+                  src={machine.imageUrl || machine.itemPhoto} 
+                  alt={machine.name} 
+                  className="w-full max-h-60 object-contain rounded-2xl border border-slate-200 bg-slate-50 p-2 shadow-inner"
+                />
               ) : (
-                <p className="text-xs text-purple-900/60 font-bold">
-                  {currentLang === 'lo' ? 'ຍັງບໍ່ມີນ້ຳໝຶກທີ່ເຊື່ອມໂຍง' : 'No inks linked to this printer yet'}
-                </p>
+                <div className="w-full h-48 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center text-slate-400 gap-2">
+                  <Printer className="w-12 h-12 text-slate-300" />
+                  <span className="text-xs font-bold">No Product Image</span>
+                </div>
               )}
             </div>
+            <div className="md:col-span-8 grid grid-cols-2 gap-4 text-xs font-bold text-slate-600">
+              <div>
+                <span className="text-slate-400 uppercase text-[10px] block">Asset ID</span>
+                <span className="text-sm text-slate-900 font-mono block mt-1">{machine.id}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 uppercase text-[10px] block">Serial Number (S/N)</span>
+                <span className="text-sm text-slate-900 font-mono block mt-1">{machine.serialNumber || machine.sn || '-'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 uppercase text-[10px] block">Brand / Make</span>
+                <span className="text-sm text-slate-900 block mt-1">{machine.brand || '-'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 uppercase text-[10px] block">Model</span>
+                <span className="text-sm text-slate-900 block mt-1">{machine.model || machine.name}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 uppercase text-[10px] block">Printer Category</span>
+                <span className="text-sm text-slate-900 block mt-1">{machine.printerCategory || machine.category}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 uppercase text-[10px] block">Color Scheme Type</span>
+                <span className="text-sm text-slate-900 block mt-1">{machine.colorSchemeType || '-'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 uppercase text-[10px] block">Total Color Slots</span>
+                <span className="text-sm text-slate-900 font-mono block mt-1">{machine.totalColorSlots || machine.totalSlots || '-'}</span>
+              </div>
+            </div>
           </div>
         </div>
-      )}
 
-      {/* Component Wear & Maintenance Health */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-sky-50 text-sky-600 rounded-xl border border-sky-100">
-              <Clock className="w-5 h-5" />
+        {/* CATEGORY 2: Technical Specifications */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 flex items-center gap-2">
+            <Printer className="w-4 h-4 text-purple-600" />
+            <span>Category 2: Technical Specifications</span>
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-xs font-bold text-slate-600">
+            <div>
+              <span className="text-slate-400 uppercase text-[10px] block">Print Speed (Black / Color)</span>
+              <span className="text-xs text-slate-900 block mt-1">{machine.printSpeedColor || machine.printSpeed || '25 PPM / 60 PPM'}</span>
             </div>
             <div>
-              <h4 className="font-black text-sm text-slate-900">{currentLang === 'lo' ? 'ສະຖານະຊິ້ນສ່ວນ & ບຳລຸງຮັກສາ (SLA Component Wear)' : 'SLA Component Wear'}</h4>
-              <p className="text-[11px] text-slate-400 font-semibold">Track wear percentages & component SLA thresholds</p>
+              <span className="text-slate-400 uppercase text-[10px] block">Max Resolution</span>
+              <span className="text-xs text-slate-900 block mt-1">{machine.resolution || machine.maxResolution || '1200 x 1200 DPI'}</span>
+            </div>
+            <div>
+              <span className="text-slate-400 uppercase text-[10px] block">Supported Paper Sizes</span>
+              <span className="text-xs text-slate-900 block mt-1">{machine.paperSizes || 'A4, A3, SRA3, 13x19"'}</span>
+            </div>
+            <div>
+              <span className="text-slate-400 uppercase text-[10px] block">Paper Tray Capacity</span>
+              <span className="text-xs text-slate-900 block mt-1">{machine.trayCapacity || '1,500 Sheets'}</span>
+            </div>
+            <div>
+              <span className="text-slate-400 uppercase text-[10px] block">Duplex Printing</span>
+              <span className="text-xs text-slate-900 block mt-1">{machine.duplex ? 'Yes' : 'No'}</span>
+            </div>
+            <div>
+              <span className="text-slate-400 uppercase text-[10px] block">Registered Functions</span>
+              <span className="text-xs text-slate-900 block mt-1">{(machine.functions && machine.functions.join(', ')) || 'Print, Scan, Copy'}</span>
+            </div>
+            <div className="md:col-span-2">
+              <span className="text-slate-400 uppercase text-[10px] block">Scanner Specs</span>
+              <span className="text-xs text-slate-900 block mt-1">{machine.scannerSpecs || 'Dual-scan ADF, 240 opm'}</span>
             </div>
           </div>
-          <button
-            onClick={() => {
-              updateEquipmentMaintenance(machine.id);
-              showToast(currentLang === 'lo' ? `ຣີເຊັດຄ່າບຳລຸງຮັກສາເຄື່ອງ "${machine.name}" ສຳເລັດ!` : 'Maintenance reset successfully!', 'success');
-            }}
-            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition cursor-pointer active:scale-95"
-          >
-            <Wrench className="w-3.5 h-3.5" />
-            <span>SLA Reset</span>
-          </button>
         </div>
 
-        <div className="space-y-3">
-          {machine.components && machine.components.length > 0 ? (
-            machine.components.map((comp, idx) => (
-              <div key={idx} className="space-y-1">
-                <div className="flex justify-between text-xs font-bold">
-                  <span className="text-slate-700">{comp.name}</span>
-                  <span className={comp.usage >= (comp.threshold || 90) ? 'text-red-600 font-black' : 'text-slate-600 font-sans'}>
-                    {comp.usage}% / {comp.threshold || 90}%
-                  </span>
-                </div>
-                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full rounded-full transition-all ${
-                      comp.usage >= (comp.threshold || 90) ? 'bg-red-500' : 'bg-emerald-500'
-                    }`}
-                    style={{ width: `${Math.min(100, comp.usage)}%` }}
-                  />
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="text-xs text-slate-400 font-semibold">{currentLang === 'lo' ? 'ບໍ່ມີຂໍ້ມູນສະຖານະຊິ້ນສ່ວນອາໄຫຼ່' : 'No component data available'}</p>
-          )}
-        </div>
-      </div>
-
-      {/* Payment Slip Attachment Card */}
-      {machine.paymentSlip && (
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-3">
-          <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-            <Camera className="w-4 h-4 text-emerald-600" />
-            {currentLang === 'lo' ? 'ຫຼັກຖານການຈ່າຍເງິນ / ສະລິບ (Payment Slip)' : 'Payment Slip'}
-          </h4>
-          <div className="h-52 bg-slate-50 rounded-xl p-2 border border-slate-100 flex items-center justify-center">
-            <img src={machine.paymentSlip} alt="Payment Slip" className="w-full h-48 object-contain rounded-lg" />
+        {/* CATEGORY 3: Connectivity & Network */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 flex items-center gap-2">
+            <Laptop className="w-4 h-4 text-emerald-600" />
+            <span>Category 3: Connectivity & Network</span>
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-xs font-bold text-slate-600">
+            <div>
+              <span className="text-slate-400 uppercase text-[10px] block">Connectivity Interfaces</span>
+              <span className="text-xs text-slate-900 block mt-1">{(machine.connectivity && machine.connectivity.join(', ')) || 'Ethernet, USB 3.0'}</span>
+            </div>
+            <div>
+              <span className="text-slate-400 uppercase text-[10px] block">IP Address</span>
+              <span className="text-xs text-slate-900 font-mono block mt-1">{machine.ipAddress || machine.ip || '192.168.1.120'}</span>
+            </div>
+            <div>
+              <span className="text-slate-400 uppercase text-[10px] block">MAC Address</span>
+              <span className="text-xs text-slate-900 font-mono block mt-1">{machine.macAddress || machine.mac || '00:1A:2B:3C:4D:5E'}</span>
+            </div>
+            <div>
+              <span className="text-slate-400 uppercase text-[10px] block">OS Compatibility</span>
+              <span className="text-xs text-slate-900 block mt-1">{(machine.osCompatibility && machine.osCompatibility.join(', ')) || 'Windows, macOS, Linux'}</span>
+            </div>
           </div>
         </div>
-      )}
+
+        {/* CATEGORY 4: Linked Colors & Consumables */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-6">
+          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 flex items-center gap-2">
+            <Layers className="w-4 h-4 text-purple-600" />
+            <span>Category 4: Linked Colors & Consumables (Dynamic Section)</span>
+          </h3>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 uppercase tracking-wider font-black">
+                  <th className="py-3 px-4">Slot / Color Name</th>
+                  <th className="py-3 px-4">Color Code (Ink Code)</th>
+                  <th className="py-3 px-4">Ink Model / Name</th>
+                  <th className="py-3 px-4 text-right">Volume</th>
+                  <th className="py-3 px-4">Ink Type</th>
+                  <th className="py-3 px-4">OEM / Compatible</th>
+                  <th className="py-3 px-4 text-right">Unit Price</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-semibold">
+                {linkedLinks.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="py-8 text-center text-slate-400 font-bold">
+                      No linked inks found for this machine. Register inks via Inbound procurement to link colors.
+                    </td>
+                  </tr>
+                ) : (
+                  linkedLinks.map(lnk => {
+                    const ink = inventory.find(i => i.id === lnk.inkCode);
+                    return (
+                      <tr key={lnk.id} className="hover:bg-slate-50">
+                        <td className="py-3 px-4 font-bold text-slate-800">{lnk.slotPosition}</td>
+                        <td className="py-3 px-4 font-mono text-slate-500">{lnk.inkCode}</td>
+                        <td className="py-3 px-4 text-slate-700">{ink ? ink.name : '-'}</td>
+                        <td className="py-3 px-4 font-mono text-slate-500 text-right">{ink?.volume || ink?.purchaseMultiplier || '-'} ml</td>
+                        <td className="py-3 px-4 text-slate-600">{ink?.inkBaseType || '-'}</td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                            ink?.isCompatible ? 'bg-orange-50 text-orange-700 border border-orange-100' : 'bg-green-50 text-green-700 border border-green-100'
+                          }`}>
+                            {ink?.isCompatible ? 'Compatible' : 'OEM'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 font-mono text-emerald-600 font-bold text-right">{ink ? formatLAK(ink.unitPrice || ink.costPerPurchaseUnit || 0) : '-'}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Component wear (Maintenance units) */}
+          <div className="space-y-4 pt-4 border-t border-slate-100">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black text-slate-800 uppercase tracking-wider block">Maintenance Units SLA Health</span>
+              <button
+                onClick={() => {
+                  updateEquipmentMaintenance(machine.id);
+                  showToast(currentLang === 'lo' ? `ຣີເຊັດຄ່າບຳລຸງຮັກສາເຄື່ອງ "${machine.name}" ສຳເລັດ!` : 'Maintenance reset successfully!', 'success');
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[10px] rounded-xl border border-indigo-200 transition cursor-pointer active:scale-95"
+              >
+                <Wrench className="w-3 h-3" />
+                <span>SLA Reset</span>
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {machine.components && machine.components.map((comp, idx) => (
+                <div key={idx} className="bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-1.5">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-slate-600">{comp.name}</span>
+                    <span className={comp.usage >= (comp.threshold || 90) ? 'text-red-600 font-black' : 'text-slate-700 font-mono'}>
+                      {comp.usage}% / {comp.threshold || 90}%
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all ${
+                        comp.usage >= (comp.threshold || 90) ? 'bg-red-500' : 'bg-emerald-500'
+                      }`}
+                      style={{ width: `${Math.min(100, comp.usage)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* CATEGORY 5: Purchasing & Document Links */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-6">
+          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 flex items-center gap-2">
+            <FileText className="w-4 h-4 text-amber-600" />
+            <span>Category 5: Purchasing & Document Links</span>
+          </h3>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-xs font-bold text-slate-600">
+            <div>
+              <span className="text-slate-400 uppercase text-[10px] block">Purchase Date</span>
+              <span className="text-xs text-slate-900 block mt-1">{machine.purchaseDate || '-'}</span>
+            </div>
+            <div>
+              <span className="text-slate-400 uppercase text-[10px] block">Price / Cost</span>
+              <span className="text-xs text-slate-900 font-mono block mt-1">{formatLAK(machine.purchaseCost || machine.price || 0)}</span>
+            </div>
+            <div>
+              <span className="text-slate-400 uppercase text-[10px] block">Vendor / Supplier</span>
+              <span className="text-xs text-slate-900 block mt-1">{machine.vendor || '-'}</span>
+            </div>
+            <div>
+              <span className="text-slate-400 uppercase text-[10px] block">Warranty Expiry Year</span>
+              <span className="text-xs text-slate-900 block mt-1">{machine.warrantyExpirationYear || machine.warrantyExpiration || '-'}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3 pt-4 border-t border-slate-100">
+            {machine.receiptUrl || machine.paymentSlip ? (
+              <a
+                href={machine.receiptUrl || machine.paymentSlip}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition border border-slate-200 shadow-2xs"
+              >
+                <FileText className="w-4 h-4 text-amber-600" />
+                <span>View Receipt / Invoice Link</span>
+                <ExternalLink className="w-3 h-3 text-slate-400" />
+              </a>
+            ) : null}
+
+            {machine.supplierLink || machine.vendorLink ? (
+              <a
+                href={machine.supplierLink || machine.vendorLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition border border-slate-200 shadow-2xs"
+              >
+                <span>Supplier Link</span>
+                <ExternalLink className="w-3 h-3 text-slate-400" />
+              </a>
+            ) : null}
+          </div>
+        </div>
+
+      </div>
 
       {/* Bottom Action Footer with Reusable Delete Button */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs flex items-center justify-end gap-3">
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs flex items-center justify-between">
+        <span className="text-xs text-slate-400 font-semibold">Location / Dept: {machine.location || 'Main Office'}</span>
         <DeleteActionButton onClick={() => setIsDeleteModalOpen(true)} />
       </div>
 
