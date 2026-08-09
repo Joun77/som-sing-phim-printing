@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"backend/auth"
 	"backend/inventory"
 	"backend/orders"
 	"backend/pricing"
@@ -41,6 +42,13 @@ func main() {
 		})
 	})
 
+	// Auth routes
+	router.POST("/api/auth/login", auth.HandleLogin)
+
+	// Daily rates routes
+	router.GET("/api/rates", pricing.HandleGetRates)
+	router.PUT("/api/rates", pricing.HandleUpdateRate)
+
 	// Pricing engine route
 	router.POST("/api/pricing/calculate", pricing.HandleCalculatePrice)
 
@@ -49,6 +57,10 @@ func main() {
 	router.POST("/api/orders", orders.HandleCreateOrder)
 	router.PUT("/api/orders/:id/deposit", orders.HandleRecordDeposit)
 	router.PUT("/api/orders/:id/status", orders.HandleUpdateOrderStatus)
+
+	// PDF Generation routes
+	router.GET("/api/orders/:id/pdf/quotation", orders.HandleGenerateQuotationPDF)
+	router.GET("/api/orders/:id/pdf/delivery", orders.HandleGenerateDeliveryPDF)
 
 	// Inventory offcut routes
 	router.GET("/api/inventory/offcuts", inventory.HandleGetOffcuts)

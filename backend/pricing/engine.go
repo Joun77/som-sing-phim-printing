@@ -27,21 +27,24 @@ type CalculationRequest struct {
 	LaborCostPerHour  float64 `json:"labor_cost_per_hour"`
 	EstimatedHours    float64 `json:"estimated_hours"`
 	MarkupMargin      float64 `json:"markup_margin"` // e.g., 0.30 for 30% profit margin
+	TargetCurrency    string  `json:"target_currency"`
 }
 
 // CalculationResponse details the cost breakdown and sale prices
 type CalculationResponse struct {
-	JobName       string  `json:"job_name"`
-	Quantity      int     `json:"quantity"`
-	PaperCost     float64 `json:"paper_cost"`
-	InkCost       float64 `json:"ink_cost"`
+	JobName        string  `json:"job_name"`
+	Quantity       int     `json:"quantity"`
+	PaperCost      float64 `json:"paper_cost"`
+	InkCost        float64 `json:"ink_cost"`
 	LaminationCost float64 `json:"lamination_cost"`
-	BindingCost   float64 `json:"binding_cost"`
-	LaborCost     float64 `json:"labor_cost"`
-	TotalCost     float64 `json:"total_cost"`
-	SalePrice     float64 `json:"sale_price"`
-	UnitPrice     float64 `json:"unit_price"`
-	ProfitMargin  float64 `json:"profit_margin"`
+	BindingCost    float64 `json:"binding_cost"`
+	LaborCost      float64 `json:"labor_cost"`
+	TotalCost      float64 `json:"total_cost"`
+	SalePrice      float64 `json:"sale_price"`
+	UnitPrice      float64 `json:"unit_price"`
+	ProfitMargin   float64 `json:"profit_margin"`
+	Currency       string  `json:"currency"`
+	ExchangeRate   float64 `json:"exchange_rate"`
 }
 
 // CalculateJobPricing performs the backend pricing engine math
@@ -83,6 +86,23 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	// 6. Markup & Sale Price
 	salePrice := totalCost * (1.0 + req.MarkupMargin)
 	
+	// 7. Multi-currency conversion
+	currency := req.TargetCurrency
+	if currency == "" {
+		currency = "LAK"
+	}
+	rate := GetExchangeRateSnapshot(currency)
+
+	if currency != "LAK" && rate > 0 {
+		paperCost = paperCost / rate
+		inkCost = inkCost / rate
+		laminationCost = laminationCost / rate
+		bindingCost = bindingCost / rate
+		laborCost = laborCost / rate
+		totalCost = totalCost / rate
+		salePrice = salePrice / rate
+	}
+
 	// Round calculations to 2 decimal places
 	paperCost = roundToTwoDecimals(paperCost)
 	inkCost = roundToTwoDecimals(inkCost)
@@ -106,6 +126,8 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		SalePrice:      salePrice,
 		UnitPrice:      unitPrice,
 		ProfitMargin:   req.MarkupMargin,
+		Currency:       currency,
+		ExchangeRate:   rate,
 	}, nil
 }
 

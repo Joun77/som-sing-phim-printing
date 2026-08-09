@@ -68,6 +68,13 @@ CREATE TYPE order_status AS ENUM (
     'DELIVERED'
 );
 
+CREATE TABLE currency_rates (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    currency VARCHAR(10) UNIQUE NOT NULL,
+    rate_to_lak NUMERIC(12, 6) NOT NULL DEFAULT 1.000000,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     order_number VARCHAR(50) UNIQUE NOT NULL,
@@ -77,6 +84,8 @@ CREATE TABLE orders (
     deposit_amount NUMERIC(12, 2) DEFAULT 0.00,
     total_price NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     total_cost NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    currency VARCHAR(10) DEFAULT 'LAK',
+    exchange_rate NUMERIC(12, 6) DEFAULT 1.000000,
     google_drive_link TEXT, -- File access for production prepress
     created_by UUID REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

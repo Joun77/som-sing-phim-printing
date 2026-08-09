@@ -1011,6 +1011,22 @@ export default function OrderDetailsPage({
 
         {/* Status Badges & Delete Button */}
         <div className="flex flex-wrap items-center gap-3">
+          <a
+            href={`http://localhost:8080/api/orders/${order.id}/pdf/quotation`}
+            download
+            className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer"
+          >
+            <FileText className="w-4 h-4" />
+            <span>{currentLang === 'lo' ? 'ໃບສະເໜີລາຄາ (PDF)' : 'Quotation (PDF)'}</span>
+          </a>
+          <a
+            href={`http://localhost:8080/api/orders/${order.id}/pdf/delivery`}
+            download
+            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer"
+          >
+            <FileText className="w-4 h-4" />
+            <span>{currentLang === 'lo' ? 'ໃບສົ່ງເຄື່ອງ (PDF)' : 'Delivery Note (PDF)'}</span>
+          </a>
           <span className={`px-3 py-1.5 rounded-xl text-xs font-black border uppercase flex items-center gap-1.5 ${getStatusBadgeClass(order.status)}`}>
             {getStatusIcon(order.status)}
             <span>{t(`status.${order.status}`)}</span>
