@@ -504,6 +504,236 @@ const initialSpoilageLogs = [
   }
 ];
 
+// Multi-Currency configuration (all internal values are stored in LAK base)
+const CURRENCY_META = {
+  LAK: { symbol: '₭', locale: 'lo-LA', currency: 'LAK', rate: 1 },
+  THB: { symbol: '฿', locale: 'th-TH', currency: 'THB', rate: 700 },
+  USD: { symbol: '$', locale: 'en-US', currency: 'USD', rate: 21000 }
+};
+
+const initialQuotations = [
+  {
+    id: 'quot-260801-01',
+    quotationNumber: 'Q-260801-01',
+    customerName: 'ສົມພອນ ສີວິໄລ',
+    phone: '020 55667788',
+    status: 'Accepted',
+    version: 2,
+    versions: [
+      { version: 1, date: getPastDateString(6), total: 262500, note: 'ປະມານເບື້ອງຕົ້ນ (Initial estimate)' },
+      { version: 2, date: getPastDateString(3), total: 232500, note: 'ປັບລົງ 5% (Revised -5% discount)' }
+    ],
+    items: [
+      { name: 'ເຈ້ຍ A4 Double A 80gsm (ພິມ 100 ແຜ່ນ)', quantity: 100, unitPrice: 1200 },
+      { name: 'ກະດູກງູ Spiral 8mm', quantity: 2, unitPrice: 15000 }
+    ],
+    subtotal: 150000,
+    discountPercent: 5,
+    taxEnabled: true,
+    taxRate: 7,
+    taxAmount: 9975,
+    grandTotal: 232500,
+    expiresAt: '2026-08-31',
+    paymentTerms: '50% Deposit / 50% on Delivery',
+    createdAt: getPastDateString(6),
+    convertedOrderId: 'ord-1001',
+    notes: 'ລູກຄ້າຮັບເຄີຍງານສີຄຸນນະພາບສູງ'
+  },
+  {
+    id: 'quot-260802-02',
+    quotationNumber: 'Q-260802-02',
+    customerName: 'ຮ້ານອາຫານ ທ່າທາງ',
+    phone: '020 99887766',
+    status: 'Pending',
+    version: 1,
+    versions: [
+      { version: 1, date: getPastDateString(2), total: 318500, note: 'ເມນູໃໝ່ ປົກແຂງ 50 ຊຸດ' }
+    ],
+    items: [
+      { name: 'ເຈ້ຍ A3 Art Paper 120gsm (ເມນູ 30 ແຜ່ນ)', quantity: 30, unitPrice: 15000 }
+    ],
+    subtotal: 450000,
+    discountPercent: 0,
+    taxEnabled: true,
+    taxRate: 7,
+    taxAmount: 31500,
+    grandTotal: 481500,
+    expiresAt: '2026-08-20',
+    paymentTerms: 'Immediate / Cash',
+    createdAt: getPastDateString(2),
+    convertedOrderId: null,
+    notes: ''
+  }
+];
+
+const initialEmployees = [
+  {
+    id: 'EMP-001',
+    name: 'ສົມຈິດ ແກ້ວມະນີ',
+    nameEn: 'Somchit Kaewmanee',
+    role: 'press_operator',
+    phone: '020-5551-0001',
+    address: 'ບ້ານ ສາຍລົມ, ວຽງຈັນ',
+    salary: 2500000,
+    salaryType: 'monthly',
+    startDate: '2024-01-15',
+    status: 'active',
+    attendance: { present: 22, absent: 1, late: 2 },
+    skills: ['Digital Printing', 'CMYK Calibration', 'Mimaki Operation'],
+    shift: 'morning',
+    avatar: 'SC',
+    rating: 4.8,
+    assignedMachines: ['eq-konica'],
+    pieceRatePerImpression: 15,
+    impressionsProduced: 85000,
+    salesCommissionRate: 0
+  },
+  {
+    id: 'EMP-002',
+    name: 'ນາງ ມາລີ ວົງສະຫວັນ',
+    nameEn: 'Malee Vongsavanh',
+    role: 'cutting_finishing',
+    phone: '020-5551-0002',
+    address: 'ບ້ານ ໂພນຕ້ອງ, ວຽງຈັນ',
+    salary: 2200000,
+    salaryType: 'monthly',
+    startDate: '2024-03-10',
+    status: 'active',
+    attendance: { present: 23, absent: 0, late: 1 },
+    skills: ['Guillotine Cutting', 'Lamination', 'Binding'],
+    shift: 'morning',
+    avatar: 'ML',
+    rating: 4.9,
+    assignedMachines: ['eq-eba-cutter'],
+    pieceRatePerImpression: 0,
+    impressionsProduced: 0,
+    salesCommissionRate: 0
+  },
+  {
+    id: 'EMP-003',
+    name: 'ຄຳສອນ ພົມມະວົງ',
+    nameEn: 'Khamson Phommavong',
+    role: 'design_prepress',
+    phone: '020-5551-0003',
+    address: 'ບ້ານ ດົງໂດກ, ວຽງຈັນ',
+    salary: 3000000,
+    salaryType: 'monthly',
+    startDate: '2023-11-01',
+    status: 'active',
+    attendance: { present: 21, absent: 2, late: 0 },
+    skills: ['Adobe Illustrator', 'Photoshop', 'Prepress QC', 'Artwork'],
+    shift: 'morning',
+    avatar: 'KS',
+    rating: 4.7,
+    assignedMachines: [],
+    pieceRatePerImpression: 0,
+    impressionsProduced: 0,
+    salesCommissionRate: 0
+  },
+  {
+    id: 'EMP-004',
+    name: 'ບຸນທ່ຽນ ໄຊຍະວົງ',
+    nameEn: 'Bountien Xaiyavong',
+    role: 'delivery_logistics',
+    phone: '020-5551-0004',
+    address: 'ບ້ານ ສີວິໄລ, ວຽງຈັນ',
+    salary: 2000000,
+    salaryType: 'monthly',
+    startDate: '2024-06-01',
+    status: 'active',
+    attendance: { present: 20, absent: 2, late: 3 },
+    skills: ['Kerry Lao', 'BCEL Express', 'Route Planning'],
+    shift: 'afternoon',
+    avatar: 'BT',
+    rating: 4.3,
+    assignedMachines: [],
+    pieceRatePerImpression: 0,
+    impressionsProduced: 0,
+    salesCommissionRate: 0
+  },
+  {
+    id: 'EMP-005',
+    name: 'ນາງ ບົວທອງ ລາດຊາວົງ',
+    nameEn: 'Bouathong Ratsavong',
+    role: 'customer_service',
+    phone: '020-5551-0005',
+    address: 'ບ້ານ ທ່ານົກ, ວຽງຈັນ',
+    salary: 2300000,
+    salaryType: 'monthly',
+    startDate: '2024-02-20',
+    status: 'active',
+    attendance: { present: 24, absent: 0, late: 0 },
+    skills: ['Order Intake', 'WhatsApp/LINE CRM', 'Customer Follow-up'],
+    shift: 'morning',
+    avatar: 'BT2',
+    rating: 5.0,
+    assignedMachines: [],
+    pieceRatePerImpression: 0,
+    impressionsProduced: 0,
+    salesCommissionRate: 2
+  }
+];
+
+const initialMachineStatus = {
+  'eq-konica': { status: 'running', lastChanged: getPastDateTimeString(0, 8, 0) },
+  'eq-eba-cutter': { status: 'setup', lastChanged: getPastDateTimeString(0, 9, 0) },
+  'eq-laminator': { status: 'running', lastChanged: getPastDateTimeString(0, 8, 30) }
+};
+
+const initialDowntimeLogs = [
+  {
+    id: 'dt-1',
+    equipmentId: 'eq-konica',
+    equipmentName: 'ເຄື່ອງພິມ Konica Minolta C6085',
+    startTime: getPastDateTimeString(1, 10, 15),
+    endTime: getPastDateTimeString(1, 11, 40),
+    downtimeMinutes: 85,
+    reason: 'No Material',
+    description: 'ລໍຖ້າເຈ້ຍ A4 ເຂົ້າໃໝ່ (Waiting for A4 paper restock)'
+  }
+];
+
+const initialPurchaseRequisitions = [
+  {
+    id: 'PR-260801-01',
+    prNumber: 'PR-260801-01',
+    date: getPastDateString(3),
+    materialId: 'ink-konica-black-oem',
+    materialName: 'ນ້ຳໝຶກ Konica Black OEM',
+    category: 'Ink',
+    qty: 2,
+    unit: 'Bottle (100ml)',
+    currentStock: 45,
+    reorderThreshold: 50,
+    reason: 'Reorder Point (ROP) alert',
+    status: 'Open'
+  }
+];
+
+const initialDeliveries = [
+  {
+    id: 'dlv-1',
+    orderId: 'ord-1003',
+    customerName: 'ຮ້ານອາຫານ ທ່າທາງ',
+    courier: 'In-house Driver',
+    trackingNumber: 'SOMSING-1003',
+    dispatchedAt: getPastDateTimeString(2, 13, 0),
+    status: 'Delivered',
+    deliveredAt: getPastDateTimeString(2, 14, 0),
+    podSignature: '',
+    podPhoto: '',
+    notes: ''
+  }
+];
+
+const ROLE_OPTIONS = [
+  { id: 'admin', labelLo: 'ຜູ້ບໍລິຫານ (Admin)', labelEn: 'Admin' },
+  { id: 'sales', labelLo: 'ຝ່າຍຂາຍ (Sales)', labelEn: 'Sales' },
+  { id: 'press_operator', labelLo: 'ຊ່າງພິມ (Press Operator)', labelEn: 'Press Operator' },
+  { id: 'inventory_manager', labelLo: 'ຜູ້ຈັດການຄັງ (Inventory Manager)', labelEn: 'Inventory Manager' },
+  { id: 'accountant', labelLo: 'ນັກບັນຊີ (Accountant)', labelEn: 'Accountant' }
+];
+
 export const AppProvider = ({ children }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [focusOrderId, setFocusOrderId] = useState(null);
@@ -511,6 +741,120 @@ export const AppProvider = ({ children }) => {
   const [prefilledOrderSpecs, setPrefilledOrderSpecs] = useState(null);
   const [toast, setToast] = useState(null); // { message: '', type: 'success' | 'warning' }
   const [confirmDialog, setConfirmDialog] = useState(null); // { message: '', onConfirm: () => void, onCancel: () => void }
+
+  // ---- Multi-currency (internal values always stored in LAK base) ----
+  const [currency, setCurrency] = useState(() => {
+    const saved = localStorage.getItem('ss_print_currency_v6');
+    return saved && CURRENCY_META[saved] ? saved : 'LAK';
+  });
+
+  useEffect(() => {
+    safeSetItem('ss_print_currency_v6', currency);
+  }, [currency]);
+
+  const formatCurrency = (num) => {
+    const meta = CURRENCY_META[currency] || CURRENCY_META.LAK;
+    const converted = (Number(num) || 0) / meta.rate;
+    const options = {
+      style: 'currency',
+      currency: meta.currency,
+      maximumFractionDigits: meta.currency === 'USD' ? 2 : 0,
+      minimumFractionDigits: 0
+    };
+    try {
+      return new Intl.NumberFormat(meta.locale, options).format(converted);
+    } catch (e) {
+      return `${meta.symbol}${converted.toLocaleString()}`;
+    }
+  };
+
+  const convertToCurrency = (num) => {
+    const meta = CURRENCY_META[currency] || CURRENCY_META.LAK;
+    return (Number(num) || 0) / meta.rate;
+  };
+
+  // ---- Quotations (versioning / expiry / convert-to-order) ----
+  const [quotations, setQuotations] = useState(() => {
+    const saved = localStorage.getItem('ss_print_quotations_v6');
+    return saved ? JSON.parse(saved) : initialQuotations;
+  });
+
+  useEffect(() => {
+    safeSetItem('ss_print_quotations_v6', quotations);
+  }, [quotations]);
+
+  // ---- Employees (persisted, includes machine assignments & incentives) ----
+  const [employees, setEmployees] = useState(() => {
+    const saved = localStorage.getItem('ss_print_employees_v6');
+    return saved ? JSON.parse(saved) : initialEmployees;
+  });
+
+  useEffect(() => {
+    safeSetItem('ss_print_employees_v6', employees);
+  }, [employees]);
+
+  // ---- Machine status widget (Running / Setup / Downtime / Maintenance) ----
+  const [machineStatus, setMachineStatus] = useState(() => {
+    const saved = localStorage.getItem('ss_print_machine_status_v6');
+    return saved ? JSON.parse(saved) : initialMachineStatus;
+  });
+
+  useEffect(() => {
+    safeSetItem('ss_print_machine_status_v6', machineStatus);
+  }, [machineStatus]);
+
+  const [downtimeLogs, setDowntimeLogs] = useState(() => {
+    const saved = localStorage.getItem('ss_print_downtime_logs_v6');
+    return saved ? JSON.parse(saved) : initialDowntimeLogs;
+  });
+
+  useEffect(() => {
+    safeSetItem('ss_print_downtime_logs_v6', downtimeLogs);
+  }, [downtimeLogs]);
+
+  // ---- Purchase Requisitions (ROP generated) ----
+  const [purchaseRequisitions, setPurchaseRequisitions] = useState(() => {
+    const saved = localStorage.getItem('ss_print_purchase_requisitions_v6');
+    return saved ? JSON.parse(saved) : initialPurchaseRequisitions;
+  });
+
+  useEffect(() => {
+    safeSetItem('ss_print_purchase_requisitions_v6', purchaseRequisitions);
+  }, [purchaseRequisitions]);
+
+  // ---- Deliveries / Dispatch tracker ----
+  const [deliveries, setDeliveries] = useState(() => {
+    const saved = localStorage.getItem('ss_print_deliveries_v6');
+    return saved ? JSON.parse(saved) : initialDeliveries;
+  });
+
+  useEffect(() => {
+    safeSetItem('ss_print_deliveries_v6', deliveries);
+  }, [deliveries]);
+
+  // ---- Role-Based Access Control (simulation) ----
+  const [activeRole, setActiveRole] = useState(() => {
+    const saved = localStorage.getItem('ss_print_active_role_v6');
+    return saved || 'admin';
+  });
+
+  useEffect(() => {
+    safeSetItem('ss_print_active_role_v6', activeRole);
+  }, [activeRole]);
+
+  const canAccess = (permission) => {
+    // Admin has all permissions; simple per-role capability map
+    const capabilities = {
+      admin: ['financials', 'pricing', 'approve', 'delete', 'maintenance', 'delivery', 'hr', 'inventory'],
+      sales: ['orders', 'quotation', 'pricing', 'delivery', 'customers'],
+      press_operator: ['orders', 'production', 'machineStatus', 'maintenance'],
+      inventory_manager: ['inventory', 'inbound', 'purchaseRequisition', 'delivery'],
+      accountant: ['financials', 'inventory', 'delivery']
+    };
+    const caps = capabilities[activeRole] || [];
+    if (activeRole === 'admin') return true;
+    return caps.includes(permission);
+  };
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -1392,6 +1736,203 @@ export const AppProvider = ({ children }) => {
     setPurchaseOrders(prev => prev.filter(p => (p.poId !== targetId && p.id !== targetId)));
   };
 
+  // ---- Quotation actions (versioning, expiry, convert) ----
+  const addQuotation = (quotationData) => {
+    const now = new Date().toISOString().split('T')[0];
+    const newQuote = {
+      id: `quot-${Date.now().toString().slice(-6)}`,
+      quotationNumber: quotationData.quotationNumber || `Q-${now.replace(/-/g, '').slice(2)}-${Date.now().toString().slice(-2)}`,
+      status: quotationData.status || 'Pending',
+      version: 1,
+      versions: [{ version: 1, date: now, total: Number(quotationData.grandTotal) || 0, note: 'Initial estimate' }],
+      createdAt: now,
+      convertedOrderId: null,
+      ...quotationData
+    };
+    setQuotations(prev => [newQuote, ...prev]);
+    return newQuote;
+  };
+
+  const reviseQuotation = (quotationId, newTotal, note) => {
+    setQuotations(prev => prev.map(q => {
+      if (q.id !== quotationId) return q;
+      const nextVersion = (q.version || 0) + 1;
+      const newVersionEntry = {
+        version: nextVersion,
+        date: new Date().toISOString().split('T')[0],
+        total: Number(newTotal),
+        note: note || `Revision v${nextVersion}`
+      };
+      return {
+        ...q,
+        version: nextVersion,
+        grandTotal: Number(newTotal),
+        versions: [newVersionEntry, ...(q.versions || [])],
+        status: 'Pending'
+      };
+    }));
+  };
+
+  const updateQuotation = (quotationId, updatedFields) => {
+    setQuotations(prev => prev.map(q => q.id === quotationId ? { ...q, ...updatedFields } : q));
+  };
+
+  const deleteQuotation = (quotationId) => {
+    setQuotations(prev => prev.filter(q => q.id !== quotationId));
+  };
+
+  // Convert an accepted quotation into a production order + job ticket
+  const convertQuotationToOrder = (quotationId) => {
+    const quotation = quotations.find(q => q.id === quotationId);
+    if (!quotation) return null;
+
+    const orderItems = (quotation.items || []).map(item => {
+      const invItem = inventory.find(i => i.id === item.id || i.name === item.name);
+      return {
+        id: invItem ? invItem.id : item.id,
+        name: item.name || invItem?.name || 'Custom Print Job',
+        quantity: Number(item.quantity) || 1,
+        unitCost: Number(item.unitPrice) || 0
+      };
+    });
+
+    const newOrder = {
+      customerName: quotation.customerName,
+      phone: quotation.phone || '',
+      items: orderItems,
+      totalPriceCharged: Number(quotation.grandTotal) || 0,
+      depositAmountPaid: Math.round((Number(quotation.grandTotal) || 0) * 0.5),
+      remainingUnpaidBalance: Math.round((Number(quotation.grandTotal) || 0) * 0.5),
+      paymentMethod: 'BCEL One',
+      paymentStatus: 'Deposit Paid',
+      status: 'Received',
+      promisedDeliveryDate: quotation.expiresAt || new Date().toISOString().split('T')[0],
+      artworkLink: quotation.artworkLink || '',
+      notes: `Converted from quotation ${quotation.quotationNumber} (v${quotation.version}). ${quotation.notes || ''}`,
+      sourceQuotationId: quotation.id
+    };
+
+    let createdId = null;
+    setOrders(prev => {
+      const id = `ord-${Date.now().toString().slice(-4)}`;
+      createdId = id;
+      return [{ ...newOrder, id }, ...prev];
+    });
+
+    setQuotations(prev => prev.map(q => q.id === quotationId ? { ...q, status: 'Accepted', convertedOrderId: createdId } : q));
+    return createdId;
+  };
+
+  // ---- Employee actions (CRUD + shift/machine assignment + incentives) ----
+  const addEmployee = (empData) => {
+    const newEmp = {
+      id: `EMP-${String(Date.now()).slice(-3).padStart(3, '0')}`,
+      attendance: { present: 0, absent: 0, late: 0 },
+      rating: 5.0,
+      assignedMachines: empData.assignedMachines || [],
+      pieceRatePerImpression: Number(empData.pieceRatePerImpression) || 0,
+      impressionsProduced: 0,
+      salesCommissionRate: Number(empData.salesCommissionRate) || 0,
+      ...empData
+    };
+    setEmployees(prev => [newEmp, ...prev]);
+  };
+
+  const updateEmployee = (empId, updatedFields) => {
+    setEmployees(prev => prev.map(e => e.id === empId ? { ...e, ...updatedFields } : e));
+  };
+
+  const deleteEmployee = (empId) => {
+    setEmployees(prev => prev.filter(e => e.id !== empId));
+  };
+
+  const assignEmployeeToMachine = (empId, machineId, shift) => {
+    setEmployees(prev => prev.map(e => {
+      if (e.id !== empId) return e;
+      const assigned = new Set(e.assignedMachines || []);
+      if (machineId) assigned.add(machineId);
+      return { ...e, assignedMachines: [...assigned], shift: shift || e.shift };
+    }));
+  };
+
+  const recordImpressions = (empId, impressions) => {
+    setEmployees(prev => prev.map(e => {
+      if (e.id !== empId) return e;
+      return {
+        ...e,
+        impressionsProduced: (Number(e.impressionsProduced) || 0) + Number(impressions)
+      };
+    }));
+  };
+
+  // ---- Machine status & downtime log actions ----
+  const setMachineOperationalStatus = (eqId, status, opts = {}) => {
+    setMachineStatus(prev => ({
+      ...prev,
+      [eqId]: {
+        status,
+        lastChanged: opts.lastChanged || new Date().toISOString().replace('T', ' ').slice(0, 16),
+        reason: opts.reason || ''
+      }
+    }));
+
+    if (status === 'downtime') {
+      const equipmentItem = equipment.find(e => e.id === eqId);
+      const newLog = {
+        id: `dt-${Date.now().toString().slice(-4)}`,
+        equipmentId: eqId,
+        equipmentName: equipmentItem?.name || eqId,
+        startTime: opts.lastChanged || new Date().toISOString().replace('T', ' ').slice(0, 16),
+        endTime: null,
+        downtimeMinutes: 0,
+        reason: opts.reason || 'No Material',
+        description: opts.description || ''
+      };
+      setDowntimeLogs(prev => [newLog, ...prev]);
+    }
+  };
+
+  const resolveDowntime = (logId, endTime) => {
+    setDowntimeLogs(prev => prev.map(log => {
+      if (log.id !== logId) return log;
+      const end = endTime || new Date().toISOString().replace('T', ' ').slice(0, 16);
+      const minutes = Math.max(1, Math.round((new Date(end.replace(' ', 'T')) - new Date(log.startTime.replace(' ', 'T'))) / 60000));
+      return { ...log, endTime: end, downtimeMinutes: minutes };
+    }));
+  };
+
+  // ---- Purchase Requisition actions ----
+  const addPurchaseRequisition = (prData) => {
+    const newPR = {
+      id: `PR-${Date.now().toString().slice(-6)}`,
+      prNumber: prData.prNumber || `PR-${Date.now().toString().slice(-6)}`,
+      date: prData.date || new Date().toISOString().split('T')[0],
+      reason: prData.reason || 'Reorder Point (ROP) alert',
+      status: prData.status || 'Open',
+      ...prData
+    };
+    setPurchaseRequisitions(prev => [newPR, ...prev]);
+    return newPR;
+  };
+
+  const updatePurchaseRequisition = (prId, updatedFields) => {
+    setPurchaseRequisitions(prev => prev.map(pr => pr.id === prId ? { ...pr, ...updatedFields } : pr));
+  };
+
+  // ---- Delivery / dispatch actions ----
+  const addDelivery = (deliveryData) => {
+    const newDelivery = {
+      id: `dlv-${Date.now().toString().slice(-4)}`,
+      status: deliveryData.status || 'Dispatched',
+      ...deliveryData
+    };
+    setDeliveries(prev => [newDelivery, ...prev]);
+  };
+
+  const updateDelivery = (deliveryId, updatedFields) => {
+    setDeliveries(prev => prev.map(d => d.id === deliveryId ? { ...d, ...updatedFields } : d));
+  };
+
   const addCustomer = (customerData) => {
     const newCust = {
       id: `cust-${Date.now().toString().slice(-4)}`,
@@ -1422,6 +1963,12 @@ export const AppProvider = ({ children }) => {
     setCustomers(initialCustomers);
     setOffcuts(initialOffcuts);
     setPurchaseOrders(initialPurchaseOrders);
+    setQuotations(initialQuotations);
+    setEmployees(initialEmployees);
+    setMachineStatus(initialMachineStatus);
+    setDowntimeLogs(initialDowntimeLogs);
+    setPurchaseRequisitions(initialPurchaseRequisitions);
+    setDeliveries(initialDeliveries);
   };
 
   return (
@@ -1434,6 +1981,41 @@ export const AppProvider = ({ children }) => {
       setPreselectedCustomerName,
       prefilledOrderSpecs,
       setPrefilledOrderSpecs,
+      currency,
+      setCurrency,
+      formatCurrency,
+      convertToCurrency,
+      quotations,
+      setQuotations,
+      addQuotation,
+      reviseQuotation,
+      updateQuotation,
+      deleteQuotation,
+      convertQuotationToOrder,
+      employees,
+      setEmployees,
+      addEmployee,
+      updateEmployee,
+      deleteEmployee,
+      assignEmployeeToMachine,
+      recordImpressions,
+      machineStatus,
+      setMachineStatus,
+      setMachineOperationalStatus,
+      downtimeLogs,
+      setDowntimeLogs,
+      resolveDowntime,
+      purchaseRequisitions,
+      setPurchaseRequisitions,
+      addPurchaseRequisition,
+      updatePurchaseRequisition,
+      deliveries,
+      setDeliveries,
+      addDelivery,
+      updateDelivery,
+      activeRole,
+      setActiveRole,
+      canAccess,
       inventory,
       equipment,
       orders,

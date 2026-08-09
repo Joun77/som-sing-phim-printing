@@ -3,8 +3,6 @@ import { useApp } from '../context/AppContext';
 import { useTranslation } from 'react-i18next';
 import { 
   Calculator, 
-  HelpCircle, 
-  Percent, 
   ShieldAlert, 
   ShieldCheck,
   Coins,
@@ -12,18 +10,14 @@ import {
   Info,
   Sliders,
   Scissors,
-  Check,
-  DollarSign,
   Settings,
   Download,
   ShoppingCart,
   Layers,
-  Sparkles,
-  User,
-  Activity,
   Layers3,
   PercentSquare,
-  ArrowLeft
+  ArrowLeft,
+  X
 } from 'lucide-react';
 
 export default function QuotationManager({ onConvertToOrder, onBack }) {
@@ -37,7 +31,14 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
     showToast,
     askConfirmation,
     preselectedCustomerName,
-    setPreselectedCustomerName
+    setPreselectedCustomerName,
+    quotations,
+    addQuotation,
+    reviseQuotation,
+    convertQuotationToOrder,
+    currency,
+    setCurrency,
+    formatCurrency
   } = useApp();
   
   const { t, i18n } = useTranslation();
@@ -121,8 +122,16 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
   // Quotation States
   const [profitMargin, setProfitMargin] = useState(40); // Profit Margin in % (Interactive slider)
   const [discountPercent, setDiscountPercent] = useState(0);
-  const [applyVat, setApplyVat] = useState(true);
+  // Flexible Tax Management: optional toggle, custom % rate, or manual override/clear
+  const [taxEnabled, setTaxEnabled] = useState(true);
+  const [taxRate, setTaxRate] = useState(7); // custom tax percentage (0/5/7/10...)
+  const [taxMode, setTaxMode] = useState('percent'); // 'percent' | 'override'
+  const [taxOverrideAmount, setTaxOverrideAmount] = useState(0); // manual fixed tax amount
   const [paymentTerms, setPaymentTerms] = useState('Immediate / Cash');
+  // Quotation versioning & expiry
+  const [quotationExpiry, setQuotationExpiry] = useState('2026-08-31');
+  const [quotationNote, setQuotationNote] = useState('');
+  const [isQuotationListOpen, setIsQuotationListOpen] = useState(false);
 
   // Helpers
   const formatLAK = (num) => {
@@ -281,8 +290,14 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
   const baseSubtotal = unitSellingPrice * printVolume;
   const discountAmount = baseSubtotal * (Number(discountPercent) / 100);
   const discountedSubtotal = baseSubtotal - discountAmount;
-  const vatAmount = applyVat ? discountedSubtotal * 0.07 : 0;
-  const finalGrandTotal = discountedSubtotal + vatAmount;
+
+  // Flexible Tax: OFF → Grand Total = Subtotal. ON → % rate OR manual override amount.
+  const taxAmount = taxEnabled
+    ? (taxMode === 'override'
+        ? (Number(taxOverrideAmount) || 0)
+        : discountedSubtotal * (Number(taxRate) / 100))
+    : 0;
+  const finalGrandTotal = discountedSubtotal + taxAmount;
 
   const netJobProfit = finalGrandTotal - netInternalCost;
   const actualProfitMarginPercent = finalGrandTotal > 0 ? (netJobProfit / finalGrandTotal) * 100 : 0;
@@ -341,6 +356,77 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
     });
   };
 
+  // Save current quotation to history with versioning
+  const handleSaveQuotation = () => {
+    const items = [
+      { name: `${inventory.find(p => p.id === selectedPaperId)?.name || 'Paper'} (${parentSheetsNeeded} parent sheets)`, quantity: printVolume, unitPrice: unitSellingPrice },
+    ];
+    const quoteData = {
+      customerName: selectedCustomerId,
+      phone: customers.find(c => c.name === selectedCustomerId)?.phone || '',
+      items,
+      subtotal: baseSubtotal,
+      discountPercent: Number(discountPercent),
+      taxEnabled,
+      taxRate: Number(taxRate),
+      taxMode,
+      taxOverrideAmount: Number(taxOverrideAmount),
+      taxAmount,
+      grandTotal: finalGrandTotal,
+      expiresAt: quotationExpiry,
+      paymentTerms,
+      notes: quotationNote,
+      status: 'Pending',
+      version: 1
+    };
+    addQuotation(quoteData);
+    showToast(
+      currentLang === 'lo' ? 'ບັນທຶກໃບສະເໜີລາຄາສຳເລັດ!' : 'Quotation saved successfully!',
+      'success'
+    );
+  };
+
+  // Revise the active quotation (adds a new version row)
+  const handleReviseQuotation = (quotationId) => {
+    reviseQuotation(quotationId, finalGrandTotal, `Revision applied: ${currency} ${formatCurrency(finalGrandTotal)}`);
+    showToast(
+      currentLang === 'lo' ? 'ສ້າງເວີຊັນໃໝ່ສຳເລັດ!' : 'New quotation version created!',
+      'success'
+    );
+  };
+
+  // 1-Click Convert accepted quotation to production order + job ticket
+  const handleConvertToOrder = (quotation) => {
+    const msg = currentLang === 'lo'
+      ? `ປ່ຽນໃບສະເໜີ ${quotation.quotationNumber} ເປັນອໍເດີ ແລະ ສ້າງ Job Ticket ບໍ?`
+      : `Convert quotation ${quotation.quotationNumber} to a production order with Job Ticket?`;
+
+    askConfirmation(msg, () => {
+      const orderId = convertQuotationToOrder(quotation.id);
+      if (orderId && onConvertToOrder) {
+        onConvertToOrder({ orderId, sourceQuotationId: quotation.id });
+      }
+      showToast(
+        currentLang === 'lo' ? 'ປ່ຽນເປັນອໍເດີສຳເລັດ! ສ້າງ Job Ticket ແລ້ວ.' : 'Converted to order! Job Ticket generated.',
+        'success'
+      );
+    });
+  };
+
+  // Load a saved quotation's financial settings back into the calculator
+  const handleLoadQuotation = (quotation) => {
+    setSelectedCustomerId(quotation.customerName);
+    setDiscountPercent(Number(quotation.discountPercent) || 0);
+    setTaxEnabled(Boolean(quotation.taxEnabled));
+    setTaxRate(Number(quotation.taxRate) || 0);
+    setTaxMode(quotation.taxMode || 'percent');
+    setTaxOverrideAmount(Number(quotation.taxOverrideAmount) || 0);
+    setQuotationExpiry(quotation.expiresAt || '2026-08-31');
+    setPaymentTerms(quotation.paymentTerms || 'Immediate / Cash');
+    setQuotationNote(quotation.notes || '');
+    setIsQuotationListOpen(false);
+  };
+
   return (
     <div className="space-y-8 animate-fade-in text-slate-800 print:bg-white print:p-0 print:text-black">
       
@@ -365,7 +451,34 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
             </p>
           </div>
         </div>
-        <div>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {/* Multi-Currency Selector */}
+          <div className="flex items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-2xl">
+            <Coins className="w-4 h-4 text-slate-400 ml-2" />
+            {['LAK', 'THB', 'USD'].map(code => (
+              <button
+                key={code}
+                type="button"
+                onClick={() => setCurrency(code)}
+                className={`px-3 py-2 rounded-xl text-xs font-black transition ${
+                  currency === code
+                    ? 'bg-white text-primary-navy shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                {code === 'LAK' ? '₭ LAK' : code === 'THB' ? '฿ THB' : '$ USD'}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => setIsQuotationListOpen(true)}
+            className="flex items-center gap-2 px-4 py-3.5 bg-white border-2 border-slate-200 text-slate-700 rounded-2xl text-xs font-extrabold hover:bg-slate-50 transition min-h-[48px]"
+          >
+            <Layers3 className="w-5 h-5 shrink-0 text-accent-sky" />
+            <span>{currentLang === 'lo' ? `ໃບສະເໜີ (${quotations.length})` : `Quotations (${quotations.length})`}</span>
+          </button>
+
           <button
             onClick={() => setIsSettingsOpen(true)}
             className="flex items-center gap-2 px-5 py-3.5 bg-slate-800 text-white rounded-2xl text-base font-extrabold shadow-md hover:bg-slate-900 transition min-h-[48px]"
@@ -954,7 +1067,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                   <div className="space-y-2 text-xs font-semibold text-slate-600 pt-1.5 font-sans">
                     <div className="flex justify-between">
                       <span>Base Selling Price:</span>
-                      <span className="font-sans font-extrabold text-slate-800">{formatLAK(baseSubtotal)}</span>
+                      <span className="font-sans font-extrabold text-slate-800">{formatCurrency(baseSubtotal)}</span>
                     </div>
 
                     {/* Interactive Discount Field (Hide on print if 0) */}
@@ -972,35 +1085,172 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                     {discountPercent > 0 && (
                       <div className="flex justify-between text-emerald-600 font-extrabold">
                         <span>Discount ({discountPercent}%):</span>
-                        <span>-{formatLAK(discountAmount)}</span>
+                        <span>-{formatCurrency(discountAmount)}</span>
                       </div>
                     )}
 
-                    {/* Interactive VAT Field (Hide on print) */}
-                    <div className="flex justify-between items-center gap-4 print:hidden">
-                      <span className="text-slate-500">Include VAT (7%):</span>
-                      <input
-                        type="checkbox"
-                        checked={applyVat}
-                        onChange={(e) => setApplyVat(e.target.checked)}
-                        className="w-5 h-5 cursor-pointer accent-accent-sky"
-                      />
+                    {/* Flexible Tax Management (Toggle ON/OFF, custom %, manual override) */}
+                    <div className="rounded-2xl border-2 border-slate-200 p-3.5 space-y-3 print:hidden">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <PercentSquare className="w-4 h-4 text-accent-sky" />
+                          <span className="text-slate-700 font-extrabold">{currentLang === 'lo' ? 'ພາສີ (Tax)' : 'Tax'}</span>
+                        </div>
+                        {/* Tax Toggle ON/OFF */}
+                        <button
+                          type="button"
+                          onClick={() => setTaxEnabled(!taxEnabled)}
+                          className={`w-11 h-6 rounded-full p-0.5 transition ${taxEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                          aria-label="Toggle tax"
+                        >
+                          <div className={`w-5 h-5 rounded-full bg-white shadow transition ${taxEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                        </button>
+                      </div>
+
+                      {taxEnabled ? (
+                        <div className="space-y-3 animate-fade-in">
+                          {/* Mode: Percentage OR Manual Override Amount */}
+                          <div className="flex gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setTaxMode('percent')}
+                              className={`flex-1 py-2 text-xs font-black rounded-xl border transition ${
+                                taxMode === 'percent'
+                                  ? 'bg-accent-sky border-accent-sky text-white'
+                                  : 'bg-slate-50 border-slate-200 text-slate-500'
+                              }`}
+                            >
+                              {currentLang === 'lo' ? 'ເປີເຊັນ (%)' : 'Percentage (%)'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setTaxMode('override')}
+                              className={`flex-1 py-2 text-xs font-black rounded-xl border transition ${
+                                taxMode === 'override'
+                                  ? 'bg-indigo-600 border-indigo-600 text-white'
+                                  : 'bg-slate-50 border-slate-200 text-slate-500'
+                              }`}
+                            >
+                              {currentLang === 'lo' ? 'ຈຳນວນຄົງທີ່' : 'Fixed Amount'}
+                            </button>
+                          </div>
+
+                          {taxMode === 'percent' ? (
+                            <div className="space-y-2">
+                              <div className="flex gap-1.5">
+                                {[0, 5, 7, 10].map(rate => (
+                                  <button
+                                    key={rate}
+                                    type="button"
+                                    onClick={() => setTaxRate(rate)}
+                                    className={`px-3 py-1.5 text-[10px] font-black rounded-lg border transition ${
+                                      Number(taxRate) === rate
+                                        ? 'bg-emerald-500 border-emerald-500 text-white'
+                                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    {rate}%
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-500">{currentLang === 'lo' ? 'ອັດຕາພາສີ:' : 'Custom rate:'}</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="50"
+                                  value={taxRate}
+                                  onChange={(e) => setTaxRate(Number(e.target.value))}
+                                  className="w-24 min-h-[34px] px-2 text-right border-2 rounded-lg text-xs font-black font-sans"
+                                />
+                                <span className="text-xs font-bold text-slate-500">%</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-slate-500">{currentLang === 'lo' ? 'ຈຳນວນພາສີ:' : 'Fixed tax amount:'}</span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={taxOverrideAmount}
+                                onChange={(e) => setTaxOverrideAmount(Number(e.target.value))}
+                                className="w-32 min-h-[34px] px-2 text-right border-2 rounded-lg text-xs font-black font-sans"
+                                placeholder="0"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setTaxOverrideAmount(0)}
+                                className="text-[10px] font-black text-red-500 hover:underline"
+                              >
+                                {currentLang === 'lo' ? 'ລ້າງ' : 'Clear'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-emerald-600 font-extrabold">
+                          {currentLang === 'lo' ? '✓ ປິດພາສີ - ຍອດລວມ = ມູນຄ່າສຸດທິ (Grand Total = Subtotal)' : '✓ Tax OFF — Grand Total = Subtotal (no tax added)'}
+                        </p>
+                      )}
                     </div>
-                    {applyVat && (
+
+                    {(taxEnabled && taxAmount > 0) && (
                       <div className="flex justify-between">
-                        <span>VAT (7%):</span>
-                        <span className="font-sans font-extrabold">{formatLAK(vatAmount)}</span>
+                        <span>
+                          {taxMode === 'override'
+                            ? (currentLang === 'lo' ? `Tax (Fixed):` : `Tax (Fixed):`)
+                            : `Tax (${taxRate}%):`}
+                        </span>
+                        <span className="font-sans font-extrabold">{formatCurrency(taxAmount)}</span>
                       </div>
                     )}
 
                     {/* Final Grand Total */}
                     <div className="flex justify-between items-center border-t-2 border-slate-900 pt-3 text-slate-900 font-black text-sm">
                       <span>Total Grand Total:</span>
-                      <span className="text-xl font-black text-primary-navy font-sans">{formatLAK(finalGrandTotal)}</span>
+                      <span className="text-xl font-black text-primary-navy font-sans">{formatCurrency(finalGrandTotal)}</span>
                     </div>
                     <div className="flex justify-between text-[10px] text-slate-400 font-bold">
                       <span>Unit Price (Charged / Piece):</span>
-                      <span className="font-sans">{formatLAK(Math.round(finalGrandTotal / printVolume))}</span>
+                      <span className="font-sans">{formatCurrency(Math.round(finalGrandTotal / printVolume))}</span>
+                    </div>
+
+                    {/* Quotation Expiry Date + Payment Terms */}
+                    <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-2 print:hidden">
+                      <div className="space-y-1">
+                        <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider block">{currentLang === 'lo' ? 'ໝົດອາຍຸໃບສະເໜີ' : 'Valid Until (Expiry)'}</span>
+                        <input
+                          type="date"
+                          value={quotationExpiry}
+                          onChange={(e) => setQuotationExpiry(e.target.value)}
+                          className="w-full min-h-[36px] px-2 border-2 rounded-lg text-xs font-bold font-sans"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider block">{currentLang === 'lo' ? 'ເງື່ອນໄຂຊຳຣະ' : 'Payment Terms'}</span>
+                        <select
+                          value={paymentTerms}
+                          onChange={(e) => setPaymentTerms(e.target.value)}
+                          className="w-full min-h-[36px] px-2 border-2 rounded-lg text-xs font-bold bg-white"
+                        >
+                          <option>Immediate / Cash</option>
+                          <option>50% Deposit / 50% on Delivery</option>
+                          <option>Net 7 Days</option>
+                          <option>Net 30 Days</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Quotation Notes */}
+                    <div className="space-y-1 print:hidden">
+                      <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider block">{currentLang === 'lo' ? 'ໝາຍເຫດ' : 'Quotation Notes'}</span>
+                      <input
+                        type="text"
+                        value={quotationNote}
+                        onChange={(e) => setQuotationNote(e.target.value)}
+                        placeholder={currentLang === 'lo' ? 'ໝາຍເຫດເພີ່ມເຕີມ...' : 'Additional notes...'}
+                        className="w-full min-h-[36px] px-3 border-2 rounded-lg text-xs font-semibold"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1008,6 +1258,14 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
 
               {/* Quotation action triggers */}
               <div className="flex gap-3 pt-6 border-t border-slate-100 print:hidden">
+                <button
+                  type="button"
+                  onClick={handleSaveQuotation}
+                  className="flex-1 flex items-center justify-center gap-2 min-h-[48px] border-2 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-2xl text-sm font-extrabold transition active:scale-95"
+                >
+                  <Layers className="w-4 h-4 shrink-0" />
+                  <span>{currentLang === 'lo' ? 'ບັນທຶກໃບສະເໜີ' : 'Save Quotation'}</span>
+                </button>
                 <button
                   type="button"
                   onClick={handleExportPDF}
@@ -1032,6 +1290,106 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
         </div>
 
       </div>
+
+      {/* QUOTATION HISTORY / VERSIONING DIALOG */}
+      {isQuotationListOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/50 backdrop-blur-md animate-fade-in print:hidden">
+          <div className="bg-white max-w-3xl w-full rounded-3xl shadow-2xl p-6 border border-slate-100 flex flex-col justify-between min-h-[400px] max-h-[80vh]">
+            <div className="flex justify-between items-center border-b pb-4">
+              <div className="flex items-center gap-2.5">
+                <Layers3 className="w-6 h-6 text-accent-sky" />
+                <h3 className="text-xl font-black text-slate-900 tracking-wide">
+                  {currentLang === 'lo' ? 'ປະຫວັດໃບສະເໜີລາຄາ & ເວີຊັນ' : 'Quotation History & Versions'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsQuotationListOpen(false)}
+                className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-3">
+              {quotations.length === 0 ? (
+                <p className="text-center text-slate-400 font-bold py-10">{currentLang === 'lo' ? 'ຍັງບໍ່ມີໃບສະເໜີ' : 'No quotations saved yet'}</p>
+              ) : quotations.map(quote => (
+                <div key={quote.id} className="p-4 rounded-2xl border border-slate-200 hover:border-accent-sky/40 transition space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-black text-slate-900">{quote.quotationNumber}</span>
+                      <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase border ${
+                        quote.status === 'Accepted'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : quote.status === 'Expired'
+                          ? 'bg-slate-100 text-slate-500 border-slate-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}>
+                        {quote.status}
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-400">{quote.customerName}</span>
+                    </div>
+                    <span className="text-sm font-black text-primary-navy font-sans">{formatCurrency(quote.grandTotal)}</span>
+                  </div>
+
+                  {/* Version history rows */}
+                  <div className="space-y-1">
+                    {(quote.versions || []).map(v => (
+                      <div key={v.version} className="flex justify-between items-center text-[11px] bg-slate-50 rounded-lg px-3 py-1.5">
+                        <span className="font-bold text-slate-600">
+                          v{v.version} · {v.date} — {v.note}
+                        </span>
+                        <span className="font-black text-slate-800 font-sans">{formatCurrency(v.total)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleLoadQuotation(quote)}
+                      className="px-3 py-1.5 text-[11px] font-black bg-slate-900 text-white rounded-xl hover:bg-slate-700 transition"
+                    >
+                      {currentLang === 'lo' ? 'ໂຫຼດໃສ່ເຄື່ອງຄິດເລກ' : 'Load into Calculator'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleReviseQuotation(quote.id)}
+                      className="px-3 py-1.5 text-[11px] font-black bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-xl hover:bg-indigo-100 transition"
+                    >
+                      {currentLang === 'lo' ? `ສ້າງເວີຊັນ v${(quote.version || 0) + 1}` : `Revise → v${(quote.version || 0) + 1}`}
+                    </button>
+                    {quote.status === 'Pending' && (
+                      <button
+                        type="button"
+                        onClick={() => handleConvertToOrder(quote)}
+                        className="px-3 py-1.5 text-[11px] font-black bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition"
+                      >
+                        {currentLang === 'lo' ? 'ປ່ຽນເປັນອໍເດີ →' : 'Convert to Order →'}
+                      </button>
+                    )}
+                    {quote.convertedOrderId && (
+                      <span className="px-2 py-1.5 text-[10px] font-black text-emerald-600">
+                        ✓ {currentLang === 'lo' ? 'ປ່ຽນເປັນອໍເດີແລ້ວ' : 'Converted'} ({quote.convertedOrderId})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t pt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsQuotationListOpen(false)}
+                className="px-6 py-2.5 bg-accent-sky text-white rounded-xl text-xs font-black shadow-md hover:bg-accent-sky/95 transition"
+              >
+                {currentLang === 'lo' ? 'ປິດ' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* QUICK CONFIGURATION ACCESS MODAL DIALOG */}
       {isSettingsOpen && (
