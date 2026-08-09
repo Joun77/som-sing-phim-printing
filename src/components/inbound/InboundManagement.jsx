@@ -245,22 +245,22 @@ export default function InboundManagement() {
     const newLog = {
       id: logId,
       poNumber: logId,
-      receiptDate: new Date().toISOString().split('T')[0],
+      receiptDate: data.importDate || new Date().toISOString().split('T')[0],
       category: type,
       categoryPill: type,
       name: data.name,
       sku: data.id,
-      currentQty: type === 'PRINTER' ? 1 : data.stockQty,
-      initialQty: type === 'PRINTER' ? 1 : data.stockQty,
-      unit: type === 'PRINTER' ? 'Unit' : 'Bottle',
-      subUnit: type === 'PRINTER' ? '(1 Unit)' : `(${data.stockQty} Bottle)`,
-      supplier: data.supplier || data.vendor || 'Supplier',
-      totalPrice: type === 'PRINTER' ? data.price : (data.stockQty * data.unitPrice),
-      paymentMethod: 'TRANSFER',
+      currentQty: (type === 'PRINTER' || type === 'MACHINERY') ? 1 : data.importQty || 1,
+      initialQty: (type === 'PRINTER' || type === 'MACHINERY') ? 1 : data.importQty || 1,
+      unit: data.unit || 'Unit',
+      subUnit: (type === 'PRINTER' || type === 'MACHINERY') ? '(1 Unit)' : `(${data.importQty} ${data.unit})`,
+      supplier: data.supplier || 'Supplier',
+      totalPrice: (type === 'PRINTER' || type === 'MACHINERY') ? data.price : ((data.importQty || 1) * data.unitPrice),
+      paymentMethod: data.paymentMethod || 'TRANSFER',
       origin: 'TH',
       tariffRate: 0,
       freightCharge: 0,
-      specs: {},
+      specs: data.specs || {},
       docs: {
         productPhoto: data.imageUrl || 'https://via.placeholder.com/300?text=Product+Photo',
         paymentSlip: data.receiptUrl || ''
@@ -270,45 +270,42 @@ export default function InboundManagement() {
 
     setInboundList(prev => [newLog, ...prev]);
 
-    if (type === 'PRINTER') {
-      addEquipment(data);
-      showToast('Printer registered successfully in assets!', 'success');
+    if (type === 'PRINTER' || type === 'MACHINERY') {
+      addEquipment({
+        ...data,
+        category: type === 'PRINTER' ? 'Printer' : 'Processing Tools',
+        status: 'In Use'
+      });
+      showToast(`${type === 'PRINTER' ? 'Printer' : 'Machinery'} registered successfully in assets!`, 'success');
     } else {
-      const existingInk = inventory.find(item => item.id === data.id);
-      if (existingInk) {
-        addStock(data.id, data.stockQty);
+      const existingItem = inventory.find(item => item.id === data.id);
+      if (existingItem) {
+        addStock(data.id, data.importQty);
       } else {
         addInventorySku({
-          id: data.id,
-          name: data.name,
-          category: 'Ink',
-          stockQty: data.stockQty,
-          consumptionUnit: 'ml',
-          purchaseUnit: `Bottle (${data.volume}ml)`,
-          purchaseMultiplier: data.volume,
+          ...data,
+          stockQty: data.importQty,
+          consumptionUnit: data.unit,
+          purchaseUnit: data.unit,
+          purchaseMultiplier: 1,
           costPerPurchaseUnit: data.unitPrice,
-          costPerConsumptionUnit: Math.round(data.unitPrice / data.volume),
-          reorderThreshold: 50,
-          imageUrl: data.imageUrl,
-          receiptUrl: data.receiptUrl,
-          supplier: data.supplier,
-          inkBaseType: data.inkBaseType,
-          isCompatible: data.isCompatible,
+          costPerConsumptionUnit: data.unitPrice,
+          reorderThreshold: 10,
           batches: [
             {
               id: `LOT-${data.id.slice(-4)}-001`,
-              purchaseDate: new Date().toISOString().split('T')[0],
+              purchaseDate: data.importDate || new Date().toISOString().split('T')[0],
               supplierName: data.supplier,
               purchasePricePerReam: data.unitPrice,
-              costPerSheet: Math.round(data.unitPrice / data.volume),
-              initialQty: data.stockQty,
-              currentQty: data.stockQty
+              costPerSheet: data.unitPrice,
+              initialQty: data.importQty,
+              currentQty: data.importQty
             }
           ]
         });
       }
 
-      if (data.targetPrinterId) {
+      if (type === 'INK' && data.targetPrinterId) {
         addPrinterColorLink({
           assetId: data.targetPrinterId,
           inkCode: data.id,
@@ -317,7 +314,7 @@ export default function InboundManagement() {
         });
       }
 
-      showToast('Ink stock recorded and linked successfully!', 'success');
+      showToast(`${type} stock recorded successfully!`, 'success');
     }
 
     setIsModalOpen(false);
@@ -889,7 +886,7 @@ export default function InboundManagement() {
                   handleImportSubmit(type, data);
                   setIsModalOpen(false);
                 }}
-                onCancel={() => setIsModalOpen(false)}
+                onClose={() => setIsModalOpen(false)}
               />
             </div>
           </div>
