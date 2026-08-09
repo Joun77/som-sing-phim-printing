@@ -14,6 +14,7 @@ export default function EditMaterialModal({ isOpen, materialData, onSave, onClos
   const [reorderThreshold, setReorderThreshold] = useState(50);
   const [supplierName, setSupplierName] = useState('');
   const [selectedMachineIds, setSelectedMachineIds] = useState([]);
+  const [colorModel, setColorModel] = useState('');
 
   useEffect(() => {
     if (materialData) {
@@ -23,6 +24,7 @@ export default function EditMaterialModal({ isOpen, materialData, onSave, onClos
       setUnitCost(materialData.costPerSheet || materialData.purchasePricePerReam || parent.costPerConsumptionUnit || 0);
       setReorderThreshold(parent.reorderThreshold || 50);
       setSupplierName(materialData.supplierName || '');
+      setColorModel(parent.colorModel || parent.specs?.colorModel || '');
       
       const initialIds = parent.linkedMachineIds || (parent.linkedMachineId ? [parent.linkedMachineId] : []);
       setSelectedMachineIds(initialIds);
@@ -46,13 +48,14 @@ export default function EditMaterialModal({ isOpen, materialData, onSave, onClos
       ...materialData,
       currentQty: Number(currentQty),
       costPerSheet: Number(unitCost),
-      purchasePricePerReam: Number(unitCost),
+      purchasePricePerReam: Number(unitCost) * (parent.purchaseMultiplier || 1),
       supplierName,
       parentItem: {
         ...parent,
         name,
         reorderThreshold: Number(reorderThreshold),
-        linkedMachineIds: selectedMachineIds
+        linkedMachineIds: selectedMachineIds,
+        colorModel: colorModel
       }
     });
   };
@@ -154,26 +157,45 @@ export default function EditMaterialModal({ isOpen, materialData, onSave, onClos
 
           {/* Conditional Multi-Select Machinery Selection - Ink Only */}
           {isInkCategory && (
-            <div className="space-y-2">
-              <label className="text-slate-700 block">
-                {t('equipment_mapping.linked_material')} (Multi-Select)
-              </label>
-              <div className="max-h-36 overflow-y-auto space-y-1.5 p-3 border border-slate-200 rounded-xl bg-slate-50/50">
-                {equipment && equipment.length > 0 ? (
-                  equipment.map(eq => (
-                    <label key={eq.id} className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 hover:text-sky-600">
-                      <input
-                        type="checkbox"
-                        checked={selectedMachineIds.includes(eq.id)}
-                        onChange={() => toggleMachineSelection(eq.id)}
-                        className="rounded border-slate-300 text-sky-600 focus:ring-sky-500 w-4 h-4"
-                      />
-                      <span>{eq.name} <span className="font-mono text-[10px] text-slate-400">({eq.id})</span></span>
-                    </label>
-                  ))
-                ) : (
-                  <p className="text-slate-400 text-xs">{t('equipment_mapping.no_linked_material')}</p>
-                )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-slate-700 block">เฉดสี / ตลับสี (Color Option) *</label>
+                <select
+                  value={colorModel}
+                  onChange={(e) => setColorModel(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white text-slate-900 font-bold"
+                >
+                  <option value="">-- เลือกสี --</option>
+                  <option value="Cyan (C)">Cyan (C)</option>
+                  <option value="Magenta (M)">Magenta (M)</option>
+                  <option value="Yellow (Y)">Yellow (Y)</option>
+                  <option value="Black (K)">Black (K)</option>
+                  <option value="CMYK Set">CMYK Set</option>
+                  <option value="White">White</option>
+                  <option value="Varnish">Varnish</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-slate-700 block">
+                  {t('equipment_mapping.linked_material')} (Multi-Select)
+                </label>
+                <div className="max-h-36 overflow-y-auto space-y-1.5 p-3 border border-slate-200 rounded-xl bg-slate-50/50">
+                  {equipment && equipment.length > 0 ? (
+                    equipment.map(eq => (
+                      <label key={eq.id} className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 hover:text-sky-600">
+                        <input
+                          type="checkbox"
+                          checked={selectedMachineIds.includes(eq.id)}
+                          onChange={() => toggleMachineSelection(eq.id)}
+                          className="rounded border-slate-300 text-sky-600 focus:ring-sky-500 w-4 h-4"
+                        />
+                        <span>{eq.name} <span className="font-mono text-[10px] text-slate-400">({eq.id})</span></span>
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-slate-400 text-xs">{t('equipment_mapping.no_linked_material')}</p>
+                  )}
+                </div>
               </div>
             </div>
           )}

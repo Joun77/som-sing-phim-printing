@@ -49,6 +49,15 @@ export default function EquipmentManagement() {
           </h2>
           <p className="text-sm font-semibold text-slate-400 mt-1">Track SLA operation parameters, equipment wear, & component metrics</p>
         </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={() => setIsAddOpen(true)}
+            className="flex items-center gap-2 px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-xs rounded-2xl shadow-md shadow-sky-600/20 transition active:scale-95 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{currentLang === 'lo' ? '+ ລົງທະບຽນເຄື່ອງຈັກ' : '+ Register Machine'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Category filters */}

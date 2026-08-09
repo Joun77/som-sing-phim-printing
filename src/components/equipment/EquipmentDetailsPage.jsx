@@ -20,9 +20,16 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
   const currentLang = i18n.language || 'lo';
   
   const machine = equipment ? equipment.find(eq => eq.id === equipmentId) : null;
-  const linkedInkItem = (machine && machine.linkedInkSku && inventory) 
-    ? inventory.find(i => i.id === machine.linkedInkSku) 
-    : null;
+  const linkedInks = (machine && inventory) 
+    ? inventory.filter(i => 
+        i.category === 'Ink' && (
+          i.id === machine.linkedInkSku || 
+          i.linkedInkSku === machine.id ||
+          (i.linkedMachineIds && i.linkedMachineIds.includes(machine.id)) ||
+          i.linkedMachineId === machine.id
+        )
+      ) 
+    : [];
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
@@ -194,19 +201,51 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
               </span>
             </div>
 
-            {/* Linked Inventory Ink Item */}
-            <div className="bg-purple-50/60 p-4 rounded-2xl border border-purple-100 space-y-1">
-              <span className="text-[10px] text-purple-700 uppercase font-black block">{currentLang === 'lo' ? 'ຮາຍການໝຶກພິມທີ່ລີ້ງຈາກຄັງ (Linked Inventory Ink SKU):' : 'Linked Inventory Ink SKU:'}</span>
-              <div className="flex justify-between items-center pt-1">
-                <span className="text-xs font-bold text-slate-900">
-                  {linkedInkItem ? `${linkedInkItem.name} (${linkedInkItem.id})` : (machine.linkedInkSku || (currentLang === 'lo' ? 'ຍັງບໍ່ໄດ້ລີ້ງ SKU' : 'Not Linked'))}
-                </span>
-                {linkedInkItem && (
-                  <span className="text-xs font-mono font-black text-emerald-600">
-                    {formatLAK(linkedInkItem.costPerMl || linkedInkItem.costPerConsumptionUnit || 500)} / ml
-                  </span>
-                )}
-              </div>
+            {/* Linked Inventory Ink Items (CMYK / Individual Colors) */}
+            <div className="bg-purple-50/60 p-4 rounded-2xl border border-purple-100 space-y-3">
+              <span className="text-[10px] text-purple-700 uppercase font-black block">
+                {currentLang === 'lo' ? 'ລາຍການນ້ຳໝຶກທີ່ເຊື່ອมໂຍງ (Linked CMYK Inks):' : 'Linked CMYK Inks:'}
+              </span>
+              {linkedInks.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {linkedInks.map(ink => {
+                    const colorModel = ink.colorModel || ink.specs?.colorModel || ink.inkColor || '';
+                    const isCyan = colorModel.toLowerCase().includes('cyan') || ink.name.toLowerCase().includes('cyan');
+                    const isMagenta = colorModel.toLowerCase().includes('magenta') || ink.name.toLowerCase().includes('magenta');
+                    const isYellow = colorModel.toLowerCase().includes('yellow') || ink.name.toLowerCase().includes('yellow');
+                    const isBlack = colorModel.toLowerCase().includes('black') || ink.name.toLowerCase().includes('black');
+                    
+                    let colorPill = 'bg-slate-100 text-slate-800';
+                    if (isCyan) colorPill = 'bg-cyan-100 text-cyan-800 border border-cyan-200';
+                    else if (isMagenta) colorPill = 'bg-pink-100 text-pink-800 border border-pink-200';
+                    else if (isYellow) colorPill = 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+                    else if (isBlack) colorPill = 'bg-neutral-900 text-white border border-neutral-800';
+
+                    return (
+                      <div key={ink.id} className="bg-white p-3 rounded-xl border border-purple-200/40 flex flex-col justify-between space-y-1.5 shadow-2xs">
+                        <div className="flex justify-between items-start gap-1">
+                          <span className="font-extrabold text-slate-800 text-[11px] leading-tight block truncate max-w-[150px]" title={ink.name}>
+                            {ink.name}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase shrink-0 ${colorPill}`}>
+                            {colorModel || 'Ink'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="text-slate-400 font-mono">{ink.id}</span>
+                          <span className="font-black text-emerald-600 font-sans">
+                            {ink.stockQty.toLocaleString()} ml
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-purple-900/60 font-bold">
+                  {currentLang === 'lo' ? 'ຍັງບໍ່ມີນ້ຳໝຶກທີ່ເຊື່ອມໂຍง' : 'No inks linked to this printer yet'}
+                </p>
+              )}
             </div>
           </div>
         </div>

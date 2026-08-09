@@ -24,6 +24,51 @@ const OrderRow = React.memo(({
     return summary;
   };
 
+  const renderSLATimer = () => {
+    if (!ord.promisedDeliveryDate) return null;
+    const promised = new Date(ord.promisedDeliveryDate + 'T23:59:59');
+    const now = new Date();
+    
+    if (ord.status === 'Delivered') {
+      return (
+        <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-black mt-1 inline-block">
+          ✓ ສົ່ງມອບແລ້ວ
+        </span>
+      );
+    }
+    if (ord.status === 'Cancelled') {
+      return (
+        <span className="text-[10px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded font-black mt-1 inline-block">
+          ✗ ຍົກເລີກແລ້ວ
+        </span>
+      );
+    }
+
+    const diffMs = promised.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffMs < 0) {
+      const daysOverdue = Math.abs(Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+      return (
+        <span className="text-[10px] text-red-600 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded font-black mt-1 inline-block animate-pulse">
+          ⚠ ກາຍກຳນົດ {daysOverdue} ວັນ
+        </span>
+      );
+    } else if (diffDays <= 1) {
+      return (
+        <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded font-black mt-1 inline-block">
+          ⏳ ສົ່ງມື້ນີ້ (ດ່ວນ)
+        </span>
+      );
+    } else {
+      return (
+        <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-bold mt-1 inline-block">
+          ເຫຼືອ {diffDays} ວັນ
+        </span>
+      );
+    }
+  };
+
   return (
     <tr 
       className={`hover:bg-slate-50/30 transition ${
@@ -34,6 +79,7 @@ const OrderRow = React.memo(({
       <td className="px-6 py-4 whitespace-nowrap">
         <span className="font-mono font-black text-slate-900 block text-sm lg:text-base">#{ord.id}</span>
         <span className="text-xs text-slate-400 block font-sans mt-1">Due: {ord.promisedDeliveryDate}</span>
+        {renderSLATimer()}
       </td>
       {/* Customer Info */}
       <td className="px-6 py-4 whitespace-nowrap">

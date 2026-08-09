@@ -12,13 +12,14 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
-  HelpCircle
+  HelpCircle,
+  Calculator
 } from 'lucide-react';
 
 function OrderAppContent() {
   const { toast, setToast, confirmDialog } = useApp();
   const { t, i18n } = useTranslation();
-  const [subTab, setSubTab] = useState('orders');
+  const [subTab, setSubTab] = useState('quotation');
 
   const currentLang = i18n.language || 'lo';
 
@@ -29,12 +30,13 @@ function OrderAppContent() {
   };
 
   const navItems = [
-    { id: 'orders', label: '🛒 ລາຍການອໍເດີ (Order Directory)', icon: ShoppingCart },
-    { id: 'create_order', label: '➕ ສ້າງອໍເດີໃຫມ່ (Create Order)', icon: Plus },
-    { id: 'production', label: '🏭 ຕິດຕາມການຜະລິດ (Production Tracker)', icon: Printer },
-    { id: 'deliveries', label: '🚚 ຕິດຕາມການຈັດສົ່ງ (Delivery Tracker)', icon: Truck },
-    { id: 'completed', label: '✅ ຈັດສົ່ງສໍາເລັດ (Completed Orders)', icon: CheckCircle2 },
-    { id: 'cancelled', label: '❌ ລາຍການຍົກເລີກ (Cancelled Orders)', icon: X },
+    { id: 'quotation', label: 'ອອກໃບສະເໜີລາຄາ (Create Quotation)', icon: Calculator },
+    { id: 'orders', label: 'ລາຍການອໍເດີ (Order Directory)', icon: ShoppingCart },
+    { id: 'create_order', label: 'ສ້າງອໍເດີໃໝ່ (Create Order)', icon: Plus },
+    { id: 'production', label: 'ຕິດຕາມການຜະລິດ (Production Tracker)', icon: Printer },
+    { id: 'deliveries', label: 'ຕິດຕາມການຈັດສົ່ງ (Delivery Tracker)', icon: Truck },
+    { id: 'completed', label: 'ຈັດສົ່ງສໍາເລັດ (Completed Orders)', icon: CheckCircle2 },
+    { id: 'cancelled', label: 'ລາຍການຍົກເລີກ (Cancelled Orders)', icon: X },
   ];
 
   return (
@@ -70,14 +72,14 @@ function OrderAppContent() {
                 <button
                   key={item.id}
                   onClick={() => setSubTab(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-xs font-black transition-all ${
+                  className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-sm font-extrabold transition-all text-left justify-start ${
                     isActive 
                       ? 'bg-accent-sky text-white shadow-md shadow-accent-sky/20 scale-[1.01]' 
                       : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
-                  <span>{item.label}</span>
+                  <Icon className="w-5 h-5 shrink-0" />
+                  <span className="leading-snug">{item.label}</span>
                 </button>
               );
             })}

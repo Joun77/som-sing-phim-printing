@@ -15,7 +15,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Truck,
-  User
+  User,
+  Users
 } from 'lucide-react';
 
 
@@ -60,7 +61,7 @@ export default function Sidebar() {
     {
       id: 'orders',
       labelKey: 'sidebar.orders',
-      subText: 'Launch Order Management Web App 🚀',
+      subText: 'Launch Order Management Web App',
       icon: ShoppingCart,
       isExternal: true,
       externalUrl: '/orders.html',
@@ -90,16 +91,10 @@ export default function Sidebar() {
       icon: User,
     },
     {
-      id: 'calculator',
-      labelKey: 'sidebar.estimator',
-      subText: 'Profit & Cost Calculator',
-      icon: Calculator,
-    },
-    {
-      id: 'reports',
-      labelKey: 'sidebar.reports',
-      subText: 'History & Analytics',
-      icon: BarChart3,
+      id: 'hr',
+      labelKey: 'sidebar.hr',
+      subText: 'HR & Staff Management',
+      icon: Users,
     },
   ];
 

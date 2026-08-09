@@ -43,7 +43,7 @@ export default function InventoryDetailsModal({ lot, onClose, onEdit }) {
     }
 
     if (category === 'Ink') {
-      const bottles = Math.floor(currentQty / 1000) || 1;
+      const bottles = currentQty > 0 ? Math.ceil(currentQty / (parent.purchaseMultiplier || 1000)) : 0;
       return (
         <div>
           <span className="text-sm font-black text-slate-900 font-mono block">
@@ -70,7 +70,7 @@ export default function InventoryDetailsModal({ lot, onClose, onEdit }) {
     if (parent.id && lot.id) {
       editInventoryBatch(parent.id, lot.id, {
         currentQty: Number(editQty),
-        purchasePricePerReam: Number(editCost),
+        purchasePricePerReam: Number(editCost) * (parent.purchaseMultiplier || 1),
         supplierName: editSupplier
       });
       showToast(t('common.save') + ' ' + t('common.details'), 'success');

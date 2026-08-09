@@ -7,12 +7,15 @@ import {
   AlertTriangle, 
   Plus,
   Activity,
-  Layers
+  Layers,
+  Calculator
 } from 'lucide-react';
 import OrdersTable from './OrdersTable';
 import CreateOrderPage from './CreateOrderPage';
 import OrderDetailsPage from './OrderDetailsPage';
 import Lightbox from './Lightbox';
+import OrderDetailsModal from './OrderDetailsModal';
+import QuotationManager from '../QuotationManager';
 
 export default function CustomerOrders({ initialSubTab = 'orders' }) {
   const { 
@@ -21,6 +24,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
     settleOrderBalance, 
     deleteOrder, 
     updatePreflightCheck,
+    updateProductionStep,
     inventory,
     equipment,
     showToast,
@@ -31,12 +35,14 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
     customers,
     addCustomer,
     prefilledOrderSpecs,
-    setPrefilledOrderSpecs
+    setPrefilledOrderSpecs,
+    addSpoilageLog
   } = useApp();
 
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
 
+  const [showQuotation, setShowQuotation] = useState(initialSubTab === 'quotation');
   const [filterStatus, setFilterStatus] = useState(
     initialSubTab === 'production' ? 'Printing' : initialSubTab === 'deliveries' ? 'Ready' : 'All'
   );
@@ -48,14 +54,21 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
   useEffect(() => {
     if (initialSubTab === 'create_order') {
       setIsAddOrderOpen(true);
+      setShowQuotation(false);
     } else if (initialSubTab === 'production') {
       setFilterStatus('Printing');
       setIsAddOrderOpen(false);
+      setShowQuotation(false);
     } else if (initialSubTab === 'deliveries') {
       setFilterStatus('Ready');
       setIsAddOrderOpen(false);
+      setShowQuotation(false);
     } else if (initialSubTab === 'orders') {
       setIsAddOrderOpen(false);
+      setShowQuotation(false);
+    } else if (initialSubTab === 'quotation') {
+      setIsAddOrderOpen(false);
+      setShowQuotation(true);
     }
   }, [initialSubTab]);
 
@@ -210,6 +223,19 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
     showToast(`ອັບເດດສະຖານະການຈັດສົ່ງເປັນ: ${nextStatus === 'Delivered' ? 'ສົ່ງມອບແລ້ວ (Delivered)' : 'ກຳລັງຂົນສົ່ງ (In Transit)'}`, 'success');
   };
 
+  if (showQuotation) {
+    return (
+      <QuotationManager 
+        onConvertToOrder={(specs) => {
+          setPrefilledOrderSpecs(specs);
+          setIsAddOrderOpen(true);
+          setShowQuotation(false);
+        }} 
+        onBack={() => setShowQuotation(false)}
+      />
+    );
+  }
+
   if (isAddOrderOpen) {
     return (
       <CreateOrderPage
@@ -257,6 +283,10 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
           getStatusIcon={getStatusIcon}
           getPaymentStatusBadge={getPaymentStatusBadge}
           getPaymentStatusIcon={getPaymentStatusIcon}
+          viewMode={initialSubTab}
+          updateProductionStep={updateProductionStep}
+          addSpoilageLog={addSpoilageLog}
+          inventory={inventory}
         />
 
         {/* STEP-BY-STEP BALANCE SETTLEMENT DIALOG */}
@@ -424,10 +454,10 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
       <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="space-y-1">
           <h2 className="text-2xl sm:text-3xl font-black text-primary-navy tracking-tight font-sans">
-            {initialSubTab === 'production' && '🏭 ຕິດຕາມການຜະລິດ (Production Tracker)'}
-            {initialSubTab === 'deliveries' && '🚚 ຕິດຕາມການຈັດສົ່ງ & ຊຳຣະເງິນ (Deliveries & Payment)'}
-            {initialSubTab === 'completed' && '✅ ລາຍການຈັດສົ່ງສໍາເລັດ (Completed Orders)'}
-            {initialSubTab === 'cancelled' && '❌ ລາຍການຍົກເລີກ (Cancelled Orders)'}
+            {initialSubTab === 'production' && 'ຕິດຕາມການຜະລິດ (Production Tracker)'}
+            {initialSubTab === 'deliveries' && 'ຕິດຕາມການຈັດສົ່ງ & ຊຳຣະເງິນ (Deliveries & Payment)'}
+            {initialSubTab === 'completed' && 'ລາຍການຈັດສົ່ງສໍາເລັດ (Completed Orders)'}
+            {initialSubTab === 'cancelled' && 'ລາຍການຍົກເລີກ (Cancelled Orders)'}
             {initialSubTab === 'orders' && t('orders.title')}
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 font-semibold leading-relaxed">
@@ -438,13 +468,24 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             {initialSubTab === 'orders' && t('orders.subtitle')}
           </p>
         </div>
-        <button
-          onClick={() => setIsAddOrderOpen(true)}
-          className="flex items-center gap-2.5 px-6 py-3.5 bg-accent-sky hover:bg-sky-600 text-white rounded-2xl text-sm font-black shadow-lg shadow-sky-600/10 transition active:scale-95 shrink-0"
-        >
-          <Plus className="w-5 h-5" />
-          <span>{currentLang === 'lo' ? 'ເພີ່ມອໍເດີໃໝ່' : 'Add New Order'}</span>
-        </button>
+        <div className="flex items-center gap-3 shrink-0 flex-wrap">
+          {initialSubTab === 'orders' && (
+            <button
+              onClick={() => setShowQuotation(true)}
+              className="flex items-center gap-2 px-5 py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl text-xs sm:text-sm font-extrabold shadow-md transition active:scale-95 cursor-pointer"
+            >
+              <Calculator className="w-4 h-4 animate-pulse" />
+              <span>{currentLang === 'lo' ? 'ເຮັດໃບສະເໜີລາຄາ' : 'Create Quotation'}</span>
+            </button>
+          )}
+          <button
+            onClick={() => setIsAddOrderOpen(true)}
+            className="flex items-center gap-2.5 px-6 py-3.5 bg-accent-sky hover:bg-sky-600 text-white rounded-2xl text-sm font-black shadow-lg shadow-sky-600/10 transition active:scale-95 shrink-0 cursor-pointer"
+          >
+            <Plus className="w-5 h-5" />
+            <span>{currentLang === 'lo' ? 'ເພີ່ມອໍເດີໃໝ່' : 'Add New Order'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter tab bar only on 'orders' tab */}
@@ -503,7 +544,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
                             : 'bg-amber-100 text-amber-800 border-amber-200'
                         }`}
                       >
-                        {ord.status === 'Delivered' ? '✓ ສົ່ງມອບແລ້ວ (Delivered)' : '🚚 ກຳລັງຂົນສົ່ງ (In Transit)'}
+                        {ord.status === 'Delivered' ? '✓ ສົ່ງມອບແລ້ວ (Delivered)' : 'ກຳລັງຂົນສົ່ງ (In Transit)'}
                       </button>
                     </td>
                     <td className="px-4 py-3.5 text-right font-sans">
@@ -591,7 +632,10 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
           getStatusIcon={getStatusIcon}
           getPaymentStatusBadge={getPaymentStatusBadge}
           getPaymentStatusIcon={getPaymentStatusIcon}
-          isProductionView={initialSubTab === 'production'}
+          viewMode={initialSubTab}
+          updateProductionStep={updateProductionStep}
+          addSpoilageLog={addSpoilageLog}
+          inventory={inventory}
         />
       )}
 

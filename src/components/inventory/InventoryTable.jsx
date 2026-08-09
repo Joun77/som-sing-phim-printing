@@ -7,7 +7,7 @@ import EditMaterialModal from './EditMaterialModal';
 
 export default function InventoryTable({ items, onRestockItem, onViewDetails }) {
   const { t } = useTranslation();
-  const { editInventoryBatch, showToast } = useApp();
+  const { editInventoryBatch, editInventorySku, showToast } = useApp();
   
   // Selected lot states for modal popups
   const [selectedLotModal, setSelectedLotModal] = useState(null);
@@ -87,11 +87,11 @@ export default function InventoryTable({ items, onRestockItem, onViewDetails }) 
     }
 
     if (category === 'Ink') {
-      const bottles = Math.floor(currentQty / 1000) || 1;
+      const bottles = currentQty > 0 ? Math.ceil(currentQty / (parentItem.purchaseMultiplier || 1000)) : 0;
       return (
         <div>
           <span className="font-mono font-black text-slate-800 block">
-            {bottles} ${purchaseUnit || 'Bottle'}
+            {bottles} {purchaseUnit || 'Bottle'}
           </span>
           <span className="text-[10px] text-slate-400 block font-bold">
             ({currentQty} {consumptionUnit || 'ml'})
@@ -118,6 +118,15 @@ export default function InventoryTable({ items, onRestockItem, onViewDetails }) 
         purchasePricePerReam: updatedLotData.purchasePricePerReam,
         supplierName: updatedLotData.supplierName
       });
+
+      // Update SKU details (name, reorderThreshold, linkedMachineIds, colorModel)
+      editInventorySku(parentId, {
+        name: updatedLotData.parentItem.name,
+        reorderThreshold: updatedLotData.parentItem.reorderThreshold,
+        linkedMachineIds: updatedLotData.parentItem.linkedMachineIds,
+        colorModel: updatedLotData.parentItem.colorModel
+      });
+
       showToast(t('common.save') + ' ' + t('common.details'), 'success');
       setEditingLotModal(null);
     }

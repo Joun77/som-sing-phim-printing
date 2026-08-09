@@ -13,7 +13,7 @@ import {
   Info
 } from 'lucide-react';
 
-export default function HistoryAnalytics() {
+export default function HistoryAnalytics({ hideHeader = false }) {
   const { orders, spoilageLogs, inventory, settleOrderBalance } = useApp();
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
@@ -200,38 +200,70 @@ export default function HistoryAnalytics() {
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-primary-navy tracking-wide">
-            {t('reports.title')}
-          </h2>
-          <p className="text-sm text-slate-500 font-medium mt-1">
-            {t('reports.subtitle')}
-          </p>
-        </div>
+      {!hideHeader ? (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-bold text-primary-navy tracking-wide">
+              {t('reports.title')}
+            </h2>
+            <p className="text-sm text-slate-500 font-medium mt-1">
+              {t('reports.subtitle')}
+            </p>
+          </div>
 
-        {/* Timeframe filters */}
-        <div className="flex gap-1.5 p-1 bg-slate-200/60 rounded-xl border border-slate-200">
-          <button
-            onClick={() => setTimeframe('7day')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${timeframe === '7day' ? 'bg-white text-primary-navy shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            {t('reports.filter_7days')}
-          </button>
-          <button
-            onClick={() => setTimeframe('month')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${timeframe === 'month' ? 'bg-white text-primary-navy shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            {t('reports.filter_month')}
-          </button>
-          <button
-            onClick={() => setTimeframe('year')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${timeframe === 'year' ? 'bg-white text-primary-navy shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            {t('reports.filter_year')}
-          </button>
+          {/* Timeframe filters */}
+          <div className="flex gap-1.5 p-1 bg-slate-200/60 rounded-xl border border-slate-200">
+            <button
+              onClick={() => setTimeframe('7day')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${timeframe === '7day' ? 'bg-white text-primary-navy shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              {t('reports.filter_7days')}
+            </button>
+            <button
+              onClick={() => setTimeframe('month')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${timeframe === 'month' ? 'bg-white text-primary-navy shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              {t('reports.filter_month')}
+            </button>
+            <button
+              onClick={() => setTimeframe('year')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${timeframe === 'year' ? 'bg-white text-primary-navy shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              {t('reports.filter_year')}
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+          <div>
+            <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-indigo-600" />
+              <span>{currentLang === 'lo' ? 'ລາຍງານວິເຄາະທຸລະກິດ (Business Analytics)' : 'BI Analytics Reports'}</span>
+            </h3>
+          </div>
+          {/* Timeframe filters */}
+          <div className="flex gap-1.5 p-1 bg-slate-200/60 rounded-xl border border-slate-200">
+            <button
+              onClick={() => setTimeframe('7day')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${timeframe === '7day' ? 'bg-white text-primary-navy shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              {t('reports.filter_7days')}
+            </button>
+            <button
+              onClick={() => setTimeframe('month')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${timeframe === 'month' ? 'bg-white text-primary-navy shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              {t('reports.filter_month')}
+            </button>
+            <button
+              onClick={() => setTimeframe('year')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${timeframe === 'year' ? 'bg-white text-primary-navy shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              {t('reports.filter_year')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Grid: SVG chart and top products */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

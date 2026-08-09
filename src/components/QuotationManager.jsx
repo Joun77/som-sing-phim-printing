@@ -22,10 +22,11 @@ import {
   User,
   Activity,
   Layers3,
-  PercentSquare
+  PercentSquare,
+  ArrowLeft
 } from 'lucide-react';
 
-export default function QuotationManager({ onConvertToOrder }) {
+export default function QuotationManager({ onConvertToOrder, onBack }) {
   const { 
     inventory, 
     equipment, 
@@ -345,13 +346,24 @@ export default function QuotationManager({ onConvertToOrder }) {
       
       {/* Header Card (Hide on print) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm print:hidden">
-        <div className="space-y-1">
-          <h2 className="text-3xl font-black text-primary-navy tracking-tight">
-            {currentLang === 'lo' ? 'ຄິດໄລ່ຕົ້ນທຶນ & ອອກໃບສະເໜີລາຄາ' : 'Cost Estimator & Quotation Desk'}
-          </h2>
-          <p className="text-base text-slate-500 font-semibold leading-relaxed">
-            {currentLang === 'lo' ? 'ຄຳນວນລະອຽດ, ປັບປ່ຽນອັດຕາກຳໄລ, ອອກໃບສະເໜີ ແລະ ຕັດສະຕ໋ອກ FIFO ໃນຄລິກດຽວ' : 'High-fidelity print pricing engine linked with real-time FIFO stock and machinery depreciation.'}
-          </p>
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl transition shrink-0 active:scale-95 cursor-pointer flex items-center justify-center"
+              title="Back"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          )}
+          <div className="space-y-1">
+            <h2 className="text-3xl font-black text-primary-navy tracking-tight">
+              {currentLang === 'lo' ? 'ອອກໃບສະເໜີລາຄາ (Quotation Desk)' : 'Quotation Desk'}
+            </h2>
+            <p className="text-base text-slate-500 font-semibold leading-relaxed">
+              {currentLang === 'lo' ? 'ຄຳນວນລະອຽດ, ປັບປ່ຽນອັດຕາກຳໄລ, ອອກໃບສະເໜີ ແລະ ຕັດສະຕ໋ອກ FIFO ໃນຄລິກດຽວ' : 'Estimate print specs, fine-tune profit margins, print quotations, and deduct FIFO stock.'}
+            </p>
+          </div>
         </div>
         <div>
           <button
@@ -882,7 +894,7 @@ export default function QuotationManager({ onConvertToOrder }) {
               </div>
             </div>
 
-            {/* 📄 PANEL 2: Customer Quotation Preview */}
+            {/* PANEL 2: Customer Quotation Preview */}
             <div className="bg-white text-slate-800 p-6 rounded-3xl border border-slate-200 shadow-xl space-y-6 flex flex-col justify-between print:border-none print:shadow-none print:p-0">
               
               {/* Quotation Sheet Container */}
@@ -946,19 +958,17 @@ export default function QuotationManager({ onConvertToOrder }) {
                     </div>
 
                     {/* Interactive Discount Field (Hide on print if 0) */}
-                    {(Number(discountPercent) > 0 || true) && (
-                      <div className="flex justify-between items-center gap-4 print:hidden">
-                        <span className="text-slate-500">Apply Discount (%):</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="95"
-                          value={discountPercent}
-                          onChange={(e) => setDiscountPercent(Math.min(95, Math.max(0, Number(e.target.value))))}
-                          className="w-16 min-h-[30px] px-2 text-right border-2 rounded-lg text-xs font-black"
-                        />
-                      </div>
-                    )}
+                    <div className="flex justify-between items-center gap-4 print:hidden">
+                      <span className="text-slate-500">Apply Discount (%):</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="95"
+                        value={discountPercent}
+                        onChange={(e) => setDiscountPercent(Math.min(95, Math.max(0, Number(e.target.value))))}
+                        className="w-16 min-h-[30px] px-2 text-right border-2 rounded-lg text-xs font-black"
+                      />
+                    </div>
                     {discountPercent > 0 && (
                       <div className="flex justify-between text-emerald-600 font-extrabold">
                         <span>Discount ({discountPercent}%):</span>

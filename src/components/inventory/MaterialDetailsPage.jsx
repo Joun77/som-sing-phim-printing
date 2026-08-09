@@ -249,17 +249,17 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
                 <span className="text-slate-900 font-bold">{lotData.purchaseDate || '-'}</span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ຜູ້ສະໜອງ/ร้านค้า:' : 'Supplier Name:'}</span>
+                <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ຜູ້ສະໜອງ/ຮ້ານຄ້າ:' : 'Supplier Name:'}</span>
                 <span className="text-slate-900 font-bold">{lotData.supplierName || targetItem.supplierName || '-'}</span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ช่องทางชำระเงิน:' : 'Payment Method:'}</span>
+                <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ຊ່ອງທາງການຊຳລະເງິນ:' : 'Payment Method:'}</span>
                 <span className="font-bold text-slate-900">
-                  {lotData.paymentMethod === 'CASH' ? (currentLang === 'lo' ? 'เงินสด (Cash)' : 'Cash') : (currentLang === 'lo' ? 'ໂອນเงิน (Bank Transfer)' : 'Bank Transfer')}
+                  {lotData.paymentMethod === 'CASH' ? (currentLang === 'lo' ? 'ເງິນສົດ (Cash)' : 'Cash') : (currentLang === 'lo' ? 'ໂອນເງິນ (Bank Transfer)' : 'Bank Transfer')}
                 </span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ຈຳນວນນຳເຂົ້າเริ่มต้น:' : 'Initial Received Qty:'}</span>
+                <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ຈຳນວນນຳເຂົ້າເລີ່ມຕົ້ນ:' : 'Initial Received Qty:'}</span>
                 <span className="font-mono text-slate-900 font-bold">{lotData.initialQty || lotData.currentQty || 1} {targetItem.unit || targetItem.purchaseUnit || 'Units'}</span>
               </div>
               <div>

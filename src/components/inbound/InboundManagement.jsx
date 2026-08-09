@@ -131,7 +131,7 @@ export default function InboundManagement() {
     const reader = new FileReader();
     reader.onload = (uploadEvent) => {
       setUrlState(uploadEvent.target.result);
-      showToast(currentLang === 'lo' ? 'ອັບໂຫຼດรูปภาพเรียบร้อยแล้ว!' : 'Image uploaded successfully!', 'success');
+      showToast(currentLang === 'lo' ? 'ອັບໂຫຼດຮູບພາບສຳເລັດແລ້ວ!' : 'Image uploaded successfully!', 'success');
     };
     reader.readAsDataURL(file);
   };

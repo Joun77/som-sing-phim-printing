@@ -35,7 +35,8 @@
     "production": "ຕິດຕາມການຜະລິດ (Production)",
     "deliveries": "ຕິດຕາມການຈັດສົ່ງ (Deliveries)",
     "estimator": "ເຄື່ອງຄິດໄລ່ (Profit Estimator)",
-    "reports": "ລາຍງານວິເຄາະ (BI Reports)"
+    "reports": "ລາຍງານວິເຄາະ (BI Reports)",
+    "hr": "ຈັດການພະນັກງານ (HR)"
   },
   "dashboard": {
     "title": "ສະບາຍດີ, ຮ້ານ ສົມສິ່ງພິມ",
@@ -98,7 +99,7 @@
     "amount_to_pay": "ຈຳນວນເງິນຊຳຣະ (LAK)",
     "ref_number": "ເລກທີອ້າງອີງ / ໝາຍເຫດ",
     "verify_phone": "ກວດສອບເບີໂທລະສັບ",
-    "estimated_total": "ລາຄาປະເມີນລວມ",
+    "estimated_total": "ລາຄາປະເມີນລວມ",
     "total_price_charged": "ລາຄາລວມທັງໝົດ",
     "promised_due_date": "ວັນກຳນົດສົ່ງສິນຄ້າ",
     "installation_schedule": "ຕາຕະລາງການຕິດຕັ້ງ (ເລືອກໄດ້)",
@@ -156,7 +157,7 @@
     "vendor_table_sheet": "ຕົ້ນທຶນສະເລ່ຍ/ແຜ່ນ",
     "vendor_table_update": "ອັບເດດຫຼ້າສຸດ",
     "spoilage_table_qty": "ຈຳນວນເສຍ",
-    "spoilage_table_total": "ความເສຍຫາຍລວມ",
+    "spoilage_table_total": "ຄ່າເສຍຫາຍລວມ",
     "spoilage_table_cause": "ສາເຫດ",
     "modal_restock_title": "ສັ່ງຊື້ເຈ້ຍ / ຕື່ມລັອດໃໝ່ (FIFO Batch Entry)",
     "modal_vendor_title": "ອັບເດດລາຄາຮ້ານສະໜອງ (Vendor Price Update)",
@@ -197,7 +198,7 @@
     "subtitle": "ປະເມີນລາຄາຂາຍ, ບວກຄ່າຫຼັງພິມ (Finishing), ແລະ ວິເຄາະອັດຕາກຳໄລກ່ອນອອກໃບບິນ",
     "alert_violation": "ຄວາມສ່ຽງ: ອັດຕາກຳໄລຕ່ຳກວ່າເກນປ້ອງກັນ",
     "discount_badge": "ໄດ້ຮັບສ່ວນຫຼຸດປະລິມານການສັ່ງຊື້ (Volume Tier Discount):",
-    "form_title": "ກຳນົດລายລະອຽດງານພິມ",
+    "form_title": "ກຳນົດລາຍລະອຽດງານພິມ",
     "paper_select": "1. ເລືອກເຈ້ຍທີ່ໃຊ້ພິມ *",
     "override_cost": "ປ່ຽນແທນຕົ້ນທຶນເຈ້ຍເອງ (Override Cost)",
     "override_label": "ຕົ້ນທຶນເຈ້ຍກຳນົດເອງ (LAK / ແຜ່ນ)",

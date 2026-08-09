@@ -363,7 +363,7 @@ export default function ItemSpecConfigurator({
                     }`}
                   >
                     <Package className="w-4 h-4" />
-                    <span>📄 ເຈ້ຍແຜ່ນ (Sheet-fed)</span>
+                    <span>ເຈ້ຍແຜ່ນ (Sheet-fed)</span>
                   </button>
 
                   <button
@@ -376,7 +376,7 @@ export default function ItemSpecConfigurator({
                     }`}
                   >
                     <Maximize2 className="w-4 h-4" />
-                    <span>🌀 ເຈ້ຍມ້ວນ / ປ້າຍ (Roll-fed)</span>
+                    <span>ເຈ້ຍມ້ວນ / ປ້າຍ (Roll-fed)</span>
                   </button>
                 </div>
               </div>

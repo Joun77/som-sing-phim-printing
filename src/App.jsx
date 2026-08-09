@@ -9,6 +9,7 @@ import CustomerManagement from './components/customers/CustomerManagement';
 import CustomerOrders from './components/orders/CustomerOrders';
 import QuotationManager from './components/QuotationManager';
 import HistoryAnalytics from './components/HistoryAnalytics';
+import EmployeeManagement from './components/hr/EmployeeManagement';
 import { useTranslation } from 'react-i18next';
 import { 
   CheckCircle2, 
@@ -30,15 +31,14 @@ function AppContent() {
       <main className="flex-1 h-screen overflow-y-auto px-6 py-8 md:px-8">
         <div className="w-full">
           {activeTab === 'dashboard' && <DashboardOverview />}
-          {(activeTab === 'orders' || activeTab === 'create_order' || activeTab === 'production' || activeTab === 'deliveries') && (
+          {(activeTab === 'orders' || activeTab === 'create_order' || activeTab === 'production' || activeTab === 'deliveries' || activeTab === 'quotation') && (
             <CustomerOrders initialSubTab={activeTab} />
           )}
           {activeTab === 'inbound' && <InboundManagement />}
           {activeTab === 'inventory' && <InventoryManagement />}
           {activeTab === 'equipment' && <EquipmentOverhead />}
           {activeTab === 'crm' && <CustomerManagement />}
-          {activeTab === 'calculator' && <QuotationManager />}
-          {activeTab === 'reports' && <HistoryAnalytics />}
+          {activeTab === 'hr' && <EmployeeManagement />}
         </div>
       </main>
 

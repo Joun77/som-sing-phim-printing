@@ -12,7 +12,17 @@ import {
   ShieldCheck,
   CreditCard,
   DollarSign,
-  FileText
+  FileText,
+  Phone,
+  MapPin,
+  User,
+  Calendar,
+  AlertTriangle,
+  Check,
+  Activity,
+  Sparkles,
+  Layers,
+  X
 } from 'lucide-react';
 
 export default function OrderDetailsPage({
@@ -22,6 +32,7 @@ export default function OrderDetailsPage({
   t,
   currentLang,
   handleStatusChange,
+  handlePreflightToggle,
   deleteOrder,
   showToast,
   askConfirmation,
@@ -31,9 +42,150 @@ export default function OrderDetailsPage({
   getStatusBadgeClass,
   getStatusIcon,
   getPaymentStatusBadge,
-  getPaymentStatusIcon
+  getPaymentStatusIcon,
+  viewMode = 'orders',
+  updateProductionStep,
+  addSpoilageLog,
+  inventory
 }) {
   if (!order) return null;
+
+  const renderSLAHeroBadge = () => {
+    if (!order.promisedDeliveryDate) return null;
+    const promised = new Date(order.promisedDeliveryDate + 'T23:59:59');
+    const now = new Date();
+    const diffMs = promised.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffMs < 0) {
+      const daysOverdue = Math.abs(Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+      return (
+        <span className="px-3 py-1.5 rounded-xl bg-red-600 text-white border border-red-500 text-xs font-black animate-pulse flex items-center gap-1">
+          ⚠ ກາຍກຳນົດ {daysOverdue} ວັນ (Overdue)
+        </span>
+      );
+    } else if (diffDays <= 1) {
+      return (
+        <span className="px-3 py-1.5 rounded-xl bg-amber-500 text-slate-900 text-xs font-black flex items-center gap-1">
+          ⏳ ສົ່ງມື້ນີ້ (Due Today)
+        </span>
+      );
+    } else {
+      return (
+        <span className="px-3 py-1.5 rounded-xl bg-purple-800 border border-purple-700 text-purple-200 text-xs font-bold font-mono">
+          ເຫຼືອເວລາ: {diffDays} ວັນ
+        </span>
+      );
+    }
+  };
+
+  const renderActivityTimeline = () => {
+    const logs = order.activityLog || [];
+    return (
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-5">
+        <h3 className="text-sm font-black text-slate-900 border-b pb-3 flex items-center gap-2 font-sans">
+          <Activity className="w-5 h-5 text-slate-600" />
+          <span>{currentLang === 'lo' ? 'ປະຫວັດການດຳເນີນງານ & ກິດຈະກຳ' : 'Order Activity Audit Trail'}</span>
+        </h3>
+        
+        {logs.length === 0 ? (
+          <p className="text-xs text-slate-400 font-bold text-center py-4">
+            {currentLang === 'lo' ? 'ບໍ່ມີປະຫວັດກິດຈະກຳເທື່ອ' : 'No activity logged yet'}
+          </p>
+        ) : (
+          <div className="relative pl-6 border-l-2 border-slate-100 space-y-6 font-sans text-xs">
+            {logs.map((log, idx) => (
+              <div key={idx} className="relative text-left">
+                <span className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-slate-400 border-2 border-white ring-4 ring-slate-50" />
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <span className="font-bold text-slate-800 leading-snug">{log.description}</span>
+                  <span className="text-[10px] text-slate-400 font-mono font-bold shrink-0">{log.timestamp}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderJobTicket = () => {
+    return (
+      <div className="hidden print:block p-8 max-w-xl mx-auto border-2 border-dashed border-slate-400 rounded-3xl space-y-6 text-slate-800 font-sans">
+        <div className="text-center space-y-2 border-b-2 pb-4">
+          <h1 className="text-2xl font-black uppercase tracking-wider text-slate-900">ສົມສິງ ພິມ (Som Sing Printing)</h1>
+          <p className="text-xs font-bold text-slate-500">ໃບສັ່ງຜະລິດ / Work Order Job Ticket</p>
+          <p className="text-xs font-mono font-bold text-slate-900 mt-2">Order ID: #{order.id} | Date: {order.date}</p>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-4 text-xs">
+          <div className="space-y-1">
+            <span className="text-[10px] uppercase font-bold text-slate-400">ລູກຄ້າ / Customer</span>
+            <p className="font-bold text-slate-800 text-sm">{order.customerName}</p>
+            <p className="font-mono text-slate-500">{order.phone}</p>
+          </div>
+          <div className="space-y-1 text-right">
+            <span className="text-[10px] uppercase font-bold text-slate-400">ກຳນົດສົ່ງ / Promised Due</span>
+            <p className="font-bold text-slate-800 text-sm">{order.promisedDeliveryDate}</p>
+            <p className="font-mono text-slate-500">{order.deliveryMethod || 'Pickup'}</p>
+          </div>
+        </div>
+
+        <div className="border-y border-slate-200 py-4 space-y-3">
+          <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider">ລາຍການສັ່ງພິມ / Print Items Specifications</span>
+          <div className="divide-y divide-slate-100 font-sans text-xs">
+            {order.items && order.items.map((item, idx) => {
+              const spec = getSpecDetails(item.name);
+              return (
+                <div key={idx} className="py-2 flex justify-between items-start">
+                  <div>
+                    <p className="font-bold text-slate-900">{item.name}</p>
+                    <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                      Spec: {spec.paper} | Size: {spec.size} | Fin: {spec.finishing}
+                    </p>
+                  </div>
+                  <p className="font-mono font-black text-slate-900 text-sm">x{item.quantity}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider">ໝາຍເຫດການຜະລິດ / Production Notes</span>
+          <p className="text-xs p-3 bg-slate-50 border rounded-xl font-bold text-slate-700 min-h-[60px] italic">
+            {order.notes || 'ບໍ່ມີໝາຍເຫດເພີ່ມເຕີມ'}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 border-t pt-4">
+          <div className="space-y-2 text-xs">
+            <span className="text-[10px] uppercase font-bold text-slate-400">ຂັ້ນຕອນການກວດສອບ / Checklists</span>
+            <div className="space-y-1 font-bold text-slate-700">
+              <p>[  ] 1. ກວດສອບໄຟລ໌ (Pre-flight)</p>
+              <p>[  ] 2. ພິມແຜ່ນງານ (Press Printing)</p>
+              <p>[  ] 3. ຕັດແລະເຄືອບ (Cutting & Binding)</p>
+              <p>[  ] 4. ກວດສອບ QC (Final QC)</p>
+            </div>
+          </div>
+          <div className="flex flex-col justify-end items-end text-right text-[10px] space-y-1 text-slate-400">
+            <p className="border-b border-slate-300 w-32 pb-4"></p>
+            <p className="font-bold">ລາຍເຊັນຊ່າງຮັບຜິດຊອບ</p>
+            <p className="font-mono">Date: ____/____/____</p>
+          </div>
+        </div>
+
+        <div className="pt-6 flex flex-col items-center justify-center space-y-1.5 border-t">
+          <div className="flex items-center gap-0.5 justify-center h-8 font-mono text-[9px] text-slate-800">
+            {[1,2,3,4,3,2,1,4,3,2,1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4,3,2,1,4,3,2,1].map((bar, bIdx) => (
+              <span key={bIdx} className="bg-slate-900 inline-block h-full" style={{ width: bar === 1 ? '1px' : bar === 2 ? '2px' : bar === 3 ? '3px' : '4px' }} />
+            ))}
+          </div>
+          <p className="text-[9px] font-mono font-bold tracking-widest text-slate-400">QC-MIMAKI-{order.id}</p>
+        </div>
+      </div>
+    );
+  };
 
   const preflightComplete = order.preflight?.cmyk === 'Pass' && order.preflight?.bleed === 'Pass' && order.preflight?.resolution === 'Pass';
   const totalOrderedQty = order.items ? order.items.reduce((sum, it) => sum + Number(it.quantity || 0), 0) : 0;
@@ -72,9 +224,10 @@ export default function OrderDetailsPage({
     return { paper, size, finishing };
   };
 
-  // Shopee-style light status checks
   const isProdStepDone = (stepKey) => {
+    const custom = order.productionStepsCompleted || {};
     if (stepKey === 'preflight') return preflightComplete;
+    if (stepKey in custom) return Boolean(custom[stepKey]);
     if (stepKey === 'printing') return ['Printing', 'Cutting', 'Ready', 'Delivered'].includes(order.status);
     if (stepKey === 'cutting') return ['Cutting', 'Ready', 'Delivered'].includes(order.status);
     if (stepKey === 'qc') return ['Ready', 'Delivered'].includes(order.status);
@@ -95,6 +248,742 @@ export default function OrderDetailsPage({
     return false;
   };
 
+  // COMMON HEADER
+  const renderHeader = (titleText) => (
+    <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xs">
+      <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-2xl text-xs sm:text-sm font-black transition active:scale-95 shadow-sm cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>{currentLang === 'lo' ? '← ກັບຄືນ' : '← Back'}</span>
+        </button>
+        <div>
+          <div className="flex items-center gap-2 text-xs font-mono font-bold text-slate-400 uppercase">
+            <span>ID: #{order.id}</span>
+            <span>•</span>
+            <span>{order.date} {order.createdTime || ''}</span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5 tracking-tight">
+            {titleText}
+          </h1>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <span className={`px-3 py-1.5 rounded-xl text-xs font-black border uppercase flex items-center gap-1.5 ${getStatusBadgeClass(order.status)}`}>
+          {getStatusIcon(order.status)}
+          <span>{t(`status.${order.status}`)}</span>
+        </span>
+        <span className={`px-3 py-1.5 rounded-xl text-xs font-black border uppercase flex items-center gap-1.5 ${getPaymentStatusBadge(order.paymentStatus)}`}>
+          {getPaymentStatusIcon(order.paymentStatus)}
+          <span>{t(`payment.${order.paymentStatus}`)}</span>
+        </span>
+        {viewMode === 'production' && (
+          <button
+            type="button"
+            onClick={() => { showToast(currentLang === 'lo' ? 'ກຳລັງພິມໃບສັ່ງຜະລິດ...' : 'Printing Job Ticket...', 'info'); window.print(); }}
+            className="flex items-center gap-1.5 px-3 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer"
+          >
+            <Printer className="w-4 h-4" />
+            <span>{currentLang === 'lo' ? 'ພິມໃບສັ່ງຜະລິດ' : 'Print Job Ticket'}</span>
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            const msg = currentLang === 'lo' ? 'ທ່ານຕ້ອງການລຶບອໍເດີນີ້ແທ້ ຫຼື ບໍ່?' : 'Delete this order permanently?';
+            askConfirmation(msg, () => {
+              deleteOrder(order.id);
+              onBack();
+              showToast(currentLang === 'lo' ? 'ລຶບອໍເດີສຳເລັດ!' : 'Order deleted successfully!', 'success');
+            });
+          }}
+          className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer"
+        >
+          <Trash2 className="w-4 h-4" />
+          <span>{currentLang === 'lo' ? 'ລຶບ' : 'Delete'}</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  // VIEW 1: PRODUCTION VIEW (viewMode === 'production')
+  if (viewMode === 'production') {
+    return (
+      <>
+        <div className="min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 lg:p-8 space-y-8 animate-fade-in font-sans print:hidden">
+          {renderHeader(currentLang === 'lo' ? 'ຕິດຕາມ & ຈັດການຂະບວນການຜະລິດ' : 'Production Tracking Desk')}
+
+          {/* Production Hero Banner */}
+          <div className="bg-purple-900 text-white rounded-3xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-md relative overflow-hidden">
+            <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-48 h-48 rounded-full bg-purple-800 opacity-20 pointer-events-none" />
+            <div className="space-y-1">
+              <span className="text-[10px] uppercase font-black tracking-wider text-purple-300 flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5" /> Stage 1: Manufacturing run
+              </span>
+              <h2 className="text-xl font-black">{currentLang === 'lo' ? 'ກຳລັງດຳເນີນການຜະລິດໃນໂຮງງານ' : 'Order is Currently in Manufacturing Run'}</h2>
+              <p className="text-xs text-purple-200">Machine priority: Standard Digital Press • Promised Delivery: {order.promisedDeliveryDate}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
+              {renderSLAHeroBadge()}
+              <div className="px-4 py-2 bg-purple-800 border border-purple-700 rounded-2xl text-xs font-bold text-purple-200 font-mono">
+                QC Code: QC-MIMAKI-{order.id}
+              </div>
+            </div>
+          </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column: Artwork Spec & Pre-flight Checklist */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Artwork File Card */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-5">
+              <h3 className="text-sm font-black text-slate-900 border-b pb-3 flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-purple-600" />
+                  {currentLang === 'lo' ? 'ໄຟລ໌ອອກແບບ & ສື່ສິ່ງພິມ' : 'Artwork File & Print Media'}
+                </span>
+                <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[10px] font-black border border-purple-200 uppercase">Art Safe</span>
+              </h3>
+              
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-purple-100 text-purple-800 border border-purple-200 rounded-2xl flex items-center justify-center font-black text-xs uppercase font-mono shadow-inner">
+                    PDF
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-extrabold text-slate-800 leading-snug font-mono">artwork_order_{order.id}_cmyk.pdf</h4>
+                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">High-Resolution Vector Format • 300 DPI • Embedded Profile</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => showToast(currentLang === 'lo' ? 'ດາວໂຫຼດໄຟລ໌ສຳເລັດ!' : 'Artwork file downloaded!', 'success')}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition active:scale-95 cursor-pointer shadow-sm shadow-purple-600/10 shrink-0"
+                >
+                  {currentLang === 'lo' ? 'ດາວໂຫຼດໄຟລ໌' : 'Download File'}
+                </button>
+              </div>
+
+              {/* Pre-flight Interactive Control Panel */}
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wider block">{currentLang === 'lo' ? 'ກວດສອບມາດຕະຖານໄຟລ໌ (Pre-flight Toggles)' : 'Interactive Pre-flight Toggles'}</span>
+                  <span className="text-[10px] text-slate-400 font-bold">Click button to switch check status</span>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* 1. CMYK Color mode */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between gap-3 text-xs">
+                    <div>
+                      <span className="font-extrabold text-slate-800 block">CMYK Color Mode</span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">Color check</span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      {['Pass', 'Fail', 'Pending'].map((val) => {
+                        const isSelected = order.preflight?.cmyk === val;
+                        return (
+                          <button
+                            key={val}
+                            onClick={() => handlePreflightToggle('cmyk', val)}
+                            className={`flex-1 py-1 rounded-lg font-black transition text-[10px] cursor-pointer ${
+                              isSelected
+                                ? val === 'Pass' ? 'bg-emerald-600 text-white' : val === 'Fail' ? 'bg-red-600 text-white' : 'bg-amber-500 text-white'
+                                : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {val}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 2. Bleed margins check */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between gap-3 text-xs">
+                    <div>
+                      <span className="font-extrabold text-slate-800 block">Bleed & Safe Zones</span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">Safety Margins</span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      {['Pass', 'Fail', 'Pending'].map((val) => {
+                        const isSelected = order.preflight?.bleed === val;
+                        return (
+                          <button
+                            key={val}
+                            onClick={() => handlePreflightToggle('bleed', val)}
+                            className={`flex-1 py-1 rounded-lg font-black transition text-[10px] cursor-pointer ${
+                              isSelected
+                                ? val === 'Pass' ? 'bg-emerald-600 text-white' : val === 'Fail' ? 'bg-red-600 text-white' : 'bg-amber-500 text-white'
+                                : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {val}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 3. Resolution Check */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between gap-3 text-xs">
+                    <div>
+                      <span className="font-extrabold text-slate-800 block">Image Resolution</span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">Minimum 300 DPI</span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      {['Pass', 'Fail', 'Pending'].map((val) => {
+                        const isSelected = order.preflight?.resolution === val;
+                        return (
+                          <button
+                            key={val}
+                            onClick={() => handlePreflightToggle('resolution', val)}
+                            className={`flex-1 py-1 rounded-lg font-black transition text-[10px] cursor-pointer ${
+                              isSelected
+                                ? val === 'Pass' ? 'bg-emerald-600 text-white' : val === 'Fail' ? 'bg-red-600 text-white' : 'bg-amber-500 text-white'
+                                : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {val}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Print Spec & Item Breakdown */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+              <h3 className="text-sm font-black text-slate-900 border-b pb-3 flex items-center gap-2">
+                <Printer className="w-5 h-5 text-purple-600" />
+                <span>{currentLang === 'lo' ? 'ລາຍການສິ່ງພິມທີ່ຈະຜະລິດ' : 'Printed Items to Manufacture'}</span>
+              </h3>
+              <div className="divide-y divide-slate-100">
+                {order.items && order.items.map((item, idx) => {
+                  const specs = getItemSpecs(item);
+                  return (
+                    <div key={item.id || idx} className="py-4 flex justify-between items-center text-xs">
+                      <div>
+                        <h4 className="font-black text-sm text-slate-900">{item.name}</h4>
+                        <div className="flex flex-wrap gap-2 text-slate-500 font-bold mt-1">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[10px]">Paper: {specs.paper}</span>
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[10px]">Size: {specs.size}</span>
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[10px]">Cut: {specs.finishing}</span>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-slate-400 block font-bold">Ordered Volume</span>
+                        <span className="text-sm font-black text-slate-900 font-mono">x{item.quantity} units</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Interactive Timeline Tracker */}
+          <div className="space-y-6">
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between min-h-[300px]">
+              <div className="space-y-5">
+                <h3 className="text-sm font-black text-slate-900 border-b pb-3 flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-purple-600 animate-pulse" />
+                  <span>{currentLang === 'lo' ? 'ຕິດຕາມຂັ້ນຕອນการຜະລິດ' : 'Production Progress'}</span>
+                </h3>
+
+                <div className="space-y-3.5">
+                  {[
+                    { id: 'preflight', title: currentLang === 'lo' ? 'ກວດສອບໄຟລ໌' : 'File Validation', sub: 'CMYK Color & Resolution Pass', done: isProdStepDone('preflight'), icon: FileCheck, clickable: step.id === 'preflight' },
+                    { id: 'printing', title: currentLang === 'lo' ? 'ພິມຜ່ານເຄື່ອງ' : 'Press Printing', sub: 'Active Industrial Digital Printer', done: isProdStepDone('printing'), icon: Printer },
+                    { id: 'cutting', title: currentLang === 'lo' ? 'ຕັດ & ເຄືອບ' : 'Cutting & Binding', sub: 'Laminating & Guillotine Cutting', done: isProdStepDone('cutting'), icon: Scissors },
+                    { id: 'qc', title: currentLang === 'lo' ? 'ກວດ QC ສຸດທ້າຍ' : 'Final QC Inspection', sub: 'Color Alignment & Count Validation', done: isProdStepDone('qc'), icon: ShieldCheck },
+                  ].map((step, sIdx) => {
+                    const StepIcon = step.icon;
+                    const isClickable = step.id !== 'preflight' && updateProductionStep;
+                    return (
+                      <button
+                        key={sIdx}
+                        type="button"
+                        disabled={!isClickable}
+                        title={isClickable ? (step.done ? (currentLang === 'lo' ? 'ກົດເພື່ອຍົກເລີກ' : 'Click to unmark') : (currentLang === 'lo' ? 'ກົດເພື່ອໝາຍວ່າສຳເລັດ' : 'Click to mark complete')) : (currentLang === 'lo' ? 'ໃຊ້ toggle ຂ້າງເທິງ' : 'Toggle via preflight checks above')}
+                        onClick={() => {
+                          if (isClickable) {
+                            updateProductionStep(order.id, step.id, !step.done);
+                            showToast(
+                              !step.done
+                                ? (currentLang === 'lo' ? `✓ ${step.title}: ສຳເລັດ!` : `✓ ${step.title}: Marked complete!`)
+                                : (currentLang === 'lo' ? `↺ ${step.title}: ຍົກເລີກ` : `↺ ${step.title}: Unmarked`),
+                              !step.done ? 'success' : 'info'
+                            );
+                          }
+                        }}
+                        className={`w-full p-3 rounded-2xl border transition-all text-left flex items-center justify-between ${
+                          step.done 
+                            ? 'bg-emerald-50/70 border-emerald-200 text-slate-800' 
+                            : 'bg-slate-50 border-slate-200 text-slate-400'
+                        } ${isClickable ? 'hover:border-purple-300 hover:shadow-sm cursor-pointer active:scale-[0.99]' : 'cursor-default'}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <StepIcon className={`w-4 h-4 shrink-0 ${step.done ? 'text-emerald-600' : 'text-slate-400'}`} />
+                          <div>
+                            <span className="text-xs font-bold block text-slate-900">{step.title}</span>
+                            <span className="text-[10px] text-slate-400 block font-mono mt-0.5">{step.sub}</span>
+                          </div>
+                        </div>
+                        {step.done ? (
+                          <span className="p-1 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                            <Check className="w-3.5 h-3.5" />
+                          </span>
+                        ) : (
+                          <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${isClickable ? 'border-slate-300 hover:border-purple-400' : 'bg-slate-200 border-transparent'}`} />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {order.status !== 'Ready' && order.status !== 'Delivered' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (handleStatusChange) handleStatusChange(order.id, order.status);
+                  }}
+                  className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl text-xs font-black shadow-md transition active:scale-95 mt-6 cursor-pointer"
+                >
+                  {currentLang === 'lo' ? `ອັບເດດສະຖານະການຜະລິດ (${order.status})` : `Advance Production Status (${order.status})`}
+                </button>
+              )}
+            </div>
+
+            {/* Quick customer detail block */}
+            <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-xs space-y-4">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Client Contact</span>
+              <div className="space-y-3 font-semibold text-xs">
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span>{order.customerName}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                  <a href={`tel:${order.phone}`} className="hover:underline">{order.phone}</a>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span>{order.deliveryMethod || 'Kerry Lao'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Spoilage defect reporter form */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+              <h3 className="text-sm font-black text-slate-900 border-b pb-3 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+                <span>{currentLang === 'lo' ? 'ແຈ້ງເສຍຫາຍ / ລາຍງານງານເສຍ' : 'Report Production Spoilage'}</span>
+              </h3>
+              
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const form = e.target;
+                  const materialId = form.materialId.value;
+                  const quantity = Number(form.quantity.value);
+                  const cause = form.cause.value;
+                  
+                  if (!materialId || quantity <= 0) {
+                    showToast(currentLang === 'lo' ? 'ກະລຸນາເລືອກວັດສະດຸ ແລະ ປ້ອນຈຳນວນ!' : 'Please select material and enter quantity!', 'error');
+                    return;
+                  }
+                  
+                  if (addSpoilageLog) {
+                    addSpoilageLog({
+                      materialId,
+                      quantity,
+                      cause,
+                      orderId: order.id
+                    });
+                    showToast(currentLang === 'lo' ? 'ບັນທຶກງານເສຍສຳເລັດ!' : 'Spoilage logged successfully!', 'success');
+                    form.reset();
+                  }
+                }}
+                className="space-y-3 text-xs"
+              >
+                <div>
+                  <label className="block font-bold text-slate-500 mb-1">{currentLang === 'lo' ? 'ເລືອກວັດສະດຸທີ່ເສຍ' : 'Select Spoilage Material'}</label>
+                  <select 
+                    name="materialId"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:bg-white transition"
+                    required
+                  >
+                    <option value="">-- {currentLang === 'lo' ? 'ເລືອກວັດສະດຸ' : 'Select Material'} --</option>
+                    {inventory && inventory.map(item => (
+                      <option key={item.id} value={item.id}>{item.name} ({item.currentQty} {item.consumptionUnit})</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-500 mb-1">{currentLang === 'lo' ? 'ຈຳນວນເສຍຫາຍ' : 'Quantity'}</label>
+                    <input 
+                      type="number"
+                      name="quantity"
+                      min="1"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:bg-white font-mono"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-500 mb-1">{currentLang === 'lo' ? 'ສາເຫດ / ໝາຍເຫດ' : 'Reason'}</label>
+                    <input 
+                      type="text"
+                      name="cause"
+                      placeholder="e.g. ເຈ້ຍຕິດ, ຕັດຜິດ"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:bg-white"
+                    />
+                  </div>
+                </div>
+                
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-black transition active:scale-95 cursor-pointer shadow-sm shadow-amber-600/10 text-center"
+                >
+                  {currentLang === 'lo' ? 'ບັນທຶກລາຍງານງານເສย' : 'Submit Spoilage Log'}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        {/* Full-width Activity Log Timeline */}
+        {renderActivityTimeline()}
+      </div>
+      {renderJobTicket()}
+    </>
+    );
+  }
+
+  // VIEW 2: DELIVERY VIEW (viewMode === 'deliveries')
+  if (viewMode === 'deliveries') {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 lg:p-8 space-y-8 animate-fade-in font-sans">
+        {renderHeader(currentLang === 'lo' ? 'ຕິດຕາມການຈັດສົ່ງ & ຊຳຣະຍອດຄ້າງ' : 'Dispatch & Settlement Desk')}
+
+        {/* Deliveries alert card showing remaining unpaid balance */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex items-center justify-between col-span-2">
+            <div className="space-y-1">
+              <span className="text-[10px] uppercase font-black tracking-wider text-red-500 block">{currentLang === 'lo' ? 'ຍອດເງິນຄ້າງຊຳລະທັງໝົດ' : 'Outstanding Remaining Balance'}</span>
+              <span className="text-3xl font-black text-red-600 font-sans block">
+                {formatLAK(remainingUnpaid)}
+              </span>
+              <p className="text-xs text-slate-400 font-bold">{currentLang === 'lo' ? 'ຕ້ອງເກັບກ່ອນ ຫຼື ຂະນະທີ່ສົ່ງມອບສິນຄ້າ' : 'Must be collected before or during delivery handover'}</p>
+            </div>
+            {remainingUnpaid > 0 ? (
+              <button
+                onClick={() => {
+                  setSettleAmount(remainingUnpaid);
+                  setSettleStep(1);
+                  setIsSettleOpen(true);
+                }}
+                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black shadow-md transition active:scale-95 cursor-pointer shrink-0"
+              >
+                {t('orders.btn_settle')}
+              </button>
+            ) : (
+              <span className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-black uppercase flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Fully Paid
+              </span>
+            )}
+          </div>
+
+          <div className="bg-sky-950 text-white rounded-3xl p-6 shadow-xs flex flex-col justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] font-black uppercase text-sky-400 block">Shipping Method</span>
+              <span className="text-lg font-black block">{order.deliveryMethod || 'Kerry Lao'}</span>
+            </div>
+            <span className="text-[11px] font-bold text-sky-300 font-mono mt-2">Target Date: {order.promisedDeliveryDate}</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column: Customer details, Address, Ledger details */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Shipping Address details */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-5">
+              <h3 className="text-sm font-black text-slate-900 border-b pb-3 flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-sky-600" />
+                <span>{currentLang === 'lo' ? 'ທີ່ຢູ່ຈັດສົ່ງ ແລະ ຂໍ້ມູນລູກຄ້າ' : 'Delivery Address & Client Details'}</span>
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs sm:text-sm">
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-black text-slate-400 block">{currentLang === 'lo' ? 'ຊື່ຜູ້ຮັບສິນຄ້າ' : 'Recipient Name'}</span>
+                    <span className="font-extrabold text-slate-800">{order.customerName}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-black text-slate-400 block">{currentLang === 'lo' ? 'ເບີໂທລະສັບ' : 'Phone'}</span>
+                    <a href={`tel:${order.phone}`} className="font-black text-sky-600 text-sm hover:underline">{order.phone}</a>
+                  </div>
+                </div>
+                <div className="space-y-1 bg-slate-50 p-4 border border-slate-200 rounded-2xl">
+                  <span className="text-[10px] uppercase font-black text-slate-400 block">{currentLang === 'lo' ? 'ທີ່ຢູ່ສົ່ງເຄື່ອງຢ່າງລະອຽດ' : 'Full Delivery Address'}</span>
+                  <p className="font-semibold text-slate-700 mt-1.5 italic leading-relaxed">
+                    {order.address || (currentLang === 'lo' ? 'ບໍ່ມີຂໍ້ມູນທີ່ຢູ່ (ຮັບເອງທີ່ຮ້าน)' : 'No address provided (Self-pickup)')}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Financial Ledger & Invoice breakdowns */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+              <h3 className="text-sm font-black text-slate-900 border-b pb-3 flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-sky-600" />
+                <span>{currentLang === 'lo' ? 'ລາຍການສິນຄ້າ ແລະ ໃບບິນ' : 'Invoice & Itemized Ledger'}</span>
+              </h3>
+              
+              <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                      <th className="p-3">Item</th>
+                      <th className="p-3 text-center">Qty</th>
+                      <th className="p-3 text-right">Unit Price</th>
+                      <th className="p-3 text-right">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                    {order.items && order.items.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50">
+                        <td className="p-3 font-bold text-slate-800">{item.name}</td>
+                        <td className="p-3 text-center font-mono">x{item.quantity}</td>
+                        <td className="p-3 text-right">{formatLAK(item.unitCost)}</td>
+                        <td className="p-3 text-right font-black text-slate-900">{formatLAK(Number(item.quantity || 0) * Number(item.unitCost || 0))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-between items-center bg-slate-50 p-4 border border-slate-200 rounded-2xl text-xs sm:text-sm font-bold">
+                <span className="text-slate-500">{currentLang === 'lo' ? 'ລາຄາລວມທັງໝົດ' : 'Total Charges'}</span>
+                <span className="text-lg font-black text-slate-900">{formatLAK(order.totalPriceCharged)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Dispatch progress tracking */}
+          <div className="space-y-6">
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between min-h-[300px]">
+              <div className="space-y-5">
+                <h3 className="text-sm font-black text-slate-900 border-b pb-3 flex items-center gap-2">
+                  <Truck className="w-5 h-5 text-sky-600" />
+                  <span>{currentLang === 'lo' ? 'ສະຖານະການຈັດສົ່ງ' : 'Shipping Status'}</span>
+                </h3>
+
+                <div className="space-y-4">
+                  {[
+                    { id: 'ready', title: 'Package Ready', sub: 'Packaged & Checked by QC', done: isShippingStepDone('ready'), icon: Package },
+                    { id: 'dispatched', title: 'In Transit / Courier', sub: order.deliveryMethod || 'Kerry Lao', done: isShippingStepDone('dispatched'), icon: Truck },
+                    { id: 'delivered', title: 'Handed Over Successfully', sub: 'Completed and signed by client', done: isShippingStepDone('delivered'), icon: CheckCircle2 },
+                  ].map((step, sIdx) => {
+                    const StepIcon = step.icon;
+                    return (
+                      <div key={sIdx} className={`p-3 rounded-2xl border transition flex items-center justify-between ${
+                        step.done 
+                          ? 'bg-emerald-50/70 border-emerald-200 text-slate-800' 
+                          : 'bg-slate-50 border-slate-200 text-slate-400'
+                      }`}>
+                        <div className="flex items-center gap-3">
+                          <StepIcon className={`w-4 h-4 shrink-0 ${step.done ? 'text-emerald-600' : 'text-slate-400'}`} />
+                          <div>
+                            <span className="text-xs font-bold block text-slate-900">{step.title}</span>
+                            <span className="text-[10px] text-slate-400 block font-mono mt-0.5">{step.sub}</span>
+                          </div>
+                        </div>
+                        {step.done ? (
+                          <span className="p-1 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                            <Check className="w-3.5 h-3.5" />
+                          </span>
+                        ) : (
+                          <span className="w-3 h-3 rounded-full bg-slate-200 shrink-0" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {order.status === 'Ready' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (handleStatusChange) handleStatusChange(order.id, 'Delivered');
+                  }}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black shadow-md transition active:scale-95 mt-6 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Truck className="w-4 h-4" />
+                  <span>{currentLang === 'lo' ? 'ສົ່ງມອບສິນຄ້າສຳເລັດ (Mark Delivered)' : 'Mark Delivered'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // VIEW 3: COMPLETED VIEW (viewMode === 'completed')
+  if (viewMode === 'completed') {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 lg:p-8 space-y-8 animate-fade-in font-sans">
+        {renderHeader(currentLang === 'lo' ? 'ລາຍການຈັດສົ່ງສຳເລັດສົມບູນ' : 'Completed Order Archive')}
+
+        {/* Success Banner */}
+        <div className="bg-emerald-600 text-white rounded-3xl p-8 text-center space-y-3 shadow-md border border-emerald-500 relative overflow-hidden">
+          <div className="w-16 h-16 bg-white/20 text-white rounded-full flex items-center justify-center mx-auto border-2 border-white/30 shadow-inner">
+            <CheckCircle2 className="w-9 h-9" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-xl font-black">{currentLang === 'lo' ? 'ອໍເດີນີ້ສຳເລັດສົມບູນແລ້ວ 100%' : 'Order Completed & Settled Successfully'}</h2>
+            <p className="text-xs text-emerald-100">Zero outstanding balance • All shipment batches handed over successfully</p>
+          </div>
+          <div className="flex justify-center gap-3 pt-2">
+            <button
+              onClick={() => showToast('Summary Invoice Printed!', 'success')}
+              className="px-4 py-2 bg-white text-emerald-800 rounded-xl text-xs font-black hover:bg-slate-50 transition cursor-pointer flex items-center gap-1.5"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>{currentLang === 'lo' ? 'ພิມໃບບິນ' : 'Print Invoice'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Closed Read-Only Ledger Detail */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+              <h3 className="text-sm font-black text-slate-900 border-b pb-3 flex items-center gap-2">
+                <FileCheck className="w-5 h-5 text-emerald-600" />
+                <span>{currentLang === 'lo' ? 'ສະຫຼຸບຍອດບິນທີ່ຊຳລະແລ້ວ' : 'Settled Ledger Summary'}</span>
+              </h3>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-semibold">
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center space-y-1">
+                  <span className="text-slate-400 block text-[10px] uppercase font-black">Total Charges</span>
+                  <span className="text-base font-black text-slate-900">{formatLAK(order.totalPriceCharged)}</span>
+                </div>
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-center space-y-1">
+                  <span className="text-emerald-800 block text-[10px] uppercase font-black">Paid Amount</span>
+                  <span className="text-base font-black text-emerald-600">{formatLAK(paidAmount)}</span>
+                </div>
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center space-y-1">
+                  <span className="text-slate-400 block text-[10px] uppercase font-black">Outstanding balance</span>
+                  <span className="text-base font-black text-slate-400">₭ 0</span>
+                </div>
+              </div>
+
+              {/* Items Breakdown Table */}
+              <div className="overflow-x-auto rounded-2xl border border-slate-100 mt-4">
+                <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                      <th className="p-3">Item Name</th>
+                      <th className="p-3 text-center">Volume</th>
+                      <th className="p-3 text-right">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                    {order.items && order.items.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="p-3 font-bold text-slate-800">{item.name}</td>
+                        <td className="p-3 text-center font-mono">x{item.quantity}</td>
+                        <td className="p-3 text-right font-black text-slate-950">{formatLAK(Number(item.quantity || 0) * Number(item.unitCost || 0))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Read-Only Info */}
+          <div className="space-y-6 text-xs sm:text-sm font-semibold">
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+              <h3 className="text-sm font-black text-slate-900 border-b pb-3 flex items-center gap-2">
+                <Package className="w-5 h-5 text-emerald-600" />
+                <span>{currentLang === 'lo' ? 'ຂໍ້ມູນການຈັດສົ່ງ' : 'Delivery Log'}</span>
+              </h3>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-black uppercase text-slate-400 block">Recipient Client</span>
+                  <span className="text-slate-800 font-bold block">{order.customerName}</span>
+                  <span className="text-slate-500 font-mono block mt-0.5">{order.phone}</span>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[10px] font-black uppercase text-slate-400 block">Delivery Address</span>
+                  <p className="text-slate-700 italic block">{order.address || 'Self-pickup'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // VIEW 4: CANCELLED VIEW (viewMode === 'cancelled')
+  if (viewMode === 'cancelled') {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 lg:p-8 space-y-8 animate-fade-in font-sans">
+        {renderHeader(currentLang === 'lo' ? 'ລາຍການຍົກເລີກ' : 'Cancelled Order Archive')}
+
+        {/* Cancellation Alert Banner */}
+        <div className="bg-red-50 border-2 border-red-200 text-red-900 rounded-3xl p-6 sm:p-8 flex items-start gap-4 shadow-xs">
+          <div className="p-3 bg-red-100 text-red-700 border border-red-200 rounded-2xl shrink-0">
+            <AlertTriangle className="w-8 h-8" />
+          </div>
+          <div className="space-y-1.5 flex-1">
+            <h2 className="text-lg font-black">{currentLang === 'lo' ? 'ອໍເດີນີ້ຖືກຍົກເລີກແລ້ວ' : 'This Order Has Been Cancelled'}</h2>
+            <p className="text-xs text-red-700 font-bold">
+              {currentLang === 'lo' ? 'ເຫດຜົນການຍົກເລີກ: ' : 'Cancellation Reason: '} 
+              <span className="underline italic">{order.cancelReason || 'Customer Request / Defective Layout file'}</span>
+            </p>
+            <span className="text-[10px] text-slate-400 block font-mono">Cancelled on: {order.cancelDate || order.date}</span>
+          </div>
+        </div>
+
+        {/* Read-Only items lists */}
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+          <h3 className="text-sm font-black text-slate-900 border-b pb-3">
+            {currentLang === 'lo' ? 'ລາຍລະອຽດອໍເດີທີ່ຍົກເລີກ' : 'Cancelled Order Summary'}
+          </h3>
+          <div className="divide-y divide-slate-100 text-xs sm:text-sm font-semibold">
+            {order.items && order.items.map((item, idx) => (
+              <div key={idx} className="py-3 flex justify-between items-center">
+                <div>
+                  <h4 className="font-black text-slate-800">{item.name}</h4>
+                  <span className="text-[11px] text-slate-400 block font-mono">Quantity: x{item.quantity}</span>
+                </div>
+                <span className="font-black text-slate-900">{formatLAK(Number(item.quantity || 0) * Number(item.unitCost || 0))}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex justify-between items-center bg-slate-50 p-4 border border-slate-200 rounded-2xl text-xs sm:text-sm font-black mt-4">
+            <span className="text-slate-500">Original Total Charged</span>
+            <span className="text-slate-900 text-base">{formatLAK(order.totalPriceCharged)}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // DEFAULT VIEW (viewMode === 'orders' or fallback)
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 lg:p-8 space-y-8 animate-fade-in font-sans">
       {/* 1. TOP HEADER & NAVIGATION BAR (LIGHT THEME) */}
@@ -103,7 +992,7 @@ export default function OrderDetailsPage({
           <button
             type="button"
             onClick={onBack}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-2xl text-xs sm:text-sm font-black transition active:scale-95 shadow-sm"
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-2xl text-xs sm:text-sm font-black transition active:scale-95 shadow-sm cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>{currentLang === 'lo' ? '← ກັບຄືນ' : '← Back to Orders'}</span>
@@ -140,7 +1029,7 @@ export default function OrderDetailsPage({
                 showToast(currentLang === 'lo' ? 'ລຶບອໍເດີສຳເລັດ!' : 'Order deleted successfully!', 'success');
               });
             }}
-            className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 rounded-xl text-xs font-black transition active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer"
           >
             <Trash2 className="w-4 h-4" />
             <span>{currentLang === 'lo' ? 'ລຶບ' : 'Delete'}</span>
@@ -159,7 +1048,7 @@ export default function OrderDetailsPage({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* BLOCK 1: PRODUCTION PROCESS (ຂະບວນການຜະລິດ/ພິມ) */}
+          {/* BLOCK 1: PRODUCTION PROCESS (ຂະບວນການຜະລິດ/ພิມ) */}
           <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-5 shadow-sm flex flex-col justify-between">
             <div>
               <div className="flex justify-between items-center border-b border-slate-100 pb-4">
@@ -290,7 +1179,7 @@ export default function OrderDetailsPage({
                 onClick={() => {
                   if (handleStatusChange) handleStatusChange(order.id, order.status);
                 }}
-                className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl text-xs font-black shadow-md transition active:scale-95 mt-4"
+                className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl text-xs font-black shadow-md transition active:scale-95 mt-4 cursor-pointer"
               >
                 Advance Production ({order.status})
               </button>
@@ -404,7 +1293,7 @@ export default function OrderDetailsPage({
                 onClick={() => {
                   if (handleStatusChange) handleStatusChange(order.id, 'Delivered');
                 }}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black shadow-md transition active:scale-95 mt-4 flex items-center justify-center gap-2"
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black shadow-md transition active:scale-95 mt-4 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Truck className="w-4 h-4" />
                 <span>Mark Delivered (ສົ່ງມອບແລ້ວ)</span>
@@ -443,7 +1332,7 @@ export default function OrderDetailsPage({
                     : 'bg-slate-50 border-slate-200/80 text-slate-600'
                 }`}>
                   <div className="flex items-center gap-3">
-                    <DollarSign className={`w-4 h-4 ${isPaymentStepDone('deposit') ? 'text-emerald-600' : 'text-slate-400'}`} />
+                    <DollarSign className={`w-3.5 h-3.5 ${isPaymentStepDone('deposit') ? 'text-emerald-600' : 'text-slate-400'}`} />
                     <div>
                       <span className="text-xs font-bold block text-slate-900">Deposit Received</span>
                       <span className="text-[10px] text-slate-500 block font-mono">Paid: {formatLAK(paidAmount)}</span>
@@ -467,7 +1356,7 @@ export default function OrderDetailsPage({
                     : 'bg-slate-50 border-slate-200/80 text-slate-600'
                 }`}>
                   <div className="flex items-center gap-3">
-                    <CreditCard className={`w-4 h-4 ${isPaymentStepDone('full_settle') ? 'text-emerald-600' : 'text-slate-400'}`} />
+                    <CreditCard className={`w-3.5 h-3.5 ${isPaymentStepDone('full_settle') ? 'text-emerald-600' : 'text-slate-400'}`} />
                     <div>
                       <span className="text-xs font-bold block text-slate-900">Full Settlement</span>
                       <span className="text-[10px] text-slate-500 block font-mono">Remaining: {formatLAK(remainingUnpaid)}</span>
@@ -491,9 +1380,9 @@ export default function OrderDetailsPage({
                     : 'bg-slate-50 border-slate-200/80 text-slate-600'
                 }`}>
                   <div className="flex items-center gap-3">
-                    <ShieldCheck className={`w-4 h-4 ${isPaymentStepDone('clearance') ? 'text-emerald-600' : 'text-slate-400'}`} />
+                    <ShieldCheck className={`w-3.5 h-3.5 ${isPaymentStepDone('clearance') ? 'text-emerald-600' : 'text-slate-400'}`} />
                     <div>
-                      <span className="text-xs font-bold block text-slate-900">Financial Clearance</span>
+                      <span className="text-xs font-bold block text-slate-950">Financial Clearance</span>
                       <span className="text-[10px] text-slate-500 block font-mono">Zero Balance Due</span>
                     </div>
                   </div>
@@ -519,7 +1408,7 @@ export default function OrderDetailsPage({
                   setSettleStep(1);
                   setIsSettleOpen(true);
                 }}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black shadow-md transition active:scale-95 mt-4"
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black shadow-md transition active:scale-95 mt-4 cursor-pointer"
               >
                 {t('orders.btn_settle')} ({formatLAK(remainingUnpaid)})
               </button>
@@ -548,7 +1437,7 @@ export default function OrderDetailsPage({
                 showToast('ກຳລັງພິມ: Detailed Spec Quote', 'info');
                 window.print();
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 rounded-xl text-xs font-black transition active:scale-95 shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 rounded-xl text-xs font-black transition active:scale-95 shadow-sm cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Spec Quote</span>
@@ -559,7 +1448,7 @@ export default function OrderDetailsPage({
                 showToast('ກຳລັງພິມ: Summary Invoice', 'info');
                 window.print();
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-black transition active:scale-95 shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-black transition active:scale-95 shadow-sm cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Summary Invoice</span>

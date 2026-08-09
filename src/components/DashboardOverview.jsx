@@ -24,6 +24,7 @@ import {
   FileQuestion,
   HelpCircle
 } from 'lucide-react';
+import HistoryAnalytics from './HistoryAnalytics';
 
 export default function DashboardOverview() {
   const { 
@@ -476,6 +477,9 @@ export default function DashboardOverview() {
           )}
         </div>
       </div>
+
+      {/* Reports & BI Analytics integrated at the bottom of Dashboard */}
+      <HistoryAnalytics hideHeader={true} />
 
       {/* ACCESSIBLE STEP-BY-STEP ORDER WIZARD MODAL */}
       {isOrderModalOpen && (

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { sampleInboundData } from '../data/sampleInboundData';
 
 const AppContext = createContext();
 
@@ -393,7 +394,14 @@ const initialOrders = [
       versions: [
         { url: 'https://drive.google.com/somphone-brochure.pdf', version: 1, uploadedAt: getPastDateTimeString(2, 9, 30) }
       ]
-    }
+    },
+    activityLog: [
+      { timestamp: getPastDateTimeString(2, 16, 45), description: 'ສໍາເລັດ: ກວດສອບ QC (Final QC)' },
+      { timestamp: getPastDateTimeString(2, 11, 15), description: 'ປ່ຽນສະຖານະເປັນ: Printing' },
+      { timestamp: getPastDateTimeString(2, 10, 15), description: 'ກວດຜ່ານໄຟລ໌ Pre-flight (CMYK, Bleed, Resolution) ແລ້ວ' },
+      { timestamp: getPastDateTimeString(2, 9, 45), description: 'ຊຳຣະຍອດມັດຈຳ 70,000 LAK ສໍາເລັດ' },
+      { timestamp: getPastDateTimeString(2, 9, 30), description: 'ເປີດອໍເດີໃໝ່ໃນລະบົບ' }
+    ]
   },
   {
     id: 'ord-1002',
@@ -430,7 +438,13 @@ const initialOrders = [
         { url: 'https://drive.google.com/sengdao-stickers.ai', version: 2, uploadedAt: getPastDateTimeString(0, 9, 15) },
         { url: 'https://drive.google.com/sengdao-stickers-v1.ai', version: 1, uploadedAt: getPastDateTimeString(0, 8, 30) }
       ]
-    }
+    },
+    activityLog: [
+      { timestamp: getPastDateTimeString(0, 10, 0), description: 'ປ່ຽນສະຖານະເປັນ: Printing' },
+      { timestamp: getPastDateTimeString(0, 9, 15), description: 'ອັບໂຫຼດໄຟລ໌ອາດເວີກເວີຊັນ 2' },
+      { timestamp: getPastDateTimeString(0, 8, 45), description: 'ຊຳຣະຍອດມັດຈຳ 400,000 LAK ສໍາເລັດ' },
+      { timestamp: getPastDateTimeString(0, 8, 30), description: 'ເປີດອໍເດີໃໝ່ໃນລະບົບ' }
+    ]
   },
   {
     id: 'ord-1003',
@@ -466,7 +480,14 @@ const initialOrders = [
       versions: [
         { url: 'https://drive.google.com/menu-v2.pdf', version: 1, uploadedAt: getPastDateTimeString(3, 9, 30) }
       ]
-    }
+    },
+    activityLog: [
+      { timestamp: getPastDateTimeString(2, 14, 0), description: 'ປ່ຽນສະຖານະເປັນ: Delivered (ຈັດສົ່ງສຳເລັດ)' },
+      { timestamp: getPastDateTimeString(3, 15, 0), description: 'ສໍາເລັດ: ກວດສອບ QC (Final QC)' },
+      { timestamp: getPastDateTimeString(3, 11, 0), description: 'ປ່ຽນສະຖານະເປັນ: Printing' },
+      { timestamp: getPastDateTimeString(3, 10, 10), description: 'ຊຳຣະຍອດມັດຈຳ 450,000 LAK ສໍາເລັດ' },
+      { timestamp: getPastDateTimeString(3, 9, 30), description: 'ເປີດອໍເດີໃໝ່ໃນລະບົບ' }
+    ]
   }
 ];
 
@@ -543,28 +564,10 @@ export const AppProvider = ({ children }) => {
     }
     return initialCustomers;
   });
-  const [linkedInboundEntries, setLinkedInboundEntries] = useState([
-    {
-      id: 'INB-INK-001',
-      poNumber: '#LOT-INK-001',
-      receiptDate: '2026-08-01',
-      category: 'INK',
-      name: 'น้ำหมึก Epson 003 Genuine CMYK Ink Set',
-      sku: 'INK-EP-003',
-      linkedPrinterId: 'mc-epson-l15150',
-      linkedPrinterName: 'Epson EcoTank L15150 (A3+ Multi-Function)',
-      colorModel: 'Full CMYK Set',
-      isoStandardYieldSheets: 7500,
-      totalPrice: 450000, // LAK
-      unitCostPerPage: 60, // 450,000 / 7,500 = ₭60 / sheet
-      paymentMethod: 'TRANSFER',
-      supplier: 'Epson Lao Official',
-      docs: {
-        productPhoto: 'https://images.unsplash.com/photo-1563089145-599997674d42?w=500&auto=format&fit=crop',
-        paymentSlip: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=500&auto=format&fit=crop'
-      }
-    }
-  ]);
+  const [linkedInboundEntries, setLinkedInboundEntries] = useState(() => {
+    const saved = localStorage.getItem('ss_print_inbound_entries_v6');
+    return saved ? JSON.parse(saved) : sampleInboundData;
+  });
   const [offcuts, setOffcuts] = useState(() => {
     const saved = localStorage.getItem('ss_print_offcuts_v6');
     return saved ? JSON.parse(saved) : initialOffcuts;
@@ -623,6 +626,10 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     safeSetItem('ss_print_purchase_orders_v6', purchaseOrders);
   }, [purchaseOrders]);
+
+  useEffect(() => {
+    safeSetItem('ss_print_inbound_entries_v6', linkedInboundEntries);
+  }, [linkedInboundEntries]);
 
   // Master Categories Registry & Specs Pool Persistence
   const [customCategories, setCustomCategories] = useState(() => {
@@ -827,6 +834,14 @@ export const AppProvider = ({ children }) => {
       });
     });
   };
+  const editInventorySku = (itemId, updatedFields) => {
+    setInventory(prev => prev.map(item => {
+      if (item.id === itemId) {
+        return { ...item, ...updatedFields };
+      }
+      return item;
+    }));
+  };
 
   // CRM Credit Limit Check
   const checkCreditLimit = (customerName, newOrderAmount) => {
@@ -887,9 +902,48 @@ export const AppProvider = ({ children }) => {
           updatedPf.approvedTimestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
         }
 
+        const logs = ord.activityLog || [];
+        const newLog = {
+          timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16),
+          description: `ກວດສອບອາດເວີກ Pre-flight: ${field} = ${value}`
+        };
+
         return {
           ...ord,
-          preflight: updatedPf
+          preflight: updatedPf,
+          activityLog: [newLog, ...logs]
+        };
+      }
+      return ord;
+    }));
+  };
+
+  const updateProductionStep = (orderId, stepKey, isDone) => {
+    setOrders(prev => prev.map(ord => {
+      if (ord.id === orderId) {
+        const steps = ord.productionStepsCompleted || {};
+        const stepNames = {
+          preflight: 'ກວດສອບໄຟລ໌ (File Validation)',
+          printing: 'ພິມແຜ່ນງານ (Press Printing)',
+          cutting: 'ຕັດແລະເຄືອບ (Cutting & Binding)',
+          qc: 'ກວດສອບ QC (Final QC)'
+        };
+        const statusText = isDone ? 'ສໍາເລັດ (Completed)' : 'ຍົກເລີก (Cancelled)';
+        const logDesc = `ຂັ້ນຕອນການຜະລິດ: ${stepNames[stepKey] || stepKey} ແມ່ນ ${statusText}`;
+        
+        const logs = ord.activityLog || [];
+        const newLog = {
+          timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16),
+          description: logDesc
+        };
+
+        return {
+          ...ord,
+          productionStepsCompleted: {
+            ...steps,
+            [stepKey]: isDone
+          },
+          activityLog: [newLog, ...logs]
         };
       }
       return ord;
@@ -1064,6 +1118,9 @@ export const AppProvider = ({ children }) => {
           { url: orderData.artworkLink || 'https://drive.google.com/som-sing-proof.pdf', version: 1, uploadedAt: formatDateTime() }
         ]
       },
+      activityLog: [
+        { timestamp: formatDateTime(), description: 'ເປີດອໍເດີໃໝ່ໃນລະບົບ (New Order Created)' }
+      ],
       ...orderData,
       items: itemsWithLots
     };
@@ -1143,9 +1200,25 @@ export const AppProvider = ({ children }) => {
           updates.paidDateTime = timeNow;
         }
 
+        const logs = ord.activityLog || [];
+        const statusNames = {
+          Received: 'ໄດ້ຮັບອໍເດີ (Received)',
+          Printing: 'ເລີ່ມພິມແຜ່ນງານ (Press Printing)',
+          Cutting: 'ຕັດແລະເຄືອບ (Cutting & Binding)',
+          Ready: 'ຜະລິດສຳເລັດ/ກຽມຈັດສົ່ງ (Ready for Delivery)',
+          Delivered: 'ຈັດສົ່ງສຳເລັດ (Delivered)',
+          Cancelled: 'ຍົກເລີກອໍເດີ (Cancelled)'
+        };
+        const statusText = statusNames[newStatus] || newStatus;
+        const newLog = {
+          timestamp: timeNow,
+          description: `ປ່ຽນສະຖານະອໍເດີເປັນ: ${statusText}`
+        };
+
         return {
           ...ord,
-          ...updates
+          ...updates,
+          activityLog: [newLog, ...logs]
         };
       }
       return ord;
@@ -1164,6 +1237,13 @@ export const AppProvider = ({ children }) => {
         const newDeposit = ord.depositAmountPaid + amountPaid;
         const newRemaining = Math.max(0, ord.totalPriceCharged - newDeposit);
         const fullyPaid = newRemaining === 0;
+        const timeNow = formatDateTime();
+
+        const logs = ord.activityLog || [];
+        const newLog = {
+          timestamp: timeNow,
+          description: `ຊຳຣະຍອດຄ້າງຈຳນວນ ${amountPaid.toLocaleString()} LAK ຜ່ານ ${method} (${slipNote || 'ບໍ່ມີໝາຍເຫດ'})`
+        };
 
         return {
           ...ord,
@@ -1172,7 +1252,8 @@ export const AppProvider = ({ children }) => {
           paymentMethod: method,
           paymentSlipNote: slipNote || ord.paymentSlipNote,
           paymentStatus: fullyPaid ? 'Fully Paid' : 'Deposit Paid',
-          paidDateTime: formatDateTime(),
+          paidDateTime: timeNow,
+          activityLog: [newLog, ...logs]
         };
       }
       return ord;
@@ -1201,6 +1282,23 @@ export const AppProvider = ({ children }) => {
 
     deductStockFIFO(logData.materialId, logData.quantity);
     setSpoilageLogs(prev => [newLog, ...prev]);
+
+    if (logData.orderId) {
+      setOrders(prev => prev.map(ord => {
+        if (ord.id === logData.orderId) {
+          const logs = ord.activityLog || [];
+          const actLog = {
+            timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16),
+            description: `ລາຍງານງານເສຍ: ${invItem.name} ຈຳນວນ ${logData.quantity} ໜ່ວຍ. ສາເຫດ: ${logData.cause || 'ບໍ່ລະບຸ'}`
+          };
+          return {
+            ...ord,
+            activityLog: [actLog, ...logs]
+          };
+        }
+        return ord;
+      }));
+    }
   };
 
   const addStock = (itemId, purchaseQty) => {
@@ -1214,21 +1312,53 @@ export const AppProvider = ({ children }) => {
   };
 
   const addEquipment = (eqData) => {
-    const calculatedCostPerPage = eqData.purchaseCost / eqData.printedPagesCapacity;
+    const calculatedCostPerPage = eqData.purchaseCost / (eqData.printedPagesCapacity || 500000);
+    
+    let defaultComponents = [
+      { name: 'Drum Unit (ຊຸດດຣຳ)', usage: 0, threshold: 90 },
+      { name: 'Fuser Kit (ຊຸດຄວາມຮ້ອນ)', usage: 0, threshold: 90 }
+    ];
+    if (eqData.category === 'Cutter') {
+      defaultComponents = [
+        { name: 'Blade Lifespan (ໃບມີດ)', usage: 0, threshold: 95 },
+        { name: 'Cutting Stick (ແທ່ງຮອງຕັດ)', usage: 0, threshold: 90 },
+        { name: 'Hydraulic Oil (ນ້ຳມັນໄຮໂດຼລິກ)', usage: 0, threshold: 90 }
+      ];
+    } else if (eqData.category === 'Laminator') {
+      defaultComponents = [
+        { name: 'Printhead Status (ຫົວພิມ)', usage: 0, threshold: 90 },
+        { name: 'Maintenance Box (ກ່ອງຊັບໝຶກ)', usage: 0, threshold: 90 }
+      ];
+    } else if (eqData.category === 'Binder') {
+      defaultComponents = [
+        { name: 'Glue Roller (ລູກກິ້ງກາວ)', usage: 0, threshold: 90 },
+        { name: 'Clamp Wear (ຊຸດໜີບ)', usage: 0, threshold: 90 }
+      ];
+    }
+
     const newEq = {
-      id: `eq-${Date.now().toString().slice(-4)}`,
+      id: eqData.id || `eq-${Date.now().toString().slice(-4)}`,
       printedCount: 0,
       calculatedCostPerPage,
       purchaseDate: new Date().toISOString().split('T')[0],
       warrantyExpiration: new Date(new Date().setFullYear(new Date().getFullYear() + 2)).toISOString().split('T')[0],
       lastMaintenanceDate: new Date().toISOString().split('T')[0],
-      components: eqData.components || [
-        { name: 'Drum Unit', usage: 0, threshold: 90 },
-        { name: 'Fuser Kit', usage: 0, threshold: 90 }
-      ],
+      components: eqData.components || defaultComponents,
       ...eqData
     };
     setEquipment(prev => [...prev, newEq]);
+  };
+
+  const addInboundEntry = (entry) => {
+    setLinkedInboundEntries(prev => [entry, ...prev]);
+  };
+
+  const editInboundEntry = (id, updatedFields) => {
+    setLinkedInboundEntries(prev => prev.map(item => item.id === id ? { ...item, ...updatedFields } : item));
+  };
+
+  const deleteInboundEntry = (id) => {
+    setLinkedInboundEntries(prev => prev.filter(item => item.id !== id));
   };
 
   const updateEquipmentMaintenance = (eqId) => {
@@ -1313,6 +1443,7 @@ export const AppProvider = ({ children }) => {
       purchaseOrders,
       setPurchaseOrders,
       deletePurchaseOrder,
+      linkedInboundEntries,
       customCategories,
       setCustomCategories,
       masterSpecsPool,
@@ -1328,6 +1459,7 @@ export const AppProvider = ({ children }) => {
       addInventorySku,
       deleteInventoryBatch,
       editInventoryBatch,
+      editInventorySku,
       checkCreditLimit,
       addCustomer,
       updateCustomer,
@@ -1335,6 +1467,7 @@ export const AppProvider = ({ children }) => {
       addOffcut,
       consumeOffcut,
       updatePreflightCheck,
+      updateProductionStep,
       addOrderVersion,
       addOrder,
       updateOrderStatus,
@@ -1343,8 +1476,10 @@ export const AppProvider = ({ children }) => {
       addSpoilageLog,
       addStock,
       addEquipment,
+      addInboundEntry,
+      editInboundEntry,
+      deleteInboundEntry,
       addPurchaseOrder,
-      addInventorySku,
       updateEquipmentComponentUsage,
       resetEquipmentComponent,
       updateEquipmentMaintenance,
