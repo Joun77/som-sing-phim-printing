@@ -1,6 +1,7 @@
 package pricing
 
 import (
+	"math"
 	"testing"
 )
 
@@ -97,5 +98,47 @@ func TestCalculateJobPricingNew(t *testing.T) {
 	if res.SalePrice != 116684.62 {
 		t.Errorf("Expected SalePrice 116684.62, got %v", res.SalePrice)
 	}
+
+	t.Run("Custom Finishing PER_SQM", func(t *testing.T) {
+		reqSqM := req
+		reqSqM.CustomFinishingOptions = []CustomFinishingOption{
+			{Name: "Laminate SQM", ChargeType: "PER_SQM", Price: 1000.0},
+		}
+		// Quantity = 100, W = 210, H = 297. Total SqM = 0.21 * 0.297 * 100 = 6.237 sqm.
+		// Price = 1000 * 6.237 = 6237 LAK
+		resSqM, err := CalculateJobPricing(reqSqM)
+		if err != nil {
+			t.Fatalf("Expected no error, got %v", err)
+		}
+		if resSqM.CustomFinishingCost != 6237.0 {
+			t.Errorf("Expected CustomFinishingCost 6237.0, got %v", resSqM.CustomFinishingCost)
+		}
+	})
+
+	t.Run("Margin Protection Guard", func(t *testing.T) {
+		reqGuard := req
+		reqGuard.TargetMarginPercent = 1.5 // 150% margin
+		resGuard, err := CalculateJobPricing(reqGuard)
+		if err != nil {
+			t.Fatalf("Expected no error, got %v", err)
+		}
+		if resGuard.ProfitMargin != 0.99 {
+			t.Errorf("Expected margin to be clamped to 0.99, got %v", resGuard.ProfitMargin)
+		}
+	})
+
+	t.Run("Fallback Overhead", func(t *testing.T) {
+		reqFallback := req
+		reqFallback.OverheadPercent = 0.0
+		resFallback, err := CalculateJobPricing(reqFallback)
+		if err != nil {
+			t.Fatalf("Expected no error, got %v", err)
+		}
+		// Overhead fallback to 15%
+		expectedOverhead := resFallback.DirectCost * 0.15
+		if math.Abs(resFallback.OverheadCost-roundToTwoDecimals(expectedOverhead)) > 0.01 {
+			t.Errorf("Expected OverheadCost around %v, got %v", expectedOverhead, resFallback.OverheadCost)
+		}
+	})
 }
 

@@ -89,8 +89,9 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	}
 
 	// Fallback/Default values for missing inputs
-	if req.OverheadPercent <= 0 {
-		req.OverheadPercent = 0.15 // Default 15% overhead
+	overheadPercent := req.OverheadPercent
+	if overheadPercent <= 0 {
+		overheadPercent = 0.15 // Default 15% overhead
 	}
 
 	// Handle target margin fallback to legacy markup margin
@@ -114,13 +115,11 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	paperCost := float64(req.Quantity) * req.PaperCostPerUnit
 
 	// 2. Ink Cost calculation with Black (K) and Color (CMY) split
-	// Legacy fallback if split fields are empty
 	inkCovK := req.InkCoverageKPercent
 	inkCovCMY := req.InkCoverageCMYPercent
 	if inkCovK == 0 && inkCovCMY == 0 && req.InkCoveragePercent > 0 {
 		inkCovK = req.InkCoveragePercent
 	}
-	// Fallback to defaults if color coverage is not specified
 	if inkCovCMY < 0 {
 		inkCovCMY = 0.0
 	}
@@ -141,7 +140,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		costCMY = 500.0
 	}
 
-	// ISO 5% coverage standards: 0.035 ml per A4 page
+	// ISO 5% coverage standards: 0.035 ml per A4 page (0.007 ml per 1% coverage)
 	inkVolumeKPerPage := 0.007 * inkCovK
 	inkVolumeCMYPerPage := 0.007 * inkCovCMY
 
@@ -201,7 +200,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	directCost := paperCost + inkCost + depreciationCost + maintenanceCost + customFinishingCost + laminationCost + bindingCost + laborCost
 
 	// 9. Overhead Cost calculation
-	overheadCost := directCost * req.OverheadPercent
+	overheadCost := directCost * overheadPercent
 
 	// 10. Total cost = Direct Cost + Overhead
 	totalCost := directCost + overheadCost
