@@ -10,6 +10,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
   const [purchaseCost, setPurchaseCost] = useState(15000000);
   const [lifespanYears, setLifespanYears] = useState(5);
   const [printedPagesCapacity, setPrintedPagesCapacity] = useState(500000);
+  const [maintenanceCostPerPage, setMaintenanceCostPerPage] = useState(10);
   const [imageUrl, setImageUrl] = useState('');
   
   // Printer Specific Parameters (Epson L15150 Standards)
@@ -126,6 +127,8 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
       lifespanYears: Number(lifespanYears),
       printedPagesCapacity: Number(printedPagesCapacity),
       TargetTotalPages: Number(printedPagesCapacity),
+      MaintenanceCostPerPage: Number(maintenanceCostPerPage),
+      maintenanceCostPerPage: Number(maintenanceCostPerPage),
       ...categoryParams
     });
 
@@ -433,14 +436,23 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
           )}
 
           {/* Standard Financial & Lifespan parameters */}
-          <div className="grid grid-cols-3 gap-3 pt-2">
+          <div className="grid grid-cols-2 gap-3 pt-2">
             <div className="space-y-1">
-              <label className="text-slate-500 uppercase block text-[10px]">Purchase Cost (LAK)</label>
+              <label className="text-slate-500 uppercase block text-[10px]">Purchase Cost / Machine Price (LAK)</label>
               <input
                 type="number"
                 value={purchaseCost}
                 onChange={(e) => setPurchaseCost(Number(e.target.value))}
-                className="w-full px-3 py-2 border rounded-xl focus:outline-none font-sans font-bold"
+                className="w-full px-3 py-2 border rounded-xl focus:outline-none font-sans font-bold bg-white"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-slate-500 uppercase block text-[10px]">Target Lifetime Pages</label>
+              <input
+                type="number"
+                value={printedPagesCapacity}
+                onChange={(e) => setPrintedPagesCapacity(Number(e.target.value))}
+                className="w-full px-3 py-2 border rounded-xl focus:outline-none font-sans font-bold bg-white"
               />
             </div>
             <div className="space-y-1">
@@ -449,16 +461,16 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
                 type="number"
                 value={lifespanYears}
                 onChange={(e) => setLifespanYears(Number(e.target.value))}
-                className="w-full px-3 py-2 border rounded-xl focus:outline-none font-sans font-bold"
+                className="w-full px-3 py-2 border rounded-xl focus:outline-none font-sans font-bold bg-white"
               />
             </div>
             <div className="space-y-1">
-              <label className="text-slate-500 uppercase block text-[10px]">Lifetime Capacity</label>
+              <label className="text-slate-500 uppercase block text-[10px]">Maint. Cost Per Page (LAK)</label>
               <input
                 type="number"
-                value={printedPagesCapacity}
-                onChange={(e) => setPrintedPagesCapacity(Number(e.target.value))}
-                className="w-full px-3 py-2 border rounded-xl focus:outline-none font-sans font-bold"
+                value={maintenanceCostPerPage}
+                onChange={(e) => setMaintenanceCostPerPage(Number(e.target.value))}
+                className="w-full px-3 py-2 border rounded-xl focus:outline-none font-sans font-bold bg-white"
               />
             </div>
           </div>

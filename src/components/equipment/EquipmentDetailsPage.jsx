@@ -292,11 +292,11 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
           </div>
         </div>
 
-        {/* CATEGORY 5: Purchasing & Document Links */}
+        {/* CATEGORY 5: Purchasing & Document Links + Financial & Depreciation Metrics */}
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-6">
           <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 flex items-center gap-2">
             <FileText className="w-4 h-4 text-amber-600" />
-            <span>Category 5: Purchasing & Document Links</span>
+            <span>Category 5: Purchasing & Financial / Depreciation Metrics</span>
           </h3>
           
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-xs font-bold text-slate-600">
@@ -305,16 +305,62 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
               <span className="text-xs text-slate-900 block mt-1">{machine.purchaseDate || '-'}</span>
             </div>
             <div>
-              <span className="text-slate-400 uppercase text-[10px] block">Price / Cost</span>
-              <span className="text-xs text-slate-900 font-mono block mt-1">{formatLAK(machine.purchaseCost || machine.price || 0)}</span>
-            </div>
-            <div>
               <span className="text-slate-400 uppercase text-[10px] block">Vendor / Supplier</span>
               <span className="text-xs text-slate-900 block mt-1">{machine.vendor || '-'}</span>
             </div>
             <div>
               <span className="text-slate-400 uppercase text-[10px] block">Warranty Expiry Year</span>
               <span className="text-xs text-slate-900 block mt-1">{machine.warrantyExpirationYear || machine.warrantyExpiration || '-'}</span>
+            </div>
+            <div>
+              <span className="text-slate-400 uppercase text-[10px] block">Est. Depreciation / Page</span>
+              <span className="text-xs text-emerald-600 block mt-1">
+                {machine.TargetTotalPages > 0 
+                  ? `${formatLAK((machine.MachinePrice || machine.purchaseCost || 0) / machine.TargetTotalPages)} / page`
+                  : 'N/A'}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
+            <span className="text-xs font-black text-slate-700 block uppercase tracking-wider">Update Financial & Depreciation Metrics</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-500 block uppercase">Machine Price / Asset Value (LAK)</label>
+                <input
+                  type="number"
+                  value={machine.MachinePrice !== undefined ? machine.MachinePrice : (machine.purchaseCost || 0)}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setEquipment(prev => prev.map(eq => eq.id === machine.id ? { ...eq, MachinePrice: val } : eq));
+                  }}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono text-xs font-black bg-white text-slate-950 focus:outline-none"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-500 block uppercase">Target Lifetime Pages</label>
+                <input
+                  type="number"
+                  value={machine.TargetTotalPages !== undefined ? machine.TargetTotalPages : (machine.printedPagesCapacity || 1000000)}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setEquipment(prev => prev.map(eq => eq.id === machine.id ? { ...eq, TargetTotalPages: val } : eq));
+                  }}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono text-xs font-black bg-white text-slate-950 focus:outline-none"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-500 block uppercase">Maint. Cost Per Page (LAK)</label>
+                <input
+                  type="number"
+                  value={machine.MaintenanceCostPerPage !== undefined ? machine.MaintenanceCostPerPage : (machine.maintenanceCostPerPage || 0)}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setEquipment(prev => prev.map(eq => eq.id === machine.id ? { ...eq, MaintenanceCostPerPage: val, maintenanceCostPerPage: val } : eq));
+                  }}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono text-xs font-black bg-white text-slate-950 focus:outline-none"
+                />
+              </div>
             </div>
           </div>
 

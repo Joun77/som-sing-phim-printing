@@ -20,6 +20,7 @@ export default function EquipmentTable({ machines, onViewDetails, formatLAK }) {
               <th className="py-4 px-6">{t('printer_management.color_scheme')}</th>
               <th className="py-4 px-6">{t('printer_management.total_slots')}</th>
               <th className="py-4 px-6">{t('printer_management.linked_inks')}</th>
+              <th className="py-4 px-6">Est. Depreciation / Page</th>
               <th className="py-4 px-6">Location</th>
               <th className="py-4 px-6">{t('equipment_mapping.sla_status')}</th>
               <th className="py-4 px-6 text-right">{t('inventory_status.actions')}</th>
@@ -78,6 +79,11 @@ export default function EquipmentTable({ machines, onViewDetails, formatLAK }) {
                     </td>
                     <td className="py-4 px-6 text-slate-500 font-medium max-w-xs truncate" title={linkedInksSummary}>
                       {linkedInksSummary}
+                    </td>
+                    <td className="py-4 px-6 text-emerald-600 font-mono font-bold">
+                      {eq.TargetTotalPages > 0 
+                        ? formatLAK((eq.MachinePrice || eq.purchaseCost || 0) / eq.TargetTotalPages) 
+                        : '-'}
                     </td>
                     <td className="py-4 px-6 text-slate-600 font-medium">
                       {eq.location || '-'}
