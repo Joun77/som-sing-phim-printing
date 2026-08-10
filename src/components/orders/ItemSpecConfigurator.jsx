@@ -23,7 +23,9 @@ export function calculateItemCosting(item, inventory, equipment) {
     totalParentSheets: 0, paperUnitCost: 0, inkUnitCost: 0, isMonochrome: false,
     combinedPaperInkRate: 0, totalPaperCost: 0, totalInkCost: 0, totalPaperInkCost: 0, 
     cuttingCost: 0, laminationCost: 0, bindingCost: 0,
-    mediaType: 'Sheet-fed', totalSqMeters: 0, printerStdMl: 0.05, inkCostPerMl: 500
+    mediaType: 'Sheet-fed', totalSqMeters: 0, printerStdMl: 0.05, inkCostPerMl: 500,
+    inkCostK: 0, inkCostCMY: 0, depreciationCost: 0, maintenanceCost: 0,
+    customFinishingCost: 0, overheadCost: 0, totalCost: 0, directCost: 0
   };
 
   const mediaType = item.mediaType || 'Sheet-fed';
@@ -32,14 +34,22 @@ export function calculateItemCosting(item, inventory, equipment) {
   const isMonochrome = item.colorMode === 'Monochrome' || item.printColorMode === 'Monochrome';
   const sidesMultiplier = item.isDoubleSided ? 2 : 1;
 
-  // Step 2: Printer Machine Specs Integration
+  // Printer Machine Specs Integration
   const printerItem = equipment ? equipment.find(e => e.id === item.printerId) : null;
   const printerStdMl = printerItem?.inkConsumptionStandard || 0.05; // ml per A4 sheet @ 5% coverage
   const inkCostPerMl = printerItem?.inkUnitCostMl || 500; // LAK per ml
-  const coverageRatio = (Number(item.avgCoverage || 15) / 5);
+
+  // Split K and CMY Coverages
+  const avgCoverageK = Number(item.avgCoverageK !== undefined ? item.avgCoverageK : (item.avgCoverage || 5));
+  const avgCoverageCMY = isMonochrome ? 0 : Number(item.avgCoverageCMY !== undefined ? item.avgCoverageCMY : 0);
+
+  const inkCostKPerMl = Number(printerItem?.inkUnitCostMl || 500);
+  const inkCostCMYPerMl = Number(printerItem?.inkUnitCostCMY || printerItem?.inkUnitCostMl || 600);
 
   let totalPaperCost = 0;
   let totalInkCost = 0;
+  let totalInkCostK = 0;
+  let totalInkCostCMY = 0;
   let totalPaperInkCost = 0;
   let combinedPaperInkRate = 0;
   let paperUnitCost = 0;
@@ -48,23 +58,26 @@ export function calculateItemCosting(item, inventory, equipment) {
   let totalParentSheets = 1;
   let totalSqMeters = 0;
 
+  const jobW = Number(item.jobWidth || 210);
+  const jobH = Number(item.jobHeight || 297);
+  const totalSqMetersForJob = (jobW / 1000.0) * (jobH / 1000.0) * qty;
+
   if (isRollFed) {
     // Roll-fed / Wide Format Surface Area Calculation
-    const jobW_m = Number(item.jobWidth || 1000) / 1000;
-    const jobH_m = Number(item.jobHeight || 2000) / 1000;
-    const sqMetersPerUnit = jobW_m * jobH_m;
-    totalSqMeters = Math.round(sqMetersPerUnit * qty * 100) / 100;
+    totalSqMeters = Math.round(totalSqMetersForJob * 100) / 100;
 
     const rollItem = inventory ? inventory.find(p => p.id === item.paperId) : null;
     const rollMaterialCostPerM2 = rollItem ? (rollItem.costPerM2 || rollItem.costPerSheet || 15000) : Number(item.rollMaterialCostPerM2 || 15000);
     const inkVolumePerM2 = Number(item.inkVolumePerM2 || 10);
 
     totalPaperCost = Math.round(totalSqMeters * rollMaterialCostPerM2);
-    totalInkCost = Math.round(totalSqMeters * (inkVolumePerM2 * inkCostPerMl));
+    // Scale roll-fed ink costs as well if monochrome vs color
+    const baseInkCostM2 = inkVolumePerM2 * (isMonochrome ? inkCostKPerMl : inkCostCMYPerMl);
+    totalInkCost = Math.round(totalSqMeters * baseInkCostM2);
     totalPaperInkCost = totalPaperCost + totalInkCost;
 
     paperUnitCost = rollMaterialCostPerM2;
-    inkUnitCost = Math.round(inkVolumePerM2 * inkCostPerMl);
+    inkUnitCost = Math.round(inkVolumePerM2 * (isMonochrome ? inkCostKPerMl : inkCostCMYPerMl));
     combinedPaperInkRate = paperUnitCost + inkUnitCost; // Cost per m2
   } else {
     // Sheet-fed Commercial Printing Calculation
@@ -72,8 +85,8 @@ export function calculateItemCosting(item, inventory, equipment) {
     let parentW = 297, parentH = 420;
     if (paperItem && paperItem.name.includes('A4')) { parentW = 210; parentH = 297; }
 
-    const currentJobW = Number(item.jobWidth || 210) + (Number(item.bleedMargin || 0) * 2);
-    const currentJobH = Number(item.jobHeight || 297) + (Number(item.bleedMargin || 0) * 2);
+    const currentJobW = jobW + (Number(item.bleedMargin || 0) * 2);
+    const currentJobH = jobH + (Number(item.bleedMargin || 0) * 2);
     const portraitCuts = Math.floor(parentW / currentJobW) * Math.floor(parentH / currentJobH);
     const landscapeCuts = Math.floor(parentW / currentJobH) * Math.floor(parentH / currentJobW);
     const autoCuts = Math.max(1, Math.max(portraitCuts, landscapeCuts));
@@ -91,40 +104,63 @@ export function calculateItemCosting(item, inventory, equipment) {
       ? Number(item.manualTotalSheets)
       : autoTotalSheets;
 
-    // STEP 1: Paper Cost
+    // Paper Cost
     paperUnitCost = paperItem 
       ? (paperItem.costPerSheet || paperItem.costPerConsumptionUnit || paperItem.unitCost || 1200) 
       : Number(item.customPaperCost || 1200);
 
     totalPaperCost = totalParentSheets * paperUnitCost;
 
-    // STEP 2: Dynamic Printing Ink Cost from Machine Master Specs
-    if (isMonochrome) {
-      const bwClick = printerItem?.clickRateBW || 150;
-      inkUnitCost = Math.round(coverageRatio * printerStdMl * (inkCostPerMl * 0.4) * sidesMultiplier) || (bwClick * sidesMultiplier);
-    } else {
-      const colorClick = printerItem?.clickRateColor || 500;
-      inkUnitCost = Math.round(coverageRatio * printerStdMl * inkCostPerMl * sidesMultiplier) || (colorClick * sidesMultiplier);
-    }
+    // Split ink costs based on K vs CMY coverages
+    const inkUnitCostK = (printerStdMl * (avgCoverageK / 5)) * inkCostKPerMl * sidesMultiplier;
+    const inkUnitCostCMY = (printerStdMl * (avgCoverageCMY / 5)) * inkCostCMYPerMl * sidesMultiplier;
+    inkUnitCost = Math.round(inkUnitCostK + inkUnitCostCMY);
 
-    totalInkCost = totalParentSheets * inkUnitCost;
+    totalInkCostK = Math.round(totalParentSheets * inkUnitCostK);
+    totalInkCostCMY = Math.round(totalParentSheets * inkUnitCostCMY);
+    totalInkCost = totalInkCostK + totalInkCostCMY;
     combinedPaperInkRate = paperUnitCost + inkUnitCost;
     totalPaperInkCost = totalPaperCost + totalInkCost;
   }
 
-  // 4. Cutting Cost
+  // Machine Depreciation & Maintenance
+  const machinePrice = Number(printerItem?.price || printerItem?.machinePrice || 0);
+  const targetTotalPages = Number(printerItem?.targetTotalPages || printerItem?.targetPages || 1000000);
+  const maintenanceCostPerPage = Number(printerItem?.maintenanceCostPerPage || printerItem?.maintenanceCost || 0);
+
+  const depreciationCostPerPage = targetTotalPages > 0 ? (machinePrice / targetTotalPages) : 0;
+  const depreciationCost = Math.round(depreciationCostPerPage * qty);
+  const maintenanceCost = Math.round(maintenanceCostPerPage * qty);
+  const totalMachineCost = depreciationCost + maintenanceCost;
+
+  // Custom Finishing options
+  let customFinishingCost = 0;
+  const customFinishingOptions = item.customFinishingOptions || [];
+  customFinishingOptions.forEach(opt => {
+    const price = Number(opt.price || 0);
+    if (opt.chargeType === 'FIXED_JOB') {
+      customFinishingCost += price;
+    } else if (opt.chargeType === 'PER_UNIT') {
+      customFinishingCost += price * qty;
+    } else if (opt.chargeType === 'PER_SQM') {
+      customFinishingCost += price * totalSqMetersForJob;
+    }
+  });
+  customFinishingCost = Math.round(customFinishingCost);
+
+  // Cutting Cost
   const cuttingCost = item.skipCutting ? 0 : Number(item.cuttingFee || 5000);
 
-  // 5. Coating / Lamination Cost
+  // Coating / Lamination Cost
   let laminationCost = 0;
   if (!item.noCoating && (item.useLamination || item.laminationType)) {
     const targetSheets = isRollFed ? totalSqMeters : Number(item.coatingSheets || totalParentSheets);
-    const sqMeters = isRollFed ? totalSqMeters : ((((item.jobWidth || 210) / 1000) * ((item.jobHeight || 297) / 1000)) * targetSheets);
+    const sqMeters = isRollFed ? totalSqMeters : (((jobW / 1000) * (jobH / 1000)) * targetSheets);
     const laminationRate = item.laminationType === 'SoftTouch' ? 6000 : item.laminationType === 'Matte' ? 4500 : 4000;
     laminationCost = Math.round(sqMeters * laminationRate);
   }
 
-  // 6. Binding Cost
+  // Binding Cost
   let bindingCost = 0;
   if (!item.noBinding && (item.useBinding || item.bindingType)) {
     if (item.bindingType === 'Staple') bindingCost = qty * 200;
@@ -134,10 +170,21 @@ export function calculateItemCosting(item, inventory, equipment) {
     else bindingCost = qty * 1000;
   }
 
-  // Direct Material & Finishing Net Cost (Steps 1 to 5)
-  const netCost = totalPaperInkCost + cuttingCost + laminationCost + bindingCost;
-  const targetMargin = Number(item.targetMarginPercent || 35);
-  const suggestedPrice = netCost / (1 - (targetMargin / 100));
+  // Direct Cost sum
+  const directCost = totalPaperInkCost + cuttingCost + laminationCost + bindingCost + customFinishingCost + totalMachineCost;
+
+  // Overhead Cost calculation (Fallback to 15% if not defined)
+  const overheadPercent = Number(item.overheadPercent !== undefined ? item.overheadPercent : 15) / 100;
+  const overheadCost = Math.round(directCost * overheadPercent);
+
+  // Total cost
+  const totalCost = directCost + overheadCost;
+
+  // Margin Pricing
+  const targetMargin = Number(item.targetMarginPercent || 35) / 100;
+  const clampedMargin = Math.min(0.99, Math.max(0, targetMargin));
+  const suggestedPrice = Math.round(totalCost / (1 - clampedMargin));
+
   const finalPrice = item.manualUnitPrice !== null && item.manualUnitPrice !== undefined 
     ? (Number(item.manualUnitPrice) * qty) 
     : suggestedPrice;
@@ -154,11 +201,19 @@ export function calculateItemCosting(item, inventory, equipment) {
     combinedPaperInkRate,
     totalPaperCost,
     totalInkCost,
+    totalInkCostK,
+    totalInkCostCMY,
     totalPaperInkCost,
     cuttingCost,
     laminationCost,
     bindingCost,
-    netCost,
+    depreciationCost,
+    maintenanceCost,
+    customFinishingCost,
+    overheadCost,
+    directCost,
+    totalCost,
+    netCost: directCost, // map netCost to directCost for display compatibility
     finalPrice,
     unitPrice,
     printerStdMl,
@@ -202,6 +257,10 @@ export default function ItemSpecConfigurator({
     inkPricePerMl: 500,
     isDoubleSided: false,
     avgCoverage: 15,
+    avgCoverageK: item?.avgCoverageK !== undefined ? item.avgCoverageK : 5,
+    avgCoverageCMY: item?.avgCoverageCMY !== undefined ? item.avgCoverageCMY : 10,
+    customFinishingOptions: item?.customFinishingOptions || [],
+    overheadPercent: item?.overheadPercent !== undefined ? item.overheadPercent : 15,
     skipCutting: false,
     cuttingEquipmentId: '',
     cuttingFee: 5000,
@@ -217,6 +276,33 @@ export default function ItemSpecConfigurator({
     manualUnitPrice: null,
     ...item
   });
+
+  // State for Custom Finishing options form
+  const [customName, setCustomName] = useState('');
+  const [customChargeType, setCustomChargeType] = useState('FIXED_JOB');
+  const [customPrice, setCustomPrice] = useState(0);
+
+  const addCustomFinishing = () => {
+    if (!customName.trim()) return;
+    const newOption = {
+      name: customName,
+      chargeType: customChargeType,
+      price: Number(customPrice || 0)
+    };
+    setTempItem(prev => ({
+      ...prev,
+      customFinishingOptions: [...(prev.customFinishingOptions || []), newOption]
+    }));
+    setCustomName('');
+    setCustomPrice(0);
+  };
+
+  const removeCustomFinishing = (idx) => {
+    setTempItem(prev => ({
+      ...prev,
+      customFinishingOptions: (prev.customFinishingOptions || []).filter((_, i) => i !== idx)
+    }));
+  };
 
   const handleDuplicateSpecsFrom = (sourceIndexStr) => {
     if (sourceIndexStr === '' || sourceIndexStr === null) return;
@@ -241,6 +327,10 @@ export default function ItemSpecConfigurator({
       inkPricePerMl: sourceItem.inkPricePerMl,
       isDoubleSided: sourceItem.isDoubleSided,
       avgCoverage: sourceItem.avgCoverage,
+      avgCoverageK: sourceItem.avgCoverageK !== undefined ? sourceItem.avgCoverageK : 5,
+      avgCoverageCMY: sourceItem.avgCoverageCMY !== undefined ? sourceItem.avgCoverageCMY : 10,
+      customFinishingOptions: sourceItem.customFinishingOptions || [],
+      overheadPercent: sourceItem.overheadPercent !== undefined ? sourceItem.overheadPercent : 15,
       skipCutting: sourceItem.skipCutting,
       cuttingEquipmentId: sourceItem.cuttingEquipmentId,
       cuttingFee: sourceItem.cuttingFee,
@@ -609,39 +699,91 @@ export default function ItemSpecConfigurator({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-slate-600">ໜ້າພິມ (Sides) & ການຄອບຄຸມ %</label>
-                  <div className="flex gap-2">
+                  <label className="block text-slate-600">ໜ້າພິມ (Sides)</label>
+                  <button
+                    type="button"
+                    onClick={() => setTempItem({ ...tempItem, isDoubleSided: !tempItem.isDoubleSided })}
+                    className={`w-full py-2.5 rounded-xl border text-xs font-black transition ${
+                      tempItem.isDoubleSided ? 'bg-purple-600 text-white border-purple-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    {tempItem.isDoubleSided ? 'ພິມ 2 ໜ้า (Double-Sided)' : 'ພິມ 1 ໜ້າ (Single-Sided)'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Ink Coverage Presets */}
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <label className="block text-slate-600">Preset ການຄອບຄຸມ % Coverage</label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { name: 'ISO Standard (5% / 5%)', k: 5, cmy: 5 },
+                    { name: 'Text Heavy (10% / 0%)', k: 10, cmy: 0 },
+                    { name: 'Image/Poster (20% / 40%)', k: 20, cmy: 40 },
+                    { name: 'Photo (30% / 60%)', k: 30, cmy: 60 }
+                  ].map(preset => (
                     <button
+                      key={preset.name}
                       type="button"
-                      onClick={() => setTempItem({ ...tempItem, isDoubleSided: !tempItem.isDoubleSided })}
-                      className={`px-3 py-2.5 rounded-xl border text-xs font-black transition ${
-                        tempItem.isDoubleSided ? 'bg-purple-600 text-white border-purple-600' : 'bg-slate-50 text-slate-600 border-slate-200'
-                      }`}
+                      onClick={() => setTempItem({ ...tempItem, avgCoverageK: preset.k, avgCoverageCMY: preset.cmy })}
+                      className="p-2 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-xl text-[10px] font-black text-slate-700"
                     >
-                      {tempItem.isDoubleSided ? '2 ໜ້າ' : '1 ໜ້າ'}
+                      {preset.name}
                     </button>
-                    <input
-                      type="number"
-                      min="1"
-                      max="100"
-                      value={tempItem.avgCoverage}
-                      onChange={(e) => setTempItem({ ...tempItem, avgCoverage: Number(e.target.value) })}
-                      placeholder="Coverage %"
-                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl font-sans font-bold bg-white text-xs text-center focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Sliders for K and CMY Coverage */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-600">Black Coverage (K):</span>
+                    <span className="font-sans font-black text-purple-700">{tempItem.avgCoverageK}%</span>
                   </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={tempItem.avgCoverageK}
+                    onChange={(e) => setTempItem({ ...tempItem, avgCoverageK: Number(e.target.value) })}
+                    className="w-full accent-purple-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-600">Color Coverage (CMY):</span>
+                    <span className="font-sans font-black text-purple-700">{tempItem.colorMode === 'Monochrome' ? '0% (Monochrome)' : `${tempItem.avgCoverageCMY}%`}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    disabled={tempItem.colorMode === 'Monochrome'}
+                    value={tempItem.colorMode === 'Monochrome' ? 0 : tempItem.avgCoverageCMY}
+                    onChange={(e) => setTempItem({ ...tempItem, avgCoverageCMY: Number(e.target.value) })}
+                    className="w-full accent-purple-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg disabled:opacity-50"
+                  />
                 </div>
               </div>
 
               {/* Step 2 Dynamic Ink Cost Result Banner */}
-              <div className="bg-purple-50/80 p-4 rounded-2xl border border-purple-100 flex justify-between items-center text-xs font-black">
-                <div>
-                  <span className="text-purple-900 block">ຕົ້ນທຶນໝຶກພິມລວມ (Step 2 Ink Cost):</span>
-                  <span className="text-[10px] text-purple-700 font-mono font-normal">
-                    (Formula: {tempItem.avgCoverage}% / 5% × {costing.printerStdMl}ml × ₭{costing.inkCostPerMl} × {tempItem.isDoubleSided ? '2' : '1'}) = {formatLAK(costing.inkUnitCost)}/ແຜ່ນ
-                  </span>
+              <div className="bg-purple-50/80 p-4 rounded-2xl border border-purple-100 flex flex-col gap-2 text-xs font-black">
+                <div className="flex justify-between items-center">
+                  <span className="text-purple-900">ຕົ້ນທຶນໝຶກພິມລວມ (Step 2 Ink Cost):</span>
+                  <span className="text-base font-sans text-purple-900">{formatLAK(costing.totalInkCost)}</span>
                 </div>
-                <span className="text-base font-sans text-purple-900">{formatLAK(costing.totalInkCost)}</span>
+                <div className="text-[10px] text-purple-700 font-mono font-normal space-y-1">
+                  <div>
+                    Black (K): {tempItem.avgCoverageK}% Coverage = {formatLAK(costing.totalInkCostK)}
+                  </div>
+                  {tempItem.colorMode !== 'Monochrome' && (
+                    <div>
+                      Color (CMY): {tempItem.avgCoverageCMY}% Coverage = {formatLAK(costing.totalInkCostCMY)}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -798,6 +940,116 @@ export default function ItemSpecConfigurator({
               </div>
             )}
           </div>
+
+          {/* STEP 6: Custom Finishing Options (ບໍລິການເສີມ Custom) */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <div className="p-2 bg-pink-50 text-pink-600 rounded-xl border border-pink-100">
+                <Sparkles className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <span className="text-[10px] font-black text-pink-600 uppercase block">Step 6</span>
+                <h4 className="font-black text-sm text-slate-900">ບໍລິການເສີມ Custom (Custom Finishing)</h4>
+              </div>
+            </div>
+
+            <div className="space-y-4 text-xs font-bold text-slate-700">
+              {/* List added custom options */}
+              {tempItem.customFinishingOptions && tempItem.customFinishingOptions.length > 0 && (
+                <div className="space-y-2">
+                  {tempItem.customFinishingOptions.map((opt, index) => (
+                    <div key={index} className="flex justify-between items-center bg-pink-50/50 border border-pink-100 p-2.5 rounded-xl text-pink-900">
+                      <div>
+                        <span className="block font-black">{opt.name}</span>
+                        <span className="text-[10px] text-pink-700">({opt.chargeType === 'FIXED_JOB' ? 'ຄົງທີ່' : opt.chargeType === 'PER_UNIT' ? 'ຕໍ່ຊິ້ນ' : 'ຕໍ່ ຕຣ.ມ.'})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-black text-pink-800">{formatLAK(opt.price)}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeCustomFinishing(index)}
+                          className="text-red-500 hover:text-red-700 font-bold px-1"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add form */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                <div className="space-y-1">
+                  <label className="block text-slate-600">ຊື່ບໍລິການເສີມ (Service Name)</label>
+                  <input
+                    type="text"
+                    value={customName}
+                    onChange={(e) => setCustomName(e.target.value)}
+                    placeholder="เช่น ปั๊มทอง, เคลือบ Spot UV"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-bold text-xs"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-slate-600">วิธีคิดเงิน (Charge Type)</label>
+                    <select
+                      value={customChargeType}
+                      onChange={(e) => setCustomChargeType(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-bold text-xs"
+                    >
+                      <option value="FIXED_JOB">เหมาจ่าย (Fixed Job)</option>
+                      <option value="PER_UNIT">ต่อชิ้น (Per Unit)</option>
+                      <option value="PER_SQM">ต่อ ตร.ม. (Per Sqm)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-slate-600">ราคา (LAK Price)</label>
+                    <input
+                      type="number"
+                      value={customPrice}
+                      onChange={(e) => setCustomPrice(Number(e.target.value))}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-bold text-xs text-center"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={addCustomFinishing}
+                  className="w-full py-2 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs rounded-xl shadow transition"
+                >
+                  + เพิ่มบริการเสริม Custom
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* STEP 7: Overhead Settings (ຕັ້ງຄ່າຄ່າໂສ້ຫຸ້ຍ) */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <div className="p-2 bg-slate-50 text-slate-600 rounded-xl border border-slate-200">
+                <Info className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[10px] font-black text-slate-500 uppercase block">Step 7</span>
+                <h4 className="font-black text-sm text-slate-900">ຄ່າໂສ້ຫຸ້ຍຮ້ານ (Overhead Cost Settings)</h4>
+              </div>
+            </div>
+            <div className="space-y-3 text-xs font-bold text-slate-700">
+              <div className="flex justify-between items-center">
+                <span>Overhead Rate (%):</span>
+                <span className="font-mono text-slate-800 text-sm">{tempItem.overheadPercent}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="50"
+                value={tempItem.overheadPercent}
+                onChange={(e) => setTempItem({ ...tempItem, overheadPercent: Number(e.target.value) })}
+                className="w-full accent-slate-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Column 2: Sticky Live Internal Cost Breakdown Sidebar (Right Panel - LIGHT THEME) */}
@@ -814,41 +1066,67 @@ export default function ItemSpecConfigurator({
                 </span>
               </div>
 
-              {/* 4 Direct Material & Finishing Cost Items */}
+              {/* Direct Material, Ink, Depreciation, Finishing & Overhead Cost Items */}
               <div className="space-y-3 text-xs font-semibold text-slate-700">
-                <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80 space-y-1">
+                {/* 1. Paper Cost */}
+                <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
+                  <span className="text-slate-600 font-bold">1. ต้นทุนกระดาษ (Paper Cost):</span>
+                  <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.totalPaperCost)}</span>
+                </div>
+
+                {/* 2. Black Ink Cost */}
+                <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
+                  <span className="text-slate-600 font-bold">2. ต้นทุนหมึกดำ (Black Ink K):</span>
+                  <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.totalInkCostK)}</span>
+                </div>
+
+                {/* 3. Color Ink Cost */}
+                {!costing.isMonochrome && (
+                  <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
+                    <span className="text-slate-600 font-bold">3. ต้นทุนหมึกสี (Color Ink CMY):</span>
+                    <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.totalInkCostCMY)}</span>
+                  </div>
+                )}
+
+                {/* 4. Machine Depreciation & Maintenance */}
+                <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-100 space-y-1">
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-800 font-bold">1. ຕົ້ນທຶນເຈ້ຍ & ໝຶກພິມລວມ:</span>
-                    <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.totalPaperInkCost)}</span>
+                    <span className="text-slate-600 font-bold">4. ค่าเสื่อม & บำรุงรักษาเครื่องพิมพ์:</span>
+                    <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.depreciationCost + costing.maintenanceCost)}</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono font-normal flex items-center gap-1">
-                    <Info className="w-3 h-3 text-sky-600 shrink-0" />
-                    <span>
-                      Paper: {formatLAK(costing.totalPaperCost)} + Ink: {formatLAK(costing.totalInkCost)}
-                    </span>
+                  <div className="text-[10px] text-slate-500 font-mono font-normal">
+                    Depreciation: {formatLAK(costing.depreciationCost)} | Maint: {formatLAK(costing.maintenanceCost)}
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
-                  <span className="text-slate-600">2. ຄ່າບໍລິການຕັດ (Cutting Cost):</span>
-                  <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.cuttingCost)}</span>
+                {/* 5. Finishing & Custom Post-Print Process */}
+                <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-100 space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-600 font-bold">5. งานหลังพิมพ์ & บริการเสริม:</span>
+                    <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.cuttingCost + costing.laminationCost + costing.bindingCost + costing.customFinishingCost)}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono font-normal">
+                    Cutting: {formatLAK(costing.cuttingCost)} | Lamination: {formatLAK(costing.laminationCost)} | Binding: {formatLAK(costing.bindingCost)} | Custom: {formatLAK(costing.customFinishingCost)}
+                  </div>
                 </div>
 
-                <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
-                  <span className="text-slate-600">3. ຄ່າເຄືອບຜິວ (Coating Cost):</span>
-                  <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.laminationCost)}</span>
+                {/* Direct Material & Machine Cost Banner */}
+                <div className="bg-slate-100/80 p-3.5 rounded-2xl border border-slate-200 flex justify-between items-center text-slate-900 font-black text-xs">
+                  <span>Direct Cost Subtotal:</span>
+                  <span className="font-sans text-sky-700">{formatLAK(costing.directCost)}</span>
                 </div>
 
+                {/* 6. Overhead Cost */}
                 <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
-                  <span className="text-slate-600">4. ຄ່າເຂົ້າເລົ່ມ (Binding Cost):</span>
-                  <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.bindingCost)}</span>
+                  <span className="text-slate-600 font-bold">6. โสหุ้ยร้าน (Overhead Cost {tempItem.overheadPercent}%):</span>
+                  <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.overheadCost)}</span>
                 </div>
-              </div>
 
-              {/* Direct Material & Finishing Net Cost Banner */}
-              <div className="bg-slate-100/80 p-4 rounded-2xl border border-slate-200 flex justify-between items-center text-slate-900 font-black text-xs">
-                <span>Direct Material & Finishing Net Cost:</span>
-                <span className="text-xl font-sans font-black text-sky-700">{formatLAK(costing.netCost)}</span>
+                {/* Total Cost (Direct + Overhead) */}
+                <div className="bg-slate-200/80 p-4 rounded-2xl border border-slate-300 flex justify-between items-center text-slate-900 font-black text-xs">
+                  <span>ต้นทุนรวม (Total Cost):</span>
+                  <span className="text-lg font-sans text-slate-900">{formatLAK(costing.totalCost)}</span>
+                </div>
               </div>
 
               {/* Profit Margin Slider & Pricing */}

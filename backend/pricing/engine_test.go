@@ -4,22 +4,32 @@ import (
 	"testing"
 )
 
-func TestCalculateJobPricing(t *testing.T) {
+func TestCalculateJobPricingNew(t *testing.T) {
 	req := CalculationRequest{
-		JobName:            "Booklet Printing",
-		Quantity:           100,
-		PaperSku:           "paper-a4-80",
-		PaperCostPerUnit:   100.0, // 100 LAK per sheet
-		PaperFormat:        "sheet",
-		InkCoveragePercent: 30.0,  // 30% coverage
-		InkCostPerMl:       200.0,  // 200 LAK per ml
-		LaminationType:     "thermal",
-		LaminationCost:     150.0,  // 150 LAK per sheet
-		BindingType:        "wire-o",
-		BindingCost:        200.0,  // 200 LAK per book
-		LaborCostPerHour:   15000.0,
-		EstimatedHours:     2.5,
-		MarkupMargin:       0.30,   // 30% profit margin
+		JobName:               "Professional booklet",
+		Quantity:              100,
+		PaperSku:              "paper-a4-80",
+		PaperCostPerUnit:      100.0, // 100 LAK per sheet
+		PaperFormat:           "sheet",
+		InkCoverageKPercent:   5.0,   // 5% K
+		InkCoverageCMYPercent: 10.0,  // 10% CMY
+		InkCostKPerMl:         500.0,  // 500 LAK per ml
+		InkCostCMYPerMl:       600.0,  // 600 LAK per ml
+		MachinePrice:          50000000,
+		TargetTotalPages:      1000000,
+		MaintenanceCostPerPage: 10.0,
+		JobWidth:              210,
+		JobHeight:             297,
+		CustomFinishingOptions: []CustomFinishingOption{
+			{Name: "Custom Binding", ChargeType: "PER_UNIT", Price: 150.0},
+			{Name: "Job Setup Fee", ChargeType: "FIXED_JOB", Price: 2000.0},
+		},
+		LaminationType:      "none",
+		BindingType:         "none",
+		LaborCostPerHour:    15000.0,
+		EstimatedHours:      2.0,
+		OverheadPercent:     0.10, // 10% overhead
+		TargetMarginPercent: 0.35, // 35% margin
 	}
 
 	res, err := CalculateJobPricing(req)
@@ -27,43 +37,65 @@ func TestCalculateJobPricing(t *testing.T) {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	// 1. Paper: 100 sheets * 100 LAK = 10,000 LAK
+	// 1. Paper: 100 * 100 = 10,000 LAK
 	if res.PaperCost != 10000.0 {
 		t.Errorf("Expected PaperCost 10000.0, got %v", res.PaperCost)
 	}
 
-	// 2. Ink: 100 sheets * (0.007 * 30 ml) * 200 LAK/ml = 100 * 0.21 * 200 = 4,200 LAK
-	if res.InkCost != 4200.0 {
-		t.Errorf("Expected InkCost 4200.0, got %v", res.InkCost)
+	// 2. Ink K: 100 * (0.007 * 5) * 500 = 1,750 LAK
+	// Ink CMY: 100 * (0.007 * 10) * 600 = 4,200 LAK
+	// Total Ink = 5,950 LAK
+	if res.InkCostK != 1750.0 {
+		t.Errorf("Expected InkCostK 1750.0, got %v", res.InkCostK)
+	}
+	if res.InkCostCMY != 4200.0 {
+		t.Errorf("Expected InkCostCMY 4200.0, got %v", res.InkCostCMY)
+	}
+	if res.InkCost != 5950.0 {
+		t.Errorf("Expected total InkCost 5950.0, got %v", res.InkCost)
 	}
 
-	// 3. Lamination: 100 * 150 = 15,000 LAK
-	if res.LaminationCost != 15000.0 {
-		t.Errorf("Expected LaminationCost 15000.0, got %v", res.LaminationCost)
+	// 3. Depreciation: (50000000 / 1000000) * 100 = 5,000 LAK
+	if res.DepreciationCost != 5000.0 {
+		t.Errorf("Expected DepreciationCost 5000.0, got %v", res.DepreciationCost)
 	}
 
-	// 4. Binding: 100 * 200 = 20,000 LAK
-	if res.BindingCost != 20000.0 {
-		t.Errorf("Expected BindingCost 20000.0, got %v", res.BindingCost)
+	// 4. Maintenance: 10 * 100 = 1,000 LAK
+	if res.MaintenanceCost != 1000.0 {
+		t.Errorf("Expected MaintenanceCost 1000.0, got %v", res.MaintenanceCost)
 	}
 
-	// 5. Labor: 15,000 LAK/hr * 2.5 hr = 37,500 LAK
-	if res.LaborCost != 37500.0 {
-		t.Errorf("Expected LaborCost 37500.0, got %v", res.LaborCost)
+	// 5. Custom Finishing:
+	// Custom Binding: 150 * 100 = 15,000 LAK
+	// Job Setup: 2,000 LAK
+	// Total Custom = 17,000 LAK
+	if res.CustomFinishingCost != 17000.0 {
+		t.Errorf("Expected CustomFinishingCost 17000.0, got %v", res.CustomFinishingCost)
 	}
 
-	// Total cost = 10000 + 4200 + 15000 + 20000 + 37500 = 86,700 LAK
-	if res.TotalCost != 86700.0 {
-		t.Errorf("Expected TotalCost 86700.0, got %v", res.TotalCost)
+	// 6. Labor: 15,000 * 2.0 = 30,000 LAK
+	if res.LaborCost != 30000.0 {
+		t.Errorf("Expected LaborCost 30000.0, got %v", res.LaborCost)
 	}
 
-	// Sale price = 86700 * 1.3 = 112,710 LAK
-	if res.SalePrice != 112710.0 {
-		t.Errorf("Expected SalePrice 112710.0, got %v", res.SalePrice)
+	// Direct Cost = 10000 (Paper) + 5950 (Ink) + 5000 (Depr) + 1000 (Maint) + 17000 (Custom) + 30000 (Labor) = 68,950 LAK
+	if res.DirectCost != 68950.0 {
+		t.Errorf("Expected DirectCost 68950.0, got %v", res.DirectCost)
 	}
 
-	// Unit price = 112710 / 100 = 1127.1 LAK
-	if res.UnitPrice != 1127.1 {
-		t.Errorf("Expected UnitPrice 1127.1, got %v", res.UnitPrice)
+	// Overhead: 68950 * 0.10 = 6895 LAK
+	if res.OverheadCost != 6895.0 {
+		t.Errorf("Expected OverheadCost 6895.0, got %v", res.OverheadCost)
+	}
+
+	// Total Cost = 68950 + 6895 = 75,845 LAK
+	if res.TotalCost != 75845.0 {
+		t.Errorf("Expected TotalCost 75845.0, got %v", res.TotalCost)
+	}
+
+	// Sale Price = 75845 / (1.0 - 0.35) = 75845 / 0.65 = 116,684.62
+	if res.SalePrice != 116684.62 {
+		t.Errorf("Expected SalePrice 116684.62, got %v", res.SalePrice)
 	}
 }
+
