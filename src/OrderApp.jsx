@@ -14,7 +14,8 @@ import {
   AlertCircle,
   X,
   HelpCircle,
-  Calculator
+  Calculator,
+  LayoutDashboard
 } from 'lucide-react';
 
 function OrderAppContent() {
@@ -37,7 +38,8 @@ function OrderAppContent() {
     { id: 'production', label: 'ຕິດຕາມການຜະລິດ (Production Tracker)', icon: Printer },
     { id: 'deliveries', label: 'ຕິດຕາມການຈັດສົ່ງ (Delivery Tracker)', icon: Truck },
     { id: 'completed', label: 'ຈັດສົ່ງສໍາເລັດ (Completed Orders)', icon: CheckCircle2 },
-    { id: 'cancelled', label: 'ລາຍການຍົກເລີກ (Cancelled Orders)', icon: X },
+    { id: 'cancelled', label: 'ລາຍການຍົກເລີก (Cancelled Orders)', icon: X },
+    { id: 'admin_panel', label: 'ລະບົບຫຼັກ / ແອດມິນ (Admin Panel)', icon: LayoutDashboard, isExternal: true, externalUrl: '/' }
   ];
 
   return (
@@ -72,7 +74,13 @@ function OrderAppContent() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setSubTab(item.id)}
+                  onClick={() => {
+                    if (item.isExternal) {
+                      window.location.href = item.externalUrl;
+                    } else {
+                      setSubTab(item.id);
+                    }
+                  }}
                   className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-sm font-extrabold transition-all text-left justify-start ${
                     isActive 
                       ? 'bg-accent-sky text-white shadow-md shadow-accent-sky/20 scale-[1.01]' 

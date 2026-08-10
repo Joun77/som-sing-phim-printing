@@ -122,8 +122,10 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
       category,
       imageUrl,
       purchaseCost: Number(purchaseCost),
+      MachinePrice: Number(purchaseCost),
       lifespanYears: Number(lifespanYears),
       printedPagesCapacity: Number(printedPagesCapacity),
+      TargetTotalPages: Number(printedPagesCapacity),
       ...categoryParams
     });
 
