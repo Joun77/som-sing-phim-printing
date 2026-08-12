@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "dev:backend": "cd ../backend && go run .",
+    "dev:backend": "cd ../som-sing-phim/backend && go run .",
     "dev:all": "concurrently -n backend,frontend -c green,cyan \"npm run dev:backend\" \"vite\""
   },
   "dependencies": {

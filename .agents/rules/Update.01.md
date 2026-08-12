@@ -1,5 +1,0 @@
----
-trigger: manual
----
-
-Master Prompt: แก้ไขฟอร์มนำเข้า ImportForm.jsx (ระบบ Color Scheme และปุ่มยกเลิก)คุณคือ Senior Full-Stack Developer โปรดช่วยแก้ไขโค้ดในคอมโพเนนต์ src/components/inbound/ImportForm.jsx ตามรายละเอียดข้อกำหนดดังต่อไปนี้:🎯 รายละเอียดการแก้ไข (Task Requirements):แก้ไขปุ่มยกเลิกและปุ่มปิด Modal (Cancel & Close Button Fix):ปุ่ม ยกเลิก (Cancel) ด้านล่างฟอร์ม และไอคอนกากบาท (X) ที่มุมขวาบนของ Modal จะต้องผูกฟังก์ชัน onClick={onClose} เพื่อให้สามารถปิด Pop-up Modal ได้ถูกต้องเมื่อผู้ใช้คลิกระบบเพิ่ม Color Scheme แบบ Dynamic (+ เพิ่มสีเอง):ตัวเลือกเริ่มต้น (Default Scheme Options): CMYK, Photo (6 Colors), Plotter (10-12 Colors), Monochromeเพิ่มปุ่มคลิก "+ เพิ่มสีเอง" ไว้ตรงด้านบนขวาของ Label COLOR SCHEME TYPEเมื่อผู้ใช้กดปุ่ม "+ เพิ่มสีเอง" ให้แสดง Modal/Dialog ย่อยสำหรับรับค่า:ชื่อระบบสีใหม่ (เช่น Hexachrome 6-Color, Spot UV Specialty)จำนวนช่องสีทั้งหมด (Total Color Slots)เมื่อกดบันทึกระบบสีใหม่:ให้เพิ่มชื่อระบบสีนั้นเข้าในตัวเลือก Dropdownตั้งค่า Dropdown ให้เลือกระบบสีใหม่นั้นทันทีอัปเดตค่า Total Color Slots ตามจำนวนที่ผู้ใช้ระบุโดยอัตโนมัติ📁 ไฟล์เป้าหมาย (Target File):src/components/inbound/ImportForm.jsx

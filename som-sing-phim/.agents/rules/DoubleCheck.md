@@ -5,8 +5,8 @@
 
 1. ตรวจสอบและเปรียบเทียบ (Audit & Gap Analysis):
    - อ่านไฟล์ ที่แนบมา 
-   /Users/joun/Documents/GitHub/som-sing-phim-printing/.agents/rules/som_sing_phim_frontend_spec.md
-   /Users/joun/Documents/GitHub/som-sing-phim-printing/.agents/rules/Update034.md
+   /Users/joun/Documents/GitHub/som-sing-phim-printing/som-sing-phim/.agents/rules/som_sing_phim_frontend_spec.md
+   /Users/joun/Documents/GitHub/som-sing-phim-printing/som-sing-phim/.agents/rules/Update034.md
    - สรุปให้ฉันทราบสั้นๆ ว่า:
      - ฟีเจอร์ไหนในแผนที่ทำเสร็จแล้วบ้าง?
      - ฟีเจอร์ไหนที่ยังตกค้าง ทำไม่เสร็จ หรือยังไม่ตรงตามแผน? 
@@ -16,7 +16,7 @@
 
 3. ทดสอบและแก้ไขวนลูปจนกว่าจะผ่าน (Iterative Testing & Fixing):
    - เมื่อปรับปรุงโค้ดเสร็จแล้ว ให้รันการทดสอบ Go Backend ด้วยคำสั่ง:
-     `go test ./backend/pricing/...`
+     `cd som-sing-phim/backend && go test ./...`
    - หากพบ Bug, Test Fail หรือข้อผิดพลาดใดๆ ให้แก้ไขโค้ดและรันการทดสอบซ้ำอย่างต่อเนื่อง จนกว่าการทดสอบทั้งหมดจะผ่าน 100% และไม่มี Error ใดๆ เหลืออยู่
 
 4. สรุปผลการทำงาน (Final Report):

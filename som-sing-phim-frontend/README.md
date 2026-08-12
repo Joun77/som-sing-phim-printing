@@ -63,7 +63,7 @@ Frontend คุยกับ backend ผ่าน REST โดยตรง (CORS-e
 ที่ root ของโปรเจกต์ (`som-sing-phim-printing/`):
 
 ```bash
-./run-dev.sh        # สตาร์ท backend :8080 + frontend :5173 พร้อมกัน
+som-sing-phim/run-dev.sh   # สตาร์ท backend :8080 + frontend :5173 พร้อมกัน
 ```
 
 หรือรันจากโฟลเดอร์ frontend:
@@ -83,7 +83,7 @@ npm install
 npm run dev          # http://localhost:5173
 
 # Backend (อีกเทอร์มินัล)
-cd ../backend
+cd ../som-sing-phim/backend
 go run .             # REST API ที่ port 8080
 go test ./...        # รันเทสต์ backend
 ```
@@ -95,4 +95,4 @@ go test ./...        # รันเทสต์ backend
 - 🟠 สีทอง/เหลือง = ยังใช้ Demo Mode (ข้อมูลตัวอย่าง) — กดปุ่มเพื่อลองเชื่อมต่อใหม่
 - 🔴 สีแดง = ไม่พบ backend
 
-## Backend (อยู่ในโฟลเดอร์ `backend/` ของโปรเจกต์หลัก)
+## Backend (อยู่ในโฟลเดอร์ `som-sing-phim/backend/` ของโปรเจกต์หลัก)

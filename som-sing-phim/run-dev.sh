@@ -17,10 +17,11 @@ if ! command -v go >/dev/null 2>&1; then
 fi
 
 # 2) ตรวจสอบ node_modules ของ frontend
-if [ ! -d "$ROOT/som-sing-phim-frontend/node_modules" ]; then
+FRONTEND_DIR="$ROOT/../som-sing-phim-frontend"
+if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
   echo "📦 ติดตั้ง dependencies ของ frontend ก่อน…"
-  (cd "$ROOT/som-sing-phim-frontend" && npm install)
+  (cd "$FRONTEND_DIR" && npm install)
 fi
 
 echo "🚀 กำลังสตาร์ท backend + frontend… (Ctrl+C เพื่อหยุดทั้งหมด)"
-cd "$ROOT/som-sing-phim-frontend" && npm run dev:all
+cd "$FRONTEND_DIR" && npm run dev:all

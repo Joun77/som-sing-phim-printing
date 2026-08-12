@@ -12,6 +12,17 @@ dist
 dist-ssr
 *.local
 
+# Environment variables (backend & frontend)
+.env
+.env.*
+!.env.example
+
+# Go backend artifacts
+backend/server
+*.exe
+*.test
+*.out
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
