@@ -110,7 +110,10 @@ var (
 func HandleGetEquipment(c *gin.Context) {
 	if db.DB != nil {
 		items, err := getEquipmentFromDB()
-		if err == nil && len(items) > 0 {
+		if err == nil {
+			if items == nil {
+				items = []EquipmentItem{}
+			}
 			c.JSON(http.StatusOK, gin.H{"status": "success", "data": items})
 			return
 		}
@@ -327,7 +330,10 @@ func HandleUpdateAssetV1(c *gin.Context) {
 func HandleGetInventoryItems(c *gin.Context) {
 	if db.DB != nil {
 		items, err := getInventoryItemsFromDB()
-		if err == nil && len(items) > 0 {
+		if err == nil {
+			if items == nil {
+				items = []InventoryItem{}
+			}
 			c.JSON(http.StatusOK, gin.H{"status": "success", "data": items})
 			return
 		}
@@ -733,25 +739,37 @@ func updateEquipmentInDB(id string, item EquipmentItem) error {
 	compBytes, _ := json.Marshal(item.Components)
 
 	query := `
-		UPDATE printers SET
-			serial_number = COALESCE(NULLIF($1, ''), serial_number),
-			brand = COALESCE(NULLIF($2, ''), brand),
-			model = COALESCE(NULLIF($3, ''), model),
-			category = $4::printer_category_enum,
-			color_scheme_type = $5::printer_color_scheme_enum,
-			total_color_slots = $6,
-			expected_life_a4_pages = $7,
-			maintenance_rate_percent = $8,
-			price_cost = $9,
-			vendor_supplier = COALESCE(NULLIF($10, ''), vendor_supplier),
-			warranty_expiry_year = $11,
-			status = $12::printer_status_enum,
-			location_dept = COALESCE(NULLIF($13, ''), location_dept),
-			technical_specs = $14::jsonb,
-			oem_baseline_specs = $15::jsonb,
-			components = $16::jsonb,
+		INSERT INTO printers (
+			asset_id, serial_number, brand, model, category,
+			color_scheme_type, total_color_slots, expected_life_a4_pages,
+			maintenance_rate_percent, purchase_date, price_cost, vendor_supplier,
+			warranty_expiry_year, status, location_dept, technical_specs,
+			oem_baseline_specs, components, product_image_url, receipt_invoice_url, updated_at
+		) VALUES (
+			$1, COALESCE(NULLIF($2, ''), 'SN-' || $1::text), COALESCE(NULLIF($3, ''), 'Generic'), COALESCE(NULLIF($4, ''), 'Model'), $5::printer_category_enum,
+			$6::printer_color_scheme_enum, $7, $8,
+			$9, CURRENT_DATE, $10, COALESCE(NULLIF($11, ''), 'Supplier'),
+			$12, $13::printer_status_enum, COALESCE(NULLIF($14, ''), 'Main Dept'), $15::jsonb,
+			$16::jsonb, $17::jsonb, $18, $19, NOW()
+		)
+		ON CONFLICT (asset_id) DO UPDATE SET
+			serial_number = COALESCE(NULLIF(EXCLUDED.serial_number, ''), printers.serial_number),
+			brand = COALESCE(NULLIF(EXCLUDED.brand, ''), printers.brand),
+			model = COALESCE(NULLIF(EXCLUDED.model, ''), printers.model),
+			category = EXCLUDED.category,
+			color_scheme_type = EXCLUDED.color_scheme_type,
+			total_color_slots = EXCLUDED.total_color_slots,
+			expected_life_a4_pages = EXCLUDED.expected_life_a4_pages,
+			maintenance_rate_percent = EXCLUDED.maintenance_rate_percent,
+			price_cost = EXCLUDED.price_cost,
+			vendor_supplier = COALESCE(NULLIF(EXCLUDED.vendor_supplier, ''), printers.vendor_supplier),
+			warranty_expiry_year = EXCLUDED.warranty_expiry_year,
+			status = EXCLUDED.status,
+			location_dept = COALESCE(NULLIF(EXCLUDED.location_dept, ''), printers.location_dept),
+			technical_specs = EXCLUDED.technical_specs,
+			oem_baseline_specs = EXCLUDED.oem_baseline_specs,
+			components = EXCLUDED.components,
 			updated_at = NOW()
-		WHERE asset_id = $17
 	`
 
 	pCat := item.PrinterCategory
@@ -771,11 +789,12 @@ func updateEquipmentInDB(id string, item EquipmentItem) error {
 	}
 
 	_, err := db.DB.Exec(query,
-		item.SerialNumber, item.Brand, item.Model, pCat,
+		id, item.SerialNumber, item.Brand, item.Model, pCat,
 		cScheme, item.TotalColorSlots, item.ExpectedLifeA4Pages,
 		item.MaintenanceRatePercent, item.Price, item.Vendor,
 		item.WarrantyExpirationYear, status, item.Location,
-		string(techBytes), string(oemBytes), string(compBytes), id,
+		string(techBytes), string(oemBytes), string(compBytes),
+		item.ProductImageUrl, item.ReceiptInvoiceUrl,
 	)
 
 	return err

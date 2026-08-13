@@ -197,7 +197,7 @@ CREATE INDEX IF NOT EXISTS idx_quotation_items_quotation ON quotation_items(quot
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS inbound_transactions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id VARCHAR(100) PRIMARY KEY,
     po_number VARCHAR(100),
     inbound_date DATE NOT NULL DEFAULT CURRENT_DATE,
     sku_code VARCHAR(100) NOT NULL,

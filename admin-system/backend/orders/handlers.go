@@ -22,38 +22,17 @@ var (
 )
 
 func init() {
-	ordersStore["order-001"] = Order{
-		ID:            "order-001",
-		OrderNumber:   "SO-2026-0001",
-		CustomerName:  "Vientiane Book Center",
-		CustomerPhone: "+856 20 5551 2345",
-		Status:        StatusWaitingDeposit,
-		DepositAmount: 0,
-		TotalPrice:    1250000.0,
-		TotalCost:     850000.0,
-		GoogleDriveLink: "https://drive.google.com/drive/folders/mock-order-001",
-		Items: []OrderItem{
-			{
-				ID:                "item-001",
-				OrderID:           "order-001",
-				JobName:           "A4 Catalog 100pgs Printing",
-				Quantity:          50,
-				UnitPriceSnapshot: 25000.0,
-				CostPriceSnapshot: 17000.0,
-				Specs:             map[string]interface{}{"ink_coverage": 30.0, "lamination": "thermal"},
-			},
-		},
-		CreatedAt: time.Now().Add(-2 * time.Hour),
-		UpdatedAt: time.Now().Add(-2 * time.Hour),
-	}
-	orderSeq = 1
+	orderSeq = 0
 }
 
 // HandleGetOrders lists all orders from PostgreSQL DB or memory fallback
 func HandleGetOrders(c *gin.Context) {
 	if db.DB != nil {
 		ordersList, err := getOrdersFromDB()
-		if err == nil && len(ordersList) > 0 {
+		if err == nil {
+			if ordersList == nil {
+				ordersList = []Order{}
+			}
 			c.JSON(http.StatusOK, ordersList)
 			return
 		}

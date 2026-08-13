@@ -277,6 +277,34 @@ export default function InboundManagement() {
     setIsModalOpen(true);
   };
 
+  const saveInboundToBackend = (item: any) => {
+    const apiPayload = {
+      id: item.id,
+      poNumber: item.poNumber || item.id,
+      inboundDate: item.receiptDate || new Date().toISOString().split('T')[0],
+      skuCode: item.sku || item.id,
+      itemName: item.name,
+      supplierName: item.supplier || '',
+      category: item.category,
+      quantity: Number(item.initialQty || item.currentQty) || 1,
+      unit: item.unit || 'Unit',
+      totalPrice: Number(item.totalPrice) || 0,
+      paymentMethod: item.paymentMethod || 'TRANSFER',
+      origin: item.origin || 'TH',
+      tariffFee: Number(item.tariffRate) || 0,
+      freightFee: Number(item.freightCharge) || 0,
+      productImage: item.docs?.productPhoto || '',
+      receiptSlip: item.docs?.paymentSlip || item.receiptUrl || '',
+      specs: item.specs || {}
+    };
+
+    fetch('http://localhost:8080/api/inbound', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(apiPayload)
+    }).catch(err => console.log('Inbound API save error', err));
+  };
+
   const handleImportSubmit = (type, data) => {
     const logId = `INB-${Date.now().toString().slice(-4)}`;
     const newLog = {
@@ -306,6 +334,7 @@ export default function InboundManagement() {
     };
 
     setInboundList(prev => [newLog, ...prev]);
+    saveInboundToBackend(newLog);
 
     if (type === 'PRINTER' || type === 'MACHINERY') {
       addEquipment({
@@ -451,9 +480,64 @@ export default function InboundManagement() {
 
     if (editingItem) {
       setInboundList(prev => prev.map(item => item.id === editingItem.id ? payload : item));
+      saveInboundToBackend(payload);
       showToast(currentLang === 'lo' ? 'ອັບເດດຂໍ້ມູນນຳເຂົ້າຮຽບຮ້ອຍແລ້ວ!' : 'Inbound entry updated!', 'success');
     } else {
       setInboundList(prev => [payload, ...prev]);
+      saveInboundToBackend(payload);
+
+      // Cross-module sync: Add to Equipment or Inventory
+      if (payload.category === 'PRINTER' || payload.category === 'CUTTER' || payload.category === 'MACHINERY') {
+        addEquipment({
+          id: payload.id,
+          name: payload.name,
+          brand: payload.name.split(' ')[0] || 'Generic',
+          model: payload.name.split(' ').slice(1).join(' ') || payload.name,
+          serialNumber: payload.sku || payload.id,
+          category: payload.category === 'PRINTER' ? 'Printer' : (payload.category === 'CUTTER' ? 'Cutter' : 'Processing Tools'),
+          printerCategory: payload.specs?.printerCategory || 'Inkjet',
+          colorSchemeType: 'CMYK',
+          totalColorSlots: 4,
+          expectedLifeA4Pages: 200000,
+          maintenanceRatePercent: 20,
+          price: payload.totalPrice,
+          purchaseCost: payload.totalPrice,
+          vendor: payload.supplier,
+          warrantyExpirationYear: 2028,
+          location: 'Main Dept',
+          status: 'In Use'
+        });
+      } else {
+        const existingItem = inventory.find(item => item.id === payload.sku || item.id === payload.id);
+        if (existingItem) {
+          addStock(existingItem.id, payload.currentQty);
+        } else {
+          addInventorySku({
+            id: payload.sku || payload.id,
+            name: payload.name,
+            category: payload.category === 'MATERIAL' ? 'Paper' : (payload.category === 'INK' ? 'Ink' : 'Finishing'),
+            stockQty: payload.currentQty,
+            consumptionUnit: payload.unit,
+            purchaseUnit: payload.unit,
+            purchaseMultiplier: 1,
+            costPerPurchaseUnit: payload.totalPrice / (payload.currentQty || 1),
+            costPerConsumptionUnit: payload.totalPrice / (payload.currentQty || 1),
+            reorderThreshold: 10,
+            batches: [
+              {
+                id: `LOT-${payload.id}-001`,
+                purchaseDate: payload.receiptDate || new Date().toISOString().split('T')[0],
+                supplierName: payload.supplier,
+                purchasePricePerReam: payload.totalPrice,
+                costPerSheet: payload.totalPrice / (payload.currentQty || 1),
+                initialQty: payload.currentQty,
+                currentQty: payload.currentQty
+              }
+            ]
+          });
+        }
+      }
+
       showToast(currentLang === 'lo' ? 'ບັນທຶກຂໍ້ມູນນຳເຂົ້າສິນຄ້າໃໝ່ຮຽບຮ້ອຍແລ້ວ!' : 'New inbound entry created!', 'success');
     }
 
@@ -796,16 +880,20 @@ export default function InboundManagement() {
                   </h3>
                   <div className="grid grid-cols-2 gap-4 text-xs font-medium">
                     <div>
+                      <span className="text-slate-400 block text-[11px]">PO / Ref ID:</span>
+                      <span className="font-mono text-slate-800 font-extrabold">{selectedDrawerItem.poNumber || selectedDrawerItem.id}</span>
+                    </div>
+                    <div>
                       <span className="text-slate-400 block text-[11px]">SKU Code:</span>
                       <span className="font-mono text-slate-800 font-bold">{selectedDrawerItem.sku}</span>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[11px]">{currentLang === 'lo' ? 'ວັນທີຮັບ/ຕິດຕັ້ງ:' : 'Receipt Date:'}</span>
-                      <span className="text-slate-800">{selectedDrawerItem.receiptDate}</span>
+                      <span className="text-slate-800 font-bold">{selectedDrawerItem.receiptDate}</span>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[11px]">{currentLang === 'lo' ? 'ຜູ້ສະໜອງ/ຮ້ານຄ້າ:' : 'Supplier Name:'}</span>
-                      <span className="text-slate-800">{selectedDrawerItem.supplier}</span>
+                      <span className="text-slate-800 font-bold">{selectedDrawerItem.supplier}</span>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[11px]">{currentLang === 'lo' ? 'ຊ່ອງທາງຊຳລະເງິນ:' : 'Payment Method:'}</span>
@@ -817,6 +905,14 @@ export default function InboundManagement() {
                       <span className="text-slate-400 block text-[11px]">{currentLang === 'lo' ? 'ປະເທດຕົ້ນທາງ:' : 'Origin Country:'}</span>
                       <span className="font-bold text-slate-800">{selectedDrawerItem.origin}</span>
                     </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">{currentLang === 'lo' ? 'ອັດຕາພາສີ (Tariff Rate):' : 'Customs Tariff Rate:'}</span>
+                      <span className="font-bold text-amber-700">{selectedDrawerItem.tariffRate || 0}%</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">{currentLang === 'lo' ? 'ຄ່າขนส่ง (Freight Fee):' : 'Freight Fee:'}</span>
+                      <span className="font-bold text-slate-800">{formatLAK(selectedDrawerItem.freightCharge || 0)}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -827,47 +923,53 @@ export default function InboundManagement() {
                     <span>{currentLang === 'lo' ? 'ສະເປັກທາງເຕັກນິກ (ERP Technical Specs)' : 'ERP Technical Specs'}</span>
                   </h3>
                   <div className="grid grid-cols-2 gap-4 text-xs font-medium">
-                    {Object.entries(selectedDrawerItem.specs || {}).map(([key, val]) => {
-                      if (!val || key === 'tariffRate' || key === 'clickRate' || key === 'clickBw' || key === 'clickColor') return null;
-                      
-                      const labelMapLo = {
-                        formFactor: currentLang === 'lo' ? 'ຮູບແບບບັນຈຸພັນ (Form Factor)' : 'Form Factor',
-                        grammage: currentLang === 'lo' ? 'ຄວາມໜາ/ນ້ຳໜັກ (Grammage GSM)' : 'Grammage (GSM)',
-                        standardSize: currentLang === 'lo' ? 'ຂະໜາດມາດຕະຖານ (Standard Size)' : 'Standard Size',
-                        widthMm: currentLang === 'lo' ? 'ໜ້າກວ້າງ (Width mm)' : 'Width (mm)',
-                        length: currentLang === 'lo' ? 'ຄວາມຍາວລວມ (Length m)' : 'Length (m)',
-                        packQty: currentLang === 'lo' ? 'ຈຳນວນແຜ່ນຕໍ່ຣີມ (Pack Qty)' : 'Pack Qty',
-                        inkType: currentLang === 'lo' ? 'ປະເພດໝຶກພິມ (Ink Type)' : 'Ink Type',
-                        colorModel: currentLang === 'lo' ? 'ສີ / ຕະລັບສີ (Color Option)' : 'Color Option',
-                        volumePerBottle: currentLang === 'lo' ? 'ບໍລິມາດບັນຈຸ (Volume/Bottle)' : 'Volume/Bottle',
-                        compatiblePrinter: currentLang === 'lo' ? 'ເຄື່ອງພິມທີ່ເຊື່ອມໂຍງ (Linked Printer)' : 'Linked Printer',
-                        supportedInkType: currentLang === 'lo' ? 'ຊະນິດໝຶກທີ່ເຄື່ອງໃຊ້ (Supported Ink)' : 'Supported Ink',
-                        colorSlots: currentLang === 'lo' ? 'ສະລັອດສີໝຶກປະຈຳເຄື່ອງ (Color Slots)' : 'Color Slots',
-                        hwType: currentLang === 'lo' ? 'ໝວດໝູ່ອຸປະກອນ (Hardware Type)' : 'Hardware Type',
-                        hwSpec: currentLang === 'lo' ? 'ເບີ/ສະເປັກສະເພາະ (Hardware Spec)' : 'Hardware Spec',
-                        packCount: currentLang === 'lo' ? 'ຈຳນວນບັນຈຸຕໍ່ກ່ອງ (Pack Count)' : 'Pack Count',
-                        containerWeight: currentLang === 'lo' ? 'ນ້ຳໜັກບັນຈຸ (Container Weight)' : 'Container Weight',
-                        maxPaperSize: currentLang === 'lo' ? 'ຂະໜາດພິມສູງສຸດ (Max Print Size)' : 'Max Print Size',
-                        printSpeedColor: currentLang === 'lo' ? 'ຄວາມໄວພິມສີ (Print Speed Color)' : 'Print Speed (Color)',
-                        printSpeedBw: currentLang === 'lo' ? 'ຄວາມໄວພິມຂາວດຳ (Print Speed BW)' : 'Print Speed (BW)',
-                        isoBlackYield: currentLang === 'lo' ? 'ມາດຕະຖານພິມໝຶກດຳ (ISO Black Yield)' : 'ISO Black Yield',
-                        isoColorYield: currentLang === 'lo' ? 'ມາດຕະຖານພິມໝຶກສີ (ISO Color Yield)' : 'ISO Color Yield',
-                        costPerPage: currentLang === 'lo' ? 'ຕົ້ນທຶນໝຶກຕໍ່ແຜ່ນ (Cost Per Page - CPP)' : 'Cost Per Page (CPP)',
-                        maxCutWidthMm: currentLang === 'lo' ? 'ໜ້າກວ້າງຕັດສູງສຸດ (Max Cut Width)' : 'Max Cut Width',
-                        cuttingSpeed: currentLang === 'lo' ? 'ຂໍ້ມູນການທຳງານທົ່ວໄປ (Machine Functionality)' : 'Machine Functionality'
+                    {(() => {
+                      const combinedSpecs = {
+                        ...(selectedDrawerItem.technical_specs || {}),
+                        ...(selectedDrawerItem.specs || {})
                       };
+                      return Object.entries(combinedSpecs).map(([key, val]) => {
+                        if (!val || key === 'tariffRate' || key === 'clickRate' || key === 'clickBw' || key === 'clickColor') return null;
+                        
+                        const labelMapLo: Record<string, string> = {
+                          formFactor: currentLang === 'lo' ? 'ຮູບແບບບັນຈຸພັນ (Form Factor)' : 'Form Factor',
+                          grammage: currentLang === 'lo' ? 'ຄວາມໜາ/ນ້ຳໜັກ (Grammage GSM)' : 'Grammage (GSM)',
+                          standardSize: currentLang === 'lo' ? 'ຂະໜາດມາດຕະຖານ (Standard Size)' : 'Standard Size',
+                          widthMm: currentLang === 'lo' ? 'ໜ້າກວ້າງ (Width mm)' : 'Width (mm)',
+                          length: currentLang === 'lo' ? 'ຄວາມຍາວລວມ (Length m)' : 'Length (m)',
+                          packQty: currentLang === 'lo' ? 'ຈຳນວນແຜ່ນຕໍ່ຣີມ (Pack Qty)' : 'Pack Qty',
+                          inkType: currentLang === 'lo' ? 'ປະເພດໝຶກພິມ (Ink Type)' : 'Ink Type',
+                          colorModel: currentLang === 'lo' ? 'ສີ / ຕະລັບສີ (Color Option)' : 'Color Option',
+                          volumePerBottle: currentLang === 'lo' ? 'ບໍລິມາດບັນຈຸ (Volume/Bottle)' : 'Volume/Bottle',
+                          compatiblePrinter: currentLang === 'lo' ? 'ເຄື່ອງພິມທີ່ເຊື່ອມໂຍງ (Linked Printer)' : 'Linked Printer',
+                          supportedInkType: currentLang === 'lo' ? 'ຊະນິດໝຶກທີ່ເຄື່ອງໃຊ້ (Supported Ink)' : 'Supported Ink',
+                          colorSlots: currentLang === 'lo' ? 'ສະລັອດສີໝຶກປະຈຳເຄື່ອງ (Color Slots)' : 'Color Slots',
+                          hwType: currentLang === 'lo' ? 'ໝວດໝູ່ອຸປະກອນ (Hardware Type)' : 'Hardware Type',
+                          hwSpec: currentLang === 'lo' ? 'ເບີ/ສະເປັກສະເພາະ (Hardware Spec)' : 'Hardware Spec',
+                          packCount: currentLang === 'lo' ? 'ຈຳນວນບັນຈຸຕໍ່ກ່ອງ (Pack Count)' : 'Pack Count',
+                          containerWeight: currentLang === 'lo' ? 'ນ້ຳໜັກບັນຈຸ (Container Weight)' : 'Container Weight',
+                          maxPaperSize: currentLang === 'lo' ? 'ຂະໜາດພິມສູງສຸດ (Max Print Size)' : 'Max Print Size',
+                          printSpeedColor: currentLang === 'lo' ? 'ຄວາມໄວພິມສີ (Print Speed Color)' : 'Print Speed (Color)',
+                          printSpeedBw: currentLang === 'lo' ? 'ຄວາມໄວພິມຂາວດຳ (Print Speed BW)' : 'Print Speed (BW)',
+                          isoBlackYield: currentLang === 'lo' ? 'ມາດຕະຖານພິມໝຶກດຳ (ISO Black Yield)' : 'ISO Black Yield',
+                          isoColorYield: currentLang === 'lo' ? 'ມາດຕະຖານພິມໝຶກສີ (ISO Color Yield)' : 'ISO Color Yield',
+                          costPerPage: currentLang === 'lo' ? 'ຕົ້ນທຶນໝຶກຕໍ່ແຜ່ນ (Cost Per Page - CPP)' : 'Cost Per Page (CPP)',
+                          maxCutWidthMm: currentLang === 'lo' ? 'ໜ້າກວ້າງຕັດສູງສຸດ (Max Cut Width)' : 'Max Cut Width',
+                          cuttingSpeed: currentLang === 'lo' ? 'ຂໍ້ມູນການທຳງານທົ່ວໄປ (Machine Functionality)' : 'Machine Functionality'
+                        };
 
-                      return (
-                        <div key={key} className={key === 'cuttingSpeed' || key === 'colorSlots' ? 'col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-100' : ''}>
-                          <span className="text-slate-400 block text-[11px] font-semibold">
-                            {labelMapLo[key] || key.replace(/([A-Z])/g, ' $1')}:
-                          </span>
-                          <span className="text-slate-800 font-bold">
-                            {Array.isArray(val as string | string[]) ? (val as string[]).join(', ') : (val as string)}
-                          </span>
-                        </div>
-                      );
-                    })}
+                        return (
+                          <div key={key} className={key === 'cuttingSpeed' || key === 'colorSlots' ? 'col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-100' : ''}>
+                            <span className="text-slate-400 block text-[11px] font-semibold">
+                              {labelMapLo[key] || key.replace(/([A-Z])/g, ' $1')}:
+                            </span>
+                            <span className="text-slate-800 font-bold">
+                              {Array.isArray(val as string | string[]) ? (val as string[]).join(', ') : (val as string)}
+                            </span>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
 

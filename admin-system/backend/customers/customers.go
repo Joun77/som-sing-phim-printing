@@ -32,7 +32,10 @@ var (
 func HandleGetCustomers(c *gin.Context) {
 	if db.DB != nil {
 		customers, err := getCustomersFromDB()
-		if err == nil && len(customers) > 0 {
+		if err == nil {
+			if customers == nil {
+				customers = []Customer{}
+			}
 			c.JSON(http.StatusOK, gin.H{"status": "success", "data": customers})
 			return
 		}

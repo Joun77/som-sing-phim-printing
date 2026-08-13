@@ -30,24 +30,17 @@ var (
 )
 
 func init() {
-	offcutsStore["offcut-001"] = Offcut{
-		ID:               "offcut-001",
-		ParentMaterialID: "paper-a4-80",
-		Name:             "Leftover strip A4 80gsm",
-		WidthMm:          100.0,
-		LengthMm:         297.0,
-		Quantity:         15.0,
-		Location:         "Main Stock",
-		CreatedAt:        time.Now(),
-	}
-	offcutSeq = 1
+	offcutSeq = 0
 }
 
 // HandleGetOffcuts returns the list of offcut scraps
 func HandleGetOffcuts(c *gin.Context) {
 	if db.DB != nil {
 		offcuts, err := getOffcutsFromDB()
-		if err == nil && len(offcuts) > 0 {
+		if err == nil {
+			if offcuts == nil {
+				offcuts = []Offcut{}
+			}
 			c.JSON(http.StatusOK, offcuts)
 			return
 		}

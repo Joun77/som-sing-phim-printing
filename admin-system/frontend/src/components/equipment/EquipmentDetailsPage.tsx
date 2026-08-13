@@ -147,33 +147,56 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-xs font-bold text-slate-600">
             <div>
               <span className="text-slate-400 uppercase text-[10px] block">Print Speed (Black / Color)</span>
-              <span className="text-xs text-slate-900 block mt-1">{machine.printSpeedColor || machine.printSpeed || '25 PPM / 60 PPM'}</span>
+              <span className="text-xs text-slate-900 block mt-1">{machine.printSpeedColor || machine.printSpeed || machine.technical_specs?.printSpeed || '-'}</span>
             </div>
             <div>
               <span className="text-slate-400 uppercase text-[10px] block">Max Resolution</span>
-              <span className="text-xs text-slate-900 block mt-1">{machine.resolution || machine.maxResolution || '1200 x 1200 DPI'}</span>
+              <span className="text-xs text-slate-900 block mt-1">{machine.resolution || machine.maxResolution || machine.technical_specs?.resolution || '-'}</span>
             </div>
             <div>
               <span className="text-slate-400 uppercase text-[10px] block">Supported Paper Sizes</span>
-              <span className="text-xs text-slate-900 block mt-1">{machine.paperSizes || 'A4, A3, SRA3, 13x19"'}</span>
+              <span className="text-xs text-slate-900 block mt-1">{machine.paperSizes || machine.technical_specs?.paperSizes || '-'}</span>
             </div>
             <div>
               <span className="text-slate-400 uppercase text-[10px] block">Paper Tray Capacity</span>
-              <span className="text-xs text-slate-900 block mt-1">{machine.trayCapacity || '1,500 Sheets'}</span>
+              <span className="text-xs text-slate-900 block mt-1">{machine.trayCapacity || machine.technical_specs?.trayCapacity || '-'}</span>
             </div>
             <div>
               <span className="text-slate-400 uppercase text-[10px] block">Duplex Printing</span>
-              <span className="text-xs text-slate-900 block mt-1">{machine.duplex ? 'Yes' : 'No'}</span>
+              <span className="text-xs text-slate-900 block mt-1">{machine.duplex !== undefined ? (machine.duplex ? 'Yes' : 'No') : '-'}</span>
             </div>
             <div>
               <span className="text-slate-400 uppercase text-[10px] block">Registered Functions</span>
-              <span className="text-xs text-slate-900 block mt-1">{(machine.functions && machine.functions.join(', ')) || 'Print, Scan, Copy'}</span>
+              <span className="text-xs text-slate-900 block mt-1">{(machine.functions && machine.functions.join(', ')) || '-'}</span>
             </div>
             <div className="md:col-span-2">
               <span className="text-slate-400 uppercase text-[10px] block">Scanner Specs</span>
-              <span className="text-xs text-slate-900 block mt-1">{machine.scannerSpecs || 'Dual-scan ADF, 240 opm'}</span>
+              <span className="text-xs text-slate-900 block mt-1">{machine.scannerSpecs || machine.technical_specs?.scannerSpecs || '-'}</span>
             </div>
           </div>
+
+          {/* Additional Dynamic Technical Specs from DB */}
+          {(() => {
+            const extraSpecs = { ...(machine.technical_specs || {}), ...(machine.specs || {}) };
+            const extraEntries = Object.entries(extraSpecs);
+            if (extraEntries.length === 0) return null;
+            return (
+              <div className="pt-4 border-t border-slate-100 space-y-2">
+                <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block">Additional ERP Technical Specs</span>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs">
+                  {extraEntries.map(([k, v]) => {
+                    if (!v) return null;
+                    return (
+                      <div key={k}>
+                        <span className="text-slate-400 block text-[10px] font-bold uppercase">{k.replace(/([A-Z])/g, ' $1')}</span>
+                        <span className="text-slate-900 font-bold block mt-0.5">{Array.isArray(v) ? v.join(', ') : String(v)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* CATEGORY 3: Connectivity & Network */}

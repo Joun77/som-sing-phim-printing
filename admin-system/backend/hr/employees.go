@@ -28,29 +28,18 @@ type Employee struct {
 }
 
 var (
-	employeeStoreMutex sync.RWMutex
-	employeeMemoryStore = map[string]Employee{
-		"EMP-001": {
-			ID:         "EMP-001",
-			NameLo:     "ສົມຈິດ ແກ້ວມະນີ",
-			NameEn:     "Somchit Kaewmanee",
-			Role:       "Lead Printer Operator",
-			Department: "Digital Printing",
-			Phone:      "020-5551-2345",
-			Address:    "ບ້ານ ສາຍລົມ, ວຽງຈັນ",
-			SalaryLAK:  4500000,
-			Status:     "ACTIVE",
-			Skills:     []string{"Digital Printing", "CMYK Color Calibration", "Mimaki Maintenance"},
-			CreatedAt:  time.Now().Format(time.RFC3339),
-		},
-	}
+	employeeStoreMutex  sync.RWMutex
+	employeeMemoryStore = map[string]Employee{}
 )
 
 // HandleGetEmployees returns all employees from DB or memory fallback
 func HandleGetEmployees(c *gin.Context) {
 	if db.DB != nil {
 		employees, err := getEmployeesFromDB()
-		if err == nil && len(employees) > 0 {
+		if err == nil {
+			if employees == nil {
+				employees = []Employee{}
+			}
 			c.JSON(http.StatusOK, gin.H{"status": "success", "data": employees})
 			return
 		}

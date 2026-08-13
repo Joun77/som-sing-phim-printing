@@ -197,6 +197,14 @@ export default function ImportForm({ onSubmit, onClose }) {
   const [partModelRef, setPartModelRef] = useState('');
   const [partYield, setPartYield] = useState('');
 
+  // --- 9. OFFCUT State ---
+  const [offcutName, setOffcutName] = useState('');
+  const [offcutParentSku, setOffcutParentSku] = useState('');
+  const [offcutWidthMm, setOffcutWidthMm] = useState(100);
+  const [offcutLengthMm, setOffcutLengthMm] = useState(150);
+  const [offcutQty, setOffcutQty] = useState(100);
+  const [offcutLocation, setOffcutLocation] = useState('Shelf A-1 (Offcuts)');
+
   // Constants
   const printerCategories = ['Laser', 'Inkjet', 'MFP', 'Plotter', 'UV Flatbed', 'Sublimation'];
   const functionOptions = ['Print', 'Scan', 'Copy', 'Fax'];
@@ -513,6 +521,37 @@ export default function ImportForm({ onSubmit, onClose }) {
           partYield: partYield || null
         }
       };
+    } else if (importType === 'OFFCUT') {
+      finalData = {
+        ...finalData,
+        id: `OFF-${Date.now().toString().slice(-4)}`,
+        name: offcutName || 'Paper Offcut',
+        category: 'Offcut',
+        stockQty: Number(importQty || offcutQty),
+        unit: 'ແຜ່ນ',
+        specs: {
+          offcutParentSku,
+          offcutWidthMm: Number(offcutWidthMm),
+          offcutLengthMm: Number(offcutLengthMm),
+          offcutQty: Number(offcutQty),
+          offcutCostPerSheet: unitPriceLak,
+          offcutLocation
+        }
+      };
+
+      fetch('http://localhost:8080/api/offcuts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: finalData.id,
+          parent_material_id: offcutParentSku || 'PAP-GENERAL',
+          name: offcutName || 'Paper Offcut',
+          width_mm: Number(offcutWidthMm),
+          length_mm: Number(offcutLengthMm),
+          quantity: Number(offcutQty),
+          location: offcutLocation || 'Main Stock'
+        })
+      }).catch(err => console.log('Offcut API save error', err));
     }
 
     onSubmit(importType, finalData);
@@ -590,6 +629,7 @@ export default function ImportForm({ onSubmit, onClose }) {
               { id: 'PRINTER', label: 'ເຄື່ອງພິມ (Printer)' },
               { id: 'INK', label: 'ໝຶກພິມ (Ink)' },
               { id: 'PAPER', label: 'ເຈ້ຍ (Paper)' },
+              { id: 'OFFCUT', label: 'ເຈ້ຍເສດ (Paper Offcut)' },
               { id: 'LAMINATION', label: 'ຟີມເຄືອບ (Film)' },
               { id: 'MACHINERY', label: 'ເຄື່ອງຈັກ (Machinery)' },
               { id: 'BINDING', label: 'ເຂົ້າເລົ່ມ (Binding)' },
@@ -602,7 +642,7 @@ export default function ImportForm({ onSubmit, onClose }) {
                   setImportType(tab.id);
                   if (tab.id === 'PRINTER' || tab.id === 'MACHINERY') setImportUnit('ເຄື່ອງ');
                   else if (tab.id === 'INK') setImportUnit('ຂວດ');
-                  else if (tab.id === 'PAPER') setImportUnit('ແຜ່ນ');
+                  else if (tab.id === 'PAPER' || tab.id === 'OFFCUT') setImportUnit('ແຜ່ນ');
                   else if (tab.id === 'LAMINATION') setImportUnit('ມ້ວນ');
                   else setImportUnit('ກ່ອງ');
                 }}
@@ -831,6 +871,40 @@ export default function ImportForm({ onSubmit, onClose }) {
                   <input type="number" placeholder="Length (m)" value={rollLengthM} onChange={(e) => setRollLengthM(Number(e.target.value))} className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold" />
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {importType === 'OFFCUT' && inboundMode === 'NEW' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
+            <div>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-2">ຊື່ລາຍການເຈ້ຍເສດ (Offcut Item Name) *</label>
+              <input type="text" value={offcutName} onChange={(e) => setOffcutName(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" placeholder="e.g. ເຈ້ຍເສດ Art Card 300gsm" required />
+            </div>
+            <div>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-2">ເຈ້ຍຕົ້ນທາງ (Parent Paper SKU)</label>
+              <select value={offcutParentSku} onChange={(e) => setOffcutParentSku(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold">
+                <option value="">-- ไม่ระบุกระดาษต้นทาง --</option>
+                {inventory.filter(i => i.category === 'Paper' || i.category === 'MATERIAL').map(pap => (
+                  <option key={pap.id} value={pap.id}>[{pap.id}] {pap.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-2">ໜ້າກວ້າງ (Width mm) *</label>
+              <input type="number" value={offcutWidthMm} onChange={(e) => setOffcutWidthMm(Number(e.target.value))} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" required />
+            </div>
+            <div>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-2">ຄວາມຍາວ (Length mm) *</label>
+              <input type="number" value={offcutLengthMm} onChange={(e) => setOffcutLengthMm(Number(e.target.value))} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" required />
+            </div>
+            <div>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-2">ຈຳນວນແຜ່ນເສດ (Available Sheets) *</label>
+              <input type="number" value={offcutQty} onChange={(e) => setOffcutQty(Number(e.target.value))} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" required />
+            </div>
+            <div>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-2">ບ່ອນຈັດເກັບ (Storage Location)</label>
+              <input type="text" value={offcutLocation} onChange={(e) => setOffcutLocation(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" placeholder="e.g. Shelf A-1 (Offcuts)" />
             </div>
           </div>
         )}

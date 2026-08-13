@@ -43,7 +43,10 @@ var (
 func HandleGetInboundTransactions(c *gin.Context) {
 	if db.DB != nil {
 		logs, err := getInboundFromDB()
-		if err == nil && len(logs) > 0 {
+		if err == nil {
+			if logs == nil {
+				logs = []InboundTransaction{}
+			}
 			c.JSON(http.StatusOK, gin.H{"status": "success", "data": logs})
 			return
 		}
