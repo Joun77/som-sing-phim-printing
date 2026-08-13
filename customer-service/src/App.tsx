@@ -1,0 +1,50 @@
+import { Link, Route, Routes } from 'react-router-dom'
+import Header from './components/Header.tsx'
+import Footer from './components/Footer.tsx'
+import HomePage from './pages/HomePage.tsx'
+import CategoryPage from './pages/CategoryPage.tsx'
+import ProductPage from './pages/ProductPage.tsx'
+import CheckoutPage from './pages/CheckoutPage.tsx'
+import SuccessPage from './pages/SuccessPage.tsx'
+import TrackingPage from './pages/TrackingPage.tsx'
+import { useShop } from './context/ShopContext.tsx'
+
+function NotFound() {
+  return (
+    <section className="section text-center container">
+      <h2>ไม่พบหน้าที่คุณค้นหา (404)</h2>
+      <p className="text-muted">หน้านี้ถูกลบหรือ URL ไม่ถูกต้อง</p>
+      <Link to="/" className="btn btn--navy mt-2">
+        กลับหน้าแรก
+      </Link>
+    </section>
+  )
+}
+
+export default function App() {
+  const { demoMode } = useShop()
+
+  return (
+    <>
+      {demoMode && (
+        <div className="demo-banner" role="status">
+          <span>🔌</span> โหมดสาธิต (Demo Mode) — ระบบหลังบ้าน Go ไม่พร้อมใช้งาน
+          ใช้ข้อมูลตัวอย่างแทน เปิด backend ที่ port 8080 เพื่อเชื่อมต่อ API จริง
+        </div>
+      )}
+      <Header />
+      <main>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/category/:slug" element={<CategoryPage />} />
+          <Route path="/product/:slug" element={<ProductPage />} />
+          <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/success/:orderId" element={<SuccessPage />} />
+          <Route path="/track" element={<TrackingPage />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </main>
+      <Footer />
+    </>
+  )
+}

@@ -1,0 +1,12 @@
+{
+  "name": "som-sing-phim",
+  "private": true,
+  "scripts": {
+    "dev:admin": "cd admin-system/backend && go run main.go",
+    "dev:customer": "cd customer-service && npm run dev",
+    "dev": "concurrently \"npm run dev:admin\" \"npm run dev:customer\""
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.4"
+  }
+}
