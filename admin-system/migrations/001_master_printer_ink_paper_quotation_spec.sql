@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS printers (
     location_dept VARCHAR(100) NOT NULL,
     technical_specs JSONB DEFAULT '{}'::jsonb,
     oem_baseline_specs JSONB DEFAULT '{}'::jsonb,
+    components JSONB DEFAULT '[]'::jsonb,
     product_image_url TEXT,
     receipt_invoice_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -166,3 +167,32 @@ CREATE TABLE IF NOT EXISTS quotation_items (
 );
 
 CREATE INDEX IF NOT EXISTS idx_quotation_items_quotation ON quotation_items(quotation_id);
+
+-- ============================================================================
+-- 7. TABLE: inbound_transactions (Inbound Procurement Audit Log)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS inbound_transactions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    po_number VARCHAR(100),
+    inbound_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    sku_code VARCHAR(100) NOT NULL,
+    item_name VARCHAR(255) NOT NULL,
+    supplier_name VARCHAR(255),
+    category VARCHAR(50) NOT NULL,
+    quantity NUMERIC(12, 2) NOT NULL DEFAULT 1,
+    unit VARCHAR(50),
+    total_price NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    payment_method VARCHAR(50) DEFAULT 'TRANSFER',
+    origin VARCHAR(10) DEFAULT 'TH',
+    tariff_fee NUMERIC(15, 2) DEFAULT 0,
+    freight_fee NUMERIC(15, 2) DEFAULT 0,
+    product_image_url TEXT,
+    receipt_slip_url TEXT,
+    technical_specs JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_inbound_sku ON inbound_transactions(sku_code);
+CREATE INDEX IF NOT EXISTS idx_inbound_date ON inbound_transactions(inbound_date);
+

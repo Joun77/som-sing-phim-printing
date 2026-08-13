@@ -2,9 +2,12 @@ package inventory
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"sync"
 	"time"
+
+	"backend/db"
 
 	"github.com/gin-gonic/gin"
 )
@@ -33,7 +36,7 @@ type InventoryItem struct {
 	UpdatedAt              string                 `json:"updatedAt"`
 }
 
-// EquipmentItem represents a printer or machinery asset with OEM specs
+// EquipmentItem represents a printer or machinery asset with OEM specs and components
 type EquipmentItem struct {
 	ID                     string                 `json:"id"`
 	Name                   string                 `json:"name"`
@@ -48,8 +51,11 @@ type EquipmentItem struct {
 	MaintenanceRatePercent float64                `json:"maintenanceRatePercent"`
 	Price                  float64                `json:"price"`
 	Vendor                 string                 `json:"vendor"`
+	WarrantyExpirationYear int                    `json:"warrantyExpirationYear"`
 	Location               string                 `json:"location"`
 	Status                 string                 `json:"status"`
+	ProductImageUrl        string                 `json:"product_image_url,omitempty"`
+	ReceiptInvoiceUrl      string                 `json:"receipt_invoice_url,omitempty"`
 	TechnicalSpecs         map[string]interface{} `json:"technical_specs,omitempty"`
 	OemBaselineSpecs       map[string]interface{} `json:"oem_baseline_specs,omitempty"`
 	PrinterColorLinks      []interface{}          `json:"printerColorLinks,omitempty"`
@@ -57,12 +63,224 @@ type EquipmentItem struct {
 	UpdatedAt              string                 `json:"updatedAt"`
 }
 
+// InboundAssetRequest represents payload for POST /api/v1/assets/inbound
+type InboundAssetRequest struct {
+	ID                     string                 `json:"id"`
+	AssetID                string                 `json:"asset_id"`
+	PONumber               string                 `json:"poNumber"`
+	InboundDate            string                 `json:"inboundDate"`
+	SKU                    string                 `json:"sku"`
+	Name                   string                 `json:"name"`
+	SerialNumber           string                 `json:"serialNumber"`
+	Brand                  string                 `json:"brand"`
+	Model                  string                 `json:"model"`
+	Category               string                 `json:"category"`
+	PrinterCategory        string                 `json:"printerCategory"`
+	ColorSchemeType        string                 `json:"colorSchemeType"`
+	TotalColorSlots        int                    `json:"totalColorSlots"`
+	ExpectedLifeA4Pages    int                    `json:"expectedLifeA4Pages"`
+	MaintenanceRatePercent float64                `json:"maintenanceRatePercent"`
+	Price                  float64                `json:"price"`
+	Supplier               string                 `json:"supplier"`
+	Vendor                 string                 `json:"vendor"`
+	WarrantyExpirationYear int                    `json:"warrantyExpirationYear"`
+	Quantity               float64                `json:"quantity"`
+	Unit                   string                 `json:"unit"`
+	PaymentMethod          string                 `json:"paymentMethod"`
+	Origin                 string                 `json:"origin"`
+	TariffFee              float64                `json:"tariffFee"`
+	FreightFee             float64                `json:"freightFee"`
+	Location               string                 `json:"location"`
+	Status                 string                 `json:"status"`
+	ImgProduct             string                 `json:"imgProduct"`
+	ImgSlip                string                 `json:"imgSlip"`
+	TechnicalSpecs         map[string]interface{} `json:"technical_specs"`
+	OemBaselineSpecs       map[string]interface{} `json:"oem_baseline_specs"`
+	Components             []interface{}          `json:"components"`
+}
+
 // In-memory store fallback with thread safety
 var (
-	inventoryStore = make(map[string]InventoryItem)
-	equipmentStore = make(map[string]EquipmentItem)
+	inventoryStore  = make(map[string]InventoryItem)
+	equipmentStore  = make(map[string]EquipmentItem)
 	assetStoreMutex sync.RWMutex
 )
+
+// HandleGetEquipment returns list of equipment / printers (queries DB first)
+func HandleGetEquipment(c *gin.Context) {
+	if db.DB != nil {
+		items, err := getEquipmentFromDB()
+		if err == nil && len(items) > 0 {
+			c.JSON(http.StatusOK, gin.H{"status": "success", "data": items})
+			return
+		}
+	}
+
+	assetStoreMutex.RLock()
+	defer assetStoreMutex.RUnlock()
+
+	items := make([]EquipmentItem, 0, len(equipmentStore))
+	for _, item := range equipmentStore {
+		items = append(items, item)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": items})
+}
+
+// HandleGetAssetsV1 returns list of assets via /api/v1/assets
+func HandleGetAssetsV1(c *gin.Context) {
+	HandleGetEquipment(c)
+}
+
+// HandleGetAssetByIDV1 queries a single asset by ID
+func HandleGetAssetByIDV1(c *gin.Context) {
+	id := c.Param("id")
+	if db.DB != nil {
+		item, err := getEquipmentByIDFromDB(id)
+		if err == nil {
+			c.JSON(http.StatusOK, gin.H{"status": "success", "data": item})
+			return
+		}
+	}
+
+	assetStoreMutex.RLock()
+	item, exists := equipmentStore[id]
+	assetStoreMutex.RUnlock()
+
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Asset not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": item})
+}
+
+// HandleInboundAssetV1 processes inbound procurement & persists record in PostgreSQL
+func HandleInboundAssetV1(c *gin.Context) {
+	var req InboundAssetRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	assetID := req.AssetID
+	if assetID == "" {
+		assetID = req.ID
+	}
+	if assetID == "" {
+		assetID = "PRN-" + time.Now().Format("150405")
+	}
+
+	if req.Name == "" && req.Model != "" {
+		req.Name = req.Brand + " " + req.Model
+	}
+	if req.Vendor == "" {
+		req.Vendor = req.Supplier
+	}
+	if req.Status == "" {
+		req.Status = "In Use"
+	}
+	if req.Location == "" {
+		req.Location = "Main Workshop"
+	}
+	if req.PrinterCategory == "" {
+		req.PrinterCategory = "Inkjet"
+	}
+	if req.ColorSchemeType == "" {
+		req.ColorSchemeType = "CMYK"
+	}
+	if req.WarrantyExpirationYear == 0 {
+		req.WarrantyExpirationYear = time.Now().Year() + 2
+	}
+	if req.TechnicalSpecs == nil {
+		req.TechnicalSpecs = make(map[string]interface{})
+	}
+	if req.OemBaselineSpecs == nil {
+		req.OemBaselineSpecs = make(map[string]interface{})
+	}
+	if req.Components == nil {
+		req.Components = make([]interface{}, 0)
+	}
+
+	// 1. Try DB persistence
+	if db.DB != nil {
+		err := saveInboundToDB(assetID, req)
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to save inbound asset to DB: %v", err)
+		} else {
+			log.Printf("[DB SUCCESS] Inbound asset %s saved to PostgreSQL!", assetID)
+		}
+	}
+
+	// 2. Also keep in-memory store updated for instant fallback
+	equip := EquipmentItem{
+		ID:                     assetID,
+		Name:                   req.Name,
+		SerialNumber:           req.SerialNumber,
+		Brand:                  req.Brand,
+		Model:                  req.Model,
+		Category:               req.Category,
+		PrinterCategory:        req.PrinterCategory,
+		ColorSchemeType:        req.ColorSchemeType,
+		TotalColorSlots:        req.TotalColorSlots,
+		ExpectedLifeA4Pages:    req.ExpectedLifeA4Pages,
+		MaintenanceRatePercent: req.MaintenanceRatePercent,
+		Price:                  req.Price,
+		Vendor:                 req.Vendor,
+		WarrantyExpirationYear: req.WarrantyExpirationYear,
+		Location:               req.Location,
+		Status:                 req.Status,
+		ProductImageUrl:        req.ImgProduct,
+		ReceiptInvoiceUrl:      req.ImgSlip,
+		TechnicalSpecs:         req.TechnicalSpecs,
+		OemBaselineSpecs:       req.OemBaselineSpecs,
+		Components:             req.Components,
+		UpdatedAt:              time.Now().Format(time.RFC3339),
+	}
+
+	assetStoreMutex.Lock()
+	equipmentStore[assetID] = equip
+	assetStoreMutex.Unlock()
+
+	c.JSON(http.StatusCreated, gin.H{
+		"status":  "success",
+		"message": "Inbound asset processed and saved to Database successfully",
+		"data":    equip,
+	})
+}
+
+// HandleUpdateAssetV1 updates master technical specs & components in PostgreSQL
+func HandleUpdateAssetV1(c *gin.Context) {
+	id := c.Param("id")
+
+	var item EquipmentItem
+	if err := c.ShouldBindJSON(&item); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	item.ID = id
+	item.UpdatedAt = time.Now().Format(time.RFC3339)
+
+	if db.DB != nil {
+		err := updateEquipmentInDB(id, item)
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to update printer in DB: %v", err)
+		} else {
+			log.Printf("[DB SUCCESS] Printer %s updated in PostgreSQL!", id)
+		}
+	}
+
+	assetStoreMutex.Lock()
+	equipmentStore[id] = item
+	assetStoreMutex.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Asset specification updated successfully",
+		"data":    item,
+	})
+}
 
 // HandleGetInventoryItems returns list of inventory items
 func HandleGetInventoryItems(c *gin.Context) {
@@ -74,13 +292,10 @@ func HandleGetInventoryItems(c *gin.Context) {
 		items = append(items, item)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status": "success",
-		"data":   items,
-	})
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": items})
 }
 
-// HandleCreateInventoryItem creates or adds a new inventory SKU
+// HandleCreateInventoryItem creates a new inventory SKU
 func HandleCreateInventoryItem(c *gin.Context) {
 	var item InventoryItem
 	if err := c.ShouldBindJSON(&item); err != nil {
@@ -128,71 +343,272 @@ func HandleUpdateInventoryItem(c *gin.Context) {
 	})
 }
 
-// HandleGetEquipment returns list of equipment / printers
-func HandleGetEquipment(c *gin.Context) {
-	assetStoreMutex.RLock()
-	defer assetStoreMutex.RUnlock()
+// HandleCreateEquipment handles equipment creation endpoint
+func HandleCreateEquipment(c *gin.Context) {
+	HandleInboundAssetV1(c)
+}
 
-	items := make([]EquipmentItem, 0, len(equipmentStore))
-	for _, item := range equipmentStore {
+// HandleUpdateEquipment updates equipment asset
+func HandleUpdateEquipment(c *gin.Context) {
+	HandleUpdateAssetV1(c)
+}
+
+// --- DB HELPERS ---
+
+func getEquipmentFromDB() ([]EquipmentItem, error) {
+	query := `
+		SELECT asset_id, serial_number, brand, model, category, color_scheme_type,
+		       total_color_slots, expected_life_a4_pages, maintenance_rate_percent,
+		       price_cost, vendor_supplier, warranty_expiry_year, status, location_dept,
+		       technical_specs, oem_baseline_specs, components,
+		       COALESCE(product_image_url, ''), COALESCE(receipt_invoice_url, ''), updated_at
+		FROM printers
+		ORDER BY created_at DESC
+	`
+
+	rows, err := db.DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []EquipmentItem
+	for rows.Next() {
+		var item EquipmentItem
+		var pCat, cScheme, pStatus string
+		var techJSON, oemJSON, compJSON []byte
+		var updatedAt time.Time
+
+		err := rows.Scan(
+			&item.ID, &item.SerialNumber, &item.Brand, &item.Model,
+			&pCat, &cScheme, &item.TotalColorSlots, &item.ExpectedLifeA4Pages,
+			&item.MaintenanceRatePercent, &item.Price, &item.Vendor,
+			&item.WarrantyExpirationYear, &pStatus, &item.Location,
+			&techJSON, &oemJSON, &compJSON,
+			&item.ProductImageUrl, &item.ReceiptInvoiceUrl, &updatedAt,
+		)
+		if err != nil {
+			log.Printf("[DB ROW ERROR] %v", err)
+			continue
+		}
+
+		item.PrinterCategory = pCat
+		item.Category = pCat
+		item.ColorSchemeType = cScheme
+		item.Status = pStatus
+		item.Name = item.Brand + " " + item.Model
+		item.UpdatedAt = updatedAt.Format(time.RFC3339)
+
+		if len(techJSON) > 0 {
+			json.Unmarshal(techJSON, &item.TechnicalSpecs)
+		}
+		if len(oemJSON) > 0 {
+			json.Unmarshal(oemJSON, &item.OemBaselineSpecs)
+		}
+		if len(compJSON) > 0 {
+			json.Unmarshal(compJSON, &item.Components)
+		}
+
 		items = append(items, item)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status": "success",
-		"data":   items,
-	})
+	return items, nil
 }
 
-// HandleCreateEquipment creates a new printer asset
-func HandleCreateEquipment(c *gin.Context) {
+func getEquipmentByIDFromDB(id string) (EquipmentItem, error) {
 	var item EquipmentItem
-	if err := c.ShouldBindJSON(&item); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	query := `
+		SELECT asset_id, serial_number, brand, model, category, color_scheme_type,
+		       total_color_slots, expected_life_a4_pages, maintenance_rate_percent,
+		       price_cost, vendor_supplier, warranty_expiry_year, status, location_dept,
+		       technical_specs, oem_baseline_specs, components,
+		       COALESCE(product_image_url, ''), COALESCE(receipt_invoice_url, ''), updated_at
+		FROM printers
+		WHERE asset_id = $1
+	`
+	var pCat, cScheme, pStatus string
+	var techJSON, oemJSON, compJSON []byte
+	var updatedAt time.Time
+
+	err := db.DB.QueryRow(query, id).Scan(
+		&item.ID, &item.SerialNumber, &item.Brand, &item.Model,
+		&pCat, &cScheme, &item.TotalColorSlots, &item.ExpectedLifeA4Pages,
+		&item.MaintenanceRatePercent, &item.Price, &item.Vendor,
+		&item.WarrantyExpirationYear, &pStatus, &item.Location,
+		&techJSON, &oemJSON, &compJSON,
+		&item.ProductImageUrl, &item.ReceiptInvoiceUrl, &updatedAt,
+	)
+
+	if err != nil {
+		return item, err
 	}
 
-	if item.ID == "" {
-		item.ID = "PRN-" + time.Now().Format("150405")
+	item.PrinterCategory = pCat
+	item.Category = pCat
+	item.ColorSchemeType = cScheme
+	item.Status = pStatus
+	item.Name = item.Brand + " " + item.Model
+	item.UpdatedAt = updatedAt.Format(time.RFC3339)
+
+	if len(techJSON) > 0 {
+		json.Unmarshal(techJSON, &item.TechnicalSpecs)
 	}
-	item.UpdatedAt = time.Now().Format(time.RFC3339)
+	if len(oemJSON) > 0 {
+		json.Unmarshal(oemJSON, &item.OemBaselineSpecs)
+	}
+	if len(compJSON) > 0 {
+		json.Unmarshal(compJSON, &item.Components)
+	}
 
-	assetStoreMutex.Lock()
-	equipmentStore[item.ID] = item
-	assetStoreMutex.Unlock()
-
-	c.JSON(http.StatusCreated, gin.H{
-		"status":  "success",
-		"message": "Equipment registered successfully",
-		"data":    item,
-	})
+	return item, nil
 }
 
-// HandleUpdateEquipment updates an existing printer asset
-func HandleUpdateEquipment(c *gin.Context) {
-	id := c.Param("id")
+func saveInboundToDB(assetID string, req InboundAssetRequest) error {
+	techBytes, _ := json.Marshal(req.TechnicalSpecs)
+	oemBytes, _ := json.Marshal(req.OemBaselineSpecs)
+	compBytes, _ := json.Marshal(req.Components)
 
-	var item EquipmentItem
-	if err := c.ShouldBindJSON(&item); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	// 1. Insert into inbound_transactions
+	inboundQuery := `
+		INSERT INTO inbound_transactions (
+			po_number, sku_code, item_name, supplier_name, category,
+			quantity, unit, total_price, payment_method, origin,
+			tariff_fee, freight_fee, product_image_url, receipt_slip_url, technical_specs
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+	`
+	_, _ = db.DB.Exec(inboundQuery,
+		req.PONumber, assetID, req.Name, req.Supplier, req.Category,
+		req.Quantity, req.Unit, req.Price, req.PaymentMethod, req.Origin,
+		req.TariffFee, req.FreightFee, req.ImgProduct, req.ImgSlip, string(techBytes),
+	)
+
+	// 2. Upsert printer asset
+	printerQuery := `
+		INSERT INTO printers (
+			asset_id, serial_number, brand, model, category,
+			color_scheme_type, total_color_slots, expected_life_a4_pages,
+			maintenance_rate_percent, purchase_date, price_cost, vendor_supplier,
+			warranty_expiry_year, status, location_dept, technical_specs,
+			oem_baseline_specs, components, product_image_url, receipt_invoice_url, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5::printer_category_enum,
+			$6::printer_color_scheme_enum, $7, $8,
+			$9, CURRENT_DATE, $10, $11,
+			$12, $13::printer_status_enum, $14, $15::jsonb,
+			$16::jsonb, $17::jsonb, $18, $19, NOW()
+		)
+		ON CONFLICT (asset_id) DO UPDATE SET
+			serial_number = EXCLUDED.serial_number,
+			brand = EXCLUDED.brand,
+			model = EXCLUDED.model,
+			category = EXCLUDED.category,
+			color_scheme_type = EXCLUDED.color_scheme_type,
+			total_color_slots = EXCLUDED.total_color_slots,
+			expected_life_a4_pages = EXCLUDED.expected_life_a4_pages,
+			maintenance_rate_percent = EXCLUDED.maintenance_rate_percent,
+			price_cost = EXCLUDED.price_cost,
+			vendor_supplier = EXCLUDED.vendor_supplier,
+			warranty_expiry_year = EXCLUDED.warranty_expiry_year,
+			status = EXCLUDED.status,
+			location_dept = EXCLUDED.location_dept,
+			technical_specs = EXCLUDED.technical_specs,
+			oem_baseline_specs = EXCLUDED.oem_baseline_specs,
+			components = EXCLUDED.components,
+			updated_at = NOW()
+	`
+
+	serial := req.SerialNumber
+	if serial == "" {
+		serial = "SN-" + assetID
+	}
+	brand := req.Brand
+	if brand == "" {
+		brand = "Generic"
+	}
+	model := req.Model
+	if model == "" {
+		model = req.Name
+	}
+	pCat := req.PrinterCategory
+	if pCat == "" {
+		pCat = "Inkjet"
+	}
+	cScheme := req.ColorSchemeType
+	if cScheme == "" {
+		cScheme = "CMYK"
+	}
+	status := req.Status
+	if status == "" {
+		status = "In Use"
 	}
 
-	item.ID = id
-	item.UpdatedAt = time.Now().Format(time.RFC3339)
+	_, err := db.DB.Exec(printerQuery,
+		assetID, serial, brand, model, pCat,
+		cScheme, req.TotalColorSlots, req.ExpectedLifeA4Pages,
+		req.MaintenanceRatePercent, req.Price, req.Vendor,
+		req.WarrantyExpirationYear, status, req.Location,
+		string(techBytes), string(oemBytes), string(compBytes),
+		req.ImgProduct, req.ImgSlip,
+	)
 
-	assetStoreMutex.Lock()
-	equipmentStore[id] = item
-	assetStoreMutex.Unlock()
-
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "success",
-		"message": "Equipment updated successfully",
-		"data":    item,
-	})
+	return err
 }
 
-// Helper to ensure JSON serialization of maps
+func updateEquipmentInDB(id string, item EquipmentItem) error {
+	techBytes, _ := json.Marshal(item.TechnicalSpecs)
+	oemBytes, _ := json.Marshal(item.OemBaselineSpecs)
+	compBytes, _ := json.Marshal(item.Components)
+
+	query := `
+		UPDATE printers SET
+			serial_number = COALESCE(NULLIF($1, ''), serial_number),
+			brand = COALESCE(NULLIF($2, ''), brand),
+			model = COALESCE(NULLIF($3, ''), model),
+			category = $4::printer_category_enum,
+			color_scheme_type = $5::printer_color_scheme_enum,
+			total_color_slots = $6,
+			expected_life_a4_pages = $7,
+			maintenance_rate_percent = $8,
+			price_cost = $9,
+			vendor_supplier = COALESCE(NULLIF($10, ''), vendor_supplier),
+			warranty_expiry_year = $11,
+			status = $12::printer_status_enum,
+			location_dept = COALESCE(NULLIF($13, ''), location_dept),
+			technical_specs = $14::jsonb,
+			oem_baseline_specs = $15::jsonb,
+			components = $16::jsonb,
+			updated_at = NOW()
+		WHERE asset_id = $17
+	`
+
+	pCat := item.PrinterCategory
+	if pCat == "" {
+		pCat = "Inkjet"
+	}
+	cScheme := item.ColorSchemeType
+	if cScheme == "" {
+		cScheme = "CMYK"
+	}
+	status := item.Status
+	if status == "" {
+		status = "In Use"
+	}
+	if item.WarrantyExpirationYear == 0 {
+		item.WarrantyExpirationYear = time.Now().Year() + 2
+	}
+
+	_, err := db.DB.Exec(query,
+		item.SerialNumber, item.Brand, item.Model, pCat,
+		cScheme, item.TotalColorSlots, item.ExpectedLifeA4Pages,
+		item.MaintenanceRatePercent, item.Price, item.Vendor,
+		item.WarrantyExpirationYear, status, item.Location,
+		string(techBytes), string(oemBytes), string(compBytes), id,
+	)
+
+	return err
+}
+
+// MarshalSpecs helper
 func MarshalSpecs(specs map[string]interface{}) (string, error) {
 	if len(specs) == 0 {
 		return "{}", nil

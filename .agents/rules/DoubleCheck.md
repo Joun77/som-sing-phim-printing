@@ -1,3 +1,7 @@
+---
+trigger: manual
+---
+
 [Task Context & Reference Document]
 ฉันได้แนบไฟล์ Implementation Plan (.md) ล่าสุดมาด้วย โปรดใช้เอกสารนี้เป็นเกณฑ์มาตรฐาน (Baseline) ในการตรวจสอบและพัฒนาโค้ดในโปรเจกต์ปัจจุบัน (`som-sing-phim-printing`)
 

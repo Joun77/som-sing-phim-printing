@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"backend/auth"
+	"backend/db"
 	"backend/inventory"
 	"backend/orders"
 	"backend/pricing"
@@ -12,10 +13,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CORSMiddleware configuration
+// CORSMiddleware configuration supporting multi-origin requests
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+		if origin != "" {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+		} else {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
@@ -30,6 +36,11 @@ func CORSMiddleware() gin.HandlerFunc {
 }
 
 func main() {
+	// Initialize PostgreSQL connection pool
+	if _, err := db.InitDB(); err != nil {
+		log.Printf("Starting with fallback mode (DB connection error: %v)", err)
+	}
+
 	router := gin.Default()
 
 	// Enable CORS
@@ -74,8 +85,15 @@ func main() {
 	router.POST("/api/equipment", inventory.HandleCreateEquipment)
 	router.PUT("/api/equipment/:id", inventory.HandleUpdateEquipment)
 
+	// Phase 1 API v1 Assets & Inbound Procurement routes
+	router.GET("/api/v1/assets", inventory.HandleGetAssetsV1)
+	router.GET("/api/v1/assets/:id", inventory.HandleGetAssetByIDV1)
+	router.POST("/api/v1/assets/inbound", inventory.HandleInboundAssetV1)
+	router.PUT("/api/v1/assets/:id", inventory.HandleUpdateAssetV1)
+
 	log.Println("Starting Go server on port 8080...")
 	if err := router.Run(":8080"); err != nil {
 		log.Fatalf("Failed to run server: %v", err)
 	}
 }
+

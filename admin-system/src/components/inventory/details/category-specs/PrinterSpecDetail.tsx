@@ -16,10 +16,10 @@ export default function PrinterSpecDetail({ item, colorLinks = [] }: { item: any
   const location = item.location || specs.location || 'Main Dept';
 
   // Filter color links matching this printer asset ID
-  const printerLinks = colorLinks.filter(l => l.assetId === item.id);
-  const slotsData = item.oemBaselineSpecs?.slots || printerLinks;
+  const printerLinks = colorLinks.filter(l => l.assetId === item.id || l.asset_id === item.id);
+  const slotsData = item.oemBaselineSpecs?.slots || item.oem_baseline_specs?.slots || item.printerColorLinks || printerLinks || [];
 
-  const components = item.components || [
+  const components = item.components || item.technical_specs?.components || [
     { name: 'Drum Unit (ຊຸດດຣຳ)', usage: 15, threshold: 90 },
     { name: 'Fuser Kit (ຊຸດຄວາມຮ້ອນ)', usage: 10, threshold: 90 },
     { name: 'Waste Toner (ກ່ອງໝຶກເສຍ)', usage: 20, threshold: 95 }

@@ -978,6 +978,17 @@ export const AppProvider = ({ children }) => {
     const saved = localStorage.getItem('ss_print_equipment_v6');
     return saved ? JSON.parse(saved) : initialEquipment;
   });
+
+  useEffect(() => {
+    fetch('/api/v1/assets')
+      .then(res => res.json())
+      .then(resData => {
+        if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
+          setEquipment(resData.data);
+        }
+      })
+      .catch(err => console.log('Notice: /api/v1/assets initial fetch note:', err));
+  }, []);
   const [orders, setOrders] = useState(() => {
     const saved = localStorage.getItem('ss_print_orders_v6');
     return saved ? JSON.parse(saved) : initialOrders;
