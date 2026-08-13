@@ -16,10 +16,10 @@ export const sampleInboundData = [
     unitPrice: 45000,
     totalPrice: 900000,
     specs: {
-      formFactor: 'แผ่น (Sheet)',
+      formFactor: 'ແຜ່ນ (Sheet)',
       grammage: '80 gsm',
       standardSize: 'A4 (210 x 297 mm)',
-      packQty: '500 แผ่น/รีม'
+      packQty: '500 ແຜ່ນ/ຣີມ'
     },
     itemPhoto: 'https://images.unsplash.com/photo-1586075010923-2dd4570fb338?w=500&auto=format&fit=crop&q=60',
     paymentSlip: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=500&auto=format&fit=crop&q=60'
@@ -28,7 +28,7 @@ export const sampleInboundData = [
     id: 'INB-2026-002',
     poNumber: 'PO-984211',
     sku: 'SKU-INK-CYAN-1L',
-    name: 'ນ້ຳໝຶກพิมพ์ Konica Cyan 1000ml',
+    name: 'ນ້ຳໝຶກພິມ Konica Cyan 1000ml',
     category: 'INK',
     categoryPill: 'Ink',
     receiptDate: '2026-08-03',
@@ -36,11 +36,11 @@ export const sampleInboundData = [
     paymentMethod: 'TRANSFER',
     paymentStatus: 'PAID',
     initialQty: 10,
-    unit: 'ขวด',
+    unit: 'ຂວດ',
     unitPrice: 250000,
     totalPrice: 2500000,
     specs: {
-      inkType: 'Pigment (กันน้ำ)',
+      inkType: 'Pigment (ກັນນ້ຳ)',
       colorModel: 'Cyan (C)',
       volumePerBottle: '1000 ml',
       compatiblePrinter: 'Konica Minolta AccurioPress C6085'
@@ -60,13 +60,13 @@ export const sampleInboundData = [
     paymentMethod: 'CASH',
     paymentStatus: 'PAID',
     initialQty: 50,
-    unit: 'กล่อง',
+    unit: 'ກ່ອງ',
     unitPrice: 12000,
     totalPrice: 600000,
     specs: {
-      hwType: 'ลวดเย็บเข้าเล่ม',
-      hwSpec: 'No.3-1M (เย็บได้ 30 แผ่น)',
-      packCount: '1,000 ลวด/กล่อง'
+      hwType: 'ລວດເຢັບແມັກ',
+      hwSpec: 'No.3-1M (ເຢັບໄດ້ 30 ແຜ່ນ)',
+      packCount: '1,000 ລວດ/ກ່ອງ'
     },
     itemPhoto: null,
     paymentSlip: null

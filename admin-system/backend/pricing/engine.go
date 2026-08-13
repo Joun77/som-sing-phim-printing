@@ -17,13 +17,14 @@ type CalculationRequest struct {
 	JobName          string  `json:"job_name" binding:"required"`
 	Quantity         int     `json:"quantity" binding:"required,gt=0"`
 	PaperSku         string  `json:"paper_sku" binding:"required"`
-	PaperCostPerUnit float64 `json:"paper_cost_per_unit"` // Cost per sheet (sheet format)
+	PaperCostPerUnit float64 `json:"paper_cost_per_unit"` // Cost per ream/pack or unit
 	PaperFormat      string  `json:"paper_format"`        // "sheet" | "roll"
+	SheetsPerPack    int     `json:"sheets_per_pack"`     // Sheets per pack/ream (default 500)
 
 	// Roll-fed paper pricing
 	PaperRollPricePerM2 float64 `json:"paper_roll_price_per_m2"` // LAK per m² for roll paper
 
-	// Legacy Ink spec (for backward compatibility)
+	// Legacy Ink spec
 	InkCoveragePercent float64 `json:"ink_coverage_percent"`
 	InkCostPerMl       float64 `json:"ink_cost_per_ml"`
 
@@ -32,11 +33,14 @@ type CalculationRequest struct {
 	InkCoverageCMYPercent float64 `json:"ink_coverage_cmy_percent"`
 	InkCostKPerMl         float64 `json:"ink_cost_k_per_ml"`
 	InkCostCMYPerMl       float64 `json:"ink_cost_cmy_per_ml"`
+	IsoYieldK             float64 `json:"iso_yield_k"`   // ISO 5% A4 yield for K (default 4000)
+	IsoYieldCMY           float64 `json:"iso_yield_cmy"` // ISO 5% A4 yield for CMY (default 4000)
 
 	// Printer / Machine Depreciation and Maintenance
 	MachinePrice           float64 `json:"machine_price"`
 	TargetTotalPages       float64 `json:"target_total_pages"`
 	MaintenanceCostPerPage float64 `json:"maintenance_cost_per_page"`
+	MaintenanceRatePercent float64 `json:"maintenance_rate_percent"` // Maintenance rate % (default 20%)
 
 	// Job dimensions for Area Factor calculation
 	JobWidth  float64 `json:"job_width"`  // in mm
@@ -75,7 +79,7 @@ type CalculationResponse struct {
 	JobName  string `json:"job_name"`
 	Quantity int    `json:"quantity"`
 
-	// Area Factor S = jobW×jobH / (210×297)
+	// Area Factor S = jobW×jobH / 62,370
 	AreaFactor float64 `json:"area_factor"`
 
 	// Cost breakdown
@@ -96,6 +100,7 @@ type CalculationResponse struct {
 	Subtotal        float64 `json:"subtotal"`          // DirectCost + OverheadCost
 	SpoilageCost    float64 `json:"spoilage_cost"`     // Subtotal × SpoilagePercent
 	NetInternalCost float64 `json:"net_internal_cost"` // Subtotal × (1 + SpoilagePercent)
+	TotalCost       float64 `json:"total_cost"`        // Total internal cost (alias)
 
 	// Selling price pipeline
 	SalePrice      float64 `json:"sale_price"`      // NetInternalCost / (1 − Margin)
@@ -111,10 +116,10 @@ type CalculationResponse struct {
 	CustomOptions []CustomFinishingOption `json:"custom_options"`
 }
 
-// a4BaselineArea is the reference area (mm²) used for Paper Area Factor S
-const a4BaselineArea = 210.0 * 297.0
+// a4BaselineArea is the reference area (mm²) used for Paper Area Factor S (210 x 297 mm = 62370)
+const a4BaselineArea = 62370.0
 
-// CalculateJobPricing performs the backend pricing engine math
+// CalculateJobPricing performs the backend pricing engine math according to Spec Section 4
 func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	if req.Quantity <= 0 {
 		return CalculationResponse{}, errors.New("quantity must be greater than zero")
@@ -153,22 +158,27 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		jobH = 297.0
 	}
 
-	// ── 0. Paper Area Factor S ─────────────────────────────────────────────────
-	// S = 1.0 for A4 (baseline). A3 → S=2.0, A5 → S=0.5, A6 → S=0.25
+	// ── Step 1: Paper Area Factor S (S = JobArea / 62,370 mm²) ─────────────────
 	areaFactor := (jobW * jobH) / a4BaselineArea
 
-	// ── 1. Paper Cost ─────────────────────────────────────────────────────────
+	// ── Step 4: Paper Cost ────────────────────────────────────────────────────
 	var paperCost float64
 	if req.PaperFormat == "roll" && req.PaperRollPricePerM2 > 0 {
 		// Roll-fed: price = pricePerM2 × jobArea(m²) × quantity
 		jobAreaM2 := (jobW / 1000.0) * (jobH / 1000.0)
 		paperCost = req.PaperRollPricePerM2 * jobAreaM2 * float64(req.Quantity)
 	} else {
-		// Sheet-fed: flat cost per sheet × quantity
-		paperCost = float64(req.Quantity) * req.PaperCostPerUnit
+		// Sheet-fed: (Unit Price / SheetsPerPack) * Factor S * Quantity
+		sheetsPerPack := req.SheetsPerPack
+		if sheetsPerPack <= 0 {
+			sheetsPerPack = 500
+		}
+		costPerSheet := req.PaperCostPerUnit / float64(sheetsPerPack)
+		paperCost = costPerSheet * areaFactor * float64(req.Quantity)
 	}
 
-	// ── 2. Ink Cost (ISO 5% = 0.007 ml/A4 page, scaled by Area Factor S) ──────
+	// ── Step 2: Ink Cost (Section 4 ISO Yield Formula) ────────────────────────
+	// InkCost_Color = (Price_Color / ISOYield_Color) * (%Cov_Color / 5%) * Factor S * Quantity
 	inkCovK := req.InkCoverageKPercent
 	inkCovCMY := req.InkCoverageCMYPercent
 	if inkCovK == 0 && inkCovCMY == 0 && req.InkCoveragePercent > 0 {
@@ -179,39 +189,51 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	}
 
 	costK := req.InkCostKPerMl
-	if costK == 0 {
+	if costK <= 0 {
 		costK = req.InkCostPerMl
 	}
-	if costK == 0 {
-		costK = 500.0
+	if costK <= 0 {
+		costK = 250000.0 // Default bottle cost in LAK
 	}
 
 	costCMY := req.InkCostCMYPerMl
-	if costCMY == 0 {
+	if costCMY <= 0 {
 		costCMY = req.InkCostPerMl
 	}
-	if costCMY == 0 {
-		costCMY = 500.0
+	if costCMY <= 0 {
+		costCMY = 250000.0 // Default bottle cost in LAK
 	}
 
-	// 0.007 ml per 1% coverage at A4 baseline, scaled by S for other sizes
-	inkVolumeKPerPage := 0.007 * inkCovK * areaFactor
-	inkVolumeCMYPerPage := 0.007 * inkCovCMY * areaFactor
+	isoK := req.IsoYieldK
+	if isoK <= 0 {
+		isoK = 4000.0
+	}
+	isoCMY := req.IsoYieldCMY
+	if isoCMY <= 0 {
+		isoCMY = 4000.0
+	}
 
-	totalInkVolumeKMl := float64(req.Quantity) * inkVolumeKPerPage
-	totalInkVolumeCMYMl := float64(req.Quantity) * inkVolumeCMYPerPage
-
-	inkCostK := totalInkVolumeKMl * costK
-	inkCostCMY := totalInkVolumeCMYMl * costCMY
+	inkCostK := (costK / isoK) * (inkCovK / 5.0) * areaFactor * float64(req.Quantity)
+	inkCostCMY := (costCMY / isoCMY) * (inkCovCMY / 5.0) * areaFactor * float64(req.Quantity)
 	inkCost := inkCostK + inkCostCMY
 
-	// ── 3. Machine Depreciation & Maintenance (scaled by Area Factor S) ────────
-	// Per-impression cost at A4 is (MachinePrice / LifetimePagesAtA4).
-	// For larger paper, each impression costs proportionally more: × S
-	depreciationCost := 0.0
-	if req.TargetTotalPages > 0 {
-		depreciationCost = (req.MachinePrice / req.TargetTotalPages) * areaFactor * float64(req.Quantity)
+	// ── Step 3: Machine Depreciation & Maintenance (Section 4) ────────────────
+	// Machine Cost = (Price Cost * (1 + Maintenance Rate / 100) / Expected Life Pages) * Factor S * Quantity
+	maintRate := req.MaintenanceRatePercent
+	if maintRate <= 0 {
+		maintRate = 20.0 // Default 20% maintenance rate
 	}
+	lifePages := req.TargetTotalPages
+	if lifePages <= 0 {
+		lifePages = 500000.0
+	}
+
+	machinePrice := req.MachinePrice
+	if machinePrice <= 0 {
+		machinePrice = 50000000.0 // Default printer price LAK
+	}
+
+	depreciationCost := (machinePrice * (1.0 + maintRate/100.0) / lifePages) * areaFactor * float64(req.Quantity)
 	maintenanceCost := req.MaintenanceCostPerPage * areaFactor * float64(req.Quantity)
 
 	// ── 4. Custom Finishing options ────────────────────────────────────────────
@@ -345,6 +367,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		Subtotal:            subtotal,
 		SpoilageCost:        spoilageCost,
 		NetInternalCost:     netInternalCost,
+		TotalCost:           netInternalCost,
 		SalePrice:           salePrice,
 		DiscountAmount:      discountAmount,
 		TaxAmount:           taxAmount,

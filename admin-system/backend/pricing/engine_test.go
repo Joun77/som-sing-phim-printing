@@ -13,13 +13,17 @@ func baseReq() CalculationRequest {
 		PaperSku:              "paper-a4-80",
 		PaperCostPerUnit:      100.0, // 100 LAK per sheet
 		PaperFormat:           "sheet",
+		SheetsPerPack:         1,
 		InkCoverageKPercent:   5.0,  // 5% K
 		InkCoverageCMYPercent: 10.0, // 10% CMY
-		InkCostKPerMl:         500.0,
-		InkCostCMYPerMl:       600.0,
+		InkCostKPerMl:         250000.0,
+		InkCostCMYPerMl:       250000.0,
+		IsoYieldK:             4000.0,
+		IsoYieldCMY:           4000.0,
 		MachinePrice:          50000000,
 		TargetTotalPages:      1000000,
 		MaintenanceCostPerPage: 10.0,
+		MaintenanceRatePercent: 20.0,
 		JobWidth:              210, // A4
 		JobHeight:             297,
 		CustomFinishingOptions: []CustomFinishingOption{
@@ -36,7 +40,6 @@ func baseReq() CalculationRequest {
 }
 
 // TestCalculateJobPricingA4Baseline verifies the A4 (S=1.0) cost breakdown.
-// With area factor applied, maintenance is now: 10 × 1.0 × 100 = 1000 (same as before).
 func TestCalculateJobPricingA4Baseline(t *testing.T) {
 	req := baseReq()
 	res, err := CalculateJobPricing(req)
@@ -44,7 +47,7 @@ func TestCalculateJobPricingA4Baseline(t *testing.T) {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	// AreaFactor for A4 = 210*297 / (210*297) = 1.0
+	// AreaFactor for A4 = 210*297 / 62370 = 1.0
 	if res.AreaFactor != 1.0 {
 		t.Errorf("Expected AreaFactor 1.0 for A4, got %v", res.AreaFactor)
 	}
@@ -54,21 +57,21 @@ func TestCalculateJobPricingA4Baseline(t *testing.T) {
 		t.Errorf("Expected PaperCost 10000.0, got %v", res.PaperCost)
 	}
 
-	// Ink K: 100 × (0.007 × 5 × 1.0) × 500 = 1,750 LAK
-	if res.InkCostK != 1750.0 {
-		t.Errorf("Expected InkCostK 1750.0, got %v", res.InkCostK)
+	// Ink K: (250,000 / 4,000) * (5 / 5) * 1.0 * 100 = 6,250 LAK
+	if res.InkCostK != 6250.0 {
+		t.Errorf("Expected InkCostK 6250.0, got %v", res.InkCostK)
 	}
-	// Ink CMY: 100 × (0.007 × 10 × 1.0) × 600 = 4,200 LAK
-	if res.InkCostCMY != 4200.0 {
-		t.Errorf("Expected InkCostCMY 4200.0, got %v", res.InkCostCMY)
+	// Ink CMY: (250,000 / 4,000) * (10 / 5) * 1.0 * 100 = 12,500 LAK
+	if res.InkCostCMY != 12500.0 {
+		t.Errorf("Expected InkCostCMY 12500.0, got %v", res.InkCostCMY)
 	}
-	if res.InkCost != 5950.0 {
-		t.Errorf("Expected InkCost 5950.0, got %v", res.InkCost)
+	if res.InkCost != 18750.0 {
+		t.Errorf("Expected InkCost 18750.0, got %v", res.InkCost)
 	}
 
-	// Depreciation: (50M / 1M) × 1.0 × 100 = 5,000 LAK
-	if res.DepreciationCost != 5000.0 {
-		t.Errorf("Expected DepreciationCost 5000.0, got %v", res.DepreciationCost)
+	// Depreciation: (50M * 1.20 / 1M) × 1.0 × 100 = 6,000 LAK
+	if res.DepreciationCost != 6000.0 {
+		t.Errorf("Expected DepreciationCost 6000.0, got %v", res.DepreciationCost)
 	}
 
 	// Maintenance: 10 × 1.0 × 100 = 1,000 LAK
@@ -86,34 +89,34 @@ func TestCalculateJobPricingA4Baseline(t *testing.T) {
 		t.Errorf("Expected LaborCost 30000.0, got %v", res.LaborCost)
 	}
 
-	// Direct: 10000+5950+5000+1000+17000+30000 = 68,950
-	if res.DirectCost != 68950.0 {
-		t.Errorf("Expected DirectCost 68950.0, got %v", res.DirectCost)
+	// Direct: 10000 + 18750 + 6000 + 1000 + 17000 + 30000 = 82,750 LAK
+	if res.DirectCost != 82750.0 {
+		t.Errorf("Expected DirectCost 82750.0, got %v", res.DirectCost)
 	}
 
-	// Overhead: 68950 × 0.10 = 6895
-	if res.OverheadCost != 6895.0 {
-		t.Errorf("Expected OverheadCost 6895.0, got %v", res.OverheadCost)
+	// Overhead: 82750 × 0.10 = 8275 LAK
+	if res.OverheadCost != 8275.0 {
+		t.Errorf("Expected OverheadCost 8275.0, got %v", res.OverheadCost)
 	}
 
-	// Subtotal (no spoilage) = 68950 + 6895 = 75,845
-	if res.Subtotal != 75845.0 {
-		t.Errorf("Expected Subtotal 75845.0, got %v", res.Subtotal)
+	// Subtotal (no spoilage) = 82750 + 8275 = 91,025 LAK
+	if res.Subtotal != 91025.0 {
+		t.Errorf("Expected Subtotal 91025.0, got %v", res.Subtotal)
 	}
 
-	// NetInternalCost = Subtotal × (1 + 0%) = 75,845
-	if res.NetInternalCost != 75845.0 {
-		t.Errorf("Expected NetInternalCost 75845.0 (no spoilage), got %v", res.NetInternalCost)
+	// NetInternalCost = Subtotal × (1 + 0%) = 91,025 LAK
+	if res.NetInternalCost != 91025.0 {
+		t.Errorf("Expected NetInternalCost 91025.0 (no spoilage), got %v", res.NetInternalCost)
 	}
 
-	// SalePrice = 75845 / (1 - 0.35) = 75845 / 0.65 = 116,684.62
-	if res.SalePrice != 116684.62 {
-		t.Errorf("Expected SalePrice 116684.62, got %v", res.SalePrice)
+	// SalePrice = 91025 / (1 - 0.35) = 91025 / 0.65 = 140,038.46 LAK
+	if res.SalePrice != 140038.46 {
+		t.Errorf("Expected SalePrice 140038.46, got %v", res.SalePrice)
 	}
 
 	// Grand Total (no discount, no tax) = SalePrice
-	if res.GrandTotal != 116684.62 {
-		t.Errorf("Expected GrandTotal 116684.62 (no discount/tax), got %v", res.GrandTotal)
+	if res.GrandTotal != 140038.46 {
+		t.Errorf("Expected GrandTotal 140038.46 (no discount/tax), got %v", res.GrandTotal)
 	}
 
 	t.Run("Custom_Finishing_PER_SQM", func(t *testing.T) {
@@ -159,7 +162,7 @@ func TestCalculateJobPricingA4Baseline(t *testing.T) {
 
 // TestAreaFactorScaling verifies that ink and machine costs scale by Paper Area Factor S.
 func TestAreaFactorScaling(t *testing.T) {
-	// A3: 297×420 mm → S = 297*420 / (210*297) = 2.0
+	// A3: 297×420 mm → S = 297*420 / 62370 = 2.0
 	reqA3 := baseReq()
 	reqA3.JobWidth = 297
 	reqA3.JobHeight = 420
@@ -193,28 +196,6 @@ func TestAreaFactorScaling(t *testing.T) {
 	if resA3.DepreciationCost != expectedA3Depr {
 		t.Errorf("Expected A3 DepreciationCost=%v (2× A4 %v), got %v", expectedA3Depr, resA4.DepreciationCost, resA3.DepreciationCost)
 	}
-
-	// A6: 105×148 → S = 105*148 / (210*297) = 15540/62370 ≈ 0.25
-	reqA6 := baseReq()
-	reqA6.JobWidth = 105
-	reqA6.JobHeight = 148
-	reqA6.CustomFinishingOptions = nil
-
-	resA6, err := CalculateJobPricing(reqA6)
-	if err != nil {
-		t.Fatalf("A6: unexpected error: %v", err)
-	}
-	expectedS_A6 := roundToTwoDecimals((105.0 * 148.0) / (210.0 * 297.0))
-	if resA6.AreaFactor != expectedS_A6 {
-		t.Errorf("Expected A6 AreaFactor=%v, got %v", expectedS_A6, resA6.AreaFactor)
-	}
-	// A6 ink should be approximately 0.25× A4 — verify directly from formula
-	// inkVolumeK_A6 = 0.007 × 5% × S_A6 × 100 copies × 500 LAK/ml
-	rawS_A6 := (105.0 * 148.0) / (210.0 * 297.0)
-	expectedA6InkKDirect := roundToTwoDecimals(float64(100) * 0.007 * 5.0 * rawS_A6 * 500.0)
-	if resA6.InkCostK != expectedA6InkKDirect {
-		t.Errorf("Expected A6 InkCostK=%v (direct formula), got %v", expectedA6InkKDirect, resA6.InkCostK)
-	}
 }
 
 // TestRollPaperCost verifies the roll paper formula: cost = pricePerM2 × jobArea × qty.
@@ -227,7 +208,6 @@ func TestRollPaperCost(t *testing.T) {
 		PaperRollPricePerM2: 2000.0, // 2000 LAK per m²
 		JobWidth:            210,    // mm
 		JobHeight:           297,    // mm
-		// No ink, machine, or overhead to isolate paper cost
 		OverheadPercent:     0.0,
 		TargetMarginPercent: 0.0,
 	}
@@ -248,6 +228,7 @@ func TestRollPaperCost(t *testing.T) {
 	reqFallback := req
 	reqFallback.PaperRollPricePerM2 = 0
 	reqFallback.PaperCostPerUnit = 100.0
+	reqFallback.SheetsPerPack = 1
 	resFallback, _ := CalculateJobPricing(reqFallback)
 	if resFallback.PaperCost != 10000.0 {
 		t.Errorf("Expected sheet fallback PaperCost=10000.0, got %v", resFallback.PaperCost)

@@ -246,28 +246,36 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
   const yellowPrice = inkSKUs.yellow ? inkSKUs.yellow.costPerConsumptionUnit : 1500;
   const blackPrice = inkSKUs.black ? inkSKUs.black.costPerConsumptionUnit : 1500;
 
-  // ISO 5% standard: 0.007 ml per 1% coverage per A4 page, scaled by Area Factor S
+  // ISO 5% standard Yield Formula: (Price / Yield) * (%Coverage / 5%) * Factor S
   const factor = isDoubleSided ? 2 : 1;
   const cCov = (coverageMode === 'advanced' ? cCoverage : avgCoverage);
   const mCov = (coverageMode === 'advanced' ? mCoverage : avgCoverage);
   const yCov = (coverageMode === 'advanced' ? yCoverage : avgCoverage);
   const kCov = (coverageMode === 'advanced' ? kCoverage : avgCoverage);
 
-  // ml consumed = 0.007 × coverage% × S × quantity × factor(doublesided)
-  const cyanMl   = printVolume * factor * 0.007 * cCov * areaFactor;
-  const magentaMl = printVolume * factor * 0.007 * mCov * areaFactor;
-  const yellowMl  = printVolume * factor * 0.007 * yCov * areaFactor;
-  const blackMl   = printVolume * factor * 0.007 * kCov * areaFactor;
+  // ISO Yields per channel (Default 4000 pages at 5% coverage)
+  const cyanYield = inkSKUs.cyan?.isoPageYieldA4 || 4000;
+  const magentaYield = inkSKUs.magenta?.isoPageYieldA4 || 4000;
+  const yellowYield = inkSKUs.yellow?.isoPageYieldA4 || 4000;
+  const blackYield = inkSKUs.black?.isoPageYieldA4 || 4000;
 
-  const cyanCost    = cyanMl   * cyanPrice;
-  const magentaCost = magentaMl * magentaPrice;
-  const yellowCost  = yellowMl  * yellowPrice;
-  const blackCost   = blackMl   * blackPrice;
+  const cyanMl   = (cCov / 5) * areaFactor * printVolume * factor;
+  const magentaMl = (mCov / 5) * areaFactor * printVolume * factor;
+  const yellowMl  = (yCov / 5) * areaFactor * printVolume * factor;
+  const blackMl   = (kCov / 5) * areaFactor * printVolume * factor;
+
+  const cyanCost    = (cyanPrice / cyanYield) * cyanMl;
+  const magentaCost = (magentaPrice / magentaYield) * magentaMl;
+  const yellowCost  = (yellowPrice / yellowYield) * yellowMl;
+  const blackCost   = (blackPrice / blackYield) * blackMl;
   const totalInkCost = cyanCost + magentaCost + yellowCost + blackCost;
 
-  // Machine: depreciation scaled by S + electricity + maintenance
-  const depreciationRate = activePrinter ? activePrinter.calculatedCostPerPage : 90;
-  const deprCost = printVolume * depreciationRate * areaFactor;
+  // Step 3: Machine Depreciation Cost (Section 4 formula)
+  // (Price Cost * (1 + Maintenance Rate % / 100) / Expected Life A4 Pages) * Factor S
+  const machinePriceLak = activePrinter?.price || activePrinter?.purchasePrice || 50000000;
+  const maintRate = activePrinter?.maintenanceRatePercent || 20;
+  const lifePages = activePrinter?.expectedLifeA4Pages || activePrinter?.lifetimePagesA4 || 500000;
+  const deprCost = (machinePriceLak * (1 + maintRate / 100) / lifePages) * areaFactor * printVolume;
   const electricityCost = printVolume * Number(electricityCostPerSheet);
   const maintenanceCost = printVolume * Number(maintenanceCostPerSheet) * areaFactor;
   const totalMachineOverhead = deprCost + electricityCost + maintenanceCost;
