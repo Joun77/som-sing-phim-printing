@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Users, UserPlus, Pencil, Trash2, Phone, MapPin, Star,
   Clock, Calendar, CheckCircle2, XCircle, AlertCircle,
@@ -169,6 +169,36 @@ export default function EmployeeManagement() {
   const formatLAK = (n) => (n || n === 0) ? formatCurrency(n) : '—';
 
   const [employees, setEmployees] = useState(INITIAL_EMPLOYEES);
+
+  useEffect(() => {
+    fetch('http://localhost:8080/api/employees')
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success' && Array.isArray(data.data) && data.data.length > 0) {
+          const mapped = data.data.map((item: any) => ({
+            id: item.id,
+            name: item.nameLo || item.name,
+            nameEn: item.nameEn || item.name,
+            role: item.role,
+            department: item.department || 'Digital Printing',
+            phone: item.phone,
+            address: item.address,
+            salary: item.salaryLAK || item.salary || 0,
+            salaryType: 'monthly',
+            startDate: item.createdAt ? item.createdAt.split('T')[0] : '2024-01-01',
+            status: (item.status || 'active').toLowerCase(),
+            attendance: { present: 20, absent: 0, late: 0 },
+            skills: item.skills || [],
+            shift: 'morning',
+            avatar: item.nameEn ? item.nameEn.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) : 'EM',
+            rating: 5.0
+          }));
+          setEmployees(mapped);
+        }
+      })
+      .catch(err => console.log('Using initial employees fallback', err));
+  }, []);
+
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -226,13 +256,32 @@ export default function EmployeeManagement() {
     const skillArr = form.skills ? form.skills.split(',').map(s => s.trim()).filter(Boolean) : [];
     const avatarInit = form.nameEn ? form.nameEn.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : form.name.slice(0, 2);
 
+    const payload = {
+      id: isEditing ? form.id : `EMP-${String(Date.now()).slice(-3).padStart(3, '0')}`,
+      nameLo: form.name,
+      nameEn: form.nameEn || form.name,
+      role: form.role,
+      department: 'Digital Printing',
+      phone: form.phone,
+      address: form.address,
+      salaryLAK: Number(form.salary) || 0,
+      status: form.status ? form.status.toUpperCase() : 'ACTIVE',
+      skills: skillArr
+    };
+
+    fetch(isEditing ? `http://localhost:8080/api/employees/${form.id}` : 'http://localhost:8080/api/employees', {
+      method: isEditing ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => console.log('API save error', err));
+
     if (isEditing) {
       setEmployees(prev => prev.map(e => e.id === form.id ? { ...form, skills: skillArr, avatar: avatarInit } : e));
       showToast(T('ອັບເດດຂໍ້ມູນພະນັກງານສຳເລັດ!', 'Employee updated successfully!'), 'success');
     } else {
       const newEmp = {
         ...form,
-        id: `EMP-${String(Date.now()).slice(-3).padStart(3, '0')}`,
+        id: payload.id,
         skills: skillArr,
         avatar: avatarInit,
         salary: Number(form.salary) || 0,
@@ -249,6 +298,8 @@ export default function EmployeeManagement() {
     askConfirmation(
       T(`ທ່ານຕ້ອງການລຶບພະນັກງານ "${emp.name}" ແທ້ ຫຼື ບໍ່?`, `Delete employee "${emp.nameEn}"?`),
       () => {
+        fetch(`http://localhost:8080/api/employees/${emp.id}`, { method: 'DELETE' })
+          .catch(err => console.log('API delete error', err));
         setEmployees(prev => prev.filter(e => e.id !== emp.id));
         if (selectedEmp?.id === emp.id) setSelectedEmp(null);
         showToast(T('ລຶບຂໍ້ມູນພະນັກງານສຳເລັດ!', 'Employee deleted!'), 'success');

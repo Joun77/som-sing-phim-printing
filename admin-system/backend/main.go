@@ -5,10 +5,14 @@ import (
 	"net/http"
 
 	"backend/auth"
+	"backend/customers"
 	"backend/db"
+	"backend/hr"
+	"backend/inbound"
 	"backend/inventory"
 	"backend/orders"
 	"backend/pricing"
+	"backend/spoilage"
 
 	"github.com/gin-gonic/gin"
 )
@@ -69,6 +73,15 @@ func main() {
 	router.PUT("/api/orders/:id/deposit", orders.HandleRecordDeposit)
 	router.PUT("/api/orders/:id/status", orders.HandleUpdateOrderStatus)
 
+	// CRM Customer routes
+	router.GET("/api/customers", customers.HandleGetCustomers)
+	router.POST("/api/customers", customers.HandleCreateCustomer)
+	router.PUT("/api/customers/:id", customers.HandleUpdateCustomer)
+
+	// Spoilage audit log routes
+	router.GET("/api/spoilage", spoilage.HandleGetSpoilageLogs)
+	router.POST("/api/spoilage", spoilage.HandleCreateSpoilageLog)
+
 	// PDF Generation routes
 	router.GET("/api/orders/:id/pdf/quotation", orders.HandleGenerateQuotationPDF)
 	router.GET("/api/orders/:id/pdf/delivery", orders.HandleGenerateDeliveryPDF)
@@ -84,6 +97,16 @@ func main() {
 	router.GET("/api/equipment", inventory.HandleGetEquipment)
 	router.POST("/api/equipment", inventory.HandleCreateEquipment)
 	router.PUT("/api/equipment/:id", inventory.HandleUpdateEquipment)
+
+	// HR Employee Management routes
+	router.GET("/api/employees", hr.HandleGetEmployees)
+	router.POST("/api/employees", hr.HandleCreateEmployee)
+	router.PUT("/api/employees/:id", hr.HandleUpdateEmployee)
+	router.DELETE("/api/employees/:id", hr.HandleDeleteEmployee)
+
+	// Inbound Procurement routes
+	router.GET("/api/inbound", inbound.HandleGetInboundTransactions)
+	router.POST("/api/inbound", inbound.HandleCreateInboundTransaction)
 
 	// Phase 1 API v1 Assets & Inbound Procurement routes
 	router.GET("/api/v1/assets", inventory.HandleGetAssetsV1)

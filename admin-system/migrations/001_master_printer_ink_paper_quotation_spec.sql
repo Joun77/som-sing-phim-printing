@@ -109,7 +109,31 @@ CREATE INDEX IF NOT EXISTS idx_pcl_asset_id ON printer_color_link(asset_id);
 CREATE INDEX IF NOT EXISTS idx_pcl_ink_code ON printer_color_link(ink_code);
 
 -- ============================================================================
--- 5. TABLE: paper_catalog (Paper & Media Catalog)
+-- 5. TABLE: materials (Inventory Master SKUs)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS materials (
+    id VARCHAR(100) PRIMARY KEY,
+    sku VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    category VARCHAR(50) NOT NULL,
+    stock_qty NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    consumption_unit VARCHAR(50) NOT NULL DEFAULT 'Unit',
+    purchase_unit VARCHAR(50) NOT NULL DEFAULT 'Pack',
+    purchase_multiplier NUMERIC(12, 2) NOT NULL DEFAULT 1.00,
+    cost_per_purchase_unit NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+    cost_per_consumption_unit NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+    reorder_threshold NUMERIC(12, 2) NOT NULL DEFAULT 10.00,
+    technical_specs JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_materials_sku ON materials(sku);
+CREATE INDEX IF NOT EXISTS idx_materials_category ON materials(category);
+
+-- ============================================================================
+-- 5.2 TABLE: paper_catalog (Paper & Media Catalog)
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS paper_catalog (
@@ -195,4 +219,86 @@ CREATE TABLE IF NOT EXISTS inbound_transactions (
 
 CREATE INDEX IF NOT EXISTS idx_inbound_sku ON inbound_transactions(sku_code);
 CREATE INDEX IF NOT EXISTS idx_inbound_date ON inbound_transactions(inbound_date);
+
+-- ============================================================================
+-- 8. TABLE: customers (CRM Customers)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS customers (
+    id VARCHAR(100) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    phone VARCHAR(100),
+    email VARCHAR(100),
+    address TEXT,
+    credit_limit NUMERIC(15, 2) DEFAULT 1000000.00,
+    payment_terms VARCHAR(50) DEFAULT 'Net 30',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
+
+-- ============================================================================
+-- 9. TABLES: orders & order_items (Production & Sales Orders)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS orders (
+    id VARCHAR(100) PRIMARY KEY,
+    order_number VARCHAR(100) NOT NULL UNIQUE,
+    customer_name VARCHAR(255) NOT NULL,
+    customer_phone VARCHAR(100),
+    status VARCHAR(50) NOT NULL DEFAULT 'WAITING_DEPOSIT',
+    deposit_amount NUMERIC(15, 2) DEFAULT 0.00,
+    total_price NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+    total_cost NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+    google_drive_link TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_name);
+
+CREATE TABLE IF NOT EXISTS order_items (
+    id VARCHAR(100) PRIMARY KEY,
+    order_id VARCHAR(100) NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    job_name VARCHAR(255) NOT NULL,
+    quantity INT NOT NULL DEFAULT 1,
+    unit_price_snapshot NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+    cost_price_snapshot NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+    specs JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+
+-- ============================================================================
+-- 10. TABLE: currency_rates (Daily Exchange Rates)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS currency_rates (
+    currency_code VARCHAR(10) PRIMARY KEY,
+    rate_to_lak NUMERIC(15, 4) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================================================
+-- 11. TABLE: spoilage_logs (Defect & Spoilage Audit Log)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS spoilage_logs (
+    id VARCHAR(100) PRIMARY KEY,
+    order_id VARCHAR(100),
+    machine_id VARCHAR(100),
+    material_id VARCHAR(100),
+    paper_sku VARCHAR(100),
+    spoilage_qty NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    unit VARCHAR(50) DEFAULT 'Sheet',
+    reason TEXT,
+    cost_impact NUMERIC(15, 2) DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_spoilage_order ON spoilage_logs(order_id);
+
 

@@ -17,7 +17,7 @@ var DB *sql.DB
 func InitDB() (*sql.DB, error) {
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
-		host := getEnv("DB_HOST", "localhost")
+		host := getEnv("DB_HOST", "127.0.0.1")
 		port := getEnv("DB_PORT", "5432")
 		user := getEnv("DB_USER", "postgres")
 		pass := getEnv("DB_PASSWORD", "postgres")
@@ -58,14 +58,16 @@ func InitDB() (*sql.DB, error) {
 
 // RunMigrations executes migration scripts found in the migrations folder
 func RunMigrations(db *sql.DB) error {
-	possiblePaths := []string{
+	migrationFiles := []string{
 		"../migrations/001_master_printer_ink_paper_quotation_spec.sql",
 		"migrations/001_master_printer_ink_paper_quotation_spec.sql",
+		"../migrations/002_employees_offcuts_inbound.sql",
+		"migrations/002_employees_offcuts_inbound.sql",
 		"../schema.sql",
 		"schema.sql",
 	}
 
-	for _, path := range possiblePaths {
+	for _, path := range migrationFiles {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
 			continue
@@ -75,14 +77,12 @@ func RunMigrations(db *sql.DB) error {
 			log.Printf("[DB MIGRATION] Executing migration script from %s...", absPath)
 			_, execErr := db.Exec(string(sqlBytes))
 			if execErr != nil {
-				log.Printf("[DB MIGRATION] Migration warning: %v", execErr)
-				return execErr
+				log.Printf("[DB MIGRATION] Migration warning for %s: %v", absPath, execErr)
+			} else {
+				log.Printf("[DB MIGRATION] Successfully executed migration %s", absPath)
 			}
-			log.Println("[DB MIGRATION] Successfully executed migration script!")
-			return nil
 		}
 	}
-	log.Println("[DB MIGRATION] No migration script found or already up to date.")
 	return nil
 }
 

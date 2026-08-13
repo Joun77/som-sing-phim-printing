@@ -202,17 +202,42 @@ func HandleInboundAssetV1(c *gin.Context) {
 		req.Components = make([]interface{}, 0)
 	}
 
-	// 1. Try DB persistence
+	// 1. Try DB persistence based on category
 	if db.DB != nil {
-		err := saveInboundToDB(assetID, req)
-		if err != nil {
-			log.Printf("[DB ERROR] Failed to save inbound asset to DB: %v", err)
+		if req.Category == "PRINTER" || req.Category == "Printer" || req.Category == "MACHINERY" || req.Category == "Machinery" {
+			err := saveInboundToDB(assetID, req)
+			if err != nil {
+				log.Printf("[DB ERROR] Failed to save inbound asset to DB: %v", err)
+			} else {
+				log.Printf("[DB SUCCESS] Inbound printer/machinery %s saved to PostgreSQL!", assetID)
+			}
 		} else {
-			log.Printf("[DB SUCCESS] Inbound asset %s saved to PostgreSQL!", assetID)
+			invItem := InventoryItem{
+				ID:                     assetID,
+				Name:                   req.Name,
+				Category:               req.Category,
+				StockQty:               int(req.Quantity),
+				ConsumptionUnit:        req.Unit,
+				PurchaseUnit:           req.Unit,
+				PurchaseMultiplier:     1,
+				CostPerPurchaseUnit:    req.Price,
+				CostPerConsumptionUnit: req.Price,
+				ReorderThreshold:       10,
+				InkCode:                req.SKU,
+				TechnicalSpecs:         req.TechnicalSpecs,
+				Specs:                  req.TechnicalSpecs,
+				UpdatedAt:              time.Now().Format(time.RFC3339),
+			}
+			err := saveInventoryItemToDB(invItem)
+			if err != nil {
+				log.Printf("[DB ERROR] Failed to save inventory item to DB: %v", err)
+			} else {
+				log.Printf("[DB SUCCESS] Inventory item %s saved to PostgreSQL!", assetID)
+			}
 		}
 	}
 
-	// 2. Also keep in-memory store updated for instant fallback
+	// 2. Also keep in-memory stores updated for instant fallback
 	equip := EquipmentItem{
 		ID:                     assetID,
 		Name:                   req.Name,
@@ -240,6 +265,22 @@ func HandleInboundAssetV1(c *gin.Context) {
 
 	assetStoreMutex.Lock()
 	equipmentStore[assetID] = equip
+	inventoryStore[assetID] = InventoryItem{
+		ID:                     assetID,
+		Name:                   req.Name,
+		Category:               req.Category,
+		StockQty:               int(req.Quantity),
+		ConsumptionUnit:        req.Unit,
+		PurchaseUnit:           req.Unit,
+		PurchaseMultiplier:     1,
+		CostPerPurchaseUnit:    req.Price,
+		CostPerConsumptionUnit: req.Price,
+		ReorderThreshold:       10,
+		InkCode:                req.SKU,
+		TechnicalSpecs:         req.TechnicalSpecs,
+		Specs:                  req.TechnicalSpecs,
+		UpdatedAt:              time.Now().Format(time.RFC3339),
+	}
 	assetStoreMutex.Unlock()
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -282,8 +323,16 @@ func HandleUpdateAssetV1(c *gin.Context) {
 	})
 }
 
-// HandleGetInventoryItems returns list of inventory items
+// HandleGetInventoryItems returns list of inventory items from DB or memory fallback
 func HandleGetInventoryItems(c *gin.Context) {
+	if db.DB != nil {
+		items, err := getInventoryItemsFromDB()
+		if err == nil && len(items) > 0 {
+			c.JSON(http.StatusOK, gin.H{"status": "success", "data": items})
+			return
+		}
+	}
+
 	assetStoreMutex.RLock()
 	defer assetStoreMutex.RUnlock()
 
@@ -308,6 +357,15 @@ func HandleCreateInventoryItem(c *gin.Context) {
 	}
 	item.UpdatedAt = time.Now().Format(time.RFC3339)
 
+	if db.DB != nil {
+		err := saveInventoryItemToDB(item)
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to save inventory item to DB: %v", err)
+		} else {
+			log.Printf("[DB SUCCESS] Inventory item %s saved to PostgreSQL!", item.ID)
+		}
+	}
+
 	assetStoreMutex.Lock()
 	inventoryStore[item.ID] = item
 	assetStoreMutex.Unlock()
@@ -331,6 +389,15 @@ func HandleUpdateInventoryItem(c *gin.Context) {
 
 	item.ID = id
 	item.UpdatedAt = time.Now().Format(time.RFC3339)
+
+	if db.DB != nil {
+		err := saveInventoryItemToDB(item)
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to update inventory item in DB: %v", err)
+		} else {
+			log.Printf("[DB SUCCESS] Inventory item %s updated in PostgreSQL!", id)
+		}
+	}
 
 	assetStoreMutex.Lock()
 	inventoryStore[id] = item
@@ -461,6 +528,112 @@ func getEquipmentByIDFromDB(id string) (EquipmentItem, error) {
 	}
 
 	return item, nil
+}
+
+func getInventoryItemsFromDB() ([]InventoryItem, error) {
+	query := `
+		SELECT id, sku, name, category, stock_qty, consumption_unit, purchase_unit,
+		       purchase_multiplier, cost_per_purchase_unit, cost_per_consumption_unit,
+		       reorder_threshold, technical_specs, updated_at
+		FROM materials
+		ORDER BY created_at DESC
+	`
+
+	rows, err := db.DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []InventoryItem
+	for rows.Next() {
+		var item InventoryItem
+		var stockQty, multiplier, costPur, costCon, reorder float64
+		var techJSON []byte
+		var updatedAt time.Time
+
+		err := rows.Scan(
+			&item.ID, &item.InkCode, &item.Name, &item.Category, &stockQty,
+			&item.ConsumptionUnit, &item.PurchaseUnit, &multiplier,
+			&costPur, &costCon, &reorder, &techJSON, &updatedAt,
+		)
+		if err != nil {
+			log.Printf("[DB INVENTORY SCAN ERROR] %v", err)
+			continue
+		}
+
+		item.StockQty = int(stockQty)
+		item.PurchaseMultiplier = int(multiplier)
+		item.CostPerPurchaseUnit = costPur
+		item.CostPerConsumptionUnit = costCon
+		item.ReorderThreshold = int(reorder)
+		item.UpdatedAt = updatedAt.Format(time.RFC3339)
+
+		if len(techJSON) > 0 {
+			json.Unmarshal(techJSON, &item.TechnicalSpecs)
+			item.Specs = item.TechnicalSpecs
+		}
+
+		items = append(items, item)
+	}
+
+	return items, nil
+}
+
+func saveInventoryItemToDB(item InventoryItem) error {
+	techBytes, _ := json.Marshal(item.TechnicalSpecs)
+	if len(techBytes) == 0 || string(techBytes) == "null" {
+		techBytes, _ = json.Marshal(item.Specs)
+	}
+
+	sku := item.InkCode
+	if sku == "" {
+		sku = item.ID
+	}
+
+	query := `
+		INSERT INTO materials (
+			id, sku, name, category, stock_qty, consumption_unit,
+			purchase_unit, purchase_multiplier, cost_per_purchase_unit,
+			cost_per_consumption_unit, reorder_threshold, technical_specs, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, NOW()
+		)
+		ON CONFLICT (id) DO UPDATE SET
+			sku = EXCLUDED.sku,
+			name = EXCLUDED.name,
+			category = EXCLUDED.category,
+			stock_qty = EXCLUDED.stock_qty,
+			consumption_unit = EXCLUDED.consumption_unit,
+			purchase_unit = EXCLUDED.purchase_unit,
+			purchase_multiplier = EXCLUDED.purchase_multiplier,
+			cost_per_purchase_unit = EXCLUDED.cost_per_purchase_unit,
+			cost_per_consumption_unit = EXCLUDED.cost_per_consumption_unit,
+			reorder_threshold = EXCLUDED.reorder_threshold,
+			technical_specs = EXCLUDED.technical_specs,
+			updated_at = NOW()
+	`
+
+	cUnit := item.ConsumptionUnit
+	if cUnit == "" {
+		cUnit = "Unit"
+	}
+	pUnit := item.PurchaseUnit
+	if pUnit == "" {
+		pUnit = "Pack"
+	}
+	mult := item.PurchaseMultiplier
+	if mult == 0 {
+		mult = 1
+	}
+
+	_, err := db.DB.Exec(query,
+		item.ID, sku, item.Name, item.Category, item.StockQty,
+		cUnit, pUnit, mult, item.CostPerPurchaseUnit,
+		item.CostPerConsumptionUnit, item.ReorderThreshold, string(techBytes),
+	)
+
+	return err
 }
 
 func saveInboundToDB(assetID string, req InboundAssetRequest) error {

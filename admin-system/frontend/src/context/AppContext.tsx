@@ -980,14 +980,48 @@ export const AppProvider = ({ children }) => {
   });
 
   useEffect(() => {
-    fetch('/api/v1/assets')
-      .then(res => res.json())
+    fetch('http://localhost:8080/api/v1/assets')
+      .then(res => (res && res.ok ? res.json() : null))
       .then(resData => {
         if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
           setEquipment(resData.data);
         }
       })
-      .catch(err => console.log('Notice: /api/v1/assets initial fetch note:', err));
+      .catch(err => console.warn('Assets fetch notice:', err));
+
+    fetch('http://localhost:8080/api/inventory/items')
+      .then(res => (res && res.ok ? res.json() : null))
+      .then(resData => {
+        if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
+          setInventory(resData.data);
+        }
+      })
+      .catch(err => console.warn('Inventory fetch notice:', err));
+
+    fetch('http://localhost:8080/api/orders')
+      .then(res => (res && res.ok ? res.json() : null))
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) setOrders(data);
+      })
+      .catch(err => console.warn('Orders fetch notice:', err));
+
+    fetch('http://localhost:8080/api/customers')
+      .then(res => (res && res.ok ? res.json() : null))
+      .then(resData => {
+        if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
+          setCustomers(resData.data);
+        }
+      })
+      .catch(err => console.warn('Customers fetch notice:', err));
+
+    fetch('http://localhost:8080/api/spoilage')
+      .then(res => (res && res.ok ? res.json() : null))
+      .then(resData => {
+        if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
+          setSpoilageLogs(resData.data);
+        }
+      })
+      .catch(err => console.warn('Spoilage fetch notice:', err));
   }, []);
   const [orders, setOrders] = useState(() => {
     const saved = localStorage.getItem('ss_print_orders_v6');
@@ -1300,7 +1334,7 @@ export const AppProvider = ({ children }) => {
     });
 
     // Send JSON payload to Backend API
-    fetch(`/api/inventory/items/${newSku.id}`, {
+    fetch(`http://localhost:8080/api/inventory/items/${newSku.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newSku)
@@ -1360,7 +1394,13 @@ export const AppProvider = ({ children }) => {
   const editInventorySku = (itemId, updatedFields) => {
     setInventory(prev => prev.map(item => {
       if (item.id === itemId) {
-        return { ...item, ...updatedFields };
+        const updatedItem = { ...item, ...updatedFields };
+        fetch(`http://localhost:8080/api/inventory/items/${itemId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedItem)
+        }).catch(err => console.log('API inventory update notice:', err));
+        return updatedItem;
       }
       return item;
     }));
@@ -1882,7 +1922,7 @@ export const AppProvider = ({ children }) => {
     });
 
     // Send JSON payload to Equipment Backend API
-    fetch(`/api/equipment/${newEq.id}`, {
+    fetch(`http://localhost:8080/api/equipment/${newEq.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newEq)
@@ -2150,20 +2190,38 @@ export const AppProvider = ({ children }) => {
 
   const addCustomer = (customerData) => {
     const newCust = {
-      id: `cust-${Date.now().toString().slice(-4)}`,
+      id: customerData.id || `cust-${Date.now().toString().slice(-4)}`,
       name: customerData.name,
       phone: customerData.phone || '-',
       address: customerData.address || '-',
       creditLimit: Number(customerData.creditLimit) || 1000000,
+      paymentTerms: customerData.paymentTerms || 'Net 30',
       instagram: customerData.instagram || '',
       line: customerData.line || '',
       facebook: customerData.facebook || ''
     };
     setCustomers(prev => [...prev, newCust]);
+
+    fetch('http://localhost:8080/api/customers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newCust)
+    }).catch(err => console.warn('Add customer API notice:', err));
   };
 
   const updateCustomer = (customerId, updatedFields) => {
-    setCustomers(prev => prev.map(c => c.id === customerId ? { ...c, ...updatedFields } : c));
+    setCustomers(prev => prev.map(c => {
+      if (c.id === customerId) {
+        const updated = { ...c, ...updatedFields };
+        fetch(`http://localhost:8080/api/customers/${customerId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated)
+        }).catch(err => console.warn('Update customer API notice:', err));
+        return updated;
+      }
+      return c;
+    }));
   };
 
   const deleteCustomer = (customerId) => {

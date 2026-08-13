@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Boxes, 
   Plus, 
@@ -41,6 +41,42 @@ export default function InboundManagement() {
 
   // Initial Master Dataset imported from standalone JSON file
   const [inboundList, setInboundList] = useState<InboundEntry[]>(sampleInboundData);
+
+  useEffect(() => {
+    fetch('http://localhost:8080/api/inbound')
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success' && Array.isArray(data.data) && data.data.length > 0) {
+          const mapped = data.data.map((item: any) => ({
+            id: item.id,
+            poNumber: item.poNumber || item.id,
+            receiptDate: item.inboundDate || new Date().toISOString().split('T')[0],
+            category: item.category,
+            categoryPill: item.category,
+            name: item.itemName,
+            sku: item.skuCode,
+            currentQty: item.quantity || 1,
+            initialQty: item.quantity || 1,
+            unit: item.unit || 'Unit',
+            subUnit: `(${item.quantity} ${item.unit || 'Unit'})`,
+            supplier: item.supplierName || 'Supplier',
+            totalPrice: item.totalPrice || 0,
+            paymentMethod: item.paymentMethod || 'TRANSFER',
+            origin: item.origin || 'TH',
+            tariffRate: item.tariffFee || 0,
+            freightCharge: item.freightFee || 0,
+            specs: item.specs || {},
+            docs: {
+              productPhoto: item.productImage || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='100%25' height='100%25' fill='%23f1f5f9'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%2364748b'%3EProduct Photo%3C/text%3E%3C/svg%3E",
+              paymentSlip: item.receiptSlip || ''
+            },
+            receiptUrl: item.receiptSlip || ''
+          }));
+          setInboundList(mapped);
+        }
+      })
+      .catch(err => console.log('Using sample inbound data fallback', err));
+  }, []);
 
   // Form input state (Common Master)
   // Categories: 'MATERIAL' (A.1), 'INK' (A.2), 'HARDWARE' (A.3), 'PRINTER' (B.1), 'CUTTER' (B.2)
@@ -263,7 +299,7 @@ export default function InboundManagement() {
       freightCharge: 0,
       specs: data.specs || {},
       docs: {
-        productPhoto: data.imageUrl || 'https://via.placeholder.com/300?text=Product+Photo',
+        productPhoto: data.imageUrl || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='100%25' height='100%25' fill='%23f1f5f9'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%2364748b'%3EProduct Photo%3C/text%3E%3C/svg%3E",
         paymentSlip: data.receiptUrl || ''
       },
       receiptUrl: data.receiptUrl || ''
@@ -408,7 +444,7 @@ export default function InboundManagement() {
       freightCharge: Number(formFreight),
       specs: specs,
       docs: {
-        productPhoto: formImgProduct || 'https://via.placeholder.com/300?text=Product+Photo',
+        productPhoto: formImgProduct || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='100%25' height='100%25' fill='%23f1f5f9'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%2364748b'%3EProduct Photo%3C/text%3E%3C/svg%3E",
         paymentSlip: formPaymentMethod === 'TRANSFER' ? formImgSlip : ''
       }
     };

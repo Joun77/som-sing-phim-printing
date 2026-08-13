@@ -1,0 +1,145 @@
+package inbound
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"sync"
+	"time"
+
+	"backend/db"
+
+	"github.com/gin-gonic/gin"
+)
+
+type InboundTransaction struct {
+	ID            string                 `json:"id"`
+	PONumber      string                 `json:"poNumber"`
+	InboundDate   string                 `json:"inboundDate"`
+	SKUCode       string                 `json:"skuCode"`
+	ItemName      string                 `json:"itemName"`
+	SupplierName  string                 `json:"supplierName"`
+	Category      string                 `json:"category"`
+	Quantity      float64                `json:"quantity"`
+	Unit          string                 `json:"unit"`
+	TotalPrice    float64                `json:"totalPrice"`
+	PaymentMethod string                 `json:"paymentMethod"`
+	Origin        string                 `json:"origin"`
+	TariffFee     float64                `json:"tariffFee"`
+	FreightFee    float64                `json:"freightFee"`
+	ProductImage  string                 `json:"productImage"`
+	ReceiptSlip   string                 `json:"receiptSlip"`
+	Specs         map[string]interface{} `json:"specs"`
+	CreatedAt     string                 `json:"createdAt"`
+}
+
+var (
+	inboundMutex        sync.RWMutex
+	inboundMemoryStore = make(map[string]InboundTransaction)
+)
+
+// HandleGetInboundTransactions returns all inbound logs
+func HandleGetInboundTransactions(c *gin.Context) {
+	if db.DB != nil {
+		logs, err := getInboundFromDB()
+		if err == nil && len(logs) > 0 {
+			c.JSON(http.StatusOK, gin.H{"status": "success", "data": logs})
+			return
+		}
+	}
+
+	inboundMutex.RLock()
+	defer inboundMutex.RUnlock()
+
+	var list []InboundTransaction
+	for _, item := range inboundMemoryStore {
+		list = append(list, item)
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": list})
+}
+
+// HandleCreateInboundTransaction saves a new inbound procurement entry
+func HandleCreateInboundTransaction(c *gin.Context) {
+	var item InboundTransaction
+	if err := c.ShouldBindJSON(&item); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+
+	if item.ID == "" {
+		item.ID = fmt.Sprintf("INB-%d", time.Now().UnixNano())
+	}
+	if item.InboundDate == "" {
+		item.InboundDate = time.Now().Format("2006-01-02")
+	}
+	item.CreatedAt = time.Now().Format(time.RFC3339)
+
+	if db.DB != nil {
+		err := saveInboundToDB(item)
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to save inbound transaction: %v", err)
+		}
+	}
+
+	inboundMutex.Lock()
+	inboundMemoryStore[item.ID] = item
+	inboundMutex.Unlock()
+
+	c.JSON(http.StatusCreated, gin.H{"status": "success", "data": item})
+}
+
+func getInboundFromDB() ([]InboundTransaction, error) {
+	rows, err := db.DB.Query(`
+		SELECT id, COALESCE(po_number,''), inbound_date, sku_code, item_name, COALESCE(supplier_name,''), category,
+		       quantity, COALESCE(unit,''), total_price, COALESCE(payment_method,'TRANSFER'), COALESCE(origin,'TH'),
+		       tariff_fee, freight_fee, COALESCE(product_image_url,''), COALESCE(receipt_slip_url,''),
+		       COALESCE(technical_specs, '{}'::jsonb), created_at
+		FROM inbound_transactions ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []InboundTransaction
+	for rows.Next() {
+		var item InboundTransaction
+		var inboundDate, createdAt time.Time
+		var specsJSON []byte
+
+		err := rows.Scan(
+			&item.ID, &item.PONumber, &inboundDate, &item.SKUCode, &item.ItemName, &item.SupplierName, &item.Category,
+			&item.Quantity, &item.Unit, &item.TotalPrice, &item.PaymentMethod, &item.Origin,
+			&item.TariffFee, &item.FreightFee, &item.ProductImage, &item.ReceiptSlip,
+			&specsJSON, &createdAt,
+		)
+		if err != nil {
+			continue
+		}
+		item.InboundDate = inboundDate.Format("2006-01-02")
+		item.CreatedAt = createdAt.Format(time.RFC3339)
+		_ = json.Unmarshal(specsJSON, &item.Specs)
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+func saveInboundToDB(item InboundTransaction) error {
+	specsJSON, _ := json.Marshal(item.Specs)
+	_, err := db.DB.Exec(`
+		INSERT INTO inbound_transactions (
+			id, po_number, inbound_date, sku_code, item_name, supplier_name, category,
+			quantity, unit, total_price, payment_method, origin, tariff_fee, freight_fee,
+			product_image_url, receipt_slip_url, technical_specs, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP)
+		ON CONFLICT (id) DO UPDATE SET
+			po_number = EXCLUDED.po_number,
+			item_name = EXCLUDED.item_name,
+			supplier_name = EXCLUDED.supplier_name,
+			quantity = EXCLUDED.quantity,
+			total_price = EXCLUDED.total_price`,
+		item.ID, item.PONumber, item.InboundDate, item.SKUCode, item.ItemName, item.SupplierName, item.Category,
+		item.Quantity, item.Unit, item.TotalPrice, item.PaymentMethod, item.Origin, item.TariffFee, item.FreightFee,
+		item.ProductImage, item.ReceiptSlip, specsJSON)
+	return err
+}

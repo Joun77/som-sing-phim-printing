@@ -1,18 +1,20 @@
 package orders
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"sync"
 	"time"
 
+	"backend/db"
 	"backend/pricing"
 
 	"github.com/gin-gonic/gin"
 )
 
-// In-memory mock database store for orders
+// In-memory mock database store for orders fallback
 var (
 	ordersStore = make(map[string]Order)
 	storeMutex  sync.RWMutex
@@ -20,7 +22,6 @@ var (
 )
 
 func init() {
-	// Seed some default mock orders for UI visibility
 	ordersStore["order-001"] = Order{
 		ID:            "order-001",
 		OrderNumber:   "SO-2026-0001",
@@ -33,13 +34,13 @@ func init() {
 		GoogleDriveLink: "https://drive.google.com/drive/folders/mock-order-001",
 		Items: []OrderItem{
 			{
-				ID:                 "item-001",
-				OrderID:            "order-001",
-				JobName:            "A4 Catalog 100pgs Printing",
-				Quantity:           50,
-				UnitPriceSnapshot:  25000.0,
-				CostPriceSnapshot:  17000.0,
-				Specs:              map[string]interface{}{"ink_coverage": 30.0, "lamination": "thermal"},
+				ID:                "item-001",
+				OrderID:           "order-001",
+				JobName:           "A4 Catalog 100pgs Printing",
+				Quantity:          50,
+				UnitPriceSnapshot: 25000.0,
+				CostPriceSnapshot: 17000.0,
+				Specs:             map[string]interface{}{"ink_coverage": 30.0, "lamination": "thermal"},
 			},
 		},
 		CreatedAt: time.Now().Add(-2 * time.Hour),
@@ -48,8 +49,16 @@ func init() {
 	orderSeq = 1
 }
 
-// HandleGetOrders lists all orders
+// HandleGetOrders lists all orders from PostgreSQL DB or memory fallback
 func HandleGetOrders(c *gin.Context) {
+	if db.DB != nil {
+		ordersList, err := getOrdersFromDB()
+		if err == nil && len(ordersList) > 0 {
+			c.JSON(http.StatusOK, ordersList)
+			return
+		}
+	}
+
 	storeMutex.RLock()
 	defer storeMutex.RUnlock()
 
@@ -70,17 +79,15 @@ func HandleCreateOrder(c *gin.Context) {
 	}
 
 	storeMutex.Lock()
-	defer storeMutex.Unlock()
-
 	orderSeq++
 	orderID := fmt.Sprintf("order-%03d", orderSeq)
 	orderNum := fmt.Sprintf("SO-2026-%04d", orderSeq)
+	storeMutex.Unlock()
 
 	var itemsList []OrderItem
 	var totalPrice, totalCost float64
 
 	for idx, itemReq := range req.Items {
-		// Run pricing engine calculation
 		pricingReq := pricing.CalculationRequest{
 			JobName:            itemReq.JobName,
 			Quantity:           itemReq.Quantity,
@@ -104,15 +111,14 @@ func HandleCreateOrder(c *gin.Context) {
 			return
 		}
 
-		// Take snapshots of calculated pricing
 		orderItem := OrderItem{
-			ID:                 fmt.Sprintf("item-%s-%d", orderID, idx+1),
-			OrderID:            orderID,
-			JobName:            itemReq.JobName,
-			Quantity:           itemReq.Quantity,
-			UnitPriceSnapshot:  pricingRes.UnitPrice,
-			CostPriceSnapshot:  pricingRes.TotalCost / float64(itemReq.Quantity), // cost per unit
-			Specs:              itemReq.Specs,
+			ID:                fmt.Sprintf("item-%s-%d", orderID, idx+1),
+			OrderID:           orderID,
+			JobName:           itemReq.JobName,
+			Quantity:          itemReq.Quantity,
+			UnitPriceSnapshot: pricingRes.UnitPrice,
+			CostPriceSnapshot: pricingRes.TotalCost / float64(itemReq.Quantity),
+			Specs:             itemReq.Specs,
 		}
 
 		itemsList = append(itemsList, orderItem)
@@ -125,7 +131,7 @@ func HandleCreateOrder(c *gin.Context) {
 		OrderNumber:     orderNum,
 		CustomerName:    req.CustomerName,
 		CustomerPhone:   req.CustomerPhone,
-		Status:          StatusWaitingDeposit, // Default starting flow
+		Status:          StatusWaitingDeposit,
 		DepositAmount:   0,
 		TotalPrice:      totalPrice,
 		TotalCost:       totalCost,
@@ -135,11 +141,23 @@ func HandleCreateOrder(c *gin.Context) {
 		UpdatedAt:       time.Now(),
 	}
 
+	if db.DB != nil {
+		err := saveOrderToDB(newOrder)
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to save order to DB: %v", err)
+		} else {
+			log.Printf("[DB SUCCESS] Order %s saved to PostgreSQL!", orderID)
+		}
+	}
+
+	storeMutex.Lock()
 	ordersStore[orderID] = newOrder
+	storeMutex.Unlock()
+
 	c.JSON(http.StatusCreated, newOrder)
 }
 
-// HandleRecordDeposit logs deposit and advances status to PREPRESS_CHECK
+// HandleRecordDeposit logs deposit and advances status
 func HandleRecordDeposit(c *gin.Context) {
 	orderID := c.Param("id")
 
@@ -150,22 +168,36 @@ func HandleRecordDeposit(c *gin.Context) {
 	}
 
 	storeMutex.Lock()
-	defer storeMutex.Unlock()
-
 	order, exists := ordersStore[orderID]
+	storeMutex.Unlock()
+
+	if !exists && db.DB != nil {
+		var err error
+		order, err = getOrderByIDFromDB(orderID)
+		if err == nil {
+			exists = true
+		}
+	}
+
 	if !exists {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 		return
 	}
 
 	order.DepositAmount = req.DepositAmount
-	// Advance status from WAITING_DEPOSIT to PREPRESS_CHECK as defined in order workflow
 	if order.Status == StatusWaitingDeposit {
 		order.Status = StatusPrepressCheck
 	}
 	order.UpdatedAt = time.Now()
 
+	if db.DB != nil {
+		_ = updateOrderDepositAndStatusInDB(order.ID, order.DepositAmount, string(order.Status))
+	}
+
+	storeMutex.Lock()
 	ordersStore[orderID] = order
+	storeMutex.Unlock()
+
 	c.JSON(http.StatusOK, order)
 }
 
@@ -173,7 +205,7 @@ type UpdateStatusRequest struct {
 	Status OrderStatus `json:"status" binding:"required"`
 }
 
-// HandleUpdateOrderStatus transitions statuses and records stock ledger adjustments
+// HandleUpdateOrderStatus transitions statuses
 func HandleUpdateOrderStatus(c *gin.Context) {
 	orderID := c.Param("id")
 
@@ -184,9 +216,17 @@ func HandleUpdateOrderStatus(c *gin.Context) {
 	}
 
 	storeMutex.Lock()
-	defer storeMutex.Unlock()
-
 	order, exists := ordersStore[orderID]
+	storeMutex.Unlock()
+
+	if !exists && db.DB != nil {
+		var err error
+		order, err = getOrderByIDFromDB(orderID)
+		if err == nil {
+			exists = true
+		}
+	}
+
 	if !exists {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 		return
@@ -196,11 +236,141 @@ func HandleUpdateOrderStatus(c *gin.Context) {
 	order.Status = req.Status
 	order.UpdatedAt = time.Now()
 
-	// If moving to IN_PRODUCTION, log transaction deduction
 	if req.Status == StatusInProduction && oldStatus != StatusInProduction {
 		log.Printf("[FIFO Stock Deductions] Order %s shifted to IN_PRODUCTION. Deducting resources.", order.ID)
 	}
 
+	if db.DB != nil {
+		_ = updateOrderDepositAndStatusInDB(order.ID, order.DepositAmount, string(order.Status))
+	}
+
+	storeMutex.Lock()
 	ordersStore[orderID] = order
+	storeMutex.Unlock()
+
 	c.JSON(http.StatusOK, order)
+}
+
+// --- DB HELPERS FOR ORDERS ---
+
+func getOrdersFromDB() ([]Order, error) {
+	query := `
+		SELECT id, order_number, customer_name, COALESCE(customer_phone, ''), status,
+		       deposit_amount, total_price, total_cost, COALESCE(google_drive_link, ''),
+		       created_at, updated_at
+		FROM orders
+		ORDER BY created_at DESC
+	`
+	rows, err := db.DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []Order
+	for rows.Next() {
+		var o Order
+		var st string
+		err := rows.Scan(
+			&o.ID, &o.OrderNumber, &o.CustomerName, &o.CustomerPhone, &st,
+			&o.DepositAmount, &o.TotalPrice, &o.TotalCost, &o.GoogleDriveLink,
+			&o.CreatedAt, &o.UpdatedAt,
+		)
+		if err != nil {
+			continue
+		}
+		o.Status = OrderStatus(st)
+		o.Items, _ = getOrderItemsFromDB(o.ID)
+		list = append(list, o)
+	}
+	return list, nil
+}
+
+func getOrderByIDFromDB(orderID string) (Order, error) {
+	var o Order
+	query := `
+		SELECT id, order_number, customer_name, COALESCE(customer_phone, ''), status,
+		       deposit_amount, total_price, total_cost, COALESCE(google_drive_link, ''),
+		       created_at, updated_at
+		FROM orders
+		WHERE id = $1
+	`
+	var st string
+	err := db.DB.QueryRow(query, orderID).Scan(
+		&o.ID, &o.OrderNumber, &o.CustomerName, &o.CustomerPhone, &st,
+		&o.DepositAmount, &o.TotalPrice, &o.TotalCost, &o.GoogleDriveLink,
+		&o.CreatedAt, &o.UpdatedAt,
+	)
+	if err != nil {
+		return o, err
+	}
+	o.Status = OrderStatus(st)
+	o.Items, _ = getOrderItemsFromDB(o.ID)
+	return o, nil
+}
+
+func getOrderItemsFromDB(orderID string) ([]OrderItem, error) {
+	query := `
+		SELECT id, order_id, job_name, quantity, unit_price_snapshot, cost_price_snapshot, specs
+		FROM order_items
+		WHERE order_id = $1
+	`
+	rows, err := db.DB.Query(query, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []OrderItem
+	for rows.Next() {
+		var item OrderItem
+		var specsJSON []byte
+		err := rows.Scan(
+			&item.ID, &item.OrderID, &item.JobName, &item.Quantity,
+			&item.UnitPriceSnapshot, &item.CostPriceSnapshot, &specsJSON,
+		)
+		if err != nil {
+			continue
+		}
+		if len(specsJSON) > 0 {
+			json.Unmarshal(specsJSON, &item.Specs)
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+func saveOrderToDB(o Order) error {
+	orderQuery := `
+		INSERT INTO orders (id, order_number, customer_name, customer_phone, status, deposit_amount, total_price, total_cost, google_drive_link, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+		ON CONFLICT (id) DO UPDATE SET
+			status = EXCLUDED.status,
+			deposit_amount = EXCLUDED.deposit_amount,
+			updated_at = NOW()
+	`
+	_, err := db.DB.Exec(orderQuery, o.ID, o.OrderNumber, o.CustomerName, o.CustomerPhone, string(o.Status), o.DepositAmount, o.TotalPrice, o.TotalCost, o.GoogleDriveLink)
+	if err != nil {
+		return err
+	}
+
+	for _, item := range o.Items {
+		specsBytes, _ := json.Marshal(item.Specs)
+		itemQuery := `
+			INSERT INTO order_items (id, order_id, job_name, quantity, unit_price_snapshot, cost_price_snapshot, specs, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())
+			ON CONFLICT (id) DO NOTHING
+		`
+		_, _ = db.DB.Exec(itemQuery, item.ID, o.ID, item.JobName, item.Quantity, item.UnitPriceSnapshot, item.CostPriceSnapshot, string(specsBytes))
+	}
+	return nil
+}
+
+func updateOrderDepositAndStatusInDB(orderID string, deposit float64, status string) error {
+	query := `
+		UPDATE orders SET deposit_amount = $1, status = $2, updated_at = NOW()
+		WHERE id = $3
+	`
+	_, err := db.DB.Exec(query, deposit, status, orderID)
+	return err
 }

@@ -1,20 +1,25 @@
 package inventory
 
 import (
+	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"time"
+
+	"backend/db"
 
 	"github.com/gin-gonic/gin"
 )
 
 type Offcut struct {
 	ID               string    `json:"id"`
-	ParentMaterialID string    `json:"parent_material_id" binding:"required"`
-	Name             string    `json:"name" binding:"required"`
+	ParentMaterialID string    `json:"parent_material_id"`
+	Name             string    `json:"name"`
 	WidthMm          float64   `json:"width_mm"`
 	LengthMm         float64   `json:"length_mm"`
-	Quantity         float64   `json:"quantity" binding:"required,gt=0"`
+	Quantity         float64   `json:"quantity"`
+	Location         string    `json:"location"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 
@@ -32,6 +37,7 @@ func init() {
 		WidthMm:          100.0,
 		LengthMm:         297.0,
 		Quantity:         15.0,
+		Location:         "Main Stock",
 		CreatedAt:        time.Now(),
 	}
 	offcutSeq = 1
@@ -39,6 +45,14 @@ func init() {
 
 // HandleGetOffcuts returns the list of offcut scraps
 func HandleGetOffcuts(c *gin.Context) {
+	if db.DB != nil {
+		offcuts, err := getOffcutsFromDB()
+		if err == nil && len(offcuts) > 0 {
+			c.JSON(http.StatusOK, offcuts)
+			return
+		}
+	}
+
 	storeMutex.RLock()
 	defer storeMutex.RUnlock()
 
@@ -58,13 +72,58 @@ func HandleRegisterOffcut(c *gin.Context) {
 		return
 	}
 
-	storeMutex.Lock()
-	defer storeMutex.Unlock()
-
-	offcutSeq++
-	req.ID = time.Now().Format("20060102-150405-") + string(rune(offcutSeq))
+	if req.ID == "" {
+		req.ID = fmt.Sprintf("OFF-%d", time.Now().UnixNano())
+	}
+	if req.Location == "" {
+		req.Location = "Main Stock"
+	}
 	req.CreatedAt = time.Now()
 
+	if db.DB != nil {
+		err := saveOffcutToDB(req)
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to save offcut: %v", err)
+		}
+	}
+
+	storeMutex.Lock()
 	offcutsStore[req.ID] = req
+	storeMutex.Unlock()
+
 	c.JSON(http.StatusCreated, req)
+}
+
+func getOffcutsFromDB() ([]Offcut, error) {
+	rows, err := db.DB.Query(`SELECT id, material_sku, material_name, width_mm, height_mm, quantity, location, created_at FROM offcuts`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []Offcut
+	for rows.Next() {
+		var o Offcut
+		err := rows.Scan(&o.ID, &o.ParentMaterialID, &o.Name, &o.WidthMm, &o.LengthMm, &o.Quantity, &o.Location, &o.CreatedAt)
+		if err != nil {
+			continue
+		}
+		result = append(result, o)
+	}
+	return result, nil
+}
+
+func saveOffcutToDB(o Offcut) error {
+	_, err := db.DB.Exec(`
+		INSERT INTO offcuts (id, material_sku, material_name, width_mm, height_mm, quantity, location, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (id) DO UPDATE SET
+			material_sku = EXCLUDED.material_sku,
+			material_name = EXCLUDED.material_name,
+			width_mm = EXCLUDED.width_mm,
+			height_mm = EXCLUDED.height_mm,
+			quantity = EXCLUDED.quantity,
+			location = EXCLUDED.location`,
+		o.ID, o.ParentMaterialID, o.Name, o.WidthMm, o.LengthMm, o.Quantity, o.Location, o.CreatedAt)
+	return err
 }
