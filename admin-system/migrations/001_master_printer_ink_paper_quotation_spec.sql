@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS printers (
     warranty_expiry_year INT NOT NULL,
     status printer_status_enum NOT NULL DEFAULT 'In Use',
     location_dept VARCHAR(100) NOT NULL,
+    technical_specs JSONB DEFAULT '{}'::jsonb,
+    oem_baseline_specs JSONB DEFAULT '{}'::jsonb,
     product_image_url TEXT,
     receipt_invoice_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -75,6 +77,7 @@ CREATE TABLE IF NOT EXISTS ink_master_catalog (
     unit_price NUMERIC(15, 2) NOT NULL,
     ink_base_type ink_base_type_enum NOT NULL,
     is_compatible_ink ink_compatibility_enum NOT NULL,
+    technical_specs JSONB DEFAULT '{}'::jsonb,
     product_image_url TEXT,
     receipt_invoice_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -94,6 +97,9 @@ CREATE TABLE IF NOT EXISTS printer_color_link (
     ink_code VARCHAR(100) NOT NULL REFERENCES ink_master_catalog(ink_code) ON DELETE CASCADE ON UPDATE CASCADE,
     slot_position VARCHAR(50) NOT NULL,
     iso_page_yield_a4 INT NOT NULL,
+    oem_standard_volume_ml NUMERIC(10, 2),
+    oem_standard_iso_yield_a4 INT,
+    base_consumption_rate_ml NUMERIC(12, 6),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT unique_asset_slot UNIQUE (asset_id, slot_position)
 );

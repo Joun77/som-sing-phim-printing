@@ -277,6 +277,25 @@ export default function InboundManagement() {
         category: type === 'PRINTER' ? 'Printer' : 'Processing Tools',
         status: 'In Use'
       });
+
+      if (type === 'PRINTER' && Array.isArray(data.printerColorLinks)) {
+        data.printerColorLinks.forEach((link: any) => {
+          const vol = Number(link.oemStandardVolumeMl) || 100;
+          const yieldPages = Number(link.oemStandardIsoYieldA4) || 5000;
+          const baseRate = vol / yieldPages;
+          addPrinterColorLink({
+            assetId: data.id,
+            inkCode: link.oemInkCode || link.inkCode,
+            slotPosition: link.slotPosition,
+            oemStandardVolumeMl: vol,
+            oemStandardIsoYieldA4: yieldPages,
+            baseConsumptionRateMl: baseRate,
+            isoPageYieldA4: yieldPages,
+            notes: `Color Group: ${link.colorGroup || 'General'}`
+          });
+        });
+      }
+
       showToast(`${type === 'PRINTER' ? 'Printer' : 'Machinery'} registered successfully in assets!`, 'success');
     } else {
       const existingItem = inventory.find(item => item.id === data.id);

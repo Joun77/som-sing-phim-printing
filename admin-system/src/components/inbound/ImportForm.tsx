@@ -89,7 +89,48 @@ export default function ImportForm({ onSubmit, onClose }) {
   const [inkBaseType, setInkBaseType] = useState('Dye');
   const [isCompatible, setIsCompatible] = useState(false);
   const [inkTargetPrinter, setInkTargetPrinter] = useState('');
-  const [isoPageYield, setIsoPageYield] = useState(4000);
+
+  // --- Dynamic Ink Slot Mapping for Printer Form (OEM Baseline Standard Specs) ---
+  const [printerInkSlots, setPrinterInkSlots] = useState([
+    { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500 },
+    { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
+    { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
+    { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
+  ]);
+
+  React.useEffect(() => {
+    if (colorSchemeType === 'Monochrome') {
+      setPrinterInkSlots([
+        { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'OEM-001-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 10000 }
+      ]);
+    } else if (colorSchemeType === 'CMYK') {
+      setPrinterInkSlots([
+        { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500 },
+        { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
+        { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
+        { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
+      ]);
+    } else if (colorSchemeType === 'Photo (6 Colors)') {
+      setPrinterInkSlots([
+        { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500 },
+        { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
+        { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
+        { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
+        { slotPosition: 'Slot 5 (LC - Light Cyan)', colorGroup: 'Light Cyan', oemInkCode: 'EPSON-008-LC', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
+        { slotPosition: 'Slot 6 (LM - Light Magenta)', colorGroup: 'Light Magenta', oemInkCode: 'EPSON-008-LM', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
+      ]);
+    } else {
+      const count = Number(totalColorSlots) || 4;
+      const slots = Array.from({ length: count }, (_, i) => ({
+        slotPosition: `Slot ${i + 1}`,
+        colorGroup: 'Custom',
+        oemInkCode: `OEM-INK-${i + 1}`,
+        oemStandardVolumeMl: 100,
+        oemStandardIsoYieldA4: 5000
+      }));
+      setPrinterInkSlots(slots);
+    }
+  }, [colorSchemeType, totalColorSlots]);
 
   // --- 3. PAPER Master Specs ---
   const [paperCode, setPaperCode] = useState(`PAP-${Date.now().toString().slice(-4)}`);
@@ -238,7 +279,7 @@ export default function ImportForm({ onSubmit, onClose }) {
     const machineCostPerJob = (machinePriceLak * maintenanceFactor / lifePages) * factorS;
 
     const inkUnitPrice = importType === 'INK' ? costInLak : 250000; 
-    const inkYield = Number(isoPageYield) || 4000;
+    const inkYield = 4000;
     const inkCostPer5Pct = inkUnitPrice / inkYield;
     
     const inkCostK = inkCostPer5Pct * ((Number(previewCoverageK) || 5) / 5) * factorS;
@@ -255,7 +296,7 @@ export default function ImportForm({ onSubmit, onClose }) {
     return { factorS, paperCostPerSheet, machineCostPerJob, totalInkCost, subtotal, wasteAmount, totalUnitCost, sellingPrice };
   }, [
     importCost, importCurrency, paperFormat, sheetsPerPack, rollWidthM, rollLengthM,
-    importType, maintenanceRatePct, expectedLifeA4, isoPageYield,
+    importType, maintenanceRatePct, expectedLifeA4,
     previewJobWidthMm, previewJobLengthMm, previewCoverageK, previewCoverageC, previewCoverageM, previewCoverageY,
     previewLaborCost, previewFinishingCost, previewWastePct, previewProfitPct
   ]);
@@ -354,6 +395,7 @@ export default function ImportForm({ onSubmit, onClose }) {
         totalColorSlots: Number(totalColorSlots),
         expectedLifeA4Pages: Number(expectedLifeA4),
         maintenanceRatePercent: Number(maintenanceRatePct),
+        printerColorLinks: printerInkSlots,
         functions: selectedFunctions,
         connectivity: selectedConnectivity,
         osCompatibility: selectedOS,
@@ -382,7 +424,6 @@ export default function ImportForm({ onSubmit, onClose }) {
         stockQty: Number(importQty),
         inkBaseType,
         isCompatible,
-        isoPageYieldA4: Number(isoPageYield),
         targetPrinterId: inkTargetPrinter
       };
     } else if (importType === 'PAPER') {
@@ -631,6 +672,86 @@ export default function ImportForm({ onSubmit, onClose }) {
               <label className="block text-xs font-black uppercase text-slate-400 mb-2">Location / Dept</label>
               <input type="text" value={printerLocation} onChange={(e) => setPrinterLocation(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" />
             </div>
+
+            {/* Dynamic Ink Slot Mapping Matrix for OEM Baseline Standard Specs */}
+            <div className="col-span-1 md:col-span-2 bg-sky-50/50 p-4 rounded-2xl border border-sky-100 space-y-3 mt-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-sky-600" />
+                  <span>💧 ສເປັກໝຶກແທ້标准 (OEM Baseline Standard Specs)</span>
+                </h4>
+                <span className="text-[10px] text-sky-700 font-bold bg-sky-100 px-2 py-0.5 rounded-full">
+                  {printerInkSlots.length} Slots ({colorSchemeType})
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                ระบุสเปคหมึกแท้มาตรฐานประจำรุ่น (OEM Ink SKU, Volume ml, ISO A4 Yield) เพื่อคำนวณอัตรากินหมึกมาตรฐานต่อแผ่น (Base Consumption Rate ml/page)
+              </p>
+              <div className="space-y-3 pt-1">
+                {printerInkSlots.map((slot, index) => {
+                  const baseRate = slot.oemStandardIsoYieldA4 > 0 
+                    ? (slot.oemStandardVolumeMl / slot.oemStandardIsoYieldA4).toFixed(5) 
+                    : '0.00000';
+                  return (
+                    <div key={index} className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
+                          <span>{slot.slotPosition} ({slot.colorGroup})</span>
+                        </div>
+                        <div className="text-[11px] font-mono font-bold text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded-lg border border-sky-100">
+                          Base Rate: {baseRate} ml/แผ่น
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">1) OEM Ink SKU / Model</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. EPSON-008-BK"
+                            value={slot.oemInkCode}
+                            onChange={(e) => {
+                              const newSlots = [...printerInkSlots];
+                              newSlots[index].oemInkCode = e.target.value;
+                              setPrinterInkSlots(newSlots);
+                            }}
+                            className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">2) OEM Standard Vol. (ml)</label>
+                          <input
+                            type="number"
+                            placeholder="e.g. 127"
+                            value={slot.oemStandardVolumeMl}
+                            onChange={(e) => {
+                              const newSlots = [...printerInkSlots];
+                              newSlots[index].oemStandardVolumeMl = Number(e.target.value);
+                              setPrinterInkSlots(newSlots);
+                            }}
+                            className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">3) OEM Standard ISO Yield (Pages)</label>
+                          <input
+                            type="number"
+                            placeholder="e.g. 7500"
+                            value={slot.oemStandardIsoYieldA4}
+                            onChange={(e) => {
+                              const newSlots = [...printerInkSlots];
+                              newSlots[index].oemStandardIsoYieldA4 = Number(e.target.value);
+                              setPrinterInkSlots(newSlots);
+                            }}
+                            className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
 
@@ -660,9 +781,11 @@ export default function ImportForm({ onSubmit, onClose }) {
                 {inkBaseTypes.map(type => <option key={type} value={type}>{type}</option>)}
               </select>
             </div>
-            <div>
-              <label className="block text-xs font-black uppercase text-slate-400 mb-2">ISO A4 Yield (Pages)</label>
-              <input type="number" value={isoPageYield} onChange={(e) => setIsoPageYield(Number(e.target.value))} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" />
+            <div className="flex items-center gap-3 pt-6">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+                <input type="checkbox" checked={isCompatible} onChange={(e) => setIsCompatible(e.target.checked)} className="w-4 h-4 rounded text-sky-600 focus:ring-sky-500" />
+                <span>ໝຶກທຽບເທົ່າ (Compatible Ink) / OEM หมึกแท้</span>
+              </label>
             </div>
           </div>
         )}
@@ -712,31 +835,7 @@ export default function ImportForm({ onSubmit, onClose }) {
           </div>
         )}
 
-        {/* SECTION 4: LIVE COST CALCULATOR PREVIEW WIDGET */}
-        <div className="border-t border-slate-100 pt-6">
-          <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 text-white p-5 rounded-3xl shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-sky-500/20 flex items-center justify-center text-sky-400"><Calculator className="w-4 h-4" /></div>
-                <div>
-                  <h4 className="font-extrabold text-sm text-white">⚡ Real-time Dynamic Print Cost Calculator Preview</h4>
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs bg-white/5 p-3 rounded-2xl border border-white/10">
-              <input type="number" value={previewJobWidthMm} onChange={(e) => setPreviewJobWidthMm(Number(e.target.value))} className="bg-slate-900/80 rounded-xl px-2.5 py-1 text-xs font-mono font-bold" />
-              <input type="number" value={previewJobLengthMm} onChange={(e) => setPreviewJobLengthMm(Number(e.target.value))} className="bg-slate-900/80 rounded-xl px-2.5 py-1 text-xs font-mono font-bold" />
-              <input type="number" value={previewLaborCost} onChange={(e) => setPreviewLaborCost(Number(e.target.value))} className="bg-slate-900/80 rounded-xl px-2.5 py-1 text-xs font-mono font-bold" />
-              <input type="number" value={previewProfitPct} onChange={(e) => setPreviewProfitPct(Number(e.target.value))} className="bg-slate-900/80 text-emerald-400 rounded-xl px-2.5 py-1 text-xs font-mono font-bold" />
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-bold">
-              <div className="bg-white/5 p-3 rounded-2xl border border-white/10"><span className="text-[10px] text-slate-400 block">📄 Paper Cost / Sheet</span><span className="text-sm text-sky-300">{formatCurrency(costPreview.paperCostPerSheet)}</span></div>
-              <div className="bg-white/5 p-3 rounded-2xl border border-white/10"><span className="text-[10px] text-slate-400 block">⚙️ Machine Depreciation</span><span className="text-sm text-indigo-300">{formatCurrency(costPreview.machineCostPerJob)}</span></div>
-              <div className="bg-white/5 p-3 rounded-2xl border border-white/10"><span className="text-[10px] text-slate-400 block">💧 Total Ink Cost</span><span className="text-sm text-amber-300">{formatCurrency(costPreview.totalInkCost)}</span></div>
-              <div className="bg-emerald-500/10 p-3 rounded-2xl border border-emerald-500/30"><span className="text-[10px] text-emerald-300 block">🏷️ Selling Price</span><span className="text-sm text-emerald-400">{formatCurrency(costPreview.sellingPrice)}</span></div>
-            </div>
-          </div>
-        </div>
+
 
         <div className="border-t border-slate-100 pt-6">
           <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-1.5">

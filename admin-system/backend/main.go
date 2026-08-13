@@ -62,9 +62,17 @@ func main() {
 	router.GET("/api/orders/:id/pdf/quotation", orders.HandleGenerateQuotationPDF)
 	router.GET("/api/orders/:id/pdf/delivery", orders.HandleGenerateDeliveryPDF)
 
-	// Inventory offcut routes
+	// Inventory offcut & master routes
 	router.GET("/api/inventory/offcuts", inventory.HandleGetOffcuts)
 	router.POST("/api/inventory/offcuts", inventory.HandleRegisterOffcut)
+	router.GET("/api/inventory/items", inventory.HandleGetInventoryItems)
+	router.POST("/api/inventory/items", inventory.HandleCreateInventoryItem)
+	router.PUT("/api/inventory/items/:id", inventory.HandleUpdateInventoryItem)
+
+	// Equipment / Printer Master routes
+	router.GET("/api/equipment", inventory.HandleGetEquipment)
+	router.POST("/api/equipment", inventory.HandleCreateEquipment)
+	router.PUT("/api/equipment/:id", inventory.HandleUpdateEquipment)
 
 	log.Println("Starting Go server on port 8080...")
 	if err := router.Run(":8080"); err != nil {

@@ -1260,23 +1260,40 @@ export const AppProvider = ({ children }) => {
     });
   };
 
-  // Add a new SKU/Material Definition
+  // Add or Update a SKU/Material Definition with API persistence
   const addInventorySku = (itemData) => {
     const newSku = {
-      id: itemData.id || `${itemData.category.toLowerCase()}-${Date.now().toString().slice(-4)}`,
+      id: itemData.id || `${itemData.category?.toLowerCase() || 'sku'}-${Date.now().toString().slice(-4)}`,
       name: itemData.name,
       category: itemData.category,
-      stockQty: 0,
+      stockQty: Number(itemData.stockQty) || 0,
       consumptionUnit: itemData.consumptionUnit || 'Sheet',
       purchaseUnit: itemData.purchaseUnit || 'Pack',
       purchaseMultiplier: Number(itemData.purchaseMultiplier) || 1,
       costPerPurchaseUnit: Number(itemData.costPerPurchaseUnit) || 0,
       costPerConsumptionUnit: Number(itemData.costPerConsumptionUnit) || 0,
       reorderThreshold: Number(itemData.reorderThreshold) || 10,
+      technical_specs: itemData.technical_specs || itemData.specs || {},
       batches: [],
       ...itemData
     };
-    setInventory(prev => [...prev, newSku]);
+
+    setInventory(prev => {
+      const idx = prev.findIndex(i => i.id === newSku.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...newSku };
+        return next;
+      }
+      return [...prev, newSku];
+    });
+
+    // Send JSON payload to Backend API
+    fetch(`/api/inventory/items/${newSku.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newSku)
+    }).catch(err => console.log('API persistence notice:', err));
   };
 
   const quickAdjustStock = (itemId, adjustment) => {
@@ -1839,9 +1856,26 @@ export const AppProvider = ({ children }) => {
       warrantyExpiration: new Date(new Date().setFullYear(new Date().getFullYear() + 2)).toISOString().split('T')[0],
       lastMaintenanceDate: new Date().toISOString().split('T')[0],
       components: eqData.components || defaultComponents,
+      oem_baseline_specs: eqData.oem_baseline_specs || { slots: eqData.printerColorLinks },
       ...eqData
     };
-    setEquipment(prev => [...prev, newEq]);
+
+    setEquipment(prev => {
+      const idx = prev.findIndex(e => e.id === newEq.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...newEq };
+        return next;
+      }
+      return [...prev, newEq];
+    });
+
+    // Send JSON payload to Equipment Backend API
+    fetch(`/api/equipment/${newEq.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newEq)
+    }).catch(err => console.log('API equipment sync notice:', err));
   };
 
   const addPrinterColorLink = (linkData) => {
@@ -1850,6 +1884,10 @@ export const AppProvider = ({ children }) => {
       assetId: linkData.assetId,
       inkCode: linkData.inkCode,
       slotPosition: linkData.slotPosition || 'CMYK Slot',
+      oemStandardVolumeMl: Number(linkData.oemStandardVolumeMl) || 100,
+      oemStandardIsoYieldA4: Number(linkData.oemStandardIsoYieldA4) || 5000,
+      baseConsumptionRateMl: Number(linkData.baseConsumptionRateMl) || 0.01693,
+      isoPageYieldA4: Number(linkData.isoPageYieldA4) || 4000,
       notes: linkData.notes || ''
     };
     setPrinterColorLinks(prev => [...prev, newLink]);

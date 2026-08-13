@@ -3,11 +3,15 @@ import { ArrowLeft, Trash2, Edit3, ShieldAlert, Package, Calendar, Truck, Layers
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
 import EditMaterialModal from './EditMaterialModal';
+import AssetEditModal from './modals/AssetEditModal';
+import PrinterSpecDetail from './details/category-specs/PrinterSpecDetail';
+import InkSpecDetail from './details/category-specs/InkSpecDetail';
+import GenericSpecDetail from './details/category-specs/GenericSpecDetail';
 import ConfirmDeleteModal, { DeleteActionButton } from '../common/ConfirmDeleteModal';
 
 export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
   const { t, i18n } = useTranslation();
-  const { inventory, deleteInventoryBatch, editInventoryBatch, equipment, showToast, formatCurrency } = useApp();
+  const { inventory, deleteInventoryBatch, editInventoryBatch, addInventorySku, equipment, printerColorLinks, showToast, formatCurrency } = useApp();
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -275,39 +279,15 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
               <Layers className="w-4 h-4 text-purple-600" />
               <span>{currentLang === 'lo' ? 'ສະເປັກທາງເຕັກນິກ (ERP Technical Specs)' : 'ERP Technical Specs'}</span>
             </h3>
-            <div className="grid grid-cols-2 gap-4 text-xs font-medium">
-              {Object.entries(targetItem.specs || lotData.specs || {}).map(([key, val]) => {
-                if (!val || key === 'tariffRate' || key === 'clickRate') return null;
-                
-                const labelMap = {
-                  formFactor: currentLang === 'lo' ? 'ຮູບແບບບັນຈຸພັນ' : 'Form Factor',
-                  grammage: currentLang === 'lo' ? 'ຄວາມໜາ/ນ້ຳໜັກ (GSM)' : 'Grammage (GSM)',
-                  standardSize: currentLang === 'lo' ? 'ຂະໜາດມາດຕະຖານ' : 'Standard Size',
-                  widthMm: currentLang === 'lo' ? 'ໜ້າກວ້າງ (mm)' : 'Width (mm)',
-                  length: currentLang === 'lo' ? 'ຄວາມຍາວລວມ (m)' : 'Length (m)',
-                  packQty: currentLang === 'lo' ? 'ຈຳນວນແຜ່ນຕໍ່ຣີມ' : 'Pack Qty',
-                  inkType: currentLang === 'lo' ? 'ປະເພດໝຶກພິມ' : 'Ink Type',
-                  colorModel: currentLang === 'lo' ? 'เฉดสี / ຕະລັບສີ' : 'Color Option',
-                  volumePerBottle: currentLang === 'lo' ? 'ບໍລິມາດບັນຈຸ' : 'Volume/Bottle',
-                  compatiblePrinter: currentLang === 'lo' ? 'ເຄື່ອງພິມທີ່ເຊື່ອມໂຍງ' : 'Linked Printer',
-                  hwType: currentLang === 'lo' ? 'ໝວດໝູ່ອຸປະກອນ' : 'Hardware Type',
-                  hwSpec: currentLang === 'lo' ? 'ເບີ/ສະເປັກສະເພາະ' : 'Hardware Spec',
-                  packCount: currentLang === 'lo' ? 'ຈຳນວນບັນຈຸຕໍ່ກ່ອງ' : 'Pack Count',
-                  containerWeight: currentLang === 'lo' ? 'ນ້ຳໜັກບັນຈຸ' : 'Container Weight'
-                };
-
-                return (
-                  <div key={key} className="bg-white p-3 rounded-2xl border border-slate-200">
-                    <span className="text-slate-400 block text-[10px] font-semibold">
-                      {labelMap[key] || key.replace(/([A-Z])/g, ' $1')}:
-                    </span>
-                    <span className="text-slate-900 font-bold block mt-0.5">
-                      {Array.isArray(val as string | string[]) ? (val as string[]).join(', ') : (val as string)}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+            {(() => {
+              const cat = (targetItem.category || targetItem.printerCategory || '').toLowerCase();
+              if (cat.includes('printer')) {
+                return <PrinterSpecDetail item={targetItem} colorLinks={printerColorLinks} />;
+              } else if (cat.includes('ink')) {
+                return <InkSpecDetail item={targetItem} />;
+              }
+              return <GenericSpecDetail item={targetItem} />;
+            })()}
           </div>
 
           {/* Card 3: FIFO Job Order Usage Ledger Table */}
@@ -361,28 +341,25 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
           <DeleteActionButton onClick={() => setIsDeleteModalOpen(true)} />
           
-          {isInkCategory ? (
-            <button
-              onClick={() => setIsEditModalOpen(true)}
-              className="flex items-center gap-2 px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-2xl font-black text-xs shadow-sm transition active:scale-95 cursor-pointer"
-            >
-              <Edit3 className="w-4 h-4" />
-              <span>{t('common.edit')} (Link Printers)</span>
-            </button>
-          ) : (
-            <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-xl">
-              🔒 Read-Only Stock Record
-            </span>
-          )}
+          <button
+            onClick={() => setIsEditModalOpen(true)}
+            className="flex items-center gap-2 px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-2xl font-black text-xs shadow-sm transition active:scale-95 cursor-pointer"
+          >
+            <Edit3 className="w-4 h-4" />
+            <span>{t('common.edit')} (Edit Master Specs)</span>
+          </button>
         </div>
       </div>
 
-      {/* Edit Material Modal */}
+      {/* Asset Master Edit Modal */}
       {isEditModalOpen && (
-        <EditMaterialModal
-          isOpen={isEditModalOpen}
-          materialData={lotData}
-          onSave={handleSaveEditModal}
+        <AssetEditModal
+          item={targetItem}
+          onSave={(updatedData) => {
+            addInventorySku(updatedData);
+            showToast('Asset master data updated successfully!', 'success');
+            setIsEditModalOpen(false);
+          }}
           onClose={() => setIsEditModalOpen(false)}
         />
       )}

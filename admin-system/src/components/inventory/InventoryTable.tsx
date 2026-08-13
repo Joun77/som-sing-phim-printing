@@ -3,7 +3,7 @@ import { Eye, Edit3, Plus, Minus, ExternalLink, Image as ImageIcon } from 'lucid
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
 import InventoryDetailsModal from './InventoryDetailsModal';
-import EditMaterialModal from './EditMaterialModal';
+import AssetEditModal from './modals/AssetEditModal';
 
 export default function InventoryTable({ items, activeTab, onRestockItem, onViewDetails }) {
   const { t } = useTranslation();
@@ -277,11 +277,13 @@ export default function InventoryTable({ items, activeTab, onRestockItem, onView
       )}
 
       {editingLotModal && (
-        <EditMaterialModal
-          isOpen={Boolean(editingLotModal)}
-          materialData={editingLotModal}
-          // @ts-ignore - handleSaveEditModal is not defined in this component (pre-existing bug preserved)
-          onSave={handleSaveEditModal}
+        <AssetEditModal
+          item={editingLotModal.parentItem || editingLotModal}
+          onSave={(updatedData) => {
+            editInventorySku(updatedData.id, updatedData);
+            showToast('Asset master data updated successfully!', 'success');
+            setEditingLotModal(null);
+          }}
           onClose={() => setEditingLotModal(null)}
         />
       )}

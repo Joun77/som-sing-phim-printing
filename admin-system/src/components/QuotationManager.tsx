@@ -240,34 +240,47 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
 
   const inkSKUs = getInkSKUsOfSet(selectedInkSet);
 
-  // Get active pricing (ml cost) for each ink color
-  const cyanPrice = inkSKUs.cyan ? inkSKUs.cyan.costPerConsumptionUnit : 1500;
-  const magentaPrice = inkSKUs.magenta ? inkSKUs.magenta.costPerConsumptionUnit : 1500;
-  const yellowPrice = inkSKUs.yellow ? inkSKUs.yellow.costPerConsumptionUnit : 1500;
-  const blackPrice = inkSKUs.black ? inkSKUs.black.costPerConsumptionUnit : 1500;
+  // Get active pricing (Cost per ml) for each ink item
+  const getCostPerMl = (inkItem: any) => {
+    if (!inkItem) return 250; // Fallback LAK/ml
+    if (inkItem.costPerMl && inkItem.costPerMl > 0) return inkItem.costPerMl;
+    const vol = Number(inkItem.volume) || 100;
+    const price = Number(inkItem.costPerPurchaseUnit) || Number(inkItem.costPerConsumptionUnit) || 25000;
+    return price / (vol || 1);
+  };
 
-  // ISO 5% standard Yield Formula: (Price / Yield) * (%Coverage / 5%) * Factor S
+  const cyanPrice = inkSKUs.cyan ? (inkSKUs.cyan.costPerPurchaseUnit || inkSKUs.cyan.costPerConsumptionUnit || 25000) : 25000;
+  const magentaPrice = inkSKUs.magenta ? (inkSKUs.magenta.costPerPurchaseUnit || inkSKUs.magenta.costPerConsumptionUnit || 25000) : 25000;
+  const yellowPrice = inkSKUs.yellow ? (inkSKUs.yellow.costPerPurchaseUnit || inkSKUs.yellow.costPerConsumptionUnit || 25000) : 25000;
+  const blackPrice = inkSKUs.black ? (inkSKUs.black.costPerPurchaseUnit || inkSKUs.black.costPerConsumptionUnit || 25000) : 25000;
+
+  const cyanCostPerMl = getCostPerMl(inkSKUs.cyan);
+  const magentaCostPerMl = getCostPerMl(inkSKUs.magenta);
+  const yellowCostPerMl = getCostPerMl(inkSKUs.yellow);
+  const blackCostPerMl = getCostPerMl(inkSKUs.black);
+
   const factor = isDoubleSided ? 2 : 1;
   const cCov = (coverageMode === 'advanced' ? cCoverage : avgCoverage);
   const mCov = (coverageMode === 'advanced' ? mCoverage : avgCoverage);
   const yCov = (coverageMode === 'advanced' ? yCoverage : avgCoverage);
   const kCov = (coverageMode === 'advanced' ? kCoverage : avgCoverage);
 
-  // ISO Yields per channel (Default 4000 pages at 5% coverage)
-  const cyanYield = inkSKUs.cyan?.isoPageYieldA4 || 4000;
-  const magentaYield = inkSKUs.magenta?.isoPageYieldA4 || 4000;
-  const yellowYield = inkSKUs.yellow?.isoPageYieldA4 || 4000;
-  const blackYield = inkSKUs.black?.isoPageYieldA4 || 4000;
+  // OEM Baseline Standard Rates (ml/page at 5% A4 coverage)
+  // Base Rate = OEM Standard Volume (ml) / OEM Standard ISO Yield (Pages)
+  const blackBaseRateMl = (127 / 7500); // Default 0.01693 ml/page
+  const colorBaseRateMl = (70 / 6000);  // Default 0.01167 ml/page
 
-  const cyanMl   = (cCov / 5) * areaFactor * printVolume * factor;
-  const magentaMl = (mCov / 5) * areaFactor * printVolume * factor;
-  const yellowMl  = (yCov / 5) * areaFactor * printVolume * factor;
-  const blackMl   = (kCov / 5) * areaFactor * printVolume * factor;
+  // Total Volume consumed (ml) = BaseRate * (%Cov / 5%) * Factor S * printVolume * factor(double-sided)
+  const cyanMl    = colorBaseRateMl * (cCov / 5) * areaFactor * printVolume * factor;
+  const magentaMl = colorBaseRateMl * (mCov / 5) * areaFactor * printVolume * factor;
+  const yellowMl  = colorBaseRateMl * (yCov / 5) * areaFactor * printVolume * factor;
+  const blackMl   = blackBaseRateMl * (kCov / 5) * areaFactor * printVolume * factor;
 
-  const cyanCost    = (cyanPrice / cyanYield) * cyanMl;
-  const magentaCost = (magentaPrice / magentaYield) * magentaMl;
-  const yellowCost  = (yellowPrice / yellowYield) * yellowMl;
-  const blackCost   = (blackPrice / blackYield) * blackMl;
+  // Total Ink Cost = Volume ml * Cost per ml
+  const cyanCost    = cyanMl   * cyanCostPerMl;
+  const magentaCost = magentaMl * magentaCostPerMl;
+  const yellowCost  = yellowMl  * yellowCostPerMl;
+  const blackCost   = blackMl   * blackCostPerMl;
   const totalInkCost = cyanCost + magentaCost + yellowCost + blackCost;
 
   // Step 3: Machine Depreciation Cost (Section 4 formula)
