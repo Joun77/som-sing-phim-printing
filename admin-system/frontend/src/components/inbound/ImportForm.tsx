@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
+import ColorSlotConfigurator, { ColorSlot, STANDARD_PRESETS } from '../inventory/forms/common/ColorSlotConfigurator';
 import { 
   Upload, 
   X, 
@@ -16,7 +17,10 @@ import {
   RefreshCw,
   PackageCheck,
   CheckCircle2,
-  DollarSign
+  DollarSign,
+  ExternalLink,
+  Phone,
+  Link as LinkIcon
 } from 'lucide-react';
 
 export default function ImportForm({ onSubmit, onClose }) {
@@ -72,6 +76,7 @@ export default function ImportForm({ onSubmit, onClose }) {
   const [printerModel, setPrinterModel] = useState('');
   const [printerCategory, setPrinterCategory] = useState('Laser');
   const [colorSchemeType, setColorSchemeType] = useState('CMYK');
+  const [colorSlots, setColorSlots] = useState<ColorSlot[]>(STANDARD_PRESETS['CMYK']);
   const [totalColorSlots, setTotalColorSlots] = useState(4);
   const [expectedLifeA4, setExpectedLifeA4] = useState(500000);
   const [maintenanceRatePct, setMaintenanceRatePct] = useState(20);
@@ -80,6 +85,11 @@ export default function ImportForm({ onSubmit, onClose }) {
   const [selectedOS, setSelectedOS] = useState(['Windows', 'macOS']);
   const [printerLocation, setPrinterLocation] = useState('Main Dept');
   const [printerWarrantyYear, setPrinterWarrantyYear] = useState(new Date().getFullYear() + 2);
+
+  // --- Purchasing & Proofs Fields ---
+  const [actualImages, setActualImages] = useState<string[]>([]);
+  const [supplierPhone, setSupplierPhone] = useState('');
+  const [purchaseLink, setPurchaseLink] = useState('');
 
   // --- 2. INK Master Specs ---
   const [inkCode, setInkCode] = useState(`INK-${Date.now().toString().slice(-4)}`);
@@ -98,39 +108,29 @@ export default function ImportForm({ onSubmit, onClose }) {
     { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
   ]);
 
-  React.useEffect(() => {
-    if (colorSchemeType === 'Monochrome') {
-      setPrinterInkSlots([
-        { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'OEM-001-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 10000 }
-      ]);
-    } else if (colorSchemeType === 'CMYK') {
-      setPrinterInkSlots([
-        { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500 },
-        { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
-        { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
-        { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
-      ]);
-    } else if (colorSchemeType === 'Photo (6 Colors)') {
-      setPrinterInkSlots([
-        { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500 },
-        { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
-        { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
-        { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
-        { slotPosition: 'Slot 5 (LC - Light Cyan)', colorGroup: 'Light Cyan', oemInkCode: 'EPSON-008-LC', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
-        { slotPosition: 'Slot 6 (LM - Light Magenta)', colorGroup: 'Light Magenta', oemInkCode: 'EPSON-008-LM', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000 },
-      ]);
-    } else {
-      const count = Number(totalColorSlots) || 4;
-      const slots = Array.from({ length: count }, (_, i) => ({
-        slotPosition: `Slot ${i + 1}`,
-        colorGroup: 'Custom',
-        oemInkCode: `OEM-INK-${i + 1}`,
-        oemStandardVolumeMl: 100,
-        oemStandardIsoYieldA4: 5000
-      }));
-      setPrinterInkSlots(slots);
+  const handleColorSlotsChange = (newSlots: ColorSlot[]) => {
+    setColorSlots(newSlots);
+    setTotalColorSlots(newSlots.length);
+    const updatedInkSlots = newSlots.map((slot, index) => {
+      const existing = printerInkSlots[index];
+      return {
+        slotPosition: `Slot ${index + 1} (${slot.code} - ${slot.name})`,
+        colorGroup: slot.name,
+        oemInkCode: existing?.oemInkCode || `OEM-${slot.code}-01`,
+        oemStandardVolumeMl: existing?.oemStandardVolumeMl || 100,
+        oemStandardIsoYieldA4: existing?.oemStandardIsoYieldA4 || 6000
+      };
+    });
+    setPrinterInkSlots(updatedInkSlots);
+  };
+
+  const handleColorSchemeChange = (newScheme: string) => {
+    setColorSchemeType(newScheme);
+    if (STANDARD_PRESETS[newScheme]) {
+      handleColorSlotsChange(STANDARD_PRESETS[newScheme]);
     }
-  }, [colorSchemeType, totalColorSlots]);
+  };
+
 
   // --- 3. PAPER Master Specs ---
   const [paperCode, setPaperCode] = useState(`PAP-${Date.now().toString().slice(-4)}`);
@@ -383,6 +383,10 @@ export default function ImportForm({ onSubmit, onClose }) {
       imageUrl: productImage || null,
       receiptUrl: paymentSlip || null,
       taxInvoiceUrl: taxInvoice || null,
+      actual_images: actualImages,
+      payment_slip: paymentSlip,
+      supplier_phone: supplierPhone,
+      purchase_link: purchaseLink,
       customFields: customFields.reduce((acc, field) => {
         acc[field.key] = field.value;
         return acc;
@@ -399,11 +403,20 @@ export default function ImportForm({ onSubmit, onClose }) {
         model: printerModel,
         category: 'Printer',
         printerCategory,
+        color_config: {
+          colorScheme: colorSchemeType,
+          slots: colorSlots
+        },
         colorSchemeType,
         totalColorSlots: Number(totalColorSlots),
         expectedLifeA4Pages: Number(expectedLifeA4),
         maintenanceRatePercent: Number(maintenanceRatePct),
         printerColorLinks: printerInkSlots,
+        oemBaselineInks: printerInkSlots,
+        actual_images: actualImages,
+        payment_slip: paymentSlip,
+        supplier_phone: supplierPhone,
+        purchase_link: purchaseLink,
         functions: selectedFunctions,
         connectivity: selectedConnectivity,
         osCompatibility: selectedOS,
@@ -660,73 +673,89 @@ export default function ImportForm({ onSubmit, onClose }) {
       <form onSubmit={handleSubmit} className="space-y-6 text-xs font-semibold text-slate-700">
         
         {importType === 'PRINTER' && inboundMode === 'NEW' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
-            <div>
-              <label className="block text-xs font-black uppercase text-slate-400 mb-2">Asset ID *</label>
-              <input type="text" value={printerAssetId} onChange={(e) => setPrinterAssetId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" required />
-            </div>
-            <div>
-              <label className="block text-xs font-black uppercase text-slate-400 mb-2">Serial Number (S/N) *</label>
-              <input type="text" value={printerSn} onChange={(e) => setPrinterSn(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" placeholder="Enter Unique S/N" required />
-            </div>
-            <div>
-              <label className="block text-xs font-black uppercase text-slate-400 mb-2">Brand *</label>
-              <input type="text" value={printerBrand} onChange={(e) => setPrinterBrand(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" placeholder="e.g. Epson" required />
-            </div>
-            <div>
-              <label className="block text-xs font-black uppercase text-slate-400 mb-2">Model *</label>
-              <input type="text" value={printerModel} onChange={(e) => setPrinterModel(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" placeholder="e.g. TrueVIS VG3" required />
-            </div>
-            <div>
-              <label className="block text-xs font-black uppercase text-slate-400 mb-2">Printer Category</label>
-              <select value={printerCategory} onChange={(e) => setPrinterCategory(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold">
-                {printerCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-              </select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-6 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
+            <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">
+              {t('inbound.printer.title')}
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="block text-xs font-black uppercase text-slate-400">Color Scheme</label>
-                  <button type="button" onClick={() => setIsCustomSchemeModalOpen(true)} className="text-[10px] font-black text-sky-600 hover:text-sky-800 flex items-center gap-0.5">
-                    <Plus className="w-3 h-3" /> ເພີ່ມສີເອງ
-                  </button>
-                </div>
-                <select value={colorSchemeType} onChange={(e) => setColorSchemeType(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold">
-                  {colorSchemeOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                <label className="block text-xs font-black uppercase text-slate-400 mb-2">
+                  {t('inbound.printer.asset_id')} *
+                </label>
+                <input type="text" value={printerAssetId} onChange={(e) => setPrinterAssetId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" required />
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-400 mb-2">
+                  {t('inbound.printer.serial_number')} *
+                </label>
+                <input type="text" value={printerSn} onChange={(e) => setPrinterSn(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" placeholder="Enter Unique S/N" required />
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-400 mb-2">
+                  {t('inbound.printer.brand')} *
+                </label>
+                <input type="text" value={printerBrand} onChange={(e) => setPrinterBrand(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" placeholder="e.g. Epson" required />
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-400 mb-2">
+                  {t('inbound.printer.model')} *
+                </label>
+                <input type="text" value={printerModel} onChange={(e) => setPrinterModel(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" placeholder="e.g. TrueVIS VG3" required />
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-400 mb-2">
+                  {t('inbound.printer.category')}
+                </label>
+                <select value={printerCategory} onChange={(e) => setPrinterCategory(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold">
+                  {['Laser', 'Inkjet', 'MFP', 'Plotter', 'UV Flatbed', 'Sublimation'].map(cat => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-black uppercase text-slate-400 mb-2">Total Color Slots</label>
-                <input type="number" value={totalColorSlots} onChange={(e) => setTotalColorSlots(Number(e.target.value))} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" min="1" max="12" />
+                <label className="block text-xs font-black uppercase text-slate-400 mb-2">
+                  {t('inbound.printer.expected_life')}
+                </label>
+                <input type="number" value={expectedLifeA4} onChange={(e) => setExpectedLifeA4(Number(e.target.value))} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" />
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-400 mb-2">
+                  {t('inbound.printer.maintenance_rate')}
+                </label>
+                <input type="number" value={maintenanceRatePct} onChange={(e) => setMaintenanceRatePct(Number(e.target.value))} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" />
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-400 mb-2">
+                  {t('inbound.printer.location_dept')}
+                </label>
+                <input type="text" value={printerLocation} onChange={(e) => setPrinterLocation(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" />
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-black uppercase text-slate-400 mb-2">Expected Life A4 Pages</label>
-              <input type="number" value={expectedLifeA4} onChange={(e) => setExpectedLifeA4(Number(e.target.value))} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" />
-            </div>
-            <div>
-              <label className="block text-xs font-black uppercase text-slate-400 mb-2">Maintenance Rate %</label>
-              <input type="number" value={maintenanceRatePct} onChange={(e) => setMaintenanceRatePct(Number(e.target.value))} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" />
-            </div>
-            <div>
-              <label className="block text-xs font-black uppercase text-slate-400 mb-2">Location / Dept</label>
-              <input type="text" value={printerLocation} onChange={(e) => setPrinterLocation(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" />
+
+            {/* Custom Color Slot Configurator Integration */}
+            <div className="pt-2">
+              <ColorSlotConfigurator
+                colorScheme={colorSchemeType}
+                slots={colorSlots}
+                onSchemeChange={handleColorSchemeChange}
+                onSlotsChange={handleColorSlotsChange}
+              />
             </div>
 
             {/* Dynamic Ink Slot Mapping Matrix for OEM Baseline Standard Specs */}
-            <div className="col-span-1 md:col-span-2 bg-sky-50/50 p-4 rounded-2xl border border-sky-100 space-y-3 mt-2">
+            <div className="bg-sky-50/50 p-4 rounded-2xl border border-sky-100 space-y-3 mt-2">
               <div className="flex items-center justify-between">
-                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-sky-600" />
-                  <span>💧 ສເປັກໝຶກແທ້标准 (OEM Baseline Standard Specs)</span>
-                </h4>
-                <span className="text-[10px] text-sky-700 font-bold bg-sky-100 px-2 py-0.5 rounded-full">
-                  {printerInkSlots.length} Slots ({colorSchemeType})
+                <div>
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-sky-600" />
+                    <span>{t('inbound.printer.oem_specs_title')}</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-500 font-normal">
+                    {t('inbound.printer.oem_specs_subtitle')}
+                  </p>
+                </div>
+                <span className="text-[10px] text-sky-700 font-bold bg-sky-100 px-2 py-0.5 rounded-full shrink-0">
+                  {printerInkSlots.length} Slots
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500">
-                ระบุสเปคหมึกแท้มาตรฐานประจำรุ่น (OEM Ink SKU, Volume ml, ISO A4 Yield) เพื่อคำนวณอัตรากินหมึกมาตรฐานต่อแผ่น (Base Consumption Rate ml/page)
-              </p>
               <div className="space-y-3 pt-1">
                 {printerInkSlots.map((slot, index) => {
                   const baseRate = slot.oemStandardIsoYieldA4 > 0 
@@ -737,15 +766,17 @@ export default function ImportForm({ onSubmit, onClose }) {
                       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                         <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
                           <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
-                          <span>{slot.slotPosition} ({slot.colorGroup})</span>
+                          <span>{slot.slotPosition}</span>
                         </div>
                         <div className="text-[11px] font-mono font-bold text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded-lg border border-sky-100">
-                          Base Rate: {baseRate} ml/แผ่น
+                          {t('inbound.printer.base_rate')}: {baseRate} ml/p
                         </div>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">1) OEM Ink SKU / Model</label>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">
+                            {t('inbound.printer.oem_sku')}
+                          </label>
                           <input
                             type="text"
                             placeholder="e.g. EPSON-008-BK"
@@ -759,7 +790,9 @@ export default function ImportForm({ onSubmit, onClose }) {
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">2) OEM Standard Vol. (ml)</label>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">
+                            {t('inbound.printer.oem_vol')}
+                          </label>
                           <input
                             type="number"
                             placeholder="e.g. 127"
@@ -773,7 +806,9 @@ export default function ImportForm({ onSubmit, onClose }) {
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">3) OEM Standard ISO Yield (Pages)</label>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">
+                            {t('inbound.printer.oem_yield')}
+                          </label>
                           <input
                             type="number"
                             placeholder="e.g. 7500"
@@ -914,21 +949,130 @@ export default function ImportForm({ onSubmit, onClose }) {
         <div className="border-t border-slate-100 pt-6">
           <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-1.5">
             <Settings className="w-4 h-4 text-slate-500" />
-            <span>ຂໍ້ມູນຈັດຊື້ & ການຊຳລະເງິນ (Purchasing & Proofs)</span>
+            <span>{t('inbound.printer.purchasing_section')}</span>
           </h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-sky-50/20 p-5 rounded-2xl border border-sky-100/50">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-sky-50/20 p-5 rounded-2xl border border-sky-100/50">
             <div>
-              <label className="block text-xs font-black uppercase text-slate-400 mb-2">ຈຳນວນນຳເຂົ້າ (Import Qty) *</label>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-2">
+                {t('inbound.printer.import_qty')} *
+              </label>
               <input type="number" value={importQty} onChange={(e) => setImportQty(Number(e.target.value))} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" min="1" required />
             </div>
             <div>
-              <label className="block text-xs font-black uppercase text-slate-400 mb-2">ຕົ້ນທຶນນຳເຂົ້າ (Import Cost) *</label>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-2">
+                {t('inbound.printer.import_cost')} *
+              </label>
               <div className="relative">
                 <input type="number" value={importCost} onChange={(e) => setImportCost(e.target.value)} className="w-full pl-4 pr-16 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" placeholder="0.00" required />
                 <select value={importCurrency} onChange={(e) => setImportCurrency(e.target.value)} className="absolute right-2 top-2 bottom-2 bg-slate-100 border border-slate-200 rounded-xl px-2 text-[10px] font-black focus:outline-none">
                   <option value="LAK">LAK</option><option value="THB">THB</option><option value="USD">USD</option>
                 </select>
               </div>
+            </div>
+            <div>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-2 flex items-center gap-1">
+                <Phone className="w-3.5 h-3.5 text-slate-500" />
+                <span>{t('inbound.printer.supplier_phone')}</span>
+              </label>
+              <input type="tel" value={supplierPhone} onChange={(e) => setSupplierPhone(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" placeholder="e.g. +856 20 12345678" />
+            </div>
+            <div>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-2 flex items-center gap-1">
+                <LinkIcon className="w-3.5 h-3.5 text-slate-500" />
+                <span>{t('inbound.printer.purchase_link')}</span>
+              </label>
+              <div className="flex gap-2">
+                <input type="url" value={purchaseLink} onChange={(e) => setPurchaseLink(e.target.value)} className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold" placeholder="https://..." />
+                {purchaseLink && (
+                  <button type="button" onClick={() => window.open(purchaseLink, '_blank')} className="px-4 py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-2xl font-bold flex items-center gap-1 cursor-pointer">
+                    <ExternalLink className="w-4 h-4" />
+                    <span>{t('inbound.printer.open_link')}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Actual Product Images */}
+            <div className="md:col-span-2 space-y-2 pt-2 border-t border-slate-100">
+              <label className="block text-xs font-black uppercase text-slate-400">
+                {t('inbound.printer.actual_images')}
+              </label>
+              <div className="border-2 border-dashed border-slate-200 hover:border-sky-400 rounded-2xl p-4 bg-white text-center transition cursor-pointer relative">
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={(e) => {
+                    const files = e.target.files;
+                    if (!files) return;
+                    Array.from(files).forEach(file => {
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        if (ev.target?.result) {
+                          setActualImages(prev => [...prev, ev.target!.result as string]);
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                    });
+                  }}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                />
+                <div className="flex flex-col items-center gap-1.5 text-slate-500">
+                  <Upload className="w-5 h-5 text-sky-600" />
+                  <p className="text-xs font-semibold">{t('inbound.printer.upload_placeholder')}</p>
+                </div>
+              </div>
+              {actualImages.length > 0 && (
+                <div className="flex flex-wrap gap-3 pt-2">
+                  {actualImages.map((img, idx) => (
+                    <div key={idx} className="relative w-16 h-16 rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+                      <img src={img} alt={`Product ${idx}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setActualImages(actualImages.filter((_, i) => i !== idx))}
+                        className="absolute top-1 right-1 p-0.5 bg-rose-600 text-white rounded-full opacity-80 hover:opacity-100 transition cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Payment Slip Upload */}
+            <div className="md:col-span-2 space-y-2 pt-2 border-t border-slate-100">
+              <label className="block text-xs font-black uppercase text-slate-400">
+                {t('inbound.printer.payment_slip')}
+              </label>
+              <div className="border-2 border-dashed border-slate-200 hover:border-emerald-400 rounded-2xl p-4 bg-white text-center transition cursor-pointer relative">
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      if (ev.target?.result) setPaymentSlip(ev.target.result as string);
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                />
+                <div className="flex flex-col items-center gap-1.5 text-slate-500">
+                  <Upload className="w-5 h-5 text-emerald-600" />
+                  <p className="text-xs font-semibold">{t('inbound.printer.upload_placeholder')}</p>
+                </div>
+              </div>
+              {paymentSlip && (
+                <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-2 text-xs">
+                  <span className="font-semibold text-slate-700 truncate">Payment Slip Uploaded</span>
+                  <button type="button" onClick={() => setPaymentSlip('')} className="text-rose-600 hover:text-rose-800 font-bold cursor-pointer">
+                    {t('common.delete')}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

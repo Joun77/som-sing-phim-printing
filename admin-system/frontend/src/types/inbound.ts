@@ -50,6 +50,22 @@ export interface InboundEntry {
   freightFee?: number;
   productImage?: string;
   receiptSlip?: string;
+  actual_images?: string[];
+  payment_slip?: string;
+  supplier_phone?: string;
+  purchase_link?: string;
   specs?: Record<string, any>;
   [key: string]: any;
 }
+
+export interface InboundFormData {
+  importQty: number;
+  importCost: number | string;
+  importCurrency: string;
+  actual_images?: string[];
+  payment_slip?: string;
+  supplier_phone?: string;
+  purchase_link?: string;
+  [key: string]: any;
+}
+

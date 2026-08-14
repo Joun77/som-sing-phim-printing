@@ -495,7 +495,7 @@ export default function InboundManagement() {
           model: payload.name.split(' ').slice(1).join(' ') || payload.name,
           serialNumber: payload.sku || payload.id,
           category: payload.category === 'PRINTER' ? 'Printer' : (payload.category === 'CUTTER' ? 'Cutter' : 'Processing Tools'),
-          printerCategory: payload.specs?.printerCategory || 'Inkjet',
+          printerCategory: (payload as any).specs?.printerCategory || 'Inkjet',
           colorSchemeType: 'CMYK',
           totalColorSlots: 4,
           expectedLifeA4Pages: 200000,

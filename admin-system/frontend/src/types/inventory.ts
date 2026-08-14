@@ -1,3 +1,31 @@
+export interface ColorSlot {
+  id: string;
+  code: string;       // e.g., "K", "C", "M", "Y", "W", "V", "LC", "LM"
+  name: string;       // e.g., "Black", "Cyan", "White", "Varnish"
+  hexColor?: string;  // e.g., "#000000", "#00FFFF", "#FFFFFF"
+}
+
+export interface ColorConfig {
+  colorScheme: string; // e.g., "CMYK", "CMYK+W", "CMYK+W+V", "CUSTOM"
+  slots: ColorSlot[];
+}
+
+export interface PrinterSpec {
+  brand?: string;
+  model?: string;
+  printerCategory?: string;
+  color_config?: ColorConfig;
+  expectedLifeA4Pages?: number;
+  maintenanceRatePercent?: number;
+  location?: string;
+  printerColorLinks?: any[];
+  actual_images?: string[];
+  payment_slip?: string;
+  supplier_phone?: string;
+  purchase_link?: string;
+  [key: string]: any;
+}
+
 export interface InventoryBatch {
   id: string;
   purchaseDate: string;
@@ -43,3 +71,4 @@ export interface SpoilageLog {
   cause?: string;
   orderId?: string;
 }
+
