@@ -22,10 +22,15 @@ import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
 import { sampleInboundData } from '../../data/sampleInboundData';
 import ImportForm from './ImportForm';
+import PaperSpecDetail from '../inventory/details/PaperSpecDetail';
+import InkSpecDetail from '../inventory/details/InkSpecDetail';
+import PrinterSpecDetail from '../inventory/details/PrinterSpecDetail';
+import ProcurementDetailCard from '../inventory/details/ProcurementDetailCard';
+import InboundEditModal from './InboundEditModal';
 import type { InboundEntry } from '../../types';
 
 export default function InboundManagement() {
-   const { showToast, askConfirmation, formatCurrency, addEquipment, addInventorySku, inventory, addStock, addPrinterColorLink } = useApp();
+   const { showToast, askConfirmation, formatCurrency, addEquipment, addInventorySku, addInventoryBatch, updateInboundEntry, saveInventoryToBackend, inventory, addStock, addPrinterColorLink } = useApp();
   const { i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
 
@@ -43,6 +48,18 @@ export default function InboundManagement() {
   const [inboundList, setInboundList] = useState<InboundEntry[]>(sampleInboundData);
 
   useEffect(() => {
+    const savedLocal = localStorage.getItem('som_sing_inbound_list');
+    if (savedLocal) {
+      try {
+        const parsed = JSON.parse(savedLocal);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setInboundList(parsed);
+        }
+      } catch (e) {
+        console.log('Failed to load local inbound data', e);
+      }
+    }
+
     fetch('http://localhost:8080/api/inbound')
       .then(res => res.json())
       .then(data => {
@@ -57,14 +74,12 @@ export default function InboundManagement() {
             sku: item.skuCode,
             currentQty: item.quantity || 1,
             initialQty: item.quantity || 1,
-            unit: item.unit || 'Unit',
+            unit: (item.category === 'PRINTER' || item.category === 'MACHINERY') ? 'ເຄື່ອງ' : item.category === 'INK' ? 'ຂວດ' : (item.unit || 'ແຜ່ນ'),
             subUnit: `(${item.quantity} ${item.unit || 'Unit'})`,
             supplier: item.supplierName || 'Supplier',
             totalPrice: item.totalPrice || 0,
             paymentMethod: item.paymentMethod || 'TRANSFER',
             origin: item.origin || 'TH',
-            tariffRate: item.tariffFee || 0,
-            freightCharge: item.freightFee || 0,
             specs: item.specs || {},
             docs: {
               productPhoto: item.productImage || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='100%25' height='100%25' fill='%23f1f5f9'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%2364748b'%3EProduct Photo%3C/text%3E%3C/svg%3E",
@@ -73,9 +88,10 @@ export default function InboundManagement() {
             receiptUrl: item.receiptSlip || ''
           }));
           setInboundList(mapped);
+          localStorage.setItem('som_sing_inbound_list', JSON.stringify(mapped));
         }
       })
-      .catch(err => console.log('Using sample inbound data fallback', err));
+      .catch(err => console.log('Using local inbound data fallback', err));
   }, []);
 
   // Form input state (Common Master)
@@ -154,10 +170,8 @@ export default function InboundManagement() {
   // Calculate Net Landed Cost
   const calculateLandedCost = (item) => {
     const raw = Number(item.totalPrice) || 0;
-    const tariff = raw * ((Number(item.tariffRate) || 0) / 100);
-    const freight = Number(item.freightCharge) || 0;
     const qty = Number(item.initialQty || item.currentQty) || 1;
-    return (raw + tariff + freight) / qty;
+    return raw / qty;
   };
 
   // File Upload Handlers for Product Image & Payment Slip
@@ -277,36 +291,44 @@ export default function InboundManagement() {
     setIsModalOpen(true);
   };
 
-  const saveInboundToBackend = (item: any) => {
+  const saveInboundToBackend = (item: any, isUpdate = false) => {
     const apiPayload = {
       id: item.id,
       poNumber: item.poNumber || item.id,
-      inboundDate: item.receiptDate || new Date().toISOString().split('T')[0],
-      skuCode: item.sku || item.id,
-      itemName: item.name,
-      supplierName: item.supplier || '',
+      inboundDate: item.inboundDate || item.receiptDate || new Date().toISOString().split('T')[0],
+      skuCode: item.skuCode || item.sku || item.id,
+      itemName: item.itemName || item.name,
+      supplierName: item.supplierName || item.supplier || '',
       category: item.category,
-      quantity: Number(item.initialQty || item.currentQty) || 1,
+      quantity: Number(item.quantity || item.initialQty || item.currentQty) || 1,
       unit: item.unit || 'Unit',
       totalPrice: Number(item.totalPrice) || 0,
       paymentMethod: item.paymentMethod || 'TRANSFER',
       origin: item.origin || 'TH',
-      tariffFee: Number(item.tariffRate) || 0,
-      freightFee: Number(item.freightCharge) || 0,
-      productImage: item.docs?.productPhoto || '',
-      receiptSlip: item.docs?.paymentSlip || item.receiptUrl || '',
+      productImage: item.productImage || item.docs?.productPhoto || '',
+      receiptSlip: item.receiptSlip || item.docs?.paymentSlip || item.receiptUrl || '',
       specs: item.specs || {}
     };
 
-    fetch('http://localhost:8080/api/inbound', {
-      method: 'POST',
+    const url = isUpdate ? `http://localhost:8080/api/inbound/${item.id}` : 'http://localhost:8080/api/inbound';
+    const method = isUpdate ? 'PUT' : 'POST';
+
+    fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(apiPayload)
     }).catch(err => console.log('Inbound API save error', err));
   };
 
+  const deleteInboundFromBackend = (id: string) => {
+    fetch(`http://localhost:8080/api/inbound/${id}`, {
+      method: 'DELETE'
+    }).catch(err => console.log('Inbound API delete error', err));
+  };
+
   const handleImportSubmit = (type, data) => {
     const logId = `INB-${Date.now().toString().slice(-4)}`;
+    const calcTotal = Number(data.price) || Number(data.unitPrice) || Number(data.rawImportCost) || ((data.importQty || 1) * Number(data.unitPrice || 0));
     const newLog = {
       id: logId,
       poNumber: logId,
@@ -319,21 +341,24 @@ export default function InboundManagement() {
       initialQty: (type === 'PRINTER' || type === 'MACHINERY') ? 1 : data.importQty || 1,
       unit: data.unit || 'Unit',
       subUnit: (type === 'PRINTER' || type === 'MACHINERY') ? '(1 Unit)' : `(${data.importQty} ${data.unit})`,
-      supplier: data.supplier || 'Supplier',
-      totalPrice: (type === 'PRINTER' || type === 'MACHINERY') ? data.price : ((data.importQty || 1) * data.unitPrice),
+      supplier: data.supplier || data.vendor || '',
+      totalPrice: calcTotal,
       paymentMethod: data.paymentMethod || 'TRANSFER',
-      origin: 'TH',
-      tariffRate: 0,
-      freightCharge: 0,
-      specs: data.specs || {},
+      supplier_phone: data.supplier_phone || data.specs?.supplier_phone || '',
+      purchase_link: data.purchase_link || data.specs?.purchase_link || '',
+      specs: data.specs || { ...data },
       docs: {
-        productPhoto: data.imageUrl || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='100%25' height='100%25' fill='%23f1f5f9'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%2364748b'%3EProduct Photo%3C/text%3E%3C/svg%3E",
-        paymentSlip: data.receiptUrl || ''
+        productPhoto: data.imageUrl || (Array.isArray(data.actual_images) && data.actual_images[0]) || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='100%25' height='100%25' fill='%23f1f5f9'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%2364748b'%3EProduct Photo%3C/text%3E%3C/svg%3E",
+        paymentSlip: data.receiptUrl || data.payment_slip || ''
       },
-      receiptUrl: data.receiptUrl || ''
+      receiptUrl: data.receiptUrl || data.payment_slip || ''
     };
 
-    setInboundList(prev => [newLog, ...prev]);
+    setInboundList(prev => {
+      const newList = [newLog, ...prev];
+      localStorage.setItem('som_sing_inbound_list', JSON.stringify(newList));
+      return newList;
+    });
     saveInboundToBackend(newLog);
 
     if (type === 'PRINTER' || type === 'MACHINERY') {
@@ -363,31 +388,50 @@ export default function InboundManagement() {
 
       showToast(`${type === 'PRINTER' ? 'Printer' : 'Machinery'} registered successfully in assets!`, 'success');
     } else {
-      const existingItem = inventory.find(item => item.id === data.id);
+      const sheetsPerPack = Number(data.sheetsPerPack || data.specs?.sheetsPerPack || data.sheets_per_pack || data.sheets_per_ream || 500);
+      const isSheetPaper = type === 'PAPER' || type === 'MATERIAL' || data.category === 'Paper';
+      const packQty = Number(data.importQty || 1);
+      const totalSheets = isSheetPaper ? packQty * sheetsPerPack : packQty;
+      const unitPrice = Number(data.unitPrice || data.price || calcTotal || 95000);
+      const perSheetPrice = isSheetPaper ? Math.round(unitPrice / sheetsPerPack) : unitPrice;
+
+      const existingItem = inventory.find(item => item.id === data.id || item.id === logId);
       if (existingItem) {
-        addStock(data.id, data.importQty);
+        addInventoryBatch(existingItem.id, {
+          batchId: `LOT-${logId}`,
+          purchaseDate: data.receiptDate || data.importDate || new Date().toISOString().split('T')[0],
+          supplierName: data.supplier || data.vendor || '',
+          purchasePrice: unitPrice,
+          purchaseQty: packQty,
+          sheetsToAdd: totalSheets
+        });
       } else {
-        addInventorySku({
-          ...data,
-          stockQty: data.importQty,
-          consumptionUnit: data.unit,
-          purchaseUnit: data.unit,
-          purchaseMultiplier: 1,
-          costPerPurchaseUnit: data.unitPrice,
-          costPerConsumptionUnit: data.unitPrice,
-          reorderThreshold: 10,
+        const newItem = {
+          id: data.id || logId,
+          name: data.name,
+          category: isSheetPaper ? 'Paper' : (type === 'INK' ? 'Ink' : 'Finishing'),
+          stockQty: totalSheets,
+          consumptionUnit: isSheetPaper ? 'แผ่น' : (data.unit || 'Units'),
+          purchaseUnit: isSheetPaper ? 'แพ็ก' : (data.unit || 'Units'),
+          purchaseMultiplier: isSheetPaper ? sheetsPerPack : 1,
+          costPerPurchaseUnit: unitPrice,
+          costPerConsumptionUnit: perSheetPrice,
+          reorderThreshold: 50,
+          specs: data.specs || { ...data },
           batches: [
             {
-              id: `LOT-${data.id.slice(-4)}-001`,
-              purchaseDate: data.importDate || new Date().toISOString().split('T')[0],
-              supplierName: data.supplier,
-              purchasePricePerReam: data.unitPrice,
-              costPerSheet: data.unitPrice,
-              initialQty: data.importQty,
-              currentQty: data.importQty
+              id: `LOT-${logId}`,
+              purchaseDate: data.receiptDate || data.importDate || new Date().toISOString().split('T')[0],
+              supplierName: data.supplier || data.vendor || '',
+              purchasePricePerReam: unitPrice,
+              costPerSheet: perSheetPrice,
+              initialQty: totalSheets,
+              currentQty: totalSheets
             }
           ]
-        });
+        };
+        addInventorySku(newItem);
+        saveInventoryToBackend(newItem);
       }
 
       if (type === 'INK' && data.targetPrinterId) {
@@ -469,8 +513,6 @@ export default function InboundManagement() {
       totalPrice: Number(formTotalPrice),
       paymentMethod: formPaymentMethod,
       origin: formOrigin,
-      tariffRate: Number(formTariff),
-      freightCharge: Number(formFreight),
       specs: specs,
       docs: {
         productPhoto: formImgProduct || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='100%25' height='100%25' fill='%23f1f5f9'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%2364748b'%3EProduct Photo%3C/text%3E%3C/svg%3E",
@@ -549,7 +591,12 @@ export default function InboundManagement() {
     askConfirmation(
       currentLang === 'lo' ? 'ທ່ານຕ້ອງການລຶບລາຍການນຳເຂົ້ານີ້ ຫຼື ບໍ່?' : 'Are you sure you want to delete this inbound record?',
       () => {
-        setInboundList(prev => prev.filter(i => i.id !== id));
+        setInboundList(prev => {
+          const newList = prev.filter(i => i.id !== id);
+          localStorage.setItem('som_sing_inbound_list', JSON.stringify(newList));
+          return newList;
+        });
+        deleteInboundFromBackend(id);
         if (selectedDrawerItem?.id === id) setSelectedDrawerItem(null);
         showToast(currentLang === 'lo' ? 'ລຶບລາຍການຮຽບຮ້ອຍແລ້ວ' : 'Item deleted successfully', 'success');
       }
@@ -616,7 +663,7 @@ export default function InboundManagement() {
         <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider block">
-              {currentLang === 'lo' ? 'ສຸຣຸບຈຳນວນນຳເຂົ້າທັງໝົດ' : 'Total Inbound Quantity'}
+              {currentLang === 'lo' ? 'ສະຫຼຸບຈຳນວນນຳເຂົ້າທັງໝົດ' : 'Total Inbound Quantity'}
             </span>
             <span className="text-2xl font-black text-slate-900 font-mono block">
               {totalInboundQty.toLocaleString()} <span className="text-xs font-bold text-slate-400">{currentLang === 'lo' ? 'ລາຍການ / ຊິ້ນ' : 'Items/Pcs'}</span>
@@ -631,14 +678,14 @@ export default function InboundManagement() {
         <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider block">
-              {currentLang === 'lo' ? 'ສຸຣຸບຍອດມູນຄ່ານຳເຂົ້າທັງໝົດ' : 'Total Inbound Value'}
+              {currentLang === 'lo' ? 'ສະຫຼຸບຍອດມູນຄ່ານຳເຂົ້າທັງໝົດ' : 'Total Inbound Value'}
             </span>
             <span className="text-2xl font-black text-emerald-600 font-mono block">
               {formatLAK(totalInboundValue)}
             </span>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
-            <DollarSign className="w-6 h-6" />
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-700 shrink-0 font-black text-xl select-none">
+            ₭
           </div>
         </div>
 
@@ -761,7 +808,29 @@ export default function InboundManagement() {
                       <span className="font-bold text-slate-900 block group-hover:text-sky-600 transition">{item.name}</span>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <span className="font-mono font-black text-slate-900 block">{item.initialQty} {item.unit}</span>
+                      <span className="font-mono font-black text-slate-900 block">
+                        {(() => {
+                          const cat = (item.category || '').toUpperCase();
+                          const rawQty = Number(item.initialQty || item.currentQty) || 1;
+                          if (cat === 'PRINTER' || cat === 'MACHINERY' || cat === 'EQUIPMENT') {
+                            return `${rawQty} ${currentLang === 'lo' ? 'ເຄື່ອງ' : 'Unit'}`;
+                          }
+                          if (cat === 'INK') {
+                            return `${rawQty} ${currentLang === 'lo' ? 'ຂວດ' : 'Bottle'}`;
+                          }
+                          if (cat === 'PAPER' || cat === 'MATERIAL') {
+                            const isSheet = (item.specs?.paperFormat || item.paperFormat || 'sheet').toLowerCase() === 'sheet';
+                            if (isSheet) {
+                              const sheetsPerPack = Number(item.specs?.sheetsPerPack || item.specs?.sheets_per_ream || item.sheetsPerPack || item.sheets_per_ream) || 500;
+                              const totalSheets = rawQty * sheetsPerPack;
+                              return `${totalSheets.toLocaleString()} ${currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'}`;
+                            } else {
+                              return `${rawQty} ${currentLang === 'lo' ? 'ມ້ວນ' : 'roll'}`;
+                            }
+                          }
+                          return `${rawQty} ${item.unit || ''}`;
+                        })()}
+                      </span>
                     </td>
                     <td className="py-4 px-6 text-right">
                       <span className="font-mono font-black text-emerald-600 block">
@@ -834,7 +903,7 @@ export default function InboundManagement() {
                     onClick={() => {
                       const item = selectedDrawerItem;
                       setSelectedDrawerItem(null);
-                      handleOpenModal(item);
+                      setEditingItem(item);
                     }}
                     className="p-2.5 text-slate-400 hover:text-sky-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
                   >
@@ -859,62 +928,45 @@ export default function InboundManagement() {
               <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin">
                 <div className="grid grid-cols-3 gap-3">
                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                    <span className="text-[11px] text-slate-400 font-extrabold block mb-1">Raw Purchase Price</span>
-                    <span className="text-sm md:text-base font-black text-slate-900">{formatLAK(selectedDrawerItem.totalPrice)}</span>
+                    <span className="text-[11px] text-slate-400 font-extrabold block mb-1">Total Import Cost</span>
+                    <span className="text-sm md:text-base font-black text-slate-900">{formatLAK(selectedDrawerItem.totalPrice || 0)}</span>
                   </div>
                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
                     <span className="text-[11px] text-slate-400 font-extrabold block mb-1">Total Inbound Qty</span>
-                    <span className="text-sm md:text-base font-black text-sky-700">{selectedDrawerItem.initialQty || selectedDrawerItem.currentQty} {selectedDrawerItem.unit}</span>
+                    <span className="text-sm md:text-base font-black text-sky-700">
+                      {(() => {
+                        const cat = (selectedDrawerItem.category || '').toUpperCase();
+                        const rawQty = Number(selectedDrawerItem.initialQty || selectedDrawerItem.currentQty) || 1;
+                        if (cat === 'PRINTER' || cat === 'MACHINERY' || cat === 'EQUIPMENT') {
+                          return `${rawQty} ${currentLang === 'lo' ? 'ເຄື່ອງ' : 'Unit'}`;
+                        }
+                        if (cat === 'INK') {
+                          return `${rawQty} ${currentLang === 'lo' ? 'ຂວດ' : 'Bottle'}`;
+                        }
+                        if (cat === 'PAPER' || cat === 'MATERIAL') {
+                          const isSheet = (selectedDrawerItem.specs?.paperFormat || selectedDrawerItem.paperFormat || 'sheet').toLowerCase() === 'sheet';
+                          if (isSheet) {
+                            const sheetsPerPack = Number(selectedDrawerItem.specs?.sheetsPerPack || selectedDrawerItem.specs?.sheets_per_ream || selectedDrawerItem.sheetsPerPack || selectedDrawerItem.sheets_per_ream) || 500;
+                            const totalSheets = rawQty * sheetsPerPack;
+                            return `${totalSheets.toLocaleString()} ${currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'}`;
+                          } else {
+                            return `${rawQty} ${currentLang === 'lo' ? 'ມ້ວນ' : 'roll'}`;
+                          }
+                        }
+                        return `${rawQty} ${selectedDrawerItem.unit || ''}`;
+                      })()}
+                    </span>
                   </div>
                   <div className="bg-blue-50/60 p-4 rounded-2xl border border-blue-100">
-                    <span className="text-[11px] text-blue-900 font-extrabold block mb-1">Net Landed Cost/Unit</span>
-                    <span className="text-sm md:text-base font-black text-blue-950">{formatLAK(calculateLandedCost(selectedDrawerItem))}</span>
+                    <span className="text-[11px] text-blue-900 font-extrabold block mb-1">Unit Cost</span>
+                    <span className="text-sm md:text-base font-black text-blue-950">
+                      {formatLAK(Math.round((selectedDrawerItem.totalPrice || 0) / (selectedDrawerItem.initialQty || selectedDrawerItem.currentQty || 1)))}
+                    </span>
                   </div>
                 </div>
 
-                {/* Customs & General Info */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-sky-600" />
-                    <span>{currentLang === 'lo' ? 'ລາຍລະອຽດການສັ່ງຊື້ & ນຳເຂົ້າ (Procurement Details)' : 'Procurement Details'}</span>
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4 text-xs font-medium">
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">PO / Ref ID:</span>
-                      <span className="font-mono text-slate-800 font-extrabold">{selectedDrawerItem.poNumber || selectedDrawerItem.id}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">SKU Code:</span>
-                      <span className="font-mono text-slate-800 font-bold">{selectedDrawerItem.sku}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">{currentLang === 'lo' ? 'ວັນທີຮັບ/ຕິດຕັ້ງ:' : 'Receipt Date:'}</span>
-                      <span className="text-slate-800 font-bold">{selectedDrawerItem.receiptDate}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">{currentLang === 'lo' ? 'ຜູ້ສະໜອງ/ຮ້ານຄ້າ:' : 'Supplier Name:'}</span>
-                      <span className="text-slate-800 font-bold">{selectedDrawerItem.supplier}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">{currentLang === 'lo' ? 'ຊ່ອງທາງຊຳລະເງິນ:' : 'Payment Method:'}</span>
-                      <span className="font-bold text-slate-800">
-                        {selectedDrawerItem.paymentMethod === 'TRANSFER' ? (currentLang === 'lo' ? 'ໂອນເງິນ (Bank Transfer)' : 'Bank Transfer') : (currentLang === 'lo' ? 'ເງິນສົດ (Cash)' : 'Cash')}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">{currentLang === 'lo' ? 'ປະເທດຕົ້ນທາງ:' : 'Origin Country:'}</span>
-                      <span className="font-bold text-slate-800">{selectedDrawerItem.origin}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">{currentLang === 'lo' ? 'ອັດຕາພາສີ (Tariff Rate):' : 'Customs Tariff Rate:'}</span>
-                      <span className="font-bold text-amber-700">{selectedDrawerItem.tariffRate || 0}%</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">{currentLang === 'lo' ? 'ຄ່າขนส่ง (Freight Fee):' : 'Freight Fee:'}</span>
-                      <span className="font-bold text-slate-800">{formatLAK(selectedDrawerItem.freightCharge || 0)}</span>
-                    </div>
-                  </div>
-                </div>
+                {/* Procurement Details */}
+                <ProcurementDetailCard item={selectedDrawerItem} currentLang={currentLang} />
 
                 {/* Dynamic Technical Specs */}
                 <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
@@ -922,55 +974,34 @@ export default function InboundManagement() {
                     <Microchip className="w-4 h-4 text-purple-600" />
                     <span>{currentLang === 'lo' ? 'ສະເປັກທາງເຕັກນິກ (ERP Technical Specs)' : 'ERP Technical Specs'}</span>
                   </h3>
-                  <div className="grid grid-cols-2 gap-4 text-xs font-medium">
-                    {(() => {
-                      const combinedSpecs = {
-                        ...(selectedDrawerItem.technical_specs || {}),
-                        ...(selectedDrawerItem.specs || {})
-                      };
-                      return Object.entries(combinedSpecs).map(([key, val]) => {
-                        if (!val || key === 'tariffRate' || key === 'clickRate' || key === 'clickBw' || key === 'clickColor') return null;
-                        
-                        const labelMapLo: Record<string, string> = {
-                          formFactor: currentLang === 'lo' ? 'ຮູບແບບບັນຈຸພັນ (Form Factor)' : 'Form Factor',
-                          grammage: currentLang === 'lo' ? 'ຄວາມໜາ/ນ້ຳໜັກ (Grammage GSM)' : 'Grammage (GSM)',
-                          standardSize: currentLang === 'lo' ? 'ຂະໜາດມາດຕະຖານ (Standard Size)' : 'Standard Size',
-                          widthMm: currentLang === 'lo' ? 'ໜ້າກວ້າງ (Width mm)' : 'Width (mm)',
-                          length: currentLang === 'lo' ? 'ຄວາມຍາວລວມ (Length m)' : 'Length (m)',
-                          packQty: currentLang === 'lo' ? 'ຈຳນວນແຜ່ນຕໍ່ຣີມ (Pack Qty)' : 'Pack Qty',
-                          inkType: currentLang === 'lo' ? 'ປະເພດໝຶກພິມ (Ink Type)' : 'Ink Type',
-                          colorModel: currentLang === 'lo' ? 'ສີ / ຕະລັບສີ (Color Option)' : 'Color Option',
-                          volumePerBottle: currentLang === 'lo' ? 'ບໍລິມາດບັນຈຸ (Volume/Bottle)' : 'Volume/Bottle',
-                          compatiblePrinter: currentLang === 'lo' ? 'ເຄື່ອງພິມທີ່ເຊື່ອມໂຍງ (Linked Printer)' : 'Linked Printer',
-                          supportedInkType: currentLang === 'lo' ? 'ຊະນິດໝຶກທີ່ເຄື່ອງໃຊ້ (Supported Ink)' : 'Supported Ink',
-                          colorSlots: currentLang === 'lo' ? 'ສະລັອດສີໝຶກປະຈຳເຄື່ອງ (Color Slots)' : 'Color Slots',
-                          hwType: currentLang === 'lo' ? 'ໝວດໝູ່ອຸປະກອນ (Hardware Type)' : 'Hardware Type',
-                          hwSpec: currentLang === 'lo' ? 'ເບີ/ສະເປັກສະເພາະ (Hardware Spec)' : 'Hardware Spec',
-                          packCount: currentLang === 'lo' ? 'ຈຳນວນບັນຈຸຕໍ່ກ່ອງ (Pack Count)' : 'Pack Count',
-                          containerWeight: currentLang === 'lo' ? 'ນ້ຳໜັກບັນຈຸ (Container Weight)' : 'Container Weight',
-                          maxPaperSize: currentLang === 'lo' ? 'ຂະໜາດພິມສູງສຸດ (Max Print Size)' : 'Max Print Size',
-                          printSpeedColor: currentLang === 'lo' ? 'ຄວາມໄວພິມສີ (Print Speed Color)' : 'Print Speed (Color)',
-                          printSpeedBw: currentLang === 'lo' ? 'ຄວາມໄວພິມຂາວດຳ (Print Speed BW)' : 'Print Speed (BW)',
-                          isoBlackYield: currentLang === 'lo' ? 'ມາດຕະຖານພິມໝຶກດຳ (ISO Black Yield)' : 'ISO Black Yield',
-                          isoColorYield: currentLang === 'lo' ? 'ມາດຕະຖານພິມໝຶກສີ (ISO Color Yield)' : 'ISO Color Yield',
-                          costPerPage: currentLang === 'lo' ? 'ຕົ້ນທຶນໝຶກຕໍ່ແຜ່ນ (Cost Per Page - CPP)' : 'Cost Per Page (CPP)',
-                          maxCutWidthMm: currentLang === 'lo' ? 'ໜ້າກວ້າງຕັດສູງສຸດ (Max Cut Width)' : 'Max Cut Width',
-                          cuttingSpeed: currentLang === 'lo' ? 'ຂໍ້ມູນການທຳງານທົ່ວໄປ (Machine Functionality)' : 'Machine Functionality'
-                        };
-
-                        return (
-                          <div key={key} className={key === 'cuttingSpeed' || key === 'colorSlots' ? 'col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-100' : ''}>
-                            <span className="text-slate-400 block text-[11px] font-semibold">
-                              {labelMapLo[key] || key.replace(/([A-Z])/g, ' $1')}:
-                            </span>
-                            <span className="text-slate-800 font-bold">
-                              {Array.isArray(val as string | string[]) ? (val as string[]).join(', ') : (val as string)}
-                            </span>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
+                  {(() => {
+                    const category = (selectedDrawerItem.category || '').toUpperCase();
+                    if (category === 'PAPER' || category === 'MATERIAL') {
+                      return <PaperSpecDetail item={selectedDrawerItem} currentLang={currentLang} />;
+                    }
+                    if (category === 'INK') {
+                      return <InkSpecDetail item={selectedDrawerItem} currentLang={currentLang} />;
+                    }
+                    if (category === 'PRINTER') {
+                      return <PrinterSpecDetail item={selectedDrawerItem} currentLang={currentLang} />;
+                    }
+                    const specs = selectedDrawerItem.specs || selectedDrawerItem.technical_specs || {};
+                    return (
+                      <div className="grid grid-cols-2 gap-4 text-xs font-medium">
+                        {Object.entries(specs).map(([key, val]) => {
+                          if (!val || typeof val === 'object' || key === 'tariffRate' || key === 'origin' || key === 'freightCharge') return null;
+                          return (
+                            <div key={key}>
+                              <span className="text-slate-400 block text-[11px] font-semibold">
+                                {key.replace(/([A-Z])/g, ' $1')}:
+                              </span>
+                              <span className="text-slate-800 font-bold">{String(val)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Document Vault Attachments */}
@@ -1025,7 +1056,7 @@ export default function InboundManagement() {
         </div>
       )}
 
-      {/* Full Add / Edit Modal */}
+      {/* Dynamic New Inbound Import Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-4xl max-h-[95vh] flex flex-col shadow-2xl overflow-hidden animate-fade-in">
@@ -1034,7 +1065,7 @@ export default function InboundManagement() {
                 <Boxes className="w-5 h-5 text-blue-900" />
                 <span>{currentLang === 'lo' ? 'ນຳເຂົ້າສິນຄ້າ / ອຸປະກອນໃໝ່ (Dynamic Inbound Form)' : 'New Inbound Procurement (Dynamic Inbound Form)'}</span>
               </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-700 transition">
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-700 transition cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1049,6 +1080,26 @@ export default function InboundManagement() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Category-Aware Edit Modal */}
+      {editingItem && (
+        <InboundEditModal
+          item={editingItem}
+          onSave={(updatedItem) => {
+            setInboundList(prev => {
+              const newList = prev.map(item => item.id === updatedItem.id ? updatedItem : item);
+              localStorage.setItem('som_sing_inbound_list', JSON.stringify(newList));
+              return newList;
+            });
+            updateInboundEntry(updatedItem);
+            saveInboundToBackend(updatedItem, true);
+            setEditingItem(null);
+            setSelectedDrawerItem(updatedItem);
+            showToast(currentLang === 'lo' ? 'ແກ້ໄຂຂໍ້ມູນสำเร็จ!' : 'Inbound item updated successfully!', 'success');
+          }}
+          onClose={() => setEditingItem(null)}
+        />
       )}
 
       {/* Fullscreen Lightbox */}

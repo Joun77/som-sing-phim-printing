@@ -10,7 +10,7 @@ import PaperSpecDetail from './details/PaperSpecDetail';
 import GenericSpecDetail from './details/GenericSpecDetail';
 import ConfirmDeleteModal, { DeleteActionButton } from '../common/ConfirmDeleteModal';
 
-export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
+export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBack }) {
   const { t, i18n } = useTranslation();
   const { inventory, linkedInboundEntries, deleteInventoryBatch, editInventoryBatch, addInventorySku, equipment, printerColorLinks, showToast, formatCurrency } = useApp();
 
@@ -22,10 +22,7 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
   let targetLot = null;
 
   if (parentSkuId) {
-    targetItem = inventory.find(i => i.id === parentSkuId);
-    if (targetItem && targetItem.batches) {
-      targetLot = targetItem.batches.find(b => b.id === lotId) || targetItem.batches[0];
-    }
+    targetItem = inventory.find(i => i.id === parentSkuId || i.id.toLowerCase() === parentSkuId.toLowerCase());
   }
 
   if (!targetItem && lotId) {
@@ -41,37 +38,71 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
     }
   }
 
+  const isSheetPaper = (targetItem?.category || '').toLowerCase() === 'paper' || (targetItem?.category || '').toLowerCase() === 'material';
+  const multiplier = Number(targetItem?.purchaseMultiplier || targetItem?.specs?.sheetsPerPack || 500);
+
   const matchedInboundEntries = (linkedInboundEntries || []).filter(
     (e: any) => e && (e.sku === targetItem?.id || e.id === targetItem?.id || e.skuCode === targetItem?.id || e.name === targetItem?.name)
   );
 
-  const realBatches = (targetItem?.batches || []).filter((b: any) => b.id && !b.id.includes('-EMPTY'));
+  const rawBatches = (targetItem?.batches || []).filter((b: any) => b.id && !b.id.includes('-EMPTY'));
 
-  const combinedBatches = realBatches.length > 0 ? realBatches : matchedInboundEntries.map((e: any) => ({
-    id: e.poNumber || e.id || `LOT-${targetItem?.id}`,
-    purchaseDate: e.receiptDate || e.importDate || '-',
-    supplierName: e.supplier || e.vendor || '',
-    purchasePricePerReam: e.totalPrice || e.unitPrice || targetItem?.costPerPurchaseUnit || 0,
-    costPerSheet: targetItem?.costPerConsumptionUnit || 0,
-    initialQty: (e.importQty || 1) * (targetItem?.purchaseMultiplier || 500),
-    currentQty: (e.importQty || 1) * (targetItem?.purchaseMultiplier || 500)
-  }));
+  const realBatches = rawBatches.map((b: any) => {
+    let iQty = Number(b.initialQty || 0);
+    let cQty = Number(b.currentQty || 0);
+    if (isSheetPaper && iQty > 0 && iQty <= 10) {
+      iQty = iQty * multiplier;
+    }
+    if (isSheetPaper && cQty > 0 && cQty <= 10) {
+      cQty = cQty * multiplier;
+    }
+    return {
+      ...b,
+      initialQty: iQty,
+      currentQty: cQty
+    };
+  });
 
-  const isSheetPaper = (targetItem?.category || '').toLowerCase() === 'paper' || (targetItem?.category || '').toLowerCase() === 'material';
-  const multiplier = Number(targetItem?.purchaseMultiplier || targetItem?.specs?.sheetsPerPack || 500);
+  const combinedBatches = realBatches.length > 0 ? realBatches : matchedInboundEntries.map((e: any) => {
+    const packQty = Number(e.importQty || 1);
+    const totalSheets = isSheetPaper ? packQty * multiplier : packQty;
+    return {
+      id: e.poNumber || e.id || `LOT-${targetItem?.id}`,
+      purchaseDate: e.receiptDate || e.importDate || '-',
+      supplierName: e.supplier || e.vendor || '',
+      purchasePricePerReam: e.totalPrice || e.unitPrice || targetItem?.costPerPurchaseUnit || 0,
+      costPerSheet: Math.round((e.totalPrice || e.unitPrice || targetItem?.costPerPurchaseUnit || 95000) / multiplier),
+      initialQty: totalSheets,
+      currentQty: totalSheets
+    };
+  });
 
-  const realStockQty = combinedBatches.length > 0
-    ? combinedBatches.reduce((sum: number, b: any) => sum + (Number(b.currentQty) || 0), 0)
-    : (Number(targetItem?.stockQty) || Number(targetItem?.currentStock) || 0);
-
-  let effectiveStock = realStockQty > 0 ? realStockQty : (Number(targetItem?.stockQty) || Number(targetItem?.currentStock) || 0);
-  if (isSheetPaper && effectiveStock > 0 && effectiveStock <= 10) {
-    effectiveStock = effectiveStock * multiplier;
-  } else if (isSheetPaper && effectiveStock === 0) {
-    effectiveStock = multiplier;
+  let effectiveStock = combinedBatches.reduce((sum: number, b: any) => sum + (Number(b.currentQty) || 0), 0);
+  if (effectiveStock === 0) {
+    let rawStock = Number(targetItem?.stockQty) || Number(targetItem?.currentStock) || 0;
+    if (isSheetPaper && rawStock > 0 && rawStock <= 10) {
+      rawStock = rawStock * multiplier;
+    } else if (isSheetPaper && rawStock === 0) {
+      rawStock = multiplier;
+    }
+    effectiveStock = rawStock;
   }
 
   const activeLot = targetLot || (combinedBatches.length > 0 ? combinedBatches[0] : null);
+
+  let activeInitialQty = Number(activeLot?.initialQty || effectiveStock);
+  if (isSheetPaper && activeInitialQty > 0 && activeInitialQty <= 10) {
+    activeInitialQty = activeInitialQty * multiplier;
+  }
+
+  let activeCurrentQty = Number(activeLot?.currentQty || effectiveStock);
+  if (isSheetPaper && activeCurrentQty > 0 && activeCurrentQty <= 10) {
+    activeCurrentQty = activeCurrentQty * multiplier;
+  }
+
+  const perSheetCost = isSheetPaper
+    ? Math.round(Number(activeLot?.purchasePricePerReam || activeLot?.purchasePrice || targetItem?.costPerPurchaseUnit || 95000) / multiplier)
+    : Number(activeLot?.costPerSheet || targetItem?.costPerConsumptionUnit || 0);
 
   const lotData = {
     parentItem: targetItem,
@@ -80,10 +111,10 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
     purchaseDate: activeLot?.purchaseDate || targetItem?.receiptDate || targetItem?.importDate || '-',
     supplierName: activeLot?.supplierName || targetItem?.supplierName || targetItem?.supplier || targetItem?.vendor || '-',
     paymentMethod: activeLot?.paymentMethod || targetItem?.paymentMethod || 'TRANSFER',
-    costPerSheet: activeLot?.costPerSheet || targetItem?.costPerConsumptionUnit || Math.round((targetItem?.costPerPurchaseUnit || 95000) / multiplier),
+    costPerSheet: perSheetCost,
     purchasePrice: activeLot?.purchasePricePerReam || targetItem?.costPerPurchaseUnit || 95000,
-    currentQty: effectiveStock,
-    initialQty: effectiveStock,
+    currentQty: activeCurrentQty,
+    initialQty: activeInitialQty,
     usageHistory: targetItem?.usageHistory || targetItem?.dischargeLogs || []
   };
 
@@ -103,21 +134,21 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
     );
   }
 
-  const isInkCategory = targetItem.category === 'Ink';
-  const linkedMachine = equipment?.find(eq => eq.linkedMaterialSku === targetItem.id);
-
   const formatLAK = formatCurrency;
 
   const renderDualUnitQuantity = (currentQty, category, purchaseUnit, consumptionUnit, itemsPerPurchaseUnit = 500) => {
-    if (category === 'Paper') {
-      const reams = Math.floor(currentQty / itemsPerPurchaseUnit);
+    const isPaperCategory = (category || '').toLowerCase() === 'paper' || (category || '').toLowerCase() === 'material';
+    if (isPaperCategory) {
+      const mult = itemsPerPurchaseUnit || 500;
+      const reams = Math.floor(currentQty / mult);
+      const remainder = currentQty % mult;
       return (
         <div>
           <span className="text-2xl font-black text-slate-900 font-mono">
             {currentQty.toLocaleString()} <span className="text-sm font-bold text-slate-600">แผ่น</span>
           </span>
-          <span className="text-xs font-bold text-slate-400 block">
-            ({reams} {purchaseUnit || 'รีม'})
+          <span className="text-xs font-bold text-slate-500 block font-sans mt-0.5">
+            ({reams > 0 ? `${reams} ${purchaseUnit || 'แพ็ก'}` : ''}{remainder > 0 ? `${reams > 0 ? ' + ' : ''}${remainder} แผ่น` : (reams === 0 ? `0 ${purchaseUnit || 'แพ็ก'}` : '')})
           </span>
         </div>
       );
@@ -135,19 +166,6 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
       showToast(`${t('common.delete')} #${lotData.id}`, 'info');
       setIsDeleteModalOpen(false);
       onBack();
-    }
-  };
-
-  const handleSaveEditModal = (updatedLotData) => {
-    if (targetItem.id && lotData.id) {
-      editInventoryBatch(targetItem.id, lotData.id, {
-        currentQty: updatedLotData.currentQty,
-        costPerSheet: updatedLotData.costPerSheet,
-        purchasePricePerReam: updatedLotData.purchasePricePerReam,
-        supplierName: updatedLotData.supplierName
-      });
-      showToast(`${t('common.save')} ${t('common.details')}`, 'success');
-      setIsEditModalOpen(false);
     }
   };
 
@@ -289,7 +307,7 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
             {lotData.initialQty > 0 && (
               <div>
                 <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ຈຳນວນນຳເຂົ້າເລີ່ມຕົ້ນ:' : 'Initial Received Qty:'}</span>
-                <span className="font-mono text-slate-900 font-bold">{lotData.initialQty} {targetItem.consumptionUnit || 'Units'}</span>
+                <span className="font-mono text-slate-900 font-bold">{lotData.initialQty} {targetItem.consumptionUnit || 'แผ่น'}</span>
               </div>
             )}
             {(lotData.purchasePrice || lotData.costPerSheet || targetItem.costPerConsumptionUnit) > 0 && (
@@ -303,136 +321,137 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
           </div>
         </div>
 
-          {/* Card 2: ERP Technical Specs */}
-          <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-3 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-purple-600" />
-              <span>{currentLang === 'lo' ? 'ສະເປັກທາງເຕັກນິກ (ERP Technical Specs)' : 'ERP Technical Specs'}</span>
-            </h3>
-            {(() => {
-              const cat = (targetItem.category || targetItem.printerCategory || '').toLowerCase();
-              if (cat.includes('printer')) {
-                return <PrinterSpecDetail item={targetItem} currentLang={currentLang} />;
-              } else if (cat.includes('ink')) {
-                return <InkSpecDetail item={targetItem} currentLang={currentLang} />;
-              } else if (cat.includes('paper') || cat.includes('material')) {
-                return <PaperSpecDetail item={targetItem} currentLang={currentLang} />;
-              }
-              return <GenericSpecDetail item={targetItem} />;
-            })()}
-          </div>
+        {/* Card 2: ERP Technical Specs */}
+        <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
+          <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-3 flex items-center gap-2">
+            <Layers className="w-4 h-4 text-purple-600" />
+            <span>{currentLang === 'lo' ? 'ສະເປັກທາງເຕັກນິກ (ERP Technical Specs)' : 'ERP Technical Specs'}</span>
+          </h3>
+          {(() => {
+            const cat = (targetItem.category || targetItem.printerCategory || '').toLowerCase();
+            if (cat.includes('printer')) {
+              return <PrinterSpecDetail item={targetItem} currentLang={currentLang} />;
+            } else if (cat.includes('ink')) {
+              return <InkSpecDetail item={targetItem} currentLang={currentLang} />;
+            } else if (cat.includes('paper') || cat.includes('material')) {
+              return <PaperSpecDetail item={targetItem} currentLang={currentLang} />;
+            }
+            return <GenericSpecDetail item={targetItem} />;
+          })()}
         </div>
+      </div>
 
-        {/* Inbound Batches Procurement History Ledger */}
-          <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-5 space-y-3">
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex justify-between items-center">
-              <span className="flex items-center gap-2">
-                <Truck className="w-4 h-4 text-emerald-600" />
-                <span>{currentLang === 'lo' ? 'ປະວັດການນຳເຂົ້າສິນຄ້າ (Inbound Procurement History)' : 'Inbound Procurement History Logs'}</span>
-              </span>
-              <span className="text-[10px] font-bold text-slate-500 bg-white px-2.5 py-1 rounded-full border border-slate-200">
-                {combinedBatches.length} Batches
-              </span>
-            </h3>
+      {/* Inbound Batches Procurement History Ledger */}
+      <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-5 space-y-3">
+        <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex justify-between items-center">
+          <span className="flex items-center gap-2">
+            <Truck className="w-4 h-4 text-emerald-600" />
+            <span>{currentLang === 'lo' ? 'ປະວັດການນຳເຂົ້າສິນຄ້າ (Inbound Procurement History)' : 'Inbound Procurement History Logs'}</span>
+          </span>
+          <span className="text-[10px] font-bold text-slate-500 bg-white px-2.5 py-1 rounded-full border border-slate-200">
+            {combinedBatches.length} Batches
+          </span>
+        </h3>
 
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                    <th className="py-3 px-4">ວັນທີນຳເຂົ້າ (Date)</th>
-                    <th className="py-3 px-4">ລະຫັດລ໋ອດ / ໃບສັ່ງ (Lot ID)</th>
-                    <th className="py-3 px-4">ຜູ້ຈັດຈຳໜ່າຍ (Supplier)</th>
-                    <th className="py-3 px-4 text-right">ຈຳນວນນຳເຂົ້າ</th>
-                    <th className="py-3 px-4 text-right">ລາຄານຳເຂົ້າ (LAK ₭)</th>
-                    <th className="py-3 px-4 text-right">ຄົງເຫຼືອລ໋ອດນີ້</th>
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                <th className="py-3 px-4">ວັນທີນຳເຂົ້າ (Date)</th>
+                <th className="py-3 px-4">ລະຫັດລ໋ອດ / ໃບສັ່ງ (Lot ID)</th>
+                <th className="py-3 px-4">ຜູ້ຈັດຈຳໜ່າຍ (Supplier)</th>
+                <th className="py-3 px-4 text-right">ຈຳນວນນຳເຂົ້າ</th>
+                <th className="py-3 px-4 text-right">ລາຄານຳເຂົ້າ (LAK ₭)</th>
+                <th className="py-3 px-4 text-right">ຄົງເຫຼືອລ໋ອດນີ້</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-medium">
+              {combinedBatches.length > 0 ? (
+                combinedBatches.map((batch: any, idx: number) => (
+                  <tr key={idx} className="hover:bg-slate-50 transition">
+                    <td className="py-3 px-4 font-mono font-bold text-slate-600">{batch.purchaseDate && batch.purchaseDate !== '-' ? batch.purchaseDate : '-'}</td>
+                    <td className="py-3 px-4 font-mono font-bold text-sky-600">{batch.id}</td>
+                    <td className="py-3 px-4 text-slate-800">{batch.supplierName && batch.supplierName !== 'Unknown Vendor' && batch.supplierName !== '-' ? batch.supplierName : '-'}</td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">{batch.initialQty} {targetItem.consumptionUnit || 'แผ่น'}</td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600">{formatLAK(batch.purchasePricePerReam || batch.costPerSheet)}</td>
+                    <td className="py-3 px-4 text-right font-mono font-black text-slate-800">
+                      <span className="px-2.5 py-1 bg-slate-100 rounded-xl text-slate-700 font-mono">
+                        {batch.currentQty} {targetItem.consumptionUnit || 'แผ่น'}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {combinedBatches.length > 0 ? (
-                    combinedBatches.map((batch: any, idx: number) => (
-                      <tr key={idx} className="hover:bg-slate-50 transition">
-                        <td className="py-3 px-4 font-mono font-bold text-slate-600">{batch.purchaseDate && batch.purchaseDate !== '-' ? batch.purchaseDate : '-'}</td>
-                        <td className="py-3 px-4 font-mono font-bold text-sky-600">{batch.id}</td>
-                        <td className="py-3 px-4 text-slate-800">{batch.supplierName && batch.supplierName !== 'Unknown Vendor' && batch.supplierName !== '-' ? batch.supplierName : '-'}</td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">{batch.initialQty} {targetItem.consumptionUnit || 'Units'}</td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600">{formatLAK(batch.purchasePricePerReam || batch.costPerSheet)}</td>
-                        <td className="py-3 px-4 text-right font-mono font-black text-slate-800">
-                          <span className="px-2.5 py-1 bg-slate-100 rounded-xl text-slate-700 font-mono">
-                            {batch.currentQty} {targetItem.consumptionUnit || 'Units'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">
-                        {currentLang === 'lo' ? 'ຍັງບໍ່ມີປະວັດການນຳເຂົ້າ' : 'No inbound batches recorded yet'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Usage / Consumption Logs Section */}
-          <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-5 space-y-3">
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex justify-between items-center">
-              <span className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-sky-600" />
-                <span>{currentLang === 'lo' ? 'ປະວັດການເບີກໃຊ້ງານຜະລິດ (FIFO Consumption Ledger)' : 'FIFO Job Order Consumption Ledger'}</span>
-              </span>
-              <span className="text-[10px] font-bold text-slate-400 bg-white px-2.5 py-1 rounded-full border border-slate-200">
-                Real-time Stock Deductions
-              </span>
-            </h3>
-
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                    <th className="py-3 px-4">ວັນທີເບີກ</th>
-                    <th className="py-3 px-4">ລະຫັດໃບສັ່ງພິມ (Job Order Ref)</th>
-                    <th className="py-3 px-4">ລາຍລະອຽດການຜະລິດ</th>
-                    <th className="py-3 px-4 text-right">ຈຳນວນເບີກ</th>
-                    <th className="py-3 px-4 text-right">ຕົ້ນທຶນรวม (LAK ₭)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {lotData.usageHistory && lotData.usageHistory.length > 0 ? (
-                    lotData.usageHistory.map((u, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50 transition">
-                        <td className="py-3 px-4 font-mono font-bold text-slate-600">{u.date}</td>
-                        <td className="py-3 px-4 font-mono font-bold text-sky-600">{u.jobId}</td>
-                        <td className="py-3 px-4 text-slate-800">{u.description || 'Production Printing Job'}</td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">{u.qty} {targetItem.consumptionUnit || 'Units'}</td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600">{formatLAK(u.cost)}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center text-slate-400 font-semibold">
-                        {currentLang === 'lo' ? 'ຍັງບໍ່ມີປະວັດການເບີກໃຊ້ງານສິນຄ້ານີ້' : 'No consumption history recorded yet'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-        {/* Bottom Action Footer */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-          <DeleteActionButton onClick={() => setIsDeleteModalOpen(true)} />
-          
-          <button
-            onClick={() => setIsEditModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-2xl font-black text-xs shadow-sm transition active:scale-95 cursor-pointer"
-          >
-            <Edit3 className="w-4 h-4" />
-            <span>{t('common.edit')} (Edit Master Specs)</span>
-          </button>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">
+                    {currentLang === 'lo' ? 'ຍັງບໍ່ມີປະວັດການນຳເຂົ້າ' : 'No inbound batches recorded yet'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
+      </div>
+
+      {/* Usage / Consumption Logs Section */}
+      <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-5 space-y-3">
+        <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex justify-between items-center">
+          <span className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-sky-600" />
+            <span>{currentLang === 'lo' ? 'ປະວັດການເບີກໃຊ້ງານຜະລິດ (FIFO Consumption Ledger)' : 'FIFO Job Order Consumption Ledger'}</span>
+          </span>
+          <span className="text-[10px] font-bold text-slate-400 bg-white px-2.5 py-1 rounded-full border border-slate-200">
+            Real-time Stock Deductions
+          </span>
+        </h3>
+
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                <th className="py-3 px-4">ວັນທີເບີກ</th>
+                <th className="py-3 px-4">ລະຫັດໃບສັ່ງພິມ (Job Order Ref)</th>
+                <th className="py-3 px-4">ລາຍລະອຽດການຜະລິດ</th>
+                <th className="py-3 px-4 text-right">ຈຳນວນເບີກ</th>
+                <th className="py-3 px-4 text-right">ຕົ້ນທຶນรวม (LAK ₭)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-medium">
+              {lotData.usageHistory && lotData.usageHistory.length > 0 ? (
+                lotData.usageHistory.map((u: any, idx: number) => (
+                  <tr key={idx} className="hover:bg-slate-50 transition">
+                    <td className="py-3 px-4 font-mono font-bold text-slate-600">{u.date}</td>
+                    <td className="py-3 px-4 font-mono font-bold text-sky-600">{u.jobId}</td>
+                    <td className="py-3 px-4 text-slate-800">{u.description || 'Production Printing Job'}</td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">{u.qty} {targetItem.consumptionUnit || 'แผ่น'}</td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600">{formatLAK(u.cost)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-400 font-semibold">
+                    {currentLang === 'lo' ? 'ຍັງບໍ່ມີປະວັດການເບີກໃຊ້ງານສິນຄ້ານີ້' : 'No consumption history recorded yet'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Bottom Action Footer */}
+      <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+        <DeleteActionButton onClick={() => setIsDeleteModalOpen(true)} />
+        
+        <button
+          onClick={() => setIsEditModalOpen(true)}
+          className="flex items-center gap-2 px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-2xl font-black text-xs shadow-sm transition active:scale-95 cursor-pointer"
+        >
+          <Edit3 className="w-4 h-4" />
+          <span>{t('common.edit')} (Edit Master Specs)</span>
+        </button>
+      </div>
+
       {/* Asset Master Edit Modal */}
       {isEditModalOpen && (
         <AssetEditModal
@@ -446,6 +465,7 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
         />
       )}
 
+      {/* Reusable Confirm Delete Modal Component */}
       <ConfirmDeleteModal
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}

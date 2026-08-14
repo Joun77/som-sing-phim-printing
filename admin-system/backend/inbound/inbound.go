@@ -127,6 +127,50 @@ func getInboundFromDB() ([]InboundTransaction, error) {
 	return result, nil
 }
 
+// HandleUpdateInboundTransaction updates an inbound log
+func HandleUpdateInboundTransaction(c *gin.Context) {
+	id := c.Param("id")
+	var item InboundTransaction
+	if err := c.ShouldBindJSON(&item); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+	if item.ID == "" {
+		item.ID = id
+	}
+
+	if db.DB != nil {
+		err := saveInboundToDB(item)
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to update inbound transaction: %v", err)
+		}
+	}
+
+	inboundMutex.Lock()
+	inboundMemoryStore[item.ID] = item
+	inboundMutex.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": item})
+}
+
+// HandleDeleteInboundTransaction deletes an inbound log
+func HandleDeleteInboundTransaction(c *gin.Context) {
+	id := c.Param("id")
+
+	if db.DB != nil {
+		_, err := db.DB.Exec(`DELETE FROM inbound_transactions WHERE id = $1`, id)
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to delete inbound transaction: %v", err)
+		}
+	}
+
+	inboundMutex.Lock()
+	delete(inboundMemoryStore, id)
+	inboundMutex.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Record deleted"})
+}
+
 func saveInboundToDB(item InboundTransaction) error {
 	specsJSON, _ := json.Marshal(item.Specs)
 	_, err := db.DB.Exec(`
@@ -137,10 +181,21 @@ func saveInboundToDB(item InboundTransaction) error {
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP)
 		ON CONFLICT (id) DO UPDATE SET
 			po_number = EXCLUDED.po_number,
+			inbound_date = EXCLUDED.inbound_date,
+			sku_code = EXCLUDED.sku_code,
 			item_name = EXCLUDED.item_name,
 			supplier_name = EXCLUDED.supplier_name,
+			category = EXCLUDED.category,
 			quantity = EXCLUDED.quantity,
-			total_price = EXCLUDED.total_price`,
+			unit = EXCLUDED.unit,
+			total_price = EXCLUDED.total_price,
+			payment_method = EXCLUDED.payment_method,
+			origin = EXCLUDED.origin,
+			tariff_fee = EXCLUDED.tariff_fee,
+			freight_fee = EXCLUDED.freight_fee,
+			product_image_url = EXCLUDED.product_image_url,
+			receipt_slip_url = EXCLUDED.receipt_slip_url,
+			technical_specs = EXCLUDED.technical_specs`,
 		item.ID, item.PONumber, item.InboundDate, item.SKUCode, item.ItemName, item.SupplierName, item.Category,
 		item.Quantity, item.Unit, item.TotalPrice, item.PaymentMethod, item.Origin, item.TariffFee, item.FreightFee,
 		item.ProductImage, item.ReceiptSlip, specsJSON)

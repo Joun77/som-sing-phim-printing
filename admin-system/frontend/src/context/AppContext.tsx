@@ -258,6 +258,62 @@ export const AppProvider = ({ children }) => {
     });
   };
 
+  const sanitizeInventoryItem = (item: any) => {
+    if (!item) return item;
+    const cat = (item.category || '').toLowerCase();
+    const isPaper = cat === 'paper' || cat === 'material';
+    const multiplier = Number(item.purchaseMultiplier || item.specs?.sheetsPerPack || 500);
+    
+    let currentStockSheets = Number(item.stockQty) || Number(item.currentStock) || 0;
+    if (isPaper && currentStockSheets > 0 && currentStockSheets <= 10) {
+      currentStockSheets = currentStockSheets * multiplier;
+    } else if (isPaper && currentStockSheets === 0) {
+      currentStockSheets = multiplier;
+    }
+
+    const costPerPurchase = Number(item.costPerPurchaseUnit || item.price || 95000);
+    const costPerConsumption = isPaper ? Math.round(costPerPurchase / multiplier) : Number(item.costPerConsumptionUnit || costPerPurchase);
+
+    let realBatches = (item.batches || []).filter((b: any) => b.id && !b.id.includes('-EMPTY'));
+    if (realBatches.length === 0) {
+      const lotId = `LOT-${(item.id || 'SKU').replace('PAP-', '').slice(-4)}`;
+      realBatches = [
+        {
+          id: lotId,
+          purchaseDate: item.receiptDate || item.importDate || new Date().toISOString().split('T')[0],
+          supplierName: item.supplier || item.supplierName || item.vendor || '',
+          purchasePricePerReam: costPerPurchase,
+          costPerSheet: costPerConsumption,
+          initialQty: currentStockSheets,
+          currentQty: currentStockSheets
+        }
+      ];
+    } else {
+      realBatches = realBatches.map((b: any) => {
+        let bQty = Number(b.currentQty || b.initialQty || 0);
+        if (isPaper && bQty > 0 && bQty <= 10) {
+          bQty = bQty * multiplier;
+        }
+        return {
+          ...b,
+          initialQty: b.initialQty <= 10 && isPaper ? b.initialQty * multiplier : b.initialQty,
+          currentQty: bQty
+        };
+      });
+    }
+
+    return {
+      ...item,
+      stockQty: currentStockSheets,
+      purchaseMultiplier: multiplier,
+      costPerPurchaseUnit: costPerPurchase,
+      costPerConsumptionUnit: costPerConsumption,
+      consumptionUnit: isPaper ? 'แผ่น' : (item.consumptionUnit || 'Units'),
+      purchaseUnit: isPaper ? 'แพ็ก' : (item.purchaseUnit || 'Units'),
+      batches: realBatches
+    };
+  };
+
   const [inventory, setInventory] = useState(() => {
     const saved = localStorage.getItem('ss_print_inventory_v6');
     if (saved) {
@@ -268,7 +324,7 @@ export const AppProvider = ({ children }) => {
         for (const item of parsed) {
           if (item && item.id && !seen.has(item.id)) {
             seen.add(item.id);
-            unique.push(item);
+            unique.push(sanitizeInventoryItem(item));
           }
         }
         return unique;
@@ -297,7 +353,7 @@ export const AppProvider = ({ children }) => {
       .then(res => (res && res.ok ? res.json() : null))
       .then(resData => {
         if (resData && resData.status === 'success' && Array.isArray(resData.data)) {
-          setInventory(resData.data);
+          setInventory(resData.data.map(sanitizeInventoryItem));
         }
       })
       .catch(err => console.warn('Inventory fetch notice:', err));
@@ -326,6 +382,33 @@ export const AppProvider = ({ children }) => {
         }
       })
       .catch(err => console.warn('Spoilage fetch notice:', err));
+
+    fetch('http://localhost:8080/api/inbound')
+      .then(res => (res && res.ok ? res.json() : null))
+      .then(resData => {
+        if (resData && resData.status === 'success' && Array.isArray(resData.data)) {
+          const mappedInbound = resData.data.map((item: any) => ({
+            id: item.id,
+            poNumber: item.poNumber || item.id,
+            receiptDate: item.inboundDate || new Date().toISOString().split('T')[0],
+            importDate: item.inboundDate || new Date().toISOString().split('T')[0],
+            category: item.category,
+            name: item.itemName,
+            sku: item.skuCode,
+            skuCode: item.skuCode,
+            importQty: item.quantity || 1,
+            unit: item.unit || 'แพ็ก',
+            supplier: item.supplierName || 'Supplier',
+            totalPrice: item.totalPrice || 0,
+            unitPrice: item.totalPrice && item.quantity ? Math.round(item.totalPrice / item.quantity) : item.totalPrice,
+            paymentMethod: item.paymentMethod || 'TRANSFER',
+            origin: item.origin || 'TH',
+            specs: item.specs || {}
+          }));
+          setLinkedInboundEntries(mappedInbound);
+        }
+      })
+      .catch(err => console.warn('Inbound fetch notice:', err));
   }, []);
   const [orders, setOrders] = useState(() => {
     const saved = localStorage.getItem('ss_print_orders_v6');
@@ -481,6 +564,60 @@ export const AppProvider = ({ children }) => {
     safeSetItem('ss_print_master_specs_pool_v6', masterSpecsPool);
   }, [masterSpecsPool]);
 
+  // Auto-sync & repair inventory stock & batches from inbound procurement logs
+  useEffect(() => {
+    const rawInboundList = localStorage.getItem('som_sing_inbound_list');
+    let inboundLogs: any[] = [];
+    if (rawInboundList) {
+      try { inboundLogs = JSON.parse(rawInboundList); } catch (e) {}
+    }
+    const allInboundEntries = [...(linkedInboundEntries || []), ...inboundLogs];
+    if (allInboundEntries.length === 0) return;
+
+    setInventory(prev => {
+      let updated = false;
+      const newInv = prev.map(item => {
+        const matches = allInboundEntries.filter(
+          (e: any) => e && (e.sku === item.id || e.id === item.id || e.skuCode === item.id || e.name === item.name)
+        );
+        if (matches.length === 0) return item;
+
+        const sheetsPerPack = item.purchaseMultiplier || matches[0].sheetsPerPack || 500;
+        const totalSheetsFromInbound = matches.reduce((sum, e) => {
+          const packQty = Number(e.importQty || 1);
+          return sum + (packQty * sheetsPerPack);
+        }, 0);
+
+        const latestPrice = Number(matches[0].totalPrice || matches[0].unitPrice || item.costPerPurchaseUnit || 95000);
+        const perSheetPrice = Math.round(latestPrice / sheetsPerPack);
+
+        const constructedBatches = matches.map(e => ({
+          id: e.poNumber || e.id || `LOT-${item.id}`,
+          purchaseDate: e.receiptDate || e.importDate || new Date().toISOString().split('T')[0],
+          supplierName: e.supplier || e.vendor || '',
+          purchasePricePerReam: Number(e.totalPrice || e.unitPrice || latestPrice),
+          costPerSheet: perSheetPrice,
+          initialQty: Number(e.importQty || 1) * sheetsPerPack,
+          currentQty: Number(e.importQty || 1) * sheetsPerPack
+        }));
+
+        const hasRealBatches = (item.batches || []).some(b => b.id && !b.id.includes('-EMPTY'));
+        if (item.stockQty !== totalSheetsFromInbound || !hasRealBatches) {
+          updated = true;
+          return {
+            ...item,
+            stockQty: totalSheetsFromInbound,
+            costPerPurchaseUnit: latestPrice,
+            costPerConsumptionUnit: perSheetPrice,
+            batches: constructedBatches
+          };
+        }
+        return item;
+      });
+      return updated ? newInv : prev;
+    });
+  }, [linkedInboundEntries]);
+
   // Solver for overdue orders
   useEffect(() => {
     const todayStr = '2026-08-04';
@@ -576,6 +713,45 @@ export const AppProvider = ({ children }) => {
     });
   };
 
+  const dischargeInventoryStock = (skuId: string, qtyNeeded: number, reason: string = 'MANUAL_DISCHARGE', remarks: string = '') => {
+    deductStockFIFO(skuId, qtyNeeded);
+
+    fetch(`http://localhost:8080/api/inventory/${skuId}/discharge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skuId, quantity: qtyNeeded, reason, remarks })
+    }).catch(err => console.log('Inventory discharge backend sync notice:', err));
+  };
+
+  const deductStockForOrder = (orderData: any) => {
+    if (!orderData) return;
+    const itemsArr = orderData.items || orderData.orderItems || [orderData];
+    itemsArr.forEach((ordItem: any) => {
+      const paperSku = ordItem.paperCode || ordItem.paperId || ordItem.sku || ordItem.materialId;
+      const pagesCount = Number(ordItem.pages) || Number(ordItem.pagesPerItem) || 1;
+      const printQty = Number(ordItem.quantity) || Number(ordItem.qty) || 1;
+      const totalSheets = printQty * pagesCount;
+
+      if (paperSku) {
+        dischargeInventoryStock(paperSku, totalSheets, 'PRINT_PRODUCTION', `Order #${orderData.id || orderData.orderNo || 'Job'}`);
+      }
+    });
+  };
+
+  const saveInventoryToBackend = (item: any) => {
+    fetch('http://localhost:8080/api/inventory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item)
+    }).catch(err => console.log('Inventory save backend sync notice:', err));
+  };
+
+  const deleteInventoryFromBackend = (id: string) => {
+    fetch(`http://localhost:8080/api/inventory/${id}`, {
+      method: 'DELETE'
+    }).catch(err => console.log('Inventory delete backend sync notice:', err));
+  };
+
   // Add a new batch to inventory
   const addInventoryBatch = (itemId, batchData) => {
     setInventory(prev => {
@@ -599,12 +775,15 @@ export const AppProvider = ({ children }) => {
         const updatedBatches = [...(item.batches || []), newBatch];
         const newStockQty = updatedBatches.reduce((sum, b) => sum + b.currentQty, 0);
 
-        return {
+        const updatedItem = {
           ...item,
           batches: updatedBatches,
           stockQty: newStockQty,
+          costPerPurchaseUnit: Number(batchData.purchasePrice),
           costPerConsumptionUnit: costPerSheet
         };
+        saveInventoryToBackend(updatedItem);
+        return updatedItem;
       });
     });
   };
@@ -1532,6 +1711,57 @@ export const AppProvider = ({ children }) => {
     setCustomers(prev => prev.filter(c => c.id !== customerId));
   };
 
+  const updateInboundEntry = (updatedEntry: any) => {
+    setLinkedInboundEntries(prev => {
+      const newList = prev.map(item => (item.id === updatedEntry.id || item.poNumber === updatedEntry.id) ? updatedEntry : item);
+      return newList;
+    });
+
+    const targetSku = updatedEntry.skuCode || updatedEntry.sku || updatedEntry.id;
+    const cat = (updatedEntry.category || '').toLowerCase();
+    const isPaper = cat === 'paper' || cat === 'material';
+    const sheetsPerPack = Number(updatedEntry.sheetsPerPack || updatedEntry.specs?.sheetsPerPack || 500);
+    const packQty = Number(updatedEntry.quantity || updatedEntry.importQty || 1);
+    const totalSheets = isPaper ? packQty * sheetsPerPack : packQty;
+    const totalPrice = Number(updatedEntry.totalPrice || 95000);
+    const costPerPurchase = Number(updatedEntry.unitPrice || (totalPrice / packQty));
+    const costPerConsumption = isPaper ? Math.round(totalPrice / totalSheets) : costPerPurchase;
+
+    setInventory(prev => {
+      return prev.map(invItem => {
+        if (invItem.id === targetSku || invItem.id.toLowerCase() === targetSku.toLowerCase() || invItem.name === updatedEntry.itemName) {
+          const updatedBatches = (invItem.batches || []).map((b: any) => {
+            if (b.id === updatedEntry.id || b.poNumber === updatedEntry.poNumber || b.id === `LOT-${targetSku}` || invItem.batches.length === 1) {
+              return {
+                ...b,
+                purchaseDate: updatedEntry.inboundDate || updatedEntry.receiptDate || b.purchaseDate,
+                supplierName: updatedEntry.supplierName || updatedEntry.supplier || b.supplierName,
+                purchasePricePerReam: totalPrice,
+                costPerSheet: costPerConsumption,
+                initialQty: totalSheets,
+                currentQty: totalSheets
+              };
+            }
+            return b;
+          });
+
+          const newItem = {
+            ...invItem,
+            stockQty: totalSheets,
+            costPerPurchaseUnit: costPerPurchase,
+            costPerConsumptionUnit: costPerConsumption,
+            supplier: updatedEntry.supplierName || updatedEntry.supplier || invItem.supplier,
+            batches: updatedBatches
+          };
+
+          saveInventoryToBackend(newItem);
+          return newItem;
+        }
+        return invItem;
+      });
+    });
+  };
+
   const resetToDefaultData = () => {
     setInventory(initialInventory);
     setEquipment(initialEquipment);
@@ -1627,9 +1857,14 @@ export const AppProvider = ({ children }) => {
       getFIFOCostPerSheet,
       addInventoryBatch,
       addInventorySku,
+      dischargeInventoryStock,
+      deductStockForOrder,
+      saveInventoryToBackend,
+      deleteInventoryFromBackend,
       deleteInventoryBatch,
       editInventoryBatch,
       editInventorySku,
+      updateInboundEntry,
       checkCreditLimit,
       addCustomer,
       updateCustomer,

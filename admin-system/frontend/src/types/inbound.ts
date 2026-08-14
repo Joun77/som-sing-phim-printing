@@ -46,8 +46,6 @@ export interface InboundEntry {
   totalPrice?: number;
   paymentMethod?: string;
   origin?: string;
-  tariffFee?: number;
-  freightFee?: number;
   productImage?: string;
   receiptSlip?: string;
   actual_images?: string[];
@@ -68,4 +66,9 @@ export interface InboundFormData {
   purchase_link?: string;
   [key: string]: any;
 }
+
+import type { PaperSpec } from './inventory';
+export type { PaperSpec };
+
+
 

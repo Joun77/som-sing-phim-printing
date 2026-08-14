@@ -324,6 +324,17 @@
         "add_btn": "Add Color",
         "cancel": "Cancel"
       }
+    },
+    "paper": {
+      "sheets_per_pack": "SHEETS PER PACK",
+      "sheets_per_ream": "SHEETS PER PACK",
+      "sheets_per_ream_placeholder": "e.g. 500, 100, 20",
+      "sheets_per_ream_helper": "Specify number of sheets per pack (e.g., standard 500, photo paper 20-100)",
+      "roll_width": "ROLL WIDTH (METERS)",
+      "roll_width_placeholder": "e.g. 0.914, 1.07, 1.27, 1.52 (m)",
+      "roll_length": "ROLL LENGTH (METERS)",
+      "roll_length_placeholder": "e.g. 30, 50, 100 (m)",
+      "roll_helper": "Specify the roll width and length dimensions (in meters)"
     }
   },
   "inventory_status": {

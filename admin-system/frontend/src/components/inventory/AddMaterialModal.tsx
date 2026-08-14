@@ -6,25 +6,30 @@ import FinishingForm from './forms/FinishingForm';
 import { useApp } from '../../context/AppContext';
 
 export default function AddMaterialModal({ isOpen, onClose }) {
-  const { addInventorySku, showToast } = useApp();
+  const { addInventorySku, saveInventoryToBackend, showToast } = useApp();
   const [activeForm, setActiveForm] = useState('paper'); // paper, ink, finishing
 
   if (!isOpen) return null;
 
   const handlePaperSubmit = (sku) => {
     addInventorySku(sku);
+    saveInventoryToBackend(sku);
     showToast('Paper SKU added to inventory ledger!', 'success');
     onClose();
   };
 
   const handleInkSubmit = (skus) => {
-    skus.forEach(sku => addInventorySku(sku));
+    skus.forEach(sku => {
+      addInventorySku(sku);
+      saveInventoryToBackend(sku);
+    });
     showToast('Ink Set CMYK channels registered successfully!', 'success');
     onClose();
   };
 
   const handleFinishingSubmit = (sku) => {
     addInventorySku(sku);
+    saveInventoryToBackend(sku);
     showToast('Finishing/Film material added!', 'success');
     onClose();
   };

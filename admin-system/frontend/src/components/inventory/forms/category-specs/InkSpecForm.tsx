@@ -5,12 +5,14 @@ export default function InkSpecForm({ formData, onChange }: { formData: any; onC
   const { i18n } = useTranslation();
   const isLao = i18n.language === 'lo';
 
-  const [inkCode, setInkCode] = useState(formData.inkCode || formData.id || '');
-  const [colorName, setColorName] = useState(formData.colorName || formData.name || '');
-  const [colorGroup, setColorGroup] = useState(formData.colorGroup || 'Cyan');
-  const [volume, setVolume] = useState(formData.volume || 100);
-  const [inkBaseType, setInkBaseType] = useState(formData.inkBaseType || 'Dye');
-  const [isCompatible, setIsCompatible] = useState(formData.isCompatible ?? false);
+  const specs = formData.specs || formData.technical_specs || formData || {};
+
+  const [inkCode, setInkCode] = useState(specs.inkCode || formData.inkCode || formData.id || '');
+  const [colorName, setColorName] = useState(specs.colorName || formData.colorName || formData.name || '');
+  const [colorGroup, setColorGroup] = useState(specs.colorGroup || formData.colorGroup || 'Cyan');
+  const [volume, setVolume] = useState(specs.volume || formData.volume || 100);
+  const [inkBaseType, setInkBaseType] = useState(specs.inkBaseType || formData.inkBaseType || 'Dye');
+  const [isCompatible, setIsCompatible] = useState(specs.isCompatible ?? formData.isCompatible ?? false);
 
   const updateParent = (fields: any) => {
     onChange({

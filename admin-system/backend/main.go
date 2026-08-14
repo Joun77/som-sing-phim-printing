@@ -86,13 +86,6 @@ func main() {
 	router.GET("/api/orders/:id/pdf/quotation", orders.HandleGenerateQuotationPDF)
 	router.GET("/api/orders/:id/pdf/delivery", orders.HandleGenerateDeliveryPDF)
 
-	// Inventory offcut & master routes
-	router.GET("/api/inventory/offcuts", inventory.HandleGetOffcuts)
-	router.POST("/api/inventory/offcuts", inventory.HandleRegisterOffcut)
-	router.GET("/api/inventory/items", inventory.HandleGetInventoryItems)
-	router.POST("/api/inventory/items", inventory.HandleCreateInventoryItem)
-	router.PUT("/api/inventory/items/:id", inventory.HandleUpdateInventoryItem)
-
 	// Equipment / Printer Master routes
 	router.GET("/api/equipment", inventory.HandleGetEquipment)
 	router.POST("/api/equipment", inventory.HandleCreateEquipment)
@@ -107,12 +100,24 @@ func main() {
 	// Inbound Procurement routes
 	router.GET("/api/inbound", inbound.HandleGetInboundTransactions)
 	router.POST("/api/inbound", inbound.HandleCreateInboundTransaction)
+	router.PUT("/api/inbound/:id", inbound.HandleUpdateInboundTransaction)
+	router.DELETE("/api/inbound/:id", inbound.HandleDeleteInboundTransaction)
 
 	// Phase 1 API v1 Assets & Inbound Procurement routes
 	router.GET("/api/v1/assets", inventory.HandleGetAssetsV1)
 	router.GET("/api/v1/assets/:id", inventory.HandleGetAssetByIDV1)
 	router.POST("/api/v1/assets/inbound", inventory.HandleInboundAssetV1)
 	router.PUT("/api/v1/assets/:id", inventory.HandleUpdateAssetV1)
+
+	// Inventory Material SKU CRUD & Stock Discharge routes
+	router.GET("/api/inventory/offcuts", inventory.HandleGetOffcuts)
+	router.POST("/api/inventory/offcuts", inventory.HandleRegisterOffcut)
+	router.GET("/api/inventory/items", inventory.HandleGetInventoryItems)
+	router.GET("/api/inventory", inventory.HandleGetInventoryItems)
+	router.POST("/api/inventory", inventory.HandleSaveInventorySKU)
+	router.PUT("/api/inventory/:id", inventory.HandleUpdateInventorySKU)
+	router.DELETE("/api/inventory/:id", inventory.HandleDeleteInventorySKU)
+	router.POST("/api/inventory/:id/discharge", inventory.HandleDischargeInventoryStock)
 
 	log.Println("Starting Go server on port 8080...")
 	if err := router.Run(":8080"); err != nil {

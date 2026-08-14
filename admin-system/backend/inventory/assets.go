@@ -808,3 +808,77 @@ func MarshalSpecs(specs map[string]interface{}) (string, error) {
 	bytes, err := json.Marshal(specs)
 	return string(bytes), err
 }
+
+// DischargeRequest represents stock deduction payload
+type DischargeRequest struct {
+	SKUCode  string `json:"skuId"`
+	Quantity int    `json:"quantity"`
+	Reason   string `json:"reason"`
+	Remarks  string `json:"remarks"`
+}
+
+// HandleSaveInventorySKU saves or creates an inventory SKU
+func HandleSaveInventorySKU(c *gin.Context) {
+	var item InventoryItem
+	if err := c.ShouldBindJSON(&item); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+
+	assetStoreMutex.Lock()
+	inventoryStore[item.ID] = item
+	assetStoreMutex.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": item})
+}
+
+// HandleUpdateInventorySKU updates an existing SKU
+func HandleUpdateInventorySKU(c *gin.Context) {
+	id := c.Param("id")
+	var item InventoryItem
+	if err := c.ShouldBindJSON(&item); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+	item.ID = id
+
+	assetStoreMutex.Lock()
+	inventoryStore[item.ID] = item
+	assetStoreMutex.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": item})
+}
+
+// HandleDeleteInventorySKU deletes a SKU
+func HandleDeleteInventorySKU(c *gin.Context) {
+	id := c.Param("id")
+
+	assetStoreMutex.Lock()
+	delete(inventoryStore, id)
+	assetStoreMutex.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "SKU deleted"})
+}
+
+// HandleDischargeInventoryStock discharges stock for a SKU
+func HandleDischargeInventoryStock(c *gin.Context) {
+	id := c.Param("id")
+	var req DischargeRequest
+	_ = c.ShouldBindJSON(&req)
+	if req.SKUCode == "" {
+		req.SKUCode = id
+	}
+
+	assetStoreMutex.Lock()
+	item, exists := inventoryStore[req.SKUCode]
+	if exists {
+		item.StockQty = item.StockQty - req.Quantity
+		if item.StockQty < 0 {
+			item.StockQty = 0
+		}
+		inventoryStore[req.SKUCode] = item
+	}
+	assetStoreMutex.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Stock discharged", "remainingStock": item.StockQty})
+}

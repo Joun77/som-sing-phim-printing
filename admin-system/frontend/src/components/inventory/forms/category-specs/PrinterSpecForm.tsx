@@ -3,22 +3,35 @@ import { Layers, Upload, X, ExternalLink, Phone, Link as LinkIcon } from 'lucide
 import { useTranslation } from 'react-i18next';
 import ColorSlotConfigurator, { ColorSlot, STANDARD_PRESETS } from '../common/ColorSlotConfigurator';
 
-export default function PrinterSpecForm({ formData, onChange }: { formData: any; onChange: (updated: any) => void }) {
+export default function PrinterSpecForm({ 
+  formData, 
+  onChange, 
+  showPurchasingSection = true 
+}: { 
+  formData: any; 
+  onChange: (updated: any) => void;
+  showPurchasingSection?: boolean;
+}) {
   const { t } = useTranslation();
 
-  const [assetId, setAssetId] = useState(formData.asset_id || formData.id || '');
-  const [serialNumber, setSerialNumber] = useState(formData.serial_number || formData.serialNumber || '');
-  const [brand, setBrand] = useState(formData.brand || '');
-  const [model, setModel] = useState(formData.model || '');
-  const [printerCategory, setPrinterCategory] = useState(formData.printer_category || formData.printerCategory || 'Laser');
-  const [colorScheme, setColorScheme] = useState(formData.color_config?.colorScheme || formData.colorSchemeType || 'CMYK');
+  const specs = formData.specs || formData.technical_specs || formData || {};
 
-  const initialSlots: ColorSlot[] = formData.color_config?.slots || STANDARD_PRESETS[colorScheme] || STANDARD_PRESETS['CMYK'];
+  const defaultBrand = specs.brand || formData.brand || (formData.name || formData.itemName ? (formData.name || formData.itemName).split(' ')[0] : 'Epson');
+  const defaultModel = specs.model || formData.model || (formData.name || formData.itemName ? (formData.name || formData.itemName).split(' ').slice(1).join(' ') || (formData.name || formData.itemName) : 'L15150');
+
+  const [assetId, setAssetId] = useState(formData.asset_id || formData.id || specs.asset_id || '');
+  const [serialNumber, setSerialNumber] = useState(formData.serial_number || formData.serialNumber || specs.serialNumber || specs.serial_number || '');
+  const [brand, setBrand] = useState(defaultBrand);
+  const [model, setModel] = useState(defaultModel);
+  const [printerCategory, setPrinterCategory] = useState(specs.printerCategory || formData.printer_category || formData.printerCategory || 'Laser');
+  const [colorScheme, setColorScheme] = useState(specs.color_config?.colorScheme || formData.color_config?.colorScheme || formData.colorSchemeType || 'CMYK');
+
+  const initialSlots: ColorSlot[] = specs.color_config?.slots || formData.color_config?.slots || STANDARD_PRESETS[colorScheme] || STANDARD_PRESETS['CMYK'];
   const [colorSlots, setColorSlots] = useState<ColorSlot[]>(initialSlots);
 
-  const [expectedLifeA4Pages, setExpectedLifeA4Pages] = useState(formData.expected_life_a4 || formData.expectedLifeA4Pages || 500000);
-  const [maintenanceRatePercent, setMaintenanceRatePercent] = useState(formData.maintenance_rate || formData.maintenanceRatePercent || 20);
-  const [location, setLocation] = useState(formData.location_dept || formData.location || 'Main Dept');
+  const [expectedLifeA4Pages, setExpectedLifeA4Pages] = useState(specs.expectedLifeA4Pages || formData.expected_life_a4 || formData.expectedLifeA4Pages || 500000);
+  const [maintenanceRatePercent, setMaintenanceRatePercent] = useState(specs.maintenanceRatePercent !== undefined ? specs.maintenanceRatePercent : (formData.maintenance_rate || formData.maintenanceRatePercent || 20));
+  const [location, setLocation] = useState(specs.location || formData.location_dept || formData.location || 'Main Dept');
 
   // Purchasing & Proofs fields
   const [importQty, setImportQty] = useState(formData.import_qty || formData.importQty || 1);
@@ -377,180 +390,182 @@ export default function PrinterSpecForm({ formData, onChange }: { formData: any;
       </div>
 
       {/* Group 3: Purchasing, Proofs & Media */}
-      <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200 space-y-4">
-        <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-          <span>{t('inbound.printer.purchasing_section')}</span>
-        </h4>
+      {showPurchasingSection && (
+        <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200 space-y-4">
+          <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+            <span>{t('inbound.printer.purchasing_section')}</span>
+          </h4>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-black uppercase text-slate-400 mb-1.5">
-              {t('inbound.printer.import_qty')} *
-            </label>
-            <input
-              type="number"
-              min="1"
-              value={importQty}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                setImportQty(val);
-                updateParent({ import_qty: val, importQty: val });
-              }}
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-black uppercase text-slate-400 mb-1.5">
-              {t('inbound.printer.import_cost')} *
-            </label>
-            <div className="relative">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-1.5">
+                {t('inbound.printer.import_qty')} *
+              </label>
               <input
                 type="number"
-                value={importCost}
+                min="1"
+                value={importQty}
                 onChange={(e) => {
-                  setImportCost(e.target.value);
-                  updateParent({ import_cost: e.target.value, rawImportCost: e.target.value });
+                  const val = Number(e.target.value);
+                  setImportQty(val);
+                  updateParent({ import_qty: val, importQty: val });
                 }}
-                className="w-full pl-3 pr-16 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
-                placeholder="0.00"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
                 required
               />
-              <select
-                value={importCurrency}
-                onChange={(e) => {
-                  setImportCurrency(e.target.value);
-                  updateParent({ currency: e.target.value });
-                }}
-                className="absolute right-1.5 top-1.5 bottom-1.5 bg-slate-100 border border-slate-200 rounded-lg px-2 text-[10px] font-black"
-              >
-                <option value="LAK">LAK</option>
-                <option value="THB">THB</option>
-                <option value="USD">USD</option>
-              </select>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-xs font-black uppercase text-slate-400 mb-1.5 flex items-center gap-1">
-              <Phone className="w-3.5 h-3.5 text-slate-500" />
-              <span>{t('inbound.printer.supplier_phone')}</span>
-            </label>
-            <input
-              type="tel"
-              value={supplierPhone}
-              onChange={(e) => {
-                setSupplierPhone(e.target.value);
-                updateParent({ supplier_phone: e.target.value });
-              }}
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
-              placeholder="e.g. +856 20 12345678"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-black uppercase text-slate-400 mb-1.5 flex items-center gap-1">
-              <LinkIcon className="w-3.5 h-3.5 text-slate-500" />
-              <span>{t('inbound.printer.purchase_link')}</span>
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="url"
-                value={purchaseLink}
-                onChange={(e) => {
-                  setPurchaseLink(e.target.value);
-                  updateParent({ purchase_link: e.target.value });
-                }}
-                className="flex-1 px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
-                placeholder="https://..."
-              />
-              {purchaseLink && (
-                <button
-                  type="button"
-                  onClick={() => window.open(purchaseLink, '_blank')}
-                  className="px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+            <div>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-1.5">
+                {t('inbound.printer.import_cost')} *
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={importCost}
+                  onChange={(e) => {
+                    setImportCost(e.target.value);
+                    updateParent({ import_cost: e.target.value, rawImportCost: e.target.value });
+                  }}
+                  className="w-full pl-3 pr-16 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
+                  placeholder="0.00"
+                  required
+                />
+                <select
+                  value={importCurrency}
+                  onChange={(e) => {
+                    setImportCurrency(e.target.value);
+                    updateParent({ currency: e.target.value });
+                  }}
+                  className="absolute right-1.5 top-1.5 bottom-1.5 bg-slate-100 border border-slate-200 rounded-lg px-2 text-[10px] font-black"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>{t('inbound.printer.open_link')}</span>
-                </button>
-              )}
+                  <option value="LAK">LAK</option>
+                  <option value="THB">THB</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* File Uploads: Actual Product Images */}
-        <div className="space-y-2 pt-2 border-t border-slate-100">
-          <label className="block text-xs font-black uppercase text-slate-400">
-            {t('inbound.printer.actual_images')}
-          </label>
-          <div className="border-2 border-dashed border-slate-200 hover:border-sky-400 rounded-2xl p-4 bg-white text-center transition cursor-pointer relative">
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={handleImageUpload}
-              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-            />
-            <div className="flex flex-col items-center gap-1.5 text-slate-500">
-              <Upload className="w-5 h-5 text-sky-600" />
-              <p className="text-xs font-semibold">{t('inbound.printer.upload_placeholder')}</p>
+            <div>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-1.5 flex items-center gap-1">
+                <Phone className="w-3.5 h-3.5 text-slate-500" />
+                <span>{t('inbound.printer.supplier_phone')}</span>
+              </label>
+              <input
+                type="tel"
+                value={supplierPhone}
+                onChange={(e) => {
+                  setSupplierPhone(e.target.value);
+                  updateParent({ supplier_phone: e.target.value });
+                }}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
+                placeholder="e.g. +856 20 12345678"
+              />
             </div>
-          </div>
 
-          {actualImages.length > 0 && (
-            <div className="flex flex-wrap gap-3 pt-2">
-              {actualImages.map((img, idx) => (
-                <div key={idx} className="relative w-16 h-16 rounded-xl border border-slate-200 overflow-hidden group shadow-2xs">
-                  <img src={img} alt={`Product ${idx}`} className="w-full h-full object-cover" />
+            <div>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-1.5 flex items-center gap-1">
+                <LinkIcon className="w-3.5 h-3.5 text-slate-500" />
+                <span>{t('inbound.printer.purchase_link')}</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={purchaseLink}
+                  onChange={(e) => {
+                    setPurchaseLink(e.target.value);
+                    updateParent({ purchase_link: e.target.value });
+                  }}
+                  className="flex-1 px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
+                  placeholder="https://..."
+                />
+                {purchaseLink && (
                   <button
                     type="button"
-                    onClick={() => handleRemoveImage(idx)}
-                    className="absolute top-1 right-1 p-0.5 bg-rose-600 text-white rounded-full opacity-80 hover:opacity-100 transition cursor-pointer"
+                    onClick={() => window.open(purchaseLink, '_blank')}
+                    className="px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
                   >
-                    <X className="w-3 h-3" />
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>{t('inbound.printer.open_link')}</span>
                   </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* File Upload: Payment Slip */}
-        <div className="space-y-2 pt-2 border-t border-slate-100">
-          <label className="block text-xs font-black uppercase text-slate-400">
-            {t('inbound.printer.payment_slip')}
-          </label>
-          <div className="border-2 border-dashed border-slate-200 hover:border-emerald-400 rounded-2xl p-4 bg-white text-center transition cursor-pointer relative">
-            <input
-              type="file"
-              accept="image/*,.pdf"
-              onChange={handleSlipUpload}
-              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-            />
-            <div className="flex flex-col items-center gap-1.5 text-slate-500">
-              <Upload className="w-5 h-5 text-emerald-600" />
-              <p className="text-xs font-semibold">{t('inbound.printer.upload_placeholder')}</p>
+                )}
+              </div>
             </div>
           </div>
 
-          {paymentSlip && (
-            <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-2 text-xs">
-              <span className="font-semibold text-slate-700 truncate">Payment Slip Uploaded</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setPaymentSlip('');
-                  updateParent({ payment_slip: '' });
-                }}
-                className="text-rose-600 hover:text-rose-800 font-bold cursor-pointer"
-              >
-                {t('common.delete')}
-              </button>
+          {/* File Uploads: Actual Product Images */}
+          <div className="space-y-2 pt-2 border-t border-slate-100">
+            <label className="block text-xs font-black uppercase text-slate-400">
+              {t('inbound.printer.actual_images')}
+            </label>
+            <div className="border-2 border-dashed border-slate-200 hover:border-sky-400 rounded-2xl p-4 bg-white text-center transition cursor-pointer relative">
+              <input
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+              />
+              <div className="flex flex-col items-center gap-1.5 text-slate-500">
+                <Upload className="w-5 h-5 text-sky-600" />
+                <p className="text-xs font-semibold">{t('inbound.printer.upload_placeholder')}</p>
+              </div>
             </div>
-          )}
+
+            {actualImages.length > 0 && (
+              <div className="flex flex-wrap gap-3 pt-2">
+                {actualImages.map((img, idx) => (
+                  <div key={idx} className="relative w-16 h-16 rounded-xl border border-slate-200 overflow-hidden group shadow-2xs">
+                    <img src={img} alt={`Product ${idx}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(idx)}
+                      className="absolute top-1 right-1 p-0.5 bg-rose-600 text-white rounded-full opacity-80 hover:opacity-100 transition cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* File Upload: Payment Slip */}
+          <div className="space-y-2 pt-2 border-t border-slate-100">
+            <label className="block text-xs font-black uppercase text-slate-400">
+              {t('inbound.printer.payment_slip')}
+            </label>
+            <div className="border-2 border-dashed border-slate-200 hover:border-emerald-400 rounded-2xl p-4 bg-white text-center transition cursor-pointer relative">
+              <input
+                type="file"
+                accept="image/*,.pdf"
+                onChange={handleSlipUpload}
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+              />
+              <div className="flex flex-col items-center gap-1.5 text-slate-500">
+                <Upload className="w-5 h-5 text-emerald-600" />
+                <p className="text-xs font-semibold">{t('inbound.printer.upload_placeholder')}</p>
+              </div>
+            </div>
+
+            {paymentSlip && (
+              <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-2 text-xs">
+                <span className="font-semibold text-slate-700 truncate">Payment Slip Uploaded</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentSlip('');
+                    updateParent({ payment_slip: '' });
+                  }}
+                  className="text-rose-600 hover:text-rose-800 font-bold cursor-pointer"
+                >
+                  {t('common.delete')}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

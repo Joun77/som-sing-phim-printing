@@ -325,6 +325,17 @@
         "add_btn": "ເພີ່ມສີ",
         "cancel": "ຍົກເລີກ"
       }
+    },
+    "paper": {
+      "sheets_per_pack": "ຈຳນວນແຜ່ນຕໍ່ 1 ແພັກ (SHEETS PER PACK)",
+      "sheets_per_ream": "ຈຳນວນແຜ່ນຕໍ່ 1 ແພັກ (SHEETS PER PACK)",
+      "sheets_per_ream_placeholder": "ตัวอย่าง: 500, 100, 20",
+      "sheets_per_ream_helper": "ระบุจำนวนแผ่นต่อบรรจุภัณฑ์/แพ็ค (เช่น 500, 100, 20 แผ่น/แพ็ค)",
+      "roll_width": "ຄວາມກວ້າງໜ້າເຈ້ຍມ້ວນ (ROLL WIDTH)",
+      "roll_width_placeholder": "ตัวอย่าง: 0.914, 1.07, 1.27, 1.52 (เมตร)",
+      "roll_length": "ຄວາມຍາວມ້ວນ (ROLL LENGTH)",
+      "roll_length_placeholder": "ตัวอย่าง: 30, 50, 100 (เมตร)",
+      "roll_helper": "ระบุขนาดความกว้างและความยาวของม้วนกระดาษ (หน่วยเป็นเมตร)"
     }
   },
   "inventory_status": {
@@ -335,7 +346,7 @@
     "actions": "ການຈັດການ",
     "unit_cost": "ຕົ້ນທຶນ/ໜ່ວຍ",
     "remaining_qty": "ຈຳນວນເຫຼືອ",
-    "received_initial": "ວັນທີຮັບ / ເລີ່ມຕົ້ນ",
+    "received_initial": "ວັນທີນຳເຂົ້າ",
     "item_sku": "ຊື່ລາຍການ & SKU",
     "lot_id": "ລະຫັດລັອດ"
   },

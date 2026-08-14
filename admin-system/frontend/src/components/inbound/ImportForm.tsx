@@ -24,7 +24,8 @@ import {
 } from 'lucide-react';
 
 export default function ImportForm({ onSubmit, onClose }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const currentLang = i18n.language || 'lo';
   const { equipment, inventory, showToast, formatCurrency } = useApp();
 
   // Mode Selection: 'NEW' (New Master Item) vs 'RESTOCK' (Existing Stock Restock)
@@ -394,6 +395,27 @@ export default function ImportForm({ onSubmit, onClose }) {
     };
 
     if (importType === 'PRINTER') {
+      const printerSpecsObj = {
+        brand: printerBrand,
+        model: printerModel,
+        printerCategory,
+        color_config: {
+          colorScheme: colorSchemeType,
+          slots: colorSlots
+        },
+        colorSchemeType,
+        totalColorSlots: Number(totalColorSlots),
+        expectedLifeA4Pages: Number(expectedLifeA4),
+        maintenanceRatePercent: Number(maintenanceRatePct),
+        oemBaselineInks: printerInkSlots,
+        actual_images: actualImages,
+        payment_slip: paymentSlip,
+        supplier_phone: supplierPhone,
+        purchase_link: purchaseLink,
+        location: printerLocation,
+        warrantyExpirationYear: printerWarrantyYear
+      };
+
       finalData = {
         ...finalData,
         id: printerAssetId,
@@ -422,10 +444,12 @@ export default function ImportForm({ onSubmit, onClose }) {
         osCompatibility: selectedOS,
         purchaseDate: importDate,
         price: unitPriceLak,
+        unitPrice: unitPriceLak,
         vendor: importVendor,
         location: printerLocation,
         warrantyExpirationYear: printerWarrantyYear,
         status: 'In Use',
+        specs: printerSpecsObj,
         components: [
           { name: 'Drum Unit (ຊຸດດຣຳ)', usage: 0, threshold: 90 },
           { name: 'Fuser Kit (ຊຸດຄວາມຮ້ອນ)', usage: 0, threshold: 90 },
@@ -433,6 +457,20 @@ export default function ImportForm({ onSubmit, onClose }) {
         ]
       };
     } else if (importType === 'INK') {
+      const inkSpecsObj = {
+        inkCode,
+        colorName: inkColorName,
+        colorGroup: inkColorGroup,
+        volume: Number(inkVolume) || 100,
+        inkBaseType,
+        isCompatible,
+        targetPrinterId: inkTargetPrinter,
+        supplier_phone: supplierPhone,
+        purchase_link: purchaseLink,
+        actual_images: actualImages,
+        payment_slip: paymentSlip
+      };
+
       finalData = {
         ...finalData,
         id: inkCode,
@@ -445,7 +483,8 @@ export default function ImportForm({ onSubmit, onClose }) {
         stockQty: Number(importQty),
         inkBaseType,
         isCompatible,
-        targetPrinterId: inkTargetPrinter
+        targetPrinterId: inkTargetPrinter,
+        specs: inkSpecsObj
       };
     } else if (importType === 'PAPER') {
       finalData = {
@@ -468,6 +507,8 @@ export default function ImportForm({ onSubmit, onClose }) {
           customLengthMm: paperSize === 'Custom Sheet' ? customLengthMm : null,
           packagingType: paperFormat === 'Sheet' ? packagingType : null,
           sheetsPerPack: paperFormat === 'Sheet' ? Number(sheetsPerPack) : null,
+          sheets_per_pack: paperFormat === 'Sheet' ? Number(sheetsPerPack) : null,
+          sheets_per_ream: paperFormat === 'Sheet' ? Number(sheetsPerPack) : null,
           rollWidthPreset: paperFormat === 'Roll' ? rollWidthPreset : null,
           rollWidthM: paperFormat === 'Roll' ? Number(rollWidthM) : null,
           rollLengthM: paperFormat === 'Roll' ? Number(rollLengthM) : null,
@@ -885,6 +926,22 @@ export default function ImportForm({ onSubmit, onClose }) {
                 {paperSurfaces.map(surf => <option key={surf} value={surf}>{surf}</option>)}
               </select>
             </div>
+            <div>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-2">
+                {currentLang === 'lo' ? 'ຄວາມໜາເຈ້ຍ (Grammage GSM/grm)' : 'Paper Grammage (GSM / grm)'}
+              </label>
+              <div className="relative">
+                <input 
+                  type="number" 
+                  min="1"
+                  placeholder="e.g. 80, 130, 210, 300"
+                  value={grammage} 
+                  onChange={(e) => setGrammage(e.target.value)} 
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold pr-16" 
+                />
+                <span className="absolute right-4 top-3.5 text-xs font-bold text-slate-400">gsm</span>
+              </div>
+            </div>
             <div className="md:col-span-2 bg-white p-4 rounded-2xl border border-slate-200 space-y-4">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-black uppercase text-slate-800">Paper Format *</label>
@@ -894,16 +951,63 @@ export default function ImportForm({ onSubmit, onClose }) {
                 </div>
               </div>
               {paperFormat === 'Sheet' ? (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
-                  <select value={paperSize} onChange={(e) => setPaperSize(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold">
-                    {paperSizes.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <input type="number" placeholder="Sheets/Pack" value={sheetsPerPack} onChange={(e) => setSheetsPerPack(Number(e.target.value))} className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Standard Size</label>
+                    <select value={paperSize} onChange={(e) => setPaperSize(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold">
+                      {paperSizes.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
+                      {t('inbound.paper.sheets_per_ream')} *
+                    </label>
+                    <input 
+                      type="number" 
+                      min="1"
+                      placeholder={t('inbound.paper.sheets_per_ream_placeholder')} 
+                      value={sheetsPerPack} 
+                      onChange={(e) => setSheetsPerPack(e.target.value === '' ? 0 : Number(e.target.value))} 
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:border-sky-500" 
+                    />
+                    <p className="text-[10px] text-slate-400 font-normal mt-1">
+                      {t('inbound.paper.sheets_per_ream_helper')}
+                    </p>
+                  </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
-                  <input type="number" step="0.001" placeholder="Roll Width (m)" value={rollWidthM} onChange={(e) => setRollWidthM(Number(e.target.value))} className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold" />
-                  <input type="number" placeholder="Length (m)" value={rollLengthM} onChange={(e) => setRollLengthM(Number(e.target.value))} className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
+                      {t('inbound.paper.roll_width')} (m) *
+                    </label>
+                    <input 
+                      type="number" 
+                      step="0.001" 
+                      placeholder={t('inbound.paper.roll_width_placeholder')} 
+                      value={rollWidthM} 
+                      onChange={(e) => setRollWidthM(Number(e.target.value))} 
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:border-sky-500" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
+                      {t('inbound.paper.roll_length')} (m) *
+                    </label>
+                    <input 
+                      type="number" 
+                      step="0.1" 
+                      placeholder={t('inbound.paper.roll_length_placeholder')} 
+                      value={rollLengthM} 
+                      onChange={(e) => setRollLengthM(Number(e.target.value))} 
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:border-sky-500" 
+                    />
+                  </div>
+                  <div className="col-span-1 md:col-span-2">
+                    <p className="text-[10px] text-slate-400 font-normal">
+                      {t('inbound.paper.roll_helper')}
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
@@ -968,6 +1072,19 @@ export default function ImportForm({ onSubmit, onClose }) {
                   <option value="LAK">LAK</option><option value="THB">THB</option><option value="USD">USD</option>
                 </select>
               </div>
+            </div>
+            <div>
+              <label className="block text-xs font-black uppercase text-slate-400 mb-2">
+                {currentLang === 'lo' ? 'ຊ່ອງທາງຊຳລະເງິນ (Payment Method) *' : 'Payment Method *'}
+              </label>
+              <select 
+                value={paymentMethod} 
+                onChange={(e) => setPaymentMethod(e.target.value)} 
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold"
+              >
+                <option value="TRANSFER">{currentLang === 'lo' ? 'ໂອນເງິນ (Bank Transfer)' : 'Bank Transfer (โอนจ่าย)'}</option>
+                <option value="CASH">{currentLang === 'lo' ? 'ເງິນສົດ (Cash)' : 'Cash (เงินสด)'}</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs font-black uppercase text-slate-400 mb-2 flex items-center gap-1">

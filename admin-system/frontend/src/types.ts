@@ -115,9 +115,14 @@ export interface AppContextValue {
   getFIFOCostPerSheet: (itemId: string, sheetsNeeded: number) => number;
   addInventoryBatch: (...args: any[]) => any;
   addInventorySku: (...args: any[]) => any;
+  dischargeInventoryStock: (...args: any[]) => any;
+  deductStockForOrder: (...args: any[]) => any;
+  saveInventoryToBackend: (...args: any[]) => any;
+  deleteInventoryFromBackend: (...args: any[]) => any;
   deleteInventoryBatch: (...args: any[]) => any;
   editInventoryBatch: (...args: any[]) => any;
   editInventorySku: (...args: any[]) => any;
+  updateInboundEntry: (...args: any[]) => any;
   checkCreditLimit: (...args: any[]) => any;
 
   addCustomer: (...args: any[]) => any;

@@ -45,7 +45,7 @@ export default function GenericSpecDetail({ item }: { item: any }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-white p-4 rounded-2xl border border-slate-200 text-xs">
       {entries.map(([key, val]) => {
-        if (val === null || val === undefined || val === '') return null;
+        if (val === null || val === undefined || val === '' || key === 'tariffRate' || key === 'origin' || key === 'freightCharge') return null;
         const displayVal = Array.isArray(val) ? val.join(', ') : String(val);
         return (
           <div key={key}>

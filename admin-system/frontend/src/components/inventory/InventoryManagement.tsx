@@ -3,9 +3,10 @@ import { Boxes, Plus, Scissors, RotateCw, AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
 import InventoryTable from './InventoryTable';
-import MaterialDetailsPage from './MaterialDetailsPage';
+import InventoryMaterialDetailsPage from './InventoryMaterialDetailsPage';
 import AddMaterialModal from './AddMaterialModal';
 import OffcutModal from './OffcutModal';
+import StockDischargeModal from './StockDischargeModal';
 
 export default function InventoryManagement() {
   const { 
@@ -26,6 +27,8 @@ export default function InventoryManagement() {
   // Modals state
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
   const [isOffcutOpen, setIsOffcutOpen] = useState(false);
+  const [isDischargeOpen, setIsDischargeOpen] = useState(false);
+  const [selectedDischargeItem, setSelectedDischargeItem] = useState(null);
 
   // Restock lot state
   const [isRestockOpen, setIsRestockOpen] = useState(false);
@@ -64,7 +67,7 @@ export default function InventoryManagement() {
   // Render standalone detail page if a material lot is selected
   if (selectedDetailLot) {
     return (
-      <MaterialDetailsPage
+      <InventoryMaterialDetailsPage
         lotId={selectedDetailLot.id}
         parentSkuId={selectedDetailLot.parentItem?.id}
         onBack={() => setSelectedDetailLot(null)}
@@ -102,15 +105,22 @@ export default function InventoryManagement() {
         </div>
         <div className="flex flex-wrap gap-2.5">
           <button
+            onClick={() => { setSelectedDischargeItem(null); setIsDischargeOpen(true); }}
+            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-rose-50 border border-rose-100 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-2xl transition cursor-pointer"
+          >
+            <Scissors className="w-4 h-4" />
+            <span>{currentLang === 'lo' ? '- ເບີກใช้งาน / ຕັດສະຕ໋ອກ' : '- Stock Discharge'}</span>
+          </button>
+          <button
             onClick={() => setIsOffcutOpen(true)}
-            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-2xl transition"
+            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-2xl transition cursor-pointer"
           >
             <Scissors className="w-4 h-4" />
             <span>+ Add Offcut Remnant</span>
           </button>
           <button
             onClick={() => setIsAddMaterialOpen(true)}
-            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-accent-sky hover:bg-sky-600 text-white font-bold text-xs rounded-2xl transition shadow-sm"
+            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-accent-sky hover:bg-sky-600 text-white font-bold text-xs rounded-2xl transition shadow-sm cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>+ New Material SKU</span>
@@ -150,6 +160,10 @@ export default function InventoryManagement() {
         activeTab={activeTab}
         onRestockItem={handleOpenRestock}
         onViewDetails={(lot) => setSelectedDetailLot(lot)}
+        onDischargeItem={(item) => {
+          setSelectedDischargeItem(item);
+          setIsDischargeOpen(true);
+        }}
       />
 
       {/* Offcut Summary Grid */}
@@ -256,6 +270,16 @@ export default function InventoryManagement() {
           </div>
         </div>
       )}
+
+      {/* Stock Discharge Modal */}
+      <StockDischargeModal
+        item={selectedDischargeItem}
+        isOpen={isDischargeOpen}
+        onClose={() => {
+          setIsDischargeOpen(false);
+          setSelectedDischargeItem(null);
+        }}
+      />
     </div>
   );
 }

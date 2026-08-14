@@ -5,8 +5,9 @@ import { useApp } from '../../context/AppContext';
 import InventoryDetailsModal from './InventoryDetailsModal';
 import AssetEditModal from './modals/AssetEditModal';
 
-export default function InventoryTable({ items, activeTab, onRestockItem, onViewDetails }) {
-  const { t } = useTranslation();
+export default function InventoryTable({ items, activeTab, onRestockItem, onViewDetails, onDischargeItem }: { items: any[]; activeTab: string; onRestockItem?: (item: any) => void; onViewDetails?: (lot: any) => void; onDischargeItem?: (item: any) => void }) {
+  const { t, i18n } = useTranslation();
+  const currentLang = i18n.language || 'lo';
   const { editInventoryBatch, editInventorySku, showToast, formatCurrency, quickAdjustStock } = useApp();
   
   const [selectedLotModal, setSelectedLotModal] = useState(null);
@@ -19,23 +20,39 @@ export default function InventoryTable({ items, activeTab, onRestockItem, onView
   // Flatten lots
   const flatLots = [];
   items.forEach(item => {
+    const isPaper = (item.category || '').toLowerCase() === 'paper' || (item.category || '').toLowerCase() === 'material';
+    const multiplier = Number(item.purchaseMultiplier || item.specs?.sheetsPerPack || 500);
+
+    let stockSheets = Number(item.stockQty) || Number(item.currentStock) || 0;
+    if (isPaper && stockSheets > 0 && stockSheets <= 10) {
+      stockSheets = stockSheets * multiplier;
+    } else if (isPaper && stockSheets === 0) {
+      stockSheets = multiplier;
+    }
+
     if (item.batches && item.batches.length > 0) {
       item.batches.forEach(batch => {
+        let bQty = Number(batch.currentQty || batch.initialQty || 0);
+        if (isPaper && bQty > 0 && bQty <= 10) {
+          bQty = bQty * multiplier;
+        }
         flatLots.push({
           parentItem: item,
-          ...batch
+          ...batch,
+          initialQty: batch.initialQty <= 10 && isPaper ? batch.initialQty * multiplier : batch.initialQty,
+          currentQty: bQty
         });
       });
     } else {
       flatLots.push({
         parentItem: item,
-        id: `LOT-${item.id.slice(-3).toUpperCase()}-EMPTY`,
-        purchaseDate: '-',
-        supplierName: '-',
+        id: `LOT-${item.id.replace('PAP-', '').slice(-4).toUpperCase()}`,
+        purchaseDate: item.receiptDate || item.importDate || '-',
+        supplierName: item.supplier || item.supplierName || '-',
         purchasePricePerReam: item.costPerPurchaseUnit || 0,
         costPerSheet: item.costPerConsumptionUnit || 0,
-        initialQty: 0,
-        currentQty: 0
+        initialQty: stockSheets,
+        currentQty: stockSheets
       });
     }
   });
@@ -248,7 +265,15 @@ export default function InventoryTable({ items, activeTab, onRestockItem, onView
                         <span>{statusDetails.label}</span>
                       </span>
                     </td>
-                    <td className="py-4.5 px-6 text-right">
+                    <td className="py-4.5 px-6 text-right flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => onDischargeItem ? onDischargeItem(parent) : null}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-black transition border border-rose-200 cursor-pointer"
+                        title="Stock Discharge"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                        <span>{currentLang === 'lo' ? 'ເບີກ' : 'Discharge'}</span>
+                      </button>
                       <button
                         onClick={() => onViewDetails ? onViewDetails(lot) : setSelectedLotModal(lot)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition active:scale-95 border border-slate-200 cursor-pointer"
