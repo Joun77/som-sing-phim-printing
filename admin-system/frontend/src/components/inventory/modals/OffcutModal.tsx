@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Scissors } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { useApp } from '../../../context/AppContext';
 
 export default function OffcutModal({ isOpen, onClose }) {
   const { inventory, addOffcut, showToast } = useApp();

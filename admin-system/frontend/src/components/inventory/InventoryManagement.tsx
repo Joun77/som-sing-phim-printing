@@ -3,10 +3,10 @@ import { Boxes, Plus, Scissors, RotateCw, AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
 import InventoryTable from './InventoryTable';
-import InventoryMaterialDetailsPage from './InventoryMaterialDetailsPage';
-import AddMaterialModal from './AddMaterialModal';
-import OffcutModal from './OffcutModal';
-import StockDischargeModal from './StockDischargeModal';
+import InventoryMaterialDetailsPage from './details/InventoryMaterialDetailsPage';
+import AddMaterialModal from './modals/AddMaterialModal';
+import OffcutModal from './modals/OffcutModal';
+import StockDischargeModal from './modals/StockDischargeModal';
 
 export default function InventoryManagement() {
   const { 

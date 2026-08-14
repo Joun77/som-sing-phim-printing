@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { X, Layers, Droplet, Hammer } from 'lucide-react';
-import PaperForm from './forms/PaperForm';
-import InkSetForm from './forms/InkSetForm';
-import FinishingForm from './forms/FinishingForm';
-import { useApp } from '../../context/AppContext';
+import PaperForm from '../forms/PaperForm';
+import InkSetForm from '../forms/InkSetForm';
+import FinishingForm from '../forms/FinishingForm';
+import { useApp } from '../../../context/AppContext';
 
 export default function AddMaterialModal({ isOpen, onClose }) {
   const { addInventorySku, saveInventoryToBackend, showToast } = useApp();

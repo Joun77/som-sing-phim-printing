@@ -274,7 +274,26 @@ export const AppProvider = ({ children }) => {
     const costPerPurchase = Number(item.costPerPurchaseUnit || item.price || 95000);
     const costPerConsumption = isPaper ? Math.round(costPerPurchase / multiplier) : Number(item.costPerConsumptionUnit || costPerPurchase);
 
-    let realBatches = (item.batches || []).filter((b: any) => b.id && !b.id.includes('-EMPTY'));
+    let rawBatches = (item.batches || []).filter((b: any) => b.id && !b.id.includes('-EMPTY'));
+    let realBatches: any[] = [];
+    const seenBatchKeys = new Set();
+
+    for (const b of rawBatches) {
+      const key = b.id || b.poNumber || b.batchId;
+      if (key && !seenBatchKeys.has(key)) {
+        seenBatchKeys.add(key);
+        let bQty = Number(b.currentQty || b.initialQty || 0);
+        if (isPaper && bQty > 0 && bQty <= 10) {
+          bQty = bQty * multiplier;
+        }
+        realBatches.push({
+          ...b,
+          initialQty: b.initialQty <= 10 && isPaper ? b.initialQty * multiplier : b.initialQty,
+          currentQty: bQty
+        });
+      }
+    }
+
     if (realBatches.length === 0) {
       const lotId = `LOT-${(item.id || 'SKU').replace('PAP-', '').slice(-4)}`;
       realBatches = [
@@ -288,23 +307,13 @@ export const AppProvider = ({ children }) => {
           currentQty: currentStockSheets
         }
       ];
-    } else {
-      realBatches = realBatches.map((b: any) => {
-        let bQty = Number(b.currentQty || b.initialQty || 0);
-        if (isPaper && bQty > 0 && bQty <= 10) {
-          bQty = bQty * multiplier;
-        }
-        return {
-          ...b,
-          initialQty: b.initialQty <= 10 && isPaper ? b.initialQty * multiplier : b.initialQty,
-          currentQty: bQty
-        };
-      });
     }
+
+    const calculatedStock = realBatches.reduce((sum: number, b: any) => sum + Number(b.currentQty || 0), 0);
 
     return {
       ...item,
-      stockQty: currentStockSheets,
+      stockQty: calculatedStock,
       purchaseMultiplier: multiplier,
       costPerPurchaseUnit: costPerPurchase,
       costPerConsumptionUnit: costPerConsumption,
@@ -444,6 +453,10 @@ export const AppProvider = ({ children }) => {
     const saved = localStorage.getItem('ss_print_color_links_v6');
     return saved ? JSON.parse(saved) : initialPrinterColorLinks;
   });
+  const [meterReadings, setMeterReadings] = useState(() => {
+    const saved = localStorage.getItem('ss_print_meter_readings_v6');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [offcuts, setOffcuts] = useState(() => {
     const saved = localStorage.getItem('ss_print_offcuts_v6');
     return saved ? JSON.parse(saved) : initialOffcuts;
@@ -544,6 +557,10 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     safeSetItem('ss_print_color_links_v6', printerColorLinks);
   }, [printerColorLinks]);
+
+  useEffect(() => {
+    safeSetItem('ss_print_meter_readings_v6', meterReadings);
+  }, [meterReadings]);
 
   // Master Categories Registry & Specs Pool Persistence
   const [customCategories, setCustomCategories] = useState(() => {
@@ -747,6 +764,7 @@ export const AppProvider = ({ children }) => {
   };
 
   const deleteInventoryFromBackend = (id: string) => {
+    setInventory(prev => prev.filter(item => item.id !== id && item.id.toLowerCase() !== id.toLowerCase()));
     fetch(`http://localhost:8080/api/inventory/${id}`, {
       method: 'DELETE'
     }).catch(err => console.log('Inventory delete backend sync notice:', err));
@@ -837,17 +855,33 @@ export const AppProvider = ({ children }) => {
     }));
   };
 
-  const deleteInventoryBatch = (itemId, batchId) => {
+  const deleteInventoryBatch = (itemId: string, batchId: string) => {
     setInventory(prev => {
+      const target = prev.find(item => item.id === itemId || item.id.toLowerCase() === itemId.toLowerCase());
+      if (!target) return prev;
+
+      const remainingBatches = (target.batches || []).filter(b => 
+        b.id !== batchId && 
+        b.id !== `LOT-${batchId}` && 
+        b.poNumber !== batchId &&
+        b.id !== batchId.replace('LOT-', '')
+      );
+
+      if (remainingBatches.length === 0 || (target.batches || []).length <= 1) {
+        deleteInventoryFromBackend(target.id);
+        return prev.filter(item => item.id !== target.id);
+      }
+
       return prev.map(item => {
-        if (item.id !== itemId) return item;
-        const updatedBatches = (item.batches || []).filter(b => b.id !== batchId);
-        const newStockQty = updatedBatches.reduce((sum, b) => sum + b.currentQty, 0);
-        return {
+        if (item.id !== target.id) return item;
+        const newStockQty = remainingBatches.reduce((sum, b) => sum + Number(b.currentQty || 0), 0);
+        const updatedItem = {
           ...item,
-          batches: updatedBatches,
+          batches: remainingBatches,
           stockQty: newStockQty
         };
+        saveInventoryToBackend(updatedItem);
+        return updatedItem;
       });
     });
   };
@@ -1412,6 +1446,121 @@ export const AppProvider = ({ children }) => {
     }).catch(err => console.log('API equipment sync notice:', err));
   };
 
+  const updateEquipment = (eqId: string, updatedFields: Record<string, any>) => {
+    setEquipment(prev => prev.map(eq => {
+      if (eq.id === eqId) {
+        const merged = { ...eq, ...updatedFields };
+        if (merged.purchaseCost && merged.printedPagesCapacity) {
+          merged.calculatedCostPerPage = merged.purchaseCost / merged.printedPagesCapacity;
+        }
+        // Async sync to backend
+        fetch(`http://localhost:8080/api/equipment/${eqId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(merged)
+        }).catch(err => console.log('API equipment update notice:', err));
+        return merged;
+      }
+      return eq;
+    }));
+  };
+
+  const deleteEquipment = (eqId: string) => {
+    setEquipment(prev => prev.filter(eq => eq.id !== eqId));
+    fetch(`http://localhost:8080/api/equipment/${eqId}`, {
+      method: 'DELETE'
+    }).catch(err => console.log('API equipment delete notice:', err));
+  };
+
+  const addMeterReading = (readingData: {
+    equipmentId: string;
+    meterCount: number;
+    date?: string;
+    time?: string;
+    recordedBy?: string;
+    notes?: string;
+  }) => {
+    const today = new Date().toISOString().split('T')[0];
+    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Calculate diffCount from previous meter reading for this machine
+    const eqReadings = meterReadings.filter((m: any) => m.equipmentId === readingData.equipmentId);
+    const lastReading = eqReadings.length > 0 
+      ? Math.max(...eqReadings.map((m: any) => m.meterCount || 0))
+      : 0;
+
+    const diffCount = Math.max(0, readingData.meterCount - lastReading);
+
+    const newReading = {
+      id: `mtr-${Date.now().toString().slice(-5)}`,
+      equipmentId: readingData.equipmentId,
+      date: readingData.date || today,
+      time: readingData.time || timeNow,
+      meterCount: Number(readingData.meterCount),
+      diffCount,
+      recordedBy: readingData.recordedBy || 'Operator',
+      notes: readingData.notes || ''
+    };
+
+    setMeterReadings((prev: any[]) => [newReading, ...prev]);
+
+    // Update equipment printedCount and currentMeterCount
+    updateEquipment(readingData.equipmentId, {
+      printedCount: Number(readingData.meterCount),
+      currentMeterCount: Number(readingData.meterCount),
+      lastMeterDate: readingData.date || today
+    });
+  };
+
+  const addDowntimeLog = (logData: {
+    equipmentId: string;
+    equipmentName: string;
+    startTime: string;
+    endTime?: string | null;
+    downtimeMinutes?: number;
+    reason: string;
+    description?: string;
+    actionTaken?: string;
+    technician?: string;
+    cost?: number;
+    status?: 'Pending' | 'In Progress' | 'Completed';
+  }) => {
+    const newLog = {
+      id: `dt-${Date.now().toString().slice(-5)}`,
+      equipmentId: logData.equipmentId,
+      equipmentName: logData.equipmentName,
+      startTime: logData.startTime || new Date().toISOString(),
+      endTime: logData.endTime || null,
+      downtimeMinutes: Number(logData.downtimeMinutes) || 0,
+      reason: logData.reason,
+      description: logData.description || '',
+      actionTaken: logData.actionTaken || '',
+      technician: logData.technician || '',
+      cost: Number(logData.cost) || 0,
+      status: logData.status || 'Pending'
+    };
+
+    setDowntimeLogs((prev: any[]) => [newLog, ...prev]);
+
+    // Update machine status if downtime is pending/in progress
+    if (logData.status !== 'Completed') {
+      updateEquipment(logData.equipmentId, { status: 'Under Repair' });
+    }
+  };
+
+  const updateDowntimeLog = (logId: string, updatedFields: Record<string, any>) => {
+    setDowntimeLogs((prev: any[]) => prev.map(log => {
+      if (log.id === logId) {
+        const merged = { ...log, ...updatedFields };
+        if (merged.status === 'Completed' && log.equipmentId) {
+          updateEquipment(log.equipmentId, { status: 'In Use' });
+        }
+        return merged;
+      }
+      return log;
+    }));
+  };
+
   const addPrinterColorLink = (linkData) => {
     const newLink = {
       id: linkData.id || `lnk-${Date.now().toString().slice(-4)}`,
@@ -1727,27 +1876,60 @@ export const AppProvider = ({ children }) => {
     const costPerPurchase = Number(updatedEntry.unitPrice || (totalPrice / packQty));
     const costPerConsumption = isPaper ? Math.round(totalPrice / totalSheets) : costPerPurchase;
 
+    fetch(`http://localhost:8080/api/inbound/${updatedEntry.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedEntry)
+    }).catch(err => console.warn('Update Inbound API notice:', err));
+
     setInventory(prev => {
       return prev.map(invItem => {
         if (invItem.id === targetSku || invItem.id.toLowerCase() === targetSku.toLowerCase() || invItem.name === updatedEntry.itemName) {
-          const updatedBatches = (invItem.batches || []).map((b: any) => {
-            if (b.id === updatedEntry.id || b.poNumber === updatedEntry.poNumber || b.id === `LOT-${targetSku}` || invItem.batches.length === 1) {
-              return {
-                ...b,
-                purchaseDate: updatedEntry.inboundDate || updatedEntry.receiptDate || b.purchaseDate,
-                supplierName: updatedEntry.supplierName || updatedEntry.supplier || b.supplierName,
-                purchasePricePerReam: totalPrice,
-                costPerSheet: costPerConsumption,
-                initialQty: totalSheets,
-                currentQty: totalSheets
-              };
-            }
-            return b;
-          });
+          const existingBatches = invItem.batches || [];
+
+          // Find index of existing batch lot (DO NOT CREATE NEW LOT IF IT EXISTS)
+          const batchIndex = existingBatches.findIndex((b: any) =>
+            b.id === updatedEntry.id ||
+            b.id === `LOT-${updatedEntry.id}` ||
+            b.poNumber === updatedEntry.poNumber ||
+            b.poNumber === updatedEntry.id ||
+            (existingBatches.length === 1)
+          );
+
+          let updatedBatches = [...existingBatches];
+
+          if (batchIndex !== -1) {
+            // Overwrite existing batch lot in place
+            updatedBatches[batchIndex] = {
+              ...updatedBatches[batchIndex],
+              id: updatedBatches[batchIndex].id || `LOT-${updatedEntry.id}`,
+              poNumber: updatedEntry.poNumber || updatedEntry.id,
+              purchaseDate: updatedEntry.inboundDate || updatedEntry.receiptDate || updatedBatches[batchIndex].purchaseDate,
+              supplierName: updatedEntry.supplierName || updatedEntry.supplier || updatedBatches[batchIndex].supplierName,
+              purchasePricePerReam: totalPrice,
+              costPerSheet: costPerConsumption,
+              initialQty: totalSheets,
+              currentQty: totalSheets
+            };
+          } else {
+            // Append only if truly new
+            updatedBatches.push({
+              id: `LOT-${updatedEntry.id}`,
+              poNumber: updatedEntry.poNumber || updatedEntry.id,
+              purchaseDate: updatedEntry.inboundDate || updatedEntry.receiptDate || new Date().toISOString().split('T')[0],
+              supplierName: updatedEntry.supplierName || updatedEntry.supplier || 'Unknown Supplier',
+              purchasePricePerReam: totalPrice,
+              costPerSheet: costPerConsumption,
+              initialQty: totalSheets,
+              currentQty: totalSheets
+            });
+          }
+
+          const newStockQty = updatedBatches.reduce((sum: number, b: any) => sum + Number(b.currentQty || 0), 0);
 
           const newItem = {
             ...invItem,
-            stockQty: totalSheets,
+            stockQty: newStockQty,
             costPerPurchaseUnit: costPerPurchase,
             costPerConsumptionUnit: costPerConsumption,
             supplier: updatedEntry.supplierName || updatedEntry.supplier || invItem.supplier,
@@ -1881,6 +2063,12 @@ export const AppProvider = ({ children }) => {
       addSpoilageLog,
       addStock,
       addEquipment,
+      updateEquipment,
+      deleteEquipment,
+      meterReadings,
+      addMeterReading,
+      addDowntimeLog,
+      updateDowntimeLog,
       addInboundEntry,
       printerColorLinks,
       setPrinterColorLinks,

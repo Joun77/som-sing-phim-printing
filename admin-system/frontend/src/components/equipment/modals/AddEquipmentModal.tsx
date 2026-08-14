@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Settings, Printer, Scissors, Layers, BookOpen, Camera, Link as LinkIcon } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { useApp } from '../../../context/AppContext';
 
 export default function AddEquipmentModal({ isOpen, onClose }) {
   const { inventory, addEquipment, showToast } = useApp();

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Save, Edit3, DollarSign, Calendar, CreditCard, Phone, Link as LinkIcon } from 'lucide-react';
-import PaperSpecForm from '../inventory/forms/category-specs/PaperSpecForm';
-import InkSpecForm from '../inventory/forms/category-specs/InkSpecForm';
-import PrinterSpecForm from '../inventory/forms/category-specs/PrinterSpecForm';
-import GenericSpecForm from '../inventory/forms/category-specs/GenericSpecForm';
+import PaperSpecForm from '../../inventory/forms/category-specs/PaperSpecForm';
+import InkSpecForm from '../../inventory/forms/category-specs/InkSpecForm';
+import PrinterSpecForm from '../../inventory/forms/category-specs/PrinterSpecForm';
+import GenericSpecForm from '../../inventory/forms/category-specs/GenericSpecForm';
 
 interface InboundEditModalProps {
   item: any;

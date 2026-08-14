@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { X, Save } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useApp } from '../../context/AppContext';
+import { useApp } from '../../../context/AppContext';
 
 export default function EditMaterialModal({ isOpen, materialData, onSave, onClose }) {
   const { t } = useTranslation();

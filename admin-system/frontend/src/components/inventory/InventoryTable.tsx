@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { Eye, Edit3, Plus, Minus, ExternalLink, Image as ImageIcon } from 'lucide-react';
+import { Eye, Edit3, Plus, Minus, ExternalLink, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
-import InventoryDetailsModal from './InventoryDetailsModal';
+import InventoryDetailsModal from './modals/InventoryDetailsModal';
 import AssetEditModal from './modals/AssetEditModal';
 
 export default function InventoryTable({ items, activeTab, onRestockItem, onViewDetails, onDischargeItem }: { items: any[]; activeTab: string; onRestockItem?: (item: any) => void; onViewDetails?: (lot: any) => void; onDischargeItem?: (item: any) => void }) {
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
-  const { editInventoryBatch, editInventorySku, showToast, formatCurrency, quickAdjustStock } = useApp();
+  const { editInventoryBatch, editInventorySku, deleteInventoryBatch, deleteInventoryFromBackend, showToast, formatCurrency, quickAdjustStock } = useApp();
   
   const [selectedLotModal, setSelectedLotModal] = useState(null);
   const [editingLotModal, setEditingLotModal] = useState(null);
@@ -17,8 +17,10 @@ export default function InventoryTable({ items, activeTab, onRestockItem, onView
   const formatLAK = formatCurrency;
   const isInkView = activeTab === 'Ink';
 
-  // Flatten lots
-  const flatLots = [];
+  // Flatten lots cleanly without duplicate rows
+  const flatLots: any[] = [];
+  const seenLotKeys = new Set();
+
   items.forEach(item => {
     const isPaper = (item.category || '').toLowerCase() === 'paper' || (item.category || '').toLowerCase() === 'material';
     const multiplier = Number(item.purchaseMultiplier || item.specs?.sheetsPerPack || 500);
@@ -30,31 +32,34 @@ export default function InventoryTable({ items, activeTab, onRestockItem, onView
       stockSheets = multiplier;
     }
 
-    if (item.batches && item.batches.length > 0) {
-      item.batches.forEach(batch => {
+    const batches = (item.batches && item.batches.length > 0) ? item.batches : [{
+      id: `LOT-${item.id.replace('PAP-', '').slice(-4).toUpperCase()}`,
+      purchaseDate: item.receiptDate || item.importDate || '-',
+      supplierName: item.supplier || item.supplierName || '-',
+      purchasePricePerReam: item.costPerPurchaseUnit || 0,
+      costPerSheet: item.costPerConsumptionUnit || 0,
+      initialQty: stockSheets,
+      currentQty: stockSheets
+    }];
+
+    batches.forEach(batch => {
+      const lotKey = `${item.id}-${batch.id || batch.poNumber || 'DEFAULT'}`;
+      if (!seenLotKeys.has(lotKey)) {
+        seenLotKeys.add(lotKey);
+
         let bQty = Number(batch.currentQty || batch.initialQty || 0);
         if (isPaper && bQty > 0 && bQty <= 10) {
           bQty = bQty * multiplier;
         }
+
         flatLots.push({
           parentItem: item,
           ...batch,
           initialQty: batch.initialQty <= 10 && isPaper ? batch.initialQty * multiplier : batch.initialQty,
           currentQty: bQty
         });
-      });
-    } else {
-      flatLots.push({
-        parentItem: item,
-        id: `LOT-${item.id.replace('PAP-', '').slice(-4).toUpperCase()}`,
-        purchaseDate: item.receiptDate || item.importDate || '-',
-        supplierName: item.supplier || item.supplierName || '-',
-        purchasePricePerReam: item.costPerPurchaseUnit || 0,
-        costPerSheet: item.costPerConsumptionUnit || 0,
-        initialQty: stockSheets,
-        currentQty: stockSheets
-      });
-    }
+      }
+    });
   });
 
   const getStockStatusDetails = (parentItem, lotId, currentQty) => {
@@ -280,6 +285,18 @@ export default function InventoryTable({ items, activeTab, onRestockItem, onView
                       >
                         <Eye className="w-4 h-4 text-slate-600" />
                         <span>{t('common.details')}</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm(currentLang === 'lo' ? `ທ່ານຕັ້ງໃຈລຶບ #${lot.id} (${parent.name}) ບໍ?` : `Are you sure you want to delete #${lot.id} (${parent.name})?`)) {
+                            deleteInventoryBatch(parent.id, lot.id);
+                            showToast(currentLang === 'lo' ? `ລຶບຂໍ້ມູນ #${lot.id} สำเร็จ!` : `Deleted #${lot.id} successfully!`, 'info');
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-xl text-xs font-black transition border border-slate-200 hover:border-rose-200 cursor-pointer"
+                        title="Delete Item / Batch"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </td>
                   </tr>

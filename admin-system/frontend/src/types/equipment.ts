@@ -16,6 +16,13 @@ export interface Equipment {
   calculatedCostPerPage: number;
   category: string;
   printerType?: string;
+  printerCategory?: string;
+  brand?: string;
+  model?: string;
+  serialNumber?: string;
+  location?: string;
+  status?: string;
+  imageUrl?: string;
   inkConsumptionStandard?: number;
   inkUnitCostMl?: number;
   clickRateColor?: number;
@@ -34,6 +41,10 @@ export interface PrinterColorLink {
   inkCode: string;
   slotPosition: string;
   notes?: string;
+  oemStandardVolumeMl?: number;
+  oemStandardIsoYieldA4?: number;
+  baseConsumptionRateMl?: number;
+  isoPageYieldA4?: number;
 }
 
 export interface MachineStatusEntry {
@@ -47,8 +58,24 @@ export interface DowntimeLog {
   equipmentId: string;
   equipmentName: string;
   startTime: string;
-  endTime: string | null;
+  endTime?: string | null;
   downtimeMinutes: number;
   reason: string;
-  description: string;
+  description?: string;
+  actionTaken?: string;
+  technician?: string;
+  cost?: number;
+  status?: 'Pending' | 'In Progress' | 'Completed';
 }
+
+export interface MeterReading {
+  id: string;
+  equipmentId: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:mm
+  meterCount: number;
+  diffCount: number; // pages printed since last record
+  recordedBy?: string;
+  notes?: string;
+}
+

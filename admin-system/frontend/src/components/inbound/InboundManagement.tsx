@@ -26,8 +26,27 @@ import PaperSpecDetail from '../inventory/details/PaperSpecDetail';
 import InkSpecDetail from '../inventory/details/InkSpecDetail';
 import PrinterSpecDetail from '../inventory/details/PrinterSpecDetail';
 import ProcurementDetailCard from '../inventory/details/ProcurementDetailCard';
-import InboundEditModal from './InboundEditModal';
+import InboundEditModal from './modals/InboundEditModal';
 import type { InboundEntry } from '../../types';
+
+export const resolveInboundItemName = (item: any): string => {
+  if (!item) return '-';
+  if (item.name && item.name.trim() !== '') return item.name;
+  if (item.itemName && item.itemName.trim() !== '') return item.itemName;
+  
+  const specs = item.specs || item.technical_specs || {};
+  if (specs.ink_name && specs.ink_name.trim() !== '') return specs.ink_name;
+  if (specs.paperName && specs.paperName.trim() !== '') return specs.paperName;
+  if (specs.brand || specs.model || specs.series) {
+    return `${specs.brand || ''} ${specs.series || ''} ${specs.model || ''}`.trim();
+  }
+  if (specs.colorName) return `ໝຶກ ${specs.colorName} (${specs.inkBaseType || 'Dye'})`;
+  if (item.skuCode || item.sku || item.poNumber || item.id) {
+    return `${item.category || 'Item'} (${item.skuCode || item.sku || item.poNumber || item.id})`;
+  }
+
+  return 'Unspecified Item';
+};
 
 export default function InboundManagement() {
    const { showToast, askConfirmation, formatCurrency, addEquipment, addInventorySku, addInventoryBatch, updateInboundEntry, saveInventoryToBackend, inventory, addStock, addPrinterColorLink } = useApp();
@@ -70,7 +89,8 @@ export default function InboundManagement() {
             receiptDate: item.inboundDate || new Date().toISOString().split('T')[0],
             category: item.category,
             categoryPill: item.category,
-            name: item.itemName,
+            name: resolveInboundItemName(item),
+            itemName: resolveInboundItemName(item),
             sku: item.skuCode,
             currentQty: item.quantity || 1,
             initialQty: item.quantity || 1,
@@ -292,12 +312,13 @@ export default function InboundManagement() {
   };
 
   const saveInboundToBackend = (item: any, isUpdate = false) => {
+    const resolvedName = resolveInboundItemName(item);
     const apiPayload = {
       id: item.id,
       poNumber: item.poNumber || item.id,
       inboundDate: item.inboundDate || item.receiptDate || new Date().toISOString().split('T')[0],
       skuCode: item.skuCode || item.sku || item.id,
-      itemName: item.itemName || item.name,
+      itemName: resolvedName,
       supplierName: item.supplierName || item.supplier || '',
       category: item.category,
       quantity: Number(item.quantity || item.initialQty || item.currentQty) || 1,
@@ -329,13 +350,15 @@ export default function InboundManagement() {
   const handleImportSubmit = (type, data) => {
     const logId = `INB-${Date.now().toString().slice(-4)}`;
     const calcTotal = Number(data.price) || Number(data.unitPrice) || Number(data.rawImportCost) || ((data.importQty || 1) * Number(data.unitPrice || 0));
+    const resolvedItemName = resolveInboundItemName(data);
     const newLog = {
       id: logId,
       poNumber: logId,
       receiptDate: data.importDate || new Date().toISOString().split('T')[0],
       category: type,
       categoryPill: type,
-      name: data.name,
+      name: resolvedItemName,
+      itemName: resolvedItemName,
       sku: data.id,
       currentQty: (type === 'PRINTER' || type === 'MACHINERY') ? 1 : data.importQty || 1,
       initialQty: (type === 'PRINTER' || type === 'MACHINERY') ? 1 : data.importQty || 1,
@@ -805,7 +828,7 @@ export default function InboundManagement() {
                     </td>
                     <td className="py-4 px-6 font-mono font-bold text-slate-600">{item.sku || item.poNumber}</td>
                     <td className="py-4 px-6">
-                      <span className="font-bold text-slate-900 block group-hover:text-sky-600 transition">{item.name}</span>
+                      <span className="font-bold text-slate-900 block group-hover:text-sky-600 transition">{resolveInboundItemName(item)}</span>
                     </td>
                     <td className="py-4 px-6 text-right">
                       <span className="font-mono font-black text-slate-900 block">

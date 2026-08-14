@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import { X, Trash2, Edit3, Save } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useApp } from '../../context/AppContext';
+import { useApp } from '../../../context/AppContext';
 
 export default function InventoryDetailsModal({ lot, onClose, onEdit }) {
   const { t } = useTranslation();

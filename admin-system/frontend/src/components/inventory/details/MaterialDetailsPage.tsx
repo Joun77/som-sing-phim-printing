@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Trash2, Edit3, ShieldAlert, Package, Calendar, Truck, Layers } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useApp } from '../../context/AppContext';
-import EditMaterialModal from './EditMaterialModal';
-import AssetEditModal from './modals/AssetEditModal';
-import PrinterSpecDetail from './details/PrinterSpecDetail';
-import InkSpecDetail from './details/InkSpecDetail';
-import PaperSpecDetail from './details/PaperSpecDetail';
-import GenericSpecDetail from './details/GenericSpecDetail';
-import ConfirmDeleteModal, { DeleteActionButton } from '../common/ConfirmDeleteModal';
+import { useApp } from '../../../context/AppContext';
+import EditMaterialModal from '../modals/EditMaterialModal';
+import AssetEditModal from '../modals/AssetEditModal';
+import PrinterSpecDetail from './PrinterSpecDetail';
+import InkSpecDetail from './InkSpecDetail';
+import PaperSpecDetail from './PaperSpecDetail';
+import GenericSpecDetail from './GenericSpecDetail';
+import ConfirmDeleteModal, { DeleteActionButton } from '../../common/ConfirmDeleteModal';
 
 export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
   const { t, i18n } = useTranslation();

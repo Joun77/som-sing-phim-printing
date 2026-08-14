@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Trash2, Edit3, ShieldAlert, Package, Calendar, Truck, Layers } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useApp } from '../../context/AppContext';
-import EditMaterialModal from './EditMaterialModal';
-import AssetEditModal from './modals/AssetEditModal';
-import PrinterSpecDetail from './details/PrinterSpecDetail';
-import InkSpecDetail from './details/InkSpecDetail';
-import PaperSpecDetail from './details/PaperSpecDetail';
-import GenericSpecDetail from './details/GenericSpecDetail';
-import ConfirmDeleteModal, { DeleteActionButton } from '../common/ConfirmDeleteModal';
+import { useApp } from '../../../context/AppContext';
+import EditMaterialModal from '../modals/EditMaterialModal';
+import AssetEditModal from '../modals/AssetEditModal';
+import PrinterSpecDetail from './PrinterSpecDetail';
+import InkSpecDetail from './InkSpecDetail';
+import PaperSpecDetail from './PaperSpecDetail';
+import GenericSpecDetail from './GenericSpecDetail';
+import ConfirmDeleteModal, { DeleteActionButton } from '../../common/ConfirmDeleteModal';
 
 export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBack }) {
   const { t, i18n } = useTranslation();
@@ -47,7 +47,17 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
 
   const rawBatches = (targetItem?.batches || []).filter((b: any) => b.id && !b.id.includes('-EMPTY'));
 
-  const realBatches = rawBatches.map((b: any) => {
+  const uniqueRawBatches: any[] = [];
+  const seenBatchKeys = new Set();
+  for (const b of rawBatches) {
+    const key = b.id || b.poNumber || b.batchId;
+    if (key && !seenBatchKeys.has(key)) {
+      seenBatchKeys.add(key);
+      uniqueRawBatches.push(b);
+    }
+  }
+
+  const realBatches = uniqueRawBatches.map((b: any) => {
     let iQty = Number(b.initialQty || 0);
     let cQty = Number(b.currentQty || 0);
     if (isSheetPaper && iQty > 0 && iQty <= 10) {

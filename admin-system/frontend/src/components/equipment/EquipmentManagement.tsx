@@ -3,8 +3,8 @@ import { Settings, Plus, Wrench, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
 import EquipmentTable from './EquipmentTable';
-import AddEquipmentModal from './AddEquipmentModal';
-import EquipmentDetailsPage from './EquipmentDetailsPage';
+import AddEquipmentModal from './modals/AddEquipmentModal';
+import EquipmentDetailsPage from './details/EquipmentDetailsPage';
 
 export default function EquipmentManagement() {
   const { equipment, updateEquipmentMaintenance, showToast, formatCurrency } = useApp();
