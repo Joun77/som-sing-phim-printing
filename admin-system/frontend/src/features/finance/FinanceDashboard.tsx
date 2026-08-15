@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PaymentVerificationTable } from './PaymentVerificationTable';
 import { InvoiceTaxDocumentModal } from './InvoiceTaxDocumentModal';
 import { JobProfitabilityAudit } from './JobProfitabilityAudit';
+import { BankAccountConfigModal } from './components/BankAccountConfigModal';
 import { 
   Coins, 
   TrendingUp, 
@@ -10,7 +11,8 @@ import {
   FileText, 
   RefreshCw,
   Wallet,
-  CheckCircle2
+  CheckCircle2,
+  Building2
 } from 'lucide-react';
 
 interface FinanceSummary {
@@ -31,6 +33,7 @@ export const FinanceDashboard: React.FC = () => {
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [showDocModal, setShowDocModal] = useState(false);
+  const [showBankModal, setShowBankModal] = useState(false);
 
   const fetchFinanceSummary = async () => {
     setLoading(true);
@@ -185,7 +188,14 @@ export const FinanceDashboard: React.FC = () => {
       </div>
 
       {/* Action Toolbar */}
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-3">
+        <button
+          onClick={() => setShowBankModal(true)}
+          className="py-3.5 px-6 bg-slate-900 hover:bg-slate-800 text-white font-extrabold rounded-2xl shadow-xl shadow-slate-900/20 active:scale-95 transition flex items-center gap-2 cursor-pointer text-sm"
+        >
+          <Building2 className="w-5 h-5 text-emerald-400" />
+          ຕັ້ງຄ່າຂໍ້ມູນບັນຊີທະນາຄານຮັບເງິນ (Bank Setup)
+        </button>
         <button
           onClick={() => setShowDocModal(true)}
           className="py-3.5 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold rounded-2xl shadow-xl shadow-blue-600/20 active:scale-95 transition flex items-center gap-2 cursor-pointer text-sm"
@@ -204,6 +214,11 @@ export const FinanceDashboard: React.FC = () => {
       {/* Tax Document Modal */}
       {showDocModal && (
         <InvoiceTaxDocumentModal onClose={() => setShowDocModal(false)} />
+      )}
+
+      {/* Bank Account Setup Modal */}
+      {showBankModal && (
+        <BankAccountConfigModal onClose={() => setShowBankModal(false)} />
       )}
     </div>
   );

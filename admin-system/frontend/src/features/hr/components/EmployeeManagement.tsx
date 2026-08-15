@@ -615,7 +615,7 @@ function EmployeeModal({ isEditing, form, setForm, onSave, onClose, T }: Employe
   const F = (field: string, val: any) => setForm((prev: any) => ({ ...prev, [field]: val }));
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-md animate-fade-in">
       <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b bg-slate-900 text-white">
           <div>

@@ -661,7 +661,7 @@ export default function ImportForm({ onSubmit, onClose }) {
             }`}
           >
             <RefreshCw className="w-4 h-4 text-emerald-600" />
-            <span>📦 Restock (ເຕີມ Stock ສິນຄ້າເກົ່າ)</span>
+            <span>Restock (ເຕີມ Stock ສິນຄ້າເກົ່າ)</span>
           </button>
         </div>
       </div>
@@ -1068,12 +1068,12 @@ export default function ImportForm({ onSubmit, onClose }) {
                   onChange={(e) => setPostPressSubtype(e.target.value)}
                   className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold font-sans"
                 >
-                  <option value="guillotine">✂️ เครื่องตัดกระดาษทั่วไป (Guillotine Cutter)</option>
-                  <option value="sticker_plotter">🎯 เครื่องตัด/ไดคัทสติกเกอร์ (Sticker Plotter / Cutter)</option>
-                  <option value="hole_drill">🔘 เครื่องเจาะรูกระดาษ/เจาะตาไก่ (Paper Hole Drill / Puncher)</option>
-                  <option value="binder">📚 เครื่องเข้าเล่มกระดาษ (Perfect / Spiral Binder)</option>
-                  <option value="folder">📄 เครื่องพับ/กดรอยพับ (Paper Folder / Creaser)</option>
-                  <option value="laminator">✨ เครื่องเคลือบผิว/ฟิล์ม (Laminator / Coater)</option>
+                  <option value="guillotine">Guillotine Cutter (ເຄື່ອງຕັດເຈ້ຍ)</option>
+                  <option value="sticker_plotter">Sticker Plotter / Cutter (ເຄື່ອງຕັດສະຕິກເກີ)</option>
+                  <option value="hole_drill">Paper Hole Drill (ເຄື່ອງເຈາະຮູເຈ້ຍ)</option>
+                  <option value="binder">Binder (ເຄື່ອງເຂົ້າເລົ່ມ)</option>
+                  <option value="folder">Folder / Creaser (ເຄື່ອງພັບເຈ້ຍ)</option>
+                  <option value="laminator">Laminator / Coater (ເຄື່ອງເຄືອບ)</option>
                 </select>
               </div>
 

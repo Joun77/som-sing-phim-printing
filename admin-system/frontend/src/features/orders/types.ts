@@ -125,3 +125,30 @@ export interface QuotationFormState {
   currency: 'LAK' | 'THB' | 'USD';
 }
 
+export type OrderStatus7Step =
+  | 'Pending'
+  | 'Pre-Press'
+  | 'Queued'
+  | 'Printing'
+  | 'Post-Press'
+  | 'Ready for Delivery'
+  | 'Delivered';
+
+export interface WorkflowStep {
+  id: OrderStatus7Step;
+  stepNumber: number;
+  labelLao: string;
+  labelEn: string;
+  description: string;
+}
+
+export const WORKFLOW_7_STEPS: WorkflowStep[] = [
+  { id: 'Pending', stepNumber: 1, labelLao: 'ກຳລັງກວດສອບອໍເດີ / ຊຳລະເງິນ', labelEn: 'Pending Payment Verification', description: 'ລູກຄ້າກດສັ່ງຊື້ ແລະ ອັບໂຫຼດສະລິບ ເພື່ອລໍຖ້າການເງິນກວດສອບ' },
+  { id: 'Pre-Press', stepNumber: 2, labelLao: 'ກວດສອບໄຟລ໌ / ຢືນຢັນແບບ (Proofing)', labelEn: 'Pre-Press & Proofing', description: 'ກຣາຟິກອັບໂຫຼດ Digital Proof ໃຫ້ລູກຄ້າກວດສອບ ແລະ ຢືນຢັນແບບ' },
+  { id: 'Queued', stepNumber: 3, labelLao: 'ຈັດຄິວພິມ / ເພລດ (Queued)', labelEn: 'Queued for Print', description: 'ອໍເດີຖືກຈັດສັນລົງເຄື່ອງພິມ ແລະ ຕັດສະຕ໋ອກວັດຖຸດິບ' },
+  { id: 'Printing', stepNumber: 4, labelLao: 'ກຳລັງພິມ (Printing)', labelEn: 'Printing', description: 'ຊ່າງພິມກດເລີ່ມງານພິມ ເຄື່ອງພິມກຳລັງດຳເນີນການ' },
+  { id: 'Post-Press', stepNumber: 5, labelLao: 'ຂັ້ນຕອນຫຼັງການພິມ (Post-Press)', labelEn: 'Post-Press & Finishing', description: 'ຕັດ, ພັບ, ເຄືອບ, ໄດຄັດ ຫຼື ເຂົ້າເລົ່ມ' },
+  { id: 'Ready for Delivery', stepNumber: 6, labelLao: 'ພິມສໍາເລັດ / ຮໍານໍາສົ່ງ (Ready)', labelEn: 'Ready for Delivery', description: 'ຜ່ານ QC ແພັກສິນຄ້າຮຽບຮ້ອຍ ພ້ອມມອບໃຫ້ຂົນສົ່ງ' },
+  { id: 'Delivered', stepNumber: 7, labelLao: 'ກຳລັງນໍາສົ່ງ / ສົ່ງສໍາເລັດ (Delivered)', labelEn: 'In Transit / Delivered', description: 'ອອກເລກ Tracking ขนส่ง Anousith Express ຫຼື HAL Logistics' },
+];
+

@@ -13,37 +13,37 @@ export default function Hero() {
       <div className="container hero-inner">
         <div className="hero-copy">
           <span className="hero-badge">
-            <SparkleIcon size={16} /> งานพิมพ์ด่วนคุณภาพสูง — ส่งทั่วไทย
+            <SparkleIcon size={16} /> ງານພິມດ່ວນຄຸນນະພາບສູງ — ສົ່ງທົ່ວປະເທດລາວ
           </span>
           <h1>
-            สั่งพิมพ์ง่าย ๆ ได้ใน
-            <span className="hero-gold"> 3 ขั้นตอน</span>
+            ສັ່ງພິມງ່າຍໆ ໄດ້ໃນ
+            <span className="hero-gold"> 3 ຂັ້ນຕອນ</span>
           </h1>
           <p className="hero-sub">
-            เลือกสินค้า → แนบไฟล์งานผ่าน Google Drive → โอนเงินพร้อมส่งสลิป
-            เราดูแลพิมพ์และจัดส่งให้ถึงมือคุณ พร้อมติดตามสถานะแบบเรียลไทม์
+            ເລືອກສິນຄ້າ → ແນບຟາຍງານຜ່ານ Google Drive → ໂອນເງິນ BCEL OnePay ພ້ອມສົ່ງສະລິບ
+            ພວກເຮົາເບິ່ງແຍງພິມ ແລະ ຈັດສົ່ງໃຫ້ເຖິງມືທ່ານ ພ້ອມຕິດຕາມສະຖານະແບບ Real-time
           </p>
           <div className="hero-cta">
             <Link to="/category/albums" className="btn btn--gold btn--lg">
-              สั่งพิมพ์เลย
+              ສັ່ງພິມເລີຍ
             </Link>
             <Link to="/track" className="btn btn--outline-gold btn--lg">
-              ติดตามสถานะงานพิมพ์
+              ຕິດຕາມສະຖານະງານພິມ
             </Link>
           </div>
 
           <ul className="hero-points">
             <li>
-              <ShieldIcon size={20} /> ราคาคุ้มค่า โปร่งใส
+              <ShieldIcon size={20} /> ລາຄາຄຸ້ມຄ່າ ໂປ່ງໃສ
             </li>
             <li>
-              <PrinterIcon size={20} /> พิมพ์รวดเร็ว ภายใน 24-72 ชม.
+              <PrinterIcon size={20} /> ພິມວ່ອງໄວ ພາຍໃນ 24-72 ຊມ.
             </li>
             <li>
-              <TruckIcon size={20} /> จัดส่งทั่วประเทศ
+              <TruckIcon size={20} /> ຈັດສົ່ງທົ່ວປະເທດລາວ (Anousith / HAL)
             </li>
             <li>
-              <ClockIcon size={20} /> ติดตามสถานะได้ตลอด
+              <ClockIcon size={20} /> ຕິດຕາມສະຖານະໄດ້ຕະຫຼອດ 24 ຊມ.
             </li>
           </ul>
         </div>
@@ -76,15 +76,15 @@ export default function Hero() {
           <div className="hero-card hero-card--float hero-card--1">
             <PrinterIcon size={20} />
             <div>
-              <strong>พิมพ์เสร็จไว</strong>
-              <small>เริ่มผลิตภายใน 24 ชม.</small>
+              <strong>ພິມເສັດໄວ</strong>
+              <small>ເລີ່ມຜະລິດພາຍໃນ 24 ຊມ.</small>
             </div>
           </div>
           <div className="hero-card hero-card--float hero-card--2">
             <TruckIcon size={20} />
             <div>
-              <strong>จัดส่งทั่วไทย</strong>
-              <small>Flash / J&T / Kerry</small>
+              <strong>ຈັດສົ່ງທົ່ວລາວ</strong>
+              <small>Anousith & HAL Logistics</small>
             </div>
           </div>
         </div>

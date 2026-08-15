@@ -17,12 +17,12 @@ export default function EquipmentTable({ machines, onViewDetails, onEdit, format
   const { printerColorLinks, inventory } = useApp();
 
   const subtypeLabelMap: Record<string, string> = {
-    guillotine: '✂️ GUILLOTINE CUTTER',
-    sticker_plotter: '🎯 STICKER PLOTTER',
-    hole_drill: '🔘 PAPER DRILL',
-    binder: '📚 BINDER',
-    folder: '📄 FOLDER/CREASER',
-    laminator: '✨ LAMINATOR'
+    guillotine: 'GUILLOTINE CUTTER',
+    sticker_plotter: 'STICKER PLOTTER',
+    hole_drill: 'PAPER DRILL',
+    binder: 'BINDER',
+    folder: 'FOLDER/CREASER',
+    laminator: 'LAMINATOR'
   };
 
   return (

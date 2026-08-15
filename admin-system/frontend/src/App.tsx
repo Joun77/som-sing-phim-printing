@@ -1,6 +1,6 @@
 import React from 'react';
 import { AppProvider, useApp } from '@store/AppContext';
-import Sidebar from '@components/Sidebar';
+import Navbar from '@components/Navbar';
 import { DashboardOverview } from '@features/dashboard';
 import { InventoryManagement } from '@features/inventory';
 import { EquipmentManagement as EquipmentOverhead } from '@features/equipment';
@@ -11,6 +11,7 @@ import { QuotationManager } from '@features/pricing';
 import { HistoryAnalytics } from '@features/analytics';
 import { EmployeeManagement } from '@features/hr';
 import { FinanceDashboard } from '@features/finance';
+import { ProfileSettingsPage } from '@features/profile';
 import { ProtectedRoute } from '@components/ProtectedRoute';
 import CurrencyRatesModal from '@components/common/CurrencyRatesModal';
 import { useTranslation } from 'react-i18next';
@@ -19,7 +20,8 @@ import {
   CheckCircle2, 
   AlertCircle, 
   X, 
-  HelpCircle 
+  HelpCircle,
+  Coins
 } from 'lucide-react';
 
 const queryClient = new QueryClient({
@@ -32,17 +34,18 @@ const queryClient = new QueryClient({
 });
 
 function AppContent() {
-  const { activeTab, toast, setToast, confirmDialog } = useApp();
+  const { activeTab, toast, setToast, confirmDialog, setIsRatesOpen, currency, exchangeRates, rateMode } = useApp();
   const { t } = useTranslation();
+  const currentRate = currency === 'LAK' ? 1 : ((exchangeRates[currency] && exchangeRates[currency][rateMode]) || 0);
 
   return (
     <ProtectedRoute>
-      <div className="flex flex-col lg:flex-row min-h-screen bg-slate-bg font-sans antialiased text-slate-800">
-        {/* Sidebar Navigation */}
-        <Sidebar />
+      <div className="min-h-screen bg-slate-bg font-sans antialiased text-slate-800 flex flex-col">
+        {/* Top Navbar Navigation */}
+        <Navbar />
 
-        {/* Main Contents view */}
-        <main className="flex-1 h-screen overflow-y-auto px-6 py-8 md:px-8">
+        {/* Main Contents View (Full Width 100% Edge-to-Edge) */}
+        <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-8">
           <div className="w-full">
             {activeTab === 'dashboard' && <DashboardOverview />}
             {(activeTab === 'orders' || activeTab === 'create_order' || activeTab === 'production' || activeTab === 'deliveries' || activeTab === 'quotation') && (
@@ -54,8 +57,19 @@ function AppContent() {
             {activeTab === 'crm' && <CustomerManagement />}
             {activeTab === 'hr' && <EmployeeManagement />}
             {activeTab === 'finance' && <FinanceDashboard />}
+            {(activeTab === 'settings' || activeTab === 'profile') && <ProfileSettingsPage />}
           </div>
         </main>
+
+        {/* FLOATING EXCHANGE RATE ACTION PILL BUTTON */}
+        <button
+          onClick={() => setIsRatesOpen(true)}
+          className="fixed bottom-6 right-6 z-40 px-4.5 py-3.5 bg-gradient-to-r from-slate-900 via-primary-navy to-slate-900 text-emerald-400 hover:text-white font-black text-xs rounded-full shadow-2xl border-2 border-emerald-500/40 flex items-center gap-2 cursor-pointer hover:scale-105 active:scale-95 transition-all group"
+          title="ຕັ້ງຄ່າອັດຕາແລກປ່ຽນ"
+        >
+          <Coins className="w-5 h-5 text-emerald-400 group-hover:rotate-12 transition-transform" />
+          <span>ອັດຕາແລກປ່ຽນ: {currency} 1={currentRate ? `${currentRate.toLocaleString()}₭` : '—'}</span>
+        </button>
 
         {/* ACCESSIBLE ELDERLY-FRIENDLY TOAST NOTIFICATIONS */}
         {toast && (

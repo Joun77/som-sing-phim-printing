@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Trash2, Edit3, ShieldAlert, Package, Calendar, Truck, Layers } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit3, ShieldAlert, Package, Calendar, Truck, Layers, AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import EditMaterialModal from '../modals/EditMaterialModal';
@@ -229,8 +229,9 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
                 }
                 if (effectiveStock < 100) {
                   return (
-                    <span className="px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-black">
-                      ⚠️ {currentLang === 'lo' ? 'ໃກ້ໝົດສະຕ໋ອກ (Low Stock Warning)' : 'Low Stock Warning'}
+                    <span className="px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-black inline-flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                      {currentLang === 'lo' ? 'ໃກ້ໝົດສະຕ໋ອກ (Low Stock Warning)' : 'Low Stock Warning'}
                     </span>
                   );
                 }

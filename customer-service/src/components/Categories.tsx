@@ -7,9 +7,9 @@ export default function Categories() {
     <section className="section categories" id="categories">
       <div className="container">
         <div className="section-head">
-          <span className="eyebrow">หมวดหมู่สินค้า</span>
-          <h2>เลือกหมวดงานพิมพ์ที่คุณต้องการ</h2>
-          <p>ครบทุกงานพิมพ์ในที่เดียว ตั้งแต่ของที่ระลึกจนถึงงานเอกสารองค์กร</p>
+          <span className="eyebrow">ໝວດໝູ່ສິນຄ້າ (Categories)</span>
+          <h2>ເລືອກໝວດງານພິມທີ່ທ່ານຕ້ອງການ</h2>
+          <p>ຄົບທຸກງານພິມໃນທີ່ດຽວ ຕັ້ງແຕ່ຂອງທີ່ລະນຶກ ຈົນເຖິງງານເອກະສານອົງກອນ</p>
         </div>
 
         <div className="category-grid">
@@ -19,7 +19,7 @@ export default function Categories() {
               <h3>{c.name}</h3>
               <p>{c.tagline}</p>
               <span className="category-card-link">
-                ดูสินค้า <ArrowRightIcon size={16} />
+                ເບິ່ງສິນຄ້າ <ArrowRightIcon size={16} />
               </span>
             </Link>
           ))}

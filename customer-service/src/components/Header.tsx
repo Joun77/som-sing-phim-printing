@@ -65,7 +65,6 @@ function CurrencySwitcher() {
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="currency-flag">{active.code === 'THB' ? '🇹🇭' : '🇱🇦'}</span>
         <span className="currency-code">{active.label}</span>
         <ChevronDownIcon />
       </button>
@@ -91,7 +90,7 @@ function CurrencySwitcher() {
                     : 'เงินบาทไทย'}
                 </small>
               </span>
-              {c.code === currency && <span className="currency-check">✓</span>}
+              {c.code === currency && <CheckIcon size={14} />}
             </button>
           ))}
           {ratesLoaded && currency === 'LAK' && (

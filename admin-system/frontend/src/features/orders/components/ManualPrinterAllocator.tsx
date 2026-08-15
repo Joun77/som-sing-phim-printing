@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { AlertTriangle } from 'lucide-react';
 import { PrinterAllocation } from '../types';
 
 interface AvailablePrinter {
@@ -160,12 +161,13 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
         </select>
       )}
 
+
       {!isComplete && targetQuantity > 0 && (
         <p className="text-xs font-medium text-amber-600 flex items-center gap-1">
-          <span>⚠️</span>
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
           {remainingPages > 0
-            ? t('orders.unallocatedWarning', `ຍັງเหลือ ${remainingPages.toLocaleString()} แผ่น ที่ยังไม่ได้แบ่งเครื่องพิมพ์`)
-            : t('orders.overallocatedWarning', `จำนวนที่แบ่งเกินเป้าหมายอยู่ ${Math.abs(remainingPages).toLocaleString()} แผ่น`)}
+            ? t('orders.unallocatedWarning', `ຍັງເຫຼືອ ${remainingPages.toLocaleString()} ແຜ່ນ ທີ່ຍັງບໍ່ໄດ້ແບ່ງເຄື່ອງພິມ`)
+            : t('orders.overallocatedWarning', `ຈຳນວນທີ່ແບ່ງເກີນເປົ້າໝາຍຢູ່ ${Math.abs(remainingPages).toLocaleString()} ແຜ່ນ`)}
         </p>
       )}
     </div>

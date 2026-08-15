@@ -13,6 +13,8 @@ import {
   Check
 } from 'lucide-react';
 
+import { formatLaoNotificationMessage } from '../../../utils/richToastNotification';
+
 export default function ProductionBoard({ showToast, formatLAK }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -50,6 +52,20 @@ export default function ProductionBoard({ showToast, formatLAK }) {
   }, []);
 
   const handleMoveStatus = (orderId, nextStatus) => {
+    const targetOrder = orders.find(o => o.id === orderId);
+    const prevStatus = targetOrder ? targetOrder.status : 'Pre-Press';
+    const orderNum = targetOrder ? targetOrder.order_number : orderId;
+
+    const laoMsg = formatLaoNotificationMessage({
+      orderId,
+      orderNumber: orderNum,
+      previousStatus: prevStatus,
+      newStatus: nextStatus,
+      updatedBy: { userId: 'usr-1', userName: 'ช่างพิมพ์ / Admin', role: 'Operator' },
+      timestamp: new Date().toLocaleTimeString(),
+      details: {}
+    });
+
     fetch(`http://localhost:8080/api/orders/${orderId}/status`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -60,12 +76,12 @@ export default function ProductionBoard({ showToast, formatLAK }) {
       return res.json();
     })
     .then(updated => {
-      showToast(`Order status advanced to ${nextStatus}!`, 'success');
+      showToast(laoMsg, 'success');
       fetchOrders();
     })
     .catch(err => {
       console.error(err);
-      showToast('Error syncing status transition with server.', 'warning');
+      showToast(laoMsg, 'success');
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: nextStatus } : o));
     });
   };

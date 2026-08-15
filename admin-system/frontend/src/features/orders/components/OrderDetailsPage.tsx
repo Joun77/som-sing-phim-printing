@@ -94,13 +94,13 @@ export default function OrderDetailsPage({
       const daysOverdue = Math.abs(Math.floor(diffMs / (1000 * 60 * 60 * 24)));
       return (
         <span className="px-3 py-1.5 rounded-xl bg-red-600 text-white border border-red-500 text-xs font-black animate-pulse flex items-center gap-1">
-          ⚠ ກາຍກຳນົດ {daysOverdue} ວັນ (Overdue)
+          <AlertTriangle className="w-3.5 h-3.5 text-white" /> ກາຍກຳນົດ {daysOverdue} ວັນ (Overdue)
         </span>
       );
     } else if (diffDays <= 1) {
       return (
         <span className="px-3 py-1.5 rounded-xl bg-amber-500 text-slate-900 text-xs font-black flex items-center gap-1">
-          ⏳ ສົ່ງມື້ນີ້ (Due Today)
+          <Clock className="w-3.5 h-3.5 text-slate-900" /> ສົ່ງມື້ນີ້ (Due Today)
         </span>
       );
     } else {
@@ -547,7 +547,7 @@ export default function OrderDetailsPage({
                             updateProductionStep(order.id, step.id, !step.done);
                             showToast(
                               !step.done
-                                ? (currentLang === 'lo' ? `✓ ${step.title}: ສຳເລັດ!` : `✓ ${step.title}: Marked complete!`)
+                                ? (currentLang === 'lo' ? `${step.title}: ສຳເລັດ!` : `${step.title}: Marked complete!`)
                                 : (currentLang === 'lo' ? `↺ ${step.title}: ຍົກເລີກ` : `↺ ${step.title}: Unmarked`),
                               !step.done ? 'success' : 'info'
                             );
@@ -1136,11 +1136,11 @@ export default function OrderDetailsPage({
                   </div>
                   {isProdStepDone('preflight') ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-black border border-emerald-300">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> ✓ Pass
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Pass
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200">
-                      ⏳ Pending
+                      <Clock className="w-3.5 h-3.5 text-amber-600" /> Pending
                     </span>
                   )}
                 </div>
@@ -1162,7 +1162,7 @@ export default function OrderDetailsPage({
                   </div>
                   {isProdStepDone('printing') ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-black border border-emerald-300">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> ✓ Done
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Done
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200">
@@ -1186,7 +1186,7 @@ export default function OrderDetailsPage({
                   </div>
                   {isProdStepDone('cutting') ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-black border border-emerald-300">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> ✓ Complete
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Complete
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200">
@@ -1210,7 +1210,7 @@ export default function OrderDetailsPage({
                   </div>
                   {isProdStepDone('qc') ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-black border border-emerald-300">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> ✓ Passed QC
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Passed QC
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200">
@@ -1276,7 +1276,7 @@ export default function OrderDetailsPage({
                   </div>
                   {isShippingStepDone('ready') ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-black border border-emerald-300">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> ✓ Ready
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Ready
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200">
@@ -1300,7 +1300,7 @@ export default function OrderDetailsPage({
                   </div>
                   {isShippingStepDone('dispatched') ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-black border border-emerald-300">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> ✓ Dispatched
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Dispatched
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200">
@@ -1324,7 +1324,7 @@ export default function OrderDetailsPage({
                   </div>
                   {isShippingStepDone('delivered') ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-black border border-emerald-300">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> ✓ Delivered
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Delivered
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200">
@@ -1389,7 +1389,7 @@ export default function OrderDetailsPage({
                   </div>
                   {isPaymentStepDone('deposit') ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-black border border-emerald-300">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> ✓ Received
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Received
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200">
@@ -1413,7 +1413,7 @@ export default function OrderDetailsPage({
                   </div>
                   {isPaymentStepDone('full_settle') ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-black border border-emerald-300">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> ✓ Fully Paid
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Fully Paid
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 text-xs font-bold border border-red-200">
@@ -1437,7 +1437,7 @@ export default function OrderDetailsPage({
                   </div>
                   {isPaymentStepDone('clearance') ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-black border border-emerald-300">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> ✓ Cleared
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Cleared
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 text-xs font-bold border border-slate-200">

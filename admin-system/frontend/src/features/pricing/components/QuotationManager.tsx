@@ -756,8 +756,8 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                       }`}
                     >
                       {fmt === 'sheet'
-                        ? (currentLang === 'lo' ? '📄 ເຈ້ຍແຜ່ນ (Sheet)' : '📄 Sheet Fed')
-                        : (currentLang === 'lo' ? '🗞️ ເຈ້ຍມ້ວນ (Roll)' : '🗞️ Roll Fed')}
+                        ? (currentLang === 'lo' ? 'ເຈ້ຍແຜ່ນ (Sheet)' : 'Sheet Fed')
+                        : (currentLang === 'lo' ? 'ເຈ້ຍມ້ວນ (Roll)' : 'Roll Fed')}
                     </button>
                   ))}
                 </div>
@@ -1161,7 +1161,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                     <span className="text-indigo-300 font-bold">
                       Area Factor S = {displayAreaFactor.toFixed(4)}
                       {isBackendCalc && <span className="ml-1 text-indigo-400 animate-pulse">…</span>}
-                      {backendResult && <span className="ml-1 text-emerald-400">⚡ Backend</span>}
+                      {backendResult && <span className="ml-1 text-emerald-400">Backend</span>}
                       {!backendResult && !isBackendCalc && <span className="ml-1 text-white/30">~ local</span>}
                     </span>
                     <span className="text-indigo-400 font-sans font-black">

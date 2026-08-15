@@ -132,12 +132,12 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
   const isPostPressMachine = machine.category !== 'Printer' && machine.category !== 'PRINTER';
 
   const postPressSubtypeMap: Record<string, string> = {
-    guillotine: '✂️ Guillotine Cutter',
-    sticker_plotter: '🎯 Sticker Plotter',
-    hole_drill: '🔘 Paper Hole Drill',
-    binder: '📚 Paper Binder',
-    folder: '📄 Folder / Creaser',
-    laminator: '✨ Laminator'
+    guillotine: 'Guillotine Cutter',
+    sticker_plotter: 'Sticker Plotter',
+    hole_drill: 'Paper Hole Drill',
+    binder: 'Paper Binder',
+    folder: 'Folder / Creaser',
+    laminator: 'Laminator'
   };
   const subtypeLabel = postPressSubtypeMap[machine.postPressSubtype || machine.specs?.postPressSubtype || ''] || machine.postPressSubtype || machine.category;
 

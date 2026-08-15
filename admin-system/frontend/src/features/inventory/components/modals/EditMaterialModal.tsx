@@ -63,7 +63,7 @@ export default function EditMaterialModal({ isOpen, materialData, onSave, onClos
   const modalContent = (
     <div 
       onClick={onClose}
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-fade-in"
+      className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/50 backdrop-blur-md p-4 animate-fade-in"
     >
       <div 
         onClick={(e) => e.stopPropagation()}

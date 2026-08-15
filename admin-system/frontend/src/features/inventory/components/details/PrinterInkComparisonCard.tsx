@@ -352,7 +352,7 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
                         Vol: {item.actualVol} ml | Price: {formatLAK(item.actualInkPrice)}
                       </span>
                       <span className="text-[10px] font-black text-sky-700 block">
-                        ⚡ {currentLang === 'lo' ? 'ຄາດວ່າພິມໄດ້:' : 'Est. Yield:'} {item.scaledRateMl > 0 ? Math.round(item.actualVol / item.scaledRateMl).toLocaleString() : 0} {currentLang === 'lo' ? 'ແຜ່ນ' : 'pages'} (@{coveragePercent}%)
+                        {currentLang === 'lo' ? 'ຄາດວ່າພິມໄດ້:' : 'Est. Yield:'} {item.scaledRateMl > 0 ? Math.round(item.actualVol / item.scaledRateMl).toLocaleString() : 0} {currentLang === 'lo' ? 'ແຜ່ນ' : 'pages'} (@{coveragePercent}%)
                       </span>
                     </div>
                   ) : (

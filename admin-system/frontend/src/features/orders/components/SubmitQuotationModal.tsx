@@ -34,7 +34,7 @@ export default function SubmitQuotationModal({
   const fileUrl = order.artworkUrl || order.driveLink || order.fileUrl;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-md p-4 animate-fade-in">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/60 backdrop-blur-md p-4 animate-fade-in">
       <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-100 p-6 space-y-6 text-slate-800">
         
         {/* Header */}

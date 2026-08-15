@@ -336,12 +336,12 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
                   onChange={(e) => setPostPressSubtype(e.target.value)}
                   className="w-full px-3 py-2 border rounded-xl focus:outline-none bg-white text-xs font-bold font-sans"
                 >
-                  <option value="guillotine">✂️ เครื่องตัดกระดาษทั่วไป (Guillotine Cutter)</option>
-                  <option value="sticker_plotter">🎯 เครื่องตัด/ไดคัทสติกเกอร์ (Sticker Plotter / Cutter)</option>
-                  <option value="hole_drill">🔘 เครื่องเจาะรูกระดาษ/เจาะตาไก่ (Paper Hole Drill / Puncher)</option>
-                  <option value="binder">📚 เครื่องเข้าเล่มกระดาษ (Perfect / Spiral Binder)</option>
-                  <option value="folder">📄 เครื่องพับ/กดรอยพับ (Paper Folder / Creaser)</option>
-                  <option value="laminator">✨ เครื่องเคลือบผิว/ฟิล์ม (Laminator / Coater)</option>
+                  <option value="guillotine">Guillotine Cutter (ເຄື່ອງຕັດເຈ້ຍ)</option>
+                  <option value="sticker_plotter">Sticker Plotter / Cutter (ເຄື່ອງຕັດສະຕິກເກີ)</option>
+                  <option value="hole_drill">Paper Hole Drill (ເຄື່ອງເຈາະຮູເຈ້ຍ)</option>
+                  <option value="binder">Binder (ເຄື່ອງເຂົ້າເລົ່ມ)</option>
+                  <option value="folder">Folder / Creaser (ເຄື່ອງພັບເຈ້ຍ)</option>
+                  <option value="laminator">Laminator / Coater (ເຄື່ອງເຄືອບ)</option>
                 </select>
               </div>
 

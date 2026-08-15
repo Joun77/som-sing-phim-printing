@@ -287,7 +287,7 @@ export default function CustomerCombobox({
             onChange={(e) => handleToggleSaveToCrm(e.target.checked)}
             className="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 cursor-pointer"
           />
-          <span>{isLao ? '☑️ ບັນທຶກເຂົ້າຖານຂໍ້ມູນ CRM ອັດຕະໂນມັດ' : '☑️ Save customer to CRM database automatically'}</span>
+          <span>{isLao ? 'ບັນທຶກເຂົ້າຖານຂໍ້ມູນ CRM ອັດຕະໂນມັດ' : 'Save customer to CRM database automatically'}</span>
         </label>
       )}
     </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye } from 'lucide-react';
+import { Eye, CheckCircle, XCircle, AlertTriangle, Clock } from 'lucide-react';
 
 interface OrderRowProps {
   ord: any;
@@ -27,7 +27,8 @@ const OrderRow = React.memo<OrderRowProps>(({
   getPaymentStatusIcon,
   onViewDetails,
   onOpenQuoteModal,
-  isSelected
+  isSelected,
+  focusRef
 }) => {
   const isOverdue = ord.paymentStatus === 'Overdue';
   const itemsSummary = () => {
@@ -47,15 +48,15 @@ const OrderRow = React.memo<OrderRowProps>(({
     
     if (ord.status === 'Delivered') {
       return (
-        <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-black mt-1 inline-block">
-          ✓ ສົ່ງມອບແລ້ວ
+        <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-black mt-1 inline-flex items-center gap-1">
+          <CheckCircle className="w-3 h-3 text-emerald-600" /> ສົ່ງມອບແລ້ວ
         </span>
       );
     }
     if (ord.status === 'Cancelled') {
       return (
-        <span className="text-[10px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded font-black mt-1 inline-block">
-          ✗ ຍົກເລີກແລ້ວ
+        <span className="text-[10px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded font-black mt-1 inline-flex items-center gap-1">
+          <XCircle className="w-3 h-3 text-red-600" /> ຍົກເລີກແລ້ວ
         </span>
       );
     }
@@ -66,14 +67,14 @@ const OrderRow = React.memo<OrderRowProps>(({
     if (diffMs < 0) {
       const daysOverdue = Math.abs(Math.floor(diffMs / (1000 * 60 * 60 * 24)));
       return (
-        <span className="text-[10px] text-red-600 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded font-black mt-1 inline-block animate-pulse">
-          ⚠ ກາຍກຳນົດ {daysOverdue} ວັນ
+        <span className="text-[10px] text-red-600 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded font-black mt-1 inline-flex items-center gap-1 animate-pulse">
+          <AlertTriangle className="w-3 h-3 text-red-600" /> ກາຍກຳນົດ {daysOverdue} ວັນ
         </span>
       );
     } else if (diffDays <= 1) {
       return (
-        <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded font-black mt-1 inline-block">
-          ⏳ ສົ່ງມື້ນີ້ (ດ່ວນ)
+        <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded font-black mt-1 inline-flex items-center gap-1">
+          <Clock className="w-3 h-3 text-amber-700" /> ສົ່ງມື້ນີ້ (ດ່ວນ)
         </span>
       );
     } else {

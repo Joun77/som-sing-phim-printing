@@ -16,16 +16,13 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  {
-    key: 'PENDING_SLIP_CHECK',
-    title: 'ได้รับออเดอร์แล้ว',
-    desc: 'รอแอดมินตรวจสอบสลิป',
-    icon: 'receive',
-  },
-  { key: 'PAYMENT_APPROVED', title: 'ยืนยันการชำระเงินแล้ว', desc: 'แอดมินอนุมัติสลิปแล้ว', icon: 'pay' },
-  { key: 'IN_PRODUCTION', title: 'กำลังดำเนินการพิมพ์ / ขึ้นงาน', desc: 'งานอยู่ในระหว่างการผลิต', icon: 'print' },
-  { key: 'SHIPPED', title: 'จัดส่งเรียบร้อยแล้ว', desc: 'อยู่ระหว่างการขนส่ง', icon: 'ship' },
-  { key: 'DELIVERED', title: 'ถึงมือผู้รับแล้ว', desc: 'ส่งมอบสำเร็จ', icon: 'deliver' },
+  { key: 'Pending', title: '1. Pending (ກຳລັງກວດສອບອໍເດີ/ຊຳລະເງິນ)', desc: 'ລໍຖ້າການເງິນກວດສອບສະລິບ', icon: 'receive' },
+  { key: 'Pre-Press', title: '2. Pre-Press / Proofing (ກວດສອບໄຟລ໌/ຢືນຢັນແບບ)', desc: 'ກຣາຟິກອັບໂຫຼດ Digital Proof ໃຫ້ກວດສອບ', icon: 'pay' },
+  { key: 'Queued', title: '3. Queued (ຈັດຄິວພິມ/ເພລດ)', desc: 'ຈັດສັນລົງເຄື່ອງພິມ ແລະ ຕັດສະຕ໋ອກ', icon: 'print' },
+  { key: 'Printing', title: '4. Printing (ກຳລັງພິມ)', desc: 'ເຄື່ອງພິມກຳລັງດຳເນີນການພິມ', icon: 'print' },
+  { key: 'Post-Press', title: '5. Post-Press / Finishing (ຂັ້ນຕອນຫຼັງການພິມ)', desc: 'ຕັດ, ພັບ, ເຄືອບ ຫຼື ເຂົ້າເລົ່ມ', icon: 'print' },
+  { key: 'Ready for Delivery', title: '6. Ready for Delivery (ພິມສໍາເລັດ/ຮໍານໍາສົ່ງ)', desc: 'ຜ່ານ QC ແພັກສິນຄ້າຮຽບຮ້ອຍ', icon: 'ship' },
+  { key: 'Delivered', title: '7. Delivered (ກຳລັງນໍາສົ່ງ/ສົ່ງສໍາເລັດ)', desc: 'ຂົນສົ່ງ Anousith Express / HAL Logistics', icon: 'deliver' },
 ]
 
 const STATUS_ORDER = STEPS.map((s) => s.key)

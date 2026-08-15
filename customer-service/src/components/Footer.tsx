@@ -97,7 +97,7 @@ export default function Footer() {
       <div className="footer-bottom">
         <div className="container footer-bottom-inner">
           <span>© {new Date().getFullYear()} ส้มสิ่งพิมพ์ SOM SING PHIM — สงวนลิขสิทธิ์</span>
-          <span className="footer-payment">รับชำระผ่าน PromptPay, โอนเงินธนาคาร, ชำระปลายทาง</span>
+          <span className="footer-payment">ຮັບຊຳລະຜ່ານ BCEL OnePay, ໂອນເງິນຜ່ານທະນາຄານ, ແລະ ຊຳລະປາຍທາງ</span>
         </div>
       </div>
     </footer>

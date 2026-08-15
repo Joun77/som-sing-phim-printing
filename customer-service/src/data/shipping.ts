@@ -1,6 +1,6 @@
 // ============================================================
-// Shipping couriers & free-shipping conditions.
-// Mirrors the backend configuration (fetched via REST when online).
+// Shipping couriers & free-shipping conditions (Lao Logistics).
+// Mirrors the backend configuration (Anousith Express & HAL Logistics).
 // ============================================================
 
 export interface Courier {
@@ -15,53 +15,53 @@ export interface Courier {
 
 export const COURIERS: Courier[] = [
   {
-    id: 'flash_express',
-    name: 'Flash Express',
-    short: 'Flash',
-    fee: 40,
-    eta: '1-2 วัน',
-    freeAbove: 800,
-    color: '#ff7a00',
+    id: 'anousith_express',
+    name: 'Anousith Express (ອະນຸສິດ ເອັກສະເປຣັສ)',
+    short: 'Anousith',
+    fee: 15000,
+    eta: '1-2 ວັນ (1-2 Days)',
+    freeAbove: 300000,
+    color: '#d97706',
   },
   {
-    id: 'jnt',
-    name: 'J&T Express',
-    short: 'J&T',
-    fee: 45,
-    eta: '1-3 วัน',
-    freeAbove: 800,
-    color: '#0084ff',
+    id: 'hal_logistics',
+    name: 'HAL Logistics (ຮົງອາລຸນ ຂົນສົ່ງ)',
+    short: 'HAL',
+    fee: 20000,
+    eta: '1-2 ວັນ (1-2 Days)',
+    freeAbove: 350000,
+    color: '#2563eb',
   },
   {
-    id: 'kerry',
-    name: 'Kerry Express',
-    short: 'Kerry',
-    fee: 55,
-    eta: '1-3 วัน',
-    freeAbove: 1000,
-    color: '#d82b23',
+    id: 'self_pickup',
+    name: 'Self Pickup (ຮັບເອງທີ່ຮ້ານ)',
+    short: 'Self Pickup',
+    fee: 0,
+    eta: 'ທັນທີ (Immediate)',
+    freeAbove: 0,
+    color: '#059669',
   },
 ]
 
-export const FREE_SHIPPING_THRESHOLD = 800
+export const FREE_SHIPPING_THRESHOLD = 300000
 
 export const getCourier = (id: string) => COURIERS.find((c) => c.id === id)
 
-// Bank account details shown on the payment step
+// Bank account details shown on the payment step (BCEL OnePay)
 export interface BankAccount {
   bank: string
   branch: string
   accountName: string
   accountNumber: string
-  promptpay: string
+  bcelOnePayQr: string
   promptpayName: string
 }
 
 export const BANK_ACCOUNT: BankAccount = {
-  bank: 'ธนาคารกสิกรไทย',
-  branch: 'สาขาเซ็นทรัลเวิลด์',
-  accountName: 'หจก. ส้มสิ่งพิมพ์',
-  accountNumber: '064-2-12345-6',
-  promptpay: '0812345678',
-  promptpayName: 'ส้มสิ่งพิมพ์',
+  bank: 'BCEL (ທະນາຄານການຄ້າຕ່າງປະເທດລາວ ມະຫາຊົນ)',
+  branch: 'Vientiane Head Office',
+  accountName: 'Som-Sing Phim Printing Shop',
+  accountNumber: '160-12-00-01234567-001',
+  bcelOnePayQr: '/assets/images/bcel-qr-placeholder.png',
+  promptpayName: 'Som-Sing Phim',
 }

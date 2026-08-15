@@ -779,9 +779,9 @@ export default function CustomerManagement() {
         </div>
       )}
 
-      {/* 👤 REGISTER NEW CUSTOMER MODAL */}
+      {/* REGISTER NEW CUSTOMER MODAL */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-100 p-6 space-y-5 animate-scale-up relative">
             <div className="flex justify-between items-center border-b pb-4">
               <div>
@@ -900,9 +900,9 @@ export default function CustomerManagement() {
         </div>
       )}
 
-      {/* ✏️ EDIT CUSTOMER MODAL */}
+      {/* EDIT CUSTOMER MODAL */}
       {editingCustomer && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-100 p-6 space-y-5 animate-scale-up relative">
             <div className="flex justify-between items-center border-b pb-4">
               <div>

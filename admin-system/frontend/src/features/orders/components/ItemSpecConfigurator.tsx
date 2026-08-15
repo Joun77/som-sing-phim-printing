@@ -1260,15 +1260,15 @@ export default function ItemSpecConfigurator({
                 )}
                 <span>
                   {isCalculatingBackend
-                    ? 'กำลังคำนวณผ่าน Go Pricing Engine...'
+                    ? 'ກຳລັງຄຳນວນຜ່ານ Go Pricing Engine...'
                     : backendPricing
-                    ? 'Go Pricing Engine: Connected ✅'
+                    ? 'Go Pricing Engine: Connected'
                     : `Engine Status: ${backendError || 'Offline'}`}
                 </span>
               </div>
               {backendPricing && backendPricing.volume_discount_percent > 0 && (
                 <span className="px-2.5 py-1 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-2xs">
-                  ⚡ Discount -{backendPricing.volume_discount_percent}% (Margin)
+                  Discount -{backendPricing.volume_discount_percent}% (Margin)
                 </span>
               )}
             </div>

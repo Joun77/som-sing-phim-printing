@@ -12,26 +12,26 @@ const STEPS: Step[] = [
   {
     n: 1,
     icon: 'cart',
-    title: 'เลือกสินค้าและสเปก',
-    desc: 'เลือกรายการงานพิมพ์ กำหนดขนาด วัสดุ และเทคนิคพิเศษ ราคาคำนวณอัตโนมัติแบบเรียลไทม์',
+    title: 'ເລືອກສິນຄ້າ ແລະ ສະເປັກ',
+    desc: 'ເລືອກລາຍການງານພິມ ກຳນົດຂະໜາດ ວັດສະດຸ ແລະ ເຕັກນິກວິເສດ ລາຄາຄຳນວນອັດຕະໂນມັດແບບ Real-time',
   },
   {
     n: 2,
     icon: 'link',
-    title: 'แนบลิงก์ Google Drive',
-    desc: 'อัปโหลดไฟล์งานของคุณ แล้วแนบลิงก์ (เปิดสิทธิ์ Anyone with the link) พร้อมหมายเหตุถึงช่างพิมพ์',
+    title: 'ແນບລິ້ງ Google Drive',
+    desc: 'ອັບໂຫຼດຟາຍງານຂອງທ່ານ ແລ້ວແນບລິ້ງ (ເປີດສິດ Anyone with the link) ພ້ອມໝາຍເຫດເຖິງຊ່າງພິມ',
   },
   {
     n: 3,
     icon: 'bank',
-    title: 'โอนเงินแนบสลิป',
-    desc: 'สแกน PromptPay หรือโอนผ่านธนาคาร ตามยอดรวม แล้วแนบภาพสลิปเพื่อยืนยันการชำระเงิน',
+    title: 'ໂອນເງິນແນບສະລິບ BCEL OnePay',
+    desc: 'ສະແກນ BCEL OnePay QR ຫຼື ໂອນຜ່ານທະນາຄານ ຕາມຍອດລວມ ແລ້ວແນບຮູບສະລິບເພື່ອຢືນຢັນການຊຳລະເງິນ',
   },
   {
     n: 4,
     icon: 'truck',
-    title: 'ติดตามสถานะรอรับสินค้า',
-    desc: 'จด Order ID แล้วติดตามสถานะงานพิมพ์แบบเรียลไทม์ พร้อมเลขพัสดุเมื่อจัดส่งเรียบร้อย',
+    title: 'ຕິດຕາມສະຖານະຮໍານໍາສົ່ງ',
+    desc: 'ຈົດ Order ID ແລ້ວຕິດຕາມສະຖານະງານພິມແບບ Real-time ພ້ອມເລກ Tracking ເມື່ອຈັດສົ່ງຮຽບຮ້ອຍ',
   },
 ]
 
@@ -75,8 +75,8 @@ export default function HowItWorks() {
       <div className="container">
         <div className="section-head">
           <span className="eyebrow">How It Works</span>
-          <h2>4 ขั้นตอนสั่งซื้อง่าย ๆ</h2>
-          <p>ไม่ต้องสมัครสมาชิก ไม่ต้องเข้าสู่ระบบ — เลือกและสั่งพิมพ์ได้ทันที</p>
+          <h2>4 ຂັ້ນຕອນສັ່ງຊື້ງ່າຍໆ</h2>
+          <p>ບໍ່ຕ້ອງສະໝັກສະມາຊິກ — ເລືອກ ແລະ ສັ່ງພິມໄດ້ທັນທີ</p>
         </div>
 
         <div className="steps-grid">
@@ -86,7 +86,7 @@ export default function HowItWorks() {
                 <StepIcon type={s.icon} />
               </div>
               <span className="step-num">
-                ขั้นตอนที่ {s.n} <em>STEP 0{s.n}</em>
+                ຂັ້ນຕອນທີ {s.n} <em>STEP 0{s.n}</em>
               </span>
               <h3>{s.title}</h3>
               <p>{s.desc}</p>
@@ -97,7 +97,7 @@ export default function HowItWorks() {
 
         <div className="how-cta">
           <Link to="/category/albums" className="btn btn--gold btn--lg">
-            เริ่มสั่งพิมพ์เลย <ArrowRightIcon size={18} />
+            ເລີ່ມສັ່ງພິມເລີຍ <ArrowRightIcon size={18} />
           </Link>
         </div>
       </div>

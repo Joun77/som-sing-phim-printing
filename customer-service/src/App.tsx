@@ -1,6 +1,5 @@
 import { Link, Route, Routes } from 'react-router-dom'
 import Header from './components/Header.tsx'
-import Footer from './components/Footer.tsx'
 import HomePage from './pages/HomePage.tsx'
 import CategoryPage from './pages/CategoryPage.tsx'
 import ProductPage from './pages/ProductPage.tsx'
@@ -11,11 +10,11 @@ import { useShop } from './context/ShopContext.tsx'
 
 function NotFound() {
   return (
-    <section className="section text-center container">
-      <h2>ไม่พบหน้าที่คุณค้นหา (404)</h2>
-      <p className="text-muted">หน้านี้ถูกลบหรือ URL ไม่ถูกต้อง</p>
+    <section className="section text-center container min-h-60 flex flex-col items-center justify-center">
+      <h2>ບໍ່ພົບໜ້າທີ່ທ່ານຄົ້ນຫາ (404 Page Not Found)</h2>
+      <p className="text-muted">ໜ້ານີ້ຖືກລຶບ ຫຼື URL ບໍ່ຖືກຕ້ອງ</p>
       <Link to="/" className="btn btn--navy mt-2">
-        กลับหน้าแรก
+        ກັບຄືນໜ້າທຳອິດ
       </Link>
     </section>
   )
@@ -28,8 +27,7 @@ export default function App() {
     <>
       {demoMode && (
         <div className="demo-banner" role="status">
-          <span>🔌</span> โหมดสาธิต (Demo Mode) — ระบบหลังบ้าน Go ไม่พร้อมใช้งาน
-          ใช้ข้อมูลตัวอย่างแทน เปิด backend ที่ port 8080 เพื่อเชื่อมต่อ API จริง
+          ໂຫມດສາທິດ (Demo Mode) — ລະບົບຫຼັງບ້ານ Go ບໍ່ພ້ອມໃຊ້ງານ, ໃຊ້ຂໍ້ມູນຕົວຢ່າງແທນ. ເປີດ Backend ທີ່ port 8080 ເພື່ອເຊື່ອມຕໍ່ API ຕົວຈິງ.
         </div>
       )}
       <Header />
@@ -44,7 +42,6 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
-      <Footer />
     </>
   )
 }

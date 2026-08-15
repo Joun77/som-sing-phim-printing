@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Trash2, Edit3, ShieldAlert, Package, Calendar, Truck, Layers } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit3, ShieldAlert, Package, Calendar, Truck, Layers, AlertTriangle, CheckCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import EditMaterialModal from '../modals/EditMaterialModal';
@@ -257,14 +257,16 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
                 }
                 if (effectiveStock < 100) {
                   return (
-                    <span className="px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-black">
-                      ⚠️ {currentLang === 'lo' ? 'ໃກ້ໝົດສະຕ໋ອກ (Low Stock Warning)' : 'Low Stock Warning'}
+                    <span className="px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-black inline-flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                      {currentLang === 'lo' ? 'ໃກ້ໝົດສະຕ໋ອກ (Low Stock Warning)' : 'Low Stock Warning'}
                     </span>
                   );
                 }
                 return (
-                  <span className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-black">
-                    🟢 {currentLang === 'lo' ? 'ສະຕ໋ອກພ້ອມໃຊ້ງານ (Stock Ready)' : 'Stock Ready'}
+                  <span className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-black inline-flex items-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                    {currentLang === 'lo' ? 'ສະຕ໋ອກພ້ອມໃຊ້ງານ (Stock Ready)' : 'Stock Ready'}
                   </span>
                 );
               })()}

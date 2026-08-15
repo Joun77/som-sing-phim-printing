@@ -37,7 +37,8 @@ export default function DashboardOverview() {
     customers,
     showToast,
     askConfirmation,
-    formatCurrency
+    formatCurrency,
+    setActiveTab
   } = useApp();
 
   const { t, i18n } = useTranslation();
@@ -241,11 +242,8 @@ export default function DashboardOverview() {
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <button 
-            onClick={() => {
-              setOrderStep(1);
-              setIsOrderModalOpen(true);
-            }}
-            className="flex items-center justify-center gap-2.5 px-6 py-4 bg-accent-sky text-white rounded-2xl text-lg font-extrabold shadow-lg shadow-accent-sky/25 hover:bg-accent-sky/95 transition active:scale-95 min-h-[52px]"
+            onClick={() => setActiveTab('create_order')}
+            className="flex items-center justify-center gap-2.5 px-6 py-4 bg-accent-sky text-white rounded-2xl text-lg font-extrabold shadow-lg shadow-accent-sky/25 hover:bg-accent-sky/95 transition active:scale-95 min-h-[52px] cursor-pointer"
           >
             <Plus className="w-6 h-6 shrink-0" />
             <span>{t('dashboard.btn_new_order')}</span>
@@ -378,8 +376,9 @@ export default function DashboardOverview() {
         </div>
 
         {lowStockItems.length === 0 ? (
-          <div className="bg-white p-4 rounded-2xl border border-amber-100 text-center text-sm font-semibold text-emerald-700">
-            ✅ {currentLang === 'lo' ? 'ວັດສະດຸ ແລະ ໝຶກທຸກຢ່າງในสางยังคงพอเพียง' : 'All inks and paper materials are above reorder thresholds.'}
+          <div className="bg-white p-4 rounded-2xl border border-amber-100 text-center text-sm font-semibold text-emerald-700 flex items-center justify-center gap-1.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{currentLang === 'lo' ? 'ວັດສະດຸ ແລະ ໝຶກທຸກຢ່າງໃນສາງຍັງຄົງພໍພຽງ' : 'All inks and paper materials are above reorder thresholds.'}</span>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">

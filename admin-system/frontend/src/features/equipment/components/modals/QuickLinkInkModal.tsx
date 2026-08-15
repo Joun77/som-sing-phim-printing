@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Layers, Link as LinkIcon } from 'lucide-react';
+import { X, Layers, Link as LinkIcon, Zap } from 'lucide-react';
 import { useApp } from '@store/AppContext';
 import { useTranslation } from 'react-i18next';
 
@@ -75,7 +75,7 @@ export default function QuickLinkInkModal({ isOpen, onClose, equipmentItem }: Qu
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-md animate-fade-in">
       <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100 flex flex-col">
         {/* Header */}
         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
@@ -157,8 +157,9 @@ export default function QuickLinkInkModal({ isOpen, onClose, equipmentItem }: Qu
 
             return (
               <div className="bg-purple-50/70 border border-purple-200 rounded-2xl p-3.5 space-y-1.5 text-purple-950">
-                <span className="text-[10px] font-black uppercase text-purple-700 block tracking-wider">
-                  ⚡ {currentLang === 'lo' ? 'ຂໍ້ມູນໝຶກທີ່ຄຳນວນຈາກສາງ (Calculated Specs)' : 'Auto-Calculated Ink Specs from Inventory'}
+                <span className="text-[10px] font-black uppercase text-purple-700 flex items-center gap-1 tracking-wider">
+                  <Zap className="w-3 h-3 text-purple-600 inline" />
+                  {currentLang === 'lo' ? 'ຂໍ້ມູນໝຶກທີ່ຄຳນວນຈາກສາງ (Calculated Specs)' : 'Auto-Calculated Ink Specs from Inventory'}
                 </span>
                 <div className="grid grid-cols-3 gap-2 font-mono text-xs">
                   <div>

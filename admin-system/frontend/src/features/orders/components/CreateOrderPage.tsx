@@ -553,7 +553,7 @@ export default function CreateOrderPage({
                   <span>ຮາຍການສິນຄ້າທີ່ລູກຄ້າສັ່ງ (Master Order Item List)</span>
                 </h4>
                 <p className="text-xs font-semibold text-slate-400 mt-0.5">
-                  ເພີ່ມຮາຍການສິນຄ້າ, ກຳນົດຈຳນວນ ແລະ ກົດປຸ່ມ "[⚙️ ກຳນົດສະເປັກ]" ເພື່ອຕັ້ງຄ່າສະເປັກການພິມ ແລະ ຄຳນວນຕົ້ນທຶນ
+                  ເພີ່ມຮາຍການສິນຄ້າ, ກຳນົດຈຳນວນ ແລະ ກົດປຸ່ມ "[ກຳນົດສະເປັກ]" ເພື່ອຕັ້ງຄ່າສະເປັກການພິມ ແລະ ຄຳນວນຕົ້ນທຶນ
                 </p>
               </div>
               <button
@@ -651,7 +651,7 @@ export default function CreateOrderPage({
                           }`}
                         >
                           <Settings className="w-3.5 h-3.5" />
-                          <span>[⚙️ ກຳນົດສະເປັກ]</span>
+                          <span>[ກຳນົດສະເປັກ]</span>
                         </button>
 
                         {items.length > 1 && (

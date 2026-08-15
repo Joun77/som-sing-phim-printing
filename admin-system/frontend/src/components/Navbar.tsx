@@ -1,0 +1,272 @@
+import React, { useState } from 'react';
+import { useApp } from '@store/AppContext';
+import { useAuthStore } from '@store/useAuthStore';
+import { useTranslation } from 'react-i18next';
+import { 
+  LayoutDashboard, 
+  Boxes, 
+  Cpu, 
+  ShoppingCart, 
+  RotateCcw,
+  Menu,
+  X,
+  Printer,
+  Truck,
+  User,
+  Users,
+  Coins,
+  LogOut
+} from 'lucide-react';
+
+export default function Navbar() {
+  const { 
+    activeTab, 
+    setActiveTab, 
+    resetToDefaultData, 
+    setIsRatesOpen, 
+    currency, 
+    exchangeRates, 
+    rateMode, 
+    askConfirmation, 
+    showToast 
+  } = useApp();
+
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const currentRate = currency === 'LAK' ? 1 : ((exchangeRates[currency] && exchangeRates[currency][rateMode]) || 0);
+
+  const { t, i18n } = useTranslation();
+  const currentLang = i18n.language || 'lo';
+
+  const toggleLanguage = () => {
+    const nextLang = currentLang === 'lo' ? 'en' : 'lo';
+    i18n.changeLanguage(nextLang);
+    localStorage.setItem('somsing_lang', nextLang);
+  };
+
+  const navItems = [
+    { id: 'dashboard', labelLao: 'ແຜງຄວບຄຸມ', icon: LayoutDashboard },
+    { id: 'finance', labelLao: 'ການເງິນ & ບັນຊີ', icon: Coins },
+    { id: 'orders', labelLao: 'ອໍເດີ', icon: ShoppingCart },
+    { id: 'inbound', labelLao: 'ນຳເຂົ້າ', icon: Truck },
+    { id: 'inventory', labelLao: 'ຄັງສິນຄ້າ', icon: Boxes },
+    { id: 'equipment', labelLao: 'ເຄື່ອງຈັກ', icon: Cpu },
+    { id: 'crm', labelLao: 'ລູກຄ້າ', icon: User },
+    { id: 'hr', labelLao: 'ພະນັກງານ', icon: Users },
+  ];
+
+  return (
+    <header className="bg-gradient-to-r from-slate-950 via-primary-navy to-slate-950 text-white shadow-xl sticky top-0 z-50 border-b border-slate-800/80">
+      <div className="w-full px-4 sm:px-6 md:px-8">
+        <div className="flex items-center justify-between h-20 gap-4">
+          
+          {/* Left: Brand Logo & Title */}
+          <div className="flex items-center gap-3 shrink-0 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
+            <div className="w-11 h-11 bg-accent-sky text-white rounded-2xl flex items-center justify-center shadow-lg shadow-sky-500/20 border border-sky-400/30">
+              <Printer className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="font-black text-lg tracking-tight text-white leading-tight font-sans">
+                {t('common.app_name')}
+              </h1>
+              <p className="text-[11px] font-semibold text-slate-400">Som Sing Printing ERP</p>
+            </div>
+          </div>
+
+          {/* Center: Desktop Navigation Links (Fits in 1 row cleanly) */}
+          <nav className="hidden lg:flex items-center gap-1.5 bg-white/5 p-1.5 rounded-2xl border border-white/10">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`
+                    px-3 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap
+                    ${isActive 
+                      ? 'bg-accent-sky text-white shadow-md shadow-accent-sky/30' 
+                      : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                    }
+                  `}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span>{item.labelLao}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Right: Actions & User Profile */}
+          <div className="hidden lg:flex items-center gap-3 shrink-0">
+            {/* Language Switcher */}
+            <button 
+              onClick={toggleLanguage}
+              className="px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-xs font-black transition flex items-center gap-1 cursor-pointer select-none"
+            >
+              <span className={currentLang === 'lo' ? 'text-accent-sky font-black' : 'text-white/60'}>LA</span>
+              <span className="text-white/30">|</span>
+              <span className={currentLang === 'en' ? 'text-accent-sky font-black' : 'text-white/60'}>EN</span>
+            </button>
+
+            {/* User Profile Avatar & Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setProfileOpen(!profileOpen)}
+                className="flex items-center gap-2.5 p-1.5 pr-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition cursor-pointer"
+              >
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white font-black text-xs flex items-center justify-center shadow-md">
+                  SP
+                </div>
+                <div className="text-left hidden xl:block">
+                  <div className="text-xs font-black text-white leading-tight">ສົມສິ່ງພິມ (Owner)</div>
+                  <div className="text-[10px] font-semibold text-emerald-400">Super Admin</div>
+                </div>
+              </button>
+
+              {/* Profile Dropdown Menu */}
+              {profileOpen && (
+                <div className="absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl p-4 space-y-3 z-[100] animate-fade-in">
+                  <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white font-black text-sm flex items-center justify-center shadow-md">
+                      SP
+                    </div>
+                    <div>
+                      <div className="text-xs font-black text-white">ຮ້ານ ສົມສິ່ງພິມ (Owner)</div>
+                      <div className="text-[11px] font-medium text-slate-400">som.sing.phim@gmail.com</div>
+                      <span className="inline-block mt-1 px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold rounded-md border border-emerald-500/30">
+                        เจ้าของโรงพิมพ์ (Super Admin)
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-slate-400 font-semibold space-y-1">
+                    <div>สาขาหลัก: <span className="text-white font-bold">Vientiane Head Office</span></div>
+                    <div>สถานะระบบ: <span className="text-emerald-400 font-bold">Online (Active)</span></div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setProfileOpen(false);
+                      setActiveTab('settings');
+                    }}
+                    className="w-full py-2.5 bg-accent-sky/20 hover:bg-accent-sky/30 text-sky-200 border border-sky-500/30 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <User className="w-4 h-4 text-sky-300" />
+                    <span>ຕັ້ງຄ່າໂປຣໄຟລ໌ & ລະບົບ (Settings)</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setProfileOpen(false);
+                      useAuthStore.getState().logout();
+                    }}
+                    className="w-full py-2.5 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    ออกจากระบบ (Logout)
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Mobile/Tablet Menu Button */}
+          <div className="flex xl:hidden items-center gap-2">
+            <button 
+              onClick={toggleLanguage}
+              className="px-2.5 py-1.5 bg-white/10 border border-white/20 rounded-xl text-xs font-extrabold flex items-center gap-1"
+            >
+              <span className={currentLang === 'lo' ? 'text-accent-sky' : 'text-white/60'}>LA</span>
+              <span className="text-white/30">|</span>
+              <span className={currentLang === 'en' ? 'text-accent-sky' : 'text-white/60'}>EN</span>
+            </button>
+            <button
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className="p-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-white transition cursor-pointer"
+            >
+              {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Tablet Navigation Bar (Below main header for lg resolution) */}
+        <div className="hidden lg:flex xl:hidden pb-3 overflow-x-auto gap-2">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`
+                  px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer
+                  ${isActive 
+                    ? 'bg-accent-sky text-white shadow-md shadow-accent-sky/30' 
+                    : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                  }
+                `}
+              >
+                <Icon className="w-4 h-4" />
+                <span>{t(item.labelKey)}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Mobile Drawer Menu */}
+      {mobileOpen && (
+        <div className="xl:hidden bg-slate-900 border-t border-slate-800 px-4 pt-3 pb-6 space-y-3 animate-fade-in">
+          <div className="grid grid-cols-2 gap-2">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setMobileOpen(false);
+                  }}
+                  className={`
+                    p-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 text-left cursor-pointer
+                    ${isActive 
+                      ? 'bg-accent-sky text-white shadow-md shadow-accent-sky/30' 
+                      : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                    }
+                  `}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="truncate">{t(item.labelKey)}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-col gap-2 pt-3 border-t border-slate-800">
+            <button
+              onClick={() => {
+                setIsRatesOpen(true);
+                setMobileOpen(false);
+              }}
+              className="w-full p-3 bg-white/5 hover:bg-white/10 text-emerald-300 text-xs font-bold rounded-xl flex items-center justify-between"
+            >
+              <span className="flex items-center gap-2">
+                <Coins className="w-4 h-4" /> อัตราแลกเปลี่ยน ({currency})
+              </span>
+              <span>1 = {currentRate ? `${currentRate.toLocaleString()}₭` : '—'}</span>
+            </button>
+
+            <button
+              onClick={() => useAuthStore.getState().logout()}
+              className="w-full p-3 bg-slate-800 text-slate-200 text-xs font-bold rounded-xl flex items-center gap-2"
+            >
+              <LogOut className="w-4 h-4 text-red-400" /> ออกจากระบบ (Logout)
+            </button>
+          </div>
+        </div>
+      )}
+    </header>
+  );
+}
