@@ -11,7 +11,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./admin-system/migrations/001_master_printer_ink_paper_quotation_spec.sql:/docker-entrypoint-initdb.d/001_init.sql
+      - ./admin-system/migrations:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d somsing_db"]
       interval: 5s

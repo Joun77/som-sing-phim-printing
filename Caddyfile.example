@@ -1,0 +1,14 @@
+# Example Caddyfile for Som Sing Phim Printing Production Deployment
+# Replace 'yourdomain.com' with your actual domain name
+
+admin.yourdomain.com {
+    reverse_proxy localhost:3000
+}
+
+app.yourdomain.com {
+    reverse_proxy localhost:5173
+}
+
+api.yourdomain.com {
+    reverse_proxy localhost:8080
+}
