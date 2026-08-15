@@ -7,6 +7,7 @@ import (
 	"backend/auth"
 	"backend/customers"
 	"backend/db"
+	"backend/finance"
 	"backend/hr"
 	"backend/inbound"
 	"backend/inventory"
@@ -38,6 +39,12 @@ func main() {
 
 	// Auth routes
 	router.POST("/api/auth/login", auth.HandleLogin)
+	router.POST("/api/v1/auth/login", auth.HandleLogin)
+
+	// Owner Finance routes
+	router.GET("/api/v1/finance/summary", finance.HandleGetFinanceSummary)
+	router.POST("/api/v1/finance/verify-slip", finance.HandleVerifyPaymentSlip)
+	router.GET("/api/v1/finance/ar-aging", finance.HandleGetARAging)
 
 	// Daily rates routes
 	router.GET("/api/rates", pricing.HandleGetRates)
@@ -52,6 +59,7 @@ func main() {
 	router.POST("/api/orders", orders.HandleCreateOrder)
 	router.PUT("/api/orders/:id/deposit", orders.HandleRecordDeposit)
 	router.PUT("/api/orders/:id/status", orders.HandleUpdateOrderStatus)
+	router.GET("/api/v1/orders/stream", orders.HandleOrderProgressSSEStream)
 
 	// CRM Customer routes
 	router.GET("/api/customers", customers.HandleGetCustomers)

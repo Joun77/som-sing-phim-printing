@@ -11,6 +11,13 @@
   --color-surface-white: #FFFFFF;
 }
 
+:root, html, body, #root {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  min-height: 100vh !important;
+}
+
 :root, html, body, input, button, select, textarea {
   font-family: 'Plus Jakarta Sans', 'Noto Sans Lao', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
 }

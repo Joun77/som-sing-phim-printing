@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Settings, Save, Calculator, Image as ImageIcon, Cpu, DollarSign, Info } from 'lucide-react';
 import { useApp } from '@store/AppContext';
 import { useTranslation } from 'react-i18next';
+import { FormModalTemplate } from '@components/common';
 
 interface EditEquipmentModalProps {
   isOpen: boolean;
@@ -120,34 +121,35 @@ export default function EditEquipmentModal({ isOpen, onClose, equipmentItem }: E
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white border border-slate-100 rounded-3xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl shadow-slate-900/15 overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/60">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-sky-50 text-sky-600 rounded-2xl border border-sky-100 shrink-0">
-              <Settings className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-extrabold text-base text-slate-900">
-                {currentLang === 'lo' ? 'ແກ້ໄຂໂປຣໄຟລ໌ເຄື່ອງຈັກ' : 'Edit Machine Profile'}
-              </h3>
-              <p className="text-[11px] font-semibold text-slate-400">
-                ID: {equipmentItem.id} • <span className="text-sky-600 font-bold">{isPostPress ? 'Post-Press Machinery' : 'Printer'}</span>
-              </p>
-            </div>
-          </div>
+    <FormModalTemplate
+      isOpen={isOpen}
+      onClose={onClose}
+      icon={<Settings className="w-5 h-5 text-accent-sky" />}
+      title={currentLang === 'lo' ? 'ແກ້ໄຂໂປຣໄຟລ໌ເຄື່ອງຈັກ' : 'Edit Machine Profile'}
+      subtitle={`ID: ${equipmentItem.id} • ${isPostPress ? 'Post-Press Machinery' : 'Printer'}`}
+      badgeText="EQUIPMENT"
+      maxWidthClass="max-w-5xl"
+      footerActions={
+        <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200/80 text-slate-400 hover:text-slate-600 flex items-center justify-center transition cursor-pointer active:scale-95"
+            className="px-4.5 py-2.5 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200 transition cursor-pointer active:scale-95 shadow-2xs"
           >
-            <X className="w-4 h-4" />
+            {currentLang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
+          </button>
+          <button
+            type="submit"
+            form="edit-equipment-form"
+            className="flex items-center gap-2 px-5 py-2.5 bg-accent-sky hover:bg-sky-600 text-white font-bold rounded-xl text-xs transition shadow-md shadow-sky-600/20 active:scale-95 cursor-pointer"
+          >
+            <Save className="w-4 h-4" />
+            <span>{currentLang === 'lo' ? 'ບັນທຶກການປ່ຽນແປງ' : 'Save Changes'}</span>
           </button>
         </div>
-
-        {/* Form Content */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5 text-xs font-semibold text-slate-700 flex-1 bg-white">
+      }
+    >
+      <form id="edit-equipment-form" onSubmit={handleSubmit} className="space-y-6">
           {/* General Information Card */}
           <div className="bg-slate-50/60 border border-slate-200/70 rounded-2xl p-4.5 space-y-4">
             <div className="flex items-center gap-2 border-b border-slate-200/60 pb-2.5">
@@ -478,26 +480,8 @@ export default function EditEquipmentModal({ isOpen, onClose, equipmentItem }: E
             </div>
           </div>
 
-          {/* Submit Action */}
-          <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4.5 py-2.5 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200 transition cursor-pointer active:scale-95 shadow-2xs"
-            >
-              {currentLang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
-            </button>
-            <button
-              type="submit"
-              className="flex items-center gap-2 px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-xs transition shadow-md shadow-sky-600/20 active:scale-95 cursor-pointer"
-            >
-              <Save className="w-4 h-4" />
-              <span>{currentLang === 'lo' ? 'ບັນທຶກການປ່ຽນແປງ' : 'Save Changes'}</span>
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </FormModalTemplate>
   );
 }
 

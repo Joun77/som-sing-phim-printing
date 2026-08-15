@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -868,7 +869,88 @@ func HandleDeleteInventorySKU(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "SKU deleted"})
 }
 
-// HandleDischargeInventoryStock discharges stock for a SKU
+// DeductInventoryStockFIFOPessimisticLock performs strict FIFO stock deduction with FOR UPDATE row locks to prevent race conditions
+func DeductInventoryStockFIFOPessimisticLock(sku string, quantity float64) (float64, error) {
+	if db.DB == nil {
+		assetStoreMutex.Lock()
+		defer assetStoreMutex.Unlock()
+		item, exists := inventoryStore[sku]
+		if !exists {
+			return 0, fmt.Errorf("SKU %s not found in inventory", sku)
+		}
+		if float64(item.StockQty) < quantity {
+			return float64(item.StockQty), fmt.Errorf("insufficient stock for SKU %s (available: %d, requested: %v)", sku, item.StockQty, quantity)
+		}
+		item.StockQty -= int(quantity)
+		inventoryStore[sku] = item
+		return float64(item.StockQty), nil
+	}
+
+	tx, err := db.DB.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("failed to start SQL transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Lock material row for update
+	var materialID string
+	var currentStock float64
+	queryLockMaterial := `SELECT id, stock_qty FROM materials WHERE sku = $1 FOR UPDATE`
+	err = tx.QueryRow(queryLockMaterial, sku).Scan(&materialID, &currentStock)
+	if err != nil {
+		return 0, fmt.Errorf("material SKU %s not found: %w", sku, err)
+	}
+
+	if currentStock < quantity {
+		return currentStock, fmt.Errorf("insufficient stock for SKU %s (available: %v, requested: %v)", sku, currentStock, quantity)
+	}
+
+	// 2. Lock inventory batches for FIFO deduction
+	queryLockBatches := `SELECT id, quantity FROM inventory_batches WHERE sku_id = $1 AND quantity > 0 ORDER BY received_date ASC FOR UPDATE`
+	rows, err := tx.Query(queryLockBatches, sku)
+	if err == nil {
+		remainingToDeduct := quantity
+		for rows.Next() {
+			var batchID string
+			var batchQty float64
+			if err := rows.Scan(&batchID, &batchQty); err != nil {
+				continue
+			}
+
+			var deductAmt float64
+			if batchQty >= remainingToDeduct {
+				deductAmt = remainingToDeduct
+				remainingToDeduct = 0
+			} else {
+				deductAmt = batchQty
+				remainingToDeduct -= batchQty
+			}
+
+			updateBatch := `UPDATE inventory_batches SET quantity = quantity - $1 WHERE id = $2`
+			_, _ = tx.Exec(updateBatch, deductAmt, batchID)
+
+			if remainingToDeduct <= 0 {
+				break
+			}
+		}
+		rows.Close()
+	}
+
+	// 3. Deduct total stock in materials catalog
+	newStock := currentStock - quantity
+	updateMaterial := `UPDATE materials SET stock_qty = $1, updated_at = NOW() WHERE sku = $2`
+	if _, err := tx.Exec(updateMaterial, newStock, sku); err != nil {
+		return 0, fmt.Errorf("failed to update material stock: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit inventory deduction transaction: %w", err)
+	}
+
+	return newStock, nil
+}
+
+// HandleDischargeInventoryStock discharges stock for a SKU using pessimistic FOR UPDATE locking
 func HandleDischargeInventoryStock(c *gin.Context) {
 	id := c.Param("id")
 	var req DischargeRequest
@@ -877,16 +959,12 @@ func HandleDischargeInventoryStock(c *gin.Context) {
 		req.SKUCode = id
 	}
 
-	assetStoreMutex.Lock()
-	item, exists := inventoryStore[req.SKUCode]
-	if exists {
-		item.StockQty = item.StockQty - req.Quantity
-		if item.StockQty < 0 {
-			item.StockQty = 0
-		}
-		inventoryStore[req.SKUCode] = item
+	remaining, err := DeductInventoryStockFIFOPessimisticLock(req.SKUCode, float64(req.Quantity))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error(), "remainingStock": remaining})
+		return
 	}
-	assetStoreMutex.Unlock()
 
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Stock discharged", "remainingStock": item.StockQty})
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Stock discharged cleanly with FIFO lock", "remainingStock": remaining})
 }
+

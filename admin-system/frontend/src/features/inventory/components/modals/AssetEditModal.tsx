@@ -41,7 +41,7 @@ export default function AssetEditModal({ item, onSave, onClose }: { item: any; o
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm animate-fade-in">
       <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-2xl p-6 shadow-2xl animate-fade-in space-y-6 max-h-[90vh] overflow-y-auto">
         
         {/* Header */}

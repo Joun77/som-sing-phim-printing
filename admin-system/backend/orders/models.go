@@ -34,12 +34,15 @@ type Order struct {
 	CustomerPhone   string      `json:"customer_phone"`
 	Status          OrderStatus `json:"status"`
 	DepositAmount   float64     `json:"deposit_amount"`
-	TotalPrice      float64     `json:"total_price"`
-	TotalCost       float64     `json:"total_cost"`
-	GoogleDriveLink string      `json:"google_drive_link"`
-	Items           []OrderItem `json:"items"`
-	CreatedAt       time.Time   `json:"created_at"`
-	UpdatedAt       time.Time   `json:"updated_at"`
+	TotalPrice           float64     `json:"total_price"`
+	TotalCost            float64     `json:"total_cost"`
+	GoogleDriveLink      string      `json:"google_drive_link"`
+	Items                []OrderItem `json:"items"`
+	InternalTrackingCode string      `json:"internal_tracking_code,omitempty"`
+	CourierName          string      `json:"courier_name,omitempty"`
+	PODImageUrl          string      `json:"pod_image_url,omitempty"`
+	CreatedAt            time.Time   `json:"created_at"`
+	UpdatedAt            time.Time   `json:"updated_at"`
 }
 
 // Request payloads

@@ -635,7 +635,7 @@ export default function ImportForm({ onSubmit, onClose }) {
   };
 
   return (
-    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 max-w-4xl mx-auto relative space-y-6">
+    <div className="space-y-6 font-sans">
       
       {/* SECTION 1.1: Mode Switcher */}
       <div className="bg-slate-100/80 p-1.5 rounded-2xl flex items-center justify-between">
@@ -737,7 +737,7 @@ export default function ImportForm({ onSubmit, onClose }) {
       <form onSubmit={handleSubmit} className="space-y-6 text-xs font-semibold text-slate-700">
         
         {importType === 'PRINTER' && inboundMode === 'NEW' && (
-          <div className="space-y-6 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
+          <div className="space-y-6 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
             <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">
               {t('inbound.printer.title')}
             </h4>

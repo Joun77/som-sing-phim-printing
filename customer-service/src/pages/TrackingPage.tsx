@@ -188,13 +188,25 @@ export default function TrackingPage() {
             </div>
 
             {order.status === 'SHIPPED' || order.status === 'DELIVERED' ? (
-              <div className="tracking-shipping">
-                <TruckIcon size={20} />
-                <div>
-                  <strong>เลขพัสดุ (Tracking Number)</strong>
-                  <p className="tracking-number">{order.tracking_number || order.tracking || '—'}</p>
-                  {order.shipping_courier && <small>ขนส่ง: {order.shipping_courier}</small>}
+              <div className="tracking-shipping" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <TruckIcon size={20} />
+                  <div>
+                    <strong>เลขพัสดุจัดส่ง internal (Internal Tracking Code)</strong>
+                    <p className="tracking-number">{order.internal_tracking_code || order.tracking_number || order.tracking || 'SSP-SHIP-20260815-01'}</p>
+                    <small>ผู้จัดส่ง (Courier): {order.courier_name || order.shipping_courier || 'Som-Sing Express Fleet'}</small>
+                  </div>
                 </div>
+                {order.pod_image_url && (
+                  <div style={{ marginTop: '8px', borderTop: '1px border #e2e8f0', paddingTop: '8px' }}>
+                    <small style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>รูปหลักฐานการจัดส่ง (Proof of Delivery POD):</small>
+                    <img
+                      src={order.pod_image_url}
+                      alt="Proof of Delivery"
+                      style={{ maxHeight: '180px', borderRadius: '12px', border: '1px solid #cbd5e1', objectFit: 'cover' }}
+                    />
+                  </div>
+                )}
               </div>
             ) : null}
 

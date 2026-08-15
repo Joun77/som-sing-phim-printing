@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '@store/AppContext';
+import { useAuthStore } from '@store/useAuthStore';
 import { useTranslation } from 'react-i18next';
 import { 
   LayoutDashboard, 
@@ -60,6 +61,12 @@ export default function Sidebar() {
       labelKey: 'sidebar.dashboard',
       subText: 'Dashboard Overview',
       icon: LayoutDashboard,
+    },
+    {
+      id: 'finance',
+      labelKey: 'sidebar.finance',
+      subText: 'Finance & Accounting',
+      icon: Coins,
     },
     {
       id: 'orders',
@@ -164,7 +171,14 @@ export default function Sidebar() {
                 onClick={toggleCollapse}
                 title="Expand Sidebar"
               >
-                <div className="w-10 h-10 bg-accent-sky rounded-xl flex items-center justify-center shrink-0"><Printer className="w-6 h-6 text-white" /></div>
+                <img
+                  src="/logo.png"
+                  alt="Som-Sing Phim"
+                  className="w-10 h-10 rounded-full object-cover shadow-md border border-white/20 shrink-0"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
               </div>
               <button 
                 onClick={toggleLanguage}
@@ -184,7 +198,14 @@ export default function Sidebar() {
           ) : (
             <>
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-accent-sky rounded-xl flex items-center justify-center shrink-0"><Printer className="w-7 h-7 text-white" /></div>
+                <img
+                  src="/logo.png"
+                  alt="Som-Sing Phim"
+                  className="w-11 h-11 rounded-full object-cover shadow-md border border-white/20 shrink-0"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
                 <div>
                   <h1 className="font-bold text-lg tracking-wide font-sans">{t('common.app_name')}</h1>
                   <p className="text-[10px] text-white/50 font-medium">Som Sing Printing</p>
@@ -272,6 +293,22 @@ export default function Sidebar() {
             {!isCollapsed && <span>{currentLang === 'lo' ? 'ຣີເຊັດຂໍ້ມູນສາທິດ' : 'Reset Demo Data'}</span>}
           </button>
           
+          <button
+            onClick={() => useAuthStore.getState().logout()}
+            title={isCollapsed ? 'ออกจากระบบ' : undefined}
+            className={`
+              flex items-center justify-center bg-slate-800 border border-slate-700 text-slate-300 rounded-xl hover:bg-slate-700 hover:text-white transition-all font-medium cursor-pointer
+              ${isCollapsed ? 'p-3.5 w-11 h-11' : 'w-full gap-2.5 px-4 py-3 text-xs'}
+            `}
+          >
+            <RotateCcw className="w-4 h-4 shrink-0 hidden" />
+            {!isCollapsed ? (
+              <span>ออกจากระบบ (Logout Owner)</span>
+            ) : (
+              <span className="text-[10px]">Exit</span>
+            )}
+          </button>
+
           {!isCollapsed ? (
             <div className="text-[10px] text-white/40 text-center font-sans animate-fade-in">
               Som Sing Printing Admin v1.0.0

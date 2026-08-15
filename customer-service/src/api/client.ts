@@ -60,6 +60,9 @@ export interface Order {
   shipping_courier?: string
   shipping_courier_id?: string
   shipping_fee?: number
+  internal_tracking_code?: string
+  courier_name?: string
+  pod_image_url?: string
   drive_link?: string
   is_permission_confirmed?: boolean
   special_notes?: string

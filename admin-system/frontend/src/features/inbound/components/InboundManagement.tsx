@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
+import { FormModalTemplate } from '@components/common';
 import { sampleInboundData } from '../data/sampleInboundData';
 import ImportForm from './ImportForm';
 import DynamicSpecDetail from '@features/inventory/components/details/DynamicSpecDetail';
@@ -1052,28 +1053,22 @@ export default function InboundManagement() {
 
       {/* Dynamic New Inbound Import Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-4xl max-h-[95vh] flex flex-col shadow-2xl overflow-hidden animate-fade-in">
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                <Boxes className="w-5 h-5 text-blue-900" />
-                <span>{currentLang === 'lo' ? 'ນຳເຂົ້າສິນຄ້າ / ອຸປະກອນໃໝ່ (Dynamic Inbound Form)' : 'New Inbound Procurement (Dynamic Inbound Form)'}</span>
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-700 transition cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50">
-              <ImportForm 
-                onSubmit={(type, data) => {
-                  handleImportSubmit(type, data);
-                  setIsModalOpen(false);
-                }}
-                onClose={() => setIsModalOpen(false)}
-              />
-            </div>
-          </div>
-        </div>
+        <FormModalTemplate
+          onClose={() => setIsModalOpen(false)}
+          icon={<Boxes className="w-5 h-5 text-accent-sky" />}
+          title={currentLang === 'lo' ? 'ນຳເຂົ້າສິນຄ້າ / ອຸປະກອນໃໝ່ (Dynamic Inbound Form)' : 'New Inbound Procurement'}
+          subtitle={currentLang === 'lo' ? 'ເພີ່ມວັດຖຸດິບ, ເຈ້ຍ, ໝຶກ, ເຄື່ອງຈັກ ແລະ ອຸປະກອນເຂົ້າສະຕ໋ອກ ERP' : 'Add Paper, Ink, Equipment & Materials to Stock'}
+          badgeText="INBOUND FORM"
+          maxWidthClass="max-w-6xl"
+        >
+          <ImportForm 
+            onSubmit={(type, data) => {
+              handleImportSubmit(type, data);
+              setIsModalOpen(false);
+            }}
+            onClose={() => setIsModalOpen(false)}
+          />
+        </FormModalTemplate>
       )}
 
       {/* Category-Aware Edit Modal */}

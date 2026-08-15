@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Settings, Printer, Scissors, Layers, BookOpen, Camera, Link as LinkIcon } from 'lucide-react';
+import { X, Settings, Printer, Scissors, Layers, BookOpen, Camera, Link as LinkIcon, Cpu } from 'lucide-react';
 import { useApp } from '@store/AppContext';
+import { FormModalTemplate } from '@components/common';
 
 export default function AddEquipmentModal({ isOpen, onClose }) {
   const { inventory, addEquipment, showToast } = useApp();
@@ -127,25 +128,33 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-      <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[92vh]">
-        
-        {/* Header */}
-        <div className="p-5 border-b flex justify-between items-center bg-slate-50">
-          <div className="flex items-center gap-2">
-            <Settings className="w-5 h-5 text-sky-600" />
-            <div>
-              <h3 className="font-extrabold text-base text-slate-800 font-sans">ລົງທະບຽນໂປຣໄຟລ໌ເຄື່ອງຈັກ (Register Machine Profile)</h3>
-              <p className="text-[10px] font-bold text-slate-400 mt-0.5">Decoupled Technical Ink Yield & Inventory Linking Engine</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-slate-200 rounded-lg transition">
-            <X className="w-5 h-5 text-slate-400" />
+    <FormModalTemplate
+      onClose={onClose}
+      icon={<Cpu className="w-5 h-5 text-accent-sky" />}
+      title="ລົງທະບຽນໂປຣໄຟລ໌ເຄື່ອງຈັກ (Register Machine Profile)"
+      subtitle="Decoupled Technical Ink Yield & Inventory Linking Engine"
+      badgeText="NEW MACHINE"
+      maxWidthClass="max-w-5xl"
+      footerActions={
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2.5 border border-slate-200 rounded-xl font-bold hover:bg-slate-50 transition cursor-pointer text-xs"
+          >
+            ຍົກເລີກ
+          </button>
+          <button
+            type="submit"
+            form="add-equipment-form"
+            className="px-5 py-2.5 bg-accent-sky hover:bg-sky-600 text-white rounded-xl font-black shadow-md shadow-sky-500/20 transition cursor-pointer text-xs"
+          >
+            ລົງທະບຽນໂປຣໄຟລ໌ເຄື່ອງຈັກ (Add Machine)
           </button>
         </div>
-
-        {/* Wizard Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-slate-800 overflow-y-auto flex-1 text-xs font-bold">
+      }
+    >
+      <form id="add-equipment-form" onSubmit={handleSubmit} className="space-y-4 text-xs font-bold">
           
           <div className="space-y-1">
             <label className="text-slate-600 uppercase block font-black">ຊື່ເຄື່ອງພິມ / ອຸປະກອນ (Machine Name) *</label>
@@ -403,25 +412,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 border rounded-xl font-bold hover:bg-slate-50 transition"
-            >
-              ຍົກເລີກ
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-black shadow-md transition"
-            >
-              ລົງທະບຽນໂປຣໄຟລ໌ເຄື່ອງຈັກ (Add Machine Profile)
-            </button>
-          </div>
-
-        </form>
-
-      </div>
-    </div>
+      </form>
+    </FormModalTemplate>
   );
 }

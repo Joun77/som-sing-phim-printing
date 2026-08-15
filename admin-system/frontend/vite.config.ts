@@ -6,13 +6,16 @@ import path from 'path'
 // https://vite.dev/config/
 export default defineConfig({
   resolve: {
+    dedupe: ['react', 'react-dom'],
     alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@features': path.resolve(__dirname, './src/features'),
-      '@components': path.resolve(__dirname, './src/components'),
-      '@store': path.resolve(__dirname, './src/store'),
-      '@types': path.resolve(__dirname, './src/types'),
-      '@lib': path.resolve(__dirname, './src/lib'),
+      react: path.resolve(import.meta.dirname, './node_modules/react'),
+      'react-dom': path.resolve(import.meta.dirname, './node_modules/react-dom'),
+      '@': path.resolve(import.meta.dirname, './src'),
+      '@features': path.resolve(import.meta.dirname, './src/features'),
+      '@components': path.resolve(import.meta.dirname, './src/components'),
+      '@store': path.resolve(import.meta.dirname, './src/store'),
+      '@types': path.resolve(import.meta.dirname, './src/types'),
+      '@lib': path.resolve(import.meta.dirname, './src/lib'),
     },
   },
   plugins: [

@@ -1,15 +1,10 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Trash2, AlertTriangle, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 /**
  * Reusable Modern Delete Action Button & Confirmation Modal
- * @param {Function} onDelete - Callback when user confirms deletion
- * @param {string} title - Custom title or item name
- * @param {string} description - Extra context details
- * @param {boolean} isOpen - Modal visibility state
- * @param {Function} onClose - Close modal callback
- * @param {boolean} isIconButton - Render as compact icon button or full text button
  */
 interface ConfirmDeleteModalProps {
   isOpen: boolean;
@@ -33,9 +28,9 @@ export default function ConfirmDeleteModal({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-fade-in">
-      <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border-2 border-slate-900/15 overflow-hidden space-y-5 p-6 animate-scale-up">
+  const modalJSX = (
+    <div className="fixed inset-0 top-0 left-0 right-0 bottom-0 w-screen h-screen z-[99999] flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-md animate-fade-in">
+      <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-100 overflow-hidden space-y-5 p-6 animate-scale-up">
         {/* Header Icon & Close */}
         <div className="flex items-start justify-between gap-3">
           <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0">
@@ -43,6 +38,7 @@ export default function ConfirmDeleteModal({
           </div>
           <button 
             onClick={onClose}
+            type="button"
             className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -88,6 +84,8 @@ export default function ConfirmDeleteModal({
       </div>
     </div>
   );
+
+  return createPortal(modalJSX, document.body);
 }
 
 /**
