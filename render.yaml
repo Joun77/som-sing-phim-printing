@@ -1,0 +1,36 @@
+services:
+  # 1. Backend Service (Go API)
+  - type: web
+    name: somsing-backend
+    env: docker
+    dockerContext: ./admin-system/backend
+    dockerfilePath: ./admin-system/backend/Dockerfile
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: somsing-db
+          property: connectionString
+
+  # 2. Admin System Frontend (React Admin)
+  - type: web
+    name: somsing-admin
+    env: docker
+    dockerContext: ./admin-system/frontend
+    dockerfilePath: ./admin-system/frontend/Dockerfile
+    plan: free
+
+  # 3. Customer Service Frontend (React Customer)
+  - type: web
+    name: somsing-customer
+    env: docker
+    dockerContext: ./customer-service
+    dockerfilePath: ./customer-service/Dockerfile
+    plan: free
+
+databases:
+  # PostgreSQL Database (Free Tier)
+  - name: somsing-db
+    databaseName: somsing_db
+    user: somsing_user
+    plan: free
