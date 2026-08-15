@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '@store/AppContext';
 import { useTranslation } from 'react-i18next';
 import CustomerCombobox from '@components/common/CustomerCombobox';
+import ItemSpecConfigurator from '@features/orders/components/ItemSpecConfigurator';
 import { 
   Calculator, 
   ShieldAlert, 

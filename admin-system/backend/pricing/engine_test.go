@@ -114,6 +114,20 @@ func TestCalculateJobPricingA4Baseline(t *testing.T) {
 		t.Errorf("Expected SalePrice 140038.46, got %v", res.SalePrice)
 	}
 
+	// TotalBreakdown and UnitBreakdown checks
+	if res.TotalBreakdown.PaperCost != 10000.0 {
+		t.Errorf("Expected TotalBreakdown.PaperCost 10000.0, got %v", res.TotalBreakdown.PaperCost)
+	}
+	if res.UnitBreakdown.PaperCost != 100.0 {
+		t.Errorf("Expected UnitBreakdown.PaperCost 100.0, got %v", res.UnitBreakdown.PaperCost)
+	}
+	if res.TotalBreakdown.DirectSubtotal != 82750.0 {
+		t.Errorf("Expected TotalBreakdown.DirectSubtotal 82750.0, got %v", res.TotalBreakdown.DirectSubtotal)
+	}
+	if res.UnitBreakdown.DirectSubtotal != 827.5 {
+		t.Errorf("Expected UnitBreakdown.DirectSubtotal 827.5, got %v", res.UnitBreakdown.DirectSubtotal)
+	}
+
 	// Grand Total (no discount, no tax) = SalePrice
 	if res.GrandTotal != 140038.46 {
 		t.Errorf("Expected GrandTotal 140038.46 (no discount/tax), got %v", res.GrandTotal)

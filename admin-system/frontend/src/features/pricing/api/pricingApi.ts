@@ -37,10 +37,26 @@ export interface PricingCalculationInput {
   [key: string]: any;
 }
 
+export interface CostBreakdownItem {
+  paper_cost: number;
+  black_ink_cost: number;
+  color_ink_cost: number;
+  depreciation_cost: number;
+  maintenance_cost: number;
+  setup_cost: number;
+  finishing_cost: number;
+  labor_cost: number;
+  direct_subtotal: number;
+  overhead_cost: number;
+  total_cost: number;
+}
+
 export interface PricingCalculationResult {
   job_name: string;
   quantity: number;
   area_factor: number;
+  total_breakdown?: CostBreakdownItem;
+  unit_breakdown?: CostBreakdownItem;
   paper_cost: number;
   ink_cost: number;
   ink_cost_k: number;

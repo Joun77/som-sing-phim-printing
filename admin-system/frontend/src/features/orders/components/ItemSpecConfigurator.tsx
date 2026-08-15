@@ -16,7 +16,9 @@ import {
   Info,
   Maximize2,
   Zap,
-  RefreshCw
+  RefreshCw,
+  Settings,
+  Download
 } from 'lucide-react';
 
 export function calculateItemCosting(item, inventory, equipment) {
@@ -150,8 +152,8 @@ export function calculateItemCosting(item, inventory, equipment) {
   });
   customFinishingCost = Math.round(customFinishingCost);
 
-  // Cutting Cost
-  const cuttingCost = item.skipCutting ? 0 : Number(item.cuttingFee || 5000);
+  // Cutting Cost (Defaults to 0 if skipped or no cutter equipment/fee set)
+  const cuttingCost = (item.skipCutting || (!item.cuttingEquipmentId && item.cuttingFee === undefined)) ? 0 : Number(item.cuttingFee || 0);
 
   // Coating / Lamination Cost
   let laminationCost = 0;
@@ -173,7 +175,7 @@ export function calculateItemCosting(item, inventory, equipment) {
   }
 
   // Setup & Finishing Costs
-  const setupCost = Number(item.setupCost !== undefined ? item.setupCost : 50000);
+  const setupCost = Number(item.setupCost !== undefined ? item.setupCost : 20000);
   const totalFinishingCost = cuttingCost + laminationCost + bindingCost + customFinishingCost;
 
   // Direct Cost sum (Paper + Ink + Machine + Setup + Finishing)
@@ -234,7 +236,7 @@ export function calculateItemCosting(item, inventory, equipment) {
 
 export default function ItemSpecConfigurator({
   item,
-  itemIndex,
+  itemIndex = 0,
   allItems = [],
   inventory = [],
   equipment = [],
@@ -243,7 +245,11 @@ export default function ItemSpecConfigurator({
   onChange,
   onCancel,
   showToast,
-  embeddedMode = false
+  embeddedMode = false,
+  mode = 'order',
+  customerData,
+  onCustomerChange,
+  onExportPdf
 }: {
   item?: any;
   itemIndex?: number;
@@ -256,6 +262,10 @@ export default function ItemSpecConfigurator({
   onCancel?: any;
   showToast?: any;
   embeddedMode?: boolean;
+  mode?: 'quotation' | 'order';
+  customerData?: any;
+  onCustomerChange?: any;
+  onExportPdf?: any;
 }) {
   const isLao = true;
   const papers = inventory ? inventory.filter(p => p.category === 'Paper' || p.name.includes('A4') || p.name.includes('A3') || p.id.startsWith('LOT-')) : [];
@@ -287,9 +297,10 @@ export default function ItemSpecConfigurator({
     avgCoverageCMY: item?.avgCoverageCMY !== undefined ? item.avgCoverageCMY : 10,
     customFinishingOptions: item?.customFinishingOptions || [],
     overheadPercent: item?.overheadPercent !== undefined ? item.overheadPercent : 15,
-    skipCutting: false,
-    cuttingEquipmentId: '',
-    cuttingFee: 5000,
+    setupCost: item?.setupCost !== undefined ? item.setupCost : 20000,
+    skipCutting: item?.skipCutting !== undefined ? item.skipCutting : true,
+    cuttingEquipmentId: item?.cuttingEquipmentId || '',
+    cuttingFee: item?.cuttingFee !== undefined ? item.cuttingFee : 0,
     noCoating: false,
     useLamination: false,
     laminationType: 'Glossy',
@@ -318,16 +329,18 @@ export default function ItemSpecConfigurator({
 
       const localCosting = calculateItemCosting(tempItem, inventory, equipment);
       const setupCost = Number(tempItem.setupCost !== undefined ? tempItem.setupCost : 50000);
-      const finishingCost = localCosting.cuttingCost + localCosting.laminationCost + localCosting.bindingCost + localCosting.customFinishingCost;
+      const qty = Math.max(1, Number(tempItem.quantity || 1));
+      const totalFinishingCost = localCosting.cuttingCost + localCosting.laminationCost + localCosting.bindingCost + localCosting.customFinishingCost;
+      const finishingCostPerUnit = totalFinishingCost / qty;
 
       calculateBackendPricing({
         job_name: tempItem.name || 'Print Job',
-        quantity: Number(tempItem.quantity || 1),
+        quantity: qty,
         paper_sku: tempItem.paperId || 'default-paper',
         paper_cost_per_unit: localCosting.paperUnitCost,
         paper_format: tempItem.mediaType === 'Roll-fed' ? 'roll' : 'sheet',
         setup_cost: setupCost,
-        finishing_cost: finishingCost,
+        finishing_cost: finishingCostPerUnit,
         base_profit_pct: Number(tempItem.targetMarginPercent || 30),
         ink_coverage_k_percent: Number(tempItem.avgCoverageK !== undefined ? tempItem.avgCoverageK : 5),
         ink_coverage_cmy_percent: Number(tempItem.avgCoverageCMY !== undefined ? tempItem.avgCoverageCMY : 10),
@@ -1137,6 +1150,69 @@ export default function ItemSpecConfigurator({
             </div>
           </div>
 
+          {/* STEP 6.5: Setup & Pre-press Fee (ຄ່າຕັ້ງຄ່າເຄື່ອງ & วางเพลต) */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <div className="p-2 bg-amber-50 text-amber-600 rounded-xl border border-amber-100">
+                <Settings className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[10px] font-black text-amber-600 uppercase block">Setup Fee</span>
+                <h4 className="font-black text-sm text-slate-900">ຄ່າຕັ້ງຄ່າເຄື່ອງ & ວຽກไฟล์ (Setup & Pre-press Fee)</h4>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs font-bold text-slate-700">
+              <div className="space-y-1">
+                <label className="block text-slate-600">ค่า Setup ต่อ Job (กำหนดเองได้):</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    value={tempItem.setupCost !== undefined ? tempItem.setupCost : 20000}
+                    onChange={(e) => setTempItem({ ...tempItem, setupCost: Math.max(0, Number(e.target.value)) })}
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl font-mono font-black text-sm text-amber-900 bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                  <span className="font-sans font-black text-slate-500">LAK</span>
+                </div>
+              </div>
+
+              {/* Preset Buttons */}
+              <div className="space-y-1 pt-1">
+                <span className="block text-[10px] text-slate-500 uppercase font-black">Preset Quick Select:</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTempItem({ ...tempItem, setupCost: 0 })}
+                    className={`py-2 px-2.5 rounded-xl border text-[11px] font-black transition ${
+                      tempItem.setupCost === 0 ? 'bg-amber-600 text-white border-amber-600 shadow-2xs' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    0 LAK (ลูกค้าส่งไฟล์เอง)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTempItem({ ...tempItem, setupCost: 20000 })}
+                    className={`py-2 px-2.5 rounded-xl border text-[11px] font-black transition ${
+                      tempItem.setupCost === 20000 ? 'bg-amber-600 text-white border-amber-600 shadow-2xs' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    20,000 LAK (ทั่วไป)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTempItem({ ...tempItem, setupCost: 50000 })}
+                    className={`py-2 px-2.5 rounded-xl border text-[11px] font-black transition ${
+                      tempItem.setupCost === 50000 ? 'bg-amber-600 text-white border-amber-600 shadow-2xs' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    50,000 LAK (ซับซ้อน)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* STEP 7: Overhead Settings (ຕັ້ງຄ່າຄ່າໂສ້ຫຸ້ຍ) */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
@@ -1227,14 +1303,56 @@ export default function ItemSpecConfigurator({
 
               {/* Direct Material, Ink, Depreciation, Finishing & Overhead Cost Items */}
               {(() => {
-                const qtyScale = breakdownViewMode === 'unit' ? Math.max(1, tempItem.quantity || 1) : 1;
+                const isUnitMode = breakdownViewMode === 'unit';
+                const qty = Math.max(1, tempItem.quantity || 1);
+
+                const paperCost = backendPricing
+                  ? (isUnitMode ? backendPricing.unit_breakdown?.paper_cost : backendPricing.total_breakdown?.paper_cost) ?? (isUnitMode ? costing.totalPaperCost / qty : costing.totalPaperCost)
+                  : (isUnitMode ? costing.totalPaperCost / qty : costing.totalPaperCost);
+
+                const blackInkCost = backendPricing
+                  ? (isUnitMode ? backendPricing.unit_breakdown?.black_ink_cost : backendPricing.total_breakdown?.black_ink_cost) ?? (isUnitMode ? costing.totalInkCostK / qty : costing.totalInkCostK)
+                  : (isUnitMode ? costing.totalInkCostK / qty : costing.totalInkCostK);
+
+                const colorInkCost = backendPricing
+                  ? (isUnitMode ? backendPricing.unit_breakdown?.color_ink_cost : backendPricing.total_breakdown?.color_ink_cost) ?? (isUnitMode ? costing.totalInkCostCMY / qty : costing.totalInkCostCMY)
+                  : (isUnitMode ? costing.totalInkCostCMY / qty : costing.totalInkCostCMY);
+
+                const depreciationCost = backendPricing
+                  ? (isUnitMode ? backendPricing.unit_breakdown?.depreciation_cost : backendPricing.total_breakdown?.depreciation_cost) ?? (isUnitMode ? costing.depreciationCost / qty : costing.depreciationCost)
+                  : (isUnitMode ? costing.depreciationCost / qty : costing.depreciationCost);
+
+                const maintenanceCost = backendPricing
+                  ? (isUnitMode ? backendPricing.unit_breakdown?.maintenance_cost : backendPricing.total_breakdown?.maintenance_cost) ?? (isUnitMode ? costing.maintenanceCost / qty : costing.maintenanceCost)
+                  : (isUnitMode ? costing.maintenanceCost / qty : costing.maintenanceCost);
+
+                const setupCost = backendPricing
+                  ? (isUnitMode ? backendPricing.unit_breakdown?.setup_cost : backendPricing.total_breakdown?.setup_cost) ?? (isUnitMode ? costing.setupCost / qty : costing.setupCost)
+                  : (isUnitMode ? costing.setupCost / qty : costing.setupCost);
+
+                const finishingCost = backendPricing
+                  ? (isUnitMode ? backendPricing.unit_breakdown?.finishing_cost : backendPricing.total_breakdown?.finishing_cost) ?? (isUnitMode ? costing.totalFinishingCost / qty : costing.totalFinishingCost)
+                  : (isUnitMode ? costing.totalFinishingCost / qty : costing.totalFinishingCost);
+
+                const directSubtotal = backendPricing
+                  ? (isUnitMode ? backendPricing.unit_breakdown?.direct_subtotal : backendPricing.total_breakdown?.direct_subtotal) ?? (isUnitMode ? costing.directCost / qty : costing.directCost)
+                  : (isUnitMode ? costing.directCost / qty : costing.directCost);
+
+                const overheadCost = backendPricing
+                  ? (isUnitMode ? backendPricing.unit_breakdown?.overhead_cost : backendPricing.total_breakdown?.overhead_cost) ?? (isUnitMode ? costing.overheadCost / qty : costing.overheadCost)
+                  : (isUnitMode ? costing.overheadCost / qty : costing.overheadCost);
+
+                const totalCost = backendPricing
+                  ? (isUnitMode ? backendPricing.unit_breakdown?.total_cost : backendPricing.total_breakdown?.total_cost) ?? (isUnitMode ? costing.totalCost / qty : costing.totalCost)
+                  : (isUnitMode ? costing.totalCost / qty : costing.totalCost);
+
                 return (
                   <div className="space-y-3 text-xs font-semibold text-slate-700">
                     {/* 1. Paper Cost */}
                     <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
                       <span className="text-slate-600 font-bold">1. ຕົ້ນທຶນເຈ້ຍ (Paper Cost):</span>
                       <span className="font-sans font-black text-slate-900 text-sm">
-                        {formatLAK(Math.round((backendPricing ? backendPricing.paper_cost : costing.totalPaperCost) / qtyScale))}
+                        {formatLAK(Math.round(paperCost))}
                       </span>
                     </div>
 
@@ -1242,7 +1360,7 @@ export default function ItemSpecConfigurator({
                     <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
                       <span className="text-slate-600 font-bold">2. ຕົ້ນທຶນໝຶກດຳ (Black Ink K):</span>
                       <span className="font-sans font-black text-slate-900 text-sm">
-                        {formatLAK(Math.round((backendPricing ? backendPricing.ink_cost_k : costing.totalInkCostK) / qtyScale))}
+                        {formatLAK(Math.round(blackInkCost))}
                       </span>
                     </div>
 
@@ -1251,7 +1369,7 @@ export default function ItemSpecConfigurator({
                       <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
                         <span className="text-slate-600 font-bold">3. ຕົ້ນທຶນໝຶກສີ (Color Ink CMY):</span>
                         <span className="font-sans font-black text-slate-900 text-sm">
-                          {formatLAK(Math.round((backendPricing ? backendPricing.ink_cost_cmy : costing.totalInkCostCMY) / qtyScale))}
+                          {formatLAK(Math.round(colorInkCost))}
                         </span>
                       </div>
                     )}
@@ -1261,11 +1379,11 @@ export default function ItemSpecConfigurator({
                       <div className="flex justify-between items-center">
                         <span className="text-slate-600 font-bold">4. ຄ່າເສື່ອມ & ບຳລຸງຮັກສາເຄື່ອງພິມ:</span>
                         <span className="font-sans font-black text-slate-900 text-sm">
-                          {formatLAK(Math.round((backendPricing ? (backendPricing.depreciation_cost + backendPricing.maintenance_cost) : (costing.depreciationCost + costing.maintenanceCost)) / qtyScale))}
+                          {formatLAK(Math.round(depreciationCost + maintenanceCost))}
                         </span>
                       </div>
                       <div className="text-[10px] text-slate-500 font-mono font-normal">
-                        Depreciation: {formatLAK(Math.round((backendPricing ? backendPricing.depreciation_cost : costing.depreciationCost) / qtyScale))} | Maint: {formatLAK(Math.round((backendPricing ? backendPricing.maintenance_cost : costing.maintenanceCost) / qtyScale))}
+                        Depreciation: {formatLAK(Math.round(depreciationCost))} | Maint: {formatLAK(Math.round(maintenanceCost))}
                       </div>
                     </div>
 
@@ -1274,19 +1392,19 @@ export default function ItemSpecConfigurator({
                       <div className="flex justify-between items-center">
                         <span className="text-slate-600 font-bold">5. ວຽກຫຼັງພິມ & ບໍລິການເສີມ (Setup + Finishing):</span>
                         <span className="font-sans font-black text-slate-900 text-sm">
-                          {formatLAK(Math.round((backendPricing ? (backendPricing.setup_cost + backendPricing.finishing_cost) : (costing.cuttingCost + costing.laminationCost + costing.bindingCost + costing.customFinishingCost + costing.setupCost)) / qtyScale))}
+                          {formatLAK(Math.round(setupCost + finishingCost))}
                         </span>
                       </div>
                       <div className="text-[10px] text-slate-500 font-mono font-normal">
-                        SetupCost: {formatLAK(Math.round((backendPricing ? backendPricing.setup_cost : 50000) / qtyScale))} | Finishing: {formatLAK(Math.round((backendPricing ? backendPricing.finishing_cost : (costing.cuttingCost + costing.laminationCost + costing.bindingCost + costing.customFinishingCost)) / qtyScale))}
+                        SetupCost: {formatLAK(Math.round(setupCost))} | Finishing: {formatLAK(Math.round(finishingCost))}
                       </div>
                     </div>
 
                     {/* Direct Material & Machine Cost Banner */}
                     <div className="bg-slate-100/80 p-3.5 rounded-2xl border border-slate-200 flex justify-between items-center text-slate-900 font-black text-xs">
-                      <span>Direct Cost Subtotal {breakdownViewMode === 'unit' ? '(Per Sheet)' : ''}:</span>
+                      <span>Direct Cost Subtotal {isUnitMode ? '(Per Sheet)' : '(Total Job)'}:</span>
                       <span className="font-sans text-sky-700">
-                        {formatLAK(Math.round((backendPricing ? backendPricing.direct_cost : costing.directCost) / qtyScale))}
+                        {formatLAK(Math.round(directSubtotal))}
                       </span>
                     </div>
 
@@ -1294,15 +1412,15 @@ export default function ItemSpecConfigurator({
                     <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
                       <span className="text-slate-600 font-bold">6. ໂສ້ຫຸ້ຍຮ້ານ (Overhead Cost {tempItem.overheadPercent}%):</span>
                       <span className="font-sans font-black text-slate-900 text-sm">
-                        {formatLAK(Math.round((backendPricing ? backendPricing.overhead_cost : costing.overheadCost) / qtyScale))}
+                        {formatLAK(Math.round(overheadCost))}
                       </span>
                     </div>
 
                     {/* Total Cost (Direct + Overhead) */}
                     <div className="bg-slate-200/80 p-4 rounded-2xl border border-slate-300 flex justify-between items-center text-slate-900 font-black text-xs">
-                      <span>ຕົ້ນທຶນລວມ (Total Internal Cost):</span>
+                      <span>ຕົ້ນທຶນລວມ (Total Internal Cost {isUnitMode ? '/ Unit' : '/ Job'}):</span>
                       <span className="text-lg font-sans text-slate-900">
-                        {formatLAK(Math.round((backendPricing ? backendPricing.total_cost : costing.totalCost) / qtyScale))}
+                        {formatLAK(Math.round(totalCost))}
                       </span>
                     </div>
                   </div>

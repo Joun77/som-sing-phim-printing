@@ -84,6 +84,19 @@ export interface CalculationRequest {
   tax_percent: number /* float64 */; // e.g. 0.07 for 7%
   target_currency: string;
 }
+export interface CostBreakdownItem {
+  paper_cost: number /* float64 */;
+  black_ink_cost: number /* float64 */;
+  color_ink_cost: number /* float64 */;
+  depreciation_cost: number /* float64 */;
+  maintenance_cost: number /* float64 */;
+  setup_cost: number /* float64 */;
+  finishing_cost: number /* float64 */;
+  labor_cost: number /* float64 */;
+  direct_subtotal: number /* float64 */;
+  overhead_cost: number /* float64 */;
+  total_cost: number /* float64 */;
+}
 /**
  * CalculationResponse details the cost breakdown and sale prices
  */
@@ -94,6 +107,8 @@ export interface CalculationResponse {
    * Area Factor S = jobW×jobH / 62,370
    */
   area_factor: number /* float64 */;
+  total_breakdown?: CostBreakdownItem;
+  unit_breakdown?: CostBreakdownItem;
   /**
    * Cost breakdown
    */

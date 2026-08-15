@@ -84,13 +84,28 @@ type CalculationRequest struct {
 	TargetCurrency string `json:"target_currency"`
 }
 
+// CostBreakdownItem represents normalized cost components per unit or per total job
+type CostBreakdownItem struct {
+	PaperCost        float64 `json:"paper_cost"`
+	BlackInkCost     float64 `json:"black_ink_cost"`
+	ColorInkCost     float64 `json:"color_ink_cost"`
+	DepreciationCost float64 `json:"depreciation_cost"`
+	MaintenanceCost  float64 `json:"maintenance_cost"`
+	SetupCost        float64 `json:"setup_cost"`
+	FinishingCost    float64 `json:"finishing_cost"`
+	LaborCost        float64 `json:"labor_cost"`
+	DirectSubtotal   float64 `json:"direct_subtotal"`
+	OverheadCost     float64 `json:"overhead_cost"`
+	TotalCost        float64 `json:"total_cost"`
+}
+
 // CalculationResponse details the cost breakdown and sale prices
 type CalculationResponse struct {
-	JobName  string `json:"job_name"`
-	Quantity int    `json:"quantity"`
-
-	// Area Factor S = jobW×jobH / 62,370
-	AreaFactor float64 `json:"area_factor"`
+	JobName        string            `json:"job_name"`
+	Quantity       int               `json:"quantity"`
+	AreaFactor     float64           `json:"area_factor"`
+	TotalBreakdown CostBreakdownItem `json:"total_breakdown"`
+	UnitBreakdown  CostBreakdownItem `json:"unit_breakdown"`
 
 	// Cost breakdown
 	PaperCost           float64 `json:"paper_cost"`
@@ -435,10 +450,43 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	grandTotal = r(grandTotal)
 	unitPrice := r(grandTotal / float64(req.Quantity))
 
+	totalFinishing := r(customFinishingCost + laminationCost + bindingCost + finishingCost)
+
+	totalBreakdown := CostBreakdownItem{
+		PaperCost:        paperCost,
+		BlackInkCost:     inkCostK,
+		ColorInkCost:     inkCostCMY,
+		DepreciationCost: depreciationCost,
+		MaintenanceCost:  maintenanceCost,
+		SetupCost:        setupCost,
+		FinishingCost:    totalFinishing,
+		LaborCost:        laborCost,
+		DirectSubtotal:   directCost,
+		OverheadCost:     overheadCost,
+		TotalCost:        netInternalCost,
+	}
+
+	q := float64(req.Quantity)
+	unitBreakdown := CostBreakdownItem{
+		PaperCost:        r(paperCost / q),
+		BlackInkCost:     r(inkCostK / q),
+		ColorInkCost:     r(inkCostCMY / q),
+		DepreciationCost: r(depreciationCost / q),
+		MaintenanceCost:  r(maintenanceCost / q),
+		SetupCost:        r(setupCost / q),
+		FinishingCost:    r(totalFinishing / q),
+		LaborCost:        r(laborCost / q),
+		DirectSubtotal:   r(directCost / q),
+		OverheadCost:     r(overheadCost / q),
+		TotalCost:        r(netInternalCost / q),
+	}
+
 	return CalculationResponse{
 		JobName:               req.JobName,
 		Quantity:              req.Quantity,
 		AreaFactor:            r(areaFactor),
+		TotalBreakdown:        totalBreakdown,
+		UnitBreakdown:         unitBreakdown,
 		PaperCost:             paperCost,
 		InkCost:               inkCost,
 		InkCostK:              inkCostK,
