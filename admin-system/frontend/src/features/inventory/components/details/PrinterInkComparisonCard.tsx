@@ -88,7 +88,22 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
 
       actualVol = resolvedVol && resolvedVol > 1 ? resolvedVol : 140; // Default to 140ml standard bottle if unassigned
       const actualCostPerMl = actualVol > 0 ? (actualInkPrice / actualVol) : 0;
-      actualCostPerPage = actualCostPerMl * scaledRateMl;
+
+      // Extract yield for actual linked ink if defined in item or specs
+      const linkedYield = Number(
+        linkedInkItem.yield ||
+        linkedInkItem.standard_page_yield ||
+        linkedInkItem.standardPageYield ||
+        linkedInkItem.specs?.yield ||
+        linkedInkItem.specs?.expectedYield ||
+        linkedInkItem.specs?.standard_page_yield ||
+        linkedInkItem.specs?.isoYield ||
+        0
+      );
+
+      const actualRateMlPerSheet = linkedYield > 0 ? (actualVol / linkedYield) : isoRateMlPerSheet;
+      const actualScaledRateMl = actualRateMlPerSheet * coverageMultiplier;
+      actualCostPerPage = actualCostPerMl * actualScaledRateMl;
     }
 
     totalActualCostPerPage += actualCostPerPage;
@@ -288,11 +303,11 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
-            <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 uppercase tracking-wider font-black">
-              <th className="py-3 px-4">{currentLang === 'lo' ? 'ຊ່ອງສີ (Slot)' : 'Color Slot'}</th>
-              <th className="py-3 px-4">{currentLang === 'lo' ? 'ສະເປັກອັດຕາສິ້ນເປືອງໂຮງງານ' : 'Factory ISO Rate Baseline'}</th>
-              <th className="py-3 px-4">{currentLang === 'lo' ? 'ໝຶກທີ່ຜູກໃນສາງ (Inventory Ink)' : 'Actual Linked Ink SKU in Inventory'}</th>
-              <th className="py-3 px-4 text-right">{currentLang === 'lo' ? 'ຕົ້ນທຶນຈິງ / ແຜ່ນ' : 'Actual Cost / Page'}</th>
+            <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 uppercase tracking-wider font-black text-xs leading-relaxed">
+              <th className="py-3.5 px-4">{currentLang === 'lo' ? 'ຊ່ອງສີ (Slot)' : 'Color Slot'}</th>
+              <th className="py-3.5 px-4">{currentLang === 'lo' ? 'ສະເປັກອັດຕາສິ້ນເປືອງໂຮງງານ' : 'Factory ISO Rate Baseline'}</th>
+              <th className="py-3.5 px-4">{currentLang === 'lo' ? 'ໝຶກທີ່ຜູກໃນສາງ (Inventory Ink)' : 'Actual Linked Ink SKU in Inventory'}</th>
+              <th className="py-3.5 px-4 text-right">{currentLang === 'lo' ? 'ຕົ້ນທຶນຈິງ / ແຜ່ນ' : 'Actual Cost / Page'}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">

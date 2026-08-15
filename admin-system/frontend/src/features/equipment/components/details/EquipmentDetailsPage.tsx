@@ -123,16 +123,41 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
   const machineDowntimes = downtimeLogs.filter((d: any) => d.equipmentId === machine.id);
 
   // Financial & Depreciation Math
-  const assetValue = machine.MachinePrice !== undefined ? machine.MachinePrice : (machine.purchaseCost || 0);
-  const targetPages = machine.TargetTotalPages !== undefined ? machine.TargetTotalPages : (machine.printedPagesCapacity || 1000000);
-  const currentMeterCount = machine.currentMeterCount !== undefined ? machine.currentMeterCount : (machine.printedCount || 0);
-  const maintCostPerPage = machine.MaintenanceCostPerPage !== undefined ? machine.MaintenanceCostPerPage : (machine.maintenanceCostPerPage || 0);
+  const assetValue = Number(machine.purchaseCost || machine.purchasePrice || machine.MachinePrice || machine.unitCost || 0);
+  const targetPages = Number(machine.TargetTotalPages || machine.printedPagesCapacity || 1000000);
+  const currentMeterCount = Number(machine.currentMeterCount || machine.printedCount || 0);
+  const maintCostPerPage = Number(machine.MaintenanceCostPerPage || machine.maintenanceCostPerPage || 0);
+
+  // Check if machine is Post-Press Equipment (Non-Printer)
+  const isPostPressMachine = machine.category !== 'Printer' && machine.category !== 'PRINTER';
+
+  const postPressSubtypeMap: Record<string, string> = {
+    guillotine: '✂️ Guillotine Cutter',
+    sticker_plotter: '🎯 Sticker Plotter',
+    hole_drill: '🔘 Paper Hole Drill',
+    binder: '📚 Paper Binder',
+    folder: '📄 Folder / Creaser',
+    laminator: '✨ Laminator'
+  };
+  const subtypeLabel = postPressSubtypeMap[machine.postPressSubtype || machine.specs?.postPressSubtype || ''] || machine.postPressSubtype || machine.category;
+
+  const lifespanYears = Number(machine.lifespanYears || machine.specs?.lifespanYears || 5);
+  const estMonthlyVolume = Number(machine.estMonthlyVolume || machine.specs?.estMonthlyVolume || 50000);
+  const maintenanceRatePct = Number(machine.maintenanceRatePercent || machine.specs?.maintenanceRatePercent || 15);
+
+  const totalMonths = lifespanYears * 12;
+  const monthlyDepr = totalMonths > 0 ? (assetValue / totalMonths) : 0;
+  const baseCostPerUnit = estMonthlyVolume > 0 ? (monthlyDepr / estMonthlyVolume) : 0;
+  const calculatedNetRate = Math.round(baseCostPerUnit * (1 + maintenanceRatePct / 100) * 100) / 100;
+  const netCostPerUnit = (assetValue > 0 && calculatedNetRate > 0)
+    ? calculatedNetRate
+    : (machine.costPerConsumptionUnit || machine.calculatedCostPerPage || 0);
 
   const deprecationPerPage = targetPages > 0 ? (assetValue / targetPages) : 0;
-  const totalOverheadPerPage = deprecationPerPage + maintCostPerPage;
+  const totalOverheadPerPage = isPostPressMachine ? netCostPerUnit : (deprecationPerPage + maintCostPerPage);
 
   const roiPercent = targetPages > 0 ? Math.min(100, (currentMeterCount / targetPages) * 100) : 0;
-  const recoveredValue = currentMeterCount * deprecationPerPage;
+  const recoveredValue = currentMeterCount * (isPostPressMachine ? baseCostPerUnit : deprecationPerPage);
   const remainingValue = Math.max(0, assetValue - recoveredValue);
 
   return (
@@ -167,7 +192,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
           </span>
 
           <span className="px-3 py-1 bg-sky-50 text-sky-700 font-mono font-black text-xs rounded-full border border-sky-200 uppercase">
-            {machine.category}
+            {subtypeLabel || machine.category}
           </span>
 
           <button
@@ -175,14 +200,14 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
             className="flex items-center gap-1.5 px-3 py-2 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-xs rounded-xl border border-sky-200 transition cursor-pointer active:scale-95"
           >
             <Edit className="w-3.5 h-3.5" />
-            <span>{currentLang === 'lo' ? 'แก้ไขโปรไฟล์' : 'Edit Profile'}</span>
+            <span>{currentLang === 'lo' ? 'ແກ້ໄຂໂປຣໄຟລ໌' : 'Edit Profile'}</span>
           </button>
 
           <DeleteActionButton onClick={() => setIsDeleteModalOpen(true)} />
         </div>
       </div>
 
-      {/* ROI & Amortization Progress Card (Option B) */}
+      {/* ROI & Amortization Progress Card */}
       <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-6 rounded-3xl shadow-lg space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-700 pb-4">
           <div className="flex items-center gap-3">
@@ -191,17 +216,23 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
             </div>
             <div>
               <h3 className="text-sm font-black uppercase tracking-wider text-slate-300">
-                Asset ROI & Amortization Metrics (การคืนทุน & ค่าเสื่อมราคาเครื่อง)
+                {isPostPressMachine 
+                  ? 'Post-Press Machinery Cost Amortization'
+                  : 'Asset ROI & Amortization Metrics'}
               </h3>
-              <p className="text-xs text-slate-400 font-medium">Real-time usage wear vs target total printed capacity</p>
+              <p className="text-xs text-slate-400 font-medium">
+                {isPostPressMachine
+                  ? `Simplified Amortization Model: Purchase Price / (${lifespanYears} Years × 12 Months × ${estMonthlyVolume.toLocaleString()} Units) + ${maintenanceRatePct}% Maintenance Allowance`
+                  : 'Real-time usage wear vs target total printed capacity'}
+              </p>
             </div>
           </div>
 
           <div className="flex items-center gap-4 text-right">
             <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Base Cost / Page</span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Net Effective Rate / Unit</span>
               <span className="text-base font-black font-mono text-emerald-400">
-                {formatLAK(totalOverheadPerPage)} / page
+                {formatLAK(netCostPerUnit)} / unit
               </span>
             </div>
           </div>
@@ -211,7 +242,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
         <div className="space-y-2">
           <div className="flex justify-between items-center text-xs font-bold">
             <span className="text-slate-300">
-              Printed: <strong className="font-mono text-white text-sm">{currentMeterCount.toLocaleString()}</strong> / {targetPages.toLocaleString()} pages
+              Usage Count: <strong className="font-mono text-white text-sm">{currentMeterCount.toLocaleString()}</strong> / {(estMonthlyVolume * totalMonths).toLocaleString()} units target
             </span>
             <span className="font-mono text-sky-400 font-black text-sm">{roiPercent.toFixed(1)}% Amortized</span>
           </div>
@@ -230,16 +261,16 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
             <span className="font-mono font-black text-slate-100">{formatLAK(assetValue)}</span>
           </div>
           <div className="bg-slate-800/80 p-3 rounded-2xl border border-slate-700/80 space-y-1">
-            <span className="text-[10px] text-slate-400 uppercase font-bold block">Depreciation / Page</span>
-            <span className="font-mono font-black text-sky-400">{formatLAK(deprecationPerPage)}</span>
+            <span className="text-[10px] text-slate-400 uppercase font-bold block">Base Depreciation</span>
+            <span className="font-mono font-black text-sky-400">{formatLAK(baseCostPerUnit)} / unit</span>
           </div>
           <div className="bg-slate-800/80 p-3 rounded-2xl border border-slate-700/80 space-y-1">
-            <span className="text-[10px] text-slate-400 uppercase font-bold block">Cost Recovered</span>
-            <span className="font-mono font-black text-emerald-400">{formatLAK(recoveredValue)}</span>
+            <span className="text-[10px] text-slate-400 uppercase font-bold block">Maint. & Wear (+{maintenanceRatePct}%)</span>
+            <span className="font-mono font-black text-emerald-400">+{formatLAK(netCostPerUnit - baseCostPerUnit)} / unit</span>
           </div>
           <div className="bg-slate-800/80 p-3 rounded-2xl border border-slate-700/80 space-y-1">
-            <span className="text-[10px] text-slate-400 uppercase font-bold block">Remaining Asset Value</span>
-            <span className="font-mono font-black text-amber-400">{formatLAK(remainingValue)}</span>
+            <span className="text-[10px] text-slate-400 uppercase font-bold block">Target Volume / Month</span>
+            <span className="font-mono font-black text-amber-400">{estMonthlyVolume.toLocaleString()} / mo</span>
           </div>
         </div>
       </div>
@@ -258,17 +289,19 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
           <span>Profile & Technical Specs</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('meter')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer ${
-            activeTab === 'meter'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          <Gauge className="w-4 h-4" />
-          <span>Daily/Weekly Meter Log ({machineReadings.length})</span>
-        </button>
+        {!isPostPressMachine && (
+          <button
+            onClick={() => setActiveTab('meter')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer ${
+              activeTab === 'meter'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <Gauge className="w-4 h-4" />
+            <span>Daily/Weekly Meter Log ({machineReadings.length})</span>
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab('maintenance')}
@@ -282,17 +315,19 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
           <span>Maintenance & Downtime History ({machineDowntimes.length})</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('inks')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer ${
-            activeTab === 'inks'
-              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          <Layers className="w-4 h-4" />
-          <span>Linked Inks & Consumables ({linkedLinks.length})</span>
-        </button>
+        {!isPostPressMachine && (
+          <button
+            onClick={() => setActiveTab('inks')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer ${
+              activeTab === 'inks'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Linked Inks & Consumables ({linkedLinks.length})</span>
+          </button>
+        )}
       </div>
 
       {/* TAB CONTENT 1: SPECS & GENERAL (Categories 1, 2, 3, 5) */}
@@ -337,21 +372,25 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                   <span className="text-sm text-slate-900 block mt-1">{machine.model || machine.name}</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 uppercase text-[10px] block">Printer Category</span>
-                  <span className="text-sm text-slate-900 block mt-1">{machine.printerCategory || machine.category}</span>
+                  <span className="text-slate-400 uppercase text-[10px] block">{isPostPressMachine ? 'Subtype Classification' : 'Printer Category'}</span>
+                  <span className="text-sm text-sky-700 font-black block mt-1">{subtypeLabel}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">Location / Department</span>
                   <span className="text-sm text-slate-900 block mt-1">{machine.location || 'Main Dept'}</span>
                 </div>
-                <div>
-                  <span className="text-slate-400 uppercase text-[10px] block">Color Scheme Type</span>
-                  <span className="text-sm text-slate-900 block mt-1">{machine.colorSchemeType || '-'}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 uppercase text-[10px] block">Total Color Slots</span>
-                  <span className="text-sm text-slate-900 font-mono block mt-1">{machine.totalColorSlots || machine.totalSlots || '-'}</span>
-                </div>
+                {!isPostPressMachine && (
+                  <>
+                    <div>
+                      <span className="text-slate-400 uppercase text-[10px] block">Color Scheme Type</span>
+                      <span className="text-sm text-slate-900 block mt-1">{machine.colorSchemeType || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 uppercase text-[10px] block">Total Color Slots</span>
+                      <span className="text-sm text-slate-900 font-mono block mt-1">{machine.totalColorSlots || machine.totalSlots || '-'}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -359,70 +398,155 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
           {/* CATEGORY 2: Technical Specifications */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
             <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 flex items-center gap-2">
-              <Printer className="w-4 h-4 text-purple-600" />
-              <span>Category 2: Technical Specifications</span>
+              <Wrench className="w-4 h-4 text-purple-600" />
+              <span>Category 2: {isPostPressMachine ? 'Post-Press Machinery Amortization Specs' : 'Technical Specifications'}</span>
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-xs font-bold text-slate-600">
-              <div>
-                <span className="text-slate-400 uppercase text-[10px] block">Print Speed (PPM)</span>
-                <span className="text-xs text-slate-900 block mt-1">{machine.speedPpm || machine.printSpeedColor || machine.printSpeed || '-'}</span>
+
+            {isPostPressMachine ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-xs font-bold text-slate-600">
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px] block">Subtype Classification (ประเภทเครื่อง)</span>
+                    <span className="text-xs text-sky-700 font-extrabold block mt-1">{subtypeLabel}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px] block">Target Lifespan (อายุการใช้งาน)</span>
+                    <span className="text-xs text-slate-900 font-mono block mt-1">{lifespanYears} ปี ({totalMonths} เดือน)</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px] block">Est. Monthly Volume (ยอดผลิต/เดือน)</span>
+                    <span className="text-xs text-slate-900 font-mono block mt-1">{estMonthlyVolume.toLocaleString()} แผ่น/เดือน</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px] block">Maint. & Wear Allowance (% บำรุงรักษา)</span>
+                    <span className="text-xs text-emerald-600 font-mono font-black block mt-1">+{maintenanceRatePct}%</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px] block">Base Depreciation / Sheet (ค่าเสื่อมฐาน)</span>
+                    <span className="text-xs text-slate-900 font-mono block mt-1">{formatLAK(baseCostPerUnit)} / แผ่น</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px] block">Wear & Blade Rate / Sheet (+{maintenanceRatePct}%)</span>
+                    <span className="text-xs text-emerald-600 font-mono block mt-1">+{formatLAK(netCostPerUnit - baseCostPerUnit)} / แผ่น</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px] block">Net Effective Cost / Unit (ต้นทุนสุทธิ)</span>
+                    <span className="text-xs text-sky-700 font-mono font-black block mt-1">{formatLAK(netCostPerUnit)} / แผ่น</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px] block">Lifetime Production Target</span>
+                    <span className="text-xs text-slate-900 font-mono block mt-1">{(estMonthlyVolume * totalMonths).toLocaleString()} แผ่น</span>
+                  </div>
+                </div>
+
+                {/* Render any additional dynamic specs inside machine.specs if present */}
+                {machine.specs && typeof machine.specs === 'object' && (() => {
+                  const validEntries = Object.entries(machine.specs).filter(([key, val]) => {
+                    if (val === null || val === undefined || val === '') return false;
+                    if (['postPressSubtype', 'lifespanYears', 'estMonthlyVolume', 'maintenanceRatePercent', 'netCostPerUnit'].includes(key)) return false;
+                    return true;
+                  });
+                  if (validEntries.length === 0) return null;
+                  
+                  const labelMap: Record<string, string> = {
+                    laminationWidth: 'ความกว้างการเคลือบสูงสุด (Max Lamination Width)',
+                    warmUpTime: 'เวลาอุ่นเครื่อง (Warm-Up Time Mins)',
+                    speedMPerMin: 'ความเร็วในการเคลือบ (Speed m/min)',
+                    bindingMethod: 'รูปแบบการเข้าเล่ม (Binding Method)',
+                    maxBookSheets: 'จำนวนแผ่นสูงสุดต่อเล่ม (Max Sheets/Book)',
+                    avgTimePerBook: 'เวลาเฉลี่ยต่อเล่ม (Avg Mins/Book)',
+                    cutCapacity: 'ความจุในการตัดสูงสุด (Max Cut Capacity)',
+                    bladeDepreciationPerCut: 'ค่าเสื่อมใบมีดต่อครั้ง (Blade Wear/Cut LAK)'
+                  };
+
+                  return (
+                    <div className="pt-3 border-t border-slate-100">
+                      <span className="text-[10px] font-black uppercase text-slate-400 block mb-2">คุณลักษณะเฉพาะทางเทคนิค (Dynamic Master Specs)</span>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-bold text-slate-600">
+                        {validEntries.map(([key, val]) => (
+                          <div key={key}>
+                            <span className="text-slate-400 uppercase text-[10px] block">{labelMap[key] || key}</span>
+                            <span className="text-xs text-slate-900 block mt-1">{String(val)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
-              <div>
-                <span className="text-slate-400 uppercase text-[10px] block">Max Paper Size</span>
-                <span className="text-xs text-slate-900 block mt-1">{machine.maxWidth || machine.paperSizes || '-'}</span>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-xs font-bold text-slate-600">
+                <div>
+                  <span className="text-slate-400 uppercase text-[10px] block">Print Speed (PPM)</span>
+                  <span className="text-xs text-slate-900 block mt-1">{machine.speedPpm || machine.printSpeedColor || machine.printSpeed || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 uppercase text-[10px] block">Max Paper Size</span>
+                  <span className="text-xs text-slate-900 block mt-1">{machine.maxWidth || machine.paperSizes || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 uppercase text-[10px] block">Ink Type</span>
+                  <span className="text-xs text-slate-900 block mt-1">{machine.inkType || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 uppercase text-[10px] block">Print Tech</span>
+                  <span className="text-xs text-slate-900 block mt-1">{machine.printTech || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 uppercase text-[10px] block">Black ISO Yield (A4 5%)</span>
+                  <span className="text-xs text-slate-900 font-mono block mt-1">{machine.blackYieldPages ? `${machine.blackYieldPages} pages` : '-'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 uppercase text-[10px] block">Color ISO Yield (A4 5%)</span>
+                  <span className="text-xs text-slate-900 font-mono block mt-1">{machine.colorYieldPages ? `${machine.colorYieldPages} pages` : '-'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 uppercase text-[10px] block">Click Rate (Color)</span>
+                  <span className="text-xs text-emerald-600 font-mono block mt-1">{machine.clickRateColor ? `${formatLAK(machine.clickRateColor)} / click` : '-'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 uppercase text-[10px] block">Click Rate (B/W)</span>
+                  <span className="text-xs text-emerald-600 font-mono block mt-1">{machine.clickRateBW ? `${formatLAK(machine.clickRateBW)} / click` : '-'}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-slate-400 uppercase text-[10px] block">Ink Type</span>
-                <span className="text-xs text-slate-900 block mt-1">{machine.inkType || '-'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 uppercase text-[10px] block">Print Tech</span>
-                <span className="text-xs text-slate-900 block mt-1">{machine.printTech || '-'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 uppercase text-[10px] block">Black ISO Yield (A4 5%)</span>
-                <span className="text-xs text-slate-900 font-mono block mt-1">{machine.blackYieldPages ? `${machine.blackYieldPages} pages` : '-'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 uppercase text-[10px] block">Color ISO Yield (A4 5%)</span>
-                <span className="text-xs text-slate-900 font-mono block mt-1">{machine.colorYieldPages ? `${machine.colorYieldPages} pages` : '-'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 uppercase text-[10px] block">Click Rate (Color)</span>
-                <span className="text-xs text-emerald-600 font-mono block mt-1">{machine.clickRateColor ? `${formatLAK(machine.clickRateColor)} / click` : '-'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 uppercase text-[10px] block">Click Rate (B/W)</span>
-                <span className="text-xs text-emerald-600 font-mono block mt-1">{machine.clickRateBW ? `${formatLAK(machine.clickRateBW)} / click` : '-'}</span>
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* CATEGORY 3: Connectivity & Network */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 flex items-center gap-2">
-              <Laptop className="w-4 h-4 text-emerald-600" />
-              <span>Category 3: Connectivity & Network</span>
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-xs font-bold text-slate-600">
-              <div>
-                <span className="text-slate-400 uppercase text-[10px] block">Connectivity Interfaces</span>
-                <span className="text-xs text-slate-900 block mt-1">{(machine.connectivity && machine.connectivity.join(', ')) || 'Ethernet, USB 3.0'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 uppercase text-[10px] block">IP Address</span>
-                <span className="text-xs text-slate-900 font-mono block mt-1">{machine.ipAddress || machine.ip || '-'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 uppercase text-[10px] block">MAC Address</span>
-                <span className="text-xs text-slate-900 font-mono block mt-1">{machine.macAddress || machine.mac || '-'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 uppercase text-[10px] block">OS Compatibility</span>
-                <span className="text-xs text-slate-900 block mt-1">{(machine.osCompatibility && machine.osCompatibility.join(', ')) || 'Windows, macOS, Linux'}</span>
+          {/* CATEGORY 3: Connectivity & Network (ONLY SHOWN IF NETWORK SPECS EXIST) */}
+          {(machine.ipAddress || machine.ip || machine.macAddress || machine.mac || (machine.connectivity && machine.connectivity.length > 0)) && (
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 flex items-center gap-2">
+                <Laptop className="w-4 h-4 text-emerald-600" />
+                <span>Category 3: Connectivity & Network</span>
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-xs font-bold text-slate-600">
+                {machine.connectivity && machine.connectivity.length > 0 && (
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px] block">Connectivity Interfaces</span>
+                    <span className="text-xs text-slate-900 block mt-1">{machine.connectivity.join(', ')}</span>
+                  </div>
+                )}
+                {(machine.ipAddress || machine.ip) && (
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px] block">IP Address</span>
+                    <span className="text-xs text-slate-900 font-mono block mt-1">{machine.ipAddress || machine.ip}</span>
+                  </div>
+                )}
+                {(machine.macAddress || machine.mac) && (
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px] block">MAC Address</span>
+                    <span className="text-xs text-slate-900 font-mono block mt-1">{machine.macAddress || machine.mac}</span>
+                  </div>
+                )}
+                {machine.osCompatibility && machine.osCompatibility.length > 0 && (
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px] block">OS Compatibility</span>
+                    <span className="text-xs text-slate-900 block mt-1">{machine.osCompatibility.join(', ')}</span>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          )}
 
           {/* CATEGORY 5: Financial Metrics & Documents */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-6">
@@ -453,43 +577,132 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
             </div>
 
             {/* Quick update financial fields */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
-              <span className="text-xs font-black text-slate-700 block uppercase tracking-wider">Inline Financial Parameters Update</span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] text-slate-500 block uppercase">Machine Price / Asset Value (LAK)</label>
-                  <input
-                    type="number"
-                    value={assetValue}
-                    onChange={(e) => {
-                      updateEquipment(machine.id, { MachinePrice: Number(e.target.value), purchaseCost: Number(e.target.value) });
-                    }}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono text-xs font-black bg-white text-slate-950 focus:outline-none"
-                  />
+            <div className="bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 space-y-4">
+              <span className="text-xs font-black text-slate-800 block uppercase tracking-wider">
+                {isPostPressMachine ? 'Inline Amortization Parameters Update' : 'Inline Financial Parameters Update'}
+              </span>
+
+              {isPostPressMachine ? (
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">1. Purchase Price (LAK)</label>
+                    <input
+                      type="number"
+                      value={assetValue}
+                      onChange={(e) => {
+                        const newCost = Number(e.target.value);
+                        const mDepr = (totalMonths > 0) ? (newCost / totalMonths) : 0;
+                        const bRate = estMonthlyVolume > 0 ? (mDepr / estMonthlyVolume) : 0;
+                        const nRate = Math.round(bRate * (1 + maintenanceRatePct / 100) * 100) / 100;
+                        updateEquipment(machine.id, { 
+                          MachinePrice: newCost, 
+                          purchaseCost: newCost, 
+                          purchasePrice: newCost,
+                          costPerConsumptionUnit: nRate,
+                          calculatedCostPerPage: nRate,
+                          maintenanceCostPerPage: nRate
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all duration-200 shadow-2xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">2. Lifespan (Years)</label>
+                    <input
+                      type="number"
+                      value={lifespanYears}
+                      onChange={(e) => {
+                        const newYears = Number(e.target.value);
+                        const newMonths = newYears * 12;
+                        const mDepr = newMonths > 0 ? (assetValue / newMonths) : 0;
+                        const bRate = estMonthlyVolume > 0 ? (mDepr / newMonths) : 0;
+                        const nRate = Math.round(bRate * (1 + maintenanceRatePct / 100) * 100) / 100;
+                        updateEquipment(machine.id, { 
+                          lifespanYears: newYears,
+                          costPerConsumptionUnit: nRate,
+                          calculatedCostPerPage: nRate,
+                          maintenanceCostPerPage: nRate
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all duration-200 shadow-2xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">3. Monthly Vol (Sheets/mo)</label>
+                    <input
+                      type="number"
+                      value={estMonthlyVolume}
+                      onChange={(e) => {
+                        const newVol = Number(e.target.value);
+                        const mDepr = totalMonths > 0 ? (assetValue / totalMonths) : 0;
+                        const bRate = newVol > 0 ? (mDepr / newVol) : 0;
+                        const nRate = Math.round(bRate * (1 + maintenanceRatePct / 100) * 100) / 100;
+                        updateEquipment(machine.id, { 
+                          estMonthlyVolume: newVol,
+                          costPerConsumptionUnit: nRate,
+                          calculatedCostPerPage: nRate,
+                          maintenanceCostPerPage: nRate
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all duration-200 shadow-2xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">4. Maintenance Rate (%)</label>
+                    <input
+                      type="number"
+                      value={maintenanceRatePct}
+                      onChange={(e) => {
+                        const newRatePct = Number(e.target.value);
+                        const nRate = Math.round(baseCostPerUnit * (1 + newRatePct / 100) * 100) / 100;
+                        updateEquipment(machine.id, { 
+                          maintenanceRatePercent: newRatePct,
+                          costPerConsumptionUnit: nRate,
+                          calculatedCostPerPage: nRate,
+                          maintenanceCostPerPage: nRate
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all duration-200 shadow-2xs"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] text-slate-500 block uppercase">Target Lifetime Pages</label>
-                  <input
-                    type="number"
-                    value={targetPages}
-                    onChange={(e) => {
-                      updateEquipment(machine.id, { TargetTotalPages: Number(e.target.value), printedPagesCapacity: Number(e.target.value) });
-                    }}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono text-xs font-black bg-white text-slate-950 focus:outline-none"
-                  />
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">Machine Price / Asset Value (LAK)</label>
+                    <input
+                      type="number"
+                      value={assetValue}
+                      onChange={(e) => {
+                        updateEquipment(machine.id, { MachinePrice: Number(e.target.value), purchaseCost: Number(e.target.value) });
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all duration-200 shadow-2xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">Target Lifetime Pages</label>
+                    <input
+                      type="number"
+                      value={targetPages}
+                      onChange={(e) => {
+                        updateEquipment(machine.id, { TargetTotalPages: Number(e.target.value), printedPagesCapacity: Number(e.target.value) });
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all duration-200 shadow-2xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 block uppercase tracking-wider">Maint. Cost Per Page (LAK)</label>
+                    <input
+                      type="number"
+                      value={maintCostPerPage}
+                      onChange={(e) => {
+                        updateEquipment(machine.id, { MaintenanceCostPerPage: Number(e.target.value), maintenanceCostPerPage: Number(e.target.value) });
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all duration-200 shadow-2xs"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] text-slate-500 block uppercase">Maint. Cost Per Page (LAK)</label>
-                  <input
-                    type="number"
-                    value={maintCostPerPage}
-                    onChange={(e) => {
-                      updateEquipment(machine.id, { MaintenanceCostPerPage: Number(e.target.value), maintenanceCostPerPage: Number(e.target.value) });
-                    }}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono text-xs font-black bg-white text-slate-950 focus:outline-none"
-                  />
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

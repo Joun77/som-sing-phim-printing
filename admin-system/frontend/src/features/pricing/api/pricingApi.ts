@@ -1,6 +1,7 @@
 export interface PricingCalculationInput {
   job_name?: string;
   quantity: number;
+  allocations?: any[];
   paper_sku?: string;
   paper_cost_per_unit?: number;
   paper_format?: 'sheet' | 'roll' | string;
@@ -36,6 +37,7 @@ export interface PricingCalculationInput {
   target_currency?: string;
   [key: string]: any;
 }
+
 
 export interface CostBreakdownItem {
   paper_cost: number;
@@ -94,6 +96,7 @@ export async function calculateBackendPricing(input: PricingCalculationInput): P
   const payload = {
     job_name: input.job_name || 'Print Job',
     quantity: Math.max(1, input.quantity || 1),
+    allocations: input.allocations || [],
     paper_sku: input.paper_sku || 'paper-default',
     paper_cost_per_unit: input.paper_cost_per_unit || 100,
     paper_format: input.paper_format || 'sheet',

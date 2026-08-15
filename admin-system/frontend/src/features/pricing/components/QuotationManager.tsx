@@ -3,6 +3,8 @@ import { useApp } from '@store/AppContext';
 import { useTranslation } from 'react-i18next';
 import CustomerCombobox from '@components/common/CustomerCombobox';
 import ItemSpecConfigurator from '@features/orders/components/ItemSpecConfigurator';
+import ManualPrinterAllocator from '@features/orders/components/ManualPrinterAllocator';
+import { PrinterAllocation } from '@features/orders/types';
 import { 
   Calculator, 
   ShieldAlert, 
@@ -117,6 +119,29 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
   const [jobHeight, setJobHeight] = useState(297); // in mm
   const [isDoubleSided, setIsDoubleSided] = useState(false);
   const [printVolume, setPrintVolume] = useState(100);
+  const [printerAllocations, setPrinterAllocations] = useState<PrinterAllocation[]>([]);
+
+  useEffect(() => {
+    if (printers.length > 0 && printerAllocations.length === 0) {
+      const p = printers[0];
+      const rate = (p as any).costPerPage || (p as any).maintenanceCostPerPage || 50;
+      setPrinterAllocations([
+        {
+          printer_id: p.id,
+          printer_name: p.name,
+          allocated_pages: printVolume,
+          cost_per_page: rate,
+          subtotal_cost: printVolume * rate,
+        },
+      ]);
+    }
+  }, [printers]);
+
+  const availablePrintersList = printers.map((p) => ({
+    id: p.id,
+    name: p.name,
+    cost_per_page: (p as any).costPerPage || (p as any).maintenanceCostPerPage || 50,
+  }));
 
   // Quick settings overrides (Stored locally, pre-populated with high-fidelity defaults)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -412,6 +437,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
         const payload = {
           job_name: 'Quotation Desk Preview',
           quantity: printVolume || 1,
+          allocations: printerAllocations,
           paper_sku: selectedPaperId || 'paper-unknown',
           paper_format: paperFormat,
           paper_cost_per_unit: paperUnitCost || 0,
@@ -871,6 +897,14 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                   </p>
                 )}
               </div>
+
+              {/* Multi-Printer Manual Allocation */}
+              <ManualPrinterAllocator
+                targetQuantity={printVolume}
+                allocations={printerAllocations}
+                availablePrinters={availablePrintersList}
+                onAllocationsChange={(newAllocations) => setPrinterAllocations(newAllocations)}
+              />
 
               {/* Ink Set Selection - Dynamic Filtered */}
               <div className="space-y-1.5">

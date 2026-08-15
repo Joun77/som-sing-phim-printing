@@ -36,6 +36,7 @@ func baseReq() CalculationRequest {
 		EstimatedHours:      2.0,
 		OverheadPercent:     0.10, // 10%
 		TargetMarginPercent: 0.35, // 35%
+		TargetCurrency:      "LAK",
 	}
 }
 
@@ -109,9 +110,9 @@ func TestCalculateJobPricingA4Baseline(t *testing.T) {
 		t.Errorf("Expected NetInternalCost 91025.0 (no spoilage), got %v", res.NetInternalCost)
 	}
 
-	// SalePrice = 91025 / (1 - 0.35) = 91025 / 0.65 = 140,038.46 LAK
-	if res.SalePrice != 140038.46 {
-		t.Errorf("Expected SalePrice 140038.46, got %v", res.SalePrice)
+	// SalePrice = 91025 / (1 - 0.35) = 91025 / 0.65 = 140,038.46 LAK -> LAK integer 140,038
+	if res.SalePrice != 140038.0 {
+		t.Errorf("Expected SalePrice 140038, got %v", res.SalePrice)
 	}
 
 	// TotalBreakdown and UnitBreakdown checks
@@ -124,13 +125,13 @@ func TestCalculateJobPricingA4Baseline(t *testing.T) {
 	if res.TotalBreakdown.DirectSubtotal != 82750.0 {
 		t.Errorf("Expected TotalBreakdown.DirectSubtotal 82750.0, got %v", res.TotalBreakdown.DirectSubtotal)
 	}
-	if res.UnitBreakdown.DirectSubtotal != 827.5 {
-		t.Errorf("Expected UnitBreakdown.DirectSubtotal 827.5, got %v", res.UnitBreakdown.DirectSubtotal)
+	if res.UnitBreakdown.DirectSubtotal != 828.0 {
+		t.Errorf("Expected UnitBreakdown.DirectSubtotal 828.0, got %v", res.UnitBreakdown.DirectSubtotal)
 	}
 
 	// Grand Total (no discount, no tax) = SalePrice
-	if res.GrandTotal != 140038.46 {
-		t.Errorf("Expected GrandTotal 140038.46 (no discount/tax), got %v", res.GrandTotal)
+	if res.GrandTotal != 140038.0 {
+		t.Errorf("Expected GrandTotal 140038 (no discount/tax), got %v", res.GrandTotal)
 	}
 
 	t.Run("Custom_Finishing_PER_SQM", func(t *testing.T) {
@@ -162,6 +163,7 @@ func TestCalculateJobPricingA4Baseline(t *testing.T) {
 
 	t.Run("Fallback_Overhead", func(t *testing.T) {
 		reqFallback := baseReq()
+		reqFallback.TargetCurrency = "THB"
 		reqFallback.OverheadPercent = 0.0
 		resFallback, err := CalculateJobPricing(reqFallback)
 		if err != nil {
@@ -252,6 +254,7 @@ func TestRollPaperCost(t *testing.T) {
 // TestSpoilageApplied verifies: NetInternalCost = Subtotal × (1 + SpoilagePercent).
 func TestSpoilageApplied(t *testing.T) {
 	req := baseReq()
+	req.TargetCurrency = "THB"
 	req.CustomFinishingOptions = nil
 	req.SpoilagePercent = 0.05 // 5% spoilage
 
@@ -280,6 +283,7 @@ func TestSpoilageApplied(t *testing.T) {
 // TestGrandTotalPipeline verifies: GrandTotal = (SalePrice × (1-Discount%)) × (1+Tax%).
 func TestGrandTotalPipeline(t *testing.T) {
 	req := baseReq()
+	req.TargetCurrency = "THB"
 	req.CustomFinishingOptions = nil
 	req.DiscountPercent = 0.10 // 10% discount
 	req.TaxPercent = 0.07      // 7% VAT
@@ -412,5 +416,45 @@ func TestSetupCostAndVolumeDiscounts(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateAndCalculateAllocations(t *testing.T) {
+	allocations := []PrinterAllocation{
+		{PrinterID: "p1", PrinterName: "Machine A", AllocatedPages: 6000, CostPerPage: 50.0, SubtotalCost: 300000.0},
+		{PrinterID: "p2", PrinterName: "Machine B", AllocatedPages: 4000, CostPerPage: 60.0, SubtotalCost: 240000.0},
+	}
+
+	cost, err := ValidateAndCalculateAllocations(10000, allocations)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	expectedCost := 540000.0
+	if cost != expectedCost {
+		t.Errorf("Expected total machine cost %v, got %v", expectedCost, cost)
+	}
+
+	// Test mismatch quantity validation error
+	_, errMismatch := ValidateAndCalculateAllocations(9000, allocations)
+	if errMismatch == nil {
+		t.Errorf("Expected error when total allocated (10000) != target quantity (9000), got nil")
+	}
+}
+
+func TestLAKCurrencyIntegerRounding(t *testing.T) {
+	req := baseReq()
+	req.TargetCurrency = "LAK"
+	res, err := CalculateJobPricing(req)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if res.SalePrice != math.Round(res.SalePrice) {
+		t.Errorf("Expected integer SalePrice for LAK currency, got %v", res.SalePrice)
+	}
+	if res.GrandTotal != math.Round(res.GrandTotal) {
+		t.Errorf("Expected integer GrandTotal for LAK currency, got %v", res.GrandTotal)
+	}
+}
+
 
 

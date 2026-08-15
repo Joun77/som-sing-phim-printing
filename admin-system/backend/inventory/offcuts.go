@@ -120,6 +120,6 @@ func saveOffcutToDB(o Offcut) error {
 			height_mm = EXCLUDED.height_mm,
 			quantity = EXCLUDED.quantity,
 			location = EXCLUDED.location`,
-		o.ID, o.ParentMaterialID, o.Name, o.WidthMm, o.LengthMm, o.Quantity, o.Location, o.CreatedAt)
+		o.ID, o.ParentMaterialID, o.Name, o.WidthMm, o.LengthMm, int(o.Quantity), o.Location, o.CreatedAt)
 	return err
 }

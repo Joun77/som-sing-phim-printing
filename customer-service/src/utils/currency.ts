@@ -20,7 +20,7 @@ export const DEFAULT_CURRENCY = 'THB'
 
 export function convert(amountThb: number, currency: string, rateToLak: number) {
   if (currency === 'LAK') {
-    return round2(amountThb * rateToLak)
+    return Math.round(amountThb * rateToLak)
   }
   return round2(amountThb)
 }

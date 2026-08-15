@@ -8,6 +8,7 @@ export interface Equipment {
   id: string;
   name: string;
   purchaseCost: number;
+  purchasePrice?: number;
   MachinePrice?: number;
   lifespanYears: number;
   printedPagesCapacity: number;
@@ -15,6 +16,10 @@ export interface Equipment {
   printedCount: number;
   calculatedCostPerPage: number;
   category: string;
+  postPressSubtype?: 'guillotine' | 'sticker_plotter' | 'hole_drill' | 'binder' | 'folder' | 'laminator' | string;
+  estMonthlyVolume?: number;
+  maintenanceRatePercent?: number;
+  costPerConsumptionUnit?: number;
   printerType?: string;
   printerCategory?: string;
   brand?: string;

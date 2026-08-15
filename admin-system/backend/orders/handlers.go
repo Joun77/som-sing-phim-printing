@@ -217,6 +217,14 @@ func HandleUpdateOrderStatus(c *gin.Context) {
 
 	if req.Status == StatusInProduction && oldStatus != StatusInProduction {
 		log.Printf("[FIFO Stock Deductions] Order %s shifted to IN_PRODUCTION. Deducting resources.", order.ID)
+		if err := dischargeFIFOStockForOrder(order); err != nil {
+			log.Printf("[FIFO STOCK ERROR] Failed to discharge inventory for order %s: %v", order.ID, err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "Insufficient inventory stock for FIFO discharge",
+				"details": err.Error(),
+			})
+			return
+		}
 	}
 
 	if db.DB != nil {
@@ -228,6 +236,86 @@ func HandleUpdateOrderStatus(c *gin.Context) {
 	storeMutex.Unlock()
 
 	c.JSON(http.StatusOK, order)
+}
+
+func dischargeFIFOStockForOrder(o Order) error {
+	if db.DB == nil {
+		return nil
+	}
+	tx, err := db.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, item := range o.Items {
+		paperSku, _ := item.Specs["paper_sku"].(string)
+		if paperSku == "" {
+			paperSku, _ = item.Specs["paperSku"].(string)
+		}
+		if paperSku == "" {
+			continue
+		}
+
+		qtyNeeded := float64(item.Quantity)
+
+		rows, err := tx.Query(`
+			SELECT id, quantity
+			FROM inventory_batches
+			WHERE sku_id = $1 AND quantity > 0
+			ORDER BY received_date ASC, created_at ASC
+			FOR UPDATE
+		`, paperSku)
+
+		if err != nil {
+			_, _ = tx.Exec(`UPDATE materials SET stock_qty = GREATEST(0, stock_qty - $1) WHERE sku = $2 OR id = $2`, qtyNeeded, paperSku)
+			continue
+		}
+
+		type batchRecord struct {
+			id  string
+			qty float64
+		}
+		var batches []batchRecord
+		for rows.Next() {
+			var b batchRecord
+			if err := rows.Scan(&b.id, &b.qty); err == nil {
+				batches = append(batches, b)
+			}
+		}
+		rows.Close()
+
+		if len(batches) > 0 {
+			var totalAvail float64
+			for _, b := range batches {
+				totalAvail += b.qty
+			}
+
+			if totalAvail < qtyNeeded {
+				return fmt.Errorf("insufficient stock for SKU %s: required %.0f, available %.0f", paperSku, qtyNeeded, totalAvail)
+			}
+
+			rem := qtyNeeded
+			for _, b := range batches {
+				if rem <= 0 {
+					break
+				}
+				deduct := b.qty
+				if rem < deduct {
+					deduct = rem
+				}
+				_, err := tx.Exec(`UPDATE inventory_batches SET quantity = quantity - $1 WHERE id = $2`, deduct, b.id)
+				if err != nil {
+					return err
+				}
+				rem -= deduct
+			}
+		}
+
+		_, _ = tx.Exec(`UPDATE materials SET stock_qty = GREATEST(0, stock_qty - $1) WHERE sku = $2 OR id = $2`, qtyNeeded, paperSku)
+	}
+
+	return tx.Commit()
 }
 
 // --- DB HELPERS FOR ORDERS ---

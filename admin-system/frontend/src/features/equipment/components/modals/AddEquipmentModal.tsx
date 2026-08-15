@@ -30,20 +30,10 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
   const [clickRateColor, setClickRateColor] = useState(500);
   const [clickRateBW, setClickRateBW] = useState(150);
 
-  // Cutter Specific Parameters
-  const [cutCapacity, setCutCapacity] = useState(500);
-  const [bladeDepreciationPerCut, setBladeDepreciationPerCut] = useState(300);
-
-  // Binder Specific Parameters
-  const [bindingMethod, setBindingMethod] = useState('Perfect Glue'); // Perfect Glue, Spiral, Calendar, Staple
-  const [maxBookSheets, setMaxBookSheets] = useState(300);
-  const [avgTimePerBook, setAvgTimePerBook] = useState(5);
-  const [depreciationPerJob, setDepreciationPerJob] = useState(2000);
-
-  // Laminator Specific Parameters
-  const [laminationWidth, setLaminationWidth] = useState('A3 (330mm)');
-  const [speedMPerMin, setSpeedMPerMin] = useState(15);
-  const [warmUpTime, setWarmUpTime] = useState(10);
+  // Cutter / Post-Press Specific Parameters (Streamlined 4-Field Amortization Model)
+  const [postPressSubtype, setPostPressSubtype] = useState('guillotine'); // guillotine, sticker_plotter, hole_drill, binder, folder, laminator
+  const [estMonthlyVolume, setEstMonthlyVolume] = useState(50000);
+  const [maintenanceRatePercent, setMaintenanceRatePercent] = useState(15);
 
   if (!isOpen) return null;
 
@@ -77,6 +67,12 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
   const blackMlPerSheet = Number(blackYieldPages) > 0 ? (Number(blackCapacityMl) / Number(blackYieldPages)) : 0.0169;
   const colorMlPerSheet = Number(colorYieldPages) > 0 ? (Number(colorCapacityMl) / Number(colorYieldPages)) : 0.035;
 
+  // Streamlined Post-Press Machinery Amortization Calculation
+  const totalMonths = (Number(lifespanYears) || 1) * 12;
+  const monthlyDepr = totalMonths > 0 ? (Number(purchaseCost) / totalMonths) : 0;
+  const baseCostPerUnit = (Number(estMonthlyVolume) || 1) > 0 ? (monthlyDepr / Number(estMonthlyVolume)) : 0;
+  const netCostPerUnit = baseCostPerUnit * (1 + (Number(maintenanceRatePercent) || 0) / 100);
+
   const handleSubmit = (e) => {
     e.preventDefault();
 
@@ -98,23 +94,14 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
         clickRateColor: Number(clickRateColor || 500),
         clickRateBW: Number(clickRateBW || 150)
       };
-    } else if (category === 'Cutter') {
+    } else {
       categoryParams = { 
-        cutCapacity: Number(cutCapacity), 
-        bladeDepreciationPerCut: Number(bladeDepreciationPerCut) 
-      };
-    } else if (category === 'Binder') {
-      categoryParams = { 
-        bindingMethod,
-        maxBookSheets: Number(maxBookSheets),
-        avgTimePerBook: Number(avgTimePerBook), 
-        depreciationPerJob: Number(depreciationPerJob) 
-      };
-    } else if (category === 'Laminator') {
-      categoryParams = { 
-        laminationWidth,
-        speedMPerMin: Number(speedMPerMin), 
-        warmUpTime: Number(warmUpTime) 
+        postPressSubtype,
+        estMonthlyVolume: Number(estMonthlyVolume),
+        maintenanceRatePercent: Number(maintenanceRatePercent),
+        costPerConsumptionUnit: Math.round(netCostPerUnit * 100) / 100,
+        calculatedCostPerPage: Math.round(netCostPerUnit * 100) / 100,
+        costPerPage: Math.round(netCostPerUnit * 100) / 100
       };
     }
 
@@ -123,12 +110,15 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
       category,
       imageUrl,
       purchaseCost: Number(purchaseCost),
+      purchasePrice: Number(purchaseCost),
       MachinePrice: Number(purchaseCost),
       lifespanYears: Number(lifespanYears),
-      printedPagesCapacity: Number(printedPagesCapacity),
-      TargetTotalPages: Number(printedPagesCapacity),
-      MaintenanceCostPerPage: Number(maintenanceCostPerPage),
-      maintenanceCostPerPage: Number(maintenanceCostPerPage),
+      estMonthlyVolume: Number(estMonthlyVolume),
+      maintenanceRatePercent: Number(maintenanceRatePercent),
+      printedPagesCapacity: Number(estMonthlyVolume) * totalMonths,
+      TargetTotalPages: Number(estMonthlyVolume) * totalMonths,
+      MaintenanceCostPerPage: category === 'Printer' ? Number(maintenanceCostPerPage) : (Math.round(netCostPerUnit * 100) / 100),
+      maintenanceCostPerPage: category === 'Printer' ? Number(maintenanceCostPerPage) : (Math.round(netCostPerUnit * 100) / 100),
       ...categoryParams
     });
 
@@ -321,159 +311,97 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
           )}
 
           {/* DYNAMIC CONDITIONAL SECTION: CATEGORY = CUTTER */}
-          {category === 'Cutter' && (
-            <div className="p-4 bg-emerald-50/60 border border-emerald-100 rounded-2xl space-y-3 animate-fade-in">
-              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 block border-b border-emerald-200 pb-1.5 flex items-center gap-1.5">
-                <Scissors className="w-4 h-4 text-emerald-600" />
-                <span>Cutter Machine Specifications</span>
+          {/* DYNAMIC CONDITIONAL SECTION: POST-PRESS / CUTTER / PAPER MACHINERY */}
+          {category !== 'Printer' && (
+            <div className="p-4 bg-sky-50/60 border border-sky-100 rounded-2xl space-y-4 animate-fade-in">
+              <span className="text-[10px] font-black uppercase tracking-wider text-sky-800 block border-b border-sky-200 pb-1.5 flex items-center gap-1.5">
+                <Scissors className="w-4 h-4 text-sky-600" />
+                <span>ຂໍ້ມູນເຄື່ອງຈັກແປຮູບกระดาษ (Post-Press & Paper Machinery Specs)</span>
               </span>
 
+              {/* Subtype selector */}
+              <div className="space-y-1">
+                <label className="text-slate-600 uppercase block text-[10px]">ประเภทเครื่องแปรรูปกระดาษ (Subtype Selection)</label>
+                <select
+                  value={postPressSubtype}
+                  onChange={(e) => setPostPressSubtype(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-xl focus:outline-none bg-white text-xs font-bold font-sans"
+                >
+                  <option value="guillotine">✂️ เครื่องตัดกระดาษทั่วไป (Guillotine Cutter)</option>
+                  <option value="sticker_plotter">🎯 เครื่องตัด/ไดคัทสติกเกอร์ (Sticker Plotter / Cutter)</option>
+                  <option value="hole_drill">🔘 เครื่องเจาะรูกระดาษ/เจาะตาไก่ (Paper Hole Drill / Puncher)</option>
+                  <option value="binder">📚 เครื่องเข้าเล่มกระดาษ (Perfect / Spiral Binder)</option>
+                  <option value="folder">📄 เครื่องพับ/กดรอยพับ (Paper Folder / Creaser)</option>
+                  <option value="laminator">✨ เครื่องเคลือบผิว/ฟิล์ม (Laminator / Coater)</option>
+                </select>
+              </div>
+
+              {/* 4 Core Input Parameters Grid */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[10px]">ຈຳນວນແຜ່ນຕັດສູງສຸດ/ຄັ້ງ (Max Sheet Pass Capacity)</label>
+                  <label className="text-slate-600 uppercase block text-[10px]">1. ราคาซื้อเครื่องจักร (Purchase Price LAK) *</label>
                   <input
                     type="number"
-                    value={cutCapacity}
-                    onChange={(e) => setCutCapacity(Number(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-xl font-sans text-center font-bold"
+                    min="0"
+                    value={purchaseCost}
+                    onChange={(e) => setPurchaseCost(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-xl font-sans font-bold text-xs bg-white"
+                    placeholder="60000000"
                   />
                 </div>
+
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[10px]">ຄ່າເສື່ອມໃບມີດຕໍ່ການຕັດ (Blade Wear / Cut LAK)</label>
+                  <label className="text-slate-600 uppercase block text-[10px]">2. อายุการใช้งานเป้าหมาย (Lifespan Years) *</label>
                   <input
                     type="number"
-                    value={bladeDepreciationPerCut}
-                    onChange={(e) => setBladeDepreciationPerCut(Number(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-xl font-sans text-center font-bold"
+                    min="1"
+                    value={lifespanYears}
+                    onChange={(e) => setLifespanYears(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-xl font-sans font-bold text-xs bg-white"
+                    placeholder="5"
                   />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-slate-600 uppercase block text-[10px]">3. ประมาณการผลิต (Est. Monthly Volume) *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={estMonthlyVolume}
+                    onChange={(e) => setEstMonthlyVolume(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-xl font-sans font-bold text-xs bg-white"
+                    placeholder="50000"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-slate-600 uppercase block text-[10px]">4. ค่าบำรุงรักษา & ใบมีด (% Maint. Rate) *</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={maintenanceRatePercent}
+                    onChange={(e) => setMaintenanceRatePercent(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-xl font-sans font-bold text-xs bg-white"
+                    placeholder="15"
+                  />
+                </div>
+              </div>
+
+              {/* Real-time Calculation Summary Card */}
+              <div className="p-3.5 bg-sky-100/70 border border-sky-200 rounded-xl space-y-1 text-xs">
+                <div className="flex justify-between items-center text-sky-900 font-extrabold">
+                  <span>สรุปต้นทุนต่อแผ่น/ครั้ง (Amortized Cost Breakdown):</span>
+                  <span className="text-sm font-black text-sky-700 font-sans">
+                    {(Math.round(netCostPerUnit * 100) / 100).toLocaleString()} LAK / Unit
+                  </span>
+                </div>
+                <div className="text-[11px] text-sky-800 space-y-0.5 font-medium">
+                  <p>• ค่าเสื่อมฐาน: {(Math.round(baseCostPerUnit * 100) / 100).toLocaleString()} LAK / แผ่น</p>
+                  <p>• ค่าบำรุงรักษา & เปลี่ยนใบมีด (+{maintenanceRatePercent}%): +{(Math.round((netCostPerUnit - baseCostPerUnit) * 100) / 100).toLocaleString()} LAK / แผ่น</p>
                 </div>
               </div>
             </div>
           )}
-
-          {/* DYNAMIC CONDITIONAL SECTION: CATEGORY = LAMINATOR */}
-          {category === 'Laminator' && (
-            <div className="p-4 bg-amber-50/60 border border-amber-100 rounded-2xl space-y-3 animate-fade-in">
-              <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 block border-b border-amber-200 pb-1.5 flex items-center gap-1.5">
-                <Layers className="w-4 h-4 text-amber-600" />
-                <span>Laminator Specifications</span>
-              </span>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[9px]">ຂະໜາດກວ້າງສູງສຸດ (Max Width)</label>
-                  <input
-                    type="text"
-                    value={laminationWidth}
-                    onChange={(e) => setLaminationWidth(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl font-sans text-center font-bold"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[9px]">ເວລາອຸ່ນເຄື່ອງ (Warm-up mins)</label>
-                  <input
-                    type="number"
-                    value={warmUpTime}
-                    onChange={(e) => setWarmUpTime(Number(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-xl font-sans text-center font-bold"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[9px]">ຄວາມໄວ (Speed m/min)</label>
-                  <input
-                    type="number"
-                    value={speedMPerMin}
-                    onChange={(e) => setSpeedMPerMin(Number(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-xl font-sans text-center font-bold"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* DYNAMIC CONDITIONAL SECTION: CATEGORY = BINDER */}
-          {category === 'Binder' && (
-            <div className="p-4 bg-indigo-50/60 border border-indigo-100 rounded-2xl space-y-3 animate-fade-in">
-              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 block border-b border-indigo-200 pb-1.5 flex items-center gap-1.5">
-                <BookOpen className="w-4 h-4 text-indigo-600" />
-                <span>Binder Machine Specifications</span>
-              </span>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[9px]">ຮູບແບບການເຂົ້າເລົ່ມ (Method)</label>
-                  <select
-                    value={bindingMethod}
-                    onChange={(e) => setBindingMethod(e.target.value)}
-                    className="w-full px-2 py-2 border rounded-xl bg-white text-xs font-bold"
-                  >
-                    <option value="Perfect Glue">ສັ້ນກາວຮ້ອນ (Perfect Glue)</option>
-                    <option value="Spiral">ສັ້ນຫ່ວງ (Spiral)</option>
-                    <option value="Calendar">ສັ້ນປະຕິທິນ (Calendar)</option>
-                    <option value="Staple">ມຸງຫຼັງຄາ (Staple)</option>
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[9px]">ຄວາມຈຸສູງສຸດ (Max Sheets/Book)</label>
-                  <input
-                    type="number"
-                    value={maxBookSheets}
-                    onChange={(e) => setMaxBookSheets(Number(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-xl font-sans text-center font-bold"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[9px]">ເວລາສະເລ່ຍ/ເລົ່ມ (Mins/Book)</label>
-                  <input
-                    type="number"
-                    value={avgTimePerBook}
-                    onChange={(e) => setAvgTimePerBook(Number(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-xl font-sans text-center font-bold"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Standard Financial & Lifespan parameters */}
-          <div className="grid grid-cols-2 gap-3 pt-2">
-            <div className="space-y-1">
-              <label className="text-slate-500 uppercase block text-[10px]">Purchase Cost / Machine Price (LAK)</label>
-              <input
-                type="number"
-                value={purchaseCost}
-                onChange={(e) => setPurchaseCost(Number(e.target.value))}
-                className="w-full px-3 py-2 border rounded-xl focus:outline-none font-sans font-bold bg-white"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-slate-500 uppercase block text-[10px]">Target Lifetime Pages</label>
-              <input
-                type="number"
-                value={printedPagesCapacity}
-                onChange={(e) => setPrintedPagesCapacity(Number(e.target.value))}
-                className="w-full px-3 py-2 border rounded-xl focus:outline-none font-sans font-bold bg-white"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-slate-500 uppercase block text-[10px]">Lifespan Years</label>
-              <input
-                type="number"
-                value={lifespanYears}
-                onChange={(e) => setLifespanYears(Number(e.target.value))}
-                className="w-full px-3 py-2 border rounded-xl focus:outline-none font-sans font-bold bg-white"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-slate-500 uppercase block text-[10px]">Maint. Cost Per Page (LAK)</label>
-              <input
-                type="number"
-                value={maintenanceCostPerPage}
-                onChange={(e) => setMaintenanceCostPerPage(Number(e.target.value))}
-                className="w-full px-3 py-2 border rounded-xl focus:outline-none font-sans font-bold bg-white"
-              />
-            </div>
-          </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button

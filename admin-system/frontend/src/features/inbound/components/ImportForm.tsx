@@ -177,13 +177,22 @@ export default function ImportForm({ onSubmit, onClose }) {
   const [laminationMethod, setLaminationMethod] = useState('');
   const [laminationFinish, setLaminationFinish] = useState('');
 
-  // --- 6. MACHINERY State ---
+  // --- 6. MACHINERY / POST-PRESS State ---
   const [machineryName, setMachineryName] = useState('');
   const [machineryModel, setMachineryModel] = useState('');
   const [machinerySn, setMachinerySn] = useState('');
-  const [machineryWidth, setMachineryWidth] = useState('');
-  const [machineryCapacity, setMachineryCapacity] = useState('');
-  const [machineryDrive, setMachineryDrive] = useState('');
+  const [postPressSubtype, setPostPressSubtype] = useState('guillotine');
+  const [machineryLifespanYears, setMachineryLifespanYears] = useState(5);
+  const [machineryEstMonthlyVolume, setMachineryEstMonthlyVolume] = useState(50000);
+  const [machineryMaintenanceRatePct, setMachineryMaintenanceRatePct] = useState(15);
+
+  // Streamlined Post-Press Machinery Cost Calculation for Inbound Procurement
+  const totalCostInLak = Number(importCost || 0) * (exchangeRates[importCurrency] || 1);
+  const machineryTotalMonths = (Number(machineryLifespanYears) || 1) * 12;
+  const machineryMonthlyDepr = machineryTotalMonths > 0 ? (totalCostInLak / machineryTotalMonths) : 0;
+  const machineryBaseCostPerUnit = (Number(machineryEstMonthlyVolume) || 1) > 0 ? (machineryMonthlyDepr / Number(machineryEstMonthlyVolume)) : 0;
+  const machineryNetCostPerUnit = machineryBaseCostPerUnit * (1 + (Number(machineryMaintenanceRatePct) || 0) / 100);
+  const machineryFinalUnitCost = Math.round(machineryNetCostPerUnit * 100) / 100;
 
   // --- 7. BINDING State ---
   const [bindingName, setBindingName] = useState('');
@@ -539,13 +548,27 @@ export default function ImportForm({ onSubmit, onClose }) {
       finalData = {
         ...finalData,
         id: `MAC-${Date.now().toString().slice(-4)}`,
-        name: `${machineryName} ${machineryModel}`,
-        category: 'Machinery',
+        name: machineryName || `Paper Machine ${machineryModel}`,
+        category: 'Cutter',
+        postPressSubtype,
         serialNumber: machinerySn || null,
+        purchaseCost: totalCostInLak,
+        purchasePrice: totalCostInLak,
+        MachinePrice: totalCostInLak,
+        lifespanYears: Number(machineryLifespanYears),
+        estMonthlyVolume: Number(machineryEstMonthlyVolume),
+        maintenanceRatePercent: Number(machineryMaintenanceRatePct),
+        costPerConsumptionUnit: machineryFinalUnitCost,
+        calculatedCostPerPage: machineryFinalUnitCost,
+        maintenanceCostPerPage: machineryFinalUnitCost,
+        printedPagesCapacity: Number(machineryEstMonthlyVolume) * machineryTotalMonths,
+        TargetTotalPages: Number(machineryEstMonthlyVolume) * machineryTotalMonths,
         specs: {
-          machineryWidth: machineryWidth || null,
-          machineryCapacity: machineryCapacity || null,
-          machineryDrive: machineryDrive || null
+          postPressSubtype,
+          lifespanYears: Number(machineryLifespanYears),
+          estMonthlyVolume: Number(machineryEstMonthlyVolume),
+          maintenanceRatePercent: Number(machineryMaintenanceRatePct),
+          netCostPerUnit: machineryFinalUnitCost
         }
       };
     } else if (importType === 'BINDING') {
@@ -1010,6 +1033,122 @@ export default function ImportForm({ onSubmit, onClose }) {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {importType === 'MACHINERY' && inboundMode === 'NEW' && (
+          <div className="bg-sky-50/60 p-5 rounded-2xl border border-sky-100 space-y-4 animate-fade-in">
+            <span className="text-xs font-black uppercase tracking-wider text-sky-800 block border-b border-sky-200 pb-2 flex items-center gap-2">
+              <Printer className="w-4 h-4 text-sky-600" />
+              <span>นำเข้าเครื่องจักรกระดาษ & เครื่องแปรรูป (Post-Press & Paper Machinery Import)</span>
+            </span>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-600 mb-1">
+                  1. ชื่อเครื่องจักร (Machine Name) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={machineryName}
+                  onChange={(e) => setMachineryName(e.target.value)}
+                  placeholder="เช่น EBA 5560 Electric Cutter / Roland Plotter"
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-600 mb-1">
+                  2. ประเภทเครื่องแปรรูปกระดาษ (Subtype) *
+                </label>
+                <select
+                  value={postPressSubtype}
+                  onChange={(e) => setPostPressSubtype(e.target.value)}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold font-sans"
+                >
+                  <option value="guillotine">✂️ เครื่องตัดกระดาษทั่วไป (Guillotine Cutter)</option>
+                  <option value="sticker_plotter">🎯 เครื่องตัด/ไดคัทสติกเกอร์ (Sticker Plotter / Cutter)</option>
+                  <option value="hole_drill">🔘 เครื่องเจาะรูกระดาษ/เจาะตาไก่ (Paper Hole Drill / Puncher)</option>
+                  <option value="binder">📚 เครื่องเข้าเล่มกระดาษ (Perfect / Spiral Binder)</option>
+                  <option value="folder">📄 เครื่องพับ/กดรอยพับ (Paper Folder / Creaser)</option>
+                  <option value="laminator">✨ เครื่องเคลือบผิว/ฟิล์ม (Laminator / Coater)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-600 mb-1">
+                  3. อายุการใช้งานเป้าหมาย (Lifespan Years) *
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={machineryLifespanYears}
+                  onChange={(e) => setMachineryLifespanYears(Number(e.target.value))}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold"
+                  placeholder="5"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-600 mb-1">
+                  4. ประมาณการผลิตเฉลี่ย (Est. Monthly Volume) *
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={machineryEstMonthlyVolume}
+                  onChange={(e) => setMachineryEstMonthlyVolume(Number(e.target.value))}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold"
+                  placeholder="50000"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-600 mb-1">
+                  5. ค่าบำรุงรักษา & เปลี่ยนใบมีด (% Maintenance Rate) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={machineryMaintenanceRatePct}
+                  onChange={(e) => setMachineryMaintenanceRatePct(Number(e.target.value))}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold"
+                  placeholder="15"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-600 mb-1">
+                  Serial Number (ถ้ามี)
+                </label>
+                <input
+                  type="text"
+                  value={machinerySn}
+                  onChange={(e) => setMachinerySn(e.target.value)}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none bg-white text-sm font-semibold"
+                  placeholder="SN-998822"
+                />
+              </div>
+            </div>
+
+            {/* Real-time Calculation Breakdown Card */}
+            <div className="p-4 bg-sky-100/80 border border-sky-200 rounded-2xl space-y-1.5 text-xs">
+              <div className="flex justify-between items-center text-sky-900 font-black">
+                <span>คำนวณอัตราต้นทุนต่อแผ่นอัตโนมัติ (Amortized Rate Preview):</span>
+                <span className="text-base font-black text-sky-700 font-sans">
+                  {machineryFinalUnitCost.toLocaleString()} LAK / Unit
+                </span>
+              </div>
+              <div className="text-xs text-sky-800 space-y-0.5 font-medium">
+                <p>• ราคาซื้อสุทธิ: {totalCostInLak.toLocaleString()} LAK ({importCost || 0} {importCurrency})</p>
+                <p>• ค่าเสื่อมฐาน: {Math.round(machineryBaseCostPerUnit * 100) / 100} LAK / แผ่น ({machineryLifespanYears} ปี = {machineryTotalMonths} เดือน)</p>
+                <p>• ค่าบำรุงรักษา & อะไหล่ใบมีด (+{machineryMaintenanceRatePct}%): +{Math.round((machineryNetCostPerUnit - machineryBaseCostPerUnit) * 100) / 100} LAK / แผ่น</p>
+              </div>
             </div>
           </div>
         )}

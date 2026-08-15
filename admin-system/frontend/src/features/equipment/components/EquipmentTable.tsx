@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldAlert, CheckCircle, Eye } from 'lucide-react';
+import { ShieldAlert, CheckCircle, Eye, Edit } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import type { Equipment } from '../types';
@@ -7,13 +7,23 @@ import type { Equipment } from '../types';
 interface EquipmentTableProps {
   machines: Equipment[];
   onViewDetails: (eq: any) => void;
+  onEdit?: (eq: any) => void;
   formatLAK: (num: number) => string;
   onMaintenance?: (eqId: any) => void;
 }
 
-export default function EquipmentTable({ machines, onViewDetails, formatLAK }: EquipmentTableProps) {
+export default function EquipmentTable({ machines, onViewDetails, onEdit, formatLAK }: EquipmentTableProps) {
   const { t } = useTranslation();
   const { printerColorLinks, inventory } = useApp();
+
+  const subtypeLabelMap: Record<string, string> = {
+    guillotine: '✂️ GUILLOTINE CUTTER',
+    sticker_plotter: '🎯 STICKER PLOTTER',
+    hole_drill: '🔘 PAPER DRILL',
+    binder: '📚 BINDER',
+    folder: '📄 FOLDER/CREASER',
+    laminator: '✨ LAMINATOR'
+  };
 
   return (
     <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm">
@@ -21,31 +31,48 @@ export default function EquipmentTable({ machines, onViewDetails, formatLAK }: E
         <table className="w-full text-left border-collapse text-slate-800">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black uppercase text-slate-500 tracking-wider">
-              <th className="py-4 px-6">{t('inventory_status.lot_id')} (Asset ID)</th>
-              <th className="py-4 px-6">S/N</th>
-              <th className="py-4 px-6">{t('inventory_status.item_sku')} (Brand & Model)</th>
-              <th className="py-4 px-6">{t('inventory.material_cat')}</th>
-              <th className="py-4 px-6">{t('printer_management.color_scheme')}</th>
-              <th className="py-4 px-6">{t('printer_management.total_slots')}</th>
-              <th className="py-4 px-6">{t('printer_management.linked_inks')}</th>
-              <th className="py-4 px-6">Est. Depreciation / Page</th>
-              <th className="py-4 px-6">Location</th>
-              <th className="py-4 px-6">{t('equipment_mapping.sla_status')}</th>
-              <th className="py-4 px-6 text-right">{t('inventory_status.actions')}</th>
+              <th className="py-4 px-5">ASSET ID / S/N</th>
+              <th className="py-4 px-5">BRAND & MODEL</th>
+              <th className="py-4 px-5">CATEGORY / SUBTYPE</th>
+              <th className="py-4 px-5">KEY OPERATIONAL SPECS</th>
+              <th className="py-4 px-5">NET UNIT RATE</th>
+              <th className="py-4 px-5">LOCATION</th>
+              <th className="py-4 px-5">SLA STATUS</th>
+              <th className="py-4 px-5 text-right">ACTIONS</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs font-semibold">
             {machines.length === 0 ? (
               <tr>
-                <td colSpan={10} className="py-12 text-center text-slate-400 font-bold">
+                <td colSpan={8} className="py-12 text-center text-slate-400 font-bold">
                   No machinery registered. Use Inbound Procurement to purchase new assets.
                 </td>
               </tr>
             ) : (
               machines.map(eq => {
                 const isCritical = eq.components && eq.components.some(c => c.usage >= (c.threshold || 90));
+                const isPostPress = eq.category !== 'Printer' && eq.category !== 'PRINTER';
+
+                // Subtype text
+                const subTypeKey = eq.postPressSubtype || eq.specs?.postPressSubtype || '';
+                const subTypeLabel = subtypeLabelMap[subTypeKey] || eq.printerCategory || eq.category;
+
+                // Specs calculation
+                const lifespanYears = Number(eq.lifespanYears || eq.specs?.lifespanYears || 5);
+                const estMonthlyVolume = Number(eq.estMonthlyVolume || eq.specs?.estMonthlyVolume || 50000);
+                const maintenanceRatePct = Number(eq.maintenanceRatePercent || eq.specs?.maintenanceRatePercent || 15);
                 
-                // Calculate dynamic ink summary
+                const assetValue = eq.MachinePrice !== undefined ? eq.MachinePrice : (eq.purchaseCost || 0);
+                const targetPages = eq.TargetTotalPages !== undefined ? eq.TargetTotalPages : (eq.printedPagesCapacity || 1000000);
+                const totalMonths = lifespanYears * 12;
+                const monthlyDepr = totalMonths > 0 ? (assetValue / totalMonths) : 0;
+                const baseCostPerUnit = estMonthlyVolume > 0 ? (monthlyDepr / estMonthlyVolume) : 0;
+                const netCostPerUnit = eq.costPerConsumptionUnit || eq.calculatedCostPerPage || (baseCostPerUnit * (1 + maintenanceRatePct / 100));
+
+                const deprecationPerPage = targetPages > 0 ? (assetValue / targetPages) : 0;
+                const unitRateLAK = isPostPress ? netCostPerUnit : (eq.calculatedCostPerPage || deprecationPerPage);
+
+                // Ink Summary for printers
                 const links = printerColorLinks.filter(lnk => lnk.assetId === eq.id);
                 const linkedInksSummary = links.map(lnk => {
                   const ink = inventory.find(i => i.id === lnk.inkCode);
@@ -53,54 +80,76 @@ export default function EquipmentTable({ machines, onViewDetails, formatLAK }: E
                 }).join(', ') || '-';
 
                 return (
-                  <tr key={eq.id} className="hover:bg-slate-50/50 transition">
-                    <td className="py-4 px-6 font-mono font-bold text-slate-500 uppercase">
-                      {eq.id}
+                  <tr 
+                    key={eq.id} 
+                    onClick={() => onViewDetails(eq)}
+                    className="hover:bg-sky-50/40 transition cursor-pointer group"
+                  >
+                    <td className="py-4 px-5 font-mono font-bold text-slate-700 uppercase">
+                      <div>{eq.id}</div>
+                      <div className="text-[10px] text-slate-400 font-semibold">{eq.serialNumber || eq.sn || 'SN: -'}</div>
                     </td>
-                    <td className="py-4 px-6 font-mono font-bold text-slate-600">
-                      {eq.serialNumber || eq.sn || '-'}
-                    </td>
-                    <td className="py-4 px-6">
+
+                    <td className="py-4 px-5">
                       <div className="flex items-center gap-3">
                         {eq.imageUrl ? (
-                          <img src={eq.imageUrl} alt={eq.name} className="w-8 h-8 object-cover rounded-lg border border-slate-200" />
+                          <img src={eq.imageUrl} alt={eq.name} className="w-9 h-9 object-cover rounded-xl border border-slate-200" />
                         ) : (
-                          <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 font-bold text-[10px]">
+                          <div className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 font-extrabold text-xs">
                             {eq.name.slice(0, 2).toUpperCase()}
                           </div>
                         )}
                         <div>
-                          <span className="font-extrabold text-slate-800 block leading-tight">{eq.name}</span>
+                          <span className="font-extrabold text-slate-900 block leading-tight group-hover:text-sky-600 transition">{eq.name}</span>
+                          <span className="text-[10px] text-slate-400 font-semibold">{eq.brand || eq.model || 'Standard'}</span>
                         </div>
                       </div>
                     </td>
-                    <td className="py-4 px-6">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase bg-slate-100 text-slate-700 border">
-                        {eq.category}
+
+                    <td className="py-4 px-5">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wider uppercase border ${
+                        isPostPress 
+                          ? 'bg-sky-50 text-sky-700 border-sky-200' 
+                          : 'bg-purple-50 text-purple-700 border-purple-200'
+                      }`}>
+                        {subTypeLabel}
                       </span>
                     </td>
-                    <td className="py-4 px-6 text-slate-600 font-medium">
-                      {eq.colorSchemeType || '-'}
+
+                    <td className="py-4 px-5 text-slate-600 font-medium">
+                      {isPostPress ? (
+                        <div className="space-y-0.5 text-[11px]">
+                          <p className="font-semibold text-slate-700">เป้าหมาย: <span className="font-mono text-slate-900 font-extrabold">{estMonthlyVolume.toLocaleString()}</span> แผ่น/เดือน</p>
+                          <p className="text-slate-400 text-[10px]">อายุ {lifespanYears} ปี • บำรุงรักษา +{maintenanceRatePct}%</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-0.5 text-[11px]">
+                          <p className="font-semibold text-slate-700">ระบบสี: <span className="font-bold text-purple-700">{eq.colorSchemeType || 'CMYK'}</span> ({eq.totalColorSlots || 4} Slots)</p>
+                          <p className="text-slate-400 text-[10px] truncate max-w-xs" title={linkedInksSummary}>หมึก: {linkedInksSummary}</p>
+                        </div>
+                      )}
                     </td>
-                    <td className="py-4 px-6 text-slate-600 font-mono">
-                      {eq.totalColorSlots || eq.totalSlots || '-'}
+
+                    <td className="py-4 px-5 font-mono font-black text-emerald-600 text-xs">
+                      {unitRateLAK > 0 ? (
+                        <div>
+                          <span>{formatLAK(unitRateLAK)}</span>
+                          <span className="text-[10px] font-normal text-slate-400 block">/ {isPostPress ? 'แผ่น (sheet)' : 'หน้า (page)'}</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 font-normal">-</span>
+                      )}
                     </td>
-                    <td className="py-4 px-6 text-slate-500 font-medium max-w-xs truncate" title={linkedInksSummary}>
-                      {linkedInksSummary}
+
+                    <td className="py-4 px-5 text-slate-600 font-medium">
+                      {eq.location || 'Main Dept'}
                     </td>
-                    <td className="py-4 px-6 text-emerald-600 font-mono font-bold">
-                      {eq.TargetTotalPages > 0 
-                        ? formatLAK((eq.MachinePrice || eq.purchaseCost || 0) / eq.TargetTotalPages) 
-                        : '-'}
-                    </td>
-                    <td className="py-4 px-6 text-slate-600 font-medium">
-                      {eq.location || '-'}
-                    </td>
-                    <td className="py-4 px-6">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black border ${
+
+                    <td className="py-4 px-5">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black border ${
                         isCritical 
                           ? 'text-red-600 bg-red-50 border-red-100 animate-pulse' 
-                          : 'text-green-600 bg-green-50 border-green-100'
+                          : 'text-emerald-700 bg-emerald-50 border-emerald-100'
                       }`}>
                         {isCritical ? (
                           <>
@@ -115,16 +164,23 @@ export default function EquipmentTable({ machines, onViewDetails, formatLAK }: E
                         )}
                       </span>
                     </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="flex justify-end gap-2">
-                        {onViewDetails && (
+
+                    <td className="py-4 px-5 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-end gap-1.5">
+                        <button
+                          onClick={() => onViewDetails(eq)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-extrabold rounded-xl transition shadow-xs active:scale-95 cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>รายละเอียด</span>
+                        </button>
+                        {onEdit && (
                           <button
-                            onClick={() => onViewDetails(eq)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-bold rounded-xl transition shadow-sm cursor-pointer"
-                            title="ລາຍລະອຽດເພີ່ມເຕີມ"
+                            onClick={() => onEdit(eq)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-extrabold rounded-xl transition active:scale-95 cursor-pointer border border-slate-200"
                           >
-                            <Eye className="w-3 h-3" />
-                            <span>ລາຍລະອຽດເພີ່ມເຕີມ</span>
+                            <Edit className="w-3.5 h-3.5" />
+                            <span>แก้ไข</span>
                           </button>
                         )}
                       </div>

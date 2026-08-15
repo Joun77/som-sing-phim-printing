@@ -2,8 +2,18 @@ package pricing
 
 import (
 	"errors"
+	"fmt"
 	"math"
 )
+
+// PrinterAllocation represents a manual multi-printer allocation for a job
+type PrinterAllocation struct {
+	PrinterID      string  `json:"printer_id"`
+	PrinterName    string  `json:"printer_name"`
+	AllocatedPages int     `json:"allocated_pages"`
+	CostPerPage    float64 `json:"cost_per_page"`
+	SubtotalCost   float64 `json:"subtotal_cost"`
+}
 
 // CustomFinishingOption represents a custom post-print finishing option
 type CustomFinishingOption struct {
@@ -14,12 +24,15 @@ type CustomFinishingOption struct {
 
 // CalculationRequest represents the payload from the frontend spec builder
 type CalculationRequest struct {
-	JobName          string  `json:"job_name" binding:"required"`
-	Quantity         int     `json:"quantity" binding:"required,gt=0"`
-	PaperSku         string  `json:"paper_sku" binding:"required"`
-	PaperCostPerUnit float64 `json:"paper_cost_per_unit"` // Cost per ream/pack or unit
-	PaperFormat      string  `json:"paper_format"`        // "sheet" | "roll"
-	SheetsPerPack    int     `json:"sheets_per_pack"`     // Sheets per pack/ream (default 500)
+	JobName          string              `json:"job_name" binding:"required"`
+	Quantity         int                 `json:"quantity" binding:"required,gt=0"`
+	PaperSku         string              `json:"paper_sku" binding:"required"`
+	PaperCostPerUnit float64             `json:"paper_cost_per_unit"` // Cost per ream/pack or unit
+	PaperFormat      string              `json:"paper_format"`        // "sheet" | "roll"
+	SheetsPerPack    int                 `json:"sheets_per_pack"`     // Sheets per pack/ream (default 500)
+	CutsPerSheet     int                 `json:"cuts_per_sheet"`      // Number of brochure/job pieces cut per large sheet (default 1)
+	Allocations      []PrinterAllocation `json:"allocations"`
+
 
 	// Setup & Finishing Costs
 	SetupCost        float64 `json:"setup_cost"`         // Fixed setup cost
@@ -212,6 +225,11 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	// ── Step 1: Paper Area Factor S (S = JobArea / 62,370 mm²) ─────────────────
 	areaFactor := (jobW * jobH) / a4BaselineArea
 
+	cutsPerSheet := req.CutsPerSheet
+	if cutsPerSheet <= 0 {
+		cutsPerSheet = 1
+	}
+
 	// ── Step 4: Paper Cost ────────────────────────────────────────────────────
 	var paperCost float64
 	if req.PaperFormat == "roll" && req.PaperRollPricePerM2 > 0 {
@@ -219,13 +237,26 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		jobAreaM2 := (jobW / 1000.0) * (jobH / 1000.0)
 		paperCost = req.PaperRollPricePerM2 * jobAreaM2 * float64(req.Quantity)
 	} else {
-		// Sheet-fed: (Unit Price / SheetsPerPack) * Factor S * Quantity
+		// Sheet-fed paper cut calculation:
+		// Required large sheets = ceil(Quantity / CutsPerSheet)
+		// Total large sheets including spoilage = ceil(Required large sheets * (1 + SpoilagePercent))
+		reqSheets := math.Ceil(float64(req.Quantity) / float64(cutsPerSheet))
+		spoilPct := req.SpoilagePercent
+		if spoilPct < 0 {
+			spoilPct = 0
+		}
+		totalLargeSheets := math.Ceil(reqSheets * (1.0 + spoilPct))
+
 		sheetsPerPack := req.SheetsPerPack
 		if sheetsPerPack <= 0 {
 			sheetsPerPack = 500
 		}
-		costPerSheet := req.PaperCostPerUnit / float64(sheetsPerPack)
-		paperCost = costPerSheet * areaFactor * float64(req.Quantity)
+
+		costPerLargeSheet := req.PaperCostPerUnit
+		if req.PaperCostPerUnit > 0 && sheetsPerPack > 1 {
+			costPerLargeSheet = req.PaperCostPerUnit / float64(sheetsPerPack)
+		}
+		paperCost = totalLargeSheets * costPerLargeSheet
 	}
 
 	// ── Step 2: Ink Cost (Section 4 ISO Yield Formula) ────────────────────────
@@ -286,6 +317,15 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 
 	depreciationCost := (machinePrice * (1.0 + maintRate/100.0) / lifePages) * areaFactor * float64(req.Quantity)
 	maintenanceCost := req.MaintenanceCostPerPage * areaFactor * float64(req.Quantity)
+
+	if len(req.Allocations) > 0 {
+		allocMachineCost, allocErr := ValidateAndCalculateAllocations(req.Quantity, req.Allocations)
+		if allocErr != nil {
+			return CalculationResponse{}, allocErr
+		}
+		depreciationCost = allocMachineCost
+	}
+
 
 	// ── 4. Custom Finishing options ────────────────────────────────────────────
 	customFinishingCost := 0.0
@@ -425,8 +465,13 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		grandTotal /= rate
 	}
 
-	// ── 13. Round to 2 decimal places ─────────────────────────────────────────
-	r := roundToTwoDecimals
+	// ── 13. Rounding according to Currency (Integer for LAK, 2 decimals for THB/USD) ───
+	r := func(val float64) float64 {
+		if currency == "LAK" || currency == "" {
+			return math.Round(val)
+		}
+		return math.Round(val*100) / 100
+	}
 	paperCost = r(paperCost)
 	inkCost = r(inkCost)
 	inkCostK = r(inkCostK)
@@ -521,3 +566,24 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 func roundToTwoDecimals(val float64) float64 {
 	return math.Round(val*100) / 100
 }
+
+func ValidateAndCalculateAllocations(targetQty int, allocations []PrinterAllocation) (float64, error) {
+	totalAllocated := 0
+	var totalMachineCost float64
+
+	for _, alloc := range allocations {
+		totalAllocated += alloc.AllocatedPages
+		cost := float64(alloc.AllocatedPages) * alloc.CostPerPage
+		if alloc.SubtotalCost > 0 {
+			cost = alloc.SubtotalCost
+		}
+		totalMachineCost += cost
+	}
+
+	if totalAllocated != targetQty {
+		return 0, fmt.Errorf("allocated pages (%d) must equal target quantity (%d)", totalAllocated, targetQty)
+	}
+
+	return totalMachineCost, nil
+}
+

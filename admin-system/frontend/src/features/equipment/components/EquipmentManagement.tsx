@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import EquipmentTable from './EquipmentTable';
 import AddEquipmentModal from './modals/AddEquipmentModal';
+import EditEquipmentModal from './modals/EditEquipmentModal';
 import EquipmentDetailsPage from './details/EquipmentDetailsPage';
 
 export default function EquipmentManagement() {
@@ -43,6 +44,8 @@ export default function EquipmentManagement() {
     return matchesCategory && matchesStatus && matchesPrinterCategory && matchesLocation && matchesSearch;
   });
 
+  const [editingItem, setEditingItem] = useState(null);
+
   if (selectedEquipmentId) {
     return (
       <EquipmentDetailsPage 
@@ -63,15 +66,6 @@ export default function EquipmentManagement() {
             <span>{currentLang === 'lo' ? 'ຈັດການເຄື່ອງຈັກ & ບຳລຸງຮັກສາ' : 'Assets & Overheads'}</span>
           </h2>
           <p className="text-sm font-semibold text-slate-400 mt-1">Track SLA operation parameters, equipment wear, & component metrics</p>
-        </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <button
-            onClick={() => setIsAddOpen(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-xs rounded-2xl shadow-md shadow-sky-600/20 transition active:scale-95 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{currentLang === 'lo' ? '+ ລົງທະບຽນເຄື່ອງຈັກ' : '+ Register Machine'}</span>
-          </button>
         </div>
       </div>
 
@@ -118,15 +112,14 @@ export default function EquipmentManagement() {
           <select
             value={printerCategoryFilter}
             onChange={(e) => setPrinterCategoryFilter(e.target.value)}
-            disabled={activeCategory !== 'Printer'}
+            disabled={activeCategory !== 'Printer' && activeCategory !== 'All'}
             className="px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50 focus:outline-none focus:border-sky-500 disabled:opacity-50"
           >
             <option value="All">All Types</option>
             <option value="Laser">Laser</option>
             <option value="Inkjet">Inkjet</option>
-            <option value="MFP">MFP</option>
             <option value="Plotter">Plotter</option>
-            <option value="UV Flatbed">UV Flatbed</option>
+            <option value="UV">UV Printer</option>
             <option value="Sublimation">Sublimation</option>
           </select>
         </div>
@@ -172,11 +165,21 @@ export default function EquipmentManagement() {
         machines={filteredMachines} 
         onMaintenance={handleMaintenanceReset}
         onViewDetails={handleViewDetails}
+        onEdit={(item) => setEditingItem(item)}
         formatLAK={formatCurrency}
       />
 
       {/* Add modal wizard */}
       <AddEquipmentModal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} />
+
+      {/* Edit modal */}
+      {editingItem && (
+        <EditEquipmentModal
+          isOpen={!!editingItem}
+          onClose={() => setEditingItem(null)}
+          equipmentItem={editingItem}
+        />
+      )}
     </div>
   );
 }
