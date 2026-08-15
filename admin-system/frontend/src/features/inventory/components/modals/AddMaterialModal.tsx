@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { X, Layers, Droplet, Hammer } from 'lucide-react';
-import PaperForm from '../forms/PaperForm';
-import InkSetForm from '../forms/InkSetForm';
-import FinishingForm from '../forms/FinishingForm';
+import DynamicSpecForm from '../forms/DynamicSpecForm';
 import { useApp } from '@store/AppContext';
 
 export default function AddMaterialModal({ isOpen, onClose }) {
@@ -82,13 +80,13 @@ export default function AddMaterialModal({ isOpen, onClose }) {
         {/* Form area */}
         <div className="p-6 overflow-y-auto flex-1">
           {activeForm === 'paper' && (
-            <PaperForm onSubmit={handlePaperSubmit} onCancel={onClose} />
+            <DynamicSpecForm categoryType="paper" formData={{}} onChange={handlePaperSubmit} onSubmit={handlePaperSubmit} onCancel={onClose} />
           )}
           {activeForm === 'ink' && (
-            <InkSetForm onSubmit={handleInkSubmit} onCancel={onClose} />
+            <DynamicSpecForm categoryType="inkset" formData={{}} onChange={handleInkSubmit} onSubmit={handleInkSubmit} onCancel={onClose} />
           )}
           {activeForm === 'finishing' && (
-            <FinishingForm onSubmit={handleFinishingSubmit} onCancel={onClose} />
+            <DynamicSpecForm categoryType="finishing" formData={{}} onChange={handleFinishingSubmit} onSubmit={handleFinishingSubmit} onCancel={onClose} />
           )}
         </div>
       </div>

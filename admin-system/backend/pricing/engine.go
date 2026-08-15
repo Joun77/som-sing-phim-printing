@@ -22,9 +22,11 @@ type CalculationRequest struct {
 	SheetsPerPack    int     `json:"sheets_per_pack"`     // Sheets per pack/ream (default 500)
 
 	// Setup & Finishing Costs
-	SetupCost     float64 `json:"setup_cost"`     // Fixed setup cost
-	FinishingCost float64 `json:"finishing_cost"` // Variable finishing cost per unit
-	BaseProfitPct float64 `json:"base_profit_pct"` // Base profit percentage
+	SetupCost        float64 `json:"setup_cost"`         // Fixed setup cost
+	SetupCostMode    string  `json:"setup_cost_mode"`    // "fixed" | "percent"
+	SetupCostPercent float64 `json:"setup_cost_percent"` // Setup cost % if mode is percent
+	FinishingCost    float64 `json:"finishing_cost"`     // Variable finishing cost per unit
+	BaseProfitPct    float64 `json:"base_profit_pct"`    // Base profit percentage
 
 	// Roll-fed paper pricing
 	PaperRollPricePerM2 float64 `json:"paper_roll_price_per_m2"` // LAK per m² for roll paper
@@ -60,7 +62,10 @@ type CalculationRequest struct {
 	BindingType    string  `json:"binding_type"`    // "wire-o" | "staple" | "glue" | "none"
 	BindingCost    float64 `json:"binding_cost"`    // Cost per unit
 
-	// Overhead & Markup
+	// Labor, Overhead & Markup
+	LaborMode        string  `json:"labor_mode"`        // "manual" | "percent" | "tiered"
+	LaborPercent     float64 `json:"labor_percent"`     // Custom labor % (e.g. 10.0 for 10%)
+	LaborCostManual  float64 `json:"labor_cost_manual"` // Fixed manual labor cost
 	LaborCostPerHour float64 `json:"labor_cost_per_hour"`
 	EstimatedHours   float64 `json:"estimated_hours"`
 	MarkupMargin     float64 `json:"markup_margin"` // Legacy markup
@@ -267,11 +272,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	depreciationCost := (machinePrice * (1.0 + maintRate/100.0) / lifePages) * areaFactor * float64(req.Quantity)
 	maintenanceCost := req.MaintenanceCostPerPage * areaFactor * float64(req.Quantity)
 
-	// ── 4. Setup Cost & Finishing Cost ─────────────────────────────────────────
-	setupCost := req.SetupCost
-	finishingCost := req.FinishingCost * float64(req.Quantity)
-
-	// ── 5. Custom Finishing options ────────────────────────────────────────────
+	// ── 4. Custom Finishing options ────────────────────────────────────────────
 	customFinishingCost := 0.0
 	totalSqMeters := (jobW / 1000.0) * (jobH / 1000.0) * float64(req.Quantity)
 	for _, opt := range req.CustomFinishingOptions {
@@ -285,7 +286,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		}
 	}
 
-	// ── 6. Standard Lamination & Binding ──────────────────────────────────────
+	// ── 5. Standard Lamination & Binding ──────────────────────────────────────
 	laminationCost := 0.0
 	if req.LaminationType != "none" && req.LaminationType != "" {
 		laminationCost = float64(req.Quantity) * req.LaminationCost
@@ -295,8 +296,55 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		bindingCost = float64(req.Quantity) * req.BindingCost
 	}
 
-	// ── 7. Labor Cost ─────────────────────────────────────────────────────────
-	laborCost := req.LaborCostPerHour * req.EstimatedHours
+	directMatMachineCost := paperCost + inkCost + depreciationCost + maintenanceCost + customFinishingCost + laminationCost + bindingCost
+
+	// ── 6. Setup Cost ──────────────────────────────────────────────────────────
+	setupCost := req.SetupCost
+	if req.SetupCostMode == "percent" {
+		pct := req.SetupCostPercent
+		if pct <= 0 {
+			pct = 2.0 // default 2%
+		}
+		setupCost = directMatMachineCost * (pct / 100.0)
+	}
+	finishingCost := req.FinishingCost * float64(req.Quantity)
+
+	// ── 7. Labor Cost (Manual / Percent / Tiered) ──────────────────────────────
+	laborCost := 0.0
+	switch req.LaborMode {
+	case "manual":
+		laborCost = req.LaborCostManual
+	case "percent":
+		pct := req.LaborPercent
+		if pct <= 0 {
+			pct = 10.0
+		}
+		laborCost = directMatMachineCost * (pct / 100.0)
+	case "tiered":
+		pct := 15.0
+		if directMatMachineCost >= 5000000.0 {
+			pct = 7.0
+		} else if directMatMachineCost >= 1000000.0 {
+			pct = 10.0
+		}
+		laborCost = directMatMachineCost * (pct / 100.0)
+	default:
+		if req.LaborCostManual > 0 {
+			laborCost = req.LaborCostManual
+		} else if req.LaborPercent > 0 {
+			laborCost = directMatMachineCost * (req.LaborPercent / 100.0)
+		} else if req.LaborCostPerHour > 0 && req.EstimatedHours > 0 {
+			laborCost = req.LaborCostPerHour * req.EstimatedHours
+		} else {
+			pct := 15.0
+			if directMatMachineCost >= 5000000.0 {
+				pct = 7.0
+			} else if directMatMachineCost >= 1000000.0 {
+				pct = 10.0
+			}
+			laborCost = directMatMachineCost * (pct / 100.0)
+		}
+	}
 
 	// ── 8. Direct Cost → Overhead → Subtotal ──────────────────────────────────
 	directCost := paperCost + inkCost + depreciationCost + maintenanceCost +

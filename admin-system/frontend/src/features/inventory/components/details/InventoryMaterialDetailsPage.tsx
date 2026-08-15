@@ -4,10 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import EditMaterialModal from '../modals/EditMaterialModal';
 import AssetEditModal from '../modals/AssetEditModal';
-import PrinterSpecDetail from './PrinterSpecDetail';
-import InkSpecDetail from './InkSpecDetail';
-import PaperSpecDetail from './PaperSpecDetail';
-import GenericSpecDetail from './GenericSpecDetail';
+import DynamicSpecDetail from './DynamicSpecDetail';
 import ConfirmDeleteModal, { DeleteActionButton } from '@components/common/ConfirmDeleteModal';
 
 export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBack }) {
@@ -337,17 +334,7 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
             <Layers className="w-4 h-4 text-purple-600" />
             <span>{currentLang === 'lo' ? 'ສະເປັກທາງເຕັກນິກ (ERP Technical Specs)' : 'ERP Technical Specs'}</span>
           </h3>
-          {(() => {
-            const cat = (targetItem.category || targetItem.printerCategory || '').toLowerCase();
-            if (cat.includes('printer')) {
-              return <PrinterSpecDetail item={targetItem} currentLang={currentLang} />;
-            } else if (cat.includes('ink')) {
-              return <InkSpecDetail item={targetItem} currentLang={currentLang} />;
-            } else if (cat.includes('paper') || cat.includes('material')) {
-              return <PaperSpecDetail item={targetItem} currentLang={currentLang} />;
-            }
-            return <GenericSpecDetail item={targetItem} />;
-          })()}
+          <DynamicSpecDetail item={targetItem} currentLang={currentLang} />
         </div>
       </div>
 

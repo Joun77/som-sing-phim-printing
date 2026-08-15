@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@store/AppContext';
 import { useTranslation } from 'react-i18next';
+import CustomerCombobox from '@components/common/CustomerCombobox';
 import { 
   Calculator, 
   ShieldAlert, 
@@ -27,6 +28,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
     getFIFOCostPerSheet, 
     checkCreditLimit, 
     customers, 
+    addCustomer,
     addOrder,
     showToast,
     askConfirmation,
@@ -50,8 +52,33 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
 
   // Input states
   const [selectedCustomerId, setSelectedCustomerId] = useState(customers[0]?.name || '');
+  const [customerPhone, setCustomerPhone] = useState(customers[0]?.phone || '');
+  const [customerAddress, setCustomerAddress] = useState(customers[0]?.address || '');
   const [selectedPaperId, setSelectedPaperId] = useState(papers[0]?.id || '');
   const [selectedPrinterId, setSelectedPrinterId] = useState(printers[0]?.id || '');
+
+  const handleCustomerComboboxChange = (data: {
+    name: string;
+    phone: string;
+    address: string;
+    isNew: boolean;
+    saveToCrm: boolean;
+  }) => {
+    setSelectedCustomerId(data.name);
+    setCustomerPhone(data.phone);
+    setCustomerAddress(data.address);
+
+    if (data.isNew && data.saveToCrm && data.name.trim() && addCustomer) {
+      addCustomer({
+        id: `cust-${Date.now()}`,
+        name: data.name.trim(),
+        phone: data.phone || '020 55889900',
+        address: data.address || 'Vientiane',
+        creditLimit: 5000000,
+        unpaidBalance: 0
+      });
+    }
+  };
 
   // Auto-fill from CRM redirection
   useEffect(() => {
@@ -111,8 +138,13 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
 
   // 4. Finishing prices & Operator setups
   const [laminationRatePerSqm, setLaminationRatePerSqm] = useState(12000); // LAK per sqm
-  const [setupFeeLabor, setSetupFeeLabor] = useState(50000); // base operator setup cost (flat LAK)
-  const [laborCostPerSheet, setLaborCostPerSheet] = useState(100); // operator fee per sheet printed
+  const [setupCostMode, setSetupCostMode] = useState<'fixed' | 'percent'>('fixed');
+  const [setupCostFixed, setSetupCostFixed] = useState<number>(50000); // base setup cost (flat LAK, 0 for reprint)
+  const [setupCostPercent, setSetupCostPercent] = useState<number>(2); // setup % of order value
+  
+  const [laborMode, setLaborMode] = useState<'manual' | 'percent' | 'tiered'>('manual');
+  const [laborCostManual, setLaborCostManual] = useState<number>(30000); // manual fixed labor fee
+  const [laborPercent, setLaborPercent] = useState<number>(10); // flat % labor fee
 
   // Other Finishing States
   const [hasLamination, setHasLamination] = useState(false);
@@ -307,8 +339,30 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
   const dieCutCost = hasDieCut ? printVolume * 300 : 0;
   const totalFinishingCost = laminationCost + flatBindingCost + dieCutCost;
 
-  // Labor & Setup Costs
-  const setupLaborCost = Number(setupFeeLabor) + (Number(laborCostPerSheet) * printVolume);
+  // Labor & Setup Costs (Unified 3-Mode Labor & Setup Options)
+  const directMatMachineCost = totalPaperCost + totalInkCost + totalMachineOverhead + totalFinishingCost;
+
+  let calculatedSetupCost = Number(setupCostFixed || 0);
+  if (setupCostMode === 'percent') {
+    const pct = Number(setupCostPercent || 2);
+    calculatedSetupCost = directMatMachineCost * (pct / 100);
+  }
+
+  let calculatedLaborCost = 0;
+  if (laborMode === 'manual') {
+    calculatedLaborCost = Number(laborCostManual || 0);
+  } else if (laborMode === 'percent') {
+    const pct = Number(laborPercent || 10);
+    calculatedLaborCost = directMatMachineCost * (pct / 100);
+  } else {
+    // Tiered % based on order value
+    let pct = 15;
+    if (directMatMachineCost >= 5000000) pct = 7;
+    else if (directMatMachineCost >= 1000000) pct = 10;
+    calculatedLaborCost = directMatMachineCost * (pct / 100);
+  }
+
+  const setupLaborCost = calculatedSetupCost + calculatedLaborCost;
 
   // ── Local Fallback Calculation (matches backend formula) ─────────────────────
   // Subtotal = all direct costs (no spoilage yet)
@@ -372,8 +426,12 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
           maintenance_cost_per_page: Number(maintenanceCostPerSheet),
           spoilage_percent: activeSpoilageRate / 100,
           overhead_percent: 0.15,
-          labor_cost_per_hour: Number(setupFeeLabor),
-          estimated_hours: 1,
+          setup_cost: calculatedSetupCost,
+          setup_cost_mode: setupCostMode,
+          setup_cost_percent: setupCostPercent,
+          labor_mode: laborMode,
+          labor_percent: laborPercent,
+          labor_cost_manual: laborCostManual,
           target_margin_percent: marginDecimal,
           discount_percent: Number(discountPercent) / 100,
           tax_percent: taxEnabled && taxMode === 'percent' ? Number(taxRate) / 100 : 0,
@@ -629,19 +687,15 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                 </h4>
               </div>
 
-              {/* Customer Select */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{t('orders.select_customer')}</label>
-                <select
-                  value={selectedCustomerId}
-                  onChange={(e) => setSelectedCustomerId(e.target.value)}
-                  className="w-full min-h-[48px] px-3.5 py-2 border-2 rounded-xl focus:outline-none text-sm bg-white font-semibold font-sans"
-                >
-                  {customers.map(c => (
-                    <option key={c.name} value={c.name}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Customer Select / Combobox */}
+              <CustomerCombobox
+                customers={customers}
+                valueName={selectedCustomerId}
+                valuePhone={customerPhone}
+                valueAddress={customerAddress}
+                onChange={handleCustomerComboboxChange}
+                currentLang={currentLang}
+              />
 
               {/* Paper Selection */}
               <div className="space-y-1.5">
@@ -1123,7 +1177,9 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                     <span className="text-white/60">5. Operator setups & labor:</span>
                     <div className="text-right">
                       <span className="text-white font-sans font-black block">{formatCurrency(Math.round(displayLaborCost))}</span>
-                      <span className="text-[10px] text-white/40 block font-sans">Flat fee: {formatCurrency(setupFeeLabor)} + Labor: {formatCurrency(laborCostPerSheet*printVolume)}</span>
+                      <span className="text-[10px] text-white/40 block font-sans">
+                        Setup: {formatCurrency(Math.round(calculatedSetupCost))} ({setupCostMode === 'fixed' ? (setupCostFixed === 0 ? '0 LAK Reprint' : 'Fixed') : `${setupCostPercent}%`}) + Labor: {formatCurrency(Math.round(calculatedLaborCost))} ({laborMode === 'manual' ? 'Manual' : laborMode === 'percent' ? `${laborPercent}%` : 'Tiered %'})
+                      </span>
                     </div>
                   </div>
 
@@ -1215,8 +1271,8 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                 <div className="grid grid-cols-2 gap-4 text-xs font-semibold text-slate-600 bg-slate-50 p-3.5 rounded-2xl print:bg-white print:border print:p-4">
                   <div>
                     <span className="text-[9px] font-bold uppercase text-slate-400 block mb-0.5">{currentLang === 'lo' ? 'ສະເໜີເຖິງ' : 'Quotation To'}</span>
-                    <p className="text-slate-800 font-extrabold text-sm">{selectedCustomerId}</p>
-                    <p className="font-sans mt-0.5">Mobile: {customers.find(c => c.name === selectedCustomerId)?.phone || '020 55889900'}</p>
+                    <p className="text-slate-800 font-extrabold text-sm">{selectedCustomerId || (currentLang === 'lo' ? 'ລູກຄ້າທົ່ວໄປ' : 'General Customer')}</p>
+                    <p className="font-sans mt-0.5">Mobile: {customerPhone || customers.find(c => c.name === selectedCustomerId)?.phone || '020 55889900'}</p>
                   </div>
                   <div className="text-right border-l pl-4">
                     <span className="text-[9px] font-bold uppercase text-slate-400 block mb-0.5">{currentLang === 'lo' ? 'ເງື່ອນໄຂການຊຳຣະ' : 'Payment Terms'}</span>
@@ -1769,22 +1825,45 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                       />
                     </div>
                     <div className="space-y-1">
-                      <span>Flat Operator Setup Fee (LAK base):</span>
-                      <input
-                        type="number"
-                        value={setupFeeLabor}
-                        onChange={(e) => setSetupFeeLabor(Number(e.target.value))}
-                        className="w-full min-h-[38px] px-3 border border-slate-200 rounded-xl font-sans"
-                      />
+                      <span>Setup Cost Mode & Value:</span>
+                      <div className="flex gap-2">
+                        <select
+                          value={setupCostMode}
+                          onChange={(e) => setSetupCostMode(e.target.value as any)}
+                          className="px-2 py-1.5 border border-slate-200 rounded-xl text-xs font-bold bg-white"
+                        >
+                          <option value="fixed">Fixed LAK</option>
+                          <option value="percent">Percent %</option>
+                        </select>
+                        <input
+                          type="number"
+                          value={setupCostMode === 'fixed' ? setupCostFixed : setupCostPercent}
+                          onChange={(e) => setupCostMode === 'fixed' ? setSetupCostFixed(Number(e.target.value)) : setSetupCostPercent(Number(e.target.value))}
+                          className="w-full min-h-[38px] px-3 border border-slate-200 rounded-xl font-sans"
+                        />
+                      </div>
                     </div>
                     <div className="space-y-1">
-                      <span>Operator Labor fee per page (LAK base):</span>
-                      <input
-                        type="number"
-                        value={laborCostPerSheet}
-                        onChange={(e) => setLaborCostPerSheet(Number(e.target.value))}
-                        className="w-full min-h-[38px] px-3 border border-slate-200 rounded-xl font-sans"
-                      />
+                      <span>Labor Cost Mode & Value:</span>
+                      <div className="flex gap-2">
+                        <select
+                          value={laborMode}
+                          onChange={(e) => setLaborMode(e.target.value as any)}
+                          className="px-2 py-1.5 border border-slate-200 rounded-xl text-xs font-bold bg-white"
+                        >
+                          <option value="manual">Manual LAK</option>
+                          <option value="percent">Flat %</option>
+                          <option value="tiered">Tiered %</option>
+                        </select>
+                        {laborMode !== 'tiered' && (
+                          <input
+                            type="number"
+                            value={laborMode === 'manual' ? laborCostManual : laborPercent}
+                            onChange={(e) => laborMode === 'manual' ? setLaborCostManual(Number(e.target.value)) : setLaborPercent(Number(e.target.value))}
+                            className="w-full min-h-[38px] px-3 border border-slate-200 rounded-xl font-sans"
+                          />
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

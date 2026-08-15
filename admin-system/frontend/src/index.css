@@ -11,8 +11,11 @@
   --color-surface-white: #FFFFFF;
 }
 
+:root, html, body, input, button, select, textarea {
+  font-family: 'Plus Jakarta Sans', 'Noto Sans Lao', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
 body {
-  font-family: var(--font-sans);
   background-color: var(--color-slate-bg);
   color: #1E293B;
   overflow-x: hidden;
@@ -22,13 +25,13 @@ body {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
-.font-mono {
-  font-family: var(--font-mono);
+.font-mono, code, pre, kbd {
+  font-family: 'JetBrains Mono', monospace !important;
 }
 
 .tabular-numbers {
   font-variant-numeric: tabular-nums;
-  font-family: 'JetBrains Mono', 'Plus Jakarta Sans', monospace;
+  font-family: 'JetBrains Mono', monospace !important;
 }
 
 /* Custom Scrollbars */

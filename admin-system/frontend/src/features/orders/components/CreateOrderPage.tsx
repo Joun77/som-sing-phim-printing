@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 
 import ItemSpecConfigurator, { calculateItemCosting } from './ItemSpecConfigurator';
+import CustomerCombobox from '@components/common/CustomerCombobox';
 
 export default function CreateOrderPage({
   onBack,
@@ -503,78 +504,29 @@ export default function CreateOrderPage({
             </h4>
           </div>
 
-          <div className="flex gap-6">
-            <label className="flex items-center gap-2 font-bold cursor-pointer text-sm text-slate-700">
-              <input
-                type="radio"
-                name="custType"
-                value="existing"
-                checked={customerType === 'existing'}
-                onChange={() => setCustomerType('existing')}
-                className="w-4 h-4 text-accent-sky focus:ring-accent-sky"
-              />
-              <span>ລູກຄ້າເກົ່າ (Existing Customer)</span>
-            </label>
-            <label className="flex items-center gap-2 font-bold cursor-pointer text-sm text-slate-700">
-              <input
-                type="radio"
-                name="custType"
-                value="new"
-                checked={customerType === 'new'}
-                onChange={() => setCustomerType('new')}
-                className="w-4 h-4 text-accent-sky focus:ring-accent-sky"
-              />
-              <span>ລູກຄ້າໃໝ່ (New Customer)</span>
-            </label>
+          <div className="max-w-2xl">
+            <CustomerCombobox
+              customers={customers}
+              valueName={customerType === 'existing' ? selectedCustomerId : newCustName}
+              valuePhone={customerType === 'existing' ? phone : newCustPhone}
+              valueAddress={customerType === 'existing' ? address : newCustAddress}
+              onChange={(data) => {
+                if (data.isNew) {
+                  setCustomerType('new');
+                  setNewCustName(data.name);
+                  setNewCustPhone(data.phone);
+                  setNewCustAddress(data.address);
+                  setSelectedCustomerId('');
+                } else {
+                  setCustomerType('existing');
+                  setSelectedCustomerId(data.customerId || data.name);
+                  setPhone(data.phone);
+                  setAddress(data.address);
+                }
+              }}
+              currentLang={currentLang}
+            />
           </div>
-
-          {customerType === 'existing' ? (
-            <div className="space-y-2 max-w-xl">
-              <label className="block text-xs font-black text-slate-500">ເລືອກລູກຄ້າຈາກ CRM *</label>
-              <select
-                required
-                value={selectedCustomerId}
-                onChange={(e) => setSelectedCustomerId(e.target.value)}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold text-sm"
-              >
-                <option value="">-- ເລືອກລູກຄ້າເກົ່າ --</option>
-                {customers.map(c => (
-                  <option key={c.id} value={c.name}>{c.name} ({c.phone})</option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
-              <div className="space-y-1">
-                <label className="block text-xs font-black text-slate-500">ຊື່ ແລະ ນາມສະກຸນ *</label>
-                <input
-                  type="text"
-                  required
-                  value={newCustName}
-                  onChange={(e) => setNewCustName(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-xs font-black text-slate-500">ເບີໂທຕິດຕໍ່</label>
-                <input
-                  type="text"
-                  value={newCustPhone}
-                  onChange={(e) => setNewCustPhone(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold text-sm font-sans"
-                />
-              </div>
-              <div className="space-y-1 sm:col-span-2">
-                <label className="block text-xs font-black text-slate-500">ທີ່ຢູ່ຈັດສົ່ງ</label>
-                <input
-                  type="text"
-                  value={newCustAddress}
-                  onChange={(e) => setNewCustAddress(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold text-sm"
-                />
-              </div>
-            </div>
-          )}
 
           <div className="flex justify-end pt-6 border-t border-slate-100">
             <button

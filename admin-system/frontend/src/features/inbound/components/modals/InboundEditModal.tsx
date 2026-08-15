@@ -1,10 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Save, Edit3, DollarSign, Calendar, CreditCard, Phone, Link as LinkIcon } from 'lucide-react';
-import PaperSpecForm from '@features/inventory/components/forms/category-specs/PaperSpecForm';
-import InkSpecForm from '@features/inventory/components/forms/category-specs/InkSpecForm';
-import PrinterSpecForm from '@features/inventory/components/forms/category-specs/PrinterSpecForm';
-import GenericSpecForm from '@features/inventory/components/forms/category-specs/GenericSpecForm';
+import DynamicSpecForm from '@features/inventory/components/forms/DynamicSpecForm';
 
 interface InboundEditModalProps {
   item: any;
@@ -89,15 +86,7 @@ export default function InboundEditModal({ item, onSave, onClose }: InboundEditM
             <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">
               {currentLang === 'lo' ? 'ສະເປັກທາງເຕັກນິກ (Category Technical Specs)' : 'Category Technical Specs'}
             </h4>
-            {category === 'PAPER' || category === 'MATERIAL' ? (
-              <PaperSpecForm formData={formData} onChange={handleSpecChange} />
-            ) : category === 'INK' ? (
-              <InkSpecForm formData={formData} onChange={handleSpecChange} />
-            ) : category === 'PRINTER' ? (
-              <PrinterSpecForm formData={formData} onChange={handleSpecChange} showPurchasingSection={false} />
-            ) : (
-              <GenericSpecForm formData={formData} onChange={handleSpecChange} />
-            )}
+            <DynamicSpecForm categoryType={category} formData={formData} onChange={handleSpecChange} />
           </div>
 
           {/* Purchasing Info & Financials */}

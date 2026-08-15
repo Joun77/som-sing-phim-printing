@@ -22,9 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import { sampleInboundData } from '../data/sampleInboundData';
 import ImportForm from './ImportForm';
-import PaperSpecDetail from '@features/inventory/components/details/PaperSpecDetail';
-import InkSpecDetail from '@features/inventory/components/details/InkSpecDetail';
-import PrinterSpecDetail from '@features/inventory/components/details/PrinterSpecDetail';
+import DynamicSpecDetail from '@features/inventory/components/details/DynamicSpecDetail';
 import ProcurementDetailCard from '@features/inventory/components/details/ProcurementDetailCard';
 import InboundEditModal from './modals/InboundEditModal';
 import type { InboundEntry } from '../types';
@@ -997,34 +995,7 @@ export default function InboundManagement() {
                     <Microchip className="w-4 h-4 text-purple-600" />
                     <span>{currentLang === 'lo' ? 'ສະເປັກທາງເຕັກນິກ (ERP Technical Specs)' : 'ERP Technical Specs'}</span>
                   </h3>
-                  {(() => {
-                    const category = (selectedDrawerItem.category || '').toUpperCase();
-                    if (category === 'PAPER' || category === 'MATERIAL') {
-                      return <PaperSpecDetail item={selectedDrawerItem} currentLang={currentLang} />;
-                    }
-                    if (category === 'INK') {
-                      return <InkSpecDetail item={selectedDrawerItem} currentLang={currentLang} />;
-                    }
-                    if (category === 'PRINTER') {
-                      return <PrinterSpecDetail item={selectedDrawerItem} currentLang={currentLang} />;
-                    }
-                    const specs = selectedDrawerItem.specs || selectedDrawerItem.technical_specs || {};
-                    return (
-                      <div className="grid grid-cols-2 gap-4 text-xs font-medium">
-                        {Object.entries(specs).map(([key, val]) => {
-                          if (!val || typeof val === 'object' || key === 'tariffRate' || key === 'origin' || key === 'freightCharge') return null;
-                          return (
-                            <div key={key}>
-                              <span className="text-slate-400 block text-[11px] font-semibold">
-                                {key.replace(/([A-Z])/g, ' $1')}:
-                              </span>
-                              <span className="text-slate-800 font-bold">{String(val)}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
+                  <DynamicSpecDetail item={selectedDrawerItem} currentLang={currentLang} />
                 </div>
 
                 {/* Document Vault Attachments */}

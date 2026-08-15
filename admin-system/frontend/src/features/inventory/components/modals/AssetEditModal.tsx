@@ -1,10 +1,7 @@
 import React, { useState } from 'react';
 import { X, Edit3, Save } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import PrinterSpecForm from '../forms/category-specs/PrinterSpecForm';
-import InkSpecForm from '../forms/category-specs/InkSpecForm';
-import PaperSpecForm from '../forms/category-specs/PaperSpecForm';
-import GenericSpecForm from '../forms/category-specs/GenericSpecForm';
+import DynamicSpecForm from '../forms/DynamicSpecForm';
 
 export default function AssetEditModal({ item, onSave, onClose }: { item: any; onSave: (updated: any) => void; onClose: () => void }) {
   const { i18n, t } = useTranslation();
@@ -40,15 +37,7 @@ export default function AssetEditModal({ item, onSave, onClose }: { item: any; o
   };
 
   const renderCategorySpecForm = () => {
-    const cat = (category || item.category || '').toLowerCase();
-    if (cat.includes('printer')) {
-      return <PrinterSpecForm formData={categorySpecs} onChange={handleSpecChange} />;
-    } else if (cat.includes('ink')) {
-      return <InkSpecForm formData={categorySpecs} onChange={handleSpecChange} />;
-    } else if (cat.includes('paper')) {
-      return <PaperSpecForm formData={categorySpecs} onChange={handleSpecChange} />;
-    }
-    return <GenericSpecForm formData={categorySpecs} onChange={handleSpecChange} />;
+    return <DynamicSpecForm categoryType={category || item.category} formData={categorySpecs} onChange={handleSpecChange} />;
   };
 
   return (
