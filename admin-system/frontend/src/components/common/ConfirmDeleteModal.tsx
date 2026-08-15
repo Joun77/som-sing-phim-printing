@@ -55,7 +55,7 @@ export default function ConfirmDeleteModal({
             {title || (currentLang === 'lo' ? 'ຢືນຢັນການລຶບລາຍການ' : 'Confirm Deletion')}
           </h3>
           <p className="text-xs font-semibold text-slate-500 leading-relaxed">
-            {description || (currentLang === 'lo' ? 'ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບລາຍການນີ້? ຂໍ້ມູນທີ່ລຶບແລ້ວจะไม่สามารถกู้คืนกลับมาได้' : 'Are you sure you want to delete this record? This action cannot be undone.')}
+            {description || (currentLang === 'lo' ? 'ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບລາຍການນີ້? ຂໍ້ມູນທີ່ລຶບແລ້ວຈະບໍ່ສາມາດກູ້ຄືນໄດ້' : 'Are you sure you want to delete this record? This action cannot be undone.')}
           </p>
           {itemName && (
             <div className="mt-3 p-3 rounded-2xl bg-rose-50/60 border border-rose-100 font-mono text-xs font-bold text-rose-900 truncate">

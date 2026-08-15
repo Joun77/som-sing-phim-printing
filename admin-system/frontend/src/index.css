@@ -3,7 +3,7 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: 'Noto Sans Lao', 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', 'Noto Sans Lao', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
   --color-primary-navy: #1E3A8A;
   --color-accent-sky: #0284C7;
@@ -16,6 +16,7 @@ body {
   background-color: var(--color-slate-bg);
   color: #1E293B;
   overflow-x: hidden;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
@@ -23,6 +24,11 @@ body {
 
 .font-mono {
   font-family: var(--font-mono);
+}
+
+.tabular-numbers {
+  font-variant-numeric: tabular-nums;
+  font-family: 'JetBrains Mono', 'Plus Jakarta Sans', monospace;
 }
 
 /* Custom Scrollbars */

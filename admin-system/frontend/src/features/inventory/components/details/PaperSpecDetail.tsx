@@ -10,7 +10,7 @@ export default function PaperSpecDetail({ item, currentLang }: { item: any; curr
         <span className="text-slate-400 block text-[11px] font-semibold">
           {currentLang === 'lo' ? 'ຮູບແບບ (Paper Format):' : 'Paper Format:'}
         </span>
-        <span className="text-slate-800 font-bold">{isSheet ? 'Sheet (แผ่น)' : 'Roll (ม้วน)'}</span>
+        <span className="text-slate-800 font-bold">{isSheet ? (currentLang === 'lo' ? 'Sheet (ແຜ່ນ)' : 'Sheet') : (currentLang === 'lo' ? 'Roll (ມ້ວນ)' : 'Roll')}</span>
       </div>
 
       {isSheet ? (
@@ -67,7 +67,7 @@ export default function PaperSpecDetail({ item, currentLang }: { item: any; curr
       {(specs.paperSurface || specs.surfaceFinish) && (
         <div>
           <span className="text-slate-400 block text-[11px] font-semibold">
-            {currentLang === 'lo' ? 'ผิวสัมผัส (Surface Finish):' : 'Surface Finish:'}
+            {currentLang === 'lo' ? 'ຜິວສຳພັດ (Surface Finish):' : 'Surface Finish:'}
           </span>
           <span className="text-slate-800 font-bold">{specs.paperSurface || specs.surfaceFinish}</span>
         </div>

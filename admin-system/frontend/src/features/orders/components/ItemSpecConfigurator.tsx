@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { calculateBackendPricing, PricingCalculationResult } from '@features/pricing';
 import { 
   Sliders, 
   Copy, 
@@ -14,7 +15,8 @@ import {
   Sparkles,
   Info,
   Maximize2,
-  Zap
+  Zap,
+  RefreshCw
 } from 'lucide-react';
 
 export function calculateItemCosting(item, inventory, equipment) {
@@ -276,6 +278,78 @@ export default function ItemSpecConfigurator({
     manualUnitPrice: null,
     ...item
   });
+
+  // State for Backend Go Pricing Engine Integration
+  const [backendPricing, setBackendPricing] = useState<PricingCalculationResult | null>(null);
+  const [isCalculatingBackend, setIsCalculatingBackend] = useState<boolean>(false);
+  const [backendError, setBackendError] = useState<string | null>(null);
+
+  // Debounced effect calling Go Backend Pricing Engine API (/api/pricing/calculate)
+  useEffect(() => {
+    let isMounted = true;
+    const timer = setTimeout(() => {
+      setIsCalculatingBackend(true);
+      setBackendError(null);
+
+      const localCosting = calculateItemCosting(tempItem, inventory, equipment);
+      const setupCost = Number(tempItem.setupCost !== undefined ? tempItem.setupCost : 50000);
+      const finishingCost = localCosting.cuttingCost + localCosting.laminationCost + localCosting.bindingCost + localCosting.customFinishingCost;
+
+      calculateBackendPricing({
+        job_name: tempItem.name || 'Print Job',
+        quantity: Number(tempItem.quantity || 1),
+        paper_sku: tempItem.paperId || 'default-paper',
+        paper_cost_per_unit: localCosting.paperUnitCost,
+        paper_format: tempItem.mediaType === 'Roll-fed' ? 'roll' : 'sheet',
+        setup_cost: setupCost,
+        finishing_cost: finishingCost,
+        base_profit_pct: Number(tempItem.targetMarginPercent || 30),
+        ink_coverage_k_percent: Number(tempItem.avgCoverageK !== undefined ? tempItem.avgCoverageK : 5),
+        ink_coverage_cmy_percent: Number(tempItem.avgCoverageCMY !== undefined ? tempItem.avgCoverageCMY : 10),
+        ink_cost_k_per_ml: localCosting.inkCostPerMl,
+        ink_cost_cmy_per_ml: localCosting.inkCostPerMl,
+        job_width: Number(tempItem.jobWidth || 210),
+        job_height: Number(tempItem.jobHeight || 297),
+        overhead_percent: Number(tempItem.overheadPercent || 15) / 100,
+        spoilage_percent: Number(tempItem.spoilageRate || 5) / 100,
+        target_margin_percent: Number(tempItem.targetMarginPercent || 30) / 100,
+        target_currency: 'LAK'
+      })
+        .then(result => {
+          if (isMounted) {
+            setBackendPricing(result);
+            setIsCalculatingBackend(false);
+          }
+        })
+        .catch(err => {
+          if (isMounted) {
+            setBackendError(err.message || 'Go Pricing Engine Offline');
+            setIsCalculatingBackend(false);
+          }
+        });
+    }, 400);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [
+    tempItem.quantity,
+    tempItem.mediaType,
+    tempItem.paperId,
+    tempItem.printerId,
+    tempItem.jobWidth,
+    tempItem.jobHeight,
+    tempItem.setupCost,
+    tempItem.avgCoverageK,
+    tempItem.avgCoverageCMY,
+    tempItem.targetMarginPercent,
+    tempItem.overheadPercent,
+    tempItem.spoilageRate,
+    tempItem.laminationType,
+    tempItem.bindingType,
+    tempItem.customFinishingOptions
+  ]);
 
   // State for Custom Finishing options form
   const [customName, setCustomName] = useState('');
@@ -1055,6 +1129,35 @@ export default function ItemSpecConfigurator({
         {/* Column 2: Sticky Live Internal Cost Breakdown Sidebar (Right Panel - LIGHT THEME) */}
         <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-6">
           <div className="bg-white border border-slate-200 p-6 sm:p-7 rounded-3xl shadow-sm space-y-6">
+            {/* Go Backend Pricing Engine Status Banner */}
+            <div className={`p-3.5 rounded-2xl border flex items-center justify-between text-xs font-bold transition ${
+              isCalculatingBackend 
+                ? 'bg-sky-50 text-sky-800 border-sky-200' 
+                : backendPricing 
+                ? 'bg-emerald-50/80 text-emerald-900 border-emerald-200' 
+                : 'bg-amber-50 text-amber-900 border-amber-200'
+            }`}>
+              <div className="flex items-center gap-2">
+                {isCalculatingBackend ? (
+                  <RefreshCw className="w-4 h-4 text-sky-600 animate-spin" />
+                ) : (
+                  <Zap className="w-4 h-4 text-emerald-600" />
+                )}
+                <span>
+                  {isCalculatingBackend
+                    ? 'กำลังคำนวณผ่าน Go Pricing Engine...'
+                    : backendPricing
+                    ? 'Go Pricing Engine: Connected ✅'
+                    : `Engine Status: ${backendError || 'Offline'}`}
+                </span>
+              </div>
+              {backendPricing && backendPricing.volume_discount_percent > 0 && (
+                <span className="px-2.5 py-1 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-2xs">
+                  ⚡ Discount -{backendPricing.volume_discount_percent}% (Margin)
+                </span>
+              )}
+            </div>
+
             <div className="space-y-5">
               <div className="flex justify-between items-center border-b border-slate-100 pb-3">
                 <span className="font-black text-xs uppercase tracking-wider text-sky-600 flex items-center gap-1.5">
@@ -1070,70 +1173,93 @@ export default function ItemSpecConfigurator({
               <div className="space-y-3 text-xs font-semibold text-slate-700">
                 {/* 1. Paper Cost */}
                 <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
-                  <span className="text-slate-600 font-bold">1. ต้นทุนกระดาษ (Paper Cost):</span>
-                  <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.totalPaperCost)}</span>
+                  <span className="text-slate-600 font-bold">1. ຕົ້ນທຶນເຈ້ຍ (Paper Cost):</span>
+                  <span className="font-sans font-black text-slate-900 text-sm">
+                    {formatLAK(backendPricing ? backendPricing.paper_cost : costing.totalPaperCost)}
+                  </span>
                 </div>
 
                 {/* 2. Black Ink Cost */}
                 <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
-                  <span className="text-slate-600 font-bold">2. ต้นทุนหมึกดำ (Black Ink K):</span>
-                  <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.totalInkCostK)}</span>
+                  <span className="text-slate-600 font-bold">2. ຕົ້ນທຶນໝຶກດຳ (Black Ink K):</span>
+                  <span className="font-sans font-black text-slate-900 text-sm">
+                    {formatLAK(backendPricing ? backendPricing.ink_cost_k : costing.totalInkCostK)}
+                  </span>
                 </div>
 
                 {/* 3. Color Ink Cost */}
                 {!costing.isMonochrome && (
                   <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
-                    <span className="text-slate-600 font-bold">3. ต้นทุนหมึกสี (Color Ink CMY):</span>
-                    <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.totalInkCostCMY)}</span>
+                    <span className="text-slate-600 font-bold">3. ຕົ້ນທຶນໝຶກສີ (Color Ink CMY):</span>
+                    <span className="font-sans font-black text-slate-900 text-sm">
+                      {formatLAK(backendPricing ? backendPricing.ink_cost_cmy : costing.totalInkCostCMY)}
+                    </span>
                   </div>
                 )}
 
                 {/* 4. Machine Depreciation & Maintenance */}
                 <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-100 space-y-1">
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-600 font-bold">4. ค่าเสื่อม & บำรุงรักษาเครื่องพิมพ์:</span>
-                    <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.depreciationCost + costing.maintenanceCost)}</span>
+                    <span className="text-slate-600 font-bold">4. ຄ່າເສື່ອມ & ບຳລຸງຮັກສາເຄື່ອງພິມ:</span>
+                    <span className="font-sans font-black text-slate-900 text-sm">
+                      {formatLAK(backendPricing ? (backendPricing.depreciation_cost + backendPricing.maintenance_cost) : (costing.depreciationCost + costing.maintenanceCost))}
+                    </span>
                   </div>
                   <div className="text-[10px] text-slate-500 font-mono font-normal">
-                    Depreciation: {formatLAK(costing.depreciationCost)} | Maint: {formatLAK(costing.maintenanceCost)}
+                    Depreciation: {formatLAK(backendPricing ? backendPricing.depreciation_cost : costing.depreciationCost)} | Maint: {formatLAK(backendPricing ? backendPricing.maintenance_cost : costing.maintenanceCost)}
                   </div>
                 </div>
 
                 {/* 5. Finishing & Custom Post-Print Process */}
                 <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-100 space-y-1">
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-600 font-bold">5. งานหลังพิมพ์ & บริการเสริม:</span>
-                    <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.cuttingCost + costing.laminationCost + costing.bindingCost + costing.customFinishingCost)}</span>
+                    <span className="text-slate-600 font-bold">5. ວຽກຫຼັງພິມ & ບໍລິການເສີມ (Setup + Finishing):</span>
+                    <span className="font-sans font-black text-slate-900 text-sm">
+                      {formatLAK(backendPricing ? (backendPricing.setup_cost + backendPricing.finishing_cost) : (costing.cuttingCost + costing.laminationCost + costing.bindingCost + costing.customFinishingCost))}
+                    </span>
                   </div>
                   <div className="text-[10px] text-slate-500 font-mono font-normal">
-                    Cutting: {formatLAK(costing.cuttingCost)} | Lamination: {formatLAK(costing.laminationCost)} | Binding: {formatLAK(costing.bindingCost)} | Custom: {formatLAK(costing.customFinishingCost)}
+                    SetupCost: {formatLAK(backendPricing ? backendPricing.setup_cost : 50000)} | Finishing: {formatLAK(backendPricing ? backendPricing.finishing_cost : (costing.cuttingCost + costing.laminationCost + costing.bindingCost + costing.customFinishingCost))}
                   </div>
                 </div>
 
                 {/* Direct Material & Machine Cost Banner */}
                 <div className="bg-slate-100/80 p-3.5 rounded-2xl border border-slate-200 flex justify-between items-center text-slate-900 font-black text-xs">
                   <span>Direct Cost Subtotal:</span>
-                  <span className="font-sans text-sky-700">{formatLAK(costing.directCost)}</span>
+                  <span className="font-sans text-sky-700">
+                    {formatLAK(backendPricing ? backendPricing.direct_cost : costing.directCost)}
+                  </span>
                 </div>
 
                 {/* 6. Overhead Cost */}
                 <div className="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
-                  <span className="text-slate-600 font-bold">6. โสหุ้ยร้าน (Overhead Cost {tempItem.overheadPercent}%):</span>
-                  <span className="font-sans font-black text-slate-900 text-sm">{formatLAK(costing.overheadCost)}</span>
+                  <span className="text-slate-600 font-bold">6. ໂສ້ຫຸ້ຍຮ້ານ (Overhead Cost {tempItem.overheadPercent}%):</span>
+                  <span className="font-sans font-black text-slate-900 text-sm">
+                    {formatLAK(backendPricing ? backendPricing.overhead_cost : costing.overheadCost)}
+                  </span>
                 </div>
 
                 {/* Total Cost (Direct + Overhead) */}
                 <div className="bg-slate-200/80 p-4 rounded-2xl border border-slate-300 flex justify-between items-center text-slate-900 font-black text-xs">
-                  <span>ต้นทุนรวม (Total Cost):</span>
-                  <span className="text-lg font-sans text-slate-900">{formatLAK(costing.totalCost)}</span>
+                  <span>ຕົ້ນທຶນລວມ (Total Internal Cost):</span>
+                  <span className="text-lg font-sans text-slate-900">
+                    {formatLAK(backendPricing ? backendPricing.total_cost : costing.totalCost)}
+                  </span>
                 </div>
               </div>
 
               {/* Profit Margin Slider & Pricing */}
               <div className="space-y-3 pt-3 border-t border-slate-100">
                 <div className="flex justify-between items-center text-xs font-bold">
-                  <span className="text-slate-600">Profit Margin (%):</span>
-                  <span className="text-emerald-600 font-black font-sans text-base">{tempItem.targetMarginPercent}%</span>
+                  <span className="text-slate-600">Base Profit Margin (%):</span>
+                  <span className="text-emerald-600 font-black font-sans text-base">
+                    {tempItem.targetMarginPercent}%
+                    {backendPricing && backendPricing.volume_discount_percent > 0 && (
+                      <span className="text-xs text-emerald-800 font-semibold block text-right">
+                        (Effective Margin: {(tempItem.targetMarginPercent * (1 - backendPricing.volume_discount_percent / 100)).toFixed(1)}%)
+                      </span>
+                    )}
+                  </span>
                 </div>
                 <input
                   type="range"
@@ -1146,12 +1272,16 @@ export default function ItemSpecConfigurator({
 
                 <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 space-y-2 mt-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-emerald-800">ລາຄາສິນຄ້າລວມ (Item Subtotal):</span>
-                    <span className="text-2xl font-black text-emerald-700 font-sans">{formatLAK(costing.finalPrice)}</span>
+                    <span className="text-xs font-bold text-emerald-800">ລາຄາສິນຄ້າລວມ (Item Sale Price):</span>
+                    <span className="text-2xl font-black text-emerald-700 font-sans">
+                      {formatLAK(backendPricing ? backendPricing.sale_price : costing.finalPrice)}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center text-xs text-emerald-800/80 font-bold border-t border-emerald-200/60 pt-2 mt-1">
                     <span>ລາຄາສະເລ່ຍຕໍ່ໜ່ວຍ (Unit Price):</span>
-                    <span className="font-sans font-black text-emerald-900">{formatLAK(costing.unitPrice)} / ຊິ້ນ</span>
+                    <span className="font-sans font-black text-emerald-900">
+                      {formatLAK(backendPricing ? backendPricing.unit_price : costing.unitPrice)} / ຊິ້ນ
+                    </span>
                   </div>
                 </div>
               </div>

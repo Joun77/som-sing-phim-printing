@@ -63,8 +63,8 @@ export default function PaperSpecForm({ formData, onChange }: { formData: any; o
           }} 
           className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
         >
-          <option value="Sheet">Sheet (แผ่น)</option>
-          <option value="Roll">Roll (ม้วน)</option>
+          <option value="Sheet">Sheet</option>
+          <option value="Roll">Roll</option>
         </select>
       </div>
 

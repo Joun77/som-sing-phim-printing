@@ -91,7 +91,7 @@ export default function PrinterSpecDetail({ item, currentLang }: { item: any; cu
       {price && (
         <div>
           <span className="text-slate-400 block text-[11px] font-semibold">
-            {currentLang === 'lo' ? 'มูลค่าเครื่อง (Asset Value):' : 'Asset Price:'}
+            {currentLang === 'lo' ? 'ມູນຄ່າເຄື່ອງ (Asset Value):' : 'Asset Price:'}
           </span>
           <span className="text-emerald-700 font-mono font-bold">{Number(price).toLocaleString()} LAK</span>
         </div>
@@ -142,7 +142,7 @@ export default function PrinterSpecDetail({ item, currentLang }: { item: any; cu
       {Array.isArray(components) && components.length > 0 && (
         <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
           <span className="text-slate-700 block text-[11px] font-bold uppercase tracking-wider">
-            SLA Component Health Wear (สุขภาพชิ้นส่วนอะไหล่):
+            {currentLang === 'lo' ? 'SLA Component Health Wear (ສຸຂະພາບຊິ້ນສ່ວນອະໄຫຼ່):' : 'SLA Component Health Wear:'}
           </span>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {components.map((comp: any, idx: number) => (

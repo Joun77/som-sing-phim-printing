@@ -210,12 +210,12 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
               <h4 className="text-sm font-extrabold text-white">
                 {currentLang === 'lo' 
                   ? 'ຂໍ້ມູນສະເປັກມາດຕະຖານອັດຕາສິ້ນເປືອງໝຶກໂຮງງານ OEM (Factory Baseline Specs)' 
-                  : 'ข้อมูลสเปคมาตรฐานอัตราสิ้นเปลืองหมึกโรงงาน OEM (Factory Baseline Specs)'}
+                  : 'OEM Factory Baseline Specs'}
               </h4>
               <p className="text-[10px] text-slate-400 font-semibold">
                 {currentLang === 'lo'
                   ? 'ນຳໃຊ້ອັດຕາສິ້ນເປືອງ ml/ແຜ່ນ ຈາກສະເປັກໂຮງງານ ຄູນກັບລາຄາໝຶກທີ່ຊື້ຈິງໃນສາງ'
-                  : 'ใช้อัตราการสิ้นเปลือง ml/แผ่น จากสเปคโรงงาน เพื่อนำไปคูณกับราคาหมึกที่สั่งซื้อจริงในคลัง'}
+                  : 'Multiply factory baseline ml/page rates by real inventory purchase prices'}
               </p>
             </div>
           </div>
@@ -369,7 +369,7 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
           className="flex items-center gap-2 px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-xs rounded-2xl shadow-md shadow-sky-600/20 transition active:scale-95 cursor-pointer shrink-0"
         >
           <RefreshCw className="w-4 h-4" />
-          <span>{currentLang === 'lo' ? 'ອັບເດັດຕົ້ນທຶນหมึกเข้า Quotation Engine' : 'Sync Actual Cost to Quotation Engine'}</span>
+          <span>{currentLang === 'lo' ? 'ອັບເດດຕົ້ນທຶນໝຶກເຂົ້າ Quotation Engine' : 'Sync Actual Cost to Quotation Engine'}</span>
         </button>
       </div>
     </div>

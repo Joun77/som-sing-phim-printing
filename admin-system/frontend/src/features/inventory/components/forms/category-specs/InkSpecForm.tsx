@@ -91,7 +91,7 @@ export default function InkSpecForm({ formData, onChange }: { formData: any; onC
             onChange={(e) => handleFieldChange(setIsCompatible, 'isCompatible', e.target.checked)} 
             className="w-4 h-4 rounded text-sky-600 focus:ring-sky-500" 
           />
-          <span>{isLao ? 'ໝຶກທຽບເທົ່າ (Compatible Ink) / OEM หมึกแท้' : 'Compatible Ink (หมึกเทียบ)'}</span>
+          <span>{isLao ? 'ໝຶກທຽບເທົ່າ (Compatible Ink)' : 'Compatible Ink (OEM Alternative)'}</span>
         </label>
       </div>
     </div>

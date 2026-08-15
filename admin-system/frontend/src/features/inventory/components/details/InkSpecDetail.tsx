@@ -54,10 +54,10 @@ export default function InkSpecDetail({ item, currentLang }: { item: any; curren
       {isCompatible !== undefined && (
         <div>
           <span className="text-slate-400 block text-[11px] font-semibold">
-            {currentLang === 'lo' ? 'ມາດຕະຖານหมึก (Ink Spec Standard):' : 'Ink Standard:'}
+            {currentLang === 'lo' ? 'ມາດຕະຖານໝຶກ (Ink Spec Standard):' : 'Ink Standard:'}
           </span>
           <span className="text-emerald-600 font-extrabold">
-            {isCompatible ? 'Compatible (หมึกเทียบ)' : 'OEM (หมึกแท้)'}
+            {isCompatible ? (currentLang === 'lo' ? 'Compatible (ໝຶກທຽບ)' : 'Compatible') : (currentLang === 'lo' ? 'OEM (ໝຶກແທ້)' : 'OEM')}
           </span>
         </div>
       )}
