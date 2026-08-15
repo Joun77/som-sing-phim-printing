@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useApp } from '../../context/AppContext';
+import { useApp } from '@store/AppContext';
 import { useTranslation } from 'react-i18next';
 import { X, Coins, Save, AlertCircle, CalendarClock, ArrowDownUp } from 'lucide-react';
 

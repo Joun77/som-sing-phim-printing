@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '@store/AppContext';
 import { useTranslation } from 'react-i18next';
 import { 
   LayoutDashboard, 
@@ -64,10 +64,8 @@ export default function Sidebar() {
     {
       id: 'orders',
       labelKey: 'sidebar.orders',
-      subText: 'Launch Order Management Web App',
+      subText: 'Order Management',
       icon: ShoppingCart,
-      isExternal: true,
-      externalUrl: '/orders.html',
     },
     {
       id: 'inbound',

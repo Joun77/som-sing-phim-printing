@@ -1,20 +1,20 @@
 import type { Dispatch, SetStateAction } from 'react';
 
-export * from './types/inventory';
-export * from './types/equipment';
-export * from './types/customers';
-export * from './types/orders';
-export * from './types/hr';
-export * from './types/inbound';
-export * from './types/quotation';
+export * from './features/inventory/types';
+export * from './features/equipment/types';
+export * from './features/customers/types';
+export * from './features/orders/types';
+export * from './features/hr/types';
+export * from './features/inbound/types';
+export * from './features/pricing/types';
 
-import type { InventoryItem, Offcut, SpoilageLog } from './types/inventory';
-import type { Equipment, MachineStatusEntry, DowntimeLog, PrinterColorLink } from './types/equipment';
-import type { Customer } from './types/customers';
-import type { Order, Delivery } from './types/orders';
-import type { Employee } from './types/hr';
-import type { InboundEntry, PurchaseOrder, PurchaseRequisition } from './types/inbound';
-import type { Quotation } from './types/quotation';
+import type { InventoryItem, Offcut, SpoilageLog } from './features/inventory/types';
+import type { Equipment, MachineStatusEntry, DowntimeLog, PrinterColorLink } from './features/equipment/types';
+import type { Customer } from './features/customers/types';
+import type { Order, Delivery } from './features/orders/types';
+import type { Employee } from './features/hr/types';
+import type { InboundEntry, PurchaseOrder, PurchaseRequisition } from './features/inbound/types';
+import type { Quotation } from './features/pricing/types';
 
 export interface ExchangeRate {
   buy: number;
@@ -141,6 +141,12 @@ export interface AppContextValue {
   addSpoilageLog: (...args: any[]) => any;
   addStock: (...args: any[]) => any;
   addEquipment: (...args: any[]) => any;
+  updateEquipment?: (...args: any[]) => any;
+  deleteEquipment?: (...args: any[]) => any;
+  meterReadings?: any[];
+  addMeterReading?: (...args: any[]) => any;
+  addDowntimeLog?: (...args: any[]) => any;
+  updateDowntimeLog?: (...args: any[]) => any;
 
   addInboundEntry: (...args: any[]) => any;
   printerColorLinks: PrinterColorLink[];
@@ -155,4 +161,5 @@ export interface AppContextValue {
   resetEquipmentComponent: (...args: any[]) => any;
   updateEquipmentMaintenance: (...args: any[]) => any;
   resetToDefaultData: (...args: any[]) => any;
+  [key: string]: any;
 }

@@ -1,16 +1,16 @@
 import React from 'react';
-import { AppProvider, useApp } from './context/AppContext';
-import Sidebar from './components/Sidebar';
-import DashboardOverview from './components/DashboardOverview';
-import InventoryManagement from './components/inventory/InventoryManagement';
-import EquipmentOverhead from './components/equipment/EquipmentManagement';
-import InboundManagement from './components/inbound/InboundManagement';
-import CustomerManagement from './components/customers/CustomerManagement';
-import CustomerOrders from './components/orders/CustomerOrders';
-import QuotationManager from './components/QuotationManager';
-import HistoryAnalytics from './components/HistoryAnalytics';
-import EmployeeManagement from './components/hr/EmployeeManagement';
-import CurrencyRatesModal from './components/common/CurrencyRatesModal';
+import { AppProvider, useApp } from '@store/AppContext';
+import Sidebar from '@components/Sidebar';
+import { DashboardOverview } from '@features/dashboard';
+import { InventoryManagement } from '@features/inventory';
+import { EquipmentManagement as EquipmentOverhead } from '@features/equipment';
+import { InboundManagement } from '@features/inbound';
+import { CustomerManagement } from '@features/customers';
+import { CustomerOrders } from '@features/orders';
+import { QuotationManager } from '@features/pricing';
+import { HistoryAnalytics } from '@features/analytics';
+import { EmployeeManagement } from '@features/hr';
+import CurrencyRatesModal from '@components/common/CurrencyRatesModal';
 import { useTranslation } from 'react-i18next';
 import { 
   CheckCircle2, 

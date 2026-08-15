@@ -317,4 +317,86 @@ func TestGrandTotalPipeline(t *testing.T) {
 	})
 }
 
+// TestSetupCostAndVolumeDiscounts tests the 3 required scenarios:
+// 1. Single sheet (Quantity = 1): Full SetupCost added, 0% volume discount on margin.
+// 2. Medium volume (Quantity = 500): Volume Discount Step 1 (10% reduction on margin).
+// 3. Large volume (Quantity = 1000): Volume Discount Step 2 (20% reduction on margin).
+func TestSetupCostAndVolumeDiscounts(t *testing.T) {
+	t.Run("Scenario1_SingleSheet_SetupCostFull", func(t *testing.T) {
+		req := baseReq()
+		req.Quantity = 1
+		req.SetupCost = 50000.0   // 50,000 LAK setup fee
+		req.FinishingCost = 200.0  // 200 LAK per unit finishing
+		req.BaseProfitPct = 30.0   // 30% base profit
+
+		res, err := CalculateJobPricing(req)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		if res.SetupCost != 50000.0 {
+			t.Errorf("Expected SetupCost 50000.0, got %v", res.SetupCost)
+		}
+		if res.FinishingCost != 200.0 {
+			t.Errorf("Expected FinishingCost 200.0 for 1 qty, got %v", res.FinishingCost)
+		}
+		if res.VolumeDiscountPercent != 0.0 {
+			t.Errorf("Expected VolumeDiscountPercent 0.0 for qty=1, got %v", res.VolumeDiscountPercent)
+		}
+		if math.Abs(res.ProfitMargin-0.30) > 0.001 {
+			t.Errorf("Expected ProfitMargin 0.30 for qty=1, got %v", res.ProfitMargin)
+		}
+	})
+
+	t.Run("Scenario2_VolumeDiscountStep1_500Sheets", func(t *testing.T) {
+		req := baseReq()
+		req.Quantity = 500
+		req.SetupCost = 50000.0
+		req.FinishingCost = 200.0
+		req.BaseProfitPct = 30.0
+
+		res, err := CalculateJobPricing(req)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		if res.VolumeDiscountPercent != 10.0 {
+			t.Errorf("Expected VolumeDiscountPercent 10.0 for qty=500, got %v", res.VolumeDiscountPercent)
+		}
+		// Effective margin = 30% * (1 - 0.10) = 27% (0.27)
+		expectedMargin := 0.27
+		if math.Abs(res.ProfitMargin-expectedMargin) > 0.001 {
+			t.Errorf("Expected effective ProfitMargin %v for qty=500, got %v", expectedMargin, res.ProfitMargin)
+		}
+		if res.UnitPrice <= 0 {
+			t.Errorf("Expected valid UnitPrice, got %v", res.UnitPrice)
+		}
+	})
+
+	t.Run("Scenario3_VolumeDiscountStep2_1000Sheets", func(t *testing.T) {
+		req := baseReq()
+		req.Quantity = 1000
+		req.SetupCost = 50000.0
+		req.FinishingCost = 200.0
+		req.BaseProfitPct = 30.0
+
+		res, err := CalculateJobPricing(req)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		if res.VolumeDiscountPercent != 20.0 {
+			t.Errorf("Expected VolumeDiscountPercent 20.0 for qty=1000, got %v", res.VolumeDiscountPercent)
+		}
+		// Effective margin = 30% * (1 - 0.20) = 24% (0.24)
+		expectedMargin := 0.24
+		if math.Abs(res.ProfitMargin-expectedMargin) > 0.001 {
+			t.Errorf("Expected effective ProfitMargin %v for qty=1000, got %v", expectedMargin, res.ProfitMargin)
+		}
+		if res.UnitPrice <= 0 {
+			t.Errorf("Expected valid UnitPrice, got %v", res.UnitPrice)
+		}
+	})
+}
+
 

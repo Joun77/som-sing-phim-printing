@@ -21,6 +21,11 @@ type CalculationRequest struct {
 	PaperFormat      string  `json:"paper_format"`        // "sheet" | "roll"
 	SheetsPerPack    int     `json:"sheets_per_pack"`     // Sheets per pack/ream (default 500)
 
+	// Setup & Finishing Costs
+	SetupCost     float64 `json:"setup_cost"`     // Fixed setup cost
+	FinishingCost float64 `json:"finishing_cost"` // Variable finishing cost per unit
+	BaseProfitPct float64 `json:"base_profit_pct"` // Base profit percentage
+
 	// Roll-fed paper pricing
 	PaperRollPricePerM2 float64 `json:"paper_roll_price_per_m2"` // LAK per m² for roll paper
 
@@ -93,6 +98,8 @@ type CalculationResponse struct {
 	LaminationCost      float64 `json:"lamination_cost"`
 	BindingCost         float64 `json:"binding_cost"`
 	LaborCost           float64 `json:"labor_cost"`
+	SetupCost           float64 `json:"setup_cost"`
+	FinishingCost       float64 `json:"finishing_cost"`
 
 	// Aggregates
 	DirectCost      float64 `json:"direct_cost"`
@@ -110,10 +117,11 @@ type CalculationResponse struct {
 	UnitPrice      float64 `json:"unit_price"`      // GrandTotal / Quantity
 
 	// Meta
-	ProfitMargin  float64                 `json:"profit_margin"`
-	Currency      string                  `json:"currency"`
-	ExchangeRate  float64                 `json:"exchange_rate"`
-	CustomOptions []CustomFinishingOption `json:"custom_options"`
+	ProfitMargin          float64                 `json:"profit_margin"`
+	VolumeDiscountPercent float64                 `json:"volume_discount_percent"`
+	Currency              string                  `json:"currency"`
+	ExchangeRate          float64                 `json:"exchange_rate"`
+	CustomOptions         []CustomFinishingOption `json:"custom_options"`
 }
 
 // a4BaselineArea is the reference area (mm²) used for Paper Area Factor S (210 x 297 mm = 62370)
@@ -132,20 +140,43 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		overheadPercent = 0.15 // Default 15% overhead
 	}
 
-	// Handle target margin fallback to legacy markup margin
-	targetMargin := req.TargetMarginPercent
-	if targetMargin <= 0 && req.MarkupMargin > 0 {
-		targetMargin = req.MarkupMargin
+	// Handle profit margin & fallback
+	baseMargin := 0.0
+	if req.BaseProfitPct > 0 {
+		baseMargin = req.BaseProfitPct
+		if baseMargin > 1.0 {
+			baseMargin = baseMargin / 100.0
+		}
+	} else if req.TargetMarginPercent > 0 {
+		baseMargin = req.TargetMarginPercent
+		if baseMargin >= 100.0 {
+			baseMargin = baseMargin / 100.0
+		}
+	} else if req.MarkupMargin > 0 {
+		baseMargin = req.MarkupMargin
+		if baseMargin >= 100.0 {
+			baseMargin = baseMargin / 100.0
+		}
 	}
+
+	// Volume Discount Logic on Margin:
+	// Quantity >= 1000 -> 20% discount on margin
+	// Quantity >= 500  -> 10% discount on margin
+	volumeDiscountPct := 0.0
+	if req.Quantity >= 1000 {
+		volumeDiscountPct = 20.0
+	} else if req.Quantity >= 500 {
+		volumeDiscountPct = 10.0
+	}
+
+	effectiveMargin := baseMargin * (1.0 - volumeDiscountPct/100.0)
+
 	// Margin Protection Guard: prevent division by zero or negative pricing
-	if targetMargin >= 100.0 {
-		targetMargin = targetMargin / 100.0
+	if effectiveMargin >= 0.99 {
+		effectiveMargin = 0.99
 	}
-	if targetMargin >= 0.99 {
-		targetMargin = 0.99
-	}
-	if targetMargin < 0 {
-		targetMargin = 0.0
+	if effectiveMargin < 0 {
+		effectiveMargin = 0.0
 	}
 
 	// Job dimensions with A4 defaults
@@ -236,7 +267,11 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	depreciationCost := (machinePrice * (1.0 + maintRate/100.0) / lifePages) * areaFactor * float64(req.Quantity)
 	maintenanceCost := req.MaintenanceCostPerPage * areaFactor * float64(req.Quantity)
 
-	// ── 4. Custom Finishing options ────────────────────────────────────────────
+	// ── 4. Setup Cost & Finishing Cost ─────────────────────────────────────────
+	setupCost := req.SetupCost
+	finishingCost := req.FinishingCost * float64(req.Quantity)
+
+	// ── 5. Custom Finishing options ────────────────────────────────────────────
 	customFinishingCost := 0.0
 	totalSqMeters := (jobW / 1000.0) * (jobH / 1000.0) * float64(req.Quantity)
 	for _, opt := range req.CustomFinishingOptions {
@@ -250,7 +285,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		}
 	}
 
-	// ── 5. Standard Lamination & Binding ──────────────────────────────────────
+	// ── 6. Standard Lamination & Binding ──────────────────────────────────────
 	laminationCost := 0.0
 	if req.LaminationType != "none" && req.LaminationType != "" {
 		laminationCost = float64(req.Quantity) * req.LaminationCost
@@ -260,16 +295,16 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		bindingCost = float64(req.Quantity) * req.BindingCost
 	}
 
-	// ── 6. Labor Cost ─────────────────────────────────────────────────────────
+	// ── 7. Labor Cost ─────────────────────────────────────────────────────────
 	laborCost := req.LaborCostPerHour * req.EstimatedHours
 
-	// ── 7. Direct Cost → Overhead → Subtotal ──────────────────────────────────
+	// ── 8. Direct Cost → Overhead → Subtotal ──────────────────────────────────
 	directCost := paperCost + inkCost + depreciationCost + maintenanceCost +
-		customFinishingCost + laminationCost + bindingCost + laborCost
+		customFinishingCost + laminationCost + bindingCost + laborCost + setupCost + finishingCost
 	overheadCost := directCost * overheadPercent
 	subtotal := directCost + overheadCost
 
-	// ── 8. Spoilage ────────────────────────────────────────────────────────────
+	// ── 9. Spoilage ────────────────────────────────────────────────────────────
 	// Net Internal Cost = Subtotal × (1 + SpoilagePercent)
 	spoilagePercent := req.SpoilagePercent
 	if spoilagePercent < 0 {
@@ -278,10 +313,10 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	spoilageCost := subtotal * spoilagePercent
 	netInternalCost := subtotal + spoilageCost
 
-	// ── 9. Selling Price via Profit Margin: SP = NetCost / (1 − Margin) ───────
-	salePrice := netInternalCost / (1.0 - targetMargin)
+	// ── 10. Selling Price via Profit Margin: SP = NetCost / (1 − EffectiveMargin) ───────
+	salePrice := netInternalCost / (1.0 - effectiveMargin)
 
-	// ── 10. Discount & Tax → Grand Total ──────────────────────────────────────
+	// ── 11. Discount & Tax → Grand Total ──────────────────────────────────────
 	discountPercent := req.DiscountPercent
 	if discountPercent < 0 {
 		discountPercent = 0
@@ -296,7 +331,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	taxAmount := discountedPrice * taxPercent
 	grandTotal := discountedPrice + taxAmount
 
-	// ── 11. Multi-currency conversion ─────────────────────────────────────────
+	// ── 12. Multi-currency conversion ─────────────────────────────────────────
 	currency := req.TargetCurrency
 	if currency == "" {
 		currency = "LAK"
@@ -314,6 +349,8 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		laminationCost /= rate
 		bindingCost /= rate
 		laborCost /= rate
+		setupCost /= rate
+		finishingCost /= rate
 		directCost /= rate
 		overheadCost /= rate
 		subtotal /= rate
@@ -325,7 +362,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		grandTotal /= rate
 	}
 
-	// ── 12. Round to 2 decimal places ─────────────────────────────────────────
+	// ── 13. Round to 2 decimal places ─────────────────────────────────────────
 	r := roundToTwoDecimals
 	paperCost = r(paperCost)
 	inkCost = r(inkCost)
@@ -337,6 +374,8 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	laminationCost = r(laminationCost)
 	bindingCost = r(bindingCost)
 	laborCost = r(laborCost)
+	setupCost = r(setupCost)
+	finishingCost = r(finishingCost)
 	directCost = r(directCost)
 	overheadCost = r(overheadCost)
 	subtotal = r(subtotal)
@@ -349,34 +388,37 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	unitPrice := r(grandTotal / float64(req.Quantity))
 
 	return CalculationResponse{
-		JobName:             req.JobName,
-		Quantity:            req.Quantity,
-		AreaFactor:          r(areaFactor),
-		PaperCost:           paperCost,
-		InkCost:             inkCost,
-		InkCostK:            inkCostK,
-		InkCostCMY:          inkCostCMY,
-		DepreciationCost:    depreciationCost,
-		MaintenanceCost:     maintenanceCost,
-		CustomFinishingCost: customFinishingCost,
-		LaminationCost:      laminationCost,
-		BindingCost:         bindingCost,
-		LaborCost:           laborCost,
-		DirectCost:          directCost,
-		OverheadCost:        overheadCost,
-		Subtotal:            subtotal,
-		SpoilageCost:        spoilageCost,
-		NetInternalCost:     netInternalCost,
-		TotalCost:           netInternalCost,
-		SalePrice:           salePrice,
-		DiscountAmount:      discountAmount,
-		TaxAmount:           taxAmount,
-		GrandTotal:          grandTotal,
-		UnitPrice:           unitPrice,
-		ProfitMargin:        targetMargin,
-		Currency:            currency,
-		ExchangeRate:        rate,
-		CustomOptions:       req.CustomFinishingOptions,
+		JobName:               req.JobName,
+		Quantity:              req.Quantity,
+		AreaFactor:            r(areaFactor),
+		PaperCost:             paperCost,
+		InkCost:               inkCost,
+		InkCostK:              inkCostK,
+		InkCostCMY:            inkCostCMY,
+		DepreciationCost:      depreciationCost,
+		MaintenanceCost:       maintenanceCost,
+		CustomFinishingCost:   customFinishingCost,
+		LaminationCost:        laminationCost,
+		BindingCost:           bindingCost,
+		LaborCost:             laborCost,
+		SetupCost:             setupCost,
+		FinishingCost:         finishingCost,
+		DirectCost:            directCost,
+		OverheadCost:          overheadCost,
+		Subtotal:              subtotal,
+		SpoilageCost:          spoilageCost,
+		NetInternalCost:       netInternalCost,
+		TotalCost:             netInternalCost,
+		SalePrice:             salePrice,
+		DiscountAmount:        discountAmount,
+		TaxAmount:             taxAmount,
+		GrandTotal:            grandTotal,
+		UnitPrice:             unitPrice,
+		ProfitMargin:          effectiveMargin,
+		VolumeDiscountPercent: volumeDiscountPct,
+		Currency:              currency,
+		ExchangeRate:          rate,
+		CustomOptions:         req.CustomFinishingOptions,
 	}, nil
 }
 
