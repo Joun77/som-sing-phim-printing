@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, Droplet, TrendingDown, RefreshCw, CheckCircle2, Link as LinkIcon, AlertCircle } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
+import { Droplet, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useApp } from '../../../context/AppContext';
 
 interface PrinterInkComparisonCardProps {

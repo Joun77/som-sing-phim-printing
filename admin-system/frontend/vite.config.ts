@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { resolve } from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -14,14 +13,6 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
-      },
-    },
-  },
-  build: {
-    rollupOptions: {
-      input: {
-        main: resolve(import.meta.dirname, 'index.html'),
-        orders: resolve(import.meta.dirname, 'orders.html'),
       },
     },
   },

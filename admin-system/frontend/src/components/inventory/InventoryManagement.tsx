@@ -37,6 +37,7 @@ export default function InventoryManagement() {
   const [restockPrice, setRestockPrice] = useState(45000);
   const [restockSupplier, setRestockSupplier] = useState('');
   const [restockBatchId, setRestockBatchId] = useState('');
+  const [restockExpiry, setRestockExpiry] = useState('');
 
   const handleOpenRestock = (item) => {
     setSelectedRestockItem(item);
@@ -44,6 +45,10 @@ export default function InventoryManagement() {
     setRestockPrice(item.costPerPurchaseUnit || 45000);
     setRestockSupplier('Default Supplier');
     setRestockBatchId(`LOT-RESTOCK-${Date.now().toString().slice(-4)}`);
+    // Default expiry = 1 year from now for ink/materials
+    const nextYear = new Date();
+    nextYear.setFullYear(nextYear.getFullYear() + 1);
+    setRestockExpiry(nextYear.toISOString().split('T')[0]);
     setIsRestockOpen(true);
   };
 
@@ -54,12 +59,13 @@ export default function InventoryManagement() {
     addInventoryBatch(selectedRestockItem.id, {
       batchId: restockBatchId,
       purchaseDate: new Date().toISOString().split('T')[0],
+      expiryDate: restockExpiry,
       supplierName: restockSupplier,
       purchasePrice: Number(restockPrice),
       purchaseQty: Number(restockQty)
     });
 
-    showToast('Inventory restocked successfully!', 'success');
+    showToast('Inventory FIFO Lot restocked successfully!', 'success');
     setIsRestockOpen(false);
     setSelectedRestockItem(null);
   };
@@ -240,15 +246,27 @@ export default function InventoryManagement() {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-slate-500 uppercase tracking-wider block">Supplier Name</label>
-                <input
-                  type="text"
-                  required
-                  value={restockSupplier}
-                  onChange={(e) => setRestockSupplier(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl font-semibold"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-slate-500 uppercase tracking-wider block">Supplier Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={restockSupplier}
+                    onChange={(e) => setRestockSupplier(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-xl font-semibold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-slate-500 uppercase tracking-wider block text-amber-700">Expiry Date (วันหมดอายุ / FIFO)</label>
+                  <input
+                    type="date"
+                    required
+                    value={restockExpiry}
+                    onChange={(e) => setRestockExpiry(e.target.value)}
+                    className="w-full px-3 py-2 border border-amber-300 rounded-xl font-sans bg-amber-50/50 text-amber-900 font-bold"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t">

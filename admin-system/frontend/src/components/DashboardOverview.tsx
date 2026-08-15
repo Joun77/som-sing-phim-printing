@@ -358,12 +358,53 @@ export default function DashboardOverview() {
             <h3 className="text-3xl font-black text-slate-900 tracking-wide">
               {stats.activeOrdersCount} {currentLang === 'lo' ? 'ງານ' : 'Jobs'}
             </h3>
-            <p className="text-sm text-blue-600 font-bold flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block animate-ping"></span>
-              {t('dashboard.kpi_active_orders_sub')}
-            </p>
           </div>
         </div>
+      </div>
+
+      {/* Low Stock Alerts Widget */}
+      <div className="bg-amber-50/60 border-2 border-amber-200 p-6 rounded-3xl shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 text-amber-900 font-black text-xl">
+            <AlertTriangle className="w-6 h-6 shrink-0 text-amber-600 animate-bounce" />
+            <span>{currentLang === 'lo' ? 'ແຈ້ງເຕືອນສິນຄ້າໃກ້ໝົດ (Low Stock Alerts)' : 'Low Stock Alerts (แจ้งเตือนสินค้าใกล้หมด)'}</span>
+            <span className="bg-amber-500 text-white text-xs font-black px-2.5 py-1 rounded-full">
+              {lowStockItems.length}
+            </span>
+          </div>
+          <span className="text-xs font-bold text-amber-800">
+            {currentLang === 'lo' ? 'เกณฑ์แจ้งเตือน: สต็อก <= Reorder Threshold' : 'Threshold: stockQty <= reorderThreshold'}
+          </span>
+        </div>
+
+        {lowStockItems.length === 0 ? (
+          <div className="bg-white p-4 rounded-2xl border border-amber-100 text-center text-sm font-semibold text-emerald-700">
+            ✅ {currentLang === 'lo' ? 'ວັດສະດຸ ແລະ ໝຶກທຸກຢ່າງในสางยังคงพอเพียง' : 'All inks and paper materials are above reorder thresholds.'}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {lowStockItems.map(item => (
+              <div key={item.id} className="bg-white p-4 rounded-2xl border border-amber-200 shadow-xs flex flex-col justify-between space-y-2">
+                <div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-[11px] font-black text-amber-700 uppercase tracking-wider bg-amber-100 px-2 py-0.5 rounded-md">
+                      {item.category}
+                    </span>
+                    <span className="text-xs font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+                      {item.stockQty === 0 ? 'Out of Stock' : 'Low Stock'}
+                    </span>
+                  </div>
+                  <h4 className="font-extrabold text-slate-900 text-sm mt-2 line-clamp-1">{item.name}</h4>
+                  <p className="text-xs text-slate-500 font-mono mt-0.5">SKU: {item.id}</p>
+                </div>
+                <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-semibold">{currentLang === 'lo' ? 'คงเหลือ:' : 'Remaining:'}</span>
+                  <span className="font-black text-red-600 text-sm">{item.stockQty} {item.consumptionUnit || 'units'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Realized Cashflow bar */}

@@ -1,3 +1,4 @@
+-- +goose Up
 -- ============================================================================
 -- Migration: 002_employees_offcuts_inbound.sql
 -- Description: Adds dedicated tables for Employees (HR) and Offcuts (Remnants)
@@ -45,3 +46,7 @@ CREATE TABLE IF NOT EXISTS offcuts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_offcuts_material_sku ON offcuts(material_sku);
+
+-- +goose Down
+DROP TABLE IF EXISTS offcuts CASCADE;
+DROP TABLE IF EXISTS employees CASCADE;

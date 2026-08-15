@@ -11,6 +11,7 @@ interface OrderRowProps {
   getPaymentStatusBadge: (status: string) => string;
   getPaymentStatusIcon: (status: string) => React.ReactNode;
   onViewDetails: (ord: any) => void;
+  onOpenQuoteModal?: (ord: any) => void;
   isSelected: boolean;
   focusRef?: React.Ref<HTMLTableRowElement> | null;
 }
@@ -25,6 +26,7 @@ const OrderRow = React.memo<OrderRowProps>(({
   getPaymentStatusBadge,
   getPaymentStatusIcon,
   onViewDetails,
+  onOpenQuoteModal,
   isSelected
 }) => {
   const isOverdue = ord.paymentStatus === 'Overdue';
@@ -127,17 +129,27 @@ const OrderRow = React.memo<OrderRowProps>(({
           </span>
         )}
       </td>
-      {/* Single View Details Action */}
-      <td className="px-6 py-4 whitespace-nowrap text-center">
+      {/* Single View Details & Quote Actions */}
+      <td className="px-6 py-4 whitespace-nowrap text-center space-x-2">
         <button
           type="button"
           onClick={() => onViewDetails(ord)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-bold transition shadow-sm border border-slate-200/80 active:scale-95"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-bold transition shadow-xs border border-slate-200/80 active:scale-95"
           title={currentLang === 'lo' ? 'ເບິ່ງລາຍລະອຽດ' : 'View Details'}
         >
           <Eye className="w-4 h-4 text-slate-600" />
-          <span>{currentLang === 'lo' ? 'ເບິ່ງລາຍລະອຽດ' : 'View Details'}</span>
+          <span>{currentLang === 'lo' ? 'ເບິ່ງ' : 'View'}</span>
         </button>
+        {onOpenQuoteModal && (
+          <button
+            type="button"
+            onClick={() => onOpenQuoteModal(ord)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-black transition border border-emerald-200 active:scale-95"
+            title={currentLang === 'lo' ? 'ແຈ້ງລາຄາ' : 'Submit Quote'}
+          >
+            <span>{currentLang === 'lo' ? 'แจ้งราคา' : 'Submit Quote'}</span>
+          </button>
+        )}
       </td>
     </tr>
   );

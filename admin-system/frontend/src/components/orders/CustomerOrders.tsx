@@ -17,6 +17,7 @@ import Lightbox from './Lightbox';
 import OrderDetailsModal from './OrderDetailsModal';
 import QuotationManager from '../QuotationManager';
 import ProductionBoard from '../production/ProductionBoard';
+import SubmitQuotationModal from './SubmitQuotationModal';
 
 export default function CustomerOrders({ initialSubTab = 'orders' }) {
   const { 
@@ -57,6 +58,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isAddOrderOpen, setIsAddOrderOpen] = useState(initialSubTab === 'create_order');
   const [lightbox, setLightbox] = useState(null);
+  const [quoteModalOrder, setQuoteModalOrder] = useState(null);
   const focusRef = useRef(null);
 
   useEffect(() => {
@@ -630,6 +632,25 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
           getPaymentStatusBadge={getPaymentStatusBadge}
           getPaymentStatusIcon={getPaymentStatusIcon}
           onViewDetails={setSelectedOrder}
+          onOpenQuoteModal={(ord) => setQuoteModalOrder(ord)}
+        />
+      )}
+
+      {/* Submit Quotation Modal */}
+      {quoteModalOrder && (
+        <SubmitQuotationModal
+          order={quoteModalOrder}
+          isOpen={!!quoteModalOrder}
+          onClose={() => setQuoteModalOrder(null)}
+          onSubmitQuotation={(orderId, amount, notes) => {
+            const target = orders.find(o => o.id === orderId);
+            if (target) {
+              target.totalPriceCharged = amount;
+              target.remainingUnpaidBalance = amount - (target.depositAmountPaid || 0);
+              showToast(`ส่งใบเสนอราคาจำนวน ${formatLAK(amount)} เรียบร้อยแล้ว!`, 'success');
+            }
+          }}
+          formatCurrency={formatLAK}
         />
       )}
 

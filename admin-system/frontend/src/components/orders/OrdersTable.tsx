@@ -13,6 +13,7 @@ interface OrdersTableProps {
   getPaymentStatusBadge: (status: string) => string;
   getPaymentStatusIcon: (status: string) => React.ReactNode;
   onViewDetails: (ord: any) => void;
+  onOpenQuoteModal?: (ord: any) => void;
 }
 
 export default function OrdersTable({
@@ -26,7 +27,8 @@ export default function OrdersTable({
   getStatusIcon,
   getPaymentStatusBadge,
   getPaymentStatusIcon,
-  onViewDetails
+  onViewDetails,
+  onOpenQuoteModal
 }: OrdersTableProps) {
   return (
     <div className="w-full overflow-x-auto rounded-3xl border border-slate-100 bg-white shadow-sm">
@@ -55,6 +57,7 @@ export default function OrdersTable({
               getPaymentStatusBadge={getPaymentStatusBadge}
               getPaymentStatusIcon={getPaymentStatusIcon}
               onViewDetails={onViewDetails}
+              onOpenQuoteModal={onOpenQuoteModal}
               isSelected={selectedOrder?.id === ord.id}
               focusRef={selectedOrder?.id === ord.id ? focusRef : null}
             />

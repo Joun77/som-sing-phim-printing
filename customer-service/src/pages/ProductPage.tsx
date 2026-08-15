@@ -285,26 +285,17 @@ export default function ProductPage() {
 
                 <div className="configurator-summary">
                   <div className="configurator-summary-row">
-                    <span>ราคาต่อชิ้น</span>
-                    <strong>{formatMoney(unitDisplay, currency)}</strong>
-                  </div>
-                  <div className="configurator-summary-row">
-                    <span>จำนวน {quantity} ชิ้น</span>
-                    <span>
-                      {price.discount > 0 && (
-                        <em className="discount-tag">-{Math.round(price.discount * 100)}%</em>
-                      )}
-                      {formatMoney(totalDisplay, currency)}
-                    </span>
+                    <span>ประมาณการสเปก</span>
+                    <strong>{quantity} ชิ้น</strong>
                   </div>
                   <div className="configurator-summary-total">
-                    <span>ยอดรวม (ยังไม่รวมค่าส่ง)</span>
-                    <strong>{formatMoney(totalDisplay, currency)}</strong>
+                    <span>รูปแบบราคา</span>
+                    <strong style={{ color: '#d97706' }}>ส่งคำขอประเมินราคาโดยแอดมิน (RFQ Flow)</strong>
                   </div>
                 </div>
 
                 <button type="submit" className="btn btn--gold btn--lg btn--block">
-                  ดำเนินการสั่งชำระเงิน <ArrowRightIcon size={20} />
+                  ส่งออเดอร์เพื่อขอใบเสนอราคา (Submit RFQ) <ArrowRightIcon size={20} />
                 </button>
               </form>
             </div>

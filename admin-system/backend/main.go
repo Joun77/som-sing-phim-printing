@@ -10,34 +10,13 @@ import (
 	"backend/hr"
 	"backend/inbound"
 	"backend/inventory"
+	"backend/middleware"
 	"backend/orders"
 	"backend/pricing"
 	"backend/spoilage"
 
 	"github.com/gin-gonic/gin"
 )
-
-// CORSMiddleware configuration supporting multi-origin requests
-func CORSMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		origin := c.Request.Header.Get("Origin")
-		if origin != "" {
-			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-		} else {
-			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		}
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-
-		c.Next()
-	}
-}
 
 func main() {
 	// Initialize PostgreSQL connection pool
@@ -48,7 +27,7 @@ func main() {
 	router := gin.Default()
 
 	// Enable CORS
-	router.Use(CORSMiddleware())
+	router.Use(middleware.CORSMiddleware())
 
 	// Server status health check
 	router.GET("/health", func(c *gin.Context) {
@@ -109,15 +88,18 @@ func main() {
 	router.POST("/api/v1/assets/inbound", inventory.HandleInboundAssetV1)
 	router.PUT("/api/v1/assets/:id", inventory.HandleUpdateAssetV1)
 
-	// Inventory Material SKU CRUD & Stock Discharge routes
+	// Inventory Material SKU CRUD & Stock Discharge & FIFO Batches routes
 	router.GET("/api/inventory/offcuts", inventory.HandleGetOffcuts)
 	router.POST("/api/inventory/offcuts", inventory.HandleRegisterOffcut)
+	router.GET("/api/inventory/batches", inventory.HandleGetInventoryBatches)
 	router.GET("/api/inventory/items", inventory.HandleGetInventoryItems)
 	router.GET("/api/inventory", inventory.HandleGetInventoryItems)
 	router.POST("/api/inventory", inventory.HandleSaveInventorySKU)
 	router.PUT("/api/inventory/:id", inventory.HandleUpdateInventorySKU)
-	router.DELETE("/api/inventory/:id", inventory.HandleDeleteInventorySKU)
-	router.POST("/api/inventory/:id/discharge", inventory.HandleDischargeInventoryStock)
+	// Genuine & Compatible Ink Analytics routes
+	router.GET("/api/admin/inks/genuine", inventory.HandleGetGenuineInks)
+	router.GET("/api/admin/inks/compatible", inventory.HandleGetCompatibleInks)
+	router.GET("/api/admin/inks/analytics", inventory.HandleGetInkYieldAnalytics)
 
 	log.Println("Starting Go server on port 8080...")
 	if err := router.Run(":8080"); err != nil {

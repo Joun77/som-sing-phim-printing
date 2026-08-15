@@ -18,6 +18,8 @@ dist-ssr
 !.env.example
 
 # Go backend artifacts
+admin-system/backend/backend
+**/backend
 backend/server
 *.exe
 *.test

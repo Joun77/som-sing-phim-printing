@@ -1,3 +1,4 @@
+-- +goose Up
 -- ============================================================================
 -- Migration: 001_master_printer_ink_paper_quotation_spec.sql
 -- Description: Migration schema for Printers, Ink Catalog, Printer-Color Link,
@@ -300,5 +301,17 @@ CREATE TABLE IF NOT EXISTS spoilage_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_spoilage_order ON spoilage_logs(order_id);
+
+-- +goose Down
+DROP TABLE IF EXISTS spoilage_logs CASCADE;
+DROP TABLE IF EXISTS inbound_items CASCADE;
+DROP TABLE IF EXISTS inbound_shipments CASCADE;
+DROP TABLE IF EXISTS quotation_paper_specs CASCADE;
+DROP TABLE IF EXISTS quotation_ink_specs CASCADE;
+DROP TABLE IF EXISTS quotation_specs CASCADE;
+DROP TABLE IF EXISTS paper_catalog CASCADE;
+DROP TABLE IF EXISTS printer_color_inks CASCADE;
+DROP TABLE IF EXISTS ink_catalog CASCADE;
+DROP TABLE IF EXISTS printers CASCADE;
 
 

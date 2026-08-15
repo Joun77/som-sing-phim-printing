@@ -13,6 +13,11 @@ import (
 
 var DB *sql.DB
 
+// GetDB returns the global PostgreSQL connection instance
+func GetDB() *sql.DB {
+	return DB
+}
+
 // InitDB initializes PostgreSQL connection pool and runs migrations if available.
 func InitDB() (*sql.DB, error) {
 	connStr := os.Getenv("DATABASE_URL")
