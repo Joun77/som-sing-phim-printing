@@ -485,6 +485,10 @@ func getEquipmentFromDB() ([]EquipmentItem, error) {
 		items = append(items, item)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
 	return items, nil
 }
 
@@ -581,6 +585,10 @@ func getInventoryItemsFromDB() ([]InventoryItem, error) {
 		}
 
 		items = append(items, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return items, nil

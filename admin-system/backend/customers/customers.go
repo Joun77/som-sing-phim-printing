@@ -133,6 +133,10 @@ func getCustomersFromDB() ([]Customer, error) {
 		list = append(list, cust)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
 	return list, nil
 }
 

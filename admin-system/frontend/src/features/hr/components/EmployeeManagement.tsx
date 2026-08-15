@@ -26,8 +26,8 @@ const SHIFTS = [
   { id: 'full',      labelLo: 'ເຕັມວັນ (08:00–19:00)', labelEn: 'Full Day (08:00–19:00)' },
 ];
 
-const getRoleInfo = (roleId) => ROLES.find(r => r.id === roleId) || ROLES[0];
-const getShiftInfo = (shiftId) => SHIFTS.find(s => s.id === shiftId) || SHIFTS[0];
+const getRoleInfo = (roleId: string) => ROLES.find(r => r.id === roleId) || ROLES[0];
+const getShiftInfo = (shiftId: string) => SHIFTS.find(s => s.id === shiftId) || SHIFTS[0];
 
 // ========== EMPTY FORM ==========
 const emptyForm = {
@@ -57,8 +57,15 @@ function Avatar({ initials, size = 'md', colorClass }: AvatarProps) {
   );
 }
 
-// ========== STAT CARD ==========
-function StatCard({ icon: Icon, label, value, sub, color }) {
+interface StatCardProps {
+  icon: any;
+  label: string;
+  value: React.ReactNode;
+  sub?: string;
+  color: string;
+}
+
+function StatCard({ icon: Icon, label, value, sub, color }: StatCardProps) {
   return (
     <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3 flex flex-col justify-between">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
@@ -80,7 +87,7 @@ export default function EmployeeManagement() {
   const lang = i18n.language || 'lo';
 
   // Multi-currency salary formatting (keeps the '—' guard for empty values)
-  const formatLAK = (n) => (n || n === 0) ? formatCurrency(n) : '—';
+  const formatLAK = (n: any) => (n || n === 0) ? formatCurrency(n) : '—';
 
   const [employees, setEmployees] = useState(INITIAL_EMPLOYEES);
 
@@ -116,12 +123,12 @@ export default function EmployeeManagement() {
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [selectedEmp, setSelectedEmp] = useState(null);
+  const [selectedEmp, setSelectedEmp] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState<any>(emptyForm);
 
-  const T = (lo, en) => lang === 'lo' ? lo : en;
+  const T = (lo: string, en: string) => lang === 'lo' ? lo : en;
 
   const filtered = useMemo(() => {
     return employees.filter(e => {
@@ -151,7 +158,7 @@ export default function EmployeeManagement() {
     setSelectedEmp(null);
   };
 
-  const openEdit = (emp) => {
+  const openEdit = (emp: any) => {
     setForm({
       ...emp,
       skills: Array.isArray(emp.skills) ? emp.skills.join(', ') : emp.skills
@@ -167,8 +174,8 @@ export default function EmployeeManagement() {
       showToast(T('ກະລຸນາຕື່ມຂໍ້ມູນທີ່ຈຳເປັນ!', 'Please fill in required fields!'), 'error');
       return;
     }
-    const skillArr = form.skills ? form.skills.split(',').map(s => s.trim()).filter(Boolean) : [];
-    const avatarInit = form.nameEn ? form.nameEn.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : form.name.slice(0, 2);
+    const skillArr = form.skills ? form.skills.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+    const avatarInit = form.nameEn ? form.nameEn.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) : form.name.slice(0, 2);
 
     const payload = {
       id: isEditing ? form.id : `EMP-${String(Date.now()).slice(-3).padStart(3, '0')}`,
@@ -208,7 +215,7 @@ export default function EmployeeManagement() {
     closeModal();
   };
 
-  const handleDelete = (emp) => {
+  const handleDelete = (emp: any) => {
     askConfirmation(
       T(`ທ່ານຕ້ອງການລຶບພະນັກງານ "${emp.name}" ແທ້ ຫຼື ບໍ່?`, `Delete employee "${emp.nameEn}"?`),
       () => {
@@ -221,7 +228,7 @@ export default function EmployeeManagement() {
     );
   };
 
-  const toggleStatus = (emp) => {
+  const toggleStatus = (emp: any) => {
     const next = emp.status === 'active' ? 'inactive' : 'active';
     setEmployees(prev => prev.map(e => e.id === emp.id ? { ...e, status: next } : e));
     if (selectedEmp?.id === emp.id) setSelectedEmp(prev => ({ ...prev, status: next }));
@@ -595,8 +602,17 @@ export default function EmployeeManagement() {
 }
 
 // ========== MODAL ==========
-function EmployeeModal({ isEditing, form, setForm, onSave, onClose, T }) {
-  const F = (field, val) => setForm(prev => ({ ...prev, [field]: val }));
+interface EmployeeModalProps {
+  isEditing: boolean;
+  form: any;
+  setForm: React.Dispatch<React.SetStateAction<any>>;
+  onSave: () => void;
+  onClose: () => void;
+  T: (lo: string, en: string) => string;
+}
+
+function EmployeeModal({ isEditing, form, setForm, onSave, onClose, T }: EmployeeModalProps) {
+  const F = (field: string, val: any) => setForm((prev: any) => ({ ...prev, [field]: val }));
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">

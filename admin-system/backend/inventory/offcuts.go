@@ -103,6 +103,9 @@ func getOffcutsFromDB() ([]Offcut, error) {
 		}
 		result = append(result, o)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
