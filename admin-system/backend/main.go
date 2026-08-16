@@ -13,6 +13,7 @@ import (
 	"backend/inventory"
 	"backend/middleware"
 	"backend/orders"
+	"backend/preflight"
 	"backend/pricing"
 	"backend/spoilage"
 
@@ -30,6 +31,9 @@ func main() {
 	// Enable CORS
 	router.Use(middleware.CORSMiddleware())
 
+	// Static file server for uploaded order files & preflight uploads
+	router.Static("/api/v1/orders/files", "./uploads")
+
 	// Server status health check
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -40,6 +44,10 @@ func main() {
 	// Auth routes
 	router.POST("/api/auth/login", auth.HandleLogin)
 	router.POST("/api/v1/auth/login", auth.HandleLogin)
+
+	// PDF Preflight CMYK Extraction routes
+	router.POST("/api/v1/orders/preflight", preflight.HandlePreflightPDF)
+	router.POST("/api/v1/preflight", preflight.HandlePreflightPDF)
 
 	// Owner Finance routes
 	router.GET("/api/v1/finance/summary", finance.HandleGetFinanceSummary)
@@ -54,12 +62,19 @@ func main() {
 	router.POST("/api/pricing/calculate", pricing.HandleCalculatePrice)
 	router.POST("/api/v1/pricing/calculate", pricing.HandleCalculatePrice)
 
-	// Order management routes
+	// Order management & Shop Floor Tracker routes
 	router.GET("/api/orders", orders.HandleGetOrders)
+	router.GET("/api/v1/orders", orders.HandleGetOrders)
 	router.POST("/api/orders", orders.HandleCreateOrder)
+	router.POST("/api/v1/orders", orders.HandleCreateOrder)
+	router.POST("/api/v1/orders/upload", orders.HandleUploadOrderFile)
+	router.PATCH("/api/v1/orders/items/:id/step", orders.HandleUpdateOrderItemStep)
+	router.GET("/api/v1/orders/track/:order_no", orders.HandleGetOrderByOrderNo)
 	router.PUT("/api/orders/:id/deposit", orders.HandleRecordDeposit)
 	router.PUT("/api/orders/:id/status", orders.HandleUpdateOrderStatus)
 	router.GET("/api/v1/orders/stream", orders.HandleOrderProgressSSEStream)
+	router.GET("/api/v1/orders/:id/job-ticket", orders.HandleGenerateJobTicketPDF)
+	router.GET("/api/v1/orders/by-number/:order_no/job-ticket", orders.HandleGenerateJobTicketPDF)
 
 	// CRM Customer routes
 	router.GET("/api/customers", customers.HandleGetCustomers)

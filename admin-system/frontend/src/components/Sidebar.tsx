@@ -63,6 +63,12 @@ export default function Sidebar() {
       icon: LayoutDashboard,
     },
     {
+      id: 'preflight',
+      labelKey: 'sidebar.preflight',
+      subText: 'PDF CMYK Preflight',
+      icon: Cpu,
+    },
+    {
       id: 'finance',
       labelKey: 'sidebar.finance',
       subText: 'Finance & Accounting',

@@ -7,33 +7,85 @@ import (
 type OrderStatus string
 
 const (
-	StatusDraft          OrderStatus = "DRAFT"
-	StatusWaitingDeposit OrderStatus = "WAITING_DEPOSIT"
-	StatusPrepressCheck  OrderStatus = "PREPRESS_CHECK"
+	StatusDraft           OrderStatus = "DRAFT"
+	StatusWaitingDeposit  OrderStatus = "WAITING_DEPOSIT"
+	StatusPrepressCheck   OrderStatus = "PREPRESS_CHECK"
 	StatusWaitingApproval OrderStatus = "WAITING_APPROVAL"
-	StatusReadyToPrint   OrderStatus = "READY_TO_PRINT"
-	StatusInProduction   OrderStatus = "IN_PRODUCTION"
-	StatusCompleted      OrderStatus = "COMPLETED"
-	StatusDelivered      OrderStatus = "DELIVERED"
+	StatusReadyToPrint    OrderStatus = "READY_TO_PRINT"
+	StatusInProduction    OrderStatus = "IN_PRODUCTION"
+	StatusCompleted       OrderStatus = "COMPLETED"
+	StatusDelivered       OrderStatus = "DELIVERED"
+)
+
+// BindingType Enum
+type BindingType string
+
+const (
+	BindingNone           BindingType = "NONE"
+	BindingPerfectHotGlue BindingType = "PERFECT_HOT_GLUE"
+	BindingSaddleStitch   BindingType = "SADDLE_STITCH"
+	BindingWireO          BindingType = "WIRE_O"
+	BindingPlasticComb    BindingType = "PLASTIC_COMB"
+	BindingCalendar       BindingType = "CALENDAR"
+)
+
+// ProductionStep Enum
+type ProductionStep string
+
+const (
+	StepPending        ProductionStep = "PENDING"
+	StepInnerPrinted   ProductionStep = "INNER_PRINTED"
+	StepCoverPrinted   ProductionStep = "COVER_PRINTED"
+	StepCoverLaminated ProductionStep = "COVER_LAMINATED"
+	StepPaperTrimmed   ProductionStep = "PAPER_TRIMMED"
+	StepBound          ProductionStep = "BOUND"
+	StepReadyForPickup ProductionStep = "READY_FOR_PICKUP"
+	StepCompleted      ProductionStep = "COMPLETED"
 )
 
 type OrderItem struct {
-	ID                 string                 `json:"id"`
-	OrderID            string                 `json:"order_id"`
-	JobName            string                 `json:"job_name"`
-	Quantity           int                    `json:"quantity"`
-	UnitPriceSnapshot  float64                `json:"unit_price_snapshot"`
-	CostPriceSnapshot  float64                `json:"cost_price_snapshot"`
-	Specs              map[string]interface{} `json:"specs"`
+	ID                string                 `json:"id"`
+	OrderID           string                 `json:"order_id"`
+	JobName           string                 `json:"job_name"`
+	ItemName          string                 `json:"item_name"`
+	Quantity          int                    `json:"quantity"`
+	PageCount         int                    `json:"page_count"`
+	PaperSize         string                 `json:"paper_size"`
+	CoverPaperID      string                 `json:"cover_paper_id"`
+	InnerPaperID      string                 `json:"inner_paper_id"`
+	CoverFileURL      string                 `json:"cover_file_url"`
+	InnerFileURL      string                 `json:"inner_file_url"`
+	BindingType       BindingType            `json:"binding_type"`
+	SpineWidthMM      float64                `json:"spine_width_mm"`
+	CurrentStep       ProductionStep         `json:"current_step"`
+	AvgCovC           float64                `json:"avg_cov_c"`
+	AvgCovM           float64                `json:"avg_cov_m"`
+	AvgCovY           float64                `json:"avg_cov_y"`
+	AvgCovK           float64                `json:"avg_cov_k"`
+	UnitCostLAK       float64                `json:"unit_cost_lak"`
+	UnitPriceLAK      float64                `json:"unit_price_lak"`
+	TotalPriceLAK     float64                `json:"total_price_lak"`
+	UnitPriceSnapshot float64                `json:"unit_price_snapshot"`
+	CostPriceSnapshot float64                `json:"cost_price_snapshot"`
+	Specs             map[string]interface{} `json:"specs"`
+	CreatedAt         time.Time              `json:"created_at"`
+	UpdatedAt         time.Time              `json:"updated_at"`
 }
 
 type Order struct {
-	ID              string      `json:"id"`
-	OrderNumber     string      `json:"order_number"`
-	CustomerName    string      `json:"customer_name"`
-	CustomerPhone   string      `json:"customer_phone"`
-	Status          OrderStatus `json:"status"`
-	DepositAmount   float64     `json:"deposit_amount"`
+	ID                   string      `json:"id"`
+	OrderNo              string      `json:"order_no"`
+	OrderNumber          string      `json:"order_number"` // Backward compatibility
+	CustomerID           string      `json:"customer_id"`
+	CustomerName         string      `json:"customer_name"`
+	CustomerPhone        string      `json:"customer_phone"`
+	TotalAmountLAK       float64     `json:"total_amount_lak"`
+	DepositLAK           float64     `json:"deposit_lak"`
+	RemainingLAK         float64     `json:"remaining_lak"`
+	OverallStatus        OrderStatus `json:"overall_status"`
+	Status               OrderStatus `json:"status"` // Backward compatibility
+	DeliveryDate         string      `json:"delivery_date"`
+	DepositAmount        float64     `json:"deposit_amount"`
 	TotalPrice           float64     `json:"total_price"`
 	TotalCost            float64     `json:"total_cost"`
 	GoogleDriveLink      string      `json:"google_drive_link"`
@@ -86,27 +138,46 @@ type OrderItemRequest struct {
 }
 
 type CreateOrderRequest struct {
+	OrderNo         string                 `json:"order_no"`
+	CustomerID      string                 `json:"customer_id"`
 	CustomerName    string                 `json:"customer_name" binding:"required"`
 	CustomerPhone   string                 `json:"customer_phone"`
+	DepositLAK      float64                `json:"deposit_lak"`
+	DeliveryDate    string                 `json:"delivery_date"`
 	GoogleDriveLink string                 `json:"google_drive_link"`
 	Items           []CreateItemRequest    `json:"items" binding:"required,dive,required"`
 }
 
 type CreateItemRequest struct {
-	JobName            string                   `json:"job_name" binding:"required"`
+	JobName            string                   `json:"job_name"`
+	ItemName           string                   `json:"item_name"`
 	Quantity           int                      `json:"quantity" binding:"required,gt=0"`
+	PageCount          int                      `json:"page_count"`
+	PaperSize          string                   `json:"paper_size"`
+	CoverPaperID       string                   `json:"cover_paper_id"`
+	InnerPaperID       string                   `json:"inner_paper_id"`
+	CoverFileURL       string                   `json:"cover_file_url"`
+	InnerFileURL       string                   `json:"inner_file_url"`
 	PaperSku           string                   `json:"paper_sku"`
 	PaperCostPerUnit   float64                  `json:"paper_cost_per_unit"`
 	PaperFormat        string                   `json:"paper_format"`
 	InkCoveragePercent float64                  `json:"ink_coverage_percent"`
 	InkCostPerMl       float64                  `json:"ink_cost_per_ml"`
+	AvgCovC            float64                  `json:"avg_cov_c"`
+	AvgCovM            float64                  `json:"avg_cov_m"`
+	AvgCovY            float64                  `json:"avg_cov_y"`
+	AvgCovK            float64                  `json:"avg_cov_k"`
 	LaminationType     string                   `json:"lamination_type"`
 	LaminationCost     float64                  `json:"lamination_cost"`
 	BindingType        string                   `json:"binding_type"`
 	BindingCost        float64                  `json:"binding_cost"`
+	SpineWidthMM       float64                  `json:"spine_width_mm"`
 	LaborCostPerHour   float64                  `json:"labor_cost_per_hour"`
 	EstimatedHours     float64                  `json:"estimated_hours"`
 	MarkupMargin       float64                  `json:"markup_margin"`
+	UnitCostLAK        float64                  `json:"unit_cost_lak"`
+	UnitPriceLAK       float64                  `json:"unit_price_lak"`
+	TotalPriceLAK      float64                  `json:"total_price_lak"`
 	Specs              map[string]interface{}   `json:"specs"`
 	// Extended fields for multi-printer and finishing
 	QuantityRequired   int                      `json:"quantity_required,omitempty"`

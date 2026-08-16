@@ -26,6 +26,7 @@
   },
   "sidebar": {
     "dashboard": "Dashboard Overview",
+    "preflight": "CMYK Preflight Extractor",
     "finance": "Finance & Accounting",
     "inbound": "Inbound Procurement",
     "crm": "Customer Directory (CRM)",

@@ -4,12 +4,113 @@ export interface OrderLotUsed {
   cost: number;
 }
 
+export type BindingType =
+  | 'NONE'
+  | 'PERFECT_HOT_GLUE'
+  | 'SADDLE_STITCH'
+  | 'WIRE_O'
+  | 'PLASTIC_COMB'
+  | 'CALENDAR';
+
+export type ProductionStep =
+  | 'PENDING'
+  | 'INNER_PRINTED'
+  | 'COVER_PRINTED'
+  | 'COVER_LAMINATED'
+  | 'PAPER_TRIMMED'
+  | 'BOUND'
+  | 'READY_FOR_PICKUP'
+  | 'COMPLETED';
+
+export interface PreflightResult {
+  file_name: string;
+  file_url?: string;
+  file_type?: 'PDF' | 'IMAGE' | string;
+  total_pages: number;
+  image_width?: number;
+  image_height?: number;
+  dpi_estimate?: number;
+  avg_cov_c: number;
+  avg_cov_m: number;
+  avg_cov_y: number;
+  avg_cov_k: number;
+  color_space: string;
+  has_rgb: boolean;
+  is_standard_cmyk: boolean;
+  status_badge_lao: string;
+  warning_message_lao?: string;
+  suggested_paper?: string;
+  is_simulated?: boolean;
+  execution_notice?: string;
+}
+
+export interface MasterOrderItem {
+  id: string;
+  order_id: string;
+  job_name?: string;
+  item_name: string;
+  quantity: number;
+  page_count: number;
+  paper_size: string;
+  cover_paper_id?: string;
+  inner_paper_id?: string;
+  cover_file_url?: string;
+  inner_file_url?: string;
+  binding_type: BindingType;
+  spine_width_mm: number;
+  current_step: ProductionStep;
+  avg_cov_c: number;
+  avg_cov_m: number;
+  avg_cov_y: number;
+  avg_cov_k: number;
+  unit_cost_lak: number;
+  unit_price_lak: number;
+  total_price_lak: number;
+  unit_price_snapshot?: number;
+  cost_price_snapshot?: number;
+  specs?: any;
+}
+
+export interface MasterOrder {
+  id: string;
+  order_no: string;
+  order_number?: string;
+  customer_id?: string;
+  customer_name: string;
+  customer_phone: string;
+  total_amount_lak: number;
+  deposit_lak: number;
+  remaining_lak: number;
+  overall_status: string;
+  status?: string;
+  delivery_date?: string;
+  google_drive_link?: string;
+  items: MasterOrderItem[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface OrderItem {
   id: string;
   name: string;
   quantity: number;
   unitCost: number;
   lotsUsed?: OrderLotUsed[];
+  item_name?: string;
+  page_count?: number;
+  paper_size?: string;
+  cover_file_url?: string;
+  inner_file_url?: string;
+  binding_type?: BindingType;
+  spine_width_mm?: number;
+  current_step?: ProductionStep;
+  avg_cov_c?: number;
+  avg_cov_m?: number;
+  avg_cov_y?: number;
+  avg_cov_k?: number;
+  unit_cost_lak?: number;
+  unit_price_lak?: number;
+  total_price_lak?: number;
 }
 
 export interface OrderPreflightVersion {
@@ -33,13 +134,20 @@ export interface ActivityLogEntry {
 
 export interface Order {
   id: string;
+  order_no?: string;
+  orderNumber?: string;
   customerName: string;
+  customer_name?: string;
+  customerPhone?: string;
   phone: string;
   date: string;
   items: OrderItem[];
   totalPriceCharged: number;
+  total_amount_lak?: number;
   depositAmountPaid: number;
+  deposit_lak?: number;
   remainingUnpaidBalance: number;
+  remaining_lak?: number;
   paymentMethod: string;
   bankName?: string;
   paymentStatus: string;
@@ -47,6 +155,8 @@ export interface Order {
   paymentSlipNote?: string;
   paymentSlipUrl?: string;
   status: string;
+  overall_status?: string;
+  delivery_date?: string;
   artworkLink?: string;
   deliveryMethod?: string;
   notes?: string;

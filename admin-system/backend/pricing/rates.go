@@ -102,6 +102,9 @@ func getRatesFromDB() (map[string]CurrencyRate, error) {
 		}
 		res[cr.Currency] = cr
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return res, nil
 }
 

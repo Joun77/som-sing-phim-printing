@@ -542,6 +542,92 @@ func TestMultiPrinterChannelAndFinishing(t *testing.T) {
 	}
 }
 
+func TestSpineWidthCalculation(t *testing.T) {
+	// 120 pages on 80gsm Green Read: (120/2 * 0.105) + 0.8 = 6.3 + 0.8 = 7.1 mm
+	spine120 := CalculateSpineWidthMM(120, 80)
+	if spine120 != 7.1 {
+		t.Errorf("Expected spine width 7.1 mm for 120 pages, got %v", spine120)
+	}
+
+	// 0 pages should return 0
+	if CalculateSpineWidthMM(0, 80) != 0.0 {
+		t.Errorf("Expected 0.0 mm for 0 pages, got %v", CalculateSpineWidthMM(0, 80))
+	}
+}
+
+func TestBindingCostCalculations(t *testing.T) {
+	// Perfect hot glue consumable = 350 LAK
+	glueCost := CalculateBindingCostLAK("PERFECT_HOT_GLUE", 0, 0)
+	if glueCost != 350.0 {
+		t.Errorf("Expected 350 LAK for PERFECT_HOT_GLUE without depreciation, got %v", glueCost)
+	}
+
+	// Saddle stitch = 100 LAK
+	saddleCost := CalculateBindingCostLAK("SADDLE_STITCH", 0, 0)
+	if saddleCost != 100.0 {
+		t.Errorf("Expected 100 LAK for SADDLE_STITCH, got %v", saddleCost)
+	}
+
+	// Wire-O = 2500 LAK
+	wireOCost := CalculateBindingCostLAK("WIRE_O", 0, 0)
+	if wireOCost != 2500.0 {
+		t.Errorf("Expected 2500 LAK for WIRE_O, got %v", wireOCost)
+	}
+
+	// Calendar = 3500 LAK
+	calendarCost := CalculateBindingCostLAK("CALENDAR", 0, 0)
+	if calendarCost != 3500.0 {
+		t.Errorf("Expected 3500 LAK for CALENDAR, got %v", calendarCost)
+	}
+
+	// Machine depreciation: 10,000,000 * 1.10 / 100,000 = 110 LAK + 350 = 460 LAK
+	glueWithMach := CalculateBindingCostLAK("PERFECT_HOT_GLUE", 10000000, 100000)
+	if glueWithMach != 460.0 {
+		t.Errorf("Expected 460 LAK for glue with machine depreciation, got %v", glueWithMach)
+	}
+}
+
+func TestBilingualBookDynamicPricingWithPreflight(t *testing.T) {
+	// Item 1: 100 books, 120 pages A5, Avg K 7.5%, CMY 7.35%
+	req := CalculationRequest{
+		JobName:          "Business Handbook - Lao",
+		Quantity:         100,
+		PageCount:        120,
+		JobWidth:         148, // A5
+		JobHeight:        210, // A5
+		PaperCostPerUnit: 150.0,
+		SheetsPerPack:    1,
+		AvgCovK:          7.5,
+		AvgCovC:          2.15,
+		AvgCovM:          3.40,
+		AvgCovY:          1.80,
+		BindingType:      "PERFECT_HOT_GLUE",
+		SpoilagePercent:  0.05, // 5% spoilage
+		BaseProfitPct:    25.0,
+		TargetCurrency:   "LAK",
+	}
+
+	res, err := CalculateJobPricing(req)
+	if err != nil {
+		t.Fatalf("Unexpected error calculating book pricing: %v", err)
+	}
+
+	// Binding cost for 100 books @ 350 = 35,000 LAK
+	if res.BindingCost != 35000.0 {
+		t.Errorf("Expected BindingCost 35,000 LAK, got %v", res.BindingCost)
+	}
+
+	// Spoilage cost should be > 0 and ~5%
+	if res.SpoilageCost <= 0 {
+		t.Errorf("Expected positive SpoilageCost, got %v", res.SpoilageCost)
+	}
+
+	if res.GrandTotal <= 0 {
+		t.Errorf("Expected positive GrandTotal, got %v", res.GrandTotal)
+	}
+}
+
+
 
 
 

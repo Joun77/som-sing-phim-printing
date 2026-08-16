@@ -12,6 +12,8 @@ import { HistoryAnalytics } from '@features/analytics';
 import { EmployeeManagement } from '@features/hr';
 import { FinanceDashboard } from '@features/finance';
 import { ProfileSettingsPage } from '@features/profile';
+import { PreflightPage } from './features/production/PreflightPage';
+import { ShopFloorTracker } from './features/production/ShopFloorTracker';
 import { ProtectedRoute } from '@components/ProtectedRoute';
 import CurrencyRatesModal from '@components/common/CurrencyRatesModal';
 import { useTranslation } from 'react-i18next';
@@ -34,9 +36,24 @@ const queryClient = new QueryClient({
 });
 
 function AppContent() {
-  const { activeTab, toast, setToast, confirmDialog, setIsRatesOpen, currency, exchangeRates, rateMode } = useApp();
+  const { 
+    activeTab, 
+    setActiveTab, 
+    toast, 
+    setToast, 
+    confirmDialog, 
+    setIsRatesOpen, 
+    currency, 
+    exchangeRates, 
+    rateMode,
+    setPrefilledOrderSpecs,
+    showToast
+  } = useApp();
   const { t } = useTranslation();
   const currentRate = currency === 'LAK' ? 1 : ((exchangeRates[currency] && exchangeRates[currency][rateMode]) || 0);
+
+  const isTrackerRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/track');
+  const trackerOrderNo = isTrackerRoute ? window.location.pathname.replace(/^\/track\/?/, '') : null;
 
   return (
     <ProtectedRoute>
@@ -47,17 +64,44 @@ function AppContent() {
         {/* Main Contents View (Full Width 100% Edge-to-Edge) */}
         <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-8">
           <div className="w-full">
-            {activeTab === 'dashboard' && <DashboardOverview />}
-            {(activeTab === 'orders' || activeTab === 'create_order' || activeTab === 'production' || activeTab === 'deliveries' || activeTab === 'quotation') && (
-              <CustomerOrders initialSubTab={activeTab} />
+            {isTrackerRoute ? (
+              <ShopFloorTracker initialOrderNo={trackerOrderNo || undefined} />
+            ) : (
+              <>
+                {activeTab === 'dashboard' && <DashboardOverview />}
+                {activeTab === 'preflight' && (
+                  <PreflightPage
+                    onSendToQuotation={(res) => {
+                      if (setPrefilledOrderSpecs) {
+                        setPrefilledOrderSpecs({
+                          jobName: res.file_name.replace(/\.[^/.]+$/, ''),
+                          pageCount: res.total_pages,
+                          avgCovC: res.avg_cov_c,
+                          avgCovM: res.avg_cov_m,
+                          avgCovY: res.avg_cov_y,
+                          avgCovK: res.avg_cov_k,
+                          fileUrl: res.file_url,
+                          fileName: res.file_name,
+                        });
+                      }
+                      setActiveTab('quotation');
+                      showToast('ສົ່ງຄ່າສີ ແລະ ຈຳນວນໜ້າໄປຍັງໃບສະເໜີລາຄາຮຽບຮ້ອຍ!', 'success');
+                    }}
+                  />
+                )}
+                {(activeTab === 'orders' || activeTab === 'create_order' || activeTab === 'production' || activeTab === 'deliveries' || activeTab === 'quotation') && (
+                  <CustomerOrders initialSubTab={activeTab} />
+                )}
+                {activeTab === 'tracker' && <ShopFloorTracker />}
+                {activeTab === 'inbound' && <InboundManagement />}
+                {activeTab === 'inventory' && <InventoryManagement />}
+                {activeTab === 'equipment' && <EquipmentOverhead />}
+                {activeTab === 'crm' && <CustomerManagement />}
+                {activeTab === 'hr' && <EmployeeManagement />}
+                {activeTab === 'finance' && <FinanceDashboard />}
+                {(activeTab === 'settings' || activeTab === 'profile') && <ProfileSettingsPage />}
+              </>
             )}
-            {activeTab === 'inbound' && <InboundManagement />}
-            {activeTab === 'inventory' && <InventoryManagement />}
-            {activeTab === 'equipment' && <EquipmentOverhead />}
-            {activeTab === 'crm' && <CustomerManagement />}
-            {activeTab === 'hr' && <EmployeeManagement />}
-            {activeTab === 'finance' && <FinanceDashboard />}
-            {(activeTab === 'settings' || activeTab === 'profile') && <ProfileSettingsPage />}
           </div>
         </main>
 

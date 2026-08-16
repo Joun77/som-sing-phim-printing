@@ -26,6 +26,7 @@
   },
   "sidebar": {
     "dashboard": "ແຜງຄວບຄຸມ (Dashboard)",
+    "preflight": "ກວດໄຟລ໌ CMYK (Preflight)",
     "finance": "ການເງິນ & ບັນຊີ (Finance & Accounting)",
     "inbound": "ນຳເຂົ້າສິນຄ້າ (Inbound)",
     "crm": "ຈັດການລູກຄ້າ (CRM)",

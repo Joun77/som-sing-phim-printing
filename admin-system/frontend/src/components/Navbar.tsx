@@ -46,11 +46,12 @@ export default function Navbar() {
 
   const navItems = [
     { id: 'dashboard', labelLao: 'ແຜງຄວບຄຸມ', labelEn: 'Dashboard', icon: LayoutDashboard },
-    { id: 'finance', labelLao: 'ການເງິນ & ບັນຊີ', labelEn: 'Finance', icon: Coins },
+    { id: 'preflight', labelLao: 'ກວດໄຟລ໌ CMYK', labelEn: 'Preflight', icon: Cpu },
     { id: 'orders', labelLao: 'ອໍເດີ', labelEn: 'Orders', icon: ShoppingCart },
+    { id: 'finance', labelLao: 'ການເງິນ & ບັນຊີ', labelEn: 'Finance', icon: Coins },
     { id: 'inbound', labelLao: 'ນຳເຂົ້າ', labelEn: 'Inbound', icon: Truck },
     { id: 'inventory', labelLao: 'ຄັງສິນຄ້າ', labelEn: 'Inventory', icon: Boxes },
-    { id: 'equipment', labelLao: 'ເຄື່ອງຈັກ', labelEn: 'Equipment', icon: Cpu },
+    { id: 'equipment', labelLao: 'ເຄື່ອງຈັກ', labelEn: 'Equipment', icon: Printer },
     { id: 'crm', labelLao: 'ລູກຄ້າ', labelEn: 'Customers', icon: User },
     { id: 'hr', labelLao: 'ພະນັກງານ', labelEn: 'HR / Staff', icon: Users },
   ];

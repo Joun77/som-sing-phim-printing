@@ -140,6 +140,17 @@ type CalculationRequest struct {
 	TaxPercent      float64 `json:"tax_percent"`      // e.g. 0.07 for 7%
 	DepositPercent  float64 `json:"deposit_percent"`  // e.g. 0, 30, 50, 100
 
+	// Dynamic Preflight & Book Specifics
+	PageCount     int     `json:"page_count"`      // Number of pages in booklet/book (default 1)
+	AvgCovC       float64 `json:"avg_cov_c"`       // Average Cyan % from preflight
+	AvgCovM       float64 `json:"avg_cov_m"`       // Average Magenta % from preflight
+	AvgCovY       float64 `json:"avg_cov_y"`       // Average Yellow % from preflight
+	AvgCovK       float64 `json:"avg_cov_k"`       // Average Black/Key % from preflight
+	SpineWidthMM  float64 `json:"spine_width_mm"`  // Computed spine width in mm
+	PaperGSM      float64 `json:"paper_gsm"`       // Paper grammage (e.g. 80, 260)
+	BindingLifetimeCycles float64 `json:"binding_lifetime_cycles"` // Lifecycle cycles for binding machine
+	BindingMachinePrice   float64 `json:"binding_machine_price"`   // Purchase price of binding machine
+
 	TargetCurrency string `json:"target_currency"`
 }
 
@@ -212,6 +223,52 @@ type CalculationResponse struct {
 
 // a4BaselineArea is the reference area (mm²) used for Paper Area Factor S (210 x 297 mm = 62370)
 const a4BaselineArea = 62370.0
+
+// CalculateSpineWidthMM calculates spine thickness for booklets/books
+// Formula: (pageCount / 2.0) * sheetThickness + coverAndGlueOffset
+func CalculateSpineWidthMM(pageCount int, paperGSM float64) float64 {
+	if pageCount <= 0 {
+		return 0.0
+	}
+	sheetThickness := 0.105 // Default 80g Green Read sheet thickness ~0.105mm
+	if paperGSM > 0 {
+		sheetThickness = (paperGSM / 80.0) * 0.105
+	}
+	offset := 0.80 // Art card 260g cover + hot glue offset ~0.80mm
+	spine := (float64(pageCount)/2.0)*sheetThickness + offset
+	return math.Round(spine*10.0) / 10.0
+}
+
+// GetBindingConsumableCostLAK returns standard consumable cost in LAK for 5 binding types
+func GetBindingConsumableCostLAK(bType string) float64 {
+	switch bType {
+	case "PERFECT_HOT_GLUE", "HOT_GLUE", "glue":
+		return 350.0
+	case "SADDLE_STITCH", "STAPLE", "staple":
+		return 100.0
+	case "WIRE_O", "WIRE-O", "wire-o":
+		return 2500.0
+	case "PLASTIC_COMB", "COMB", "comb":
+		return 1500.0
+	case "CALENDAR", "calendar":
+		return 3500.0
+	default:
+		return 0.0
+	}
+}
+
+// CalculateBindingCostLAK calculates per-book binding cost including machine depreciation & consumables
+func CalculateBindingCostLAK(bType string, machinePriceLAK float64, lifetimeCycles float64) float64 {
+	consumable := GetBindingConsumableCostLAK(bType)
+	if consumable == 0 && (bType == "" || bType == "none" || bType == "NONE") {
+		return 0.0
+	}
+	depreciation := 0.0
+	if machinePriceLAK > 0 && lifetimeCycles > 0 {
+		depreciation = (machinePriceLAK * 1.10) / lifetimeCycles
+	}
+	return roundToTwoDecimals(depreciation + consumable)
+}
 
 // CalculateCutLayout determines the maximum number of pieces that can fit on a parent sheet
 func CalculateCutLayout(jobW, jobH, parentW, parentH float64) int {
@@ -439,10 +496,21 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 			dPlateCost = decimal.NewFromInt(int64(totalPlates)).Mul(decimal.NewFromFloat(req.PlateCostPerUnit))
 		}
 	} else {
-		// Standard legacy single/split ink calculation
+		// Standard legacy single/split ink or preflight multi-page CMYK calculation
+		pageMultiplier := 1.0
+		if req.PageCount > 1 {
+			pageMultiplier = float64(req.PageCount)
+		}
+		dPageMult := decimal.NewFromFloat(pageMultiplier)
+
 		inkCovK := req.InkCoverageKPercent
 		inkCovCMY := req.InkCoverageCMYPercent
-		if inkCovK == 0 && inkCovCMY == 0 && req.InkCoveragePercent > 0 {
+
+		// Check if Preflight CMYK averages are provided
+		if req.AvgCovC > 0 || req.AvgCovM > 0 || req.AvgCovY > 0 || req.AvgCovK > 0 {
+			inkCovK = req.AvgCovK
+			inkCovCMY = req.AvgCovC + req.AvgCovM + req.AvgCovY
+		} else if inkCovK == 0 && inkCovCMY == 0 && req.InkCoveragePercent > 0 {
 			inkCovK = req.InkCoveragePercent
 		}
 		if inkCovCMY < 0 {
@@ -452,8 +520,8 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		dInkCovK := decimal.NewFromFloat(inkCovK)
 		dInkCovCMY := decimal.NewFromFloat(inkCovCMY)
 
-		dInkCostK = dCostK.Div(dIsoK).Mul(dInkCovK.Div(dFive)).Mul(dAreaFactor).Mul(dQuantity)
-		dInkCostCMY = dCostCMY.Div(dIsoCMY).Mul(dInkCovCMY.Div(dFive)).Mul(dAreaFactor).Mul(dQuantity)
+		dInkCostK = dCostK.Div(dIsoK).Mul(dInkCovK.Div(dFive)).Mul(dAreaFactor).Mul(dQuantity).Mul(dPageMult)
+		dInkCostCMY = dCostCMY.Div(dIsoCMY).Mul(dInkCovCMY.Div(dFive)).Mul(dAreaFactor).Mul(dQuantity).Mul(dPageMult)
 		dInkCost = dInkCostK.Add(dInkCostCMY)
 
 		if req.PlateCostPerUnit > 0 {
@@ -466,6 +534,9 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	dMaintenanceCost := decimal.Zero
 
 	dJobPages := dQuantity.Mul(dAreaFactor)
+	if req.PageCount > 1 {
+		dJobPages = dJobPages.Mul(decimal.NewFromInt(int64(req.PageCount)))
+	}
 
 	if len(req.PrintingProcesses) > 0 {
 		for _, proc := range req.PrintingProcesses {
@@ -506,7 +577,13 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 
 	// ── Step 5: Finishing & Custom Options ────────────────────────────────────
 	dLaminationCost := decimal.NewFromFloat(req.LaminationCost).Mul(dQuantity)
-	dBindingCost := decimal.NewFromFloat(req.BindingCost).Mul(dQuantity)
+
+	// Automatic binding cost computation if binding type is provided
+	bindingUnitCost := req.BindingCost
+	if bindingUnitCost == 0 && req.BindingType != "" && req.BindingType != "none" && req.BindingType != "NONE" {
+		bindingUnitCost = CalculateBindingCostLAK(req.BindingType, req.BindingMachinePrice, req.BindingLifetimeCycles)
+	}
+	dBindingCost := decimal.NewFromFloat(bindingUnitCost).Mul(dQuantity)
 	dFinishingCost := decimal.NewFromFloat(req.FinishingCost).Mul(dQuantity).Add(dLaminationCost).Add(dBindingCost)
 
 	// Machine-Linked Finishing Asset Processes

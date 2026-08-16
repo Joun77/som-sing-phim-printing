@@ -68,6 +68,8 @@ func RunMigrations(db *sql.DB) error {
 		"migrations/001_master_printer_ink_paper_quotation_spec.sql",
 		"../migrations/002_employees_offcuts_inbound.sql",
 		"migrations/002_employees_offcuts_inbound.sql",
+		"../migrations/010_bilingual_books_preflight_and_shop_tracker.sql",
+		"migrations/010_bilingual_books_preflight_and_shop_tracker.sql",
 		"../schema.sql",
 		"schema.sql",
 	}
