@@ -59,21 +59,33 @@ export async function analyzeImageClient(file: File): Promise<PreflightResult> {
             continue;
           }
 
-          // RGB to CMYK standard formula
-          const k = 1 - Math.max(r, g, b);
+          // 1. Calculate raw gray component
+          const kRaw = 1 - Math.max(r, g, b);
+          const Tk = 0.25; // Black Generation Threshold (25%)
+
+          let k = 0;
+          if (kRaw > Tk) {
+            k = (kRaw - Tk) / (1 - Tk);
+          } else {
+            k = 0;
+          }
+
+          // 2. Recalculate C, M, Y based on adjusted K (GCR/UCR mode)
+          const denominator = 1 - k;
           let c = 0;
           let m = 0;
           let y = 0;
 
-          if (k < 0.999) {
-            c = (1 - r - k) / (1 - k);
-            m = (1 - g - k) / (1 - k);
-            y = (1 - b - k) / (1 - k);
+          if (denominator > 0.001) {
+            c = Math.max(0, Math.min(1, (1 - r - k) / denominator));
+            m = Math.max(0, Math.min(1, (1 - g - k) / denominator));
+            y = Math.max(0, Math.min(1, (1 - b - k) / denominator));
           } else {
             // Pure black
             c = 0;
             m = 0;
             y = 0;
+            k = 1;
           }
 
           sumC += c * a;

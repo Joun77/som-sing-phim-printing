@@ -16,6 +16,10 @@ import {
   RotateCcw,
   Sparkles,
   Info,
+  Sliders,
+  Printer,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react';
 import type { PreflightResult } from '../features/orders/types';
 import { analyzeImageClient, analyzePDFClient } from '../lib/preflightAnalyzer';
@@ -114,7 +118,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
           }
         }
       } catch {
-        // Server offline, uses local objectUrl
+        // Server offline
       }
 
       setResult(analysisResult);
@@ -148,22 +152,24 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
     : 0;
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-6 text-slate-100">
-      {/* Top Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-        <div className="flex items-center gap-3.5">
-          <div className="p-3 bg-gradient-to-br from-indigo-500/20 to-sky-500/20 border border-indigo-500/30 rounded-xl text-indigo-400">
-            <Cpu className="w-6 h-6" />
+    <div className="w-full space-y-6 text-slate-100">
+      {/* Top Banner Header (Full Width) */}
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
+        <div className="flex items-center gap-4">
+          <div className="p-3.5 bg-gradient-to-br from-indigo-500/20 via-sky-500/20 to-teal-500/20 border border-indigo-500/30 rounded-2xl text-indigo-400 shadow-lg shadow-indigo-950/40">
+            <Cpu className="w-7 h-7" />
           </div>
           <div>
-            <h2 className="text-xl font-bold tracking-wide flex items-center gap-2">
-              <span>ລະບົບກວດສອບໄຟລ໌ພິມ & ສະກັດຄ່າສີ CMYK (Preflight Studio)</span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                Realtime Pixel Engine
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+                ລະບົບກວດສອບໄຟລ໌ພິມ & ສະກັດຄ່າສີ CMYK (Preflight Studio)
+              </h2>
+              <span className="hidden sm:inline-flex text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                Live Pixel Engine
               </span>
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              ສະແດງຕົວຢ່າງໄຟລ໌ (Preview) ພ້ອມສະຫຼຸບຄ່າສີສະເລ່ຍ CMYK, ຂະໜາດພິກເຊວ, ແລະ ປະເມີນ DPI ດ້ານຂ້າງ
+            </div>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1">
+              ສະແດງຕົວຢ່າງໄຟລ໌ (Live Artwork Preview) ພ້ອມສະຫຼຸບຄ່າສີສະເລ່ຍ CMYK, ຂະໜາດພິກເຊວ, ແລະ ປະເມີນ DPI ດ້ານຂ້າງ
             </p>
           </div>
         </div>
@@ -171,107 +177,152 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
         {result && (
           <button
             onClick={resetAll}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold border border-slate-700 transition cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 hover:text-white rounded-xl text-xs font-bold border border-slate-700 shadow-md transition cursor-pointer"
           >
-            <RotateCcw className="w-3.5 h-3.5" /> ອັບໂຫຼດໄຟລ໌ໃໝ່
+            <RotateCcw className="w-4 h-4 text-indigo-400" /> ອັບໂຫຼດໄຟລ໌ໃໝ່
           </button>
         )}
       </div>
 
-      {/* Main Drag & Drop Zone if no result */}
+      {/* INITIAL FULL-WIDTH DROP ZONE & SPEC MATRIX (Fills Screen Beautifully) */}
       {!result && (
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setIsDragOver(true);
-          }}
-          onDragLeave={() => setIsDragOver(false)}
-          onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-3xl p-16 text-center transition-all cursor-pointer bg-slate-900/60 shadow-2xl ${
-            isDragOver
-              ? 'border-indigo-500 bg-indigo-500/10 scale-[1.01]'
-              : 'border-slate-800 hover:border-slate-600 hover:bg-slate-900/80'
-          }`}
-          onClick={() => document.getElementById('preflight-file-input')?.click()}
-        >
-          <input
-            id="preflight-file-input"
-            type="file"
-            accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff,.tif,.psd,.bmp,.gif"
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files && e.target.files[0]) {
-                handleFileUpload(e.target.files[0]);
-              }
+        <div className="space-y-6">
+          {/* Main Drag & Drop Zone */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragOver(true);
             }}
-          />
+            onDragLeave={() => setIsDragOver(false)}
+            onDrop={handleDrop}
+            className={`border-2 border-dashed rounded-3xl p-12 sm:p-20 text-center transition-all cursor-pointer bg-slate-900/80 shadow-2xl ${
+              isDragOver
+                ? 'border-indigo-500 bg-indigo-500/10 scale-[1.005]'
+                : 'border-slate-800 hover:border-slate-600 hover:bg-slate-900'
+            }`}
+            onClick={() => document.getElementById('preflight-file-input')?.click()}
+          >
+            <input
+              id="preflight-file-input"
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff,.tif,.psd,.bmp,.gif"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files && e.target.files[0]) {
+                  handleFileUpload(e.target.files[0]);
+                }
+              }}
+            />
 
-          <div className="flex flex-col items-center justify-center gap-4">
-            <div className="flex items-center gap-3 p-5 bg-slate-800/80 rounded-2xl text-indigo-400 border border-slate-700 shadow-inner">
-              <Upload className="w-8 h-8 text-indigo-400 animate-bounce" />
-              <ImageIcon className="w-8 h-8 text-pink-400" />
-              <FileText className="w-8 h-8 text-cyan-400" />
+            <div className="flex flex-col items-center justify-center gap-4 max-w-2xl mx-auto">
+              <div className="flex items-center gap-4 p-5 bg-slate-800/90 rounded-2xl text-indigo-400 border border-slate-700/80 shadow-inner">
+                <Upload className="w-9 h-9 text-indigo-400 animate-bounce" />
+                <ImageIcon className="w-9 h-9 text-pink-400" />
+                <FileText className="w-9 h-9 text-cyan-400" />
+              </div>
+
+              <div>
+                <h3 className="text-xl font-black text-slate-100 tracking-tight">
+                  ລາກໄຟລ໌ PDF ຫຼື ຮູບພາບ (JPG / PNG / WebP / TIFF) ມາຖິ້ມໃສ່ບ່ອນນີ້
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-400 mt-1.5 leading-relaxed">
+                  ລະບົບຈະກວດສອບເມັດສີ CMYK ຕົວຈິງ, ຈຳນວນໜ້າ, ຄວາມຄົມຊັດ DPI ແລະ ສະແດງຕົວຢ່າງ Preview ທັນທີ
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                <span className="px-2.5 py-1 bg-slate-800 text-slate-300 rounded-lg text-xs font-mono border border-slate-700">PDF ຫຼາຍໜ້າ</span>
+                <span className="px-2.5 py-1 bg-slate-800 text-slate-300 rounded-lg text-xs font-mono border border-slate-700">JPEG / JPG</span>
+                <span className="px-2.5 py-1 bg-slate-800 text-slate-300 rounded-lg text-xs font-mono border border-slate-700">PNG Transparent</span>
+                <span className="px-2.5 py-1 bg-slate-800 text-slate-300 rounded-lg text-xs font-mono border border-slate-700">WebP / TIFF</span>
+                <span className="px-2.5 py-1 bg-slate-800 text-slate-300 rounded-lg text-xs font-mono border border-slate-700">PSD</span>
+              </div>
+
+              {isAnalyzing && (
+                <div className="flex items-center gap-2.5 mt-4 px-6 py-3 bg-indigo-500/20 border border-indigo-500/40 rounded-xl text-indigo-300 animate-pulse text-sm font-bold shadow-lg">
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                  <span>ກຳລັງອ່ານເມັດສີ ແລະ ປະມວນຜົນພິກເຊວຕົວຈິງ...</span>
+                </div>
+              )}
+
+              {errorMessage && (
+                <div className="flex items-center gap-2.5 mt-4 px-5 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-sm font-semibold">
+                  <AlertTriangle className="w-5 h-5 shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
             </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-100">
-                ລາກໄຟລ໌ PDF ຫຼື ຮູບພາບ (JPG / PNG / WebP / TIFF) ມາຖິ້ມໃສ່ບ່ອນນີ້
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">
-                ລະບົບຈະກວດສອບເມັດສີ CMYK ຕົວຈິງ, ຈຳນວນໜ້າ, ຄວາມຄົມຊັດ DPI ແລະ ສະແດງຕົວຢ່າງ Preview ທັນທີ
+          </div>
+
+          {/* 3 Information Pillars (Utilizes Wide Screen) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-lg">
+              <div className="flex items-center gap-2.5 text-indigo-400 font-bold text-sm">
+                <ShieldCheck className="w-5 h-5" />
+                <span>100% Real Pixel Sampling</span>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                ຖອດລະຫັດເມັດສີ $R, G, B$ ຕົວຈິງຈາກທຸກພິກເຊວ ແລ້ວແປງເປັນ $C, M, Y, K\%$ ທີ່ຖືກຕ້ອງຕາມມາດຕະຖານໂຮງພິມ
               </p>
             </div>
 
-            {isAnalyzing && (
-              <div className="flex items-center gap-2.5 mt-4 px-5 py-2.5 bg-indigo-500/15 border border-indigo-500/30 rounded-xl text-indigo-300 animate-pulse text-sm font-semibold">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>ກຳລັງອ່ານເມັດສີ ແລະ ປະມວນຜົນພິກເຊວຕົວຈິງ...</span>
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-lg">
+              <div className="flex items-center gap-2.5 text-sky-400 font-bold text-sm">
+                <Printer className="w-5 h-5" />
+                <span>DPI & Print Resolution</span>
               </div>
-            )}
+              <p className="text-xs text-slate-400 leading-relaxed">
+                ກວດສອບຂະໜາດພິກເຊວ ($W \times H$) ເພື່ອແນະນຳຂະໜາດພິມທີ່ເໝາະສົມ (A3, A4, A5, ສະຕິກເກີ) ປ້ອງກັນພາບແຕກ
+              </p>
+            </div>
 
-            {errorMessage && (
-              <div className="flex items-center gap-2 mt-4 px-4 py-2.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-sm">
-                <AlertTriangle className="w-4 h-4" />
-                <span>{errorMessage}</span>
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-lg">
+              <div className="flex items-center gap-2.5 text-emerald-400 font-bold text-sm">
+                <Zap className="w-5 h-5" />
+                <span>1-Click Quotation Sync</span>
               </div>
-            )}
+              <p className="text-xs text-slate-400 leading-relaxed">
+                ສົ່ງຄ່າ % ສີ ແລະ ຈຳນວນໜ້າເຂົ້າຟອມໃບສະເໜີລາຄາອັດຕະໂນມັດ ໂດຍບໍ່ຕ້ອງປ້ອນຂໍ້ມູນເອງ
+              </p>
+            </div>
           </div>
         </div>
       )}
 
-      {/* 2-Column Split Preflight Studio: Left (Preview) + Right (Color & Specs Sidebar) */}
+      {/* 2-COLUMN SPLIT STUDIO (FULL-WIDTH 100% UTILIZATION) */}
       {result && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* LEFT: Large Interactive Preview Canvas (7 Cols) */}
-          <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+          {/* LEFT: Large Interactive Preview Canvas (8 Cols on XL) */}
+          <div className="xl:col-span-8 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <Eye className="w-4 h-4 text-indigo-400" />
                 <h3 className="text-sm font-bold text-slate-200">ຕົວຢ່າງໄຟລ໌ພິມ (Live Artwork Preview)</h3>
               </div>
 
               {/* Zoom Controls if Image */}
               {isImageFile(result.file_name) && (
-                <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                <div className="flex items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800 text-xs">
                   <button
-                    onClick={() => setZoomLevel((z) => Math.max(0.6, z - 0.2))}
-                    className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200"
+                    onClick={() => setZoomLevel((z) => Math.max(0.5, z - 0.25))}
+                    className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition"
                     title="Zoom Out"
                   >
-                    <ZoomOut className="w-3.5 h-3.5" />
+                    <ZoomOut className="w-4 h-4" />
                   </button>
-                  <span className="px-1.5 font-mono text-[11px] text-slate-300">
+                  <span className="px-2 font-mono text-xs font-bold text-slate-300">
                     {Math.round(zoomLevel * 100)}%
                   </span>
                   <button
-                    onClick={() => setZoomLevel((z) => Math.min(2.5, z + 0.2))}
-                    className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200"
+                    onClick={() => setZoomLevel((z) => Math.min(3, z + 0.25))}
+                    className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition"
                     title="Zoom In"
                   >
-                    <ZoomIn className="w-3.5 h-3.5" />
+                    <ZoomIn className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setZoomLevel(1)}
-                    className="px-1.5 py-0.5 text-[10px] bg-slate-800 hover:bg-slate-700 rounded text-slate-300"
+                    className="px-2 py-0.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 rounded text-slate-300 transition"
                   >
                     Fit
                   </button>
@@ -279,8 +330,8 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
               )}
             </div>
 
-            {/* Preview Viewport */}
-            <div className="relative w-full h-[480px] bg-slate-950/90 rounded-2xl overflow-hidden border border-slate-800 flex items-center justify-center checkerboard-pattern group">
+            {/* Preview Viewport (560px Height for Immersive Look) */}
+            <div className="relative w-full h-[560px] bg-slate-950/95 rounded-2xl overflow-hidden border border-slate-800/90 flex items-center justify-center checkerboard-pattern group">
               {previewUrl && isImageFile(result.file_name) ? (
                 <div className="w-full h-full overflow-auto flex items-center justify-center p-4">
                   <img
@@ -309,38 +360,38 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
 
               {/* Overlaid Dimension Tag */}
               {result.image_width && result.image_height && (
-                <div className="absolute bottom-3 left-3 px-3 py-1.5 bg-black/75 backdrop-blur-md rounded-lg text-xs font-mono border border-slate-700/80 text-slate-200 shadow-lg flex items-center gap-2">
-                  <Maximize2 className="w-3 h-3 text-indigo-400" />
+                <div className="absolute bottom-4 left-4 px-3.5 py-2 bg-black/85 backdrop-blur-md rounded-xl text-xs font-mono border border-slate-700 text-slate-200 shadow-2xl flex items-center gap-2.5">
+                  <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
                   <span>
                     {result.image_width} × {result.image_height} px
                   </span>
-                  <span className="text-slate-500">|</span>
-                  <span className="text-emerald-400 font-bold">~{result.dpi_estimate || 300} DPI</span>
+                  <span className="text-slate-600">|</span>
+                  <span className="text-emerald-400 font-black">~{result.dpi_estimate || 300} DPI</span>
                 </div>
               )}
             </div>
 
             {/* File Notice Footer */}
             <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
-              <span className="truncate max-w-[320px] font-medium text-slate-300">
+              <span className="truncate max-w-md font-semibold text-slate-300">
                 📄 {result.file_name}
               </span>
-              <span className="font-mono text-slate-500">
-                {result.execution_notice || 'Realtime Analysis'}
+              <span className="font-mono text-slate-500 text-[11px]">
+                {result.execution_notice || 'Realtime Pixel Analysis'}
               </span>
             </div>
           </div>
 
-          {/* RIGHT: Sidebar Color Analytics & Specs (5 Cols) */}
-          <div className="lg:col-span-5 space-y-5">
+          {/* RIGHT: Sidebar Color Analytics & Specs (4 Cols on XL) */}
+          <div className="xl:col-span-4 space-y-5">
             {/* Status & Readiness Card */}
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                   ຜົນກວດສອບມາດຕະຖານພິມ
                 </span>
                 <span
-                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black ${
                     result.has_rgb && !result.is_standard_cmyk
                       ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
                       : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
@@ -356,33 +407,33 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
               </div>
 
               {result.warning_message_lao && (
-                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-start gap-2 leading-relaxed">
+                <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-start gap-2.5 leading-relaxed">
                   <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <span>{result.warning_message_lao}</span>
                 </div>
               )}
 
               {/* CMYK Progress Bars */}
-              <div className="space-y-3 pt-1">
+              <div className="space-y-3.5 pt-1">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-300">
                   <span>📊 ຄ່າສີສະເລ່ຍ CMYK (%)</span>
-                  <span className="text-slate-400 font-mono text-[11px]">
-                    Total Ink: <strong className="text-indigo-300">{totalInkCoverage}%</strong>
+                  <span className="text-slate-400 font-mono text-xs">
+                    Total Ink: <strong className="text-indigo-300 font-bold">{totalInkCoverage}%</strong>
                   </span>
                 </div>
 
                 {/* Cyan */}
                 <div className="space-y-1">
-                  <div className="flex justify-between text-xs font-semibold">
+                  <div className="flex justify-between text-xs font-bold">
                     <span className="text-cyan-400 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block shadow-sm shadow-cyan-400/50"></span>
                       Cyan (C)
                     </span>
-                    <span className="font-mono text-cyan-300 font-bold">{result.avg_cov_c.toFixed(2)}%</span>
+                    <span className="font-mono text-cyan-300 font-black">{result.avg_cov_c.toFixed(2)}%</span>
                   </div>
-                  <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                  <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
                     <div
-                      className="bg-cyan-400 h-2.5 rounded-full transition-all duration-700"
+                      className="bg-cyan-400 h-3 rounded-full transition-all duration-700 shadow-sm"
                       style={{ width: `${Math.min(result.avg_cov_c * 2.5, 100)}%` }}
                     ></div>
                   </div>
@@ -390,16 +441,16 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
 
                 {/* Magenta */}
                 <div className="space-y-1">
-                  <div className="flex justify-between text-xs font-semibold">
+                  <div className="flex justify-between text-xs font-bold">
                     <span className="text-pink-400 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-pink-400 inline-block shadow-sm shadow-pink-400/50"></span>
                       Magenta (M)
                     </span>
-                    <span className="font-mono text-pink-300 font-bold">{result.avg_cov_m.toFixed(2)}%</span>
+                    <span className="font-mono text-pink-300 font-black">{result.avg_cov_m.toFixed(2)}%</span>
                   </div>
-                  <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                  <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
                     <div
-                      className="bg-pink-500 h-2.5 rounded-full transition-all duration-700"
+                      className="bg-pink-500 h-3 rounded-full transition-all duration-700 shadow-sm"
                       style={{ width: `${Math.min(result.avg_cov_m * 2.5, 100)}%` }}
                     ></div>
                   </div>
@@ -407,16 +458,16 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
 
                 {/* Yellow */}
                 <div className="space-y-1">
-                  <div className="flex justify-between text-xs font-semibold">
+                  <div className="flex justify-between text-xs font-bold">
                     <span className="text-yellow-400 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block shadow-sm shadow-yellow-400/50"></span>
                       Yellow (Y)
                     </span>
-                    <span className="font-mono text-yellow-300 font-bold">{result.avg_cov_y.toFixed(2)}%</span>
+                    <span className="font-mono text-yellow-300 font-black">{result.avg_cov_y.toFixed(2)}%</span>
                   </div>
-                  <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                  <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
                     <div
-                      className="bg-yellow-400 h-2.5 rounded-full transition-all duration-700"
+                      className="bg-yellow-400 h-3 rounded-full transition-all duration-700 shadow-sm"
                       style={{ width: `${Math.min(result.avg_cov_y * 2.5, 100)}%` }}
                     ></div>
                   </div>
@@ -424,16 +475,16 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
 
                 {/* Black / Key */}
                 <div className="space-y-1">
-                  <div className="flex justify-between text-xs font-semibold">
+                  <div className="flex justify-between text-xs font-bold">
                     <span className="text-slate-200 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-slate-300 inline-block shadow-sm shadow-slate-300/50"></span>
                       Black / Key (K)
                     </span>
-                    <span className="font-mono text-slate-100 font-bold">{result.avg_cov_k.toFixed(2)}%</span>
+                    <span className="font-mono text-slate-100 font-black">{result.avg_cov_k.toFixed(2)}%</span>
                   </div>
-                  <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                  <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
                     <div
-                      className="bg-slate-300 h-2.5 rounded-full transition-all duration-700"
+                      className="bg-slate-300 h-3 rounded-full transition-all duration-700 shadow-sm"
                       style={{ width: `${Math.min(result.avg_cov_k * 2.5, 100)}%` }}
                     ></div>
                   </div>
@@ -442,39 +493,39 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
             </div>
 
             {/* Specifications Summary Card */}
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-3">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-3.5">
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                <Layers className="w-4 h-4 text-indigo-400" />
                 ລາຍລະອຽດສະເປກ (Specifications)
               </h4>
 
-              <div className="grid grid-cols-2 gap-2.5 text-xs">
-                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">ປະເພດໄຟລ໌</div>
-                  <div className="font-bold text-indigo-300 mt-0.5">
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                  <div className="text-[10px] text-slate-400 font-medium">ປະເພດໄຟລ໌</div>
+                  <div className="font-black text-indigo-300 text-sm mt-0.5">
                     {result.file_type || (isImageFile(result.file_name) ? 'IMAGE' : 'PDF')}
                   </div>
                 </div>
 
-                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">
+                <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                  <div className="text-[10px] text-slate-400 font-medium">
                     {result.image_width ? 'ຂະໜາດພິກເຊວ' : 'ຈຳນວນໜ້າ'}
                   </div>
-                  <div className="font-bold text-slate-200 mt-0.5">
-                    {result.image_width ? `${result.image_width}x${result.image_height}` : `${result.total_pages} ໜ້າ`}
+                  <div className="font-black text-slate-100 text-sm mt-0.5">
+                    {result.image_width ? `${result.image_width} × ${result.image_height}` : `${result.total_pages} ໜ້າ`}
                   </div>
                 </div>
 
-                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">ຂະໜາດພິມແນະນຳ</div>
-                  <div className="font-bold text-emerald-400 mt-0.5">
+                <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                  <div className="text-[10px] text-slate-400 font-medium">ຂະໜາດພິມແນະນຳ</div>
+                  <div className="font-black text-emerald-400 text-sm mt-0.5">
                     {result.suggested_paper || 'A4'}
                   </div>
                 </div>
 
-                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">ໂໝດສີ (Color Mode)</div>
-                  <div className="font-bold text-slate-200 mt-0.5 truncate">
+                <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                  <div className="text-[10px] text-slate-400 font-medium">ໂໝດສີ (Color Mode)</div>
+                  <div className="font-black text-slate-200 text-sm mt-0.5 truncate">
                     {result.color_space || 'CMYK'}
                   </div>
                 </div>
@@ -482,11 +533,11 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
             </div>
 
             {/* 2-Button Action Flow */}
-            <div className="space-y-2.5 pt-1">
+            <div className="space-y-3 pt-1">
               {/* Button 1: Send to Quotation */}
               <button
                 onClick={() => onSendToQuotation && onSendToQuotation(result)}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.99] text-white font-bold rounded-2xl shadow-xl shadow-emerald-950/40 transition cursor-pointer"
+                className="w-full flex items-center justify-center gap-2.5 px-6 py-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.99] text-white font-black text-sm rounded-2xl shadow-xl shadow-emerald-950/50 transition cursor-pointer"
               >
                 <span>🟢 ສົ່ງຄ່ານຳໃຊ້ສ້າງໃບສະເໜີລາຄາ</span>
                 <ArrowRight className="w-4 h-4" />
@@ -495,7 +546,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
               {/* Button 2: Skip / Manual */}
               <button
                 onClick={() => onSkipToManual && onSkipToManual()}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 active:scale-[0.99] text-slate-300 hover:text-white font-semibold rounded-2xl border border-slate-700 transition cursor-pointer text-xs"
+                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-slate-800 hover:bg-slate-700 active:scale-[0.99] text-slate-300 hover:text-white font-bold rounded-2xl border border-slate-700 transition cursor-pointer text-xs"
               >
                 <span>⚪ ຂ້າມ / ໄປປ້ອນຄ່າສີເອງ</span>
               </button>
