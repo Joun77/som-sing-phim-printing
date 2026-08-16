@@ -76,12 +76,49 @@ export interface Delivery {
   notes?: string;
 }
 
+export interface ColorChannel {
+  channel_name: string; // 'C' | 'M' | 'Y' | 'K' | 'PANTONE ...'
+  density_pct: number;
+  is_spot_color?: boolean;
+}
+
+export interface PrinterProcessSetup {
+  printer_asset_id: string;
+  printer_name?: string;
+  sequence?: number;
+  color_mode: 'AVERAGE' | 'SEPARATE_CHANNEL';
+  average_density_pct: number;
+  allocated_pages?: number;
+  cost_per_page?: number;
+  color_channels: ColorChannel[];
+}
+
+export interface PaperSelectionSetup {
+  category_id: string;
+  inventory_material_id: string;
+  cost_per_sheet: number;
+  gsm: number;
+}
+
+export interface FinishingProcessSetup {
+  finishing_type: string;
+  machine_asset_id: string;
+  machine_name?: string;
+  estimated_setup_time_mins?: number;
+  estimated_run_time_mins?: number;
+  unit_cost?: number;
+}
+
 export interface PrinterAllocation {
   printer_id: string;
   printer_name: string;
   allocated_pages: number;
   cost_per_page: number; // Depreciation + Ink + Electricity rate per page
   subtotal_cost: number;
+  is_double_sided?: boolean;
+  color_mode?: 'CMYK' | 'MONO_K' | 'SPOT_ONLY' | 'AVERAGE' | 'SEPARATE_CHANNEL';
+  average_density_pct?: number;
+  color_channels?: ColorChannel[];
 }
 
 export interface FinishingItem {
@@ -91,6 +128,7 @@ export interface FinishingItem {
   unit_type: 'sheet' | 'sqm' | 'job';
   selected: boolean;
   total_cost: number;
+  machine_asset_id?: string;
 }
 
 export interface QuotationFormState {

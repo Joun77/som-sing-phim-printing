@@ -19,7 +19,15 @@ export default function EditEquipmentModal({ isOpen, onClose, equipmentItem }: E
 
   useEffect(() => {
     if (equipmentItem) {
-      const initialCost = Number(equipmentItem.purchaseCost || equipmentItem.purchasePrice || equipmentItem.MachinePrice || equipmentItem.unitCost || 0);
+      const initialCost = Number(
+        equipmentItem.price || 
+        equipmentItem.unitPrice || 
+        equipmentItem.purchaseCost || 
+        equipmentItem.purchasePrice || 
+        equipmentItem.MachinePrice || 
+        equipmentItem.unitCost || 
+        0
+      );
       setFormData({
         name: equipmentItem.name || '',
         category: equipmentItem.category || 'Printer',
@@ -28,22 +36,23 @@ export default function EditEquipmentModal({ isOpen, onClose, equipmentItem }: E
         model: equipmentItem.model || '',
         serialNumber: equipmentItem.serialNumber || equipmentItem.sn || '',
         status: equipmentItem.status || 'In Use',
-        printerCategory: equipmentItem.printerCategory || 'Laser',
+        printerCategory: equipmentItem.printerCategory || equipmentItem.specs?.printerCategory || 'Inkjet',
         location: equipmentItem.location || 'Main Dept',
         purchaseCost: initialCost,
+        price: initialCost,
         lifespanYears: Number(equipmentItem.lifespanYears || equipmentItem.specs?.lifespanYears || 5),
         estMonthlyVolume: Number(equipmentItem.estMonthlyVolume || equipmentItem.specs?.estMonthlyVolume || 50000),
         maintenanceRatePercent: Number(equipmentItem.maintenanceRatePercent || equipmentItem.specs?.maintenanceRatePercent || 15),
-        printedPagesCapacity: Number(equipmentItem.printedPagesCapacity || equipmentItem.TargetTotalPages || 1000000),
+        printedPagesCapacity: Number(equipmentItem.expectedLifeA4Pages || equipmentItem.lifetimePagesA4 || equipmentItem.printedPagesCapacity || equipmentItem.TargetTotalPages || 1000000),
         maintenanceCostPerPage: Number(equipmentItem.maintenanceCostPerPage || equipmentItem.MaintenanceCostPerPage || 0),
         clickRateColor: Number(equipmentItem.clickRateColor || 0),
         clickRateBW: Number(equipmentItem.clickRateBW || 0),
         imageUrl: equipmentItem.imageUrl || equipmentItem.itemPhoto || '',
         ipAddress: equipmentItem.ipAddress || equipmentItem.ip || '',
         macAddress: equipmentItem.macAddress || equipmentItem.mac || '',
-        vendor: equipmentItem.vendor || '',
+        vendor: equipmentItem.vendor || equipmentItem.supplier || '',
         warrantyExpirationYear: equipmentItem.warrantyExpirationYear || equipmentItem.warrantyExpiration || '',
-        purchaseDate: equipmentItem.purchaseDate || ''
+        purchaseDate: equipmentItem.purchaseDate || equipmentItem.importDate || ''
       });
     }
   }, [equipmentItem]);
@@ -68,7 +77,7 @@ export default function EditEquipmentModal({ isOpen, onClose, equipmentItem }: E
   };
 
   // Real-time calculation for Post-Press machinery
-  const assetVal = Number(formData.purchaseCost) || 0;
+  const assetVal = Number(formData.purchaseCost || formData.price) || 0;
   const lifespanYrs = Number(formData.lifespanYears) || 5;
   const monthlyVol = Number(formData.estMonthlyVolume) || 50000;
   const maintRatePct = Number(formData.maintenanceRatePercent) || 0;
@@ -86,6 +95,8 @@ export default function EditEquipmentModal({ isOpen, onClose, equipmentItem }: E
 
     const updated = {
       ...formData,
+      price: assetVal,
+      unitPrice: assetVal,
       purchaseCost: assetVal,
       purchasePrice: assetVal,
       MachinePrice: assetVal,
@@ -95,17 +106,22 @@ export default function EditEquipmentModal({ isOpen, onClose, equipmentItem }: E
       costPerConsumptionUnit: isPrinter ? Number(formData.maintenanceCostPerPage) : calculatedRate,
       calculatedCostPerPage: isPrinter ? Number(formData.maintenanceCostPerPage) : calculatedRate,
       printedPagesCapacity: Number(formData.printedPagesCapacity),
+      expectedLifeA4Pages: Number(formData.printedPagesCapacity),
+      lifetimePagesA4: Number(formData.printedPagesCapacity),
       TargetTotalPages: Number(formData.printedPagesCapacity),
       maintenanceCostPerPage: isPrinter ? Number(formData.maintenanceCostPerPage) : calculatedRate,
       MaintenanceCostPerPage: isPrinter ? Number(formData.maintenanceCostPerPage) : calculatedRate,
+      printerCategory: formData.printerCategory || 'Inkjet',
       clickRateColor: Number(formData.clickRateColor),
       clickRateBW: Number(formData.clickRateBW),
       specs: {
         ...(equipmentItem.specs || {}),
+        printerCategory: formData.printerCategory || 'Inkjet',
         postPressSubtype: formData.postPressSubtype,
         lifespanYears: lifespanYrs,
         estMonthlyVolume: monthlyVol,
         maintenanceRatePercent: maintRatePct,
+        expectedLifeA4Pages: Number(formData.printedPagesCapacity),
         netCostPerUnit: calculatedRate
       }
     };

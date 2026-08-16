@@ -301,13 +301,62 @@ export default function CreateOrderPage({
       google_drive_link: artworkLink,
       items: items.map(it => {
         const paperItem = inventory ? inventory.find(p => p.id === it.paperId) : null;
-        const paperCost = paperItem ? (paperItem.costPerConsumptionUnit || 90) : 100;
+        const paperCost = paperItem ? (paperItem.costPerConsumptionUnit || paperItem.costPerSheet || 90) : 100;
         const printerItem = equipment ? equipment.find(e => e.id === it.printerId) : null;
         const inkCostPerMl = printerItem ? (printerItem.inkUnitCostMl || 500) : 500;
+
+        const paperSetup = {
+          category_id: paperItem?.category || 'Paper',
+          inventory_material_id: it.paperId || 'default-paper',
+          cost_per_sheet: paperCost,
+          gsm: paperItem?.gsm || 130,
+        };
+
+        const printingProcesses = (it.printerAllocations && it.printerAllocations.length > 0)
+          ? it.printerAllocations.map((p, pIdx) => ({
+              printer_asset_id: p.printer_id,
+              sequence: pIdx + 1,
+              color_mode: p.color_mode || 'AVERAGE',
+              average_density_pct: p.average_density_pct || 100,
+              color_channels: p.color_channels || [],
+            }))
+          : [{
+              printer_asset_id: it.printerId || 'default-printer',
+              sequence: 1,
+              color_mode: 'AVERAGE',
+              average_density_pct: 100,
+              color_channels: [],
+            }];
+
+        const finishingProcesses = [];
+        if (it.useLamination && it.coatingMachineId) {
+          finishingProcesses.push({
+            finishing_type: it.laminationType || 'LAMINATE_GLOSS',
+            machine_asset_id: it.coatingMachineId,
+            estimated_setup_time_mins: 15,
+            estimated_run_time_mins: 30,
+            unit_cost: 150.0,
+          });
+        }
+        if (it.useBinding && it.bindingMachineId) {
+          finishingProcesses.push({
+            finishing_type: it.bindingType || 'HOT_MELT_BINDING',
+            machine_asset_id: it.bindingMachineId,
+            estimated_setup_time_mins: 20,
+            estimated_run_time_mins: 45,
+            unit_cost: 200.0,
+          });
+        }
 
         return {
           job_name: it.name,
           quantity: Number(it.quantity || 1),
+          quantity_required: Number(it.quantity || 1),
+          unfolded_width_mm: Number(it.jobWidth || 210),
+          unfolded_height_mm: Number(it.jobHeight || 297),
+          paper_setup: paperSetup,
+          printing_processes: printingProcesses,
+          finishing_processes: finishingProcesses,
           paper_sku: it.paperId || 'default-paper',
           paper_cost_per_unit: paperCost,
           paper_format: it.mediaType === 'Roll-fed' ? 'roll' : 'sheet',
@@ -331,7 +380,10 @@ export default function CreateOrderPage({
           target_margin_percent: (Number(it.targetMarginPercent) || 35) / 100.0,
           specs: {
             dimensions: `${it.jobWidth}x${it.jobHeight}mm`,
-            double_sided: it.isDoubleSided
+            double_sided: it.isDoubleSided,
+            paper_setup: paperSetup,
+            printing_processes: printingProcesses,
+            finishing_processes: finishingProcesses,
           }
         };
       })

@@ -8,6 +8,34 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// ColorChannel represents a single color plate/channel (C, M, Y, K, or Spot)
+type ColorChannel struct {
+	ChannelName string  `json:"channel_name"` // "C", "M", "Y", "K", "PANTONE..."
+	DensityPct  float64 `json:"density_pct"`
+	IsSpotColor bool    `json:"is_spot_color"`
+}
+
+// PrinterProcessSetup represents a specific printer allocation with color modes
+type PrinterProcessSetup struct {
+	PrinterAssetID string         `json:"printer_asset_id"`
+	Sequence       int            `json:"sequence"`
+	ColorMode      string         `json:"color_mode"` // "AVERAGE" | "SEPARATE_CHANNEL"
+	AverageDensity float64        `json:"average_density_pct"`
+	AllocatedPages int            `json:"allocated_pages"`
+	CostPerPage    float64        `json:"cost_per_page"`
+	ColorChannels  []ColorChannel `json:"color_channels"`
+}
+
+// FinishingProcessSetup represents a post-press machine asset integration
+type FinishingProcessSetup struct {
+	FinishingType          string  `json:"finishing_type"` // e.g. "LAMINATE_GLOSS", "FOLDING", "HOT_MELT_BINDING"
+	MachineAssetID         string  `json:"machine_asset_id"`
+	MachineHourlyRate      float64 `json:"machine_hourly_rate"`
+	EstimatedSetupTimeMins int     `json:"estimated_setup_time_mins"`
+	EstimatedRunTimeMins   int     `json:"estimated_run_time_mins"`
+	UnitCost               float64 `json:"unit_cost"`
+}
+
 // PrinterAllocation represents a manual multi-printer allocation for a job
 type PrinterAllocation struct {
 	PrinterID      string  `json:"printer_id"`
@@ -28,12 +56,23 @@ type CustomFinishingOption struct {
 type CalculationRequest struct {
 	JobName          string              `json:"job_name" binding:"required"`
 	Quantity         int                 `json:"quantity" binding:"required,gt=0"`
-	PaperSku         string              `json:"paper_sku" binding:"required"`
+	PaperSku         string              `json:"paper_sku"`
 	PaperCostPerUnit float64             `json:"paper_cost_per_unit"` // Cost per ream/pack or unit
 	PaperFormat      string              `json:"paper_format"`        // "sheet" | "roll"
 	SheetsPerPack    int                 `json:"sheets_per_pack"`     // Sheets per pack/ream (default 500)
 	CutsPerSheet     int                 `json:"cuts_per_sheet"`      // Number of brochure/job pieces cut per large sheet (default 1)
 	Allocations      []PrinterAllocation `json:"allocations"`
+
+	// Multi-Printer & Channel Color Separation (Task 3)
+	PrintingProcesses  []PrinterProcessSetup   `json:"printing_processes"`
+	FinishingProcesses []FinishingProcessSetup `json:"finishing_processes"`
+	PlateCostPerUnit   float64                 `json:"plate_cost_per_unit"` // Cost per printing plate (e.g. 50,000 LAK)
+
+	// Unfolded / Parent Sheet Dimensions for Layout Optimization
+	UnfoldedWidthMM     float64 `json:"unfolded_width_mm"`
+	UnfoldedHeightMM    float64 `json:"unfolded_height_mm"`
+	ParentSheetWidthMM  float64 `json:"parent_sheet_width_mm"`
+	ParentSheetHeightMM float64 `json:"parent_sheet_height_mm"`
 
 	// Setup & Finishing Costs
 	SetupCost        float64 `json:"setup_cost"`         // Fixed setup cost
@@ -96,10 +135,10 @@ type CalculationRequest struct {
 	TargetMarginPercent float64 `json:"target_margin_percent"`
 
 	// Discount, Tax Mode & Deposit (Task 2.2)
-	DiscountPercent  float64 `json:"discount_percent"`  // e.g. 0.10 for 10%
-	TaxMode          string  `json:"tax_mode"`          // "NONE" | "EXCLUDED" | "INCLUDED"
-	TaxPercent       float64 `json:"tax_percent"`       // e.g. 0.07 for 7%
-	DepositPercent   float64 `json:"deposit_percent"`   // e.g. 0, 30, 50, 100
+	DiscountPercent float64 `json:"discount_percent"` // e.g. 0.10 for 10%
+	TaxMode         string  `json:"tax_mode"`         // "NONE" | "EXCLUDED" | "INCLUDED"
+	TaxPercent      float64 `json:"tax_percent"`      // e.g. 0.07 for 7%
+	DepositPercent  float64 `json:"deposit_percent"`  // e.g. 0, 30, 50, 100
 
 	TargetCurrency string `json:"target_currency"`
 }
@@ -109,6 +148,7 @@ type CostBreakdownItem struct {
 	PaperCost        float64 `json:"paper_cost"`
 	BlackInkCost     float64 `json:"black_ink_cost"`
 	ColorInkCost     float64 `json:"color_ink_cost"`
+	PlateCost        float64 `json:"plate_cost"`
 	DepreciationCost float64 `json:"depreciation_cost"`
 	MaintenanceCost  float64 `json:"maintenance_cost"`
 	SetupCost        float64 `json:"setup_cost"`
@@ -133,6 +173,7 @@ type CalculationResponse struct {
 	InkCost             float64 `json:"ink_cost"` // Total combined ink cost
 	InkCostK            float64 `json:"ink_cost_k"`
 	InkCostCMY          float64 `json:"ink_cost_cmy"`
+	PlateCost           float64 `json:"plate_cost"`
 	DepreciationCost    float64 `json:"depreciation_cost"`
 	MaintenanceCost     float64 `json:"maintenance_cost"`
 	CustomFinishingCost float64 `json:"custom_finishing_cost"`
@@ -171,6 +212,25 @@ type CalculationResponse struct {
 
 // a4BaselineArea is the reference area (mm²) used for Paper Area Factor S (210 x 297 mm = 62370)
 const a4BaselineArea = 62370.0
+
+// CalculateCutLayout determines the maximum number of pieces that can fit on a parent sheet
+func CalculateCutLayout(jobW, jobH, parentW, parentH float64) int {
+	if jobW <= 0 || jobH <= 0 || parentW <= 0 || parentH <= 0 {
+		return 1
+	}
+	portraitCuts := int(parentW/jobW) * int(parentH/jobH)
+	landscapeCuts := int(parentW/jobH) * int(parentH/jobW)
+	if landscapeCuts > portraitCuts {
+		if landscapeCuts < 1 {
+			return 1
+		}
+		return landscapeCuts
+	}
+	if portraitCuts < 1 {
+		return 1
+	}
+	return portraitCuts
+}
 
 // CalculateJobPricing performs the backend pricing engine math with Decimal precision
 func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
@@ -224,12 +284,19 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		dEffectiveMargin = decimal.Zero
 	}
 
-	// Job dimensions with A4 defaults
+	// Job dimensions with fallback to Unfolded dimensions or A4 defaults
 	jobW := req.JobWidth
+	if jobW <= 0 && req.UnfoldedWidthMM > 0 {
+		jobW = req.UnfoldedWidthMM
+	}
 	if jobW <= 0 {
 		jobW = 210.0
 	}
+
 	jobH := req.JobHeight
+	if jobH <= 0 && req.UnfoldedHeightMM > 0 {
+		jobH = req.UnfoldedHeightMM
+	}
 	if jobH <= 0 {
 		jobH = 297.0
 	}
@@ -242,7 +309,11 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 
 	cutsPerSheet := req.CutsPerSheet
 	if cutsPerSheet <= 0 {
-		cutsPerSheet = 1
+		if req.ParentSheetWidthMM > 0 && req.ParentSheetHeightMM > 0 {
+			cutsPerSheet = CalculateCutLayout(jobW, jobH, req.ParentSheetWidthMM, req.ParentSheetHeightMM)
+		} else {
+			cutsPerSheet = 1
+		}
 	}
 
 	// ── Step 2: Paper Cost & Offcut Rebate ────────────────────────────────────
@@ -285,15 +356,10 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		}
 	}
 
-	// ── Step 3: Ink Cost ─────────────────────────────────────────────────────
-	inkCovK := req.InkCoverageKPercent
-	inkCovCMY := req.InkCoverageCMYPercent
-	if inkCovK == 0 && inkCovCMY == 0 && req.InkCoveragePercent > 0 {
-		inkCovK = req.InkCoveragePercent
-	}
-	if inkCovCMY < 0 {
-		inkCovCMY = 0.0
-	}
+	// ── Step 3: Ink & Plate Costs ─────────────────────────────────────────────
+	var dInkCostK, dInkCostCMY, dInkCost decimal.Decimal
+	var dPlateCost decimal.Decimal
+	totalPlates := 0
 
 	costK := req.InkCostKPerMl
 	if costK <= 0 {
@@ -322,17 +388,78 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 
 	dCostK := decimal.NewFromFloat(costK)
 	dIsoK := decimal.NewFromFloat(isoK)
-	dInkCovK := decimal.NewFromFloat(inkCovK)
-
 	dCostCMY := decimal.NewFromFloat(costCMY)
 	dIsoCMY := decimal.NewFromFloat(isoCMY)
-	dInkCovCMY := decimal.NewFromFloat(inkCovCMY)
-
 	dFive := decimal.NewFromFloat(5.0)
 
-	dInkCostK := dCostK.Div(dIsoK).Mul(dInkCovK.Div(dFive)).Mul(dAreaFactor).Mul(dQuantity)
-	dInkCostCMY := dCostCMY.Div(dIsoCMY).Mul(dInkCovCMY.Div(dFive)).Mul(dAreaFactor).Mul(dQuantity)
-	dInkCost := dInkCostK.Add(dInkCostCMY)
+	if len(req.PrintingProcesses) > 0 {
+		// Multi-printer & Channel-based calculation
+		dInkCost = decimal.Zero
+		dInkCostK = decimal.Zero
+		dInkCostCMY = decimal.Zero
+
+		for _, proc := range req.PrintingProcesses {
+			procQty := req.Quantity
+			if proc.AllocatedPages > 0 {
+				procQty = proc.AllocatedPages
+			}
+			dProcQty := decimal.NewFromInt(int64(procQty))
+
+			if proc.ColorMode == "SEPARATE_CHANNEL" && len(proc.ColorChannels) > 0 {
+				for _, ch := range proc.ColorChannels {
+					totalPlates++
+					dDensity := decimal.NewFromFloat(ch.DensityPct)
+					if ch.ChannelName == "K" || ch.ChannelName == "Black" {
+						chCost := dCostK.Div(dIsoK).Mul(dDensity.Div(dFive)).Mul(dAreaFactor).Mul(dProcQty)
+						dInkCostK = dInkCostK.Add(chCost)
+						dInkCost = dInkCost.Add(chCost)
+					} else {
+						chCost := dCostCMY.Div(dIsoCMY).Mul(dDensity.Div(dFive)).Mul(dAreaFactor).Mul(dProcQty)
+						dInkCostCMY = dInkCostCMY.Add(chCost)
+						dInkCost = dInkCost.Add(chCost)
+					}
+				}
+			} else {
+				// Average Density mode
+				avgDensity := proc.AverageDensity
+				if avgDensity <= 0 {
+					avgDensity = 100.0
+				}
+				totalPlates += 4 // CMYK
+				dDensity := decimal.NewFromFloat(avgDensity)
+				kCost := dCostK.Div(dIsoK).Mul(dDensity.Div(decimal.NewFromFloat(4.0)).Div(dFive)).Mul(dAreaFactor).Mul(dProcQty)
+				cmyCost := dCostCMY.Div(dIsoCMY).Mul(dDensity.Mul(decimal.NewFromFloat(0.75)).Div(dFive)).Mul(dAreaFactor).Mul(dProcQty)
+				dInkCostK = dInkCostK.Add(kCost)
+				dInkCostCMY = dInkCostCMY.Add(cmyCost)
+				dInkCost = dInkCost.Add(kCost).Add(cmyCost)
+			}
+		}
+
+		if req.PlateCostPerUnit > 0 && totalPlates > 0 {
+			dPlateCost = decimal.NewFromInt(int64(totalPlates)).Mul(decimal.NewFromFloat(req.PlateCostPerUnit))
+		}
+	} else {
+		// Standard legacy single/split ink calculation
+		inkCovK := req.InkCoverageKPercent
+		inkCovCMY := req.InkCoverageCMYPercent
+		if inkCovK == 0 && inkCovCMY == 0 && req.InkCoveragePercent > 0 {
+			inkCovK = req.InkCoveragePercent
+		}
+		if inkCovCMY < 0 {
+			inkCovCMY = 0.0
+		}
+
+		dInkCovK := decimal.NewFromFloat(inkCovK)
+		dInkCovCMY := decimal.NewFromFloat(inkCovCMY)
+
+		dInkCostK = dCostK.Div(dIsoK).Mul(dInkCovK.Div(dFive)).Mul(dAreaFactor).Mul(dQuantity)
+		dInkCostCMY = dCostCMY.Div(dIsoCMY).Mul(dInkCovCMY.Div(dFive)).Mul(dAreaFactor).Mul(dQuantity)
+		dInkCost = dInkCostK.Add(dInkCostCMY)
+
+		if req.PlateCostPerUnit > 0 {
+			dPlateCost = decimal.NewFromFloat(req.PlateCostPerUnit).Mul(decimal.NewFromInt(4))
+		}
+	}
 
 	// ── Step 4: Printer Depreciation & Maintenance ───────────────────────────
 	dDepreciationCost := decimal.Zero
@@ -340,7 +467,19 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 
 	dJobPages := dQuantity.Mul(dAreaFactor)
 
-	if len(req.Allocations) > 0 {
+	if len(req.PrintingProcesses) > 0 {
+		for _, proc := range req.PrintingProcesses {
+			if proc.CostPerPage > 0 {
+				pages := req.Quantity
+				if proc.AllocatedPages > 0 {
+					pages = proc.AllocatedPages
+				}
+				dPages := decimal.NewFromInt(int64(pages))
+				dCost := decimal.NewFromFloat(proc.CostPerPage)
+				dDepreciationCost = dDepreciationCost.Add(dPages.Mul(dCost))
+			}
+		}
+	} else if len(req.Allocations) > 0 {
 		for _, alloc := range req.Allocations {
 			dAllocPages := decimal.NewFromInt(int64(alloc.AllocatedPages))
 			dCostPerPage := decimal.NewFromFloat(alloc.CostPerPage)
@@ -369,6 +508,22 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	dLaminationCost := decimal.NewFromFloat(req.LaminationCost).Mul(dQuantity)
 	dBindingCost := decimal.NewFromFloat(req.BindingCost).Mul(dQuantity)
 	dFinishingCost := decimal.NewFromFloat(req.FinishingCost).Mul(dQuantity).Add(dLaminationCost).Add(dBindingCost)
+
+	// Machine-Linked Finishing Asset Processes
+	if len(req.FinishingProcesses) > 0 {
+		for _, fProc := range req.FinishingProcesses {
+			if fProc.UnitCost > 0 {
+				dFinishingCost = dFinishingCost.Add(decimal.NewFromFloat(fProc.UnitCost).Mul(dQuantity))
+			}
+			if fProc.MachineHourlyRate > 0 {
+				totalMins := float64(fProc.EstimatedSetupTimeMins + fProc.EstimatedRunTimeMins)
+				if totalMins > 0 {
+					mCost := decimal.NewFromFloat(fProc.MachineHourlyRate).Mul(decimal.NewFromFloat(totalMins / 60.0))
+					dFinishingCost = dFinishingCost.Add(mCost)
+				}
+			}
+		}
+	}
 
 	dCustomFinishingCost := decimal.Zero
 	dJobAreaM2 := dJobW.Div(decimal.NewFromFloat(1000.0)).Mul(dJobH.Div(decimal.NewFromFloat(1000.0)))
@@ -431,6 +586,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	// ── Step 7: Totals, Overhead, Spoilage, Net Cost ───────────────────────────
 	dDirectCost := dPaperCost.
 		Add(dInkCost).
+		Add(dPlateCost).
 		Add(dDepreciationCost).
 		Add(dMaintenanceCost).
 		Add(dSetupCost).
@@ -529,6 +685,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		PaperCost:        roundToTwoDecimals(dPaperCost.InexactFloat64()),
 		BlackInkCost:     roundToTwoDecimals(dInkCostK.InexactFloat64()),
 		ColorInkCost:     roundToTwoDecimals(dInkCostCMY.InexactFloat64()),
+		PlateCost:        roundToTwoDecimals(dPlateCost.InexactFloat64()),
 		DepreciationCost: roundToTwoDecimals(dDepreciationCost.InexactFloat64()),
 		MaintenanceCost:  roundToTwoDecimals(dMaintenanceCost.InexactFloat64()),
 		SetupCost:        roundToTwoDecimals(dSetupCost.InexactFloat64()),
@@ -543,6 +700,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		PaperCost:        roundToTwoDecimals(dPaperCost.Div(dQuantity).InexactFloat64()),
 		BlackInkCost:     roundToTwoDecimals(dInkCostK.Div(dQuantity).InexactFloat64()),
 		ColorInkCost:     roundToTwoDecimals(dInkCostCMY.Div(dQuantity).InexactFloat64()),
+		PlateCost:        roundToTwoDecimals(dPlateCost.Div(dQuantity).InexactFloat64()),
 		DepreciationCost: roundToTwoDecimals(dDepreciationCost.Div(dQuantity).InexactFloat64()),
 		MaintenanceCost:  roundToTwoDecimals(dMaintenanceCost.Div(dQuantity).InexactFloat64()),
 		SetupCost:        roundToTwoDecimals(dSetupCost.Div(dQuantity).InexactFloat64()),
@@ -560,15 +718,16 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		TotalBreakdown:        totalBreakdown,
 		UnitBreakdown:         unitBreakdown,
 		PaperCost:             roundToTwoDecimals(dPaperCost.InexactFloat64()),
-		OffcutRebateCost:       roundToTwoDecimals(dOffcutRebate.InexactFloat64()),
+		OffcutRebateCost:      roundToTwoDecimals(dOffcutRebate.InexactFloat64()),
 		InkCost:               roundToTwoDecimals(dInkCost.InexactFloat64()),
 		InkCostK:              roundToTwoDecimals(dInkCostK.InexactFloat64()),
 		InkCostCMY:            roundToTwoDecimals(dInkCostCMY.InexactFloat64()),
-		DepreciationCost:       roundToTwoDecimals(dDepreciationCost.InexactFloat64()),
-		MaintenanceCost:        roundToTwoDecimals(dMaintenanceCost.InexactFloat64()),
-		CustomFinishingCost:    roundToTwoDecimals(dCustomFinishingCost.InexactFloat64()),
-		LaminationCost:         roundToTwoDecimals(dLaminationCost.InexactFloat64()),
-		BindingCost:            roundToTwoDecimals(dBindingCost.InexactFloat64()),
+		PlateCost:             roundToTwoDecimals(dPlateCost.InexactFloat64()),
+		DepreciationCost:      roundToTwoDecimals(dDepreciationCost.InexactFloat64()),
+		MaintenanceCost:       roundToTwoDecimals(dMaintenanceCost.InexactFloat64()),
+		CustomFinishingCost:   roundToTwoDecimals(dCustomFinishingCost.InexactFloat64()),
+		LaminationCost:        roundToTwoDecimals(dLaminationCost.InexactFloat64()),
+		BindingCost:           roundToTwoDecimals(dBindingCost.InexactFloat64()),
 		LaborCost:             roundToTwoDecimals(dLaborCost.InexactFloat64()),
 		SetupCost:             roundToTwoDecimals(dSetupCost.InexactFloat64()),
 		FinishingCost:         roundToTwoDecimals(dFinishingCost.InexactFloat64()),
@@ -576,7 +735,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		OverheadCost:          roundToTwoDecimals(dOverheadCost.InexactFloat64()),
 		Subtotal:              roundToTwoDecimals(dSubtotal.InexactFloat64()),
 		SpoilageCost:          roundToTwoDecimals(dSpoilageCost.InexactFloat64()),
-		NetInternalCost:        netCostFloat,
+		NetInternalCost:       netCostFloat,
 		TotalCost:             netCostFloat,
 		SalePrice:             salePriceFloat,
 		DiscountAmount:        discountFloat,

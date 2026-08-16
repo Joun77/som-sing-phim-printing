@@ -21,8 +21,20 @@ import {
   Layers3,
   PercentSquare,
   ArrowLeft,
+  Palette,
   X
 } from 'lucide-react';
+
+const DEFAULT_CMYK_CHANNELS = [
+  { channel_name: 'C', density_pct: 15, is_spot_color: false },
+  { channel_name: 'M', density_pct: 15, is_spot_color: false },
+  { channel_name: 'Y', density_pct: 15, is_spot_color: false },
+  { channel_name: 'K', density_pct: 15, is_spot_color: false },
+];
+
+const DEFAULT_MONO_CHANNELS = [
+  { channel_name: 'K', density_pct: 15, is_spot_color: false },
+];
 
 export default function QuotationManager({ onConvertToOrder, onBack }) {
   const { 
@@ -51,7 +63,13 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
 
   // Filter lists
   const papers = inventory.filter(item => item.category === 'Paper');
-  const printers = equipment.filter(eq => eq.category === 'Printer');
+  const printers = equipment.filter(eq => 
+    eq.category?.toLowerCase().includes('printer') || 
+    eq.category?.toLowerCase().includes('press') || 
+    eq.id?.startsWith('PRN-') || 
+    eq.id?.startsWith('EQUIP-') ||
+    Boolean((eq as any).printerCategory)
+  );
 
   // Input states
   const [selectedCustomerId, setSelectedCustomerId] = useState(customers[0]?.name || '');
@@ -137,11 +155,22 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
     }
   }, [printers]);
 
-  const availablePrintersList = printers.map((p) => ({
-    id: p.id,
-    name: p.name,
-    cost_per_page: (p as any).costPerPage || (p as any).maintenanceCostPerPage || 50,
-  }));
+  const availablePrintersList = printers.map((p) => {
+    const mPrice = Number(p.price) || Number((p as any).purchasePrice) || Number((p as any).unitPrice) || 0;
+    const mMaint = Number((p as any).maintenanceRatePercent) || 20;
+    const mLife = Number((p as any).expectedLifeA4Pages) || Number((p as any).lifetimePagesA4) || 500000;
+    const baseDepr = mLife > 0 ? (mPrice * (1 + mMaint / 100)) / mLife : 0;
+    const rate = Math.round(baseDepr + 20);
+
+    return {
+      id: p.id,
+      name: p.name || `${(p as any).brand || ''} ${(p as any).model || ''}`.trim() || p.id,
+      cost_per_page: (p as any).costPerPage || (p as any).cost_per_page || rate || 50,
+      printerCategory: (p as any).printerCategory || (p as any).category,
+      colorSchemeType: (p as any).colorSchemeType || (p as any).color_config?.colorScheme || 'CMYK',
+      serialNumber: (p as any).serialNumber || (p as any).sn,
+    };
+  });
 
   // Quick settings overrides (Stored locally, pre-populated with high-fidelity defaults)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -266,10 +295,14 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
   const areaFactor = (Number(jobWidth) * Number(jobHeight)) / A4_BASELINE_AREA;
 
   // Base FIFO paper cost from context (for sheet format)
-  const paperUnitCost = getFIFOCostPerSheet(selectedPaperId, totalParentSheetsToUse);
+  const selectedPaperItem = inventory.find(p => p.id === selectedPaperId);
+  const paperUnitCost = selectedPaperItem
+    ? (Number(selectedPaperItem.costPerSheet) || Number(selectedPaperItem.costPerConsumptionUnit) || Number(selectedPaperItem.unitCost) || 190)
+    : (getFIFOCostPerSheet(selectedPaperId, totalParentSheetsToUse) || 190);
+
   const totalPaperCost = paperFormat === 'roll'
-    ? rollPricePerM2 * (Number(jobWidth) / 1000) * (Number(jobHeight) / 1000) * printVolume
-    : paperUnitCost * totalParentSheetsToUse;
+    ? Math.round(rollPricePerM2 * (Number(jobWidth) / 1000) * (Number(jobHeight) / 1000) * printVolume)
+    : Math.round(paperUnitCost * totalParentSheetsToUse);
 
   // Ink calculation based on selected Ink Set SKU prices
   const activePrinter = equipment.find(e => e.id === selectedPrinterId);
@@ -324,32 +357,94 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
   const kCov = (coverageMode === 'advanced' ? kCoverage : avgCoverage);
 
   // OEM Baseline Standard Rates (ml/page at 5% A4 coverage)
-  // Base Rate = OEM Standard Volume (ml) / OEM Standard ISO Yield (Pages)
   const blackBaseRateMl = (127 / 7500); // Default 0.01693 ml/page
   const colorBaseRateMl = (70 / 6000);  // Default 0.01167 ml/page
 
-  // Total Volume consumed (ml) = BaseRate * (%Cov / 5%) * Factor S * printVolume * factor(double-sided)
-  const cyanMl    = colorBaseRateMl * (cCov / 5) * areaFactor * printVolume * factor;
-  const magentaMl = colorBaseRateMl * (mCov / 5) * areaFactor * printVolume * factor;
-  const yellowMl  = colorBaseRateMl * (yCov / 5) * areaFactor * printVolume * factor;
-  const blackMl   = blackBaseRateMl * (kCov / 5) * areaFactor * printVolume * factor;
+  // Multi-Printer Ink & Machine Overhead Calculation
+  let calculatedInkCost = 0;
+  let calculatedMachDepr = 0;
+  let calculatedElectricity = 0;
+  let totalCyanMl = 0;
+  let totalMagentaMl = 0;
+  let totalYellowMl = 0;
+  let totalBlackMl = 0;
 
-  // Total Ink Cost = Volume ml * Cost per ml
-  const cyanCost    = cyanMl   * cyanCostPerMl;
-  const magentaCost = magentaMl * magentaCostPerMl;
-  const yellowCost  = yellowMl  * yellowCostPerMl;
-  const blackCost   = blackMl   * blackCostPerMl;
-  const totalInkCost = cyanCost + magentaCost + yellowCost + blackCost;
+  if (printerAllocations.length > 0) {
+    printerAllocations.forEach((alloc) => {
+      const pPages = alloc.allocated_pages || 0;
+      const pFactor = alloc.is_double_sided ? 2 : 1;
+      const isMono = alloc.color_mode === 'MONO_K';
 
-  // Step 3: Machine Depreciation Cost (Section 4 formula)
-  // (Price Cost * (1 + Maintenance Rate % / 100) / Expected Life A4 Pages) * Factor S
-  const machinePriceLak = activePrinter?.price || activePrinter?.purchasePrice || 50000000;
-  const maintRate = activePrinter?.maintenanceRatePercent || 20;
-  const lifePages = activePrinter?.expectedLifeA4Pages || activePrinter?.lifetimePagesA4 || 500000;
-  const deprCost = (machinePriceLak * (1 + maintRate / 100) / lifePages) * areaFactor * printVolume;
-  const electricityCost = printVolume * Number(electricityCostPerSheet);
-  const maintenanceCost = printVolume * Number(maintenanceCostPerSheet) * areaFactor;
-  const totalMachineOverhead = deprCost + electricityCost + maintenanceCost;
+      const channels = alloc.color_channels || (isMono ? DEFAULT_MONO_CHANNELS : DEFAULT_CMYK_CHANNELS);
+      const kChannel = channels.find(c => c.channel_name === 'K' || c.channel_name === 'Black');
+      const cChannel = channels.find(c => c.channel_name === 'C' || c.channel_name === 'Cyan');
+      const mChannel = channels.find(c => c.channel_name === 'M' || c.channel_name === 'Magenta');
+      const yChannel = channels.find(c => c.channel_name === 'Y' || c.channel_name === 'Yellow');
+
+      // Coverage (0-100% ISO range)
+      const pKCov = kChannel ? (kChannel.density_pct || 15) : (isMono ? 15 : 0);
+      const pCCov = (!isMono && cChannel) ? (cChannel.density_pct || 15) : 0;
+      const pMCov = (!isMono && mChannel) ? (mChannel.density_pct || 15) : 0;
+      const pYCov = (!isMono && yChannel) ? (yChannel.density_pct || 15) : 0;
+
+      const pCyanMl = !isMono ? colorBaseRateMl * (pCCov / 5) * areaFactor * pPages * pFactor : 0;
+      const pMagentaMl = !isMono ? colorBaseRateMl * (pMCov / 5) * areaFactor * pPages * pFactor : 0;
+      const pYellowMl = !isMono ? colorBaseRateMl * (pYCov / 5) * areaFactor * pPages * pFactor : 0;
+      const pBlackMl = blackBaseRateMl * (pKCov / 5) * areaFactor * pPages * pFactor;
+
+      totalCyanMl += pCyanMl;
+      totalMagentaMl += pMagentaMl;
+      totalYellowMl += pYellowMl;
+      totalBlackMl += pBlackMl;
+
+      const pInkCost = (pCyanMl * cyanCostPerMl) + (pMagentaMl * magentaCostPerMl) + (pYellowMl * yellowCostPerMl) + (pBlackMl * blackCostPerMl);
+      calculatedInkCost += pInkCost;
+
+      // Machine Depreciation & Utility for this allocated printer
+      const basePrinterId = alloc.printer_id.includes('__') ? alloc.printer_id.split('__')[0] : alloc.printer_id;
+      const matchEq = equipment.find(e => e.id === basePrinterId || e.id === alloc.printer_id) || activePrinter;
+      const mPriceLak = Number(matchEq?.price || matchEq?.unitPrice || matchEq?.purchasePrice || matchEq?.purchaseCost || matchEq?.MachinePrice || 0);
+      const mMaintRate = Number(matchEq?.maintenanceRatePercent || 20);
+      const mLifePages = Number(matchEq?.expectedLifeA4Pages || matchEq?.lifetimePagesA4 || matchEq?.TargetTotalPages || matchEq?.printedPagesCapacity || 500000);
+      
+      const pDepr = mLifePages > 0 ? (mPriceLak * (1 + mMaintRate / 100) / mLifePages) * areaFactor * pPages : 0;
+      const pElec = pPages * Number(electricityCostPerSheet || 20);
+
+      calculatedMachDepr += pDepr;
+      calculatedElectricity += pElec;
+    });
+  } else {
+    // Fallback single printer
+    const factor = isDoubleSided ? 2 : 1;
+    const cyanMl = colorBaseRateMl * (cCov / 5) * areaFactor * printVolume * factor;
+    const magentaMl = colorBaseRateMl * (mCov / 5) * areaFactor * printVolume * factor;
+    const yellowMl = colorBaseRateMl * (yCov / 5) * areaFactor * printVolume * factor;
+    const blackMl = blackBaseRateMl * (kCov / 5) * areaFactor * printVolume * factor;
+    totalCyanMl = cyanMl;
+    totalMagentaMl = magentaMl;
+    totalYellowMl = yellowMl;
+    totalBlackMl = blackMl;
+
+    calculatedInkCost = (cyanMl * cyanCostPerMl) + (magentaMl * magentaCostPerMl) + (yellowMl * yellowCostPerMl) + (blackMl * blackCostPerMl);
+
+    const machinePriceLak = Number(activePrinter?.price || activePrinter?.unitPrice || activePrinter?.purchasePrice || activePrinter?.purchaseCost || activePrinter?.MachinePrice || 0);
+    const maintRate = Number(activePrinter?.maintenanceRatePercent || 20);
+    const lifePages = Number(activePrinter?.expectedLifeA4Pages || activePrinter?.lifetimePagesA4 || activePrinter?.TargetTotalPages || activePrinter?.printedPagesCapacity || 500000);
+    const deprCost = lifePages > 0 ? (machinePriceLak * (1 + maintRate / 100) / lifePages) * areaFactor * printVolume : 0;
+    const electricityCost = printVolume * Number(electricityCostPerSheet || 20);
+
+    calculatedMachDepr = deprCost;
+    calculatedElectricity = electricityCost;
+  }
+
+  const cyanMl = totalCyanMl;
+  const magentaMl = totalMagentaMl;
+  const yellowMl = totalYellowMl;
+  const blackMl = totalBlackMl;
+  const totalInkCost = Math.round(calculatedInkCost);
+  const totalMachineDepr = Math.round(calculatedMachDepr);
+  const totalElectricityCost = Math.round(calculatedElectricity);
+  const totalMachineOverhead = totalMachineDepr + totalElectricityCost;
 
   // Finishing Costs
   const sqmPerPage = (jobWidth / 1000) * (jobHeight / 1000);
@@ -363,7 +458,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
     : 0;
 
   const dieCutCost = hasDieCut ? printVolume * 300 : 0;
-  const totalFinishingCost = laminationCost + flatBindingCost + dieCutCost;
+  const totalFinishingCost = Math.round(laminationCost + flatBindingCost + dieCutCost);
 
   // Labor & Setup Costs (Unified 3-Mode Labor & Setup Options)
   const directMatMachineCost = totalPaperCost + totalInkCost + totalMachineOverhead + totalFinishingCost;
@@ -388,24 +483,24 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
     calculatedLaborCost = directMatMachineCost * (pct / 100);
   }
 
-  const setupLaborCost = calculatedSetupCost + calculatedLaborCost;
+  const setupLaborCost = Math.round(calculatedSetupCost + calculatedLaborCost);
 
   // ── Local Fallback Calculation (matches backend formula) ─────────────────────
   // Subtotal = all direct costs (no spoilage yet)
   const localSubtotal = totalPaperCost + totalInkCost + totalMachineOverhead + totalFinishingCost + setupLaborCost;
   // Net Internal Cost = Subtotal × (1 + Spoilage%)
-  const localSpoilageCost = localSubtotal * (activeSpoilageRate / 100);
+  const localSpoilageCost = Math.round(localSubtotal * (activeSpoilageRate / 100));
   const netInternalCost = localSubtotal + localSpoilageCost;
 
   // If backend result available, use it; otherwise use local values
-  const displayNetCost     = backendResult?.net_internal_cost    ?? netInternalCost;
-  const displayPaperCost   = backendResult?.paper_cost           ?? totalPaperCost;
-  const displayInkCost     = backendResult?.ink_cost             ?? totalInkCost;
-  const displayMachCost    = backendResult?.depreciation_cost    ?? totalMachineOverhead;
-  const displayFinCost     = backendResult?.custom_finishing_cost ?? totalFinishingCost;
-  const displayLaborCost   = backendResult?.labor_cost           ?? setupLaborCost;
-  const displaySpoilage    = backendResult?.spoilage_cost        ?? localSpoilageCost;
-  const displayAreaFactor  = backendResult?.area_factor          ?? areaFactor;
+  const displayNetCost     = (backendResult?.net_internal_cost && backendResult.net_internal_cost > 1000) ? backendResult.net_internal_cost : netInternalCost;
+  const displayPaperCost   = totalPaperCost;
+  const displayInkCost     = totalInkCost;
+  const displayMachCost    = totalMachineOverhead;
+  const displayFinCost     = totalFinishingCost;
+  const displayLaborCost   = setupLaborCost;
+  const displaySpoilage    = localSpoilageCost;
+  const displayAreaFactor  = areaFactor;
 
   // ── Selling Price: SP = NetCost / (1 − Margin%) ───────────────────────────
   const marginDecimal = Math.min(0.99, Math.max(0, Number(profitMargin) / 100));
@@ -705,12 +800,12 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
 
           <div className="space-y-6">
             
-            {/* Section 1: Material & Sizing */}
-            <div className="space-y-4">
-              <div className="border-b pb-2">
-                <h4 className="text-sm font-extrabold text-primary-navy flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-lg bg-blue-50 text-accent-sky flex items-center justify-center font-sans text-xs">1</span>
-                  <span>{t('estimator.sec_material')}</span>
+            {/* PHASE 1: Customer Information (ຂໍ້ມູນລູກຄ້າ) */}
+            <div className="space-y-3">
+              <div className="border-b pb-2 flex items-center justify-between">
+                <h4 className="text-xs font-black text-primary-navy uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center font-sans text-xs">1</span>
+                  <span>PHASE 1: {t('estimator.sec_customer', 'Customer Information')}</span>
                 </h4>
               </div>
 
@@ -723,179 +818,107 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                 onChange={handleCustomerComboboxChange}
                 currentLang={currentLang}
               />
+            </div>
 
-              {/* Paper Selection */}
+            {/* PHASE 2: Job Overview & Production Quantity (ສະຫຼຸບງານ & ຈຳນວນຜະລິດ) */}
+            <div className="space-y-4 pt-3 border-t border-slate-100">
+              <div className="border-b pb-2">
+                <h4 className="text-xs font-black text-primary-navy uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center font-sans text-xs">2</span>
+                  <span>PHASE 2: {currentLang === 'lo' ? 'ຈຳນວນທີ່ຕ້ອງການຜະລິດ (Quantity Required)' : 'Quantity Required'}</span>
+                </h4>
+              </div>
+
+              {/* Print Volume / Quantity Required (FIRST & ONLY PRIORITY) */}
+              <div className="space-y-1.5 p-4 bg-indigo-50/60 border-2 border-indigo-200 rounded-2xl shadow-xs">
+                <label className="text-xs font-black text-indigo-950 uppercase tracking-wider block">
+                  {currentLang === 'lo' ? 'ຈຳນວນທີ່ຕ້ອງການຜະລິດ (Quantity Required) *' : 'Quantity Required (Units) *'}
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={printVolume}
+                  onChange={(e) => setPrintVolume(Math.max(1, Number(e.target.value)))}
+                  className="w-full min-h-[48px] px-4 py-2 border-2 border-indigo-400 rounded-xl focus:outline-none text-lg font-black font-sans bg-white text-indigo-950 text-center shadow-xs"
+                />
+              </div>
+            </div>
+
+            {/* PHASE 3: Inventory Paper Selection (ການເລືອກເຈ້ຍຈາກຄັງ) */}
+            <div className="space-y-4 pt-3 border-t border-slate-100">
+              <div className="border-b pb-2">
+                <h4 className="text-xs font-black text-primary-navy uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center font-sans text-xs">3</span>
+                  <span>PHASE 3: {currentLang === 'lo' ? 'ເລືອກເຈ້ຍຈາກຄັງ (Inventory Paper)' : 'Inventory Paper Selection'}</span>
+                </h4>
+              </div>
+
+              {/* Paper Selection Dropdown */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{t('estimator.paper_select')}</label>
                 <select
                   value={selectedPaperId}
                   onChange={(e) => setSelectedPaperId(e.target.value)}
-                  className="w-full min-h-[48px] px-3.5 py-2 border-2 rounded-xl focus:outline-none text-sm bg-white font-semibold font-sans"
+                  className="w-full min-h-[48px] px-3.5 py-2 border-2 rounded-xl focus:outline-none text-xs bg-white font-semibold font-sans"
                 >
-                  {papers.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
+                  {papers.map(p => {
+                    const price = p.costPerSheet || p.costPerConsumptionUnit || p.unitCost || 1200;
+                    const stock = p.stockQty !== undefined ? p.stockQty : (p.stock_qty || 0);
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.gsm ? `(${p.gsm} gsm)` : ''} — ຕົ້ນທຶນ: {formatCurrency(price)}/ແຜ່ນ [{stock} in stock]
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
-              {/* Paper Format Toggle: Sheet / Roll */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                  {currentLang === 'lo' ? 'ຮູບແບບກະດາດ (Paper Format)' : 'Paper Format'}
-                </label>
-                <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
-                  {(['sheet', 'roll'] as const).map(fmt => (
-                    <button
-                      key={fmt}
-                      type="button"
-                      onClick={() => setPaperFormat(fmt)}
-                      className={`flex-1 py-2.5 text-xs font-black rounded-lg transition ${
-                        paperFormat === fmt
-                          ? 'bg-white text-accent-sky shadow-sm'
-                          : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      {fmt === 'sheet'
-                        ? (currentLang === 'lo' ? 'ເຈ້ຍແຜ່ນ (Sheet)' : 'Sheet Fed')
-                        : (currentLang === 'lo' ? 'ເຈ້ຍມ້ວນ (Roll)' : 'Roll Fed')}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Roll-specific price input */}
-                {paperFormat === 'roll' && (
-                  <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl space-y-2 animate-fade-in">
-                    <span className="text-xs font-bold text-amber-800 block">
-                      {currentLang === 'lo' ? 'ລາຄາເຈ້ຍມ້ວນ (LAK / m²)' : 'Roll Paper Price (LAK / m²)'}
-                    </span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={rollPricePerM2}
-                      onChange={(e) => setRollPricePerM2(Number(e.target.value))}
-                      className="w-full min-h-[40px] px-3 border-2 border-amber-300 rounded-xl text-sm font-black font-sans focus:outline-none bg-white"
-                    />
-                    <p className="text-[10px] text-amber-700 font-semibold font-sans">
-                      {currentLang === 'lo'
-                        ? `ພື້ນທີ່ (S = ${(areaFactor).toFixed(3)} A4) × ≈ ${formatCurrency(Math.round(rollPricePerM2 * (Number(jobWidth)/1000) * (Number(jobHeight)/1000)))}/ໜ້າ`
-                        : `Area Factor S=${(areaFactor).toFixed(3)} → ≈${formatCurrency(Math.round(rollPricePerM2 * (Number(jobWidth)/1000) * (Number(jobHeight)/1000)))}/page`}
-                    </p>
-                  </div>
-                )}
-
-                {/* Area Factor Badge (always visible) */}
-                <div className="flex items-center justify-between px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-xl">
-                  <span className="text-xs font-bold text-indigo-700">
-                    {currentLang === 'lo' ? 'ຕົວຄູນພື້ນທີ່ເຈ້ຍ (S):' : 'Paper Area Factor (S):'}
-                  </span>
-                  <span className={`font-black font-sans text-sm px-2 py-0.5 rounded-lg ${
-                    isBackendCalc ? 'animate-pulse text-indigo-400 bg-indigo-100' : 'text-indigo-700 bg-indigo-100'
-                  }`}>
-                    {displayAreaFactor.toFixed(4)}
-                    {backendResult ? ' ✓' : ' ~'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Job Sizing Preset */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{t('estimator.finished_size')}</label>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {['A3', 'A4', 'A5', 'A6', 'Custom'].map(preset => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setJobSizePreset(preset)}
-                      className={`py-2 text-xs font-black rounded-lg border text-center transition ${
-                        jobSizePreset === preset 
-                          ? 'bg-accent-sky border-accent-sky text-white shadow-sm' 
-                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                      }`}
-                    >
-                      {preset}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Custom Sizing dimensions input */}
-                {jobSizePreset === 'Custom' && (
-                  <div className="grid grid-cols-2 gap-4 mt-2 animate-fade-in">
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{currentLang === 'lo' ? 'ຄວາມກວ້າງ (mm)' : 'Width (mm)'}</span>
-                      <input 
-                        type="number"
-                        value={jobWidth}
-                        onChange={(e) => setJobWidth(Number(e.target.value))}
-                        className="w-full min-h-[40px] px-3 border-2 rounded-xl text-xs font-semibold focus:outline-none bg-white font-sans"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{currentLang === 'lo' ? 'ຄວາມສູງ (mm)' : 'Height (mm)'}</span>
-                      <input 
-                        type="number"
-                        value={jobHeight}
-                        onChange={(e) => setJobHeight(Number(e.target.value))}
-                        className="w-full min-h-[40px] px-3 border-2 rounded-xl text-xs font-semibold focus:outline-none bg-white font-sans"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Dynamic Paper Cut Layout Details Box */}
-              <div className="p-4 bg-blue-50/80 border border-blue-100 rounded-2xl text-xs space-y-2.5 mt-3">
-                <div className="flex justify-between items-center text-blue-900 font-extrabold">
+              {/* Paper Summary Box: Cuts, Sheets, and Instant Cost */}
+              <div className="p-4 bg-sky-50/90 border border-sky-200 rounded-2xl text-xs space-y-2.5">
+                <div className="flex justify-between items-center text-sky-950 font-black">
                   <span className="flex items-center gap-1.5">
-                    <Scissors className="w-3.5 h-3.5 text-accent-sky" />
-                    <span>{currentLang === 'lo' ? 'ຄິດໄລ່ເລຍ໌ຕັດເຈ້ຍ' : 'Paper Cut Layout'}</span>
+                    <Scissors className="w-4 h-4 text-sky-600" />
+                    <span>ສະຫຼຸບການໃຊ້ເຈ້ຍ & ຕົ້ນທຶນ (Paper Usage & Cost)</span>
                   </span>
-                  <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-black font-sans">{cutsPerParentSheet} cuts/sheet</span>
+                  <span className="px-2.5 py-0.5 bg-sky-100 text-sky-900 rounded-md font-bold font-sans">
+                    {cutsPerParentSheet} ຊິ້ນ/ແຜ່ນ
+                  </span>
                 </div>
                 
-                <div className="text-blue-800 space-y-1.5 font-semibold leading-relaxed">
+                <div className="text-slate-700 space-y-1.5 font-medium">
                   <div className="flex justify-between">
-                    <span>{currentLang === 'lo' ? 'ດຶງເຈ້ຍແຜ່ນໃຫຍ່ຈາກຄັງ:' : 'Parent sheets required:'}</span>
-                    <span className="font-sans font-black">{parentSheetsNeeded} {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'}</span>
+                    <span>ຕົ້ນທຶນເຈ້ຍຕໍ່ແຜ່ນ (Unit Cost):</span>
+                    <span className="font-sans font-bold text-slate-900">{formatCurrency(paperUnitCost)} / ແຜ່ນ</span>
                   </div>
-                  <div className="flex justify-between text-blue-700 font-medium">
-                    <span>{currentLang === 'lo' ? 'ເຜື່ອເສຍຫາຍຕາມ Tier ປະລິມານພິມ:' : 'Spoilage allowance:'}</span>
-                    <span className="font-sans font-extrabold">+{wastedSheets} {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'} ({activeSpoilageRate}%)</span>
+                  <div className="flex justify-between">
+                    <span>ຈຳນວນແຜ່ນທີ່ຕ້ອງໃຊ້ (Base Sheets):</span>
+                    <span className="font-sans font-bold text-slate-900">{parentSheetsNeeded.toLocaleString()} ແຜ່ນ</span>
                   </div>
-                  <div className="flex justify-between border-t border-blue-200/50 pt-2 font-black text-blue-900">
-                    <span>{currentLang === 'lo' ? 'ຍອດຕັດສະຕ໋ອກລວມ (FIFO):' : 'Total Stock draw (FIFO):'}</span>
-                    <span className="font-sans text-sm">{totalParentSheetsToUse} {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'}</span>
+                  <div className="flex justify-between text-amber-800 font-semibold">
+                    <span>ເຜື່ອເສຍຫາຍ (Spoilage Tier {activeSpoilageRate}%):</span>
+                    <span className="font-sans font-bold">+{wastedSheets.toLocaleString()} ແຜ່ນ</span>
+                  </div>
+                  <div className="flex justify-between text-slate-900 font-bold border-t border-sky-200/70 pt-1.5">
+                    <span>ຈຳນວນແຜ່ນລວມທີ່ຕ້ອງຕັດ (FIFO Draw):</span>
+                    <span className="font-sans font-black text-slate-950 text-sm">{totalParentSheetsToUse.toLocaleString()} ແຜ່ນ</span>
                   </div>
                 </div>
-              </div>
 
+                {/* Instant Paper Total Cost Banner */}
+                <div className="flex justify-between items-center bg-sky-100/80 p-2.5 rounded-xl text-sky-950 font-black border border-sky-200">
+                  <span className="text-xs">ມູນຄ່າຕົ້ນທຶນເຈ້ຍລວມ (Total Paper Cost):</span>
+                  <span className="text-base font-sans text-sky-950 font-black">{formatCurrency(Math.round(displayPaperCost))}</span>
+                </div>
+              </div>
             </div>
 
-            {/* Section 2: Printing & Ink Calibration */}
-            <div className="space-y-4 pt-4 border-t border-slate-100">
-              <div className="pb-2">
-                <h4 className="text-sm font-extrabold text-primary-navy flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-sans text-xs">2</span>
-                  <span>{t('estimator.sec_printing')}</span>
+            {/* PHASE 4: Printing Process & Ink Setup (ເຄື່ອງພິມ & ລະບົບສີ) */}
+            <div className="space-y-4 pt-3 border-t border-slate-100">
+              <div className="border-b pb-2">
+                <h4 className="text-xs font-black text-primary-navy uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center font-sans text-xs">4</span>
+                  <span>PHASE 4: {currentLang === 'lo' ? 'ເຄື່ອງພິມ & ລະບົບສີ (Multi-Printer Setup)' : 'Printing Process & Ink'}</span>
                 </h4>
-              </div>
-
-              {/* Printer Assets Selection */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{t('estimator.printer')}</label>
-                <select
-                  value={selectedPrinterId}
-                  onChange={(e) => setSelectedPrinterId(e.target.value)}
-                  className="w-full min-h-[48px] px-3.5 py-2 border-2 rounded-xl focus:outline-none text-sm bg-white font-semibold font-sans"
-                >
-                  {printers.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-                {activePrinter?.linkedMaterialSku && (
-                  <p className="text-[10px] text-indigo-500 font-bold mt-1 font-sans">
-                    🔗 Linked Ink SKU/Set: {activePrinter.linkedMaterialSku}
-                  </p>
-                )}
               </div>
 
               {/* Multi-Printer Manual Allocation */}
@@ -906,185 +929,57 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                 onAllocationsChange={(newAllocations) => setPrinterAllocations(newAllocations)}
               />
 
-              {/* Ink Set Selection - Dynamic Filtered */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{t('estimator.ink_set')}</label>
-                <select
-                  value={selectedInkSet}
-                  onChange={(e) => setSelectedInkSet(e.target.value)}
-                  className="w-full min-h-[48px] px-3.5 py-2 border-2 rounded-xl focus:outline-none text-sm bg-white font-semibold font-sans"
-                >
-                  {supportedInkSets.map(set => (
-                    <option key={set} value={set}>{set}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Sidedness */}
-              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">{t('estimator.print_sides')}</span>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsDoubleSided(false)}
-                    className={`px-3 py-1.5 text-xs font-extrabold rounded-lg border transition ${
-                      !isDoubleSided 
-                        ? 'bg-accent-sky border-accent-sky text-white' 
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    {t('estimator.single_sided')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsDoubleSided(true)}
-                    className={`px-3 py-1.5 text-xs font-extrabold rounded-lg border transition ${
-                      isDoubleSided 
-                        ? 'bg-accent-sky border-accent-sky text-white' 
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    {t('estimator.double_sided')}
-                  </button>
+              {/* Instant Printing & Ink Summary Box */}
+              <div className="p-4 bg-purple-50/90 border border-purple-200 rounded-2xl text-xs space-y-2.5">
+                <div className="flex justify-between items-center text-purple-950 font-black">
+                  <span className="flex items-center gap-1.5">
+                    <Palette className="w-4 h-4 text-purple-600" />
+                    <span>ສະຫຼຸບຕົ້ນທຶນການພິມ & ໝຶກ (Printing & Ink Breakdown)</span>
+                  </span>
+                  <span className="px-2.5 py-0.5 bg-purple-100 text-purple-900 rounded-md font-bold font-sans">
+                    {printerAllocations.length || 1} ເຄື່ອງພິມ
+                  </span>
+                </div>
+                
+                <div className="text-slate-700 space-y-1.5 font-medium">
+                  <div className="flex justify-between items-center">
+                    <span>1. ຕົ້ນທຶນໝຶກພິມ (Ink Consumed):</span>
+                    <div className="text-right">
+                      <span className="font-sans font-bold text-slate-900">{formatCurrency(Math.round(displayInkCost))}</span>
+                      <span className="text-[10px] text-slate-400 block font-sans">
+                        (C:{cyanMl.toFixed(1)}ml M:{magentaMl.toFixed(1)}ml Y:{yellowMl.toFixed(1)}ml K:{blackMl.toFixed(1)}ml)
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>2. ຄ່າເສື່ອມລາຄາເຄື່ອງພິມ (Machine Depreciation):</span>
+                    <span className="font-sans font-bold text-slate-900">{formatCurrency(Math.round(totalMachineDepr))}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>3. ຄ່າໄຟຟ້າ & ສາທາລະນູປະໂພກ (Electricity & Utility):</span>
+                    <span className="font-sans font-bold text-slate-900">{formatCurrency(Math.round(totalElectricityCost))}</span>
+                  </div>
+                  <div className="flex justify-between text-purple-950 font-bold border-t border-purple-200/70 pt-1.5">
+                    <span>ລວມຕົ້ນທຶນພາກການພິມທັງໝົດ (Total Printing Process):</span>
+                    <span className="font-sans font-black text-purple-950 text-sm">
+                      {formatCurrency(Math.round(displayInkCost + displayMachCost))}
+                    </span>
+                  </div>
                 </div>
               </div>
-
-              {/* Coverage Mode Toggle */}
-              <div className="space-y-3.5 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">{t('estimator.coverage_mode')}</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`text-[10px] font-black uppercase ${coverageMode === 'default' ? 'text-accent-sky' : 'text-slate-400'}`}>Avg</span>
-                    <button
-                      type="button"
-                      onClick={() => setCoverageMode(prev => prev === 'default' ? 'advanced' : 'default')}
-                      className={`w-9 h-5 rounded-full p-0.5 transition ${coverageMode === 'advanced' ? 'bg-indigo-600' : 'bg-slate-300'}`}
-                    >
-                      <div className={`w-4 h-4 rounded-full bg-white transition shadow-sm ${coverageMode === 'advanced' ? 'translate-x-4' : 'translate-x-0'}`} />
-                    </button>
-                    <span className={`text-[10px] font-black uppercase ${coverageMode === 'advanced' ? 'text-indigo-600' : 'text-slate-400'}`}>CMYK</span>
-                  </div>
-                </div>
-
-                {/* Default average coverage slider */}
-                {coverageMode === 'default' ? (
-                  <div className="space-y-3 animate-fade-in">
-                    <div className="flex justify-between text-xs font-extrabold text-slate-600">
-                      <span>{t('estimator.avg_coverage')}</span>
-                      <span className="font-sans font-black text-accent-sky text-sm">{avgCoverage}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="1"
-                      max="100"
-                      value={avgCoverage}
-                      onChange={(e) => setAvgCoverage(Number(e.target.value))}
-                      className="w-full accent-accent-sky cursor-pointer"
-                    />
-                    <div className="grid grid-cols-4 gap-1">
-                      {[5, 15, 40, 80].map(val => (
-                        <button
-                          key={val}
-                          type="button"
-                          onClick={() => setAvgCoverage(val)}
-                          className="py-1 text-[10px] font-bold rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition"
-                        >
-                          {val}% {val <= 5 ? 'Text' : val <= 15 ? 'Graphic' : val <= 40 ? 'Heavy' : 'Solid'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3.5 animate-fade-in text-xs font-bold text-slate-600">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <div className="flex justify-between">
-                          <span className="text-cyan-700">C (Cyan)</span>
-                          <span className="font-sans font-black text-cyan-600">{cCoverage}%</span>
-                        </div>
-                        <input 
-                          type="range" 
-                          min="0" 
-                          max="100" 
-                          value={cCoverage} 
-                          onChange={(e) => setCCoverage(Number(e.target.value))}
-                          className="w-full accent-cyan-600 cursor-pointer"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex justify-between">
-                          <span className="text-pink-700">M (Magenta)</span>
-                          <span className="font-sans font-black text-pink-600">{mCoverage}%</span>
-                        </div>
-                        <input 
-                          type="range" 
-                          min="0" 
-                          max="100" 
-                          value={mCoverage} 
-                          onChange={(e) => setMCoverage(Number(e.target.value))}
-                          className="w-full accent-pink-600 cursor-pointer"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex justify-between">
-                          <span className="text-amber-700">Y (Yellow)</span>
-                          <span className="font-sans font-black text-amber-600">{yCoverage}%</span>
-                        </div>
-                        <input 
-                          type="range" 
-                          min="0" 
-                          max="100" 
-                          value={yCoverage} 
-                          onChange={(e) => setYCoverage(Number(e.target.value))}
-                          className="w-full accent-amber-600 cursor-pointer"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex justify-between">
-                          <span className="text-slate-800">K (Black)</span>
-                          <span className="font-sans font-black text-slate-800">{kCoverage}%</span>
-                        </div>
-                        <input 
-                          type="range" 
-                          min="0" 
-                          max="100" 
-                          value={kCoverage} 
-                          onChange={(e) => setKCoverage(Number(e.target.value))}
-                          className="w-full accent-slate-800 cursor-pointer"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
             </div>
 
-            {/* Section 3: Volume & Finishing Addons */}
-            <div className="space-y-4 pt-4 border-t border-slate-100">
-              <div className="pb-2">
-                <h4 className="text-sm font-extrabold text-primary-navy flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-sans text-xs">3</span>
-                  <span>{t('estimator.sec_volume')}</span>
+            {/* PHASE 5: Post-Press & Asset Machine Binding (ວຽກຫຼັງການພິມ & ເຄື່ອງຈັກ) */}
+            <div className="space-y-4 pt-3 border-t border-slate-100">
+              <div className="border-b pb-2">
+                <h4 className="text-xs font-black text-primary-navy uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center font-sans text-xs">5</span>
+                  <span>PHASE 5: {currentLang === 'lo' ? 'ວຽກຫຼັງພິມ & ເຄື່ອງຈັກ (Post-Press Assets)' : 'Post-Press & Finishing'}</span>
                 </h4>
               </div>
 
-              {/* Print Volume */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{t('estimator.volume')}</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={printVolume}
-                  onChange={(e) => setPrintVolume(Number(e.target.value))}
-                  className="w-full min-h-[48px] px-3.5 py-2 border-2 rounded-xl focus:outline-none text-sm font-black font-sans"
-                />
-              </div>
-
               {/* Finishing checklist */}
-              <div className="space-y-3.5">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{t('estimator.finishing_title')}</span>
-                
+              <div className="space-y-3">
                 {/* Lamination Checkbox */}
                 <label className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 select-none">
                   <input
@@ -1094,9 +989,9 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                     className="w-5 h-5 text-accent-sky rounded border-slate-300 focus:ring-accent-sky cursor-pointer"
                   />
                   <div>
-                    <span className="text-sm font-extrabold block leading-none">{t('estimator.finishing_lam')}</span>
+                    <span className="text-xs font-extrabold block leading-none">{t('estimator.finishing_lam')}</span>
                     <span className="block text-[10px] text-slate-400 font-bold mt-1 font-sans">
-                      +{formatCurrency(laminationRatePerSqm)} / sqm ({formatCurrency(Math.round(sqmPerPage * laminationRatePerSqm))} per page)
+                      +{formatCurrency(laminationRatePerSqm)} / sqm
                     </span>
                   </div>
                 </label>
@@ -1110,7 +1005,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                     className="w-5 h-5 text-accent-sky rounded border-slate-300 focus:ring-accent-sky cursor-pointer"
                   />
                   <div>
-                    <span className="text-sm font-extrabold block leading-none">{t('estimator.finishing_cut')}</span>
+                    <span className="text-xs font-extrabold block leading-none">{t('estimator.finishing_cut')}</span>
                     <span className="block text-[10px] text-slate-400 font-bold mt-1 font-sans">+300 ₭ / unit</span>
                   </div>
                 </label>
@@ -1124,9 +1019,9 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                     className="w-full min-h-[44px] px-3.5 py-2 border-2 rounded-xl focus:outline-none text-xs bg-white font-bold"
                   >
                     <option value="none">No Binding</option>
-                    <option value="staple">Staple Binding [+2,000₭]</option>
-                    <option value="spiral">Spiral Binding [+10,000₭]</option>
-                    <option value="glue">Hot Glue Binding [+15,000₭]</option>
+                    <option value="staple">Staple Binding (ມຸງຫຼັງຄາ) [+2,000₭]</option>
+                    <option value="spiral">Spiral Binding (ສັນຫ່ວງ) [+10,000₭]</option>
+                    <option value="glue">Hot Melt Binding (ສັນກາວຮ້ອນ) [+15,000₭]</option>
                   </select>
                 </div>
               </div>
@@ -1142,91 +1037,83 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
           {/* Dashboard Dual Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 print:grid-cols-1">
             
-            {/* 🔒 PANEL 1: Internal Cost & Profit Analysis */}
+            {/* 🔒 PANEL 1: Internal Cost & Profit Analysis (ແປເປັນພາສາລາວສົມບູນ) */}
             <div className="bg-slate-900 text-white p-6 rounded-3xl border border-slate-800 shadow-xl space-y-6 flex flex-col justify-between print:hidden">
               <div className="space-y-5">
                 <div className="flex justify-between items-center border-b border-white/10 pb-4">
-                  <h3 className="font-extrabold text-sm text-white/50 uppercase tracking-widest flex items-center gap-2">
+                  <h3 className="font-black text-sm text-white/70 uppercase tracking-wider flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
-                    <span>🔒 INTERNAL COST & YIELDS</span>
+                    <span>🔒 ຕົ້ນທຶນພາຍໃນ & ອັດຕາກຳໄລ (INTERNAL COST)</span>
                   </h3>
-                  <span className="text-[10px] font-black text-red-400 bg-red-950/50 border border-red-900/50 px-2 py-0.5 rounded uppercase tracking-wider">Internal Use Only</span>
+                  <span className="text-[10px] font-black text-red-400 bg-red-950/50 border border-red-900/50 px-2 py-0.5 rounded uppercase tracking-wider">
+                    ສະເພາະພາຍໃນ
+                  </span>
                 </div>
 
                 {/* Subcosts Breakdown List */}
-                <div className="space-y-3.5 text-sm font-semibold">
+                <div className="space-y-3 text-xs font-semibold">
 
-                  {/* Area Factor S indicator */}
-                  <div className="flex justify-between items-center px-3 py-1.5 bg-indigo-950/40 border border-indigo-800/30 rounded-xl text-xs">
-                    <span className="text-indigo-300 font-bold">
-                      Area Factor S = {displayAreaFactor.toFixed(4)}
-                      {isBackendCalc && <span className="ml-1 text-indigo-400 animate-pulse">…</span>}
-                      {backendResult && <span className="ml-1 text-emerald-400">Backend</span>}
-                      {!backendResult && !isBackendCalc && <span className="ml-1 text-white/30">~ local</span>}
-                    </span>
-                    <span className="text-indigo-400 font-sans font-black">
-                      {jobSizePreset !== 'Custom' ? jobSizePreset : `${jobWidth}×${jobHeight}mm`}
-                    </span>
-                  </div>
-
+                  {/* 1. Paper Cost */}
                   <div className="flex justify-between border-b border-white/5 pb-2">
-                    <span className="text-white/60">1. Paper Cost ({paperFormat === 'roll' ? 'Roll/m²' : `${activeSpoilageRate}% Spoilage`}):</span>
+                    <span className="text-white/60">1. ຕົ້ນທຶນເຈ້ຍ (Paper Cost):</span>
                     <div className="text-right">
-                      <span className="text-white font-sans font-black block">{formatCurrency(Math.round(displayPaperCost))}</span>
-                      {paperFormat === 'sheet'
-                        ? <span className="text-[10px] text-white/40 block font-sans">{totalParentSheetsToUse} sheets ({wastedSheets} waste)</span>
-                        : <span className="text-[10px] text-amber-400 block font-sans">{formatCurrency(rollPricePerM2)}/m² × {(areaFactor * printVolume * 0.01).toFixed(4)}m²</span>
-                      }
+                      <span className="text-white font-sans font-black text-sm block">{formatCurrency(Math.round(displayPaperCost))}</span>
+                      <span className="text-[10px] text-white/40 block font-sans">{totalParentSheetsToUse} ແຜ່ນ (+{wastedSheets} ເສຍ)</span>
                     </div>
                   </div>
 
+                  {/* 2. Ink Cost */}
                   <div className="flex justify-between border-b border-white/5 pb-2">
-                    <span className="text-white/60">2. Ink set cost ({coverageMode === 'default' ? 'Average' : 'CMYK'}) ×S:</span>
+                    <span className="text-white/60">2. ຕົ້ນທຶນໝຶກພິມ (Ink Cost):</span>
                     <div className="text-right">
-                      <span className="text-white font-sans font-black block">{formatCurrency(Math.round(displayInkCost))}</span>
+                      <span className="text-white font-sans font-black text-sm block">{formatCurrency(Math.round(displayInkCost))}</span>
                       <span className="text-[10px] text-white/40 block font-sans">
                         C:{cyanMl.toFixed(1)}ml M:{magentaMl.toFixed(1)}ml Y:{yellowMl.toFixed(1)}ml K:{blackMl.toFixed(1)}ml
                       </span>
                     </div>
                   </div>
 
+                  {/* 3. Machine Depreciation */}
                   <div className="flex justify-between border-b border-white/5 pb-2">
-                    <span className="text-white/60">3. Machine depr. & utility ×S:</span>
+                    <span className="text-white/60">3. ຄ່າເສື່ອມເຄື່ອງ & ໄຟຟ້າ (Machine Depr):</span>
                     <div className="text-right">
-                      <span className="text-white font-sans font-black block">{formatCurrency(Math.round(displayMachCost))}</span>
+                      <span className="text-white font-sans font-black text-sm block">{formatCurrency(Math.round(displayMachCost))}</span>
                       <span className="text-[10px] text-white/40 block font-sans">
-                        S={displayAreaFactor.toFixed(3)} applied to depr + maint
+                        ຄິດໄລ່ຕາມຈຳນວນແຜ່ນ & ເຄື່ອງຈັກ
                       </span>
                     </div>
                   </div>
 
+                  {/* 4. Finishing Cost */}
                   <div className="flex justify-between border-b border-white/5 pb-2">
-                    <span className="text-white/60">4. Finishing addons:</span>
+                    <span className="text-white/60">4. ວຽກຫຼັງການພິມ (Finishing):</span>
                     <div className="text-right">
-                      <span className="text-white font-sans font-black block">{formatCurrency(Math.round(displayFinCost))}</span>
-                      {hasLamination && <span className="text-[10px] text-emerald-400 block font-sans">Lamination active</span>}
+                      <span className="text-white font-sans font-black text-sm block">{formatCurrency(Math.round(displayFinCost))}</span>
+                      {hasLamination && <span className="text-[10px] text-emerald-400 block font-sans">ເຄືອບຜິວ Lamination</span>}
                     </div>
                   </div>
 
+                  {/* 5. Setups & Labor */}
                   <div className="flex justify-between border-b border-white/5 pb-2">
-                    <span className="text-white/60">5. Operator setups & labor:</span>
+                    <span className="text-white/60">5. ຄ່າຕັ້ງເຄື່ອງ & ແຮງງານຊ່າງ (Setup & Labor):</span>
                     <div className="text-right">
-                      <span className="text-white font-sans font-black block">{formatCurrency(Math.round(displayLaborCost))}</span>
+                      <span className="text-white font-sans font-black text-sm block">{formatCurrency(Math.round(displayLaborCost))}</span>
                       <span className="text-[10px] text-white/40 block font-sans">
-                        Setup: {formatCurrency(Math.round(calculatedSetupCost))} ({setupCostMode === 'fixed' ? (setupCostFixed === 0 ? '0 LAK Reprint' : 'Fixed') : `${setupCostPercent}%`}) + Labor: {formatCurrency(Math.round(calculatedLaborCost))} ({laborMode === 'manual' ? 'Manual' : laborMode === 'percent' ? `${laborPercent}%` : 'Tiered %'})
+                        Setup: {formatCurrency(Math.round(calculatedSetupCost))} | Labor: {formatCurrency(Math.round(calculatedLaborCost))}
                       </span>
                     </div>
                   </div>
 
-                  {/* Spoilage Row */}
+                  {/* 6. Spoilage */}
                   <div className="flex justify-between border-b border-white/5 pb-2">
-                    <span className="text-white/60">6. Waste / Spoilage ({activeSpoilageRate}%):</span>
-                    <span className="text-orange-400 font-sans font-black">+{formatCurrency(Math.round(displaySpoilage))}</span>
+                    <span className="text-white/60">6. ຄ່າເຜື່ອເສຍຫາຍ (Waste/Spoilage {activeSpoilageRate}%):</span>
+                    <span className="text-orange-400 font-sans font-black text-sm">+{formatCurrency(Math.round(displaySpoilage))}</span>
                   </div>
 
-                  <div className="flex justify-between text-base pt-2 text-accent-sky border-t border-white/10 font-black">
-                    <span>Net Internal Cost (Net Cost):</span>
-                    <span className="font-sans">{formatCurrency(Math.round(displayNetCost))}</span>
+                  {/* Net Internal Cost */}
+                  <div className="flex justify-between text-sm pt-2 text-sky-400 border-t border-white/10 font-black">
+                    <span>ຕົ້ນທຶນພາຍໃນສຸດທິ (Net Cost):</span>
+                    <span className="font-sans text-base">{formatCurrency(Math.round(displayNetCost))}</span>
                   </div>
                 </div>
 
@@ -1234,10 +1121,10 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                 <div className="space-y-3 bg-black/25 p-4 rounded-2xl border border-white/5 mt-4">
                   <div className="flex justify-between text-xs font-bold text-white/70">
                     <span className="flex items-center gap-1">
-                      <Sliders className="w-4 h-4 text-accent-sky" />
-                      <span>Markup Profit Margin:</span>
+                      <Sliders className="w-4 h-4 text-sky-400" />
+                      <span>ອັດຕາກຳໄລພື້ນຖານ (Profit Margin):</span>
                     </span>
-                    <span className="font-sans font-black text-sm text-accent-sky">{profitMargin}%</span>
+                    <span className="font-sans font-black text-sm text-sky-400">{profitMargin}%</span>
                   </div>
 
                   <input
@@ -1247,16 +1134,16 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                     step="5"
                     value={profitMargin}
                     onChange={(e) => setProfitMargin(Number(e.target.value))}
-                    className="w-full accent-accent-sky cursor-pointer"
+                    className="w-full accent-sky-500 cursor-pointer"
                   />
 
                   <div className="flex justify-between items-center text-xs font-bold pt-1.5 border-t border-white/5">
-                    <span className="text-white/60">Est. Profit Yield:</span>
+                    <span className="text-white/60">ກຳໄລຄາດການ (Est. Profit):</span>
                     <span className="font-sans text-emerald-400 text-base font-black">{formatCurrency(Math.round(netJobProfit))}</span>
                   </div>
 
                   <div className="flex justify-between items-center text-xs font-bold">
-                    <span className="text-white/60">Margin Status:</span>
+                    <span className="text-white/60">ສະຖານະກຳໄລ:</span>
                     <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black border ${
                       actualProfitMarginPercent >= 30 
                         ? 'text-emerald-400 bg-emerald-950/30 border-emerald-900/50' 
@@ -1265,12 +1152,12 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
                       {actualProfitMarginPercent >= 30 ? (
                         <>
                           <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                          <span>HEALTHY PROJECTIONS</span>
+                          <span>ກຳໄລປອດໄພ (Healthy Margin)</span>
                         </>
                       ) : (
                         <>
                           <ShieldAlert className="w-3.5 h-3.5 shrink-0 animate-bounce" />
-                          <span>RISKY LOW MARGIN</span>
+                          <span>ກຳໄລຕໍ່າເກີນໄປ (Risky Low)</span>
                         </>
                       )}
                     </div>
@@ -1279,7 +1166,7 @@ export default function QuotationManager({ onConvertToOrder, onBack }) {
               </div>
 
               <div className="text-[10px] text-white/30 italic font-semibold leading-relaxed border-t border-white/10 pt-4">
-                * Real-time calculation using FIFO Batch costs per sheet. The prices are dynamically sourced from incoming inventory lots.
+                * ຄຳນວນຕົ້ນທຶນຈິງຕາມຫຼັກ FIFO ຈາກສາງສິນຄ້າ ແລະ ເຄື່ອງຈັກໃນລະບົບແບບ Real-time.
               </div>
             </div>
 

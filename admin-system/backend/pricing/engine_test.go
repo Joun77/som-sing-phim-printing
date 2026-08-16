@@ -456,5 +456,92 @@ func TestLAKCurrencyIntegerRounding(t *testing.T) {
 	}
 }
 
+func TestCalculateCutLayout(t *testing.T) {
+	// A4 (210x297) cut into 90x54 business cards on parent sheet 330x480
+	cuts := CalculateCutLayout(90, 54, 330, 480)
+	if cuts < 20 {
+		t.Errorf("Expected at least 20 cuts on 330x480 for 90x54 cards, got %d", cuts)
+	}
+
+	// 0 or negative dimensions should return 1
+	if CalculateCutLayout(0, 54, 330, 480) != 1 {
+		t.Errorf("Expected 1 for 0 width, got %d", CalculateCutLayout(0, 54, 330, 480))
+	}
+}
+
+func TestMultiPrinterChannelAndFinishing(t *testing.T) {
+	req := CalculationRequest{
+		JobName:             "Agency Box Packaging 50k",
+		Quantity:            50000,
+		UnfoldedWidthMM:     210,
+		UnfoldedHeightMM:    297,
+		ParentSheetWidthMM:  650,
+		ParentSheetHeightMM: 900,
+		PaperCostPerUnit:    2500.0, // 2,500 LAK per parent sheet
+		PlateCostPerUnit:    50000.0, // 50,000 LAK per plate
+		PrintingProcesses: []PrinterProcessSetup{
+			{
+				PrinterAssetID: "PRN-OFFSET-01",
+				ColorMode:      "SEPARATE_CHANNEL",
+				ColorChannels: []ColorChannel{
+					{ChannelName: "C", DensityPct: 80.0, IsSpotColor: false},
+					{ChannelName: "M", DensityPct: 70.0, IsSpotColor: false},
+					{ChannelName: "Y", DensityPct: 90.0, IsSpotColor: false},
+					{ChannelName: "K", DensityPct: 60.0, IsSpotColor: false},
+					{ChannelName: "PANTONE 185 C", DensityPct: 80.0, IsSpotColor: true},
+				},
+				AllocatedPages: 50000,
+				CostPerPage:    50.0,
+			},
+		},
+		FinishingProcesses: []FinishingProcessSetup{
+			{
+				FinishingType:          "LAMINATE_MATTE",
+				MachineAssetID:         "MACH-LAM-01",
+				MachineHourlyRate:      120000.0,
+				EstimatedSetupTimeMins: 30,
+				EstimatedRunTimeMins:   90,
+				UnitCost:               100.0,
+			},
+			{
+				FinishingType:          "DIE_CUT",
+				MachineAssetID:         "MACH-DIECUT-02",
+				MachineHourlyRate:      150000.0,
+				EstimatedSetupTimeMins: 45,
+				EstimatedRunTimeMins:   120,
+				UnitCost:               150.0,
+			},
+		},
+		OverheadPercent: 0.10,
+		BaseProfitPct:   30.0,
+		TargetCurrency:  "LAK",
+	}
+
+	res, err := CalculateJobPricing(req)
+	if err != nil {
+		t.Fatalf("Unexpected calculation error: %v", err)
+	}
+
+	// 5 channels = 5 plates * 50,000 = 250,000 LAK
+	if res.PlateCost != 250000.0 {
+		t.Errorf("Expected plate cost 250,000 LAK for 5 color channels, got %v", res.PlateCost)
+	}
+
+	// Depreciation: 50,000 * 50 = 2,500,000 LAK
+	if res.DepreciationCost != 2500000.0 {
+		t.Errorf("Expected depreciation cost 2,500,000 LAK, got %v", res.DepreciationCost)
+	}
+
+	// Finishing cost should include unit cost + machine hours
+	if res.FinishingCost <= 0 {
+		t.Errorf("Expected positive finishing cost, got %v", res.FinishingCost)
+	}
+
+	if res.GrandTotal <= 0 {
+		t.Errorf("Expected positive grand total, got %v", res.GrandTotal)
+	}
+}
+
+
 
 

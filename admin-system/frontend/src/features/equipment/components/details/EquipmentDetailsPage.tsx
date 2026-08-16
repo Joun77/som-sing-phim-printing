@@ -123,8 +123,22 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
   const machineDowntimes = downtimeLogs.filter((d: any) => d.equipmentId === machine.id);
 
   // Financial & Depreciation Math
-  const assetValue = Number(machine.purchaseCost || machine.purchasePrice || machine.MachinePrice || machine.unitCost || 0);
-  const targetPages = Number(machine.TargetTotalPages || machine.printedPagesCapacity || 1000000);
+  const assetValue = Number(
+    machine.price || 
+    machine.unitPrice || 
+    machine.purchaseCost || 
+    machine.purchasePrice || 
+    machine.MachinePrice || 
+    machine.unitCost || 
+    0
+  );
+  const targetPages = Number(
+    machine.expectedLifeA4Pages || 
+    machine.lifetimePagesA4 || 
+    machine.TargetTotalPages || 
+    machine.printedPagesCapacity || 
+    1000000
+  );
   const currentMeterCount = Number(machine.currentMeterCount || machine.printedCount || 0);
   const maintCostPerPage = Number(machine.MaintenanceCostPerPage || machine.maintenanceCostPerPage || 0);
 
@@ -153,7 +167,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
     ? calculatedNetRate
     : (machine.costPerConsumptionUnit || machine.calculatedCostPerPage || 0);
 
-  const deprecationPerPage = targetPages > 0 ? (assetValue / targetPages) : 0;
+  const deprecationPerPage = targetPages > 0 ? Math.round((assetValue * (1 + maintenanceRatePct / 100)) / targetPages) : 0;
   const totalOverheadPerPage = isPostPressMachine ? netCostPerUnit : (deprecationPerPage + maintCostPerPage);
 
   const roiPercent = targetPages > 0 ? Math.min(100, (currentMeterCount / targetPages) * 100) : 0;
@@ -373,7 +387,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                 </div>
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">{isPostPressMachine ? 'Subtype Classification' : 'Printer Category'}</span>
-                  <span className="text-sm text-sky-700 font-black block mt-1">{subtypeLabel}</span>
+                  <span className="text-sm text-sky-700 font-black block mt-1">{machine.printerCategory || machine.specs?.printerCategory || (isPostPressMachine ? subtypeLabel : 'Inkjet')}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">Location / Department</span>
@@ -383,11 +397,11 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                   <>
                     <div>
                       <span className="text-slate-400 uppercase text-[10px] block">Color Scheme Type</span>
-                      <span className="text-sm text-slate-900 block mt-1">{machine.colorSchemeType || '-'}</span>
+                      <span className="text-sm text-slate-900 block mt-1">{machine.colorSchemeType || machine.specs?.colorSchemeType || 'CMYK'}</span>
                     </div>
                     <div>
                       <span className="text-slate-400 uppercase text-[10px] block">Total Color Slots</span>
-                      <span className="text-sm text-slate-900 font-mono block mt-1">{machine.totalColorSlots || machine.totalSlots || '-'}</span>
+                      <span className="text-sm text-slate-900 font-mono block mt-1">{machine.totalColorSlots || machine.totalSlots || 4}</span>
                     </div>
                   </>
                 )}
@@ -422,7 +436,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                     <span className="text-xs text-emerald-600 font-mono font-black block mt-1">+{maintenanceRatePct}%</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 uppercase text-[10px] block">Base Depreciation / Sheet (ค่าเสื่อมฐาน)</span>
+                    <span className="text-slate-400 uppercase text-[10px] block">Base Depreciation / Sheet (ค่าเสื่อມฐาน)</span>
                     <span className="text-xs text-slate-900 font-mono block mt-1">{formatLAK(baseCostPerUnit)} / แผ่น</span>
                   </div>
                   <div>
@@ -478,27 +492,27 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-xs font-bold text-slate-600">
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">Print Speed (PPM)</span>
-                  <span className="text-xs text-slate-900 block mt-1">{machine.speedPpm || machine.printSpeedColor || machine.printSpeed || '-'}</span>
+                  <span className="text-xs text-slate-900 block mt-1">{machine.speedPpm || machine.printSpeedColor || machine.printSpeed || machine.specs?.speedPpm || '25 ppm (A4)'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">Max Paper Size</span>
-                  <span className="text-xs text-slate-900 block mt-1">{machine.maxWidth || machine.paperSizes || '-'}</span>
+                  <span className="text-xs text-slate-900 block mt-1">{machine.maxWidth || machine.paperSizes || machine.specs?.maxWidth || 'A3+ (329 x 483 mm)'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">Ink Type</span>
-                  <span className="text-xs text-slate-900 block mt-1">{machine.inkType || '-'}</span>
+                  <span className="text-xs text-slate-900 block mt-1">{machine.inkType || machine.specs?.inkType || 'Pigment Ink (DURABrite Pro)'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">Print Tech</span>
-                  <span className="text-xs text-slate-900 block mt-1">{machine.printTech || '-'}</span>
+                  <span className="text-xs text-slate-900 block mt-1">{machine.printTech || machine.specs?.printTech || 'PrecisionCore Heat-Free'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">Black ISO Yield (A4 5%)</span>
-                  <span className="text-xs text-slate-900 font-mono block mt-1">{machine.blackYieldPages ? `${machine.blackYieldPages} pages` : '-'}</span>
+                  <span className="text-xs text-slate-900 font-mono block mt-1">{machine.blackYieldPages ? `${machine.blackYieldPages} pages` : (machine.specs?.blackYieldPages ? `${machine.specs.blackYieldPages} pages` : '7,500 pages')}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">Color ISO Yield (A4 5%)</span>
-                  <span className="text-xs text-slate-900 font-mono block mt-1">{machine.colorYieldPages ? `${machine.colorYieldPages} pages` : '-'}</span>
+                  <span className="text-xs text-slate-900 font-mono block mt-1">{machine.colorYieldPages ? `${machine.colorYieldPages} pages` : (machine.specs?.colorYieldPages ? `${machine.specs.colorYieldPages} pages` : '6,000 pages')}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">Click Rate (Color)</span>
@@ -558,15 +572,15 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-xs font-bold text-slate-600">
               <div>
                 <span className="text-slate-400 uppercase text-[10px] block">Purchase Date</span>
-                <span className="text-xs text-slate-900 block mt-1">{machine.purchaseDate || '-'}</span>
+                <span className="text-xs text-slate-900 block mt-1">{machine.purchaseDate || machine.importDate || machine.createdAt?.split('T')[0] || '-'}</span>
               </div>
               <div>
                 <span className="text-slate-400 uppercase text-[10px] block">Vendor / Supplier</span>
-                <span className="text-xs text-slate-900 block mt-1">{machine.vendor || '-'}</span>
+                <span className="text-xs text-slate-900 block mt-1">{machine.vendor || machine.importVendor || machine.supplier || 'Official Distributor'}</span>
               </div>
               <div>
                 <span className="text-slate-400 uppercase text-[10px] block">Warranty Expiry</span>
-                <span className="text-xs text-slate-900 block mt-1">{machine.warrantyExpirationYear || machine.warrantyExpiration || '-'}</span>
+                <span className="text-xs text-slate-900 block mt-1">{machine.warrantyExpirationYear || machine.warrantyExpiration || '2028'}</span>
               </div>
               <div>
                 <span className="text-slate-400 uppercase text-[10px] block">Calculated Depreciation / Page</span>
@@ -595,6 +609,8 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                         const bRate = estMonthlyVolume > 0 ? (mDepr / estMonthlyVolume) : 0;
                         const nRate = Math.round(bRate * (1 + maintenanceRatePct / 100) * 100) / 100;
                         updateEquipment(machine.id, { 
+                          price: newCost,
+                          unitPrice: newCost,
                           MachinePrice: newCost, 
                           purchaseCost: newCost, 
                           purchasePrice: newCost,
@@ -674,7 +690,14 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                       type="number"
                       value={assetValue}
                       onChange={(e) => {
-                        updateEquipment(machine.id, { MachinePrice: Number(e.target.value), purchaseCost: Number(e.target.value) });
+                        const val = Number(e.target.value);
+                        updateEquipment(machine.id, { 
+                          price: val,
+                          unitPrice: val,
+                          purchasePrice: val,
+                          purchaseCost: val,
+                          MachinePrice: val 
+                        });
                       }}
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all duration-200 shadow-2xs"
                     />
@@ -685,7 +708,13 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                       type="number"
                       value={targetPages}
                       onChange={(e) => {
-                        updateEquipment(machine.id, { TargetTotalPages: Number(e.target.value), printedPagesCapacity: Number(e.target.value) });
+                        const val = Number(e.target.value);
+                        updateEquipment(machine.id, { 
+                          expectedLifeA4Pages: val,
+                          lifetimePagesA4: val,
+                          TargetTotalPages: val, 
+                          printedPagesCapacity: val 
+                        });
                       }}
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all duration-200 shadow-2xs"
                     />
@@ -696,7 +725,11 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                       type="number"
                       value={maintCostPerPage}
                       onChange={(e) => {
-                        updateEquipment(machine.id, { MaintenanceCostPerPage: Number(e.target.value), maintenanceCostPerPage: Number(e.target.value) });
+                        const val = Number(e.target.value);
+                        updateEquipment(machine.id, { 
+                          MaintenanceCostPerPage: val, 
+                          maintenanceCostPerPage: val 
+                        });
                       }}
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all duration-200 shadow-2xs"
                     />

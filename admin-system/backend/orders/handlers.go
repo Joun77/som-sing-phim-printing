@@ -67,12 +67,66 @@ func HandleCreateOrder(c *gin.Context) {
 	var totalPrice, totalCost float64
 
 	for idx, itemReq := range req.Items {
+		qty := itemReq.Quantity
+		if qty <= 0 && itemReq.QuantityRequired > 0 {
+			qty = itemReq.QuantityRequired
+		}
+		if qty <= 0 {
+			qty = 1
+		}
+
+		paperSku := itemReq.PaperSku
+		paperCost := itemReq.PaperCostPerUnit
+		if itemReq.PaperSetup != nil {
+			if itemReq.PaperSetup.InventoryMaterialID != "" {
+				paperSku = itemReq.PaperSetup.InventoryMaterialID
+			}
+			if itemReq.PaperSetup.CostPerSheet > 0 {
+				paperCost = itemReq.PaperSetup.CostPerSheet
+			}
+		}
+
+		var pricingPrintingProcesses []pricing.PrinterProcessSetup
+		for _, p := range itemReq.PrintingProcesses {
+			var channels []pricing.ColorChannel
+			for _, ch := range p.ColorChannels {
+				channels = append(channels, pricing.ColorChannel{
+					ChannelName: ch.ChannelName,
+					DensityPct:  ch.DensityPct,
+					IsSpotColor: ch.IsSpotColor,
+				})
+			}
+			pricingPrintingProcesses = append(pricingPrintingProcesses, pricing.PrinterProcessSetup{
+				PrinterAssetID: p.PrinterAssetID,
+				Sequence:       p.Sequence,
+				ColorMode:      p.ColorMode,
+				AverageDensity: p.AverageDensity,
+				AllocatedPages: qty,
+				ColorChannels:  channels,
+			})
+		}
+
+		var pricingFinishingProcesses []pricing.FinishingProcessSetup
+		for _, f := range itemReq.FinishingProcesses {
+			pricingFinishingProcesses = append(pricingFinishingProcesses, pricing.FinishingProcessSetup{
+				FinishingType:          f.FinishingType,
+				MachineAssetID:         f.MachineAssetID,
+				EstimatedSetupTimeMins: f.EstimatedSetupTimeMins,
+				EstimatedRunTimeMins:   f.EstimatedRunTimeMins,
+				UnitCost:               f.UnitCost,
+			})
+		}
+
 		pricingReq := pricing.CalculationRequest{
 			JobName:            itemReq.JobName,
-			Quantity:           itemReq.Quantity,
-			PaperSku:           itemReq.PaperSku,
-			PaperCostPerUnit:   itemReq.PaperCostPerUnit,
+			Quantity:           qty,
+			PaperSku:           paperSku,
+			PaperCostPerUnit:   paperCost,
 			PaperFormat:        itemReq.PaperFormat,
+			UnfoldedWidthMM:    itemReq.UnfoldedWidthMM,
+			UnfoldedHeightMM:   itemReq.UnfoldedHeightMM,
+			PrintingProcesses:  pricingPrintingProcesses,
+			FinishingProcesses: pricingFinishingProcesses,
 			InkCoveragePercent: itemReq.InkCoveragePercent,
 			InkCostPerMl:       itemReq.InkCostPerMl,
 			LaminationType:     itemReq.LaminationType,
@@ -90,14 +144,34 @@ func HandleCreateOrder(c *gin.Context) {
 			return
 		}
 
+		specs := itemReq.Specs
+		if specs == nil {
+			specs = make(map[string]interface{})
+		}
+		if itemReq.PaperSetup != nil {
+			specs["paper_setup"] = itemReq.PaperSetup
+		}
+		if len(itemReq.PrintingProcesses) > 0 {
+			specs["printing_processes"] = itemReq.PrintingProcesses
+		}
+		if len(itemReq.FinishingProcesses) > 0 {
+			specs["finishing_processes"] = itemReq.FinishingProcesses
+		}
+		if itemReq.UnfoldedWidthMM > 0 {
+			specs["unfolded_width_mm"] = itemReq.UnfoldedWidthMM
+		}
+		if itemReq.UnfoldedHeightMM > 0 {
+			specs["unfolded_height_mm"] = itemReq.UnfoldedHeightMM
+		}
+
 		orderItem := OrderItem{
 			ID:                fmt.Sprintf("item-%s-%d", orderID, idx+1),
 			OrderID:           orderID,
 			JobName:           itemReq.JobName,
-			Quantity:          itemReq.Quantity,
+			Quantity:          qty,
 			UnitPriceSnapshot: pricingRes.UnitPrice,
-			CostPriceSnapshot: pricingRes.TotalCost / float64(itemReq.Quantity),
-			Specs:             itemReq.Specs,
+			CostPriceSnapshot: pricingRes.TotalCost / float64(qty),
+			Specs:             specs,
 		}
 
 		itemsList = append(itemsList, orderItem)
@@ -429,6 +503,63 @@ func saveOrderToDB(o Order) error {
 			ON CONFLICT (id) DO NOTHING
 		`
 		_, _ = db.DB.Exec(itemQuery, item.ID, o.ID, item.JobName, item.Quantity, item.UnitPriceSnapshot, item.CostPriceSnapshot, string(specsBytes))
+
+		// Persist multi-printer records
+		if printingProcessesRaw, ok := item.Specs["printing_processes"]; ok {
+			var procList []PrinterProcessSetup
+			procBytes, _ := json.Marshal(printingProcessesRaw)
+			if err := json.Unmarshal(procBytes, &procList); err == nil {
+				for pIdx, proc := range procList {
+					printerRowID := fmt.Sprintf("%s-prn-%d", item.ID, pIdx+1)
+					seq := proc.Sequence
+					if seq == 0 {
+						seq = pIdx + 1
+					}
+					colorMode := proc.ColorMode
+					if colorMode == "" {
+						colorMode = "AVERAGE"
+					}
+					avgDensity := proc.AverageDensity
+					if avgDensity == 0 {
+						avgDensity = 100.0
+					}
+
+					printerQuery := `
+						INSERT INTO order_item_printers (id, order_item_id, printer_asset_id, print_sequence, color_mode, average_density_pct, created_at)
+						VALUES ($1, $2, $3, $4, $5, $6, NOW())
+						ON CONFLICT (id) DO NOTHING
+					`
+					_, _ = db.DB.Exec(printerQuery, printerRowID, item.ID, proc.PrinterAssetID, seq, colorMode, avgDensity)
+
+					for cIdx, ch := range proc.ColorChannels {
+						chanRowID := fmt.Sprintf("%s-ch-%d", printerRowID, cIdx+1)
+						chanQuery := `
+							INSERT INTO order_printer_color_channels (id, order_item_printer_id, channel_name, density_pct, is_spot_color)
+							VALUES ($1, $2, $3, $4, $5)
+							ON CONFLICT (id) DO NOTHING
+						`
+						_, _ = db.DB.Exec(chanQuery, chanRowID, printerRowID, ch.ChannelName, ch.DensityPct, ch.IsSpotColor)
+					}
+				}
+			}
+		}
+
+		// Persist finishing processes
+		if finishingProcessesRaw, ok := item.Specs["finishing_processes"]; ok {
+			var finishingList []FinishingProcessSetup
+			finishingBytes, _ := json.Marshal(finishingProcessesRaw)
+			if err := json.Unmarshal(finishingBytes, &finishingList); err == nil {
+				for fIdx, f := range finishingList {
+					finRowID := fmt.Sprintf("%s-fin-%d", item.ID, fIdx+1)
+					finQuery := `
+						INSERT INTO order_item_finishing_assets (id, order_item_id, finishing_type, machine_asset_id, estimated_setup_time_mins, estimated_run_time_mins, unit_cost)
+						VALUES ($1, $2, $3, $4, $5, $6, $7)
+						ON CONFLICT (id) DO NOTHING
+					`
+					_, _ = db.DB.Exec(finQuery, finRowID, item.ID, f.FinishingType, f.MachineAssetID, f.EstimatedSetupTimeMins, f.EstimatedRunTimeMins, f.UnitCost)
+				}
+			}
+		}
 	}
 	return nil
 }
