@@ -82,25 +82,11 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       let analysisResult: PreflightResult;
 
       if (isImg) {
-        // 1. Run Real In-Browser Pixel Analysis for Images
+        // 1. Run Real In-Browser Pixel Analysis for Images (GCR Tk=0.25)
         analysisResult = await analyzeImageClient(selectedFile);
       } else {
-        // 2. Try Backend Ghostscript First for PDFs
-        try {
-          const formData = new FormData();
-          formData.append('file', selectedFile);
-          const response = await fetch('/api/v1/orders/preflight', {
-            method: 'POST',
-            body: formData,
-          });
-          if (response.ok) {
-            analysisResult = await response.json();
-          } else {
-            analysisResult = await analyzePDFClient(selectedFile);
-          }
-        } catch {
-          analysisResult = await analyzePDFClient(selectedFile);
-        }
+        // 2. Run PDF.js Real Canvas Page Extraction (Extracts EXACT page count & GCR CMYK)
+        analysisResult = await analyzePDFClient(selectedFile);
       }
 
       // Background upload to store file on server if online
