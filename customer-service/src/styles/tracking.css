@@ -17,20 +17,20 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  background: #fff;
-  border: 2px solid var(--slate-300);
+  background: var(--bg-card);
+  border: 2px solid var(--border-subtle);
   border-radius: var(--radius);
   padding: 0 18px;
   transition: border-color var(--t-fast), box-shadow var(--t-fast);
 }
 
 .tracking-search-box:focus-within {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px rgba(197, 155, 39, 0.2);
+  border-color: var(--border-gold);
+  box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.2);
 }
 
 .tracking-search-box svg {
-  color: var(--slate-400);
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
@@ -40,6 +40,7 @@
   background: none;
   padding: 15px 0;
   font-size: 1.05rem;
+  color: var(--text-main);
   outline: none;
 }
 
@@ -60,10 +61,10 @@
 
 /* ---------- Result card ---------- */
 .tracking-result {
-  background: #fff;
-  border: 1px solid var(--slate-200);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  box-shadow: var(--card-shadow);
   padding: 28px;
   margin-top: 28px;
 }
@@ -75,7 +76,7 @@
   gap: 20px;
   flex-wrap: wrap;
   padding-bottom: 20px;
-  border-bottom: 2px solid var(--navy);
+  border-bottom: 2px solid var(--border-gold);
   margin-bottom: 28px;
 }
 
@@ -92,7 +93,7 @@
 .tracking-status-label {
   display: block;
   font-weight: 700;
-  color: var(--navy-dark);
+  color: var(--text-main);
   margin-bottom: 6px;
 }
 
@@ -122,33 +123,35 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--slate-200);
-  color: var(--slate-500);
-  border: 2px solid var(--white);
-  box-shadow: 0 0 0 2px var(--slate-300);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  border: 2px solid var(--border-subtle);
+  box-shadow: 0 0 0 2px var(--border-subtle);
   transition: background var(--t), color var(--t), box-shadow var(--t);
 }
 
 .timeline-step.is-done .timeline-dot {
-  background: var(--navy);
-  color: var(--gold-light);
+  background: var(--gold);
+  color: #050B18;
+  border-color: var(--gold);
   box-shadow: 0 0 0 2px var(--gold);
 }
 
 .timeline-step.is-current .timeline-dot {
   background: var(--grad-gold);
-  color: var(--navy-dark);
-  box-shadow: 0 0 0 4px rgba(197, 155, 39, 0.25), 0 4px 12px rgba(197, 155, 39, 0.5);
+  color: #050B18;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px rgba(197, 160, 89, 0.25), 0 4px 12px rgba(197, 160, 89, 0.5);
   animation: pulseGold 2s ease-in-out infinite;
 }
 
 @keyframes pulseGold {
   0%,
   100% {
-    box-shadow: 0 0 0 3px rgba(197, 155, 39, 0.25), 0 4px 12px rgba(197, 155, 39, 0.45);
+    box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.25), 0 4px 12px rgba(197, 160, 89, 0.45);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(197, 155, 39, 0.14), 0 4px 12px rgba(197, 155, 39, 0.5);
+    box-shadow: 0 0 0 6px rgba(197, 160, 89, 0.14), 0 4px 12px rgba(197, 160, 89, 0.5);
   }
 }
 
@@ -158,7 +161,7 @@
   left: 22px;
   width: 2px;
   height: calc(100% - 20px);
-  background: var(--slate-300);
+  background: var(--border-subtle);
 }
 
 .timeline-line.is-done {
@@ -172,17 +175,19 @@
 .timeline-content h3 {
   font-size: 1.02rem;
   margin-bottom: 2px;
+  color: var(--text-main);
 }
 
 .timeline-content p {
-  color: var(--slate-600);
+  color: var(--text-muted);
   font-size: 0.9rem;
   margin: 0 0 4px;
 }
 
 .timeline-content small {
-  color: var(--slate-400);
+  color: var(--text-muted);
   font-size: 0.8rem;
+  opacity: 0.8;
 }
 
 .timeline-step.is-current .timeline-content h3 {
@@ -194,8 +199,8 @@
   display: flex;
   align-items: flex-start;
   gap: 14px;
-  background: var(--gold-soft);
-  border: 1px dashed rgba(197, 155, 39, 0.6);
+  background: rgba(197, 160, 89, 0.12);
+  border: 1px dashed var(--border-gold);
   border-radius: var(--radius);
   padding: 16px 18px;
   margin-top: 24px;
@@ -208,7 +213,7 @@
 
 .tracking-shipping strong {
   display: block;
-  color: var(--navy-dark);
+  color: var(--text-main);
 }
 
 .tracking-number {
@@ -216,12 +221,12 @@
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: 0.05em;
-  color: var(--navy-dark);
+  color: var(--gold);
   margin: 4px 0;
 }
 
 .tracking-shipping small {
-  color: var(--slate-600);
+  color: var(--text-muted);
 }
 
 .tracking-order-summary {
@@ -230,18 +235,19 @@
   gap: 14px;
   margin-top: 20px;
   padding: 14px 18px;
-  background: var(--slate-100);
+  background: var(--bg-surface);
   border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
 }
 
 .tracking-order-summary span {
-  color: var(--slate-600);
+  color: var(--text-muted);
 }
 
 .tracking-order-summary strong {
   font-family: var(--font-sans);
   font-size: 1.2rem;
-  color: var(--navy-dark);
+  color: var(--text-main);
   margin-right: auto;
 }
 

@@ -48,7 +48,17 @@ function CopyButton({ text, label, onCopied }: CopyButtonProps) {
 }
 
 export default function CheckoutPage() {
-  const { orderDraft, setOrderDraft, currency, convertTo } = useShop()
+  const {
+    orderDraft,
+    setOrderDraft,
+    selectedCartItems,
+    clearSelectedCartItems,
+    currency,
+    convertTo,
+    t,
+    language
+  } = useShop()
+
   const navigate = useNavigate()
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -60,20 +70,45 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false)
   const [paymentSlipped, setPaymentSlipped] = useState(false)
 
-  if (!orderDraft) {
+  // Determine items to checkout: prioritize selected cart items, fallback to single draft
+  const checkoutItems = useMemo(() => {
+    if (selectedCartItems && selectedCartItems.length > 0) {
+      return selectedCartItems
+    }
+    if (orderDraft) {
+      return [
+        {
+          id: 'draft',
+          product: orderDraft.product,
+          config: orderDraft.config,
+          driveLink: orderDraft.driveLink,
+          permissionConfirmed: orderDraft.permissionConfirmed,
+          specialNotes: orderDraft.specialNotes,
+          price: orderDraft.price,
+          selected: true,
+          createdAt: Date.now(),
+        },
+      ]
+    }
+    return []
+  }, [selectedCartItems, orderDraft])
+
+  if (checkoutItems.length === 0) {
     return (
-      <section className="section text-center container">
-        <h2>ຍັງບໍ່ມີສິນຄ້າໃນຄຳສັ່ງຊື້ (No items in cart)</h2>
-        <p className="text-muted">ກະລຸນາເລືອກສິນຄ້າ ແລະ ສະເປັກກ່ອນດຳເນີນການຊຳລະເງິນ</p>
+      <section className="section text-center container" style={{ padding: '80px 24px' }}>
+        <h2>{t('noItemsInCart')}</h2>
+        <p className="text-muted">{t('selectProductFirst')}</p>
         <Link to="/category/albums" className="btn btn--navy mt-2">
-          ໄປເລືອກສິນຄ້າ
+          {t('allCategoriesLink')}
         </Link>
       </section>
     )
   }
 
-  const { product, config, driveLink, permissionConfirmed, specialNotes, price } = orderDraft
-  const subtotal = price.total
+  const subtotal = checkoutItems.reduce(
+    (sum, item) => sum + (item.price?.totalTHB || item.price?.total || 0),
+    0
+  )
   const courier = COURIERS.find((c) => c.id === courierId) || COURIERS[0]
   const isFreeShipping = subtotal >= FREE_SHIPPING_THRESHOLD
   const shippingFee = isFreeShipping ? 0 : courier.fee
@@ -126,11 +161,11 @@ export default function CheckoutPage() {
 
   const validate = () => {
     const errs: Record<string, string> = {}
-    if (!customer.name.trim()) errs.name = 'ກະລຸນາກອກຊື່-ນາມສະກຸນ'
+    if (!customer.name.trim()) errs.name = language === 'en' ? 'Please enter full name' : 'ກະລຸນາກອກຊື່-ນາມສະກຸນ'
     if (!/^\d{8,12}$/.test(customer.phone.replace(/[^0-9]/g, '')))
-      errs.phone = 'ກະລຸນາກອກເບີໂທລະສັບ (ເຊັ່ນ 020xxxxxxx)'
-    if (!customer.address.trim()) errs.address = 'ກະລຸນາກອກທີ່ຢູ່ຈັດສົ່ງ'
-    if (!slipImage) errs.slip = 'ກະລຸນາແນບຮູບສະລິບໂອນເງິນ'
+      errs.phone = language === 'en' ? 'Please enter valid phone number' : 'ກະລຸນາກອກເບີໂທລະສັບ (ເຊັ່ນ 020xxxxxxx)'
+    if (!customer.address.trim()) errs.address = language === 'en' ? 'Please enter delivery address' : 'ກະລຸນາກອກທີ່ຢູ່ຈັດສົ່ງ'
+    if (!slipImage && !slipPreview) errs.slip = language === 'en' ? 'Please attach bank payment slip' : 'ກະລຸນາແນບຮູບສະລິບໂອນເງິນ'
     setErrors(errs)
     if (Object.keys(errs).length > 0) return false
     return true
@@ -141,31 +176,49 @@ export default function CheckoutPage() {
     setSubmitting(true)
     try {
       const orderId = generateOrderId()
+      const firstItem = checkoutItems[0]
+
       const order = {
         order_id: orderId,
         customer_name: customer.name.trim(),
         phone: customer.phone.trim(),
         address: customer.address.trim(),
-        product_id: product.id,
+        product_id: firstItem.product.id,
         specs: {
-          size: config.specLabels.size,
-          paper: config.specLabels.paper,
-          finishing: config.specLabels.finishing,
+          size: checkoutItems.map((i) => `${i.product.name}: ${i.config.specLabels.size}`).join(' | '),
+          paper: checkoutItems.map((i) => i.config.specLabels.paper).join(' | '),
+          finishing: checkoutItems.map((i) => i.config.specLabels.finishing).join(' | '),
         },
-        quantity: config.quantity,
-        drive_link: driveLink,
-        is_permission_confirmed: permissionConfirmed,
-        special_notes: specialNotes,
+        quantity: checkoutItems.reduce((sum, i) => sum + i.config.quantity, 0),
+        items: checkoutItems.map((i) => ({
+          product_id: i.product.id,
+          product_name: i.product.name,
+          quantity: i.config.quantity,
+          specs: i.config.specLabels,
+          unit_price: i.price.unitPrice,
+          total_price: i.price.total,
+          drive_link: i.driveLink,
+        })),
+        drive_link: checkoutItems.map((i) => i.driveLink).filter(Boolean).join(', '),
+        is_permission_confirmed: checkoutItems.every((i) => i.permissionConfirmed),
+        special_notes: checkoutItems.map((i) => i.specialNotes).filter(Boolean).join('; '),
         shipping_courier_id: courierId,
         shipping_fee: shippingFee,
         total_price: total,
         currency: 'LAK',
         payment_slip_url: slipPreview,
-        status: 'PENDING_SLIP_CHECK',
-        timeline: [{ status: 'PENDING_SLIP_CHECK', label: 'ກຳລັງກວດສອບການຊຳລະເງິນ', at: Date.now() }],
+        status: 'PENDING_PAYMENT',
+        timeline: [
+          {
+            status: 'PENDING_PAYMENT',
+            label: language === 'en' ? 'Payment Verification in Progress' : 'ກຳລັງກວດສອບການຊຳລະເງິນ',
+            at: Date.now(),
+          },
+        ],
       }
       const placed = await submitOrder(order)
       localStorage.setItem('ssp_placed_order', JSON.stringify(placed))
+      clearSelectedCartItems()
       setOrderDraft(null)
       navigate(`/success/${placed.order_id}`, { state: { order: placed } })
     } finally {
@@ -378,15 +431,54 @@ export default function CheckoutPage() {
                   </div>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  className={`slip-upload ${errors.slip ? 'has-error' : ''}`}
-                  onClick={() => fileRef.current && fileRef.current.click()}
-                >
-                  <UploadIcon size={28} />
-                  <strong>ອັບໂຫຼດຮູບສະລິບໂອນເງິນ</strong>
-                  <small>ກົດເພື່ອເລືອກຟາຍ (JPG / PNG) ກວດສອບຄວາມຖືກຕ້ອງກ່ອນສົ່ງ</small>
-                </button>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    className={`slip-upload ${errors.slip ? 'has-error' : ''}`}
+                    onClick={() => fileRef.current && fileRef.current.click()}
+                  >
+                    <UploadIcon size={28} />
+                    <strong>ອັບໂຫຼດຮູບສະລິບໂອນເງິນ</strong>
+                    <small>ກົດເພື່ອເລືອກຟາຍ (JPG / PNG) ກວດສອບຄວາມຖືກຕ້ອງກ່ອນສົ່ງ</small>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--outline btn--sm self-center text-xs opacity-80 hover:opacity-100"
+                    onClick={() => {
+                      const canvas = document.createElement('canvas')
+                      canvas.width = 400
+                      canvas.height = 500
+                      const ctx = canvas.getContext('2d')
+                      if (ctx) {
+                        ctx.fillStyle = '#070D1E'
+                        ctx.fillRect(0, 0, 400, 500)
+                        ctx.fillStyle = '#C5A059'
+                        ctx.font = 'bold 20px sans-serif'
+                        ctx.fillText('BCEL OnePay Receipt', 90, 70)
+                        ctx.fillStyle = '#FFFFFF'
+                        ctx.font = '15px sans-serif'
+                        ctx.fillText(`Amount: ₭ ${total.toLocaleString()}`, 50, 140)
+                        ctx.fillText(`Date: ${new Date().toLocaleDateString()}`, 50, 180)
+                        ctx.fillText(`To: Som Sing Phim Atelier`, 50, 220)
+                        ctx.fillStyle = '#10B981'
+                        ctx.font = 'bold 16px sans-serif'
+                        ctx.fillText('✓ TRANSFER SUCCESSFUL', 50, 280)
+                        const dataUrl = canvas.toDataURL('image/png')
+                        setSlipPreview(dataUrl)
+                        setPaymentSlipped(true)
+                        if (errors.slip) {
+                          setErrors((prev) => {
+                            const c = { ...prev }
+                            delete c.slip
+                            return c
+                          })
+                        }
+                      }
+                    }}
+                  >
+                    ⚡ ໃຊ້ສະລິບທົດສອບ (Quick Test Slip)
+                  </button>
+                </div>
               )}
               {errors.slip && <p className="field-error">{errors.slip}</p>}
 
@@ -407,23 +499,27 @@ export default function CheckoutPage() {
           {/* ---------- Right column: summary ---------- */}
           <aside className="checkout-summary">
             <div className="checkout-summary-card">
-              <h3>ສະຫຼຸບຄຳສັ່ງຊື້ (Order Summary)</h3>
+              <h3>{language === 'en' ? 'Order Summary' : 'ສະຫຼຸບຄຳສັ່ງຊື້'} ({checkoutItems.length} {t('itemsUnit')})</h3>
 
-              <div className="checkout-product">
-                <div className="checkout-product-art">
-                  <ProductArt art={product.image} />
-                </div>
-                <div className="checkout-product-info">
-                  <strong>{product.name}</strong>
-                  <small>
-                    ຈຳນວນ {config.quantity} ຊິ້ນ · {formatMoney(convertTo(price.unitPrice), currency)}/ຊິ້ນ
-                  </small>
-                  <ul className="checkout-specs">
-                    <li>ຂະໜາດ: {config.specLabels.size}</li>
-                    <li>ວັດສະດຸ: {config.specLabels.paper}</li>
-                    <li>ເຕັກນິກ: {config.specLabels.finishing}</li>
-                  </ul>
-                </div>
+              <div className="checkout-products-list" style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '16px' }}>
+                {checkoutItems.map((item, idx) => (
+                  <div key={item.id || idx} className="checkout-product" style={{ paddingBottom: '12px', borderBottom: idx < checkoutItems.length - 1 ? '1px dashed var(--border-gold)' : 'none' }}>
+                    <div className="checkout-product-art">
+                      <ProductArt art={item.product.image} />
+                    </div>
+                    <div className="checkout-product-info">
+                      <strong>{item.product.name}</strong>
+                      <small>
+                        {language === 'en' ? 'Qty' : 'ຈຳນວນ'} {item.config.quantity} {item.product.unit || (language === 'en' ? 'pcs' : 'ຊິ້ນ')} · {formatMoney(convertTo(item.price.unitPrice), currency)}/{language === 'en' ? 'item' : 'ຊິ້ນ'}
+                      </small>
+                      <ul className="checkout-specs">
+                        {item.config.specLabels.size && <li>{language === 'en' ? 'Size' : 'ຂະໜາດ'}: {item.config.specLabels.size}</li>}
+                        {item.config.specLabels.paper && <li>{language === 'en' ? 'Material' : 'ວັດສະດຸ'}: {item.config.specLabels.paper}</li>}
+                        {item.config.specLabels.finishing && <li>{language === 'en' ? 'Finishing' : 'ເຕັກນິກ'}: {item.config.specLabels.finishing}</li>}
+                      </ul>
+                    </div>
+                  </div>
+                ))}
               </div>
 
               <div className="checkout-lines">

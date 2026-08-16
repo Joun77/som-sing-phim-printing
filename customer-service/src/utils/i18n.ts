@@ -102,6 +102,28 @@ export const TRANSLATIONS = {
     printSavePdf: 'ພິມ / ບັນທຶກ PDF',
     closeBtn: 'ປິດ',
 
+    // Cart & Multi-Item Actions
+    addToCartBtn: 'ເພີ່ມໃສ່ກະຕ່າ',
+    buyNowBtn: 'ສັ່ງຊື້ທັນທີ',
+    cartTitle: 'ກະຕ່າສິນຄ້າ',
+    cartEmpty: 'ບໍ່ມີສິນຄ້າໃນກະຕ່າ',
+    cartEmptySub: 'ເລືອກສິນຄ້າທີ່ຕ້ອງການແລ້ວກົດເພີ່ມໃສ່ກະຕ່າໄດ້ເລີຍ',
+    selectAll: 'ເລືອກທັງໝົດ',
+    deselectAll: 'ຍົກເລີກການເລືອກ',
+    selectedItemsCount: 'ເລືອກແລ້ວ',
+    itemsUnit: 'ລາຍການ',
+    checkoutSelectedBtn: 'ດຳເນີນການສັ່ງຊື້',
+    deleteItem: 'ລຶບ',
+    clearCartBtn: 'ລ້າງກະຕ່າ',
+
+    // Proof Approval
+    proofTitle: 'ກວດສອບ & ຢືນຢັນແບບພິມ (Artwork Proof Approval)',
+    proofSub: 'ກະລຸນາກວດສອບຄວາມຖືກຕ້ອງຂອງໄຟລ໌ຕົວຢ່າງກ່ອນສັ່ງຜະລິດຈິງ',
+    approveProofBtn: 'ຢືນຢັນແບບພິມຖືກຕ້ອງ (Approve Proof)',
+    requestRevisionBtn: 'ແຈ້ງຂໍແກ້ໄຂແບບ (Request Revision)',
+    proofApprovedBadge: 'ຢືນຢັນແບບພິມຮຽບຮ້ອຍແລ້ວ',
+    revisionSubmittedBadge: 'ສົ່ງຄຳຮ້ອງຂໍແກ້ໄຂແລ້ວ ທີມງານກຳລັງດຳເນີນການ',
+
     // Category Page
     categoryProductsCount: 'ລາຍການສິນຄ້າໃນໝວດນີ້',
     allCategoriesLink: 'ທຸກໝວດໝູ່',
@@ -239,6 +261,28 @@ export const TRANSLATIONS = {
     quotationModalTitle: 'Instant Quotation Spec Sheet',
     printSavePdf: 'Print / Save PDF',
     closeBtn: 'Close',
+
+    // Cart & Multi-Item Actions
+    addToCartBtn: 'Add to Cart',
+    buyNowBtn: 'Buy Now',
+    cartTitle: 'Shopping Cart',
+    cartEmpty: 'Your cart is empty',
+    cartEmptySub: 'Browse products and add items to your cart.',
+    selectAll: 'Select All',
+    deselectAll: 'Deselect All',
+    selectedItemsCount: 'Selected',
+    itemsUnit: 'items',
+    checkoutSelectedBtn: 'Checkout Selected Items',
+    deleteItem: 'Remove',
+    clearCartBtn: 'Clear Cart',
+
+    // Proof Approval
+    proofTitle: 'Artwork Proof Approval',
+    proofSub: 'Please inspect and confirm proof artwork before printing starts.',
+    approveProofBtn: 'Approve Proof',
+    requestRevisionBtn: 'Request Revision',
+    proofApprovedBadge: 'Proof Approved',
+    revisionSubmittedBadge: 'Revision request sent. Our team is processing.',
 
     // Category Page
     categoryProductsCount: 'Products in this category',

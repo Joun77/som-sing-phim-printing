@@ -493,11 +493,11 @@
 }
 
 .product-card {
-  background: #fff;
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 24px;
   overflow: hidden;
-  box-shadow: 0 4px 16px rgba(7, 21, 43, 0.04);
+  box-shadow: var(--card-shadow), 0 4px 16px rgba(7, 21, 43, 0.04);
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease, border-color 0.3s ease;
   display: flex;
   flex-direction: column;
@@ -505,8 +505,8 @@
 
 .product-card:hover {
   transform: translateY(-6px);
-  box-shadow: 0 20px 40px -10px rgba(7, 21, 43, 0.12), 0 0 0 1px rgba(226, 189, 86, 0.3);
-  border-color: var(--gold-light);
+  box-shadow: var(--card-shadow), 0 20px 40px -10px rgba(7, 21, 43, 0.12);
+  border-color: var(--border-gold);
 }
 
 .product-card-media {
@@ -642,7 +642,7 @@
 .product-price-val {
   font-size: 1.25rem;
   font-weight: 900;
-  color: var(--navy);
+  color: var(--gold);
 }
 
 .product-card-cta {
@@ -651,8 +651,9 @@
   gap: 6px;
   padding: 8px 14px;
   border-radius: 12px;
-  background: var(--slate-100);
-  color: var(--navy);
+  background: var(--bg-surface);
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
   font-size: 0.82rem;
   font-weight: 800;
   transition: all var(--t);
@@ -660,7 +661,7 @@
 
 .product-card:hover .product-card-cta {
   background: var(--grad-gold);
-  color: var(--navy-dark);
+  color: #050B18;
   transform: translateX(3px);
   box-shadow: 0 4px 12px rgba(197, 155, 39, 0.3);
 }
@@ -669,7 +670,7 @@
 .categories {
   padding-top: 80px;
   padding-bottom: 80px;
-  background: #fff;
+  background: var(--bg-surface);
 }
 
 .category-grid {
@@ -680,8 +681,8 @@
 
 .category-card {
   position: relative;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border: 1px solid var(--slate-200);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 24px;
   padding: 26px;
   display: flex;
@@ -692,9 +693,9 @@
 
 .category-card:hover {
   transform: translateY(-5px);
-  border-color: var(--gold-light);
-  box-shadow: 0 16px 36px -8px rgba(7, 21, 43, 0.1), 0 0 0 1px rgba(226, 189, 86, 0.25);
-  background: #fff;
+  border-color: var(--border-gold);
+  box-shadow: var(--card-shadow), 0 16px 36px -8px rgba(7, 21, 43, 0.1);
+  background: var(--bg-card);
 }
 
 .category-card-top {
@@ -708,7 +709,8 @@
   font-size: 0.85rem;
   font-weight: 900;
   color: var(--gold);
-  background: rgba(226, 189, 86, 0.12);
+  background: rgba(226, 189, 86, 0.15);
+  border: 1px solid var(--border-gold);
   padding: 4px 10px;
   border-radius: 8px;
   font-family: monospace;
@@ -719,8 +721,8 @@
   width: 44px;
   height: 44px;
   border-radius: 14px;
-  background: #fff;
-  border: 1px solid var(--slate-200);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -730,14 +732,14 @@
 .category-card-title {
   font-size: 1.22rem;
   font-weight: 800;
-  color: var(--navy-dark);
+  color: var(--text-main);
   margin: 0 0 10px 0;
   line-height: 1.35;
 }
 
 .category-card-desc {
   font-size: 0.88rem;
-  color: var(--slate-500);
+  color: var(--text-muted);
   margin: 0 0 20px 0;
   line-height: 1.5;
   flex: 1;
@@ -745,7 +747,7 @@
 
 .category-card-foot {
   padding-top: 14px;
-  border-top: 1px solid rgba(226, 232, 240, 0.6);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .category-card-link {
@@ -760,14 +762,14 @@
 
 .category-card:hover .category-card-link {
   transform: translateX(4px);
-  color: #b4851a;
+  color: var(--gold);
 }
 
 /* ---------- How It Works Section ---------- */
 .how-it-works {
   padding-top: 80px;
   padding-bottom: 96px;
-  background: #f8fafc;
+  background: var(--bg-surface);
 }
 
 .steps-grid {
@@ -779,8 +781,8 @@
 
 .step-card {
   position: relative;
-  background: #fff;
-  border: 1px solid var(--slate-200);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 24px;
   padding: 26px;
   display: flex;
@@ -790,8 +792,8 @@
 
 .step-card:hover {
   transform: translateY(-4px);
-  border-color: var(--gold-light);
-  box-shadow: 0 16px 32px -8px rgba(7, 21, 43, 0.08);
+  border-color: var(--border-gold);
+  box-shadow: var(--card-shadow), 0 16px 32px -8px rgba(7, 21, 43, 0.08);
 }
 
 .step-head {
@@ -816,8 +818,9 @@
 .step-num-badge {
   font-size: 0.75rem;
   font-weight: 900;
-  color: var(--navy);
-  background: var(--slate-100);
+  color: var(--gold);
+  background: rgba(197, 160, 89, 0.15);
+  border: 1px solid var(--border-gold);
   padding: 4px 10px;
   border-radius: 8px;
   font-family: monospace;
@@ -826,14 +829,14 @@
 .step-card-title {
   font-size: 1.12rem;
   font-weight: 800;
-  color: var(--navy-dark);
+  color: var(--text-main);
   margin: 0 0 10px 0;
   line-height: 1.4;
 }
 
 .step-card-desc {
   font-size: 0.86rem;
-  color: var(--slate-500);
+  color: var(--text-muted);
   margin: 0;
   line-height: 1.55;
 }
@@ -845,10 +848,11 @@
   justify-content: center;
   gap: 24px;
   padding: 20px 28px;
-  background: #fff;
-  border: 1px solid var(--slate-200);
+  background: var(--bg-card);
+  border: 1px solid var(--border-gold);
   border-radius: 20px;
   margin-bottom: 40px;
+  box-shadow: var(--card-shadow);
 }
 
 .trust-item {
@@ -857,7 +861,7 @@
   gap: 8px;
   font-size: 0.88rem;
   font-weight: 700;
-  color: var(--slate-700);
+  color: var(--text-main);
 }
 
 .trust-item svg {

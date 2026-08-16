@@ -20,10 +20,11 @@
 }
 
 .checkout-card {
-  background: #fff;
-  border: 1px solid var(--slate-200);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 24px;
+  box-shadow: var(--card-shadow);
 }
 
 .checkout-card-head {
@@ -45,11 +46,13 @@
   font-weight: 700;
   font-size: 0.92rem;
   flex-shrink: 0;
+  border: 1px solid var(--border-gold);
 }
 
 .checkout-card-head h2 {
   font-size: 1.15rem;
   margin: 0;
+  color: var(--text-main);
 }
 
 /* ---------- Courier ---------- */
@@ -64,21 +67,21 @@
   align-items: center;
   gap: 14px;
   text-align: left;
-  background: #fff;
-  border: 1.5px solid var(--slate-200);
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-subtle);
   border-radius: var(--radius);
   padding: 14px 16px;
   transition: border-color var(--t-fast), background var(--t-fast);
 }
 
 .courier-card:hover {
-  border-color: var(--gold);
+  border-color: var(--border-gold);
 }
 
 .courier-card.is-selected {
-  border-color: var(--gold);
-  background: var(--gold-soft);
-  box-shadow: 0 0 0 3px rgba(197, 155, 39, 0.15);
+  border-color: var(--border-gold);
+  background: rgba(197, 160, 89, 0.18);
+  box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.2);
 }
 
 .courier-radio {
@@ -88,7 +91,7 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 2px solid var(--slate-300);
+  border: 2px solid var(--border-subtle);
   color: var(--navy-dark);
   flex-shrink: 0;
 }
@@ -119,17 +122,17 @@
 
 .courier-main strong {
   font-size: 0.98rem;
-  color: var(--navy-dark);
+  color: var(--text-main);
 }
 
 .courier-main small {
-  color: var(--slate-500);
+  color: var(--text-muted);
   font-size: 0.78rem;
 }
 
 .courier-fee {
   font-weight: 700;
-  color: var(--navy-dark);
+  color: var(--text-main);
   white-space: nowrap;
 }
 
@@ -151,12 +154,13 @@
 
 .payment-qr,
 .payment-bank {
-  border: 1px dashed var(--slate-300);
+  border: 1px dashed var(--border-gold);
   border-radius: var(--radius);
   padding: 18px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  background: var(--bg-surface);
 }
 
 .payment-qr-badge {
@@ -164,7 +168,7 @@
   align-items: center;
   gap: 6px;
   font-weight: 700;
-  color: var(--navy-dark);
+  color: var(--text-main);
   margin-bottom: 12px;
 }
 
@@ -195,7 +199,7 @@
   justify-content: space-between;
   gap: 10px;
   padding: 7px 0;
-  border-bottom: 1px dashed var(--slate-200);
+  border-bottom: 1px dashed var(--border-subtle);
   font-size: 0.9rem;
 }
 
@@ -204,13 +208,13 @@
 }
 
 .bank-list span {
-  color: var(--slate-500);
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
 .bank-list strong {
   text-align: right;
-  color: var(--navy-dark);
+  color: var(--text-main);
 }
 
 .bank-number {
@@ -229,21 +233,21 @@
 /* ---------- Slip upload ---------- */
 .slip-upload {
   width: 100%;
-  border: 2px dashed var(--slate-300);
+  border: 2px dashed var(--border-gold);
   border-radius: var(--radius);
-  background: var(--slate-50);
+  background: var(--bg-surface);
   padding: 32px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  color: var(--slate-500);
+  color: var(--text-muted);
   transition: border-color var(--t-fast), background var(--t-fast);
 }
 
 .slip-upload:hover {
   border-color: var(--gold);
-  background: var(--gold-soft);
+  background: var(--bg-card);
 }
 
 .slip-upload svg {
@@ -251,12 +255,13 @@
 }
 
 .slip-upload strong {
-  color: var(--navy-dark);
+  color: var(--text-main);
   font-size: 1rem;
 }
 
 .slip-upload small {
   font-size: 0.82rem;
+  color: var(--text-muted);
 }
 
 .slip-upload.has-error {
@@ -267,14 +272,14 @@
 .slip-preview {
   border-radius: var(--radius);
   overflow: hidden;
-  border: 1px solid var(--slate-200);
+  border: 1px solid var(--border-subtle);
 }
 
 .slip-preview img {
   width: 100%;
   max-height: 420px;
   object-fit: contain;
-  background: var(--slate-100);
+  background: var(--bg-surface);
 }
 
 .slip-preview-actions {
@@ -283,8 +288,8 @@
   justify-content: space-between;
   gap: 10px;
   padding: 12px 16px;
-  background: #fff;
-  border-top: 1px solid var(--slate-200);
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .slip-confirm {
@@ -298,16 +303,17 @@
 }
 
 .checkout-summary-card {
-  background: #fff;
-  border: 1px solid var(--slate-200);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 24px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--card-shadow);
 }
 
 .checkout-summary-card h3 {
   font-size: 1.1rem;
   margin-bottom: 18px;
+  color: var(--text-main);
 }
 
 .checkout-product {
@@ -322,7 +328,7 @@
   flex-shrink: 0;
   border-radius: var(--radius-sm);
   overflow: hidden;
-  border: 1px solid var(--slate-200);
+  border: 1px solid var(--border-subtle);
 }
 
 .checkout-product-art svg {
@@ -337,12 +343,12 @@
 .checkout-product-info strong {
   display: block;
   font-size: 0.95rem;
-  color: var(--navy-dark);
+  color: var(--text-main);
   margin-bottom: 4px;
 }
 
 .checkout-product-info small {
-  color: var(--slate-500);
+  color: var(--text-muted);
   font-size: 0.8rem;
 }
 

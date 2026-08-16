@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Link, Route, Routes, useLocation } from 'react-router-dom'
 import Header from './components/Header.tsx'
+import CartDrawer from './components/CartDrawer.tsx'
 import HomePage from './pages/HomePage.tsx'
 import CategoryPage from './pages/CategoryPage.tsx'
 import ProductPage from './pages/ProductPage.tsx'
@@ -8,6 +9,9 @@ import CheckoutPage from './pages/CheckoutPage.tsx'
 import SuccessPage from './pages/SuccessPage.tsx'
 import TrackingPage from './pages/TrackingPage.tsx'
 import { useShop } from './context/ShopContext.tsx'
+import InstallPromptBanner from './components/InstallPromptBanner.tsx'
+import ConciergeDock from './components/ConciergeDock.tsx'
+import Footer from './components/Footer.tsx'
 
 function ScrollToAnchor() {
   const location = useLocation()
@@ -61,6 +65,10 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
+      <Footer />
+      <CartDrawer />
+      <InstallPromptBanner />
+      <ConciergeDock />
     </>
   )
 }

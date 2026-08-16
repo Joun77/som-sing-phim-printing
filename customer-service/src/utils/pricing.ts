@@ -50,6 +50,7 @@ export function computeUnitPrice(product: Product, { sizeId, materialId, finishi
 export interface PriceBreakdown {
   unitPrice: number
   total: number
+  totalTHB?: number
   qty: number
   discount: number
 }
@@ -58,10 +59,15 @@ export function computePrice(product: Product, config: ProductConfig): PriceBrea
   const qty = Math.max(1, config.quantity || 1)
   const rawUnit = computeUnitPrice(product, config)
   const tier = getQuantityTier(qty)
-  const discount = tier.discount
-  const unitPrice = round2(rawUnit * (1 - discount))
-  const total = round2(unitPrice * qty)
-  return { unitPrice, total, qty, discount }
+  const discountedUnit = Math.round(rawUnit * (1 - tier.discount))
+  const total = discountedUnit * qty
+  return {
+    unitPrice: discountedUnit,
+    total,
+    totalTHB: total,
+    qty,
+    discount: tier.discount,
+  }
 }
 
 export function round2(n: number) {

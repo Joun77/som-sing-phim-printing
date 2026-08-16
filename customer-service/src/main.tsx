@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import { ShopProvider } from './context/ShopContext.tsx'
+import { ThemeProvider } from './context/ThemeContext.tsx'
 import './styles/global.css'
 import './styles/layout.css'
 import './styles/home.css'
@@ -11,12 +12,14 @@ import './styles/checkout.css'
 import './styles/success.css'
 import './styles/tracking.css'
 
-ReactDOM.createRoot(document.getElementById('root')).render(
+ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <ShopProvider>
-        <App />
-      </ShopProvider>
-    </BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
+        <ShopProvider>
+          <App />
+        </ShopProvider>
+      </BrowserRouter>
+    </ThemeProvider>
   </React.StrictMode>
 )

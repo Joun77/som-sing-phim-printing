@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { getCategory, getProduct, type Product, type SpecOption } from '../data/catalog.ts'
 import { useShop } from '../context/ShopContext.tsx'
 import { computePrice, getQuantityTier } from '../utils/pricing.ts'
@@ -20,7 +20,8 @@ import {
   ZapIcon,
   XIcon,
   SparkleIcon,
-  PrinterIcon
+  PrinterIcon,
+  CartIcon,
 } from '../components/icons.tsx'
 
 interface OptionButtonProps {
@@ -121,7 +122,8 @@ function QuantityStepper({ value, onChange, t }: QuantityStepperProps) {
 
 export default function ProductPage() {
   const { slug } = useParams()
-  const { currency, convertTo, setOrderDraft, t, language } = useShop()
+  const navigate = useNavigate()
+  const { currency, convertTo, setOrderDraft, addToCart, t, language } = useShop()
   const localProduct = getProduct(slug)
   const [remoteProduct, setRemoteProduct] = useState<RemoteProduct | null>(null)
 
@@ -135,16 +137,15 @@ export default function ProductPage() {
     }
   }, [slug])
 
-  // Convert remoteProduct to Product format if present
   const product: Product | null = useMemo(() => {
     if (remoteProduct) {
       const mats: SpecOption[] = (remoteProduct.options || [])
-        .filter(o => o.optionType === 'material')
+        .filter(o => o.optionType === 'paper' || o.optionType === 'material')
         .map(o => ({
           id: o.value,
           label: o.label,
-          hint: o.extraCostRate ? `+${o.extraCostRate * 100}%` : (language === 'en' ? 'Standard' : 'ມາດຕະຖານ'),
-          add: o.extraCostRate ? Math.round(50 * o.extraCostRate) : 0,
+          hint: '',
+          add: 0,
         }))
 
       const sizes: SpecOption[] = (remoteProduct.options || [])
@@ -193,7 +194,6 @@ export default function ProductPage() {
   const [finishingId, setFinishingId] = useState('')
   const [quantity, setQuantity] = useState(1)
   
-  // Upload mode: 'upload' vs 'drive'
   const [uploadMode, setUploadMode] = useState<'upload' | 'drive'>('upload')
   const [uploadedFileName, setUploadedFileName] = useState('')
   const [uploadedFileUrl, setUploadedFileUrl] = useState('')
@@ -222,6 +222,18 @@ export default function ProductPage() {
     return computePrice(product, { sizeId, materialId, finishingId, quantity })
   }, [product, sizeId, materialId, finishingId, quantity])
 
+  const specLabels = useMemo(() => {
+    if (!product) return { size: '', paper: '', finishing: '' }
+    const s = product.sizes.find((x) => x.id === sizeId)
+    const m = product.materials.find((x) => x.id === materialId)
+    const f = product.finishings.find((x) => x.id === finishingId)
+    return {
+      size: s ? (language === 'en' && s.labelEn ? s.labelEn : s.label) : '',
+      paper: m ? (language === 'en' && m.labelEn ? m.labelEn : m.label) : '',
+      finishing: f ? (language === 'en' && f.labelEn ? f.labelEn : f.label) : '',
+    }
+  }, [product, sizeId, materialId, finishingId, language])
+
   if (!product) {
     return (
       <section className="section text-center container min-h-60 flex flex-col items-center justify-center">
@@ -233,25 +245,13 @@ export default function ProductPage() {
     )
   }
 
-  const selectedSize = product.sizes.find((s) => s.id === sizeId)
-  const selectedMaterial = product.materials.find((m) => m.id === materialId)
-  const selectedFinishing = product.finishings.find((f) => f.id === finishingId)
-
-  const specLabels = {
-    size: (language === 'en' && selectedSize?.labelEn) ? selectedSize.labelEn : (selectedSize?.label || ''),
-    paper: (language === 'en' && selectedMaterial?.labelEn) ? selectedMaterial.labelEn : (selectedMaterial?.label || ''),
-    finishing: (language === 'en' && selectedFinishing?.labelEn) ? selectedFinishing.labelEn : (selectedFinishing?.label || ''),
-  }
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+  const handleFileUpload = async (file: File) => {
     if (!file) return
 
     setUploadedFileName(file.name)
     setIsUploading(true)
     setFileQualityNotice(null)
 
-    // Check image resolution if image
     if (file.type.startsWith('image/')) {
       const img = new Image()
       img.src = URL.createObjectURL(file)
@@ -285,7 +285,7 @@ export default function ProductPage() {
     }
   }
 
-  const goToCheckout = () => {
+  const validateInputs = () => {
     const nextErrors: Record<string, string> = {}
     
     if (uploadMode === 'drive') {
@@ -295,7 +295,7 @@ export default function ProductPage() {
         nextErrors.driveLink = language === 'en' ? 'Link must start with https://drive.google.com/...' : 'ລິ້ງຕ້ອງເປັນ Google Drive (https://drive.google.com/...)'
       }
       if (!permissionConfirmed) {
-        nextErrors.permission = language === 'en' ? 'Please confirm view permissions are enabled' : 'ກະລຸນາຍືນຢັນວ່າໄດ້ເປີດສິດການເຂົ້າເຖິງລິ້ງແລ້ວ'
+        nextErrors.permission = language === 'en' ? 'Please confirm view permissions are enabled' : 'ກະລຸນາຍືນຍັນວ່າໄດ້ເປີດສິດການເຂົ້າເຖິງລິ້ງແລ້ວ'
       }
     } else {
       if (!uploadedFileName) {
@@ -306,10 +306,16 @@ export default function ProductPage() {
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0) {
       document.querySelector('.configurator')?.scrollIntoView({ behavior: 'smooth' })
-      return
+      return false
     }
+    return true
+  }
 
-    setOrderDraft({
+  const handleAddToCart = () => {
+    if (!product || !price) return
+    if (!validateInputs()) return
+
+    addToCart({
       product,
       config: {
         sizeId,
@@ -323,6 +329,31 @@ export default function ProductPage() {
       specialNotes,
       price: price!,
     })
+  }
+
+  const handleBuyNow = (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    if (!product || !price) return
+    if (!validateInputs()) return
+
+    const item = {
+      product,
+      config: {
+        sizeId,
+        materialId,
+        finishingId,
+        quantity,
+        specLabels,
+      },
+      driveLink: uploadMode === 'drive' ? driveLink.trim() : uploadedFileUrl || uploadedFileName,
+      permissionConfirmed: uploadMode === 'drive' ? permissionConfirmed : true,
+      specialNotes,
+      price: price!,
+    }
+
+    addToCart(item)
+    setOrderDraft(item)
+    navigate('/checkout')
   }
 
   const totalDisplay = convertTo(price?.total || 0)
@@ -388,10 +419,7 @@ export default function ProductPage() {
 
               <form
                 className="configurator"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  goToCheckout()
-                }}
+                onSubmit={handleBuyNow}
               >
                 <SpecGroup title={t('sizeSelect')} options={product.sizes} value={sizeId} onChange={setSizeId} language={language} />
                 <SpecGroup title={t('materialSelect')} options={product.materials} value={materialId} onChange={setMaterialId} language={language} />
@@ -433,7 +461,10 @@ export default function ProductPage() {
                         <input
                           type="file"
                           accept=".pdf,.ai,.psd,.png,.jpg,.jpeg"
-                          onChange={handleFileUpload}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleFileUpload(file)
+                          }}
                           className="hidden"
                         />
                       </label>
@@ -504,10 +535,25 @@ export default function ProductPage() {
                   </div>
                 </div>
 
-                <button type="submit" className="btn btn--gold btn--lg btn--block shadow-glow">
-                  <span>{t('proceedToPay')}</span>
-                  <ArrowRightIcon size={20} />
-                </button>
+                <div className="product-cta-group" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '16px' }}>
+                  <button
+                    type="button"
+                    onClick={handleAddToCart}
+                    className="btn btn--secondary btn--lg flex-1"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', minWidth: '160px', border: '1px solid var(--border-gold)' }}
+                  >
+                    <CartIcon size={20} />
+                    <span>{t('addToCartBtn')}</span>
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn--gold btn--lg flex-1 shadow-glow"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', minWidth: '180px' }}
+                  >
+                    <span>{t('buyNowBtn')}</span>
+                    <ArrowRightIcon size={20} />
+                  </button>
+                </div>
               </form>
             </div>
           </div>

@@ -31,6 +31,8 @@ export interface Product {
   slug: string
   name: string
   nameEn?: string
+  title?: string
+  unit?: string
   category: string
   bestseller: boolean
   basePrice: number

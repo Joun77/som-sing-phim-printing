@@ -41,6 +41,12 @@ export default function Hero() {
         {/* Left: Copy & Actions */}
         <div className="hero-copy">
           <div className="hero-badge-group">
+            <div className="cmyk-bar" title="CMYK 4-Color Calibrated Press">
+              <span className="cmyk-dot cmyk-dot--c" />
+              <span className="cmyk-dot cmyk-dot--m" />
+              <span className="cmyk-dot cmyk-dot--y" />
+              <span className="cmyk-dot cmyk-dot--k" />
+            </div>
             <span className="hero-badge">
               <SparkleIcon size={16} /> {t('heroBadge')}
             </span>
@@ -117,8 +123,8 @@ export default function Hero() {
                 <span className="dot dot--yellow" />
                 <span className="dot dot--green" />
               </div>
-              <div className="glass-title">SOM SING PHIM · PREVIEW</div>
-              <span className="glass-live-pill">LIVE ENGINE</span>
+              <div className="glass-title">SOM SING PHIM · DIGITAL & OFFSET PRESS</div>
+              <span className="glass-live-pill">CMYK PROOF</span>
             </div>
 
             {/* Showcase Visual Content */}

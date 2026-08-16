@@ -12,8 +12,10 @@ import {
   WhatsAppIcon,
   CheckIcon,
   SparkleIcon,
+  CartIcon,
 } from './icons.tsx'
 import { CURRENCIES } from '../utils/currency.ts'
+import ThemeToggle from './ThemeToggle.tsx'
 
 const SOCIALS = [
   { label: 'Facebook', href: 'https://www.facebook.com/', Icon: FacebookIcon },
@@ -131,7 +133,7 @@ export default function Header() {
   const [catOpen, setCatOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
-  const { t, language } = useShop()
+  const { t, language, openCart, cartCount } = useShop()
 
   const handleNavAnchor = (hash: string) => {
     setMenuOpen(false)
@@ -202,8 +204,21 @@ export default function Header() {
           </div>
 
           <div className="header-actions">
+            <ThemeToggle />
             <LanguageSwitcher />
             <CurrencySwitcher />
+            <button
+              type="button"
+              className="header-cart-btn"
+              onClick={openCart}
+              aria-label="Open Shopping Cart"
+              title={t('cartTitle')}
+            >
+              <CartIcon size={20} />
+              {cartCount > 0 && (
+                <span className="header-cart-badge">{cartCount}</span>
+              )}
+            </button>
             <button
               type="button"
               className="btn btn--gold btn--track shadow-glow"
@@ -212,13 +227,6 @@ export default function Header() {
               <SearchIcon size={18} />
               <span>{t('navTrack')}</span>
             </button>
-            <div className="header-socials">
-              {SOCIALS.map(({ label, href, Icon }) => (
-                <a key={label} href={href} target="_blank" rel="noopener noreferrer" className="social-btn" aria-label={label}>
-                  <Icon size={18} />
-                </a>
-              ))}
-            </div>
           </div>
         </nav>
 

@@ -12,40 +12,55 @@ import {
   FileCheckIcon,
   PackageIcon,
   RefreshIcon,
-  AlertCircleIcon
+  AlertCircleIcon,
+  FileTextIcon,
+  SparkleIcon,
 } from '../components/icons.tsx'
 
 interface Step {
   key: string
   title: string
   desc: string
-  icon: 'receive' | 'prepress' | 'print' | 'finishing' | 'ship' | 'deliver'
+  icon: 'receive' | 'prepress' | 'proof' | 'print' | 'finishing' | 'ship' | 'deliver'
 }
 
-const STEPS: Step[] = [
-  { key: 'PENDING_SLIP_CHECK', title: '1. ຮັບອໍເດີ & ລໍຖ້າກວດສອບສະລິບ', desc: 'ລະບົບໄດ້ຮັບລາຍການສັ່ງຊື້ແລ້ວ ກຳລັງກວດສອບຍອດໂອນ BCEL OnePay', icon: 'receive' },
-  { key: 'PREPRESS_CHECK', title: '2. ກວດສອບໄຟລ໌ & ສີ CMYK (Preflight)', desc: 'ທີມງານກຣາຟິກກວດສອບຂະໜາດ, ຄວາມລະອຽດພາບ ແລະ Color Profile', icon: 'prepress' },
-  { key: 'IN_PRODUCTION', title: '3. ກຳລັງດຳເນີນການພິມ (Printing)', desc: 'ສົ່ງຄິວພິມລົງເຄື່ອງພິມດິຈິຕອນມາດຕະຖານສູງ', icon: 'print' },
-  { key: 'POST_PRESS', title: '4. ຕັດ, ພັບ, ເຄືອບ & QC (Finishing)', desc: 'ຂັ້ນຕອນຫຼັງການພິມ ໄດຄັດຕາມແບບ ແລະ ກວດສອບຄຸນນະພາບ', icon: 'finishing' },
-  { key: 'SHIPPED', title: '5. ສົ່ງມອບບໍລິສັດຂົນສົ່ງ (In Transit)', desc: 'ຈັດສົ່ງຜ່ານ Anousith Express / HAL Logistics ພ້ອມເລກ Tracking', icon: 'ship' },
-  { key: 'DELIVERED', title: '6. ຈັດສົ່ງສຳເລັດ (Delivered)', desc: 'ສິນຄ້າຮອດມືລູກຄ້າຮຽບຮ້ອຍ', icon: 'deliver' },
+const STEPS_LO: Step[] = [
+  { key: 'PENDING_PAYMENT', title: '1. ຮັບອໍເດີ & ລໍຖ້າກວດສອບສະລິບ', desc: 'ລະບົບໄດ້ຮັບລາຍການສັ່ງຊື້ແລ້ວ ກຳລັງກວດສອບຍອດໂອນ BCEL OnePay', icon: 'receive' },
+  { key: 'ORDER_CREATED', title: '2. ກວດສອບໄຟລ໌ & ສີ CMYK (Preflight)', desc: 'ທີມງານກຣາຟິກກວດສອບຂະໜາດ, ຄວາມລະອຽດພາບ ແລະ Color Profile', icon: 'prepress' },
+  { key: 'FILE_CONFIRMED', title: '3. ຢືນຢັນແບບພິມ (Proof Approved)', desc: 'ລູກຄ້າ ແລະ ຊ່າງພິມກວດສອບຢືນຢັນໄຟລ໌ຕົວຢ່າງຮຽບຮ້ອຍ', icon: 'proof' },
+  { key: 'IN_PRODUCTION', title: '4. ກຳລັງດຳເນີນການພິມ (Printing)', desc: 'ຕັດສະຕັອກວັດສະດຸ ແລະ ສົ່ງຄິວພິມລົງເຄື່ອງພິມດິຈິຕອນມາດຕະຖານສູງ', icon: 'print' },
+  { key: 'POST_PRESS', title: '5. ຕັດ, ພັບ, ເຄືອບ & QC (Finishing)', desc: 'ຂັ້ນຕອນຫຼັງການພິມ ໄດຄັດຕາມແບບ ແລະ ກວດສອບຄຸນນະພາບ', icon: 'finishing' },
+  { key: 'SHIPPED', title: '6. ສົ່ງມອບບໍລິສັດຂົນສົ່ງ (In Transit)', desc: 'ຈັດສົ່ງຜ່ານ Anousith Express / HAL Logistics ພ້ອມເລກ Tracking', icon: 'ship' },
+]
+
+const STEPS_EN: Step[] = [
+  { key: 'PENDING_PAYMENT', title: '1. Payment Verification', desc: 'Order received. Verifying BCEL OnePay payment confirmation.', icon: 'receive' },
+  { key: 'ORDER_CREATED', title: '2. Preflight & CMYK Check', desc: 'Graphic team is verifying resolution, bleed, and color profiles.', icon: 'prepress' },
+  { key: 'FILE_CONFIRMED', title: '3. Proof Approved', desc: 'Print-ready artwork proof is verified and signed off.', icon: 'proof' },
+  { key: 'IN_PRODUCTION', title: '4. In Production (Printing)', desc: 'Materials allocated from stock and running on high-precision digital presses.', icon: 'print' },
+  { key: 'POST_PRESS', title: '5. Finishing & QC', desc: 'Lamination, die-cutting, binding, and quality assurance.', icon: 'finishing' },
+  { key: 'SHIPPED', title: '6. Shipped & Delivered', desc: 'Dispatched via Anousith Express / HAL Logistics with tracking code.', icon: 'ship' },
 ]
 
 function stepIndex(status: string) {
   const map: Record<string, number> = {
+    PENDING_PAYMENT: 0,
     PENDING_SLIP_CHECK: 0,
     WAITING_DEPOSIT: 0,
     DRAFT: 0,
+    ORDER_CREATED: 1,
     PAYMENT_APPROVED: 1,
     PREPRESS_CHECK: 1,
     WAITING_APPROVAL: 1,
+    FILE_CONFIRMED: 2,
     READY_TO_PRINT: 2,
-    IN_PRODUCTION: 2,
-    POST_PRESS: 3,
-    FINISHING: 3,
-    SHIPPED: 4,
-    READY_FOR_DELIVERY: 4,
+    IN_PRODUCTION: 3,
+    POST_PRESS: 4,
+    FINISHING: 4,
+    SHIPPED: 5,
+    READY_FOR_DELIVERY: 5,
     DELIVERED: 5,
+    COMPLETED: 5,
   }
   return map[status] ?? 0
 }
@@ -55,7 +70,9 @@ function StepIconRenderer({ type }: { type: Step['icon'] }) {
     case 'receive':
       return <FileCheckIcon size={20} />
     case 'prepress':
-      return <FileCheckIcon size={20} />
+      return <FileTextIcon size={20} />
+    case 'proof':
+      return <CheckIcon size={20} />
     case 'print':
       return <PrinterIcon size={20} />
     case 'finishing':
@@ -73,18 +90,30 @@ export default function TrackingPage() {
   const [order, setOrder] = useState<Order | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [loading, setLoading] = useState(false)
-  const { currency, convertTo } = useShop()
+  const [proofApproved, setProofApproved] = useState(false)
+  const [revisionRequested, setRevisionRequested] = useState(false)
+  const [revisionNotes, setRevisionNotes] = useState('')
+  const [showRevisionBox, setShowRevisionBox] = useState(false)
+
+  const { currency, convertTo, t, language } = useShop()
+  const steps = language === 'en' ? STEPS_EN : STEPS_LO
 
   const executeSearch = async (orderId: string) => {
     const q = orderId.trim()
     if (!q) return
     setLoading(true)
     setNotFound(false)
-    setOrder(null)
     try {
       const res = await trackOrder(q)
-      if (res) setOrder(res)
-      else setNotFound(true)
+      if (res) {
+        setOrder(res)
+        if (res.status === 'FILE_CONFIRMED' || stepIndex(res.status) >= 2) {
+          setProofApproved(true)
+        }
+      } else {
+        setOrder(null)
+        setNotFound(true)
+      }
     } finally {
       setLoading(false)
     }
@@ -98,9 +127,32 @@ export default function TrackingPage() {
     }
   }, [searchParams])
 
+  // Polling for live status updates every 20 seconds
+  useEffect(() => {
+    if (!order?.order_id) return
+    const interval = setInterval(() => {
+      trackOrder(order.order_id).then((updated) => {
+        if (updated) setOrder(updated)
+      })
+    }, 20000)
+    return () => clearInterval(interval)
+  }, [order?.order_id])
+
   const search = async (e?: FormEvent) => {
     if (e) e.preventDefault()
     executeSearch(query)
+  }
+
+  const handleApproveProof = () => {
+    if (!order) return
+    setProofApproved(true)
+    setOrder((prev) => (prev ? { ...prev, status: 'FILE_CONFIRMED' } : null))
+  }
+
+  const handleSendRevision = () => {
+    if (!revisionNotes.trim()) return
+    setRevisionRequested(true)
+    setShowRevisionBox(false)
   }
 
   const currentIdx = order ? stepIndex(order.status) : 0
@@ -116,8 +168,8 @@ export default function TrackingPage() {
       <div className="container tracking-container">
         <div className="section-head">
           <span className="eyebrow">Order Tracking & Live Status</span>
-          <h1>ຕິດຕາມສະຖານະງານພິມ</h1>
-          <p>ກວດສອບສະຖານະການຜະລິດ ແລະ ເລກພັດສະດຸດ້ວຍ Order ID ໄດ້ຕະຫຼອດ 24 ຊົ່ວໂມງ</p>
+          <h1>{t('trackTitle')}</h1>
+          <p>{t('trackSub')}</p>
         </div>
 
         <form className="tracking-search" onSubmit={search}>
@@ -131,7 +183,7 @@ export default function TrackingPage() {
             />
           </div>
           <button type="submit" className="btn btn--gold btn--lg shadow-glow" disabled={loading || !query.trim()}>
-            {loading ? <RefreshIcon size={18} /> : <span>ກວດສອບສະຖານະ</span>}
+            {loading ? <RefreshIcon size={18} /> : <span>{t('trackSearchBtn')}</span>}
           </button>
         </form>
 
@@ -144,7 +196,7 @@ export default function TrackingPage() {
             <div className="flex justify-center mb-2">
               <AlertCircleIcon size={32} />
             </div>
-            <p>ບໍ່ພົບລາຍການສັ່ງຊື້ໝາຍເລກ "{query.trim()}"</p>
+            <p>{t('trackNotFound')} "{query.trim()}"</p>
             <p className="field-hint">ກະລຸນາກວດສອບ Order ID ອີກຄັ້ງ ຫຼື ຕິດຕໍ່ແອດມິນຜ່ານ WhatsApp</p>
           </div>
         )}
@@ -153,31 +205,32 @@ export default function TrackingPage() {
           <div className="tracking-result animate-fade-in">
             <div className="tracking-order-head">
               <div>
-                <span className="eyebrow">Order Tracking ID</span>
+                <span className="eyebrow">{t('trackFoundOrder')}</span>
                 <h2 className="tracking-order-id">{order.order_id}</h2>
                 <p className="text-muted">
-                  ລູກຄ້າ: {order.customer_name || '—'} · ວັນທີສັ່ງ:{' '}
+                  {language === 'en' ? 'Customer' : 'ລູກຄ້າ'}: {order.customer_name || '—'} ·{' '}
+                  {language === 'en' ? 'Date' : 'ວັນທີສັ່ງ'}:{' '}
                   {order.created_at
-                    ? new Date(order.created_at).toLocaleDateString('lo-LA', { dateStyle: 'medium' })
+                    ? new Date(order.created_at).toLocaleDateString(language === 'en' ? 'en-US' : 'lo-LA', { dateStyle: 'medium' })
                     : '—'}
                 </p>
               </div>
               <div className="tracking-order-status">
                 <span className="tracking-status-label font-bold text-slate-800">
-                  {STEPS[currentIdx]?.title}
+                  {steps[currentIdx]?.title}
                 </span>
-                <span className={`badge ${order.status === 'DELIVERED' ? 'badge--green' : 'badge--gold'}`}>
-                  {order.status === 'DELIVERED' ? 'ຈັດສົ່ງສຳເລັດ' : 'ກຳລັງດຳເນີນການ'}
+                <span className={`badge ${order.status === 'DELIVERED' || order.status === 'COMPLETED' ? 'badge--green' : 'badge--gold'}`}>
+                  {order.status === 'DELIVERED' || order.status === 'COMPLETED' ? (language === 'en' ? 'Completed' : 'ຈັດສົ່ງສຳເລັດ') : (language === 'en' ? 'In Progress' : 'ກຳລັງດຳເນີນການ')}
                 </span>
               </div>
             </div>
 
             {/* Stepper Progress Bar */}
             <div className="timeline">
-              {STEPS.map((step, i) => {
+              {steps.map((step, i) => {
                 const current = i === currentIdx
                 const done = i <= currentIdx
-                const isLast = i === STEPS.length - 1
+                const isLast = i === steps.length - 1
                 return (
                   <div key={step.key} className={`timeline-step ${done ? 'is-done' : ''} ${current ? 'is-current' : ''}`}>
                     <div className="timeline-dot">
@@ -193,6 +246,98 @@ export default function TrackingPage() {
               })}
             </div>
 
+            {/* Artwork Proof Review & Approval Box (Point of Transition to FILE_CONFIRMED) */}
+            <div className="tracking-proof-box" style={{
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-gold)',
+              borderRadius: '16px',
+              padding: '20px',
+              margin: '24px 0'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                <div style={{ padding: '8px', background: 'var(--gold-soft)', borderRadius: '10px', color: 'var(--gold)' }}>
+                  <SparkleIcon size={22} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text)' }}>{t('proofTitle')}</h3>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: 'var(--text-dim)' }}>{t('proofSub')}</p>
+                </div>
+              </div>
+
+              {order.drive_link && (
+                <div style={{ padding: '10px 14px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid rgba(212,175,55,0.2)', marginBottom: '16px', wordBreak: 'break-all', fontSize: '0.88rem' }}>
+                  <span style={{ color: 'var(--gold)', fontWeight: 600 }}>Google Drive / Artwork: </span>
+                  <a href={order.drive_link} target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>
+                    {order.drive_link}
+                  </a>
+                </div>
+              )}
+
+              {proofApproved ? (
+                <div className="badge badge--green" style={{ display: 'inline-flex', padding: '8px 16px', fontSize: '0.9rem', gap: '8px' }}>
+                  <CheckIcon size={18} />
+                  <span>{t('proofApprovedBadge')}</span>
+                </div>
+              ) : revisionRequested ? (
+                <div className="badge badge--gold" style={{ display: 'inline-flex', padding: '8px 16px', fontSize: '0.9rem', gap: '8px' }}>
+                  <AlertCircleIcon size={18} />
+                  <span>{t('revisionSubmittedBadge')}</span>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={handleApproveProof}
+                    className="btn btn--gold"
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    <CheckIcon size={18} />
+                    <span>{t('approveProofBtn')}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowRevisionBox(!showRevisionBox)}
+                    className="btn btn--outline"
+                  >
+                    <span>{t('requestRevisionBtn')}</span>
+                  </button>
+                </div>
+              )}
+
+              {showRevisionBox && !proofApproved && !revisionRequested && (
+                <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid rgba(212,175,55,0.15)' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '6px', color: 'var(--text)' }}>
+                    {language === 'en' ? 'Detail what needs revision:' : 'ລະບຸລາຍລະອຽດທີ່ຕ້ອງການໃຫ້ແກ້ໄຂ:'}
+                  </label>
+                  <textarea
+                    rows={3}
+                    className="luxury-textarea"
+                    placeholder={language === 'en' ? 'e.g. Please adjust background tone to match pantone...' : 'ເຊັ່ນ ຂໍປັບສີພື້ນຫຼັງໃຫ້ຕົງກັບ Pantone...'}
+                    value={revisionNotes}
+                    onChange={(e) => setRevisionNotes(e.target.value)}
+                  />
+                  <div style={{ marginTop: '10px', display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={handleSendRevision}
+                      className="btn btn--gold btn--sm"
+                      disabled={!revisionNotes.trim()}
+                    >
+                      {language === 'en' ? 'Send Request' : 'ສົ່ງຄຳຮ້ອງຂໍແກ້ໄຂ'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowRevisionBox(false)}
+                      className="btn btn--outline btn--sm"
+                    >
+                      {t('closeBtn')}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Shipping & Delivery Info */}
             {(order.status === 'SHIPPED' || order.status === 'DELIVERED' || order.tracking_number) && (
               <div className="tracking-shipping">
@@ -201,12 +346,12 @@ export default function TrackingPage() {
                     <TruckIcon size={24} />
                   </div>
                   <div className="flex-1">
-                    <strong className="block text-slate-900">ເລກພັດສະດຸຈັດສົ່ງ (Tracking Code)</strong>
+                    <strong className="block text-slate-900">{t('trackCourierTitle')}</strong>
                     <p className="tracking-number font-mono text-lg text-accent-sky font-black">
                       {order.internal_tracking_code || order.tracking_number || order.tracking || 'AN-LAO-882910'}
                     </p>
                     <small className="text-slate-500">
-                      ຂົນສົ່ງ: {order.courier_name || order.shipping_courier || 'Anousith Express'}
+                      {language === 'en' ? 'Carrier' : 'ຂົນສົ່ງ'}: {order.courier_name || order.shipping_courier || 'Anousith Express'}
                     </small>
                   </div>
                 </div>
@@ -215,11 +360,11 @@ export default function TrackingPage() {
 
             {order.total_price ? (
               <div className="tracking-order-summary">
-                <span>ຍອດຊຳລະທັງໝົດ</span>
+                <span>{t('trackTotalPaid')}</span>
                 <strong className="text-xl font-black text-slate-900">
                   {formatMoney(convertTo(order.total_price), currency)}
                 </strong>
-                <span className="badge badge--green">ຢືນຢັນການຊຳລະເງິນແລ້ວ</span>
+                <span className="badge badge--green">{t('trackPaidBadge')}</span>
               </div>
             ) : null}
 
@@ -230,7 +375,7 @@ export default function TrackingPage() {
               className="btn btn--navy btn--lg btn--block tracking-wa"
             >
               <WhatsAppIcon size={20} />
-              <span>ຕິດຕໍ່ສອບຖາມແອດມິນຜ່ານ WhatsApp</span>
+              <span>{t('trackWaBtn')}</span>
             </a>
           </div>
         )}
