@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { CATEGORIES } from '../data/catalog.ts'
 import { useShop } from '../context/ShopContext.tsx'
-import BackendStatus from './BackendStatus.tsx'
 import {
   ChevronDownIcon,
   EmailIcon,
@@ -11,6 +10,8 @@ import {
   SearchIcon,
   TikTokIcon,
   WhatsAppIcon,
+  CheckIcon,
+  SparkleIcon,
 } from './icons.tsx'
 import { CURRENCIES } from '../utils/currency.ts'
 
@@ -18,26 +19,49 @@ const SOCIALS = [
   { label: 'Facebook', href: 'https://www.facebook.com/', Icon: FacebookIcon },
   { label: 'Instagram', href: 'https://www.instagram.com/', Icon: InstagramIcon },
   { label: 'TikTok', href: 'https://www.tiktok.com/', Icon: TikTokIcon },
-  { label: 'WhatsApp', href: 'https://wa.me/66812345678', Icon: WhatsAppIcon },
+  { label: 'WhatsApp', href: 'https://wa.me/8562088888888', Icon: WhatsAppIcon },
   { label: 'Email', href: 'mailto:som.sing.phim@gmail.com', Icon: EmailIcon },
 ]
 
 function Logo() {
+  const { t } = useShop()
   return (
-    <Link to="/" className="header-logo" aria-label="ส้มสิ่งพิมพ์ SOM SING PHIM หน้าแรก">
-      <span className="header-logo-mark" aria-hidden="true">
-        <svg viewBox="0 0 40 40" width="36" height="36">
-          <rect width="40" height="40" rx="10" fill="#0C2340" />
-          <path d="M20 6 24 16 34 20 24 24 20 34 16 24 6 20 16 16 Z" fill="#E2BD56" />
-        </svg>
+    <Link to="/" className="header-logo group" aria-label="Som Sing Phim Home">
+      <span className="header-logo-circle" aria-hidden="true">
+        <img src="/logo.png" alt="Som Sing Phim Logo" className="header-logo-img" />
       </span>
       <span className="header-logo-text">
         <strong>
-          ส้มสิ่งพิมพ์ <em>SOM SING PHIM</em>
+          {t('appName')} <em>{t('appSub')}</em>
         </strong>
-        <small>บริการงานพิมพ์คุณภาพสูง</small>
+        <small>{t('appTagline')}</small>
       </span>
     </Link>
+  )
+}
+
+function LanguageSwitcher() {
+  const { language, setLanguage } = useShop()
+
+  return (
+    <div className="luxury-lang-switcher" role="group" aria-label="Language Switcher">
+      <button
+        type="button"
+        onClick={() => setLanguage('lo')}
+        className={`luxury-lang-btn ${language === 'lo' ? 'is-active' : ''}`}
+        aria-pressed={language === 'lo'}
+      >
+        <span>ລາວ (LAO)</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setLanguage('en')}
+        className={`luxury-lang-btn ${language === 'en' ? 'is-active' : ''}`}
+        aria-pressed={language === 'en'}
+      >
+        <span>EN (ENG)</span>
+      </button>
+    </div>
   )
 }
 
@@ -47,8 +71,8 @@ function CurrencySwitcher() {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const onClick = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
@@ -87,14 +111,14 @@ function CurrencySwitcher() {
                 <small>
                   {c.code === 'LAK' && ratesLoaded
                     ? `1 THB = ₭ ${Math.round(rates.THB || 630.5)}`
-                    : 'เงินบาทไทย'}
+                    : 'THB Currency'}
                 </small>
               </span>
               {c.code === currency && <CheckIcon size={14} />}
             </button>
           ))}
           {ratesLoaded && currency === 'LAK' && (
-            <div className="currency-note">อัตรา: 1 THB ≈ ₭ {Math.round(convertTo(1))}</div>
+            <div className="currency-note">ອັດຕາ: 1 THB ≈ ₭ {Math.round(convertTo(1))}</div>
           )}
         </div>
       )}
@@ -106,16 +130,30 @@ export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [catOpen, setCatOpen] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
+  const { t, language } = useShop()
+
+  const handleNavAnchor = (hash: string) => {
+    setMenuOpen(false)
+    if (location.pathname === '/') {
+      const elem = document.querySelector(hash)
+      if (elem) {
+        elem.scrollIntoView({ behavior: 'smooth' })
+      }
+    } else {
+      navigate(`/${hash}`)
+    }
+  }
 
   return (
     <header className="header">
       <div className="container header-inner">
         <Logo />
 
-        <nav className={`header-nav ${menuOpen ? 'is-open' : ''}`} aria-label="เมนูหลัก">
+        <nav className={`header-nav ${menuOpen ? 'is-open' : ''}`} aria-label="Main Navigation">
           <div className="nav-links">
             <Link to="/" className="nav-link" onClick={() => setMenuOpen(false)}>
-              หน้าแรก
+              {t('navHome')}
             </Link>
 
             <div className="nav-item has-dropdown">
@@ -125,7 +163,7 @@ export default function Header() {
                 onClick={() => setCatOpen((v) => !v)}
                 aria-expanded={catOpen}
               >
-                หมวดหมู่สินค้า <ChevronDownIcon />
+                {t('navCategories')} <ChevronDownIcon />
               </button>
               {catOpen && (
                 <div className="nav-dropdown">
@@ -139,36 +177,45 @@ export default function Header() {
                         setMenuOpen(false)
                       }}
                     >
-                      <strong>{c.name}</strong>
-                      <small>{c.nameEn}</small>
+                      <strong>{language === 'en' ? c.nameEn : c.name}</strong>
+                      <small>{language === 'en' ? c.taglineEn : c.tagline}</small>
                     </Link>
                   ))}
                 </div>
               )}
             </div>
 
-            <a href="#how-it-works" className="nav-link" onClick={() => setMenuOpen(false)}>
-              วิธีการสั่งซื้อ
-            </a>
-            <a href="#contact" className="nav-link" onClick={() => setMenuOpen(false)}>
-              ติดต่อเรา
-            </a>
+            <button
+              type="button"
+              className="nav-link nav-link-btn"
+              onClick={() => handleNavAnchor('#how-it-works')}
+            >
+              {t('navHowItWorks')}
+            </button>
+            <button
+              type="button"
+              className="nav-link nav-link-btn"
+              onClick={() => handleNavAnchor('#contact')}
+            >
+              {t('navContact')}
+            </button>
           </div>
 
           <div className="header-actions">
-            <BackendStatus />
+            <LanguageSwitcher />
             <CurrencySwitcher />
             <button
               type="button"
-              className="btn btn--gold btn--track"
+              className="btn btn--gold btn--track shadow-glow"
               onClick={() => navigate('/track')}
             >
-              <SearchIcon size={18} /> ติดตามสถานะงานพิมพ์
+              <SearchIcon size={18} />
+              <span>{t('navTrack')}</span>
             </button>
             <div className="header-socials">
               {SOCIALS.map(({ label, href, Icon }) => (
                 <a key={label} href={href} target="_blank" rel="noopener noreferrer" className="social-btn" aria-label={label}>
-                  <Icon size={20} />
+                  <Icon size={18} />
                 </a>
               ))}
             </div>
@@ -178,7 +225,7 @@ export default function Header() {
         <button
           type="button"
           className="header-burger"
-          aria-label="เปิดเมนู"
+          aria-label="Toggle Menu"
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((v) => !v)}
         >

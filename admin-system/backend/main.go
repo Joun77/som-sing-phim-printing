@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"backend/auth"
+	"backend/catalog"
 	"backend/customers"
 	"backend/db"
 	"backend/finance"
@@ -44,6 +45,16 @@ func main() {
 	// Auth routes
 	router.POST("/api/auth/login", auth.HandleLogin)
 	router.POST("/api/v1/auth/login", auth.HandleLogin)
+
+	// Web Product Catalog routes (Admin & Public)
+	router.GET("/api/v1/admin/catalog/products", catalog.HandleAdminGetProducts)
+	router.POST("/api/v1/admin/catalog/products", catalog.HandleAdminCreateProduct)
+	router.PUT("/api/v1/admin/catalog/products/:id", catalog.HandleAdminUpdateProduct)
+	router.PATCH("/api/v1/admin/catalog/products/:id/toggle", catalog.HandleAdminToggleProduct)
+	router.DELETE("/api/v1/admin/catalog/products/:id", catalog.HandleAdminSoftDeleteProduct)
+	router.POST("/api/v1/admin/catalog/upload", catalog.HandleAdminUploadImage)
+	router.GET("/api/v1/public/products", catalog.HandlePublicGetProducts)
+	router.GET("/api/v1/public/products/:slug", catalog.HandlePublicGetProductBySlug)
 
 	// PDF Preflight CMYK Extraction routes
 	router.POST("/api/v1/orders/preflight", preflight.HandlePreflightPDF)

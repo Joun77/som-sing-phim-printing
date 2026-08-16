@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,11 +63,25 @@ func HandleGetInboundTransactions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": list})
 }
 
-// HandleCreateInboundTransaction saves a new inbound procurement entry
+// HandleCreateInboundTransaction saves a new inbound procurement entry with DB Transaction
 func HandleCreateInboundTransaction(c *gin.Context) {
 	var item InboundTransaction
 	if err := c.ShouldBindJSON(&item); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid inbound payload: " + err.Error()})
+		return
+	}
+
+	// Boundary & sanitization validation
+	if item.Quantity <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Quantity must be greater than 0"})
+		return
+	}
+	if item.TotalPrice < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Total price cannot be negative"})
+		return
+	}
+	if strings.TrimSpace(item.SKUCode) == "" && strings.TrimSpace(item.ItemName) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "SKU Code or Item Name is required"})
 		return
 	}
 
@@ -79,9 +94,11 @@ func HandleCreateInboundTransaction(c *gin.Context) {
 	item.CreatedAt = time.Now().Format(time.RFC3339)
 
 	if db.DB != nil {
-		err := saveInboundToDB(item)
+		err := saveInboundWithTx(item)
 		if err != nil {
-			log.Printf("[DB ERROR] Failed to save inbound transaction: %v", err)
+			log.Printf("[DB ERROR] Inbound transaction failed & rolled back: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to persist inbound: " + err.Error()})
+			return
 		}
 	}
 
@@ -140,9 +157,11 @@ func HandleUpdateInboundTransaction(c *gin.Context) {
 	}
 
 	if db.DB != nil {
-		err := saveInboundToDB(item)
+		err := saveInboundWithTx(item)
 		if err != nil {
 			log.Printf("[DB ERROR] Failed to update inbound transaction: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to update inbound: " + err.Error()})
+			return
 		}
 	}
 
@@ -153,14 +172,20 @@ func HandleUpdateInboundTransaction(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": item})
 }
 
-// HandleDeleteInboundTransaction deletes an inbound log
+// HandleDeleteInboundTransaction deletes an inbound log with transaction
 func HandleDeleteInboundTransaction(c *gin.Context) {
 	id := c.Param("id")
 
 	if db.DB != nil {
-		_, err := db.DB.Exec(`DELETE FROM inbound_transactions WHERE id = $1`, id)
-		if err != nil {
-			log.Printf("[DB ERROR] Failed to delete inbound transaction: %v", err)
+		tx, err := db.DB.Begin()
+		if err == nil {
+			defer tx.Rollback()
+			_, err = tx.Exec(`DELETE FROM inbound_transactions WHERE id = $1`, id)
+			if err == nil {
+				_ = tx.Commit()
+			} else {
+				log.Printf("[DB ERROR] Failed to delete inbound transaction: %v", err)
+			}
 		}
 	}
 
@@ -171,9 +196,16 @@ func HandleDeleteInboundTransaction(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Record deleted"})
 }
 
-func saveInboundToDB(item InboundTransaction) error {
+// saveInboundWithTx performs atomic inbound save and material stock increment inside a single DB transaction
+func saveInboundWithTx(item InboundTransaction) error {
+	tx, err := db.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	specsJSON, _ := json.Marshal(item.Specs)
-	_, err := db.DB.Exec(`
+	_, err = tx.Exec(`
 		INSERT INTO inbound_transactions (
 			id, po_number, inbound_date, sku_code, item_name, supplier_name, category,
 			quantity, unit, total_price, payment_method, origin, tariff_fee, freight_fee,
@@ -199,5 +231,18 @@ func saveInboundToDB(item InboundTransaction) error {
 		item.ID, item.PONumber, item.InboundDate, item.SKUCode, item.ItemName, item.SupplierName, item.Category,
 		item.Quantity, item.Unit, item.TotalPrice, item.PaymentMethod, item.Origin, item.TariffFee, item.FreightFee,
 		item.ProductImage, item.ReceiptSlip, specsJSON)
-	return err
+	if err != nil {
+		return fmt.Errorf("inbound record insert failed: %w", err)
+	}
+
+	// Increment material stock_qty atomically if material exists
+	if item.SKUCode != "" {
+		_, _ = tx.Exec(`
+			UPDATE materials
+			SET stock_qty = stock_qty + $1,
+			    updated_at = CURRENT_TIMESTAMP
+			WHERE sku = $2 OR id = $2`, item.Quantity, item.SKUCode)
+	}
+
+	return tx.Commit()
 }

@@ -477,7 +477,27 @@ export default function ItemSpecConfigurator({
     tempItem.customFinishingOptions
   ]);
 
+  const [validationError, setValidationError] = useState<string | null>(null);
+
   const handleSave = () => {
+    setValidationError(null);
+    if (!tempItem.quantity || Number(tempItem.quantity) <= 0) {
+      setValidationError('ກະລຸນາປ້ອນຈຳນວນຜະລິດ (Quantity) ໃຫ້ຫຼາຍກວ່າ 0');
+      return;
+    }
+    if (!tempItem.jobWidth || Number(tempItem.jobWidth) <= 0) {
+      setValidationError('ກະລຸນາປ້ອນຄວາມກວ້າງ (Width) ໃຫ້ຫຼາຍກວ່າ 0 mm');
+      return;
+    }
+    if (!tempItem.jobHeight || Number(tempItem.jobHeight) <= 0) {
+      setValidationError('ກະລຸນາປ້ອນຄວາມສູງ (Height) ໃຫ້ຫຼາຍກວ່າ 0 mm');
+      return;
+    }
+    if (!tempItem.paperId) {
+      setValidationError('ກະລຸນາເລືອກເຈ້ຍຈາກຄັງສິນຄ້າ (Select Paper Item)');
+      return;
+    }
+
     if (onSave) {
       onSave({
         ...tempItem,
@@ -522,6 +542,14 @@ export default function ItemSpecConfigurator({
               <span>{tempItem.name || 'Print Item'}</span>
             </h3>
           </div>
+        </div>
+      )}
+
+      {/* Validation Error Banner */}
+      {validationError && (
+        <div className="bg-rose-50 border-2 border-rose-300 p-4 rounded-2xl flex items-center gap-3 text-rose-800 text-xs font-bold shadow-xs animate-shake">
+          <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+          <span>{validationError}</span>
         </div>
       )}
 

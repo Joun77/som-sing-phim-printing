@@ -1,9 +1,11 @@
 package pricing
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/shopspring/decimal"
 )
@@ -291,8 +293,31 @@ func CalculateCutLayout(jobW, jobH, parentW, parentH float64) int {
 
 // CalculateJobPricing performs the backend pricing engine math with Decimal precision
 func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
+	// ── Input Validation & Sanitization ──────────────────────────────────────────
+	req.JobName = strings.TrimSpace(req.JobName)
+	if req.JobName == "" {
+		req.JobName = "Standard Print Job"
+	}
 	if req.Quantity <= 0 {
 		return CalculationResponse{}, errors.New("quantity must be greater than zero")
+	}
+	if req.Quantity > 10000000 {
+		return CalculationResponse{}, errors.New("quantity exceeds maximum batch limit (10,000,000)")
+	}
+	if req.JobWidth < 0 || req.JobHeight < 0 {
+		return CalculationResponse{}, errors.New("dimensions cannot be negative")
+	}
+	if req.PaperCostPerUnit < 0 || req.SetupCost < 0 || req.FinishingCost < 0 {
+		return CalculationResponse{}, errors.New("costs cannot be negative")
+	}
+
+	// ── In-Memory Cache Lookup ──────────────────────────────────────────────────
+	var cacheKey string
+	if reqBytes, err := json.Marshal(req); err == nil {
+		cacheKey = string(reqBytes)
+		if cachedRes, found := GlobalPricingCache.Get(cacheKey); found {
+			return cachedRes, nil
+		}
 	}
 
 	dQuantity := decimal.NewFromInt(int64(req.Quantity))
@@ -788,7 +813,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		TotalCost:        roundToTwoDecimals(dNetInternalCost.Div(dQuantity).InexactFloat64()),
 	}
 
-	return CalculationResponse{
+	response := CalculationResponse{
 		JobName:               req.JobName,
 		Quantity:              req.Quantity,
 		AreaFactor:            roundToTwoDecimals(dAreaFactor.InexactFloat64()),
@@ -828,7 +853,12 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		Currency:              req.TargetCurrency,
 		ExchangeRate:          1.0,
 		CustomOptions:         req.CustomFinishingOptions,
-	}, nil
+	}
+
+	// Cache successful calculation
+	GlobalPricingCache.Set(cacheKey, response)
+
+	return response, nil
 }
 
 // roundToTwoDecimals rounds a float64 value to 2 decimal places

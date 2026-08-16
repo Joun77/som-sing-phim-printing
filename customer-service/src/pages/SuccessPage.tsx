@@ -1,7 +1,7 @@
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { useShop } from '../context/ShopContext.tsx'
 import { formatMoney } from '../utils/currency.ts'
-import { PrinterIcon } from '../components/icons.tsx'
+import { PrinterIcon, CheckIcon, TruckIcon } from '../components/icons.tsx'
 import ProductArt from '../components/ProductArt.tsx'
 import { getProduct } from '../data/catalog.ts'
 import type { Order } from '../api/client.ts'
@@ -17,15 +17,15 @@ function useOrder(): Order | null {
 
 export default function SuccessPage() {
   const order = useOrder()
-  const { currency, convertTo } = useShop()
+  const { currency, convertTo, t, language } = useShop()
 
   if (!order) {
     return (
-      <section className="section text-center container">
-        <h2>ไม่พบข้อมูลคำสั่งซื้อ</h2>
-        <p className="text-muted">กรุณาตรวจสอบ Order ID หรือกลับไปติดตามสถานะงานพิมพ์</p>
+      <section className="section text-center container min-h-60 flex flex-col items-center justify-center">
+        <h2>{language === 'en' ? 'Order Not Found' : 'ບໍ່ພົບຂໍ້ມູນຄຳສັ່ງຊື້'}</h2>
+        <p className="text-muted">{language === 'en' ? 'Please check your Order ID or track order status.' : 'ກະລຸນາກວດສອບ Order ID ຫຼື ກັບໄປຕິດຕາມສະຖານະງານພິມ'}</p>
         <Link to="/track" className="btn btn--navy mt-2">
-          ไปหน้าติดตามสถานะ
+          {t('navTrack')}
         </Link>
       </section>
     )
@@ -40,55 +40,55 @@ export default function SuccessPage() {
   return (
     <section className="section section--alt success-page">
       <div className="container success-container">
-        {/* ---------- Print-friendly receipt ---------- */}
+        {/* Print-friendly receipt */}
         <div className="receipt" id="receipt">
           <div className="receipt-header">
             <div className="receipt-logo">
-              <span className="header-logo-mark" aria-hidden="true">
-                <svg viewBox="0 0 40 40" width="42" height="42">
-                  <rect width="40" height="40" rx="10" fill="#0C2340" />
-                  <path d="M20 6 24 16 34 20 24 24 20 34 16 24 6 20 16 16 Z" fill="#E2BD56" />
-                </svg>
+              <span className="header-logo-circle" aria-hidden="true">
+                <img src="/logo.png" alt="Som Sing Phim Logo" className="header-logo-img" />
               </span>
               <div>
-                <strong>ส้มสิ่งพิมพ์ SOM SING PHIM</strong>
-                <small>ใบสรุปคำสั่งซื้อ / Order Receipt</small>
+                <strong>{t('appName')} {t('appSub')}</strong>
+                <small>{language === 'en' ? 'Order Summary & Receipt' : 'ໃບສະຫຼຸບຄຳສັ່ງຊື້ / Order Receipt'}</small>
               </div>
             </div>
             <div className="receipt-order-id">
-              <span>Order ID</span>
-              <strong>{order.order_id}</strong>
-              <small>วันที่: {orderDate.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })}</small>
+              <span>{t('orderIdLabel')}</span>
+              <strong className="font-mono text-primary-navy">{order.order_id}</strong>
+              <small>{language === 'en' ? 'Date:' : 'ວັນທີ:'} {orderDate.toLocaleString(language === 'en' ? 'en-US' : 'lo-LA', { dateStyle: 'medium', timeStyle: 'short' })}</small>
             </div>
           </div>
 
           <div className="receipt-status">
-            <span className="badge badge--navy">ได้รับออเดอร์แล้ว — รอแอดมินตรวจสอบสลิป</span>
+            <span className="badge badge--navy flex items-center gap-1.5">
+              <CheckIcon size={14} />
+              <span>{language === 'en' ? 'Order Received — Waiting for Slip Verification' : 'ໄດ້ຮັບອໍເດີແລ້ວ — ລໍຖ້າກວດສອບສະລິບ'}</span>
+            </span>
           </div>
 
           <div className="receipt-grid">
             <div className="receipt-block">
-              <h4>ข้อมูลผู้รับ</h4>
+              <h4>{t('customerInfoTitle')}</h4>
               <p>
                 <strong>{order.customer_name}</strong>
                 <br />
-                โทร: {order.phone}
+                {language === 'en' ? 'Tel:' : 'ໂທ:'} {order.phone}
                 <br />
-                ที่อยู่: {order.address}
+                {language === 'en' ? 'Address:' : 'ທີ່ຢູ່:'} {order.address}
               </p>
             </div>
             <div className="receipt-block">
-              <h4>ข้อมูลสินค้า</h4>
+              <h4>{t('selectedSpecSummary')}</h4>
               <p>
-                <strong>{product ? product.name : order.product_id}</strong>
+                <strong>{product ? (language === 'en' && product.nameEn ? product.nameEn : product.name) : order.product_id}</strong>
                 <br />
-                ขนาด: {order.specs?.size}
+                {language === 'en' ? 'Size:' : 'ຂະໜາດ:'} {order.specs?.size}
                 <br />
-                วัสดุ: {order.specs?.paper}
+                {language === 'en' ? 'Material:' : 'ວັດສະດຸ:'} {order.specs?.paper}
                 <br />
-                เทคนิค: {order.specs?.finishing}
+                {language === 'en' ? 'Finishing:' : 'ເຕັກນິກ:'} {order.specs?.finishing}
                 <br />
-                จำนวน: {order.quantity} ชิ้น
+                {language === 'en' ? 'Quantity:' : 'ຈຳນວນ:'} {order.quantity} {language === 'en' ? 'Units' : 'ຊິ້ນ'}
               </p>
             </div>
           </div>
@@ -99,66 +99,40 @@ export default function SuccessPage() {
             </div>
           )}
 
-          <table className="receipt-table">
-            <thead>
-              <tr>
-                <th>รายการ</th>
-                <th className="ta-r">จำนวน</th>
-                <th className="ta-r">ราคาต่อชิ้น</th>
-                <th className="ta-r">รวม</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>
-                  {product ? product.name : order.product_id}
-                  {order.special_notes && <small className="receipt-note">หมายเหตุ: {order.special_notes}</small>}
-                </td>
-                <td className="ta-r">{order.quantity}</td>
-                <td className="ta-r">{formatMoney(convertTo(subtotal / order.quantity), currency)}</td>
-                <td className="ta-r">{formatMoney(convertTo(subtotal), currency)}</td>
-              </tr>
-            </tbody>
-            <tfoot>
-              <tr>
-                <td colSpan={3} className="ta-r">
-                  ค่าจัดส่ง ({courierName})
-                </td>
-                <td className="ta-r">{shippingFee > 0 ? formatMoney(convertTo(shippingFee), currency) : 'ส่งฟรี'}</td>
-              </tr>
-              <tr className="receipt-total-row">
-                <td colSpan={3} className="ta-r">
-                  ยอดรวมทั้งสิ้น
-                </td>
-                <td className="ta-r">{formatMoney(convertTo(order.total_price), currency)}</td>
-              </tr>
-            </tfoot>
-          </table>
+          <div className="receipt-lines">
+            <div className="receipt-line">
+              <span>{language === 'en' ? 'Subtotal' : 'ຍອດລວມສິນຄ້າ'}</span>
+              <strong>{formatMoney(convertTo(subtotal), currency)}</strong>
+            </div>
+            <div className="receipt-line">
+              <span>{language === 'en' ? 'Shipping Fee' : 'ຄ່າຈັດສົ່ງ'} ({courierName})</span>
+              <strong>
+                {shippingFee === 0 ? (
+                  <span className="text-success">{language === 'en' ? 'Free Shipping' : 'ສົ່ງຟຣີ'}</span>
+                ) : (
+                  formatMoney(convertTo(shippingFee), currency)
+                )}
+              </strong>
+            </div>
+            <div className="receipt-line receipt-line--total">
+              <span>{language === 'en' ? 'Total Paid' : 'ຍອດລວມທັງໝົດ'}</span>
+              <strong>{formatMoney(convertTo(order.total_price), currency)}</strong>
+            </div>
+          </div>
 
-          <div className="receipt-footer">
-            <p>ช่องทางการติดต่อ: โทร 081-234-5678 · LINE @som-sing-phim · som.sing.phim@gmail.com</p>
-            <p className="receipt-footer-note">
-              ติดตามสถานะงานพิมพ์ได้ที่เว็บไซต์ด้วย Order ID: {order.order_id} — ขอบคุณที่ใช้บริการส้มสิ่งพิมพ์
-            </p>
+          <div className="receipt-foot">
+            <p>{t('keepOrderIdNotice')}</p>
           </div>
         </div>
 
-        {/* ---------- Action buttons ---------- */}
+        {/* Action buttons */}
         <div className="success-actions">
-          <h2 className="text-center">สั่งพิมพ์สำเร็จ!</h2>
-          <p className="text-center text-muted">
-            ระบบได้รับคำสั่งซื้อของคุณแล้ว เจ้าหน้าที่จะตรวจสอบสลิปและเริ่มงานพิมพ์โดยเร็วที่สุด
-            <br />
-            จด Order ID <strong className="text-gold">{order.order_id}</strong> ไว้เพื่อติดตามสถานะได้
-          </p>
-          <div className="success-btns">
-            <button type="button" className="btn btn--gold btn--lg" onClick={() => window.print()}>
-              <PrinterIcon size={20} /> พิมพ์ / เซฟใบสรุป (PDF)
-            </button>
-            <Link to="/track" className="btn btn--navy btn--lg">
-              ติดตามสถานะงานพิมพ์
-            </Link>
-          </div>
+          <button type="button" className="btn btn--white" onClick={() => window.print()}>
+            <PrinterIcon size={18} /> {t('printSavePdf')}
+          </button>
+          <Link to={`/track?q=${order.order_id}`} className="btn btn--gold shadow-glow">
+            <TruckIcon size={18} /> {t('trackNowBtn')}
+          </Link>
         </div>
       </div>
     </section>

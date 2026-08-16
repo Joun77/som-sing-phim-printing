@@ -1,90 +1,171 @@
-import { Link } from 'react-router-dom'
-import { ClockIcon, PrinterIcon, ShieldIcon, SparkleIcon, TruckIcon } from './icons.tsx'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useShop } from '../context/ShopContext.tsx'
+import { 
+  ClockIcon, 
+  PrinterIcon, 
+  ShieldIcon, 
+  SparkleIcon, 
+  TruckIcon, 
+  SearchIcon, 
+  ArrowRightIcon, 
+  CheckIcon,
+  StarIcon
+} from './icons.tsx'
 
 export default function Hero() {
+  const [trackInput, setTrackInput] = useState('')
+  const navigate = useNavigate()
+  const { t, language } = useShop()
+
+  const handleTrackSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (trackInput.trim()) {
+      navigate(`/track?q=${encodeURIComponent(trackInput.trim())}`)
+    } else {
+      navigate('/track')
+    }
+  }
+
   return (
     <section className="hero">
+      {/* Dynamic Background Glows */}
       <div className="hero-bg" aria-hidden="true">
         <div className="hero-blob hero-blob--1" />
         <div className="hero-blob hero-blob--2" />
+        <div className="hero-blob hero-blob--3" />
         <div className="hero-grid" />
       </div>
 
       <div className="container hero-inner">
+        {/* Left: Copy & Actions */}
         <div className="hero-copy">
-          <span className="hero-badge">
-            <SparkleIcon size={16} /> ງານພິມດ່ວນຄຸນນະພາບສູງ — ສົ່ງທົ່ວປະເທດລາວ
-          </span>
-          <h1>
-            ສັ່ງພິມງ່າຍໆ ໄດ້ໃນ
-            <span className="hero-gold"> 3 ຂັ້ນຕອນ</span>
-          </h1>
-          <p className="hero-sub">
-            ເລືອກສິນຄ້າ → ແນບຟາຍງານຜ່ານ Google Drive → ໂອນເງິນ BCEL OnePay ພ້ອມສົ່ງສະລິບ
-            ພວກເຮົາເບິ່ງແຍງພິມ ແລະ ຈັດສົ່ງໃຫ້ເຖິງມືທ່ານ ພ້ອມຕິດຕາມສະຖານະແບບ Real-time
-          </p>
-          <div className="hero-cta">
-            <Link to="/category/albums" className="btn btn--gold btn--lg">
-              ສັ່ງພິມເລີຍ
-            </Link>
-            <Link to="/track" className="btn btn--outline-gold btn--lg">
-              ຕິດຕາມສະຖານະງານພິມ
-            </Link>
+          <div className="hero-badge-group">
+            <span className="hero-badge">
+              <SparkleIcon size={16} /> {t('heroBadge')}
+            </span>
+            <span className="hero-badge-pill">
+              <StarIcon size={14} /> {t('heroColorQuality')}
+            </span>
           </div>
 
+          <h1 className="hero-title">
+            {t('heroTitleLine1')} <br />
+            <span className="hero-gold">{t('heroTitleHighlight')}</span>
+          </h1>
+
+          <p className="hero-sub">
+            {t('heroSub')}
+          </p>
+
+          {/* Quick Track & Order Search Bar */}
+          <form onSubmit={handleTrackSubmit} className="hero-search-box">
+            <div className="hero-search-input-wrap">
+              <SearchIcon size={18} />
+              <input
+                type="text"
+                placeholder={t('heroSearchPlaceholder')}
+                value={trackInput}
+                onChange={(e) => setTrackInput(e.target.value)}
+                aria-label="Order ID Search"
+              />
+            </div>
+            <button type="submit" className="btn btn--gold hero-search-btn">
+              <span>{t('heroSearchBtn')}</span>
+              <ArrowRightIcon size={16} />
+            </button>
+          </form>
+
+          {/* Action CTAs */}
+          <div className="hero-cta">
+            <a href="#bestsellers" className="btn btn--gold btn--lg shadow-glow">
+              {t('heroOrderNowBtn')} <ArrowRightIcon size={18} />
+            </a>
+            <a href="#categories" className="btn btn--outline-gold btn--lg">
+              {t('heroAllCategoriesBtn')}
+            </a>
+          </div>
+
+          {/* Trust Value Points */}
           <ul className="hero-points">
             <li>
-              <ShieldIcon size={20} /> ລາຄາຄຸ້ມຄ່າ ໂປ່ງໃສ
+              <div className="point-icon"><ShieldIcon size={18} /></div>
+              <span>{t('heroPoint1')}</span>
             </li>
             <li>
-              <PrinterIcon size={20} /> ພິມວ່ອງໄວ ພາຍໃນ 24-72 ຊມ.
+              <div className="point-icon"><PrinterIcon size={18} /></div>
+              <span>{t('heroPoint2')}</span>
             </li>
             <li>
-              <TruckIcon size={20} /> ຈັດສົ່ງທົ່ວປະເທດລາວ (Anousith / HAL)
+              <div className="point-icon"><TruckIcon size={18} /></div>
+              <span>{t('heroPoint3')}</span>
             </li>
             <li>
-              <ClockIcon size={20} /> ຕິດຕາມສະຖານະໄດ້ຕະຫຼອດ 24 ຊມ.
+              <div className="point-icon"><ClockIcon size={18} /></div>
+              <span>{t('heroPoint4')}</span>
             </li>
           </ul>
         </div>
 
-        <div className="hero-visual" aria-hidden="true">
-          <div className="hero-card hero-card--main">
-            <svg viewBox="0 0 320 240">
-              <defs>
-                <linearGradient id="heroCardG" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#E2BD56" />
-                  <stop offset="100%" stopColor="#C59B27" />
-                </linearGradient>
-              </defs>
-              <rect width="320" height="240" rx="20" fill="url(#heroCardG)" />
-              <rect x="18" y="18" width="284" height="204" rx="14" fill="#0C2340" />
-              <rect x="18" y="18" width="284" height="52" rx="14" fill="#07152B" />
-              <circle cx="56" cy="44" r="16" fill="#E2BD56" />
-              <rect x="86" y="34" width="90" height="8" rx="4" fill="#fff" opacity="0.9" />
-              <rect x="86" y="50" width="60" height="6" rx="3" fill="#fff" opacity="0.45" />
-              <rect x="30" y="88" width="120" height="90" rx="8" fill="#fff" opacity="0.96" />
-              <circle cx="62" cy="114" r="9" fill="#E2BD56" />
-              <path d="M30 170 L92 128 L120 146 L150 118 V178 H30 Z" fill="#C59B27" opacity="0.8" />
-              <rect x="170" y="88" width="120" height="90" rx="8" fill="#E2BD56" opacity="0.92" />
-              <path d="M170 178 V120 L210 142 L238 122 L290 178 Z" fill="#0C2340" opacity="0.55" />
-              <rect x="30" y="196" width="56" height="7" rx="3.5" fill="#fff" opacity="0.5" />
-              <rect x="96" y="196" width="42" height="7" rx="3.5" fill="#fff" opacity="0.3" />
-              <rect x="170" y="196" width="64" height="7" rx="3.5" fill="#fff" opacity="0.5" />
-            </svg>
-          </div>
-          <div className="hero-card hero-card--float hero-card--1">
-            <PrinterIcon size={20} />
-            <div>
-              <strong>ພິມເສັດໄວ</strong>
-              <small>ເລີ່ມຜະລິດພາຍໃນ 24 ຊມ.</small>
+        {/* Right: Modern Luxury Glass Showcase Card */}
+        <div className="hero-visual">
+          <div className="hero-glass-card">
+            {/* Top Bar */}
+            <div className="hero-glass-header">
+              <div className="glass-dots">
+                <span className="dot dot--red" />
+                <span className="dot dot--yellow" />
+                <span className="dot dot--green" />
+              </div>
+              <div className="glass-title">SOM SING PHIM · PREVIEW</div>
+              <span className="glass-live-pill">LIVE ENGINE</span>
             </div>
-          </div>
-          <div className="hero-card hero-card--float hero-card--2">
-            <TruckIcon size={20} />
-            <div>
-              <strong>ຈັດສົ່ງທົ່ວລາວ</strong>
-              <small>Anousith & HAL Logistics</small>
+
+            {/* Showcase Visual Content */}
+            <div className="hero-glass-body">
+              <div className="glass-preview-banner">
+                <div className="preview-tag">NEW ARRIVAL</div>
+                <h4>{language === 'en' ? 'Waterproof Glossy PP Sticker' : 'ສະຕິກເກີ PP ຂາວເງົາກັນນ້ຳ 100%'}</h4>
+                <p>{language === 'en' ? 'Ultra-HD print, precision kiss-cut, easy to peel.' : 'ພິມລະອຽດສູງ ໄດຄັດຄົມຊັດ ພ້ອມລອກຕິດ'}</p>
+                <div className="preview-price-tag">
+                  <span>{t('startPriceLabel')}</span>
+                  <strong>₭ 35,000 / Sheet</strong>
+                </div>
+              </div>
+
+              {/* Dynamic Feature Badges */}
+              <div className="glass-features-grid">
+                <div className="feature-pill">
+                  <CheckIcon size={14} /> <span>{language === 'en' ? '100% Waterproof & Freeze-proof' : 'ກັນນ້ຳ ແຊ່ຕູ້ເຢັນໄດ້'}</span>
+                </div>
+                <div className="feature-pill">
+                  <CheckIcon size={14} /> <span>{language === 'en' ? 'Kiss-Cut & Die-Cut Single' : 'ໄດຄັດ 50% & 100%'}</span>
+                </div>
+                <div className="feature-pill">
+                  <CheckIcon size={14} /> <span>{language === 'en' ? 'Up to 20% Volume Tier Discount' : 'ສ່ວນຫຼຸດ Tier ສູງສຸດ 20%'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Floating Live Badges */}
+            <div className="hero-float-card hero-float-card--1 animate-float-slow">
+              <div className="float-icon-box float-icon-box--gold">
+                <PrinterIcon size={20} />
+              </div>
+              <div>
+                <strong>{language === 'en' ? 'Express 24-48h' : 'ພິມດ່ວນ 24-48 ຊມ.'}</strong>
+                <small>{language === 'en' ? 'Fast professional digital print' : 'ຮອງຮັບງານດ່ວນທຸກປະເພດ'}</small>
+              </div>
+            </div>
+
+            <div className="hero-float-card hero-float-card--2 animate-float-delayed">
+              <div className="float-icon-box float-icon-box--green">
+                <TruckIcon size={20} />
+              </div>
+              <div>
+                <strong>{language === 'en' ? 'Nationwide Delivery' : 'ຈັດສົ່ງທົ່ວປະເທດລາວ'}</strong>
+                <small>Anousith & HAL Express</small>
+              </div>
             </div>
           </div>
         </div>

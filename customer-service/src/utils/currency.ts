@@ -12,11 +12,11 @@ export interface Currency {
 }
 
 export const CURRENCIES: Currency[] = [
-  { code: 'THB', symbol: '฿', label: 'THB ฿', name: 'บาทไทย', rateToLak: 630.5 },
-  { code: 'LAK', symbol: '₭', label: 'LAK ₭', name: 'กีบลาว', rateToLak: 1 },
+  { code: 'LAK', symbol: '₭', label: 'LAK ₭', name: 'ກີບລາວ', rateToLak: 1 },
+  { code: 'THB', symbol: '฿', label: 'THB ฿', name: 'ບາດໄທ', rateToLak: 630.5 },
 ]
 
-export const DEFAULT_CURRENCY = 'THB'
+export const DEFAULT_CURRENCY = 'LAK'
 
 export function convert(amountThb: number, currency: string, rateToLak: number) {
   if (currency === 'LAK') {
@@ -34,14 +34,14 @@ export function formatMoney(amount: number, currency?: string) {
   if (code === 'LAK') {
     return '₭ ' + Math.round(amount).toLocaleString('en-US')
   }
-  return '฿ ' + amount.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  return '฿ ' + amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
 export function formatMoneyCompact(amount: number, currency?: string) {
   const code = currency || DEFAULT_CURRENCY
   if (code === 'LAK') {
     const n = Math.round(amount)
-    if (n >= 1_000_000) return '₭ ' + (n / 1_000_000).toFixed(1) + ' ล้าน'
+    if (n >= 1_000_000) return '₭ ' + (n / 1_000_000).toFixed(1) + 'M'
     if (n >= 1_000) return '₭ ' + (n / 1_000).toFixed(1) + 'K'
     return '₭ ' + n
   }

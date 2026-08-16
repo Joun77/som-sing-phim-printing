@@ -194,12 +194,18 @@ export default function CreateOrderPage({
   const [artworkLink, setArtworkLink] = useState('');
 
   const handleNextToStep2 = () => {
-    if (customerType === 'new' && !newCustName.trim()) {
-      showToast('ກະລຸນາປ້ອນຊື່ລູກຄ້າໃໝ່', 'warning');
-      return;
+    if (customerType === 'new') {
+      if (!newCustName.trim()) {
+        showToast('ກະລຸນາປ້ອນຊື່ລູກຄ້າໃໝ່ (Customer Name Required)', 'warning');
+        return;
+      }
+      if (!newCustPhone.trim()) {
+        showToast('ກະລຸນາປ້ອນເບີໂທລະສັບລູກຄ້າ (Phone Number Required)', 'warning');
+        return;
+      }
     }
     if (customerType === 'existing' && !selectedCustomerId) {
-      showToast('ກະລຸນາເລືອກລູກຄ້າ', 'warning');
+      showToast('ກະລຸນາເລືອກລູກຄ້າທີ່ມີໃນລະບົບ (Select Existing Customer)', 'warning');
       return;
     }
     setCurrentStep(2);
@@ -209,6 +215,17 @@ export default function CreateOrderPage({
   const [backendCalculationBreakdown, setBackendCalculationBreakdown] = useState([]);
 
   const handleNextToStep3 = async () => {
+    if (items.length === 0) {
+      showToast('ກະລຸນາເພີ່ມລາຍການສິນຄ້າຢ່າງໜ້ອຍ 1 ລາຍການ (Add At Least 1 Item)', 'warning');
+      return;
+    }
+
+    const invalidQtyItem = items.find(it => !it.quantity || Number(it.quantity) <= 0);
+    if (invalidQtyItem) {
+      showToast(`ຈຳນວນຜະລິດຂອງ "${invalidQtyItem.name}" ຕ້ອງຫຼາຍກວ່າ 0`, 'error');
+      return;
+    }
+
     const unconfiguredItem = items.find(it => !it.isConfigured);
     if (unconfiguredItem) {
       showToast(`ກະລຸນາກຳນົດສເປກສິນຄ້າ "${unconfiguredItem.name}" ໃຫ້ຄົບກ່ອນດຳເນີນການຕໍ່`, 'warning');
@@ -263,10 +280,10 @@ export default function CreateOrderPage({
 
       setBackendCalculationBreakdown(breakdowns);
       setCurrentStep(3);
-      showToast('Calculated prices from backend pricing engine!', 'success');
+      showToast('ຄິດໄລ່ລາຄາຈາກ Pricing Engine สำเร็จ!', 'success');
     } catch (err) {
       console.error(err);
-      showToast('Using local pricing fallback due to offline server.', 'warning');
+      showToast('ໃຊ້ລະບົບຄິດໄລ່สำรองເນື່ອງຈາກเซิร์ฟเวอร์ Offline', 'warning');
       setCurrentStep(3);
     } finally {
       setIsCalculating(false);
@@ -276,11 +293,20 @@ export default function CreateOrderPage({
   const handleSubmitFinal = (e) => {
     e.preventDefault();
 
+    if (items.length === 0) {
+      showToast('ບໍ່ມີລາຍການສິນຄ້າໃນອໍເດີ', 'error');
+      return;
+    }
+
     let finalCustomerName = '';
     let finalPhone = '';
     let finalAddress = '';
 
     if (customerType === 'new') {
+      if (!newCustName.trim()) {
+        showToast('ກະລຸນາປ້ອນຊື່ລູກຄ້າໃໝ່', 'warning');
+        return;
+      }
       finalCustomerName = newCustName;
       finalPhone = newCustPhone;
       finalAddress = newCustAddress;

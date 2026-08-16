@@ -15,7 +15,8 @@ import {
   User,
   Users,
   Coins,
-  LogOut
+  LogOut,
+  Globe
 } from 'lucide-react';
 
 export default function Navbar() {
@@ -46,6 +47,7 @@ export default function Navbar() {
 
   const navItems = [
     { id: 'dashboard', labelLao: 'ແຜງຄວບຄຸມ', labelEn: 'Dashboard', icon: LayoutDashboard },
+    { id: 'catalog', labelLao: 'ສິນຄ້າໜ້າເວັບ', labelEn: 'Web Catalog', icon: Globe },
     { id: 'preflight', labelLao: 'ກວດໄຟລ໌ CMYK', labelEn: 'Preflight', icon: Cpu },
     { id: 'orders', labelLao: 'ອໍເດີ', labelEn: 'Orders', icon: ShoppingCart },
     { id: 'finance', labelLao: 'ການເງິນ & ບັນຊີ', labelEn: 'Finance', icon: Coins },
@@ -67,14 +69,14 @@ export default function Navbar() {
           
           {/* Left: Brand Logo & Title */}
           <div className="flex items-center gap-3 shrink-0 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
-            <div className="w-11 h-11 bg-accent-sky text-white rounded-2xl flex items-center justify-center shadow-lg shadow-sky-500/20 border border-sky-400/30">
-              <Printer className="w-6 h-6 text-white" />
+            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center p-1 shadow-lg shadow-amber-500/20 border-2 border-[#D4AF37] overflow-hidden">
+              <img src="/logo.png" alt="Som Sing Phim Logo" className="w-full h-full object-contain" />
             </div>
             <div>
               <h1 className="font-black text-lg tracking-tight text-white leading-tight font-sans">
-                {t('common.app_name')}
+                ສົມສິ່ງພິມ
               </h1>
-              <p className="text-[11px] font-semibold text-slate-400">Som Sing Printing ERP</p>
+              <p className="text-[11px] font-bold text-amber-400">SOM SING PHIM · ERP</p>
             </div>
           </div>
 

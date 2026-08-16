@@ -14,6 +14,7 @@ import { FinanceDashboard } from '@features/finance';
 import { ProfileSettingsPage } from '@features/profile';
 import { PreflightPage } from './features/production/PreflightPage';
 import { ShopFloorTracker } from './features/production/ShopFloorTracker';
+import { WebCatalogPage } from './features/catalog';
 import { ProtectedRoute } from '@components/ProtectedRoute';
 import CurrencyRatesModal from '@components/common/CurrencyRatesModal';
 import { useTranslation } from 'react-i18next';
@@ -69,6 +70,7 @@ function AppContent() {
             ) : (
               <>
                 {activeTab === 'dashboard' && <DashboardOverview />}
+                {activeTab === 'catalog' && <WebCatalogPage />}
                 {activeTab === 'preflight' && (
                   <PreflightPage
                     onSendToQuotation={(res) => {

@@ -266,3 +266,49 @@ CREATE TABLE offcuts (
     returned_by UUID REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 9. Public Web Catalog & Tier Discounts
+CREATE TABLE IF NOT EXISTS public_products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    slug VARCHAR(255) UNIQUE NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    description TEXT,
+    features TEXT[] DEFAULT '{}',
+    thumbnail_url VARCHAR(500),
+    gallery_urls TEXT[] DEFAULT '{}',
+    min_quantity INT DEFAULT 1,
+    lead_time_days INT DEFAULT 2,
+    is_active BOOLEAN DEFAULT true,
+    is_archived BOOLEAN DEFAULT false,
+    deleted_at TIMESTAMP WITH TIME ZONE NULL,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS public_product_options (
+    id SERIAL PRIMARY KEY,
+    product_id INT NOT NULL REFERENCES public_products(id) ON DELETE CASCADE,
+    option_type VARCHAR(50) NOT NULL,
+    label VARCHAR(100) NOT NULL,
+    value VARCHAR(100) NOT NULL,
+    is_default BOOLEAN DEFAULT false,
+    extra_cost_rate NUMERIC(10, 4) DEFAULT 0.0000,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS product_discount_tiers (
+    id SERIAL PRIMARY KEY,
+    product_id INT NOT NULL REFERENCES public_products(id) ON DELETE CASCADE,
+    min_quantity INT NOT NULL,
+    discount_percentage NUMERIC(5, 2) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_public_products_slug ON public_products(slug);
+CREATE INDEX IF NOT EXISTS idx_public_products_category ON public_products(category);
+CREATE INDEX IF NOT EXISTS idx_public_products_active ON public_products(is_active) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_public_product_options_pid ON public_product_options(product_id);
+CREATE INDEX IF NOT EXISTS idx_product_discount_tiers_pid ON product_discount_tiers(product_id);
+

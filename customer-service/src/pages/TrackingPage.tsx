@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { trackOrder, type Order } from '../api/client.ts'
 import { formatMoney } from '../utils/currency.ts'
 import { useShop } from '../context/ShopContext.tsx'
@@ -6,80 +7,76 @@ import {
   SearchIcon,
   TruckIcon,
   WhatsAppIcon,
+  CheckIcon,
+  PrinterIcon,
+  FileCheckIcon,
+  PackageIcon,
+  RefreshIcon,
+  AlertCircleIcon
 } from '../components/icons.tsx'
 
 interface Step {
   key: string
   title: string
   desc: string
-  icon: string
+  icon: 'receive' | 'prepress' | 'print' | 'finishing' | 'ship' | 'deliver'
 }
 
 const STEPS: Step[] = [
-  { key: 'Pending', title: '1. Pending (ກຳລັງກວດສອບອໍເດີ/ຊຳລະເງິນ)', desc: 'ລໍຖ້າການເງິນກວດສອບສະລິບ', icon: 'receive' },
-  { key: 'Pre-Press', title: '2. Pre-Press / Proofing (ກວດສອບໄຟລ໌/ຢືນຢັນແບບ)', desc: 'ກຣາຟິກອັບໂຫຼດ Digital Proof ໃຫ້ກວດສອບ', icon: 'pay' },
-  { key: 'Queued', title: '3. Queued (ຈັດຄິວພິມ/ເພລດ)', desc: 'ຈັດສັນລົງເຄື່ອງພິມ ແລະ ຕັດສະຕ໋ອກ', icon: 'print' },
-  { key: 'Printing', title: '4. Printing (ກຳລັງພິມ)', desc: 'ເຄື່ອງພິມກຳລັງດຳເນີນການພິມ', icon: 'print' },
-  { key: 'Post-Press', title: '5. Post-Press / Finishing (ຂັ້ນຕອນຫຼັງການພິມ)', desc: 'ຕັດ, ພັບ, ເຄືອບ ຫຼື ເຂົ້າເລົ່ມ', icon: 'print' },
-  { key: 'Ready for Delivery', title: '6. Ready for Delivery (ພິມສໍາເລັດ/ຮໍານໍາສົ່ງ)', desc: 'ຜ່ານ QC ແພັກສິນຄ້າຮຽບຮ້ອຍ', icon: 'ship' },
-  { key: 'Delivered', title: '7. Delivered (ກຳລັງນໍາສົ່ງ/ສົ່ງສໍາເລັດ)', desc: 'ຂົນສົ່ງ Anousith Express / HAL Logistics', icon: 'deliver' },
+  { key: 'PENDING_SLIP_CHECK', title: '1. ຮັບອໍເດີ & ລໍຖ້າກວດສອບສະລິບ', desc: 'ລະບົບໄດ້ຮັບລາຍການສັ່ງຊື້ແລ້ວ ກຳລັງກວດສອບຍອດໂອນ BCEL OnePay', icon: 'receive' },
+  { key: 'PREPRESS_CHECK', title: '2. ກວດສອບໄຟລ໌ & ສີ CMYK (Preflight)', desc: 'ທີມງານກຣາຟິກກວດສອບຂະໜາດ, ຄວາມລະອຽດພາບ ແລະ Color Profile', icon: 'prepress' },
+  { key: 'IN_PRODUCTION', title: '3. ກຳລັງດຳເນີນການພິມ (Printing)', desc: 'ສົ່ງຄິວພິມລົງເຄື່ອງພິມດິຈິຕອນມາດຕະຖານສູງ', icon: 'print' },
+  { key: 'POST_PRESS', title: '4. ຕັດ, ພັບ, ເຄືອບ & QC (Finishing)', desc: 'ຂັ້ນຕອນຫຼັງການພິມ ໄດຄັດຕາມແບບ ແລະ ກວດສອບຄຸນນະພາບ', icon: 'finishing' },
+  { key: 'SHIPPED', title: '5. ສົ່ງມອບບໍລິສັດຂົນສົ່ງ (In Transit)', desc: 'ຈັດສົ່ງຜ່ານ Anousith Express / HAL Logistics ພ້ອມເລກ Tracking', icon: 'ship' },
+  { key: 'DELIVERED', title: '6. ຈັດສົ່ງສຳເລັດ (Delivered)', desc: 'ສິນຄ້າຮອດມືລູກຄ້າຮຽບຮ້ອຍ', icon: 'deliver' },
 ]
 
-const STATUS_ORDER = STEPS.map((s) => s.key)
-
 function stepIndex(status: string) {
-  const i = STATUS_ORDER.indexOf(status)
-  return i === -1 ? 0 : i
+  const map: Record<string, number> = {
+    PENDING_SLIP_CHECK: 0,
+    WAITING_DEPOSIT: 0,
+    DRAFT: 0,
+    PAYMENT_APPROVED: 1,
+    PREPRESS_CHECK: 1,
+    WAITING_APPROVAL: 1,
+    READY_TO_PRINT: 2,
+    IN_PRODUCTION: 2,
+    POST_PRESS: 3,
+    FINISHING: 3,
+    SHIPPED: 4,
+    READY_FOR_DELIVERY: 4,
+    DELIVERED: 5,
+  }
+  return map[status] ?? 0
 }
 
-function TimelineIcon({ type }: { type: string }) {
-  const map = {
-    receive: (
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="4" width="18" height="16" rx="2" />
-        <path d="m3 8 9 6 9-6" />
-      </svg>
-    ),
-    pay: (
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2.5 20 5.5v6.2c0 4.6-3.3 8-8 9.8-4.7-1.8-8-5.2-8-9.8V5.5z" />
-        <path d="m8.5 12 2.3 2.3 4.7-4.7" />
-      </svg>
-    ),
-    print: (
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M6 9V3h12v6" />
-        <rect x="4" y="9" width="16" height="9" rx="1.5" />
-        <path d="M7 13h10v8H7z" />
-      </svg>
-    ),
-    ship: (
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M1.5 6.5h13v11h-13z" />
-        <path d="M14.5 10h4.6l3.4 3.6v3.9h-8" />
-        <circle cx="6" cy="18.5" r="1.8" />
-        <circle cx="17.5" cy="18.5" r="1.8" />
-      </svg>
-    ),
-    deliver: (
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m4.5 12.5 5 5 10-11" />
-      </svg>
-    ),
+function StepIconRenderer({ type }: { type: Step['icon'] }) {
+  switch (type) {
+    case 'receive':
+      return <FileCheckIcon size={20} />
+    case 'prepress':
+      return <FileCheckIcon size={20} />
+    case 'print':
+      return <PrinterIcon size={20} />
+    case 'finishing':
+      return <PackageIcon size={20} />
+    case 'ship':
+      return <TruckIcon size={20} />
+    case 'deliver':
+      return <CheckIcon size={20} />
   }
-  return map[type] || map.receive
 }
 
 export default function TrackingPage() {
-  const [query, setQuery] = useState('')
+  const [searchParams] = useSearchParams()
+  const [query, setQuery] = useState(searchParams.get('q') || searchParams.get('order') || '')
   const [order, setOrder] = useState<Order | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [loading, setLoading] = useState(false)
   const { currency, convertTo } = useShop()
 
-  const search = async (e?: FormEvent) => {
-    if (e) e.preventDefault()
-    const q = query.trim()
+  const executeSearch = async (orderId: string) => {
+    const q = orderId.trim()
     if (!q) return
     setLoading(true)
     setNotFound(false)
@@ -93,9 +90,24 @@ export default function TrackingPage() {
     }
   }
 
+  useEffect(() => {
+    const initialQ = searchParams.get('q') || searchParams.get('order')
+    if (initialQ) {
+      setQuery(initialQ)
+      executeSearch(initialQ)
+    }
+  }, [searchParams])
+
+  const search = async (e?: FormEvent) => {
+    if (e) e.preventDefault()
+    executeSearch(query)
+  }
+
+  const currentIdx = order ? stepIndex(order.status) : 0
+
   const waMessage = order
     ? encodeURIComponent(
-        `สวัสดีค่ะ/ครับ ฉันต้องการสอบถามเคสด่วนของออเดอร์ ${order.order_id} ชื่อ ${order.customer_name || ''}`
+        `ສະບາຍດີ ຂ້ອຍຕ້ອງການສອບຖາມສະຖານະອໍເດີ ${order.order_id} ຊື່ ${order.customer_name || ''}`
       )
     : ''
 
@@ -103,9 +115,9 @@ export default function TrackingPage() {
     <section className="section section--alt tracking-page">
       <div className="container tracking-container">
         <div className="section-head">
-          <span className="eyebrow">Order Tracking</span>
-          <h1>ติดตามสถานะงานพิมพ์</h1>
-          <p>ค้นหาสถานะงานพิมพ์ด้วย Order ID เพียงอย่างเดียว ไม่ต้องใช้เบอร์โทรศัพท์</p>
+          <span className="eyebrow">Order Tracking & Live Status</span>
+          <h1>ຕິດຕາມສະຖານະງານພິມ</h1>
+          <p>ກວດສອບສະຖານະການຜະລິດ ແລະ ເລກພັດສະດຸດ້ວຍ Order ID ໄດ້ຕະຫຼອດ 24 ຊົ່ວໂມງ</p>
         </div>
 
         <form className="tracking-search" onSubmit={search}>
@@ -113,115 +125,112 @@ export default function TrackingPage() {
             <SearchIcon size={22} />
             <input
               type="text"
-              placeholder="กรอก Order ID เช่น SSP-88291"
+              placeholder="ປ້ອນເລກ Order ID ເຊັ່ນ: SSP-88291 ຫຼື ORD-2026-001..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
-          <button type="submit" className="btn btn--gold btn--lg" disabled={loading || !query.trim()}>
-            {loading ? 'กำลังค้นหา…' : 'ค้นหาสถานะ'}
+          <button type="submit" className="btn btn--gold btn--lg shadow-glow" disabled={loading || !query.trim()}>
+            {loading ? <RefreshIcon size={18} /> : <span>ກວດສອບສະຖານະ</span>}
           </button>
         </form>
+
         <p className="text-center field-hint">
-          ตัวอย่าง: ลองค้นหา SSP-00001, SSP-00002, SSP-00003, SSP-00004 หรือ SSP-00005
+          ຕົວຢ່າງລອງຄົ້ນຫາ: SSP-00001, SSP-00002, ORD-2026-001
         </p>
 
         {notFound && (
           <div className="tracking-empty">
-            <p>ไม่พบคำสั่งซื้อหมายเลข "{query.trim()}"</p>
-            <p className="field-hint">กรุณาตรวจสอบ Order ID อีกครั้ง หรือติดต่อแอดมินผ่าน WhatsApp</p>
+            <div className="flex justify-center mb-2">
+              <AlertCircleIcon size={32} />
+            </div>
+            <p>ບໍ່ພົບລາຍການສັ່ງຊື້ໝາຍເລກ "{query.trim()}"</p>
+            <p className="field-hint">ກະລຸນາກວດສອບ Order ID ອີກຄັ້ງ ຫຼື ຕິດຕໍ່ແອດມິນຜ່ານ WhatsApp</p>
           </div>
         )}
 
         {order && (
-          <div className="tracking-result">
+          <div className="tracking-result animate-fade-in">
             <div className="tracking-order-head">
               <div>
-                <span className="eyebrow">Order ID</span>
+                <span className="eyebrow">Order Tracking ID</span>
                 <h2 className="tracking-order-id">{order.order_id}</h2>
                 <p className="text-muted">
-                  ชื่อลูกค้า: {order.customer_name || '—'} · วันที่สั่ง:{' '}
+                  ລູກຄ້າ: {order.customer_name || '—'} · ວັນທີສັ່ງ:{' '}
                   {order.created_at
-                    ? new Date(order.created_at).toLocaleDateString('th-TH', { dateStyle: 'medium' })
+                    ? new Date(order.created_at).toLocaleDateString('lo-LA', { dateStyle: 'medium' })
                     : '—'}
                 </p>
               </div>
               <div className="tracking-order-status">
-                <span className="tracking-status-label">
-                  {STEPS[stepIndex(order.status)]?.title}
+                <span className="tracking-status-label font-bold text-slate-800">
+                  {STEPS[currentIdx]?.title}
                 </span>
-                <span className={`badge badge--green`}>
-                  {order.status === 'DELIVERED' ? 'จัดส่งสำเร็จแล้ว' : 'กำลังดำเนินการ'}
+                <span className={`badge ${order.status === 'DELIVERED' ? 'badge--green' : 'badge--gold'}`}>
+                  {order.status === 'DELIVERED' ? 'ຈັດສົ່ງສຳເລັດ' : 'ກຳລັງດຳເນີນການ'}
                 </span>
               </div>
             </div>
 
+            {/* Stepper Progress Bar */}
             <div className="timeline">
               {STEPS.map((step, i) => {
-                const current = i === stepIndex(order.status)
-                const done = i <= stepIndex(order.status)
+                const current = i === currentIdx
+                const done = i <= currentIdx
                 const isLast = i === STEPS.length - 1
                 return (
                   <div key={step.key} className={`timeline-step ${done ? 'is-done' : ''} ${current ? 'is-current' : ''}`}>
                     <div className="timeline-dot">
-                      <TimelineIcon type={step.icon} />
+                      <StepIconRenderer type={step.icon} />
                     </div>
                     {!isLast && <div className={`timeline-line ${done ? 'is-done' : ''}`} />}
                     <div className="timeline-content">
                       <h3>{step.title}</h3>
                       <p>{step.desc}</p>
-                      {current && order.timeline?.find((t) => t.status === step.key)?.at && (
-                        <small>
-                          อัปเดตล่าสุด:{' '}
-                          {new Date(
-                            order.timeline.find((t) => t.status === step.key).at
-                          ).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })}
-                        </small>
-                      )}
                     </div>
                   </div>
                 )
               })}
             </div>
 
-            {order.status === 'SHIPPED' || order.status === 'DELIVERED' ? (
-              <div className="tracking-shipping" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <TruckIcon size={20} />
-                  <div>
-                    <strong>เลขพัสดุจัดส่ง internal (Internal Tracking Code)</strong>
-                    <p className="tracking-number">{order.internal_tracking_code || order.tracking_number || order.tracking || 'SSP-SHIP-20260815-01'}</p>
-                    <small>ผู้จัดส่ง (Courier): {order.courier_name || order.shipping_courier || 'Som-Sing Express Fleet'}</small>
+            {/* Shipping & Delivery Info */}
+            {(order.status === 'SHIPPED' || order.status === 'DELIVERED' || order.tracking_number) && (
+              <div className="tracking-shipping">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-sky-50 text-sky-600 rounded-xl">
+                    <TruckIcon size={24} />
+                  </div>
+                  <div className="flex-1">
+                    <strong className="block text-slate-900">ເລກພັດສະດຸຈັດສົ່ງ (Tracking Code)</strong>
+                    <p className="tracking-number font-mono text-lg text-accent-sky font-black">
+                      {order.internal_tracking_code || order.tracking_number || order.tracking || 'AN-LAO-882910'}
+                    </p>
+                    <small className="text-slate-500">
+                      ຂົນສົ່ງ: {order.courier_name || order.shipping_courier || 'Anousith Express'}
+                    </small>
                   </div>
                 </div>
-                {order.pod_image_url && (
-                  <div style={{ marginTop: '8px', borderTop: '1px border #e2e8f0', paddingTop: '8px' }}>
-                    <small style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>รูปหลักฐานการจัดส่ง (Proof of Delivery POD):</small>
-                    <img
-                      src={order.pod_image_url}
-                      alt="Proof of Delivery"
-                      style={{ maxHeight: '180px', borderRadius: '12px', border: '1px solid #cbd5e1', objectFit: 'cover' }}
-                    />
-                  </div>
-                )}
               </div>
-            ) : null}
+            )}
 
             {order.total_price ? (
               <div className="tracking-order-summary">
-                <span>ยอดชำระ</span>
-                <strong>{formatMoney(convertTo(order.total_price), currency)}</strong>
-                <span className="badge badge--green">ชำระเงินแล้ว</span>
+                <span>ຍອດຊຳລະທັງໝົດ</span>
+                <strong className="text-xl font-black text-slate-900">
+                  {formatMoney(convertTo(order.total_price), currency)}
+                </strong>
+                <span className="badge badge--green">ຢືນຢັນການຊຳລະເງິນແລ້ວ</span>
               </div>
             ) : null}
 
             <a
-              href={`https://wa.me/66812345678?text=${waMessage}`}
+              href={`https://wa.me/8562088888888?text=${waMessage}`}
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn--navy btn--lg btn--block tracking-wa"
             >
-              <WhatsAppIcon size={20} /> ติดต่อแอดมินผ่าน WhatsApp (เคสด่วน)
+              <WhatsAppIcon size={20} />
+              <span>ຕິດຕໍ່ສອບຖາມແອດມິນຜ່ານ WhatsApp</span>
             </a>
           </div>
         )}

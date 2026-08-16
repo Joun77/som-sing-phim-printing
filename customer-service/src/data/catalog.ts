@@ -1,12 +1,14 @@
 // ============================================================
-// ส้มสิ่งพิมพ์ SOM SING PHIM — Product Catalog & Config Catalog
-// Base prices are in THB (฿). LAK is derived from backend rates.
+// Som Sing Phim (ສົມສິ່ງພິມ) — Product Catalog & Config Catalog
+// Pure Lao & English specifications. No emojis.
 // ============================================================
 
 export interface SpecOption {
   id: string
   label: string
+  labelEn?: string
   hint: string
+  hintEn?: string
   add: number
 }
 
@@ -16,21 +18,27 @@ export interface Category {
   name: string
   nameEn: string
   short: string
+  shortEn?: string
   tagline: string
+  taglineEn?: string
   icon: string
   description: string
+  descriptionEn?: string
 }
 
 export interface Product {
   id: string
   slug: string
   name: string
+  nameEn?: string
   category: string
   bestseller: boolean
   basePrice: number
   image: string
   short: string
+  shortEn?: string
   description: string
+  descriptionEn?: string
   sizes: SpecOption[]
   materials: SpecOption[]
   finishings: SpecOption[]
@@ -40,57 +48,77 @@ export const CATEGORIES: Category[] = [
   {
     id: 'albums',
     slug: 'albums',
-    name: 'อัลบั้มรูปภาพพรีเมียม',
+    name: 'ອັນບັ້ມຮູບພາບພຣີມ້ຽມ',
     nameEn: 'Photo Albums',
-    short: 'อัลบั้มรูปภาพพรีเมียม',
-    tagline: 'พิมพ์อัลบั้มรูปคุณภาพสูง ตัวเลือกปกพรีเมียม ครบทุกสไตล์',
+    short: 'ອັນບັ້ມຮູບພາບພຣີມ້ຽມ',
+    shortEn: 'Premium Photo Albums',
+    tagline: 'ພິມອັນບັ້ມຮູບຄຸນນະພາບສູງ ຫຼາກຫຼາຍຮູບແບບປົກ',
+    taglineEn: 'High quality photo albums with diverse cover finishes',
     icon: 'album',
     description:
-      'อัลบั้มรูปภาพพรีเมียม พิมพ์ด้วยเครื่องพิมพ์สีคุณภาพสูง กระดาษอาร์ตการ์ด ตัวเลือกปกหลากหลาย (ปกแข็ง, ปกสันกาว, ปกไดคัท) เหมาะสำหรับเก็บภาพความทรงจำ โชว์ผลงาน และของขวัญสุดพิเศษ',
+      'ອັນບັ້ມຮູບພາບພຣີມ້ຽມ ພິມດ້ວຍເຄື່ອງພິມດິຈິຕອນມາດຕະຖານສູງ ເຈ້ຍ Art Card ປົກແຂງ/ປົກສັນກາວ ຄົມຊັດສີສັນສົດໃສ.',
+    descriptionEn:
+      'Premium photo albums printed on high quality art card paper with hardcover and softcover options.',
   },
   {
     id: 'frames',
     slug: 'frames',
-    name: 'กรอบรูปอะคริลิก & ตกแต่งบ้าน',
+    name: 'ກອບຮູບອາຄຣີລິກ & ຕົກແຕ່ງ',
     nameEn: 'Acrylic Frames',
-    short: 'กรอบรูปอะคริลิก & ตกแต่งบ้าน',
-    tagline: 'กรอบอะคริลิกใสระดับพรีเมียม ตกแต่งบ้านให้ดูหรู',
+    short: 'ກອບຮູບອາຄຣີລິກ & ຕົກແຕ່ງ',
+    shortEn: 'Acrylic Frames & Decor',
+    tagline: 'ກອບອາຄຣີລິກໃສລະດັບພຣີມ້ຽມ ຕົກແຕ່ງບ້ານ & ສຳນັກງານ',
+    taglineEn: 'Crystal clear luxury acrylic frames for gifts and home decor',
     icon: 'frame',
     description:
-      'กรอบรูปอะคริลิกโปร่งใสสวยงาม ทนทาน กันรอย กันน้ำ พิมพ์ภาพสีคมชัดด้านหลังแผ่นอะคริลิกให้ความรู้สึกหรูหรา เหมาะเป็นของขวัญหรือประดับตกแต่งบ้านและสำนักงาน',
+      'ກອບຮູບອາຄຣີລິກໂປ່ງໃສ ພິມລະອຽດສູງດ້ານຫຼັງແຜ່ນອາຄຣີລິກ ທົນທານ ກັນຮອຍ ກັນນ້ຳ 100%.',
+    descriptionEn:
+      'High-grade acrylic photo frames with direct reverse UV printing, water and scratch resistant.',
   },
   {
     id: 'stickers',
     slug: 'stickers',
-    name: 'สติ๊กเกอร์ไดคัท / ฉลากสินค้า',
-    nameEn: 'Cutout Stickers',
-    short: 'สติ๊กเกอร์ไดคัท / ฉลากสินค้า',
-    tagline: 'สติ๊กเกอร์ไดคัท กันน้ำ ติดทน ฉลากสินค้าครบสเปก',
+    name: 'ສະຕິກເກີໄດຄັດ & ສະຫຼາກສິນຄ້າ',
+    nameEn: 'Cutout Stickers & Labels',
+    short: 'ສະຕິກເກີໄດຄັດ & ສະຫຼາກສິນຄ້າ',
+    shortEn: 'Custom Die-cut Stickers',
+    tagline: 'ສະຕິກເກີ PP ກັນນ້ຳ ໄດຄັດຄົມຊັດ ຕິດແໜ້ນທົນທານ',
+    taglineEn: 'Waterproof PP stickers, precision die-cut and strong adhesive',
     icon: 'sticker',
     description:
-      'สติ๊กเกอร์ไดคัทรูปทรงตามต้องการ วัสดุ PP กันน้ำมัน กันน้ำ ทนทานต่อแสงแดด เหมาะสำหรับฉลากสินค้า สติ๊กเกอร์แบรนด์ และของแจกโปรโมชัน ตัดแม่พิมพ์ได้ทุกรูปทรง',
+      'ສະຕິກເກີໄດຄັດຕາມຮູບຊົງ ວັດສະດຸ PP ຂາວເງົາ/ຂາວດ້ານ ກັນນ້ຳ ແຊ່ຕູ້ເຢັນໄດ້ ຕັດແຍກແຜ່ນ ຫຼື ແຜ່ນໃຫຍ່.',
+    descriptionEn:
+      'Custom shape stickers printed on waterproof PP vinyl, freezer-safe, precision kiss-cut and die-cut.',
   },
   {
     id: 'cards',
     slug: 'cards',
-    name: 'การ์ดเชิญ / โปสการ์ดที่ระลึก',
-    nameEn: 'Greeting Cards',
-    short: 'การ์ดเชิญ / โปสการ์ดที่ระลึก',
-    tagline: 'การ์ดเชิญงานแต่ง โปสการ์ด ปั๊มเคทองหรูหรา',
+    name: 'ບັດເຊີນ & ໂປສກາດທີ່ລະນຶກ',
+    nameEn: 'Cards & Postcards',
+    short: 'ບັດເຊີນ & ໂປສກາດທີ່ລະນຶກ',
+    shortEn: 'Invitation & Postcards',
+    tagline: 'ບັດເຊີນງານດອງ ງານບຸນ ໂປສກາດ ປ້ຳຟອຍຄຳຫຼູຫຼາ',
+    taglineEn: 'Wedding invitations and memorial postcards with gold foil stamping',
     icon: 'card',
     description:
-      'การ์ดเชิญและโปสการ์ดที่ระลึก พิมพ์บนกระดาษอาร์ตการ์ด 300-350g ตัวเลือกเทคนิคพิเศษอย่างปั๊มเคทอง (Foil Gold) เคลือบ UV เฉพาะจุด ให้ชิ้นงานดูแพง สวย และน่าจดจำ',
+      'ບັດເຊີນ ແລະ ໂປສກາດທີ່ລະນຶກ ພິມເທິງເຈ້ຍ Art Card 300-350g ເຄືອບ Matte/Gloss ປ້ຳຟອຍຄຳ Foil Gold.',
+    descriptionEn:
+      'Invitation cards and postcards printed on premium 350g art board with optional hot gold stamping.',
   },
   {
     id: 'documents',
     slug: 'documents',
-    name: 'งานพิมพ์หนังสือ / สมุด / เอกสาร',
+    name: 'ປຶ້ມ, ວາລະສານ & ເອກະສານ',
     nameEn: 'Booklets & Documents',
-    short: 'หนังสือ / สมุด / เอกสาร',
-    tagline: 'พิมพ์หนังสือ สมุด เอกสาร ครบวงจร ส่งด่วนได้',
+    short: 'ປຶ້ມ, ວາລະສານ & ເອກະສານ',
+    shortEn: 'Books & Catalogs',
+    tagline: 'ພິມປຶ້ມ ເອກະສານອົງກອນ ເຂົ້າເລົ່ມສັນກາວ/ສັນຫ່ວງ',
+    taglineEn: 'Corporate catalogs, books and training materials with fast delivery',
     icon: 'book',
     description:
-      'งานพิมพ์หนังสือ สมุดบันทึก เอกสารประกอบการเรียนและเอกสารองค์กร พร้อมตัวเลือกการเย็บมุม เย็บกี่ ห่วง และไสสันกาว แถมมีบริการจัดส่งรวดเร็วทั่วประเทศ',
+      'ງານພິມປຶ້ມ ວາລະສານ ລາຍງານປະຈຳປີ ເຂົ້າເລົ່ມສັນກາວ ເຢັບມຸມ ຫຼື ສັນຫ່ວງກະດູກງູ ຈັດສົ່ງດ່ວນ.',
+    descriptionEn:
+      'Catalog and magazine printing with perfect glue binding, saddle stitching or wire-o binding.',
   },
 ]
 
@@ -99,243 +127,219 @@ export const PRODUCTS: Product[] = [
   {
     id: 'album-classic',
     slug: 'album-classic',
-    name: 'อัลบั้มภาพพิมพ์ 4x6 นิ้ว พรีเมียม',
+    name: 'ອັນບັ້ມຮູບພາບປົກແຂງພຣີມ້ຽມ (Hardcover Photobook)',
+    nameEn: 'Hardcover Photobook',
     category: 'albums',
     bestseller: true,
-    basePrice: 49,
+    basePrice: 50,
     image: 'album',
-    short:
-      'อัลบั้มภาพขนาด 4x6 นิ้ว พิมพ์ภาพสีคมชัด ครบ 40 รูป พร้อมปกแข็ง',
+    short: 'ປົກແຂງເຄືອບດ່ານ/ເງົາ ພິມສີລະອຽດສູງ ເປີດກາງໄດ້ 180°',
+    shortEn: 'Hardcover layflat photobook with premium matte/gloss lamination',
     description:
-      'อัลบั้มภาพถ่ายสไตล์คลาสสิก พิมพ์ด้วยหมึกคุณภาพสูง สีสดติดทนนาน ปกแข็งลายผ้า หนาแน่น เก็บภาพความทรงจำได้อย่างสวยงาม',
+      'ອັນບັ້ມຮູບພາບລະດັບພຣີມ້ຽມ ເຂົ້າເລົ່ມປົກແຂງຢ່າງດີ ໜ້າໃນໃຊ້ເຈ້ຍ Art Paper 260g ສີສັນສົດໃສ ເປີດກາງຮາບພຽງໄດ້ 180 ອົງສາ.',
+    descriptionEn:
+      'Luxury photobook with rigid hardcover and layflat 180-degree binding on 260g art paper.',
     sizes: [
-      { id: '4x6', label: '4x6 นิ้ว', hint: 'มาตรฐานภาพถ่าย', add: 0 },
-      { id: '5x7', label: '5x7 นิ้ว', hint: 'ใหญ่ขึ้น 1 ขนาด', add: 20 },
-      { id: '8x8', label: '8x8 นิ้ว', hint: 'รูปสี่เหลี่ยมสวย', add: 65 },
+      { id: '8x8', label: '8x8 ນິ້ວ (ມາດຕະຖານ)', hint: '20x20 cm', add: 0 },
+      { id: '8x10', label: '8x10 ນິ້ວ (ແນວຕັ້ງ)', hint: '20x25 cm', add: 8 },
+      { id: '10x10', label: '10x10 ນິ້ວ (ຂະໜາດໃຫຍ່)', hint: '25x25 cm', add: 15 },
+      { id: '12x12', label: '12x12 ນິ້ວ (Pro Max)', hint: '30x30 cm', add: 25 },
     ],
     materials: [
-      { id: 'art300', label: 'กระดาษอาร์ตการ์ด 300g', hint: 'หนาแน่นมาตรฐาน', add: 0 },
-      { id: 'art350', label: 'กระดาษอาร์ตการ์ด 350g', hint: 'หนาพิเศษคงทน', add: 8 },
-      { id: 'photo', label: 'กระดาษภาพถ่ายมันเงา', hint: 'เหมือนสตูดิโอถ่ายรูป', add: 25 },
+      { id: 'art-200', label: 'Art Card 200g (ມາດຕະຖານ)', hint: 'ໜາພໍດີ', add: 0 },
+      { id: 'art-260', label: 'Art Card 260g (ພຣີມ້ຽມ)', hint: 'ໜາພິເສດ', add: 6 },
+      { id: 'pearl-300', label: 'Pearl Metallic 300g (ຫຼູຫຼາ)', hint: 'ຜິວເຫຼືອບມຸກ', add: 14 },
     ],
     finishings: [
-      { id: 'none', label: 'ไม่เคลือบ', hint: 'ลดต้นทุน', add: 0 },
-      { id: 'matte', label: 'เคลือบด้าน (Matte)', hint: 'ไม่สะท้อนแสง', add: 6 },
-      { id: 'glossy', label: 'เคลือบเงา (Glossy)', hint: 'สีสดสะดุดตา', add: 6 },
+      { id: 'matte', label: 'ເຄືອບດ້ານ (Matte Lamination)', hint: 'ນຽນນຸ່ມ ບໍ່ສະທ້ອນແສງ', add: 0 },
+      { id: 'gloss', label: 'ເຄືອບເງົາ (Gloss Lamination)', hint: 'ສີສັນສົດໃສ', add: 0 },
+      { id: 'foil-gold', label: 'ປ້ຳຟອຍຄຳ (Gold Foil Stamping)', hint: 'ປ້ຳຄຳປົກໜ້າ', add: 12 },
     ],
   },
   {
-    id: 'album-preview',
-    slug: 'album-preview',
-    name: 'อัลบั้มพรีวิวงานก่อสร้าง / ผลงาน',
+    id: 'album-mini',
+    slug: 'album-mini',
+    name: 'ມິນິໂຟໂຕ້ບຸກ (Pocket Photobook)',
+    nameEn: 'Mini Pocket Photobook',
     category: 'albums',
-    bestseller: true,
-    basePrice: 320,
-    image: 'album-preview',
-    short:
-      'อัลบั้มพรีวิวผลงาน A4 ปกแข็ง พิมพ์ 30 หน้า เหมาะนำเสนอลูกค้า',
-    description:
-      'อัลบั้มพรีวิวผลงานขนาด A4 เหมาะสำหรับนำเสนอลูกค้า โชว์ผลงานก่อสร้าง สินค้า และบริการ หน้าละ 2 รูป พร้อมปกแข็งพิมพ์สีลวดลายแบรนด์',
-    sizes: [
-      { id: 'a4', label: 'A4 (8.3x11.7 นิ้ว)', hint: 'ขนาดมาตรฐาน', add: 0 },
-      { id: 'a3', label: 'A3 (11.7x16.5 นิ้ว)', hint: 'ใหญ่พิเศษ', add: 240 },
-    ],
-    materials: [
-      { id: 'art250', label: 'กระดาษอาร์ตการ์ด 250g', hint: 'บางเบา', add: 0 },
-      { id: 'art300', label: 'กระดาษอาร์ตการ์ด 300g', hint: 'หนาแน่นมาตรฐาน', add: 30 },
-    ],
-    finishings: [
-      { id: 'none', label: 'ไม่เคลือบ', hint: 'ลดต้นทุน', add: 0 },
-      { id: 'matte', label: 'เคลือบด้าน (Matte)', hint: 'ไม่สะท้อนแสง', add: 45 },
-      { id: 'glossy', label: 'เคลือบเงา (Glossy)', hint: 'สีสดสะดุดตา', add: 45 },
-    ],
-  },
-
-  // ---------- Frames ----------
-  {
-    id: 'acrylic-frame',
-    slug: 'acrylic-frame',
-    name: 'กรอบรูปอะคริลิกใสพรีเมียม',
-    category: 'frames',
-    bestseller: true,
-    basePrice: 199,
-    image: 'frame',
-    short:
-      'กรอบอะคริลิกใสคุณภาพสูง พิมพ์ภาพด้านหลังแผ่น เห็นชัดทั้งสองด้าน',
-    description:
-      'กรอบรูปอะคริลิกโปร่งใสหนา 3 มม. พิมพ์ภาพสีคมชัดลงบนด้านหลังแผ่นอะคริลิก ให้เอฟเฟกต์ลอยตัวสวยงาม ทนทานต่อรอยขีดข่วน เหมาะเป็นของขวัญและของตกแต่งบ้าน',
-    sizes: [
-      { id: '5x7', label: '5x7 นิ้ว', hint: 'ขนาดพกพา', add: 0 },
-      { id: '8x10', label: '8x10 นิ้ว', hint: 'ขนาดนิยม', add: 60 },
-      { id: 'a4', label: 'A4 (8.3x11.7 นิ้ว)', hint: 'ขนาดเอกสาร', add: 90 },
-    ],
-    materials: [
-      { id: 'acrylic3', label: 'อะคริลิกใส 3 มม.', hint: 'มาตรฐาน', add: 0 },
-      { id: 'acrylic5', label: 'อะคริลิกใส 5 มม.', hint: 'หนาพิเศษ', add: 80 },
-    ],
-    finishings: [
-      { id: 'none', label: 'ขอบตรงเรียบ', hint: 'มาตรฐาน', add: 0 },
-      { id: 'edge-gold', label: 'ขอบตัดมุมทอง', hint: 'หรูหรา', add: 45 },
-      { id: 'stand', label: 'ติดขาตั้งไม้', hint: 'ตั้งโต๊ะได้', add: 30 },
-    ],
-  },
-  {
-    id: 'acrylic-sign',
-    slug: 'acrylic-sign',
-    name: 'ป้ายอะคริลิกติดผนัง / โลโก้',
-    category: 'frames',
     bestseller: false,
-    basePrice: 450,
-    image: 'sign',
-    short:
-      'ป้ายโลโก้อะคริลิกติดผนัง พิมพ์สี หรือสีขอบทอง ดูหรูหราแพง',
+    basePrice: 35,
+    image: 'album',
+    short: 'ຂະໜາດກະທັດຮັດ ພົກພາງ່າຍ ເໝາະສຳລັບຂອງຂວັນ',
+    shortEn: 'Compact size easy to carry, ideal for personalized gifts',
     description:
-      'ป้ายโลโก้อะคริลิกสำหรับติดผนังหน้าร้านและสำนักงาน พิมพ์สีสดใสหรือสีขอบทอง ดูหรูหราและเป็นมืออาชีพ เหมาะสำหรับโลโก้แบรนด์ ป้ายชื่อ และป้ายต้อนรับ',
+      'ອັນບັ້ມຂະໜາດພົກພາ ເຂົ້າເລົ່ມສັນກາວຮ້ອນ ພິມສີຄົມຊັດ ເໝາະສຳລັບຮູບທ່ອງທ່ຽວ ຫຼື ຂອງຂວັນວັນເກີດ.',
+    descriptionEn:
+      'Compact photobook with softcover glue binding, perfect for travel memories and souvenirs.',
     sizes: [
-      { id: 'a4', label: 'A4 (8.3x11.7 นิ้ว)', hint: 'ขนาดเริ่มต้น', add: 0 },
-      { id: 'a3', label: 'A3 (11.7x16.5 นิ้ว)', hint: 'ขนาดกลาง', add: 250 },
-      { id: '50x40', label: '50x40 ซม.', hint: 'ติดหน้าร้าน', add: 550 },
+      { id: '5x5', label: '5x5 ນິ້ວ (Pocket Mini)', hint: '13x13 cm', add: 0 },
+      { id: '6x6', label: '6x6 ນິ້ວ (Square)', hint: '15x15 cm', add: 4 },
+      { id: '6x8', label: '6x8 ນິ້ວ (A5 Landscape)', hint: '15x20 cm', add: 7 },
     ],
     materials: [
-      { id: 'acrylic3', label: 'อะคริลิกใส 3 มม.', hint: 'มาตรฐาน', add: 0 },
-      { id: 'acrylic5', label: 'อะคริลิกหนา 5 มม.', hint: 'แข็งแรงขึ้น', add: 120 },
+      { id: 'art-200', label: 'Art Paper 200g (ມາດຕະຖານ)', hint: 'ພິມສອງໜ້າ', add: 0 },
+      { id: 'art-260', label: 'Art Paper 260g (ພຣີມ້ຽມ)', hint: 'ສີສົດຄົມຊັດ', add: 5 },
     ],
     finishings: [
-      { id: 'none', label: 'พิมพ์สีปกติ', hint: 'สีสันสดใส', add: 0 },
-      { id: 'foil-gold', label: 'สีขอบทอง (Foil Gold)', hint: 'หรูหราแพง', add: 150 },
+      { id: 'matte', label: 'ເຄືອບດ້ານ (Matte)', hint: '', add: 0 },
+      { id: 'gloss', label: 'ເຄືອບເງົາ (Gloss)', hint: '', add: 0 },
     ],
   },
 
   // ---------- Stickers ----------
   {
-    id: 'sticker-diecut',
-    slug: 'sticker-diecut',
-    name: 'สติ๊กเกอร์ไดคัท กันน้ำ',
+    id: 'sticker-pp-waterproof',
+    slug: 'sticker-pp-waterproof',
+    name: 'ສະຕິກເກີ PP ຂາວເງົາກັນນ້ຳ 100% (Waterproof PP Sticker)',
+    nameEn: 'Waterproof PP Sticker',
     category: 'stickers',
     bestseller: true,
-    basePrice: 15,
+    basePrice: 30,
     image: 'sticker',
-    short:
-      'สติ๊กเกอร์ไดคัททุกรูปทรง วัสดุ PP กันน้ำ ใช้ทำฉลากสินค้าและของแจก',
+    short: 'ກັນນ້ຳ 100% ແຊ່ຕູ້ເຢັນໄດ້ ໄດຄັດຄົມຊັດ ພ້ອມລອກຕິດ',
+    shortEn: '100% waterproof and freeze-proof with precision kiss-cut',
     description:
-      'สติ๊กเกอร์ไดคัทพิมพ์เต็มสี ตัดแม่พิมพ์ตามรูปทรงที่ออกแบบ วัสดุ PP กันน้ำ ทนต่อรอยขีดข่วน เหมาะกับฉลากสินค้า สติ๊กเกอร์แบรนด์ และสติ๊กเกอร์ตกแต่ง',
+      'ສະຕິກເກີເນື້ອ PP ຂາວເງົາ ກັນນ້ຳ ກັນນ້ຳມັນ ທົນອຸນຫະພູມຕິດລົບ ໄດຄັດຕາມຮູບຊົງໂລໂກ້ ພ້ອມລອກຕິດງ່າຍດາຍ.',
+    descriptionEn:
+      'High quality PP vinyl sticker, 100% waterproof and freezer safe, precision kiss-cut to any custom shape.',
     sizes: [
-      { id: 's', label: 'ขนาด S (4x6 ซม.)', hint: 'ฉลากขนาดเล็ก', add: 0 },
-      { id: 'm', label: 'ขนาด M (6x8 ซม.)', hint: 'ขนาดกลาง', add: 5 },
-      { id: 'l', label: 'ขนาด L (8x10 ซม.)', hint: 'ขนาดใหญ่', add: 10 },
+      { id: 'a3-plus', label: 'ແຜ່ນ A3+ (32x48 cm)', hint: 'ໄດ້ສະຕິກເກີ 30-100 ດວງ/ແຜ່ນ', add: 0 },
+      { id: 'a4', label: 'ແຜ່ນ A4 (21x29.7 cm)', hint: 'ໄດ້ສະຕິກເກີ 15-40 ດວງ/ແຜ່ນ', add: -10 },
+      { id: 'diecut-single', label: 'ໄດຄັດແຍກດວງ (Single Die-Cut)', hint: 'ຕັດຂາດເປັນດວງໆ', add: 15 },
     ],
     materials: [
-      { id: 'pp', label: 'สติ๊กเกอร์ PP กันน้ำ', hint: 'กันน้ำกันมัน', add: 0 },
-      { id: 'vinyl', label: 'ไวนิลกันน้ำ', hint: 'ติดทนภายนอก', add: 3 },
-      { id: 'transparent', label: 'ฟิล์มใส', hint: 'ลายโปร่งใส', add: 6 },
+      { id: 'pp-gloss', label: 'PP ຂາວເງົາ (Glossy PP)', hint: 'ສີສົດເງົາງາມ', add: 0 },
+      { id: 'pp-matte', label: 'PP ຂາວດ້ານ (Matte PP)', hint: 'ຫຼູຫຼາ ນຽນມື', add: 3 },
+      { id: 'pp-clear', label: 'PP ໃສ (Transparent PP)', hint: 'ໂປ່ງໃສເຫັນສິນຄ້າ', add: 6 },
     ],
     finishings: [
-      { id: 'none', label: 'ไม่เคลือบ', hint: 'ลดต้นทุน', add: 0 },
-      { id: 'glossy', label: 'เคลือบเงา (Glossy)', hint: 'สีสด', add: 2 },
-      { id: 'matte', label: 'เคลือบด้าน (Matte)', hint: 'ไม่สะท้อนแสง', add: 2 },
+      { id: 'kiss-cut', label: 'ໄດຄັດ 50% ພ້ອມລອກ (Kiss-cut Sheet)', hint: 'ລອກຕິດງ່າຍ', add: 0 },
+      { id: 'die-cut-100', label: 'ໄດຄັດ 100% ຕັດຂາດ (Die-cut Single)', hint: 'ແຈກເປັນດວງ', add: 5 },
+      { id: 'foil-gold', label: 'ປ້ຳຟອຍຄຳ (Gold Foil Stamping)', hint: 'ຫຼູຫຼາພຣີມ້ຽມ', add: 15 },
+    ],
+  },
+  {
+    id: 'sticker-kraft',
+    slug: 'sticker-kraft',
+    name: 'ສະຕິກເກີເຈ້ຍຄຣາຟ Vintage (Kraft Paper Sticker)',
+    nameEn: 'Kraft Paper Sticker',
+    category: 'stickers',
+    bestseller: false,
+    basePrice: 28,
+    image: 'sticker',
+    short: 'ສະຕິກເກີສີນ້ຳຕານຄຣາຟ ສາຍ Eco-Friendly ທຳມະຊາດ',
+    shortEn: 'Brown rustic kraft paper stickers for eco-friendly branding',
+    description:
+      'ສະຕິກເກີເນື້ອເຈ້ຍຄຣາຟສີນ້ຳຕານ Vintage ໃຫ້ຄວາມຮູ້ສຶກແບບທຳມະຊາດ ອໍແກນິກ ເໝາະສຳລັບຮ້ານກາເຟ ແລະ ເບເກີຣີ່.',
+    descriptionEn:
+      'Rustic eco-friendly brown kraft sticker sheets with strong adhesive, perfect for bakery and cafe packaging.',
+    sizes: [
+      { id: 'a3-plus', label: 'ແຜ່ນ A3+ (32x48 cm)', hint: 'ມາດຕະຖານ', add: 0 },
+      { id: 'a4', label: 'ແຜ່ນ A4 (21x29.7 cm)', hint: '', add: -8 },
+    ],
+    materials: [
+      { id: 'kraft-brown', label: 'ເຈ້ຍຄຣາຟສີນ້ຳຕານ (Kraft Brown)', hint: '', add: 0 },
+    ],
+    finishings: [
+      { id: 'kiss-cut', label: 'ໄດຄັດ 50% (Kiss-cut)', hint: 'ມາດຕະຖານ', add: 0 },
+    ],
+  },
+
+  // ---------- Frames ----------
+  {
+    id: 'frame-acrylic-block',
+    slug: 'frame-acrylic-block',
+    name: 'ກອບຮູບອາຄຣີລິກບລັອກພຣີມ້ຽມ (Acrylic Block Frame)',
+    nameEn: 'Acrylic Block Frame',
+    category: 'frames',
+    bestseller: true,
+    basePrice: 65,
+    image: 'frame',
+    short: 'ອາຄຣີລິກແທ້ໜາ 20mm ຕັ້ງໂຕະໄດ້ ໃສຄືແກ້ວຄຣິສຕັລ',
+    shortEn: '20mm thick freestanding crystal clear acrylic photo block',
+    description:
+      'ກອບຮູບອາຄຣີລິກແທ້ຄວາມໜາ 20mm ຕັ້ງໂຕະໄດ້ໂດຍບໍ່ຕ້ອງໃຊ້ຂາຕັ້ງ ພິມຮູບລະອຽດສູງດ້ານຫຼັງ ເບິ່ງມີມິຕິຫຼູຫຼາ.',
+    descriptionEn:
+      'Ultra-clear 20mm acrylic photo block with high-definition back UV printing, freestanding and luxury finish.',
+    sizes: [
+      { id: '4x6', label: '4x6 ນິ້ວ (ມາດຕະຖານຕັ້ງໂຕະ)', hint: '10x15 cm', add: 0 },
+      { id: '5x7', label: '5x7 ນິ້ວ (ຂະໜາດຍອດນິຍົມ)', hint: '13x18 cm', add: 12 },
+      { id: '6x8', label: '6x8 ນິ້ວ (A5)', hint: '15x20 cm', add: 20 },
+      { id: '8x10', label: '8x10 ນິ້ວ (Executive)', hint: '20x25 cm', add: 35 },
+    ],
+    materials: [
+      { id: 'acrylic-clear', label: 'ອາຄຣີລິກໃສ (Crystal Clear)', hint: 'ໃສພິເສດ', add: 0 },
+      { id: 'acrylic-magnetic', label: 'ອາຄຣີລິກແມ່ເຫຼັກ 2 ຊັ້ນ (Magnetic)', hint: 'ປ່ຽນຮູບໄດ້', add: 18 },
+    ],
+    finishings: [
+      { id: 'diamond-polish', label: 'ຂັດຂອບ Diamond Polish', hint: 'ຂອບໃສເຫຼືອບມົນ', add: 0 },
     ],
   },
 
   // ---------- Cards ----------
   {
-    id: 'wedding-card',
-    slug: 'wedding-card',
-    name: 'การ์ดเชิญงานแต่ง ปั๊มเคทอง',
+    id: 'card-gold-foil',
+    slug: 'card-gold-foil',
+    name: 'ບັດເຊີນປ້ຳຟອຍຄຳພຣີມ້ຽມ (Gold Foil Invitation Card)',
+    nameEn: 'Gold Foil Invitation Card',
     category: 'cards',
     bestseller: true,
-    basePrice: 35,
+    basePrice: 40,
     image: 'card',
-    short:
-      'การ์ดเชิญงานแต่งพิมพ์อาร์ตการ์ด 350g พร้อมตัวเลือกปั๊มเคทองหรูหรา',
+    short: 'ເຈ້ຍ Art Card 350g ປ້ຳຟອຍຄຳຫຼູຫຼາ ພ້ອມຊອງໃສ່',
+    shortEn: '350g Art card with metallic gold foil stamping and envelopes',
     description:
-      'การ์ดเชิญงานแต่งสุดหรู พิมพ์บนกระดาษอาร์ตการ์ด 350g ผิวหนาแน่น ตัวเลือกเทคนิคปั๊มเคทอง (Foil Gold) และเคลือบ UV เฉพาะจุด มาพร้อมซองจดหมาย',
+      'ບັດເຊີນງານດອງ ງານບຸນ ບັດອວຍພອນ ພິມເທິງເຈ້ຍ Art Card 350g ເຄືອບດ້ານ Soft-Touch ປ້ຳຟອຍຄຳຄົມຊັດ.',
+    descriptionEn:
+      'Luxury invitation cards printed on 350g heavy board with soft-touch matte lamination and hot gold foil stamping.',
     sizes: [
-      { id: 'a6', label: 'การ์ด A6', hint: 'ขนาดมาตรฐาน', add: 0 },
-      { id: 'dl', label: 'การ์ด DL', hint: 'รูปสามเหลี่ยมยาว', add: 3 },
-      { id: 'square', label: 'การ์ดสี่เหลี่ยมจัตุรัส', hint: 'ดูโมเดิร์น', add: 5 },
+      { id: '4x6', label: '4x6 ນິ້ວ (ມາດຕະຖານ)', hint: '10x15 cm', add: 0 },
+      { id: '5x7', label: '5x7 ນິ້ວ (ຂະໜາດຫຼູຫຼາ)', hint: '13x18 cm', add: 8 },
     ],
     materials: [
-      { id: 'art300', label: 'อาร์ตการ์ด 300g', hint: 'มาตรฐาน', add: 0 },
-      { id: 'art350', label: 'อาร์ตการ์ด 350g', hint: 'หนาพิเศษ', add: 5 },
-      { id: 'texture', label: 'กระดาษลายลินิน', hint: 'สัมผัสสวย', add: 12 },
+      { id: 'art-350', label: 'Art Card 350g (ມາດຕະຖານ)', hint: '', add: 0 },
+      { id: 'cotton-pearl', label: 'Cotton Pearl 320g (ຫຼູຫຼາ)', hint: 'ຜິວສຳຜັດພິເສດ', add: 12 },
     ],
     finishings: [
-      { id: 'none', label: 'พิมพ์ปกติ', hint: 'มาตรฐาน', add: 0 },
-      { id: 'foil-gold', label: 'ปั๊มเคทอง (Foil Gold)', hint: 'หรูหรา', add: 18 },
-      { id: 'uv-spot', label: 'เคลือบ UV เฉพาะจุด', hint: 'เงางามเฉพาะลาย', add: 12 },
-    ],
-  },
-  {
-    id: 'postcard',
-    slug: 'postcard',
-    name: 'โปสการ์ดที่ระลึก พิมพ์สองหน้า',
-    category: 'cards',
-    bestseller: false,
-    basePrice: 12,
-    image: 'postcard',
-    short:
-      'โปสการ์ดที่ระลึกพิมพ์สองหน้าสีเต็ม เหมาะแจกทริปและงานอีเวนต์',
-    description:
-      'โปสการ์ดที่ระลึกพิมพ์สองหน้าสีเต็มรูปแบบ พิมพ์บนอาร์ตการ์ดหนา 300g เหมาะสำหรับของที่ระลึกในทริป งานอีเวนต์ และโปรโมชันแบรนด์',
-    sizes: [
-      { id: '10x15', label: '10x15 ซม.', hint: 'ขนาดมาตรฐาน', add: 0 },
-      { id: 'a5', label: 'A5 (5.8x8.3 นิ้ว)', hint: 'ใหญ่ขึ้น', add: 6 },
-    ],
-    materials: [
-      { id: 'art300', label: 'อาร์ตการ์ด 300g', hint: 'มาตรฐาน', add: 0 },
-      { id: 'art350', label: 'อาร์ตการ์ด 350g', hint: 'หนาพิเศษ', add: 3 },
-    ],
-    finishings: [
-      { id: 'none', label: 'ไม่เคลือบ', hint: 'ลดต้นทุน', add: 0 },
-      { id: 'glossy', label: 'เคลือบเงา (Glossy)', hint: 'สีสด', add: 3 },
-      { id: 'matte', label: 'เคลือบด้าน (Matte)', hint: 'นุ่มนวล', add: 3 },
+      { id: 'foil-gold', label: 'ປ້ຳຟອຍຄຳ (Gold Foil)', hint: 'ສີທອງອະລ່າມ', add: 0 },
+      { id: 'foil-rosegold', label: 'ປ້ຳຟອຍ Rose Gold', hint: 'ສີທອງຊົມພູ', add: 5 },
+      { id: 'spot-uv', label: 'Spot UV ເງົາສະເພາະຈຸດ', hint: 'ເງົາສະເພາະຈຸດ', add: 8 },
     ],
   },
 
   // ---------- Documents ----------
   {
-    id: 'booklet',
-    slug: 'booklet',
-    name: 'พิมพ์หนังสือ / สมุดเล่มเล็ก',
+    id: 'doc-catalog-staple',
+    slug: 'doc-catalog-staple',
+    name: 'ແຄັດຕາລັອກ & ປຶ້ມເຢັບມຸມ (Saddle Stitch Catalog)',
+    nameEn: 'Saddle Stitch Catalog',
     category: 'documents',
-    bestseller: true,
-    basePrice: 25,
-    image: 'book',
-    short:
-      'พิมพ์หนังสือ สมุด เอกสารหลายหน้า เลือกเย็บมุม เย็บกี่ หรือไสสันกาว',
+    bestseller: false,
+    basePrice: 45,
+    image: 'doc',
+    short: 'ພິມສີຄົມຊັດ ເຢັບມຸມ 2 ຈຸດ ປົກເຄືອບເງົາ/ດ້ານ',
+    shortEn: 'Full color brochure booklet with 2-point saddle stitch binding',
     description:
-      'งานพิมพ์หนังสือและสมุดเล่มเล็กครบวงจร ตั้งแต่เอกสารประกอบการเรียน ใบปลิวหลายหน้า ไปจนถึงหนังสือเล่มเต็ม พร้อมตัวเลือกการเข้าเล่มเย็บมุม เย็บกี่ ห่วง และไสสันกาว',
+      'ງານພິມແຄັດຕາລັອກສິນຄ້າ ເມນູອາຫານ ຄູ່ມື ພິມສີ CMYK ລະອຽດສູງ ເຢັບມຸມແຂງແຮງ.',
+    descriptionEn:
+      'Brochure and booklet printing on high-grade silk paper with saddle stitch binding.',
     sizes: [
-      { id: 'a4', label: 'A4 (8.3x11.7 นิ้ว)', hint: 'ขนาดเอกสาร', add: 0 },
-      { id: 'a5', label: 'A5 (5.8x8.3 นิ้ว)', hint: 'ขนาดสมุด', add: -8 },
-      { id: 'a3', label: 'A3+ (11.7x16.5 นิ้ว)', hint: 'ขนาดใหญ่', add: 20 },
+      { id: 'a4', label: 'ຂະໜາດ A4 (21x29.7 cm)', hint: 'ມາດຕະຖານ', add: 0 },
+      { id: 'a5', label: 'ຂະໜາດ A5 (14.8x21 cm)', hint: 'ກະທັດຮັດ', add: -10 },
     ],
     materials: [
-      { id: 'art120', label: 'กระดาษอาร์ตมัน 120g', hint: 'สีสวยน้ำหนักเบา', add: 0 },
-      { id: 'art200', label: 'กระดาษอาร์ตการ์ด 200g', hint: 'หนาแน่น', add: 15 },
-      { id: 'pp60', label: 'กระดาษถนอมสายตา 60g', hint: 'อ่านสบายตา', add: -5 },
+      { id: 'art-160', label: 'ເຈ້ຍ Art Paper 160g (ມາດຕະຖານ)', hint: '', add: 0 },
+      { id: 'art-200', label: 'ເຈ້ຍ Art Paper 200g (ພຣີມ້ຽມ)', hint: '', add: 8 },
     ],
     finishings: [
-      { id: 'saddle', label: 'เย็บมุม / เย็บกี่', hint: 'เล่มบาง', add: 0 },
-      { id: 'spiral', label: 'เย็บห่วง (Wire-O)', hint: 'เปิดแบนได้', add: 30 },
-      { id: 'perfect', label: 'ไสสันกาว', hint: 'เล่มหนา', add: 25 },
+      { id: 'staple', label: 'ເຢັບມຸມມາດຕະຖານ (Saddle Stitch)', hint: '', add: 0 },
+      { id: 'wire-o', label: 'ສັນຫ່ວງກະດູກງູ (Wire-O)', hint: '', add: 15 },
     ],
   },
 ]
 
-export const getCategory = (slug: string) => CATEGORIES.find((c) => c.slug === slug)
-export const getProduct = (slug: string) => PRODUCTS.find((p) => p.slug === slug)
-export const getProductsByCategory = (slug: string) =>
-  PRODUCTS.filter((p) => p.category === slug)
+export const getCategory = (slug?: string) => CATEGORIES.find((c) => c.slug === slug)
+export const getProduct = (slug?: string) => PRODUCTS.find((p) => p.slug === slug)
 export const getBestsellers = () => PRODUCTS.filter((p) => p.bestseller)
-
-// All best sellers receive an automated "sales ranking" from the backend.
-// When the API is reachable this ranking is merged over the static data.
-export const BESTSELLER_SALES: { productId: string; sold: number }[] = [
-  { productId: 'album-classic', sold: 1284 },
-  { productId: 'album-preview', sold: 862 },
-  { productId: 'acrylic-frame', sold: 940 },
-  { productId: 'sticker-diecut', sold: 2510 },
-  { productId: 'wedding-card', sold: 1130 },
-  { productId: 'booklet', sold: 672 },
-]
+export const getProductsByCategory = (catSlug?: string) =>
+  PRODUCTS.filter((p) => p.category === catSlug)

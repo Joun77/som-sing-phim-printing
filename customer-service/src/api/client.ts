@@ -28,6 +28,40 @@ export interface HealthResponse {
   baseUrl: string
 }
 
+export interface PublicProductOptionItem {
+  id?: number
+  productId?: number
+  optionType: string
+  label: string
+  value: string
+  isDefault?: boolean
+  extraCostRate?: number
+}
+
+export interface PublicProductDiscountTier {
+  id?: number
+  productId?: number
+  minQuantity: number
+  discountPercentage: number
+}
+
+export interface RemoteProduct {
+  id: number
+  name: string
+  slug: string
+  category: string
+  description?: string
+  features?: string[]
+  thumbnailUrl?: string
+  galleryUrls?: string[]
+  minQuantity?: number
+  leadTimeDays?: number
+  isActive: boolean
+  sortOrder?: number
+  options?: PublicProductOptionItem[]
+  discountTiers?: PublicProductDiscountTier[]
+}
+
 export interface TimelineEntry {
   status: string
   label: string
@@ -136,91 +170,91 @@ function seedDemoOrders(): Order[] {
   return [
     {
       order_id: 'SSP-00001',
-      customer_name: 'คุณสมชาย ใจดี',
-      phone: '0812345678',
+      customer_name: 'ທ່ານ ສົມໄຊ ໃຈດີ',
+      phone: '020 55123456',
       product_id: 'album-classic',
-      specs: { size: '4x6 นิ้ว', paper: 'กระดาษอาร์ตการ์ด 300g', finishing: 'เคลือบด้าน (Matte)' },
+      specs: { size: '8x8 ນິ້ວ', paper: 'Art Card 260g', finishing: 'ເຄືອບດ້ານ (Matte)' },
       quantity: 20,
-      total_price: 980.0,
-      currency: 'THB',
+      total_price: 617890.0,
+      currency: 'LAK',
       status: 'PENDING_SLIP_CHECK',
       created_at: new Date(now - 5 * 60 * 60 * 1000).toISOString(),
       timeline: [
-        { status: 'PENDING_SLIP_CHECK', label: 'ได้รับออเดอร์แล้ว', at: now - 5 * 3600e3 },
+        { status: 'PENDING_SLIP_CHECK', label: 'ໄດ້ຮັບອໍເດີແລ້ວ', at: now - 5 * 3600e3 },
       ],
     },
     {
       order_id: 'SSP-00002',
-      customer_name: 'คุณนภา พิมพ์ดี',
-      phone: '0898765432',
-      product_id: 'acrylic-frame',
-      specs: { size: '8x10 นิ้ว', paper: 'อะคริลิกใส 3 มม.', finishing: 'ขอบตัดมุมทอง' },
+      customer_name: 'ທ່ານ ນາງ ນະພາ ພິມດີ',
+      phone: '020 77889900',
+      product_id: 'frame-acrylic-block',
+      specs: { size: '5x7 ນິ້ວ', paper: 'ອາຄຣີລິກໃສ 20mm', finishing: 'ຂັດຂອບ Diamond' },
       quantity: 5,
-      total_price: 1450.0,
-      currency: 'THB',
+      total_price: 485000.0,
+      currency: 'LAK',
       status: 'PAYMENT_APPROVED',
       created_at: new Date(now - 26 * 60 * 60 * 1000).toISOString(),
       timeline: [
-        { status: 'PENDING_SLIP_CHECK', label: 'ได้รับออเดอร์แล้ว', at: now - 26 * 3600e3 },
-        { status: 'PAYMENT_APPROVED', label: 'ยืนยันการชำระเงินแล้ว', at: now - 24 * 3600e3 },
+        { status: 'PENDING_SLIP_CHECK', label: 'ໄດ້ຮັບອໍເດີແລ້ວ', at: now - 26 * 3600e3 },
+        { status: 'PAYMENT_APPROVED', label: 'ຢືນຢັນການຊຳລະເງິນແລ້ວ', at: now - 24 * 3600e3 },
       ],
     },
     {
       order_id: 'SSP-00003',
-      customer_name: 'ร้านต้นไม้มินิมอล',
-      phone: '0623456789',
-      product_id: 'sticker-diecut',
-      specs: { size: 'ขนาด M (6x8 ซม.)', paper: 'สติ๊กเกอร์ PP กันน้ำ', finishing: 'เคลือบเงา (Glossy)' },
-      quantity: 200,
-      total_price: 4200.0,
-      currency: 'THB',
+      customer_name: 'ຮ້ານຕົ້ນໄມ້ມິນິມອລ ວຽງຈັນ',
+      phone: '020 22334455',
+      product_id: 'sticker-pp-waterproof',
+      specs: { size: 'ແຜ່ນ A3+', paper: 'PP ຂາວເງົາກັນນ້ຳ', finishing: 'ໄດຄັດ 50% ພ້ອມລອກ' },
+      quantity: 50,
+      total_price: 1250000.0,
+      currency: 'LAK',
       status: 'IN_PRODUCTION',
       created_at: new Date(now - 72 * 60 * 60 * 1000).toISOString(),
       timeline: [
-        { status: 'PENDING_SLIP_CHECK', label: 'ได้รับออเดอร์แล้ว', at: now - 72 * 3600e3 },
-        { status: 'PAYMENT_APPROVED', label: 'ยืนยันการชำระเงินแล้ว', at: now - 70 * 3600e3 },
-        { status: 'IN_PRODUCTION', label: 'กำลังดำเนินการพิมพ์ / ขึ้นงาน', at: now - 48 * 3600e3 },
+        { status: 'PENDING_SLIP_CHECK', label: 'ໄດ້ຮັບອໍເດີແລ້ວ', at: now - 72 * 3600e3 },
+        { status: 'PAYMENT_APPROVED', label: 'ຢືນຢັນການຊຳລະເງິນແລ້ວ', at: now - 70 * 3600e3 },
+        { status: 'IN_PRODUCTION', label: 'ກຳລັງດຳເນີນການພິມ', at: now - 48 * 3600e3 },
       ],
     },
     {
       order_id: 'SSP-00004',
-      customer_name: 'คุณพิชญา วงศ์สวย',
-      phone: '0611112222',
-      product_id: 'wedding-card',
-      specs: { size: 'การ์ด A6', paper: 'อาร์ตการ์ด 350g', finishing: 'ปั๊มเคทอง (Foil Gold)' },
+      customer_name: 'ທ່ານ ນາງ ພິຊະຍາ ວົງສວຍ',
+      phone: '020 99887766',
+      product_id: 'card-gold-foil',
+      specs: { size: '5x7 ນິ້ວ', paper: 'Art Card 350g', finishing: 'ປ້ຳຟອຍຄຳ (Gold Foil)' },
       quantity: 150,
-      total_price: 7950.0,
-      currency: 'THB',
+      total_price: 2450000.0,
+      currency: 'LAK',
       status: 'SHIPPED',
-      tracking_number: 'FL9E8123456789',
-      shipping_courier: 'Flash Express',
+      tracking_number: 'AN-LAO-991283',
+      shipping_courier: 'Anousith Express',
       created_at: new Date(now - 6 * 24 * 60 * 60 * 1000).toISOString(),
       timeline: [
-        { status: 'PENDING_SLIP_CHECK', label: 'ได้รับออเดอร์แล้ว', at: now - 6 * 24 * 3600e3 },
-        { status: 'PAYMENT_APPROVED', label: 'ยืนยันการชำระเงินแล้ว', at: now - 6 * 24 * 3600e3 + 2 * 3600e3 },
-        { status: 'IN_PRODUCTION', label: 'กำลังดำเนินการพิมพ์ / ขึ้นงาน', at: now - 5 * 24 * 3600e3 },
-        { status: 'SHIPPED', label: 'จัดส่งเรียบร้อยแล้ว', at: now - 10 * 3600e3 },
+        { status: 'PENDING_SLIP_CHECK', label: 'ໄດ້ຮັບອໍເດີແລ້ວ', at: now - 6 * 24 * 3600e3 },
+        { status: 'PAYMENT_APPROVED', label: 'ຢືນຢັນການຊຳລະເງິນແລ້ວ', at: now - 6 * 24 * 3600e3 + 2 * 3600e3 },
+        { status: 'IN_PRODUCTION', label: 'ກຳລັງດຳເນີນການພິມ', at: now - 5 * 24 * 3600e3 },
+        { status: 'SHIPPED', label: 'ຈັດສົ່ງຮຽບຮ້ອຍແລ້ວ', at: now - 10 * 3600e3 },
       ],
     },
     {
       order_id: 'SSP-00005',
-      customer_name: 'สำนักงาน XYZ',
-      phone: '0644443333',
-      product_id: 'booklet',
-      specs: { size: 'A5 (5.8x8.3 นิ้ว)', paper: 'กระดาษอาร์ตมัน 120g', finishing: 'เย็บมุม / เย็บกี่' },
+      customer_name: 'ຫ້ອງການ ບໍລິສັດ XYZ ລາວ',
+      phone: '020 55667788',
+      product_id: 'doc-catalog-staple',
+      specs: { size: 'A4', paper: 'Art Paper 160g', finishing: 'ເຢັບມຸມມາດຕະຖານ' },
       quantity: 300,
-      total_price: 9800.0,
-      currency: 'THB',
+      total_price: 3800000.0,
+      currency: 'LAK',
       status: 'DELIVERED',
-      tracking_number: 'JTK9012345678',
-      shipping_courier: 'J&T Express',
+      tracking_number: 'HAL-VTE-882104',
+      shipping_courier: 'HAL Logistics',
       created_at: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
       timeline: [
-        { status: 'PENDING_SLIP_CHECK', label: 'ได้รับออเดอร์แล้ว', at: now - 10 * 24 * 3600e3 },
-        { status: 'PAYMENT_APPROVED', label: 'ยืนยันการชำระเงินแล้ว', at: now - 10 * 24 * 3600e3 + 3 * 3600e3 },
-        { status: 'IN_PRODUCTION', label: 'กำลังดำเนินการพิมพ์ / ขึ้นงาน', at: now - 9 * 24 * 3600e3 },
-        { status: 'SHIPPED', label: 'จัดส่งเรียบร้อยแล้ว', at: now - 3 * 24 * 3600e3 },
-        { status: 'DELIVERED', label: 'ถึงมือผู้รับแล้ว', at: now - 20 * 3600e3 },
+        { status: 'PENDING_SLIP_CHECK', label: 'ໄດ້ຮັບອໍເດີແລ້ວ', at: now - 10 * 24 * 3600e3 },
+        { status: 'PAYMENT_APPROVED', label: 'ຢືນຢັນການຊຳລະເງິນແລ້ວ', at: now - 10 * 24 * 3600e3 + 3 * 3600e3 },
+        { status: 'IN_PRODUCTION', label: 'ກຳລັງດຳເນີນການພິມ', at: now - 9 * 24 * 3600e3 },
+        { status: 'SHIPPED', label: 'ຈັດສົ່ງຮຽບຮ້ອຍແລ້ວ', at: now - 3 * 24 * 3600e3 },
+        { status: 'DELIVERED', label: 'ສິນຄ້າຮອດມືລູກຄ້າແລ້ວ', at: now - 20 * 3600e3 },
       ],
     },
   ]
@@ -304,7 +338,7 @@ export async function submitOrder(order: Order): Promise<Order> {
       status: 'PENDING_SLIP_CHECK',
       created_at: new Date().toISOString(),
       timeline: [
-        { status: 'PENDING_SLIP_CHECK', label: 'ได้รับออเดอร์แล้ว', at: Date.now() },
+        { status: 'PENDING_SLIP_CHECK', label: 'ໄດ້ຮັບອໍເດີແລ້ວ', at: Date.now() },
       ],
     }
     const all = readLocalOrders()
@@ -380,3 +414,29 @@ function normalizeRemoteOrder(o: RawOrder): Order {
     timeline: o.timeline || [],
   }
 }
+
+export async function fetchPublicProducts(category?: string): Promise<RemoteProduct[]> {
+  try {
+    const qs = category ? `?category=${encodeURIComponent(category)}` : ''
+    const res = await fetch(`http://localhost:8080/api/v1/public/products${qs}`)
+    if (!res.ok) throw new Error('Failed to fetch public products')
+    const json = await res.json()
+    return json.data || []
+  } catch (err) {
+    console.warn('[Public Products Fallback]', err)
+    return []
+  }
+}
+
+export async function fetchPublicProductBySlug(slug: string): Promise<RemoteProduct | null> {
+  try {
+    const res = await fetch(`http://localhost:8080/api/v1/public/products/${encodeURIComponent(slug)}`)
+    if (!res.ok) throw new Error('Product not found')
+    const json = await res.json()
+    return json.data || null
+  } catch (err) {
+    console.warn('[Public Product Slug Fallback]', err)
+    return null
+  }
+}
+

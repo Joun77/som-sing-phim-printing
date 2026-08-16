@@ -1,4 +1,5 @@
-import { Link, Route, Routes } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Link, Route, Routes, useLocation } from 'react-router-dom'
 import Header from './components/Header.tsx'
 import HomePage from './pages/HomePage.tsx'
 import CategoryPage from './pages/CategoryPage.tsx'
@@ -7,6 +8,23 @@ import CheckoutPage from './pages/CheckoutPage.tsx'
 import SuccessPage from './pages/SuccessPage.tsx'
 import TrackingPage from './pages/TrackingPage.tsx'
 import { useShop } from './context/ShopContext.tsx'
+
+function ScrollToAnchor() {
+  const location = useLocation()
+  useEffect(() => {
+    if (location.hash) {
+      setTimeout(() => {
+        const elem = document.querySelector(location.hash)
+        if (elem) {
+          elem.scrollIntoView({ behavior: 'smooth' })
+        }
+      }, 100)
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [location])
+  return null
+}
 
 function NotFound() {
   return (
@@ -25,6 +43,7 @@ export default function App() {
 
   return (
     <>
+      <ScrollToAnchor />
       {demoMode && (
         <div className="demo-banner" role="status">
           ໂຫມດສາທິດ (Demo Mode) — ລະບົບຫຼັງບ້ານ Go ບໍ່ພ້ອມໃຊ້ງານ, ໃຊ້ຂໍ້ມູນຕົວຢ່າງແທນ. ເປີດ Backend ທີ່ port 8080 ເພື່ອເຊື່ອມຕໍ່ API ຕົວຈິງ.

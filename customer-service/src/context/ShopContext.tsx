@@ -3,6 +3,7 @@ import { DEMO_MODE, checkHealth, getRates, type Order } from '../api/client.ts'
 import { convert } from '../utils/currency.ts'
 import type { Product } from '../data/catalog.ts'
 import type { PriceBreakdown } from '../utils/pricing.ts'
+import { TRANSLATIONS, type Language } from '../utils/i18n.ts'
 
 export type ConnectionStatus = 'checking' | 'connected' | 'demo' | 'offline'
 
@@ -31,6 +32,9 @@ export interface OrderDraft {
 
 export interface ShopContextValue {
   currency: string
+  language: Language
+  setLanguage: (l: Language) => void
+  t: (key: keyof typeof TRANSLATIONS['lo']) => string
   rates: { THB: number; LAK: number }
   ratesLoaded: boolean
   demoMode: boolean
@@ -47,15 +51,29 @@ export interface ShopContextValue {
 const ShopContext = createContext<ShopContextValue | null>(null)
 
 export function ShopProvider({ children }: { children: ReactNode }) {
-  const [currency, setCurrency] = useState('THB')
+  const [currency, setCurrency] = useState('LAK')
+  const [language, setLanguageState] = useState<Language>(() => {
+    const saved = localStorage.getItem('ssp_customer_lang')
+    return (saved === 'en' || saved === 'lo') ? saved : 'lo'
+  })
+
+  const setLanguage = (l: Language) => {
+    setLanguageState(l)
+    localStorage.setItem('ssp_customer_lang', l)
+  }
+
+  const t = (key: keyof typeof TRANSLATIONS['lo']): string => {
+    return TRANSLATIONS[language]?.[key] || TRANSLATIONS['lo']?.[key] || (key as string)
+  }
+
   const [rates, setRates] = useState({ THB: 630.5, LAK: 1 })
   const [ratesLoaded, setRatesLoaded] = useState(false)
   const [demoMode, setDemoMode] = useState(false)
   const [orderDraft, setOrderDraft] = useState<OrderDraft | null>(null)
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null)
   const [connection, setConnection] = useState<ConnectionInfo>({
-    status: 'checking', // checking | connected | demo | offline
-    message: 'กำลังตรวจสอบการเชื่อมต่อ…',
+    status: 'checking',
+    message: '',
     baseUrl: '',
   })
 
@@ -67,9 +85,9 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       setRatesLoaded(true)
       setDemoMode(DEMO_MODE.enabled)
       if (!DEMO_MODE.enabled) {
-        setConnection({ status: 'connected', message: 'เชื่อมต่อกับระบบหลังบ้านแล้ว', baseUrl: '' })
+        setConnection({ status: 'connected', message: 'ເຊື່ອມຕໍ່ກັບລະບົບຫຼັງບ້ານແລ້ວ', baseUrl: '' })
       } else {
-        setConnection({ status: 'demo', message: 'ใช้ข้อมูลตัวอย่าง (Demo Mode) — กดปุ่มเพื่อเชื่อมต่อ', baseUrl: '' })
+        setConnection({ status: 'demo', message: 'ໃຊ້ຂໍ້ມູນຕົວຢ່າງ (Demo Mode)', baseUrl: '' })
       }
     })
     return () => {
@@ -79,15 +97,15 @@ export function ShopProvider({ children }: { children: ReactNode }) {
 
   const testConnection = useMemo(
     () => async () => {
-      setConnection({ status: 'checking', message: 'กำลังทดสอบการเชื่อมต่อ…', baseUrl: '' })
+      setConnection({ status: 'checking', message: 'ກຳລັງທົດສອບການເຊື່ອມຕໍ່…', baseUrl: '' })
       const res = await checkHealth()
       if (res.ok) {
         setDemoMode(false)
-        setConnection({ status: 'connected', message: 'เชื่อมต่อกับระบบหลังบ้านแล้ว', baseUrl: res.baseUrl })
+        setConnection({ status: 'connected', message: 'ເຊື່ອມຕໍ່ກັບລະບົບຫຼັງບ້ານແລ້ວ', baseUrl: res.baseUrl })
         return true
       }
       setDemoMode(true)
-      setConnection({ status: 'offline', message: 'ไม่พบระบบหลังบ้าน — ยังใช้ Demo Mode ได้', baseUrl: res.baseUrl })
+      setConnection({ status: 'offline', message: 'ບໍ່ພົບລະບົບຫຼັງບ້ານ — ຍັງໃຊ້ Demo Mode ໄດ້', baseUrl: res.baseUrl })
       return false
     },
     []
@@ -108,6 +126,9 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       currency,
+      language,
+      setLanguage,
+      t,
       rates,
       ratesLoaded,
       demoMode,
@@ -121,7 +142,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       placedOrder,
       setPlacedOrder,
     }),
-    [currency, rates, ratesLoaded, demoMode, connection, testConnection, orderDraft, placedOrder]
+    [currency, language, rates, ratesLoaded, demoMode, connection, testConnection, orderDraft, placedOrder]
   )
 
   return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>
