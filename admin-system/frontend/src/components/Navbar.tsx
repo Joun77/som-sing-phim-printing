@@ -45,15 +45,19 @@ export default function Navbar() {
   };
 
   const navItems = [
-    { id: 'dashboard', labelLao: 'ແຜງຄວບຄຸມ', icon: LayoutDashboard },
-    { id: 'finance', labelLao: 'ການເງິນ & ບັນຊີ', icon: Coins },
-    { id: 'orders', labelLao: 'ອໍເດີ', icon: ShoppingCart },
-    { id: 'inbound', labelLao: 'ນຳເຂົ້າ', icon: Truck },
-    { id: 'inventory', labelLao: 'ຄັງສິນຄ້າ', icon: Boxes },
-    { id: 'equipment', labelLao: 'ເຄື່ອງຈັກ', icon: Cpu },
-    { id: 'crm', labelLao: 'ລູກຄ້າ', icon: User },
-    { id: 'hr', labelLao: 'ພະນັກງານ', icon: Users },
+    { id: 'dashboard', labelLao: 'ແຜງຄວບຄຸມ', labelEn: 'Dashboard', icon: LayoutDashboard },
+    { id: 'finance', labelLao: 'ການເງິນ & ບັນຊີ', labelEn: 'Finance', icon: Coins },
+    { id: 'orders', labelLao: 'ອໍເດີ', labelEn: 'Orders', icon: ShoppingCart },
+    { id: 'inbound', labelLao: 'ນຳເຂົ້າ', labelEn: 'Inbound', icon: Truck },
+    { id: 'inventory', labelLao: 'ຄັງສິນຄ້າ', labelEn: 'Inventory', icon: Boxes },
+    { id: 'equipment', labelLao: 'ເຄື່ອງຈັກ', labelEn: 'Equipment', icon: Cpu },
+    { id: 'crm', labelLao: 'ລູກຄ້າ', labelEn: 'Customers', icon: User },
+    { id: 'hr', labelLao: 'ພະນັກງານ', labelEn: 'HR / Staff', icon: Users },
   ];
+
+  const getNavLabel = (item: typeof navItems[0]) => {
+    return currentLang === 'en' ? item.labelEn : item.labelLao;
+  };
 
   return (
     <header className="bg-gradient-to-r from-slate-950 via-primary-navy to-slate-950 text-white shadow-xl sticky top-0 z-50 border-b border-slate-800/80">
@@ -91,7 +95,7 @@ export default function Navbar() {
                   `}
                 >
                   <Icon className="w-4 h-4 shrink-0" />
-                  <span>{item.labelLao}</span>
+                  <span>{getNavLabel(item)}</span>
                 </button>
               );
             })}
@@ -135,14 +139,14 @@ export default function Navbar() {
                       <div className="text-xs font-black text-white">ຮ້ານ ສົມສິ່ງພິມ (Owner)</div>
                       <div className="text-[11px] font-medium text-slate-400">som.sing.phim@gmail.com</div>
                       <span className="inline-block mt-1 px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold rounded-md border border-emerald-500/30">
-                        เจ้าของโรงพิมพ์ (Super Admin)
+                        {currentLang === 'en' ? 'Super Admin (Owner)' : 'ເຈົ້າຂອງໂຮງພິມ (Super Admin)'}
                       </span>
                     </div>
                   </div>
 
                   <div className="text-[11px] text-slate-400 font-semibold space-y-1">
-                    <div>สาขาหลัก: <span className="text-white font-bold">Vientiane Head Office</span></div>
-                    <div>สถานะระบบ: <span className="text-emerald-400 font-bold">Online (Active)</span></div>
+                    <div>{currentLang === 'en' ? 'Branch:' : 'ສາຂາຫຼັກ:'} <span className="text-white font-bold">Vientiane Head Office</span></div>
+                    <div>{currentLang === 'en' ? 'System Status:' : 'ສະຖານະລະບົບ:'} <span className="text-emerald-400 font-bold">Online (Active)</span></div>
                   </div>
 
                   <button
@@ -153,7 +157,7 @@ export default function Navbar() {
                     className="w-full py-2.5 bg-accent-sky/20 hover:bg-accent-sky/30 text-sky-200 border border-sky-500/30 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <User className="w-4 h-4 text-sky-300" />
-                    <span>ຕັ້ງຄ່າໂປຣໄຟລ໌ & ລະບົບ (Settings)</span>
+                    <span>{currentLang === 'en' ? 'Profile & Settings' : 'ຕັ້ງຄ່າໂປຣໄຟລ໌ & ລະບົບ'}</span>
                   </button>
 
                   <button
@@ -164,7 +168,7 @@ export default function Navbar() {
                     className="w-full py-2.5 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <LogOut className="w-4 h-4" />
-                    ออกจากระบบ (Logout)
+                    <span>{currentLang === 'en' ? 'Sign Out' : 'ອອກຈາກລະບົບ (Logout)'}</span>
                   </button>
                 </div>
               )}
@@ -184,6 +188,7 @@ export default function Navbar() {
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
               className="p-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-white transition cursor-pointer"
+              aria-label="Toggle Navigation Menu"
             >
               {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -208,17 +213,17 @@ export default function Navbar() {
                 `}
               >
                 <Icon className="w-4 h-4" />
-                <span>{t(item.labelKey)}</span>
+                <span>{getNavLabel(item)}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Mobile Drawer Menu */}
+      {/* Mobile & Tablet Drawer Menu */}
       {mobileOpen && (
-        <div className="xl:hidden bg-slate-900 border-t border-slate-800 px-4 pt-3 pb-6 space-y-3 animate-fade-in">
-          <div className="grid grid-cols-2 gap-2">
+        <div className="xl:hidden bg-slate-900 border-t border-slate-800 px-4 pt-3 pb-6 space-y-3 animate-fade-in shadow-2xl">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -230,39 +235,46 @@ export default function Navbar() {
                     setMobileOpen(false);
                   }}
                   className={`
-                    p-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 text-left cursor-pointer
+                    p-3.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2.5 text-left cursor-pointer border
                     ${isActive 
-                      ? 'bg-accent-sky text-white shadow-md shadow-accent-sky/30' 
-                      : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                      ? 'bg-accent-sky text-white border-sky-400/40 shadow-lg shadow-accent-sky/25' 
+                      : 'bg-white/5 border-white/10 text-slate-200 hover:bg-white/10 hover:text-white'
                     }
                   `}
                 >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span className="truncate">{t(item.labelKey)}</span>
+                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-sky-400'}`} />
+                  <span className="font-extrabold text-[13px] leading-tight truncate">
+                    {getNavLabel(item)}
+                  </span>
                 </button>
               );
             })}
           </div>
 
-          <div className="flex flex-col gap-2 pt-3 border-t border-slate-800">
+          <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-slate-800">
             <button
               onClick={() => {
                 setIsRatesOpen(true);
                 setMobileOpen(false);
               }}
-              className="w-full p-3 bg-white/5 hover:bg-white/10 text-emerald-300 text-xs font-bold rounded-xl flex items-center justify-between"
+              className="w-full sm:flex-1 p-3 bg-white/5 hover:bg-white/10 text-emerald-300 text-xs font-bold rounded-xl flex items-center justify-between border border-emerald-500/20"
             >
               <span className="flex items-center gap-2">
-                <Coins className="w-4 h-4" /> อัตราแลกเปลี่ยน ({currency})
+                <Coins className="w-4 h-4 text-emerald-400" />
+                {currentLang === 'en' ? `Exchange Rate (${currency})` : `ອັດຕາແລກປ່ຽນ (${currency})`}
               </span>
-              <span>1 = {currentRate ? `${currentRate.toLocaleString()}₭` : '—'}</span>
+              <span className="font-extrabold">1 = {currentRate ? `${currentRate.toLocaleString()}₭` : '—'}</span>
             </button>
 
             <button
-              onClick={() => useAuthStore.getState().logout()}
-              className="w-full p-3 bg-slate-800 text-slate-200 text-xs font-bold rounded-xl flex items-center gap-2"
+              onClick={() => {
+                setMobileOpen(false);
+                setActiveTab('settings');
+              }}
+              className="w-full sm:w-auto p-3 bg-white/5 hover:bg-white/10 text-sky-200 text-xs font-bold rounded-xl flex items-center justify-center gap-2 border border-white/10"
             >
-              <LogOut className="w-4 h-4 text-red-400" /> ออกจากระบบ (Logout)
+              <User className="w-4 h-4 text-sky-400" />
+              <span>{currentLang === 'en' ? 'Settings' : 'ຕັ້ງຄ່າ'}</span>
             </button>
           </div>
         </div>

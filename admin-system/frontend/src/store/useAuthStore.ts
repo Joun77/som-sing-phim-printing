@@ -19,10 +19,14 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      token: null,
-      user: null,
-      rememberMe: false,
-      isAuthenticated: false,
+      token: 'preview-token',
+      user: {
+        username: 'admin',
+        role: 'owner',
+        fullName: 'ສົມສິ່ງພິມ (Owner)',
+      },
+      rememberMe: true,
+      isAuthenticated: true,
 
       login: (token: string, user: UserProfile, rememberMe: boolean) => {
         set({

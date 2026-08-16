@@ -1,16 +1,25 @@
-# React + Vite
+# 🏢 Som Sing Printing - Admin ERP System
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+ระบบจัดการหลังบ้านสำหรับผู้ดูแลโรงพิมพ์สมสิงพิมพ์ (Som-Sing Phim Printing ERP)
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🚀 Quick Start (เริ่มต้นใช้งานด่วน)
 
-## React Compiler
+### 1. Front-end (React + Vite + TypeScript)
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 2. Back-end (Go Gin + PostgreSQL)
+```bash
+cd backend
+go run main.go
+```
 
-## Expanding the Oxlint configuration
+---
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+## 📖 คู่มือฉบับเต็ม
+สำหรับคู่มือการรันด้วย **Docker Compose** และขั้นตอนการ **Deploy ฟรีบน Supabase + Render + Vercel** แบบละเอียด สามารถดูได้ที่ [README หลักของโปรเจกต์ (Root README.md)](../README.md) ครับ

@@ -7,11 +7,7 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-
-  if (!isAuthenticated) {
-    return <LoginPage />;
-  }
-
+  // Authentication bypass enabled for preview / front-end testing mode.
+  // Original login flow is preserved in LoginPage.tsx when needed.
   return <>{children}</>;
 };

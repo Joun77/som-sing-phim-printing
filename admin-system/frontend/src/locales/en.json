@@ -26,6 +26,7 @@
   },
   "sidebar": {
     "dashboard": "Dashboard Overview",
+    "finance": "Finance & Accounting",
     "inbound": "Inbound Procurement",
     "crm": "Customer Directory (CRM)",
     "inventory": "Stock & Supplies",
@@ -35,7 +36,8 @@
     "production": "Production Workflow",
     "deliveries": "Delivery Tracking",
     "estimator": "Profit Estimator",
-    "reports": "History & BI Reports"
+    "reports": "History & BI Reports",
+    "hr": "HR & Employees"
   },
   "dashboard": {
     "title": "Welcome, Som Sing Printing",
