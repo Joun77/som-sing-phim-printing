@@ -5,7 +5,7 @@ import { useShop } from '../context/ShopContext.tsx'
 import { computePrice, getQuantityTier } from '../utils/pricing.ts'
 import { formatMoney } from '../utils/currency.ts'
 import ProductArt from '../components/ProductArt.tsx'
-import { fetchPublicProductBySlug, RemoteProduct } from '../api/client.ts'
+import { fetchPublicProductBySlug, RemoteProduct, uploadArtworkFile } from '../api/client.ts'
 import {
   ArrowRightIcon,
   CheckIcon,
@@ -266,18 +266,9 @@ export default function ProductPage() {
       setFileQualityNotice(t('fileQualityDoc'))
     }
 
-    const formData = new FormData()
-    formData.append('file', file)
-
     try {
-      const res = await fetch('http://localhost:8080/api/v1/orders/upload', {
-        method: 'POST',
-        body: formData,
-      })
-      if (res.ok) {
-        const json = await res.json()
-        setUploadedFileUrl(json.url || `http://localhost:8080/api/v1/orders/files/${file.name}`)
-      }
+      const url = await uploadArtworkFile(file)
+      setUploadedFileUrl(url)
     } catch {
       setUploadedFileUrl(`local://${file.name}`)
     } finally {

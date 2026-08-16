@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx --report-unused-disable-directives --max-warnings 0",
     "dev:backend": "cd ../admin-system/backend && go run .",
-    "dev:all": "concurrently -n backend,frontend -c green,cyan \"npm run dev:backend\" \"vite\""
+    "dev:all": "concurrently -n backend,frontend -c green,cyan \"npm run dev:backend\" \"vite\"",
+    "deploy": "npm run build && npx -y firebase-tools@latest deploy --only hosting"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",

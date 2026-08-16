@@ -418,7 +418,7 @@ function normalizeRemoteOrder(o: RawOrder): Order {
 export async function fetchPublicProducts(category?: string): Promise<RemoteProduct[]> {
   try {
     const qs = category ? `?category=${encodeURIComponent(category)}` : ''
-    const res = await fetch(`http://localhost:8080/api/v1/public/products${qs}`)
+    const res = await fetch(`${API_BASE}/v1/public/products${qs}`)
     if (!res.ok) throw new Error('Failed to fetch public products')
     const json = await res.json()
     return json.data || []
@@ -430,7 +430,7 @@ export async function fetchPublicProducts(category?: string): Promise<RemoteProd
 
 export async function fetchPublicProductBySlug(slug: string): Promise<RemoteProduct | null> {
   try {
-    const res = await fetch(`http://localhost:8080/api/v1/public/products/${encodeURIComponent(slug)}`)
+    const res = await fetch(`${API_BASE}/v1/public/products/${encodeURIComponent(slug)}`)
     if (!res.ok) throw new Error('Product not found')
     const json = await res.json()
     return json.data || null
@@ -438,5 +438,17 @@ export async function fetchPublicProductBySlug(slug: string): Promise<RemoteProd
     console.warn('[Public Product Slug Fallback]', err)
     return null
   }
+}
+
+export async function uploadArtworkFile(file: File): Promise<string> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch(`${API_BASE}/v1/orders/upload`, {
+    method: 'POST',
+    body: formData,
+  })
+  if (!res.ok) throw new Error('Upload failed')
+  const json = await res.json()
+  return json.url || `${API_BASE}/v1/orders/files/${file.name}`
 }
 

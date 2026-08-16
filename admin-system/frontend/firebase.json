@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "som-sing-phim-admin",
     "public": "dist",
     "ignore": [
       "firebase.json",

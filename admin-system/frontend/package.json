@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:all": "concurrently \"npm run dev\" \"cd backend && go run main.go\" \"cd ../customer-service && npm run dev\"",
     "build": "vite build",
+    "deploy": "npm run build && npx -y firebase-tools@latest deploy --only hosting",
     "lint": "oxlint",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
