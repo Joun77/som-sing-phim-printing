@@ -80,6 +80,7 @@ function AppContent() {
                           avgCovM: res.avg_cov_m,
                           avgCovY: res.avg_cov_y,
                           avgCovK: res.avg_cov_k,
+                          colorMode: res.color_mode || 'CMYK',
                           fileUrl: res.file_url,
                           fileName: res.file_name,
                         });

@@ -53,6 +53,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [printColorMode, setPrintColorMode] = useState<'CMYK' | 'MONO_K'>('CMYK');
 
   const isImageFile = (fileName: string) => {
     const ext = fileName.slice(fileName.lastIndexOf('.')).toLowerCase();
@@ -399,82 +400,163 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                 </div>
               )}
 
+              {/* Print Color Mode Switcher (Full CMYK vs Mono K) */}
+              <div className="bg-slate-950 p-1.5 rounded-2xl border border-slate-800 flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPrintColorMode('CMYK')}
+                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                    printColorMode === 'CMYK'
+                      ? 'bg-gradient-to-r from-indigo-600 to-sky-600 text-white shadow-md shadow-indigo-950/50'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                  }`}
+                >
+                  <span>🌈 ພິມ 4 ສີ (Full CMYK)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPrintColorMode('MONO_K')}
+                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                    printColorMode === 'MONO_K'
+                      ? 'bg-slate-800 text-white border border-slate-600 shadow-md'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                  }`}
+                >
+                  <span>⚫ ພິມ 1 ສີ ຂາວດຳ (Mono K)</span>
+                </button>
+              </div>
+
               {/* CMYK Progress Bars */}
               <div className="space-y-3.5 pt-1">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-300">
-                  <span>📊 ຄ່າສີສະເລ່ຍ CMYK (%)</span>
+                  <span>
+                    {printColorMode === 'MONO_K'
+                      ? '📊 ຄ່າສີສະເລ່ຍພິມຂາວດຳ (Monochrome K %)'
+                      : '📊 ຄ່າສີສະເລ່ຍ CMYK (%)'}
+                  </span>
                   <span className="text-slate-400 font-mono text-xs">
-                    Total Ink: <strong className="text-indigo-300 font-bold">{totalInkCoverage}%</strong>
+                    Total Ink:{' '}
+                    <strong className="text-indigo-300 font-bold">
+                      {printColorMode === 'MONO_K'
+                        ? `${Math.min(100, Math.round((result.avg_cov_k + 0.299 * result.avg_cov_c + 0.587 * result.avg_cov_m + 0.114 * result.avg_cov_y) * 100) / 100)}%`
+                        : `${totalInkCoverage}%`}
+                    </strong>
                   </span>
                 </div>
 
-                {/* Cyan */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs font-bold">
-                    <span className="text-cyan-400 flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block shadow-sm shadow-cyan-400/50"></span>
-                      Cyan (C)
-                    </span>
-                    <span className="font-mono text-cyan-300 font-black">{result.avg_cov_c.toFixed(2)}%</span>
-                  </div>
-                  <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
-                    <div
-                      className="bg-cyan-400 h-3 rounded-full transition-all duration-700 shadow-sm"
-                      style={{ width: `${Math.min(result.avg_cov_c * 2.5, 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
+                {printColorMode === 'CMYK' ? (
+                  <>
+                    {/* Cyan */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className="text-cyan-400 flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block shadow-sm shadow-cyan-400/50"></span>
+                          Cyan (C)
+                        </span>
+                        <span className="font-mono text-cyan-300 font-black">{result.avg_cov_c.toFixed(2)}%</span>
+                      </div>
+                      <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
+                        <div
+                          className="bg-cyan-400 h-3 rounded-full transition-all duration-700 shadow-sm"
+                          style={{ width: `${Math.min(result.avg_cov_c * 2.5, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
 
-                {/* Magenta */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs font-bold">
-                    <span className="text-pink-400 flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-pink-400 inline-block shadow-sm shadow-pink-400/50"></span>
-                      Magenta (M)
-                    </span>
-                    <span className="font-mono text-pink-300 font-black">{result.avg_cov_m.toFixed(2)}%</span>
-                  </div>
-                  <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
-                    <div
-                      className="bg-pink-500 h-3 rounded-full transition-all duration-700 shadow-sm"
-                      style={{ width: `${Math.min(result.avg_cov_m * 2.5, 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
+                    {/* Magenta */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className="text-pink-400 flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-pink-400 inline-block shadow-sm shadow-pink-400/50"></span>
+                          Magenta (M)
+                        </span>
+                        <span className="font-mono text-pink-300 font-black">{result.avg_cov_m.toFixed(2)}%</span>
+                      </div>
+                      <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
+                        <div
+                          className="bg-pink-500 h-3 rounded-full transition-all duration-700 shadow-sm"
+                          style={{ width: `${Math.min(result.avg_cov_m * 2.5, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
 
-                {/* Yellow */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs font-bold">
-                    <span className="text-yellow-400 flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block shadow-sm shadow-yellow-400/50"></span>
-                      Yellow (Y)
-                    </span>
-                    <span className="font-mono text-yellow-300 font-black">{result.avg_cov_y.toFixed(2)}%</span>
-                  </div>
-                  <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
-                    <div
-                      className="bg-yellow-400 h-3 rounded-full transition-all duration-700 shadow-sm"
-                      style={{ width: `${Math.min(result.avg_cov_y * 2.5, 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
+                    {/* Yellow */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className="text-yellow-400 flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block shadow-sm shadow-yellow-400/50"></span>
+                          Yellow (Y)
+                        </span>
+                        <span className="font-mono text-yellow-300 font-black">{result.avg_cov_y.toFixed(2)}%</span>
+                      </div>
+                      <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
+                        <div
+                          className="bg-yellow-400 h-3 rounded-full transition-all duration-700 shadow-sm"
+                          style={{ width: `${Math.min(result.avg_cov_y * 2.5, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
 
-                {/* Black / Key */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs font-bold">
-                    <span className="text-slate-200 flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-slate-300 inline-block shadow-sm shadow-slate-300/50"></span>
-                      Black / Key (K)
-                    </span>
-                    <span className="font-mono text-slate-100 font-black">{result.avg_cov_k.toFixed(2)}%</span>
+                    {/* Black / Key */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className="text-slate-200 flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-slate-300 inline-block shadow-sm shadow-slate-300/50"></span>
+                          Black / Key (K)
+                        </span>
+                        <span className="font-mono text-slate-100 font-black">{result.avg_cov_k.toFixed(2)}%</span>
+                      </div>
+                      <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
+                        <div
+                          className="bg-slate-300 h-3 rounded-full transition-all duration-700 shadow-sm"
+                          style={{ width: `${Math.min(result.avg_cov_k * 2.5, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  /* MONO K DISPLAY */
+                  <div className="space-y-2 p-4 bg-slate-950 rounded-2xl border border-slate-800">
+                    <div className="flex justify-between text-sm font-black">
+                      <span className="text-slate-200 flex items-center gap-2">
+                        <span className="w-3.5 h-3.5 rounded-full bg-slate-300 inline-block shadow-md"></span>
+                        Black / Key (K Only)
+                      </span>
+                      <span className="font-mono text-emerald-400 text-base font-black">
+                        {Math.min(
+                          100,
+                          Math.round(
+                            (result.avg_cov_k +
+                              0.299 * result.avg_cov_c +
+                              0.587 * result.avg_cov_m +
+                              0.114 * result.avg_cov_y) *
+                              100
+                          ) / 100
+                        ).toFixed(2)}
+                        %
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-900 rounded-full h-4 overflow-hidden border border-slate-700">
+                      <div
+                        className="bg-slate-200 h-4 rounded-full transition-all duration-700 shadow-sm"
+                        style={{
+                          width: `${Math.min(
+                            (result.avg_cov_k +
+                              0.299 * result.avg_cov_c +
+                              0.587 * result.avg_cov_m +
+                              0.114 * result.avg_cov_y) *
+                              2.5,
+                            100
+                          )}%`,
+                        }}
+                      ></div>
+                    </div>
+                    <p className="text-[11px] text-slate-400 pt-1">
+                      💡 ໂໝດພິມຂາວດຳຈະບໍ່ຄິດໄລ່ຕົ້ນທຶນນ້ຳມຶກ Cyan, Magenta, Yellow (C=0%, M=0%, Y=0%)
+                    </p>
                   </div>
-                  <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
-                    <div
-                      className="bg-slate-300 h-3 rounded-full transition-all duration-700 shadow-sm"
-                      style={{ width: `${Math.min(result.avg_cov_k * 2.5, 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -522,10 +604,32 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
             <div className="space-y-3 pt-1">
               {/* Button 1: Send to Quotation */}
               <button
-                onClick={() => onSendToQuotation && onSendToQuotation(result)}
+                onClick={() => {
+                  if (onSendToQuotation) {
+                    const isMono = printColorMode === 'MONO_K';
+                    const monoK = Math.min(
+                      100,
+                      Math.round(
+                        (result.avg_cov_k +
+                          0.299 * result.avg_cov_c +
+                          0.587 * result.avg_cov_m +
+                          0.114 * result.avg_cov_y) *
+                          100
+                      ) / 100
+                    );
+                    onSendToQuotation({
+                      ...result,
+                      color_mode: printColorMode,
+                      avg_cov_c: isMono ? 0 : result.avg_cov_c,
+                      avg_cov_m: isMono ? 0 : result.avg_cov_m,
+                      avg_cov_y: isMono ? 0 : result.avg_cov_y,
+                      avg_cov_k: isMono ? monoK : result.avg_cov_k,
+                    });
+                  }
+                }}
                 className="w-full flex items-center justify-center gap-2.5 px-6 py-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.99] text-white font-black text-sm rounded-2xl shadow-xl shadow-emerald-950/50 transition cursor-pointer"
               >
-                <span>🟢 ສົ່ງຄ່ານຳໃຊ້ສ້າງໃບສະເໜີລາຄາ</span>
+                <span>🟢 ສົ່ງຄ່ານຳໃຊ້ສ້າງໃບສະເໜີລາຄາ {printColorMode === 'MONO_K' ? '(ໂໝດຂາວດຳ)' : '(ໂໝດ 4 ສີ)'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
 

@@ -35,6 +35,7 @@ export interface PreflightResult {
   avg_cov_y: number;
   avg_cov_k: number;
   color_space: string;
+  color_mode?: 'CMYK' | 'MONO_K' | string;
   has_rgb: boolean;
   is_standard_cmyk: boolean;
   status_badge_lao: string;

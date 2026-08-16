@@ -99,6 +99,9 @@ export default function CreateOrderPage({
     useFolding: false,
     useBinding: false,
     bindingType: 'Staple',
+    printerAllocations: [] as any[],
+    coatingMachineId: '',
+    bindingMachineId: '',
     spoilageRate: 5,
     targetMarginPercent: 35,
     manualUnitPrice: null

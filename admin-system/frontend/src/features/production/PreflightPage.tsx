@@ -22,6 +22,7 @@ export const PreflightPage: React.FC<{
         avgCovM: result.avg_cov_m,
         avgCovY: result.avg_cov_y,
         avgCovK: result.avg_cov_k,
+        colorMode: result.color_mode || 'CMYK',
         fileUrl: result.file_url,
         fileName: result.file_name,
       });

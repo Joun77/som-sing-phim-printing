@@ -91,8 +91,9 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
 
   // Auto-open modal when quote converted to order
   useEffect(() => {
-    if (prefilledOrderSpecs) {
+    if (prefilledOrderSpecs && prefilledOrderSpecs.isConvertedFromQuote) {
       setIsAddOrderOpen(true);
+      setShowQuotation(false);
     }
   }, [prefilledOrderSpecs]);
 
@@ -259,8 +260,9 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
   if (showQuotation) {
     return (
       <QuotationManager 
+        prefilledSpecs={prefilledOrderSpecs}
         onConvertToOrder={(specs) => {
-          setPrefilledOrderSpecs(specs);
+          setPrefilledOrderSpecs({ ...specs, isConvertedFromQuote: true });
           setIsAddOrderOpen(true);
           setShowQuotation(false);
         }} 
