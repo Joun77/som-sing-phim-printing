@@ -5,12 +5,6 @@ import App from './App.tsx'
 import { ShopProvider } from './context/ShopContext.tsx'
 import { ThemeProvider } from './context/ThemeContext.tsx'
 import './styles/global.css'
-import './styles/layout.css'
-import './styles/home.css'
-import './styles/product.css'
-import './styles/checkout.css'
-import './styles/success.css'
-import './styles/tracking.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

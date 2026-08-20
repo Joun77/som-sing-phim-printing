@@ -1,151 +1,231 @@
 import React from 'react'
 import { PreflightReport } from '../lib/preflightAnalyzer'
-import { CheckIcon, AlertCircleIcon, XIcon, SparkleIcon, ArrowRightIcon } from './icons'
+import { CheckIcon, AlertCircleIcon, XIcon, ArrowRightIcon, FileTextIcon, DownloadIcon } from './icons'
 
 export interface PreflightChecklistModalProps {
   report: PreflightReport
+  previewUrl?: string | null
+  productName?: string
+  specLabels?: { size: string; paper: string; finishing: string }
+  quantity?: number
+  priceTotal?: number
+  currency?: any
+  formatMoney?: (amount: number, currency: any) => string
+  formatMultiCurrency?: (amountTHB: number) => string
   onConfirm: () => void
   onCancel: () => void
 }
 
 export const PreflightChecklistModal: React.FC<PreflightChecklistModalProps> = ({
   report,
+  previewUrl,
+  productName,
+  specLabels,
+  quantity = 1,
+  priceTotal = 0,
+  currency,
+  formatMoney,
+  formatMultiCurrency,
   onConfirm,
   onCancel,
 }) => {
+  const isImage = report.fileType.startsWith('image/') || previewUrl?.startsWith('data:image') || previewUrl?.startsWith('blob:')
+  const quotationNo = `QT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+  const currentDate = new Date().toLocaleDateString('lo-LA', { year: 'numeric', month: 'short', day: 'numeric' })
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-4">
-      <div
-        className="rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border animate-fade-in space-y-5"
-        style={{ background: 'var(--bg-card)', borderColor: 'var(--border-gold)' }}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: 'var(--border-subtle)' }}>
+    <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+      <div className="rounded-3xl p-5 sm:p-7 max-w-2xl w-full shadow-2xl border border-amber-500/30 bg-slate-900 text-slate-100 animate-fade-in space-y-4 max-h-[92vh] overflow-y-auto">
+        {/* Header - Instant Quotation & Proof Bar */}
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-3">
-            <div
-              className="w-11 h-11 rounded-2xl flex items-center justify-center border"
-              style={{
-                background: report.allPassed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                borderColor: report.allPassed ? '#10B981' : '#F59E0B',
-                color: report.allPassed ? '#10B981' : '#F59E0B',
-              }}
-            >
-              {report.allPassed ? <CheckIcon size={22} /> : <AlertCircleIcon size={22} />}
+            <div className="w-10 h-10 rounded-2xl flex items-center justify-center border border-amber-500/40 bg-gradient-to-br from-slate-950 to-blue-950 text-amber-400">
+              <FileTextIcon size={20} />
             </div>
             <div>
-              <h3 className="font-black text-lg" style={{ color: 'var(--text-main)' }}>
-                ตรวจสอบไฟล์พิมพ์ก่อนสั่งซื้อ (Preflight Check)
-              </h3>
-              <p className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>
-                SOM SING PHIM · ARTWORK QUALITY INSPECTION
+              <div className="flex items-center gap-2">
+                <h3 className="font-black text-base sm:text-lg text-slate-100 m-0">
+                  ໃບສະເໜີລາຄາ & ຕົວຢ່າງຟາຍ (Quotation & Proof)
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                  {quotationNo}
+                </span>
+              </div>
+              <p className="text-xs font-bold text-slate-400 m-0">
+                SOM SING PHIM (ສົມສິ່ງພິມ) · {currentDate}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onCancel}
-            className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            style={{ color: 'var(--text-muted)' }}
+            className="p-2 rounded-full hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors border-none bg-transparent cursor-pointer"
             aria-label="Close"
           >
-            <XIcon size={20} />
+            <XIcon size={18} />
           </button>
         </div>
 
-        {/* File Quick Spec Summary */}
-        <div
-          className="p-3.5 rounded-2xl flex items-center justify-between text-xs font-bold border"
-          style={{ background: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
-        >
-          <div className="truncate mr-2">
-            <span style={{ color: 'var(--text-muted)' }}>ไฟล์: </span>
-            <span style={{ color: 'var(--text-main)' }}>{report.fileName}</span>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-              {report.fileSizeMB} MB
-            </span>
-            {report.estimatedDPI && (
-              <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                {report.estimatedDPI} DPI
+        {/* 2-Column Overview: Artwork Preview Left + Quotation Spec Right */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          
+          {/* Left Column: Visual Artwork Preview */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3.5 flex flex-col items-center justify-center">
+            <div className="w-full flex justify-between items-center text-[11px] font-bold mb-2">
+              <span className="text-amber-400">🖼️ ຕົວຢ່າງຟາຍພິມ (Artwork Proof)</span>
+              <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px]">
+                {report.estimatedDPI || 300} DPI
               </span>
+            </div>
+
+            {isImage && previewUrl ? (
+              <div className="w-full flex flex-col items-center">
+                <img
+                  src={previewUrl}
+                  alt="Artwork Preview"
+                  className="max-h-40 max-w-full object-contain rounded-xl shadow-md border border-slate-800"
+                />
+                <span className="text-[10.5px] font-bold text-slate-200 mt-1.5 truncate max-w-full">
+                  {report.fileName}
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  {report.fileSizeMB} MB · {report.widthPx && report.heightPx ? `${report.widthPx}×${report.heightPx} px` : 'Vector/Image'}
+                </span>
+              </div>
+            ) : (
+              <div className="py-4 flex flex-col items-center gap-1.5 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+                  <FileTextIcon size={24} />
+                </div>
+                <span className="text-xs font-black text-slate-200 truncate max-w-[180px]">
+                  {report.fileName}
+                </span>
+                <span className="text-[10.5px] font-bold text-slate-400">
+                  {report.fileSizeMB} MB · CMYK Print Ready
+                </span>
+              </div>
             )}
           </div>
-        </div>
 
-        {/* Checklist Items */}
-        <div className="space-y-2.5">
-          {report.items.map((item) => {
-            const isPass = item.status === 'passed'
-            return (
-              <div
-                key={item.id}
-                className="p-3.5 rounded-2xl border flex items-start gap-3 transition-all"
-                style={{
-                  background: isPass ? 'rgba(16, 185, 129, 0.06)' : 'rgba(245, 158, 11, 0.08)',
-                  borderColor: isPass ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.35)',
-                }}
-              >
-                <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                  style={{
-                    background: isPass ? '#10B981' : '#F59E0B',
-                    color: '#050B18',
-                  }}
-                >
-                  {isPass ? <CheckIcon size={14} /> : <AlertCircleIcon size={14} />}
-                </div>
+          {/* Right Column: Itemized Quotation Summary */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3.5 flex flex-col justify-between">
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-amber-400 mb-1.5">
+                📋 ສະຫຼຸບລາຍການສັ່ງຜະລິດ (Specs)
+              </div>
+              <h4 className="text-sm font-black text-slate-100 m-0 mb-2">
+                {productName || 'ງານສິ່ງພິມຄຸນນະພາບສູງ'}
+              </h4>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-0.5">
-                    <span className="text-xs font-black" style={{ color: 'var(--text-main)' }}>
-                      {item.label}
-                    </span>
-                    <span
-                      className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full"
-                      style={{
-                        background: isPass ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
-                        color: isPass ? '#10B981' : '#F59E0B',
-                      }}
-                    >
-                      {isPass ? 'Passed' : 'Notice'}
-                    </span>
+              <div className="space-y-1 text-xs">
+                {specLabels?.size && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">ຂະໜາດ (Size):</span>
+                    <span className="font-bold text-slate-200">{specLabels.size}</span>
                   </div>
-                  <p className="text-xs font-semibold leading-relaxed m-0" style={{ color: 'var(--text-main)' }}>
-                    {item.message}
-                  </p>
-                  {item.detail && (
-                    <p className="text-[11px] font-normal mt-0.5 m-0" style={{ color: 'var(--text-muted)' }}>
-                      {item.detail}
-                    </p>
-                  )}
+                )}
+                {specLabels?.paper && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">ເນື້ອເຈ້ຍ (Paper):</span>
+                    <span className="font-bold text-amber-400">{specLabels.paper}</span>
+                  </div>
+                )}
+                {specLabels?.finishing && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">ການເຄືອບ (Finishing):</span>
+                    <span className="font-bold text-slate-200">{specLabels.finishing}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-slate-400">ຈຳນວນ (Quantity):</span>
+                  <span className="font-black text-slate-100">{quantity} ຊິ້ນ</span>
                 </div>
               </div>
-            )
-          })}
+            </div>
+
+            {/* Total Price Box */}
+            <div className="border-t border-slate-800 pt-2 mt-2">
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs font-bold text-slate-400">ຍອດລວມສຸດທິ:</span>
+                <span className="text-lg font-black text-amber-400">
+                  {formatMoney ? formatMoney(priceTotal, currency) : `${priceTotal} THB`}
+                </span>
+              </div>
+              {formatMultiCurrency && (
+                <div className="text-[10.5px] font-bold text-right text-slate-400">
+                  {formatMultiCurrency(priceTotal)}
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
+
+        {/* Preflight Quality Checklist */}
+        <div className="space-y-1.5">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            ✓ ຜົນການກວດສອບຄຸນນະພາບຟາຍ (Quality Checklist)
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            {report.items.map((item) => {
+              const isPass = item.status === 'passed'
+              return (
+                <div
+                  key={item.id}
+                  className={`p-2.5 rounded-xl border flex items-center gap-2 ${
+                    isPass
+                      ? 'bg-emerald-500/10 border-emerald-500/30'
+                      : 'bg-amber-500/10 border-amber-500/30'
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 text-[10px] font-black ${
+                      isPass ? 'bg-emerald-500 text-slate-950' : 'bg-amber-500 text-slate-950'
+                    }`}
+                  >
+                    {isPass ? <CheckIcon size={10} /> : <AlertCircleIcon size={10} />}
+                  </div>
+                  <div className="truncate">
+                    <span className="font-bold block truncate text-slate-200">
+                      {item.label}
+                    </span>
+                    <span className="text-[10px] block truncate text-slate-400">
+                      {item.message}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-3 pt-2">
+        <div className="flex gap-2.5 pt-2 border-t border-slate-800">
           <button
             type="button"
             onClick={onConfirm}
-            className="flex-1 py-3.5 btn btn--gold text-xs font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+            className="flex-1 py-3.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 hover:from-amber-400 hover:to-yellow-200 text-slate-950 text-xs font-black rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 border-none cursor-pointer transition transform active:scale-98"
           >
-            <span>ยืนยันไฟล์และดำเนินการต่อ</span>
-            <ArrowRightIcon size={16} />
+            <span>ຢືນຢັນລາຍການ & ສັ່ງຜະລິດ (Confirm & Order)</span>
+            <ArrowRightIcon size={15} />
           </button>
+          
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="py-3 px-3.5 rounded-xl text-xs font-bold transition-all border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 cursor-pointer flex items-center gap-1.5"
+            title="Print Quotation"
+          >
+            <DownloadIcon size={15} />
+            <span className="hidden sm:inline">PDF</span>
+          </button>
+
           <button
             type="button"
             onClick={onCancel}
-            className="py-3.5 px-5 rounded-2xl text-xs font-bold transition-all border cursor-pointer"
-            style={{
-              background: 'var(--bg-surface)',
-              borderColor: 'var(--border-subtle)',
-              color: 'var(--text-muted)',
-            }}
+            className="py-3 px-4 rounded-xl text-xs font-bold transition-all border border-slate-800 bg-slate-950/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800 cursor-pointer"
           >
-            แก้ไข / เปลี่ยนไฟล์
+            ແກ້ໄຂ / ປ່ຽນຟາຍ
           </button>
         </div>
       </div>

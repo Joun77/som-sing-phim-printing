@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="th" class="h-full bg-zinc-950 text-zinc-100 selection:bg-brand-500 selection:text-zinc-950">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Paper & Material Guide - Som Sing Phim Printing</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Alpine.js for Minimal Reactive UI & Dropdowns -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- Google Fonts: Prompt & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Prompt', 'Inter', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#fdfbf7',
+              100: '#f7f1e7',
+              200: '#eddcb5',
+              500: '#d9a74a',
+              600: '#b88330',
+              900: '#1c160e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #09090b;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #27272a;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3f3f46;
+    }
+
+    /* CSS Simulated Paper Textures */
+    .texture-artcard {
+      background: linear-gradient(135deg, #ffffff 0%, #e4e4e7 100%);
+      box-shadow: inset 0 0 12px rgba(255,255,255,0.9);
+    }
+    .texture-glossy {
+      background: linear-gradient(135deg, #ffffff 0%, #d4d4d8 50%, #ffffff 100%);
+      position: relative;
+    }
+    .texture-glossy::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(45deg, transparent 35%, rgba(255,255,255,0.8) 50%, transparent 65%);
+      pointer-events: none;
+    }
+    .texture-matte {
+      background: #f4f4f5;
+      box-shadow: inset 0 0 8px rgba(0,0,0,0.05);
+    }
+    .texture-woodfree {
+      background: #fafaf9;
+      background-image: radial-gradient(#d6d3d1 0.75px, transparent 0.75px);
+      background-size: 8px 8px;
+    }
+    .texture-kraft {
+      background: #c89552;
+      background-image: radial-gradient(#a37237 1px, transparent 1px), radial-gradient(#d8a86a 1px, #c89552 1px);
+      background-size: 10px 10px;
+      background-position: 0 0, 5px 5px;
+    }
+    .texture-velvet {
+      background: linear-gradient(135deg, #27272a 0%, #09090b 100%);
+      box-shadow: inset 0 0 25px rgba(0,0,0,0.8);
+    }
+    .texture-linen {
+      background: #f8fafc;
+      background-image: repeating-linear-gradient(0deg, #cbd5e1, #cbd5e1 1px, transparent 1px, transparent 4px),
+                        repeating-linear-gradient(90deg, #cbd5e1, #cbd5e1 1px, transparent 1px, transparent 4px);
+    }
+    .texture-pearl {
+      background: linear-gradient(135deg, #fef3c7 0%, #fde047 25%, #f472b6 50%, #38bdf8 75%, #fef3c7 100%);
+      opacity: 0.9;
+    }
+    .texture-sticker {
+      background: linear-gradient(135deg, #ffffff 0%, #e2e8f0 100%);
+      border: 2px dashed #94a3b8;
+    }
+  </style>
+</head>
+
+<body 
+  class="h-full font-sans antialiased text-zinc-100 bg-zinc-950"
+  x-data="paperGuideSidebarApp()"
+  x-init="initApp()"
+>
+
+  <!-- Global App Layout with Left Sidebar -->
+  <div class="flex h-screen overflow-hidden">
+
+    <!-- LEFT SIDEBAR NAVIGATION -->
+    <aside 
+      :class="isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
+      class="fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-zinc-800/80 bg-zinc-950 transition-transform duration-300 ease-in-out lg:static lg:z-auto"
+    >
+      <!-- Sidebar Header / Logo -->
+      <div class="flex h-16 items-center justify-between border-b border-zinc-800/80 px-5">
+        <a href="#" @click="resetToAll()" class="flex items-center gap-3">
+          <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500 text-zinc-950 shadow-md shadow-brand-500/10">
+            <i data-lucide="layers" class="h-5 w-5"></i>
+          </div>
+          <div>
+            <span class="block text-[10px] font-bold tracking-widest text-brand-500 uppercase">Som Sing Phim</span>
+            <span class="block text-xs font-semibold text-zinc-100">Paper & Spec Guide</span>
+          </div>
+        </a>
+
+        <!-- Mobile Close Button -->
+        <button 
+          @click="isMobileMenuOpen = false" 
+          class="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-white lg:hidden"
+        >
+          <i data-lucide="x" class="h-5 w-5"></i>
+        </button>
+      </div>
+
+      <!-- Sidebar Navigation Links with Dropdowns -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-6">
+        
+        <!-- Search Box inside Sidebar -->
+        <div class="relative">
+          <i data-lucide="search" class="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"></i>
+          <input 
+            type="text" 
+            x-model="searchQuery" 
+            @input="selectedPaperId = null; activeTab = 'catalog'"
+            placeholder="ค้นหากระดาษ, GSM..." 
+            class="w-full rounded-xl border border-zinc-800 bg-zinc-900/90 pl-8 pr-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 outline-none transition focus:border-brand-500"
+          />
+        </div>
+
+        <!-- MENU GROUP 1: PAPERS & MATERIALS (ACCORDION DROPDOWNS) -->
+        <div class="space-y-1">
+          <div class="px-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500 mb-2">
+            หมวดหมู่กระดาษ (Paper Types)
+          </div>
+
+          <!-- All Papers Button -->
+          <button 
+            @click="selectedCategory = 'all'; selectedPaperId = null; activeTab = 'catalog'"
+            :class="selectedCategory === 'all' && !selectedPaperId ? 'bg-zinc-800/90 text-brand-500 font-semibold border-l-2 border-brand-500' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/60'"
+            class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs transition"
+          >
+            <span class="flex items-center gap-2.5">
+              <i data-lucide="files" class="h-4 w-4"></i>
+              <span>กระดาษทั้งหมด</span>
+            </span>
+            <span class="rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-500" x-text="paperList.length"></span>
+          </button>
+
+          <!-- CATEGORY 1: ART PAPER (ACCORDION) -->
+          <div class="space-y-0.5" x-data="{ open: true }">
+            <button 
+              @click="open = !open; selectedCategory = 'art'; selectedPaperId = null; activeTab = 'catalog'"
+              class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-medium text-zinc-300 hover:bg-zinc-900 transition"
+            >
+              <span class="flex items-center gap-2.5">
+                <i data-lucide="file-image" class="h-4 w-4 text-amber-400"></i>
+                <span>กระดาษอาร์ต (Art Paper)</span>
+              </span>
+              <i data-lucide="chevron-down" class="h-3.5 w-3.5 text-zinc-500 transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>
+            </button>
+
+            <!-- Dropdown Sub-Items -->
+            <div x-show="open" x-collapse class="pl-7 pr-2 space-y-1 pt-1 pb-2">
+              <template x-for="paper in getPapersByCategory('art')" :key="paper.id">
+                <button 
+                  @click="selectPaper(paper)"
+                  :class="selectedPaperId === paper.id ? 'bg-brand-500/10 text-brand-400 font-medium border-l-2 border-brand-500' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50'"
+                  class="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition text-left"
+                >
+                  <span class="truncate" x-text="paper.name"></span>
+                  <span class="text-[10px] text-zinc-500 ml-1" x-text="paper.gsm + 'g'"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <!-- CATEGORY 2: WOODFREE / BOND (ACCORDION) -->
+          <div class="space-y-0.5" x-data="{ open: false }">
+            <button 
+              @click="open = !open; selectedCategory = 'uncoated'; selectedPaperId = null; activeTab = 'catalog'"
+              class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-medium text-zinc-300 hover:bg-zinc-900 transition"
+            >
+              <span class="flex items-center gap-2.5">
+                <i data-lucide="file-text" class="h-4 w-4 text-blue-400"></i>
+                <span>กระดาษปอนด์ / A4 (Woodfree)</span>
+              </span>
+              <i data-lucide="chevron-down" class="h-3.5 w-3.5 text-zinc-500 transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>
+            </button>
+
+            <div x-show="open" x-collapse class="pl-7 pr-2 space-y-1 pt-1 pb-2">
+              <template x-for="paper in getPapersByCategory('uncoated')" :key="paper.id">
+                <button 
+                  @click="selectPaper(paper)"
+                  :class="selectedPaperId === paper.id ? 'bg-brand-500/10 text-brand-400 font-medium border-l-2 border-brand-500' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50'"
+                  class="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition text-left"
+                >
+                  <span class="truncate" x-text="paper.name"></span>
+                  <span class="text-[10px] text-zinc-500 ml-1" x-text="paper.gsm + 'g'"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <!-- CATEGORY 3: KRAFT (ACCORDION) -->
+          <div class="space-y-0.5" x-data="{ open: false }">
+            <button 
+              @click="open = !open; selectedCategory = 'kraft'; selectedPaperId = null; activeTab = 'catalog'"
+              class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-medium text-zinc-300 hover:bg-zinc-900 transition"
+            >
+              <span class="flex items-center gap-2.5">
+                <i data-lucide="leaf" class="h-4 w-4 text-emerald-400"></i>
+                <span>กระดาษคราฟท์ (Kraft Vintage)</span>
+              </span>
+              <i data-lucide="chevron-down" class="h-3.5 w-3.5 text-zinc-500 transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>
+            </button>
+
+            <div x-show="open" x-collapse class="pl-7 pr-2 space-y-1 pt-1 pb-2">
+              <template x-for="paper in getPapersByCategory('kraft')" :key="paper.id">
+                <button 
+                  @click="selectPaper(paper)"
+                  :class="selectedPaperId === paper.id ? 'bg-brand-500/10 text-brand-400 font-medium border-l-2 border-brand-500' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50'"
+                  class="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition text-left"
+                >
+                  <span class="truncate" x-text="paper.name"></span>
+                  <span class="text-[10px] text-zinc-500 ml-1" x-text="paper.gsm + 'g'"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <!-- CATEGORY 4: SPECIALTY CARD (ACCORDION) -->
+          <div class="space-y-0.5" x-data="{ open: false }">
+            <button 
+              @click="open = !open; selectedCategory = 'specialty'; selectedPaperId = null; activeTab = 'catalog'"
+              class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-medium text-zinc-300 hover:bg-zinc-900 transition"
+            >
+              <span class="flex items-center gap-2.5">
+                <i data-lucide="sparkles" class="h-4 w-4 text-purple-400"></i>
+                <span>กระดาษพิเศษ / การ์ดหรู</span>
+              </span>
+              <i data-lucide="chevron-down" class="h-3.5 w-3.5 text-zinc-500 transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>
+            </button>
+
+            <div x-show="open" x-collapse class="pl-7 pr-2 space-y-1 pt-1 pb-2">
+              <template x-for="paper in getPapersByCategory('specialty')" :key="paper.id">
+                <button 
+                  @click="selectPaper(paper)"
+                  :class="selectedPaperId === paper.id ? 'bg-brand-500/10 text-brand-400 font-medium border-l-2 border-brand-500' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50'"
+                  class="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition text-left"
+                >
+                  <span class="truncate" x-text="paper.name"></span>
+                  <span class="text-[10px] text-zinc-500 ml-1" x-text="paper.gsm + 'g'"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <!-- CATEGORY 5: STICKER (ACCORDION) -->
+          <div class="space-y-0.5" x-data="{ open: false }">
+            <button 
+              @click="open = !open; selectedCategory = 'sticker'; selectedPaperId = null; activeTab = 'catalog'"
+              class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-medium text-zinc-300 hover:bg-zinc-900 transition"
+            >
+              <span class="flex items-center gap-2.5">
+                <i data-lucide="tag" class="h-4 w-4 text-rose-400"></i>
+                <span>สติกเกอร์ / ฉลากสินค้า</span>
+              </span>
+              <i data-lucide="chevron-down" class="h-3.5 w-3.5 text-zinc-500 transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>
+            </button>
+
+            <div x-show="open" x-collapse class="pl-7 pr-2 space-y-1 pt-1 pb-2">
+              <template x-for="paper in getPapersByCategory('sticker')" :key="paper.id">
+                <button 
+                  @click="selectPaper(paper)"
+                  :class="selectedPaperId === paper.id ? 'bg-brand-500/10 text-brand-400 font-medium border-l-2 border-brand-500' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50'"
+                  class="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition text-left"
+                >
+                  <span class="truncate" x-text="paper.name"></span>
+                  <span class="text-[10px] text-zinc-500 ml-1" x-text="paper.gsm + 'g'"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- MENU GROUP 2: TOOLS & FINISHING KNOWLEDGE -->
+        <div class="space-y-1 pt-2 border-t border-zinc-900">
+          <div class="px-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500 mb-2">
+            เครื่องมือ & คลังความรู้
+          </div>
+
+          <button 
+            @click="activeTab = 'finishing'; selectedPaperId = null"
+            :class="activeTab === 'finishing' ? 'bg-zinc-800 text-brand-500 font-semibold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'"
+            class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs transition"
+          >
+            <i data-lucide="scissors" class="h-4 w-4 text-zinc-400"></i>
+            <span>เทคนิคการเคลือบ & พับ</span>
+          </button>
+
+          <button 
+            @click="activeTab = 'simulator'; selectedPaperId = null"
+            :class="activeTab === 'simulator' ? 'bg-zinc-800 text-brand-500 font-semibold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'"
+            class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs transition"
+          >
+            <i data-lucide="sliders" class="h-4 w-4 text-zinc-400"></i>
+            <span>ทดลองแกรม (GSM Simulator)</span>
+          </button>
+
+          <button 
+            @click="activeTab = 'matrix'; selectedPaperId = null"
+            :class="activeTab === 'matrix' ? 'bg-zinc-800 text-brand-500 font-semibold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'"
+            class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs transition"
+          >
+            <i data-lucide="table" class="h-4 w-4 text-zinc-400"></i>
+            <span>ตารางเปรียบเทียบสเปก</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Sidebar Footer -->
+      <div class="border-t border-zinc-800/80 p-4 text-[11px] text-zinc-500">
+        <p>&copy; 2026 Som Sing Phim</p>
+        <p class="text-[10px] text-zinc-600 mt-0.5">Interactive Material Discovery</p>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA (RIGHT SIDE) -->
+    <div class="flex flex-1 flex-col overflow-hidden bg-zinc-950">
+      
+      <!-- Top Navbar Header -->
+      <header class="flex h-16 items-center justify-between border-b border-zinc-800/80 bg-zinc-950/90 px-4 sm:px-6 backdrop-blur-md">
+        <div class="flex items-center gap-3">
+          <!-- Mobile Toggle Hamburger -->
+          <button 
+            @click="isMobileMenuOpen = true" 
+            class="rounded-xl border border-zinc-800 p-2 text-zinc-400 hover:bg-zinc-900 hover:text-white lg:hidden"
+          >
+            <i data-lucide="menu" class="h-5 w-5"></i>
+          </button>
+
+          <!-- Breadcrumb Title -->
+          <div class="flex items-center gap-2 text-xs sm:text-sm">
+            <span class="text-zinc-500 hidden sm:inline">คู่มือกระดาษ</span>
+            <i data-lucide="chevron-right" class="h-4 w-4 text-zinc-600 hidden sm:inline"></i>
+            <span class="font-semibold text-zinc-100" x-text="getCurrentBreadcrumb()"></span>
+          </div>
+        </div>
+
+        <!-- Quick Top Actions -->
+        <div class="flex items-center gap-3">
+          <button 
+            @click="openCompareModal()"
+            class="relative flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-brand-500 hover:text-white"
+          >
+            <i data-lucide="columns" class="h-4 w-4 text-brand-500"></i>
+            <span class="hidden sm:inline">เปรียบเทียบ</span>
+            <span 
+              x-show="compareList.length > 0" 
+              class="flex h-4.5 w-4.5 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-zinc-950"
+              x-text="compareList.length"
+            ></span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Scrollable Content Panel -->
+      <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-8">
+
+        <!-- VIEW 1: SINGLE SELECTED PAPER SPEC DETAIL (When user clicks a specific item from sidebar) -->
+        <template x-if="selectedPaper">
+          <div class="space-y-6">
+            
+            <!-- Back Button -->
+            <button 
+              @click="selectedPaperId = null" 
+              class="inline-flex items-center gap-2 rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-1.5 text-xs text-zinc-400 hover:text-white transition"
+            >
+              <i data-lucide="arrow-left" class="h-4 w-4"></i>
+              <span>กลับไปดูรายการทั้งหมด</span>
+            </button>
+
+            <!-- Detailed Spec Banner Card -->
+            <div class="overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/90 shadow-2xl">
+              
+              <div class="p-6 sm:p-8 space-y-6">
+                <!-- Header Info -->
+                <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-zinc-800 pb-6">
+                  <div>
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="rounded-md bg-brand-500/10 border border-brand-500/20 px-2.5 py-0.5 text-[10px] font-semibold text-brand-400 uppercase" x-text="selectedPaper.categoryName"></span>
+                      <span class="text-xs text-zinc-500" x-text="'รหัส: #' + selectedPaper.id"></span>
+                    </div>
+                    <h2 class="text-2xl font-bold text-white sm:text-3xl" x-text="selectedPaper.name"></h2>
+                  </div>
+
+                  <div class="flex items-center gap-3">
+                    <span class="rounded-2xl bg-zinc-950 px-4 py-2 text-base font-extrabold text-brand-500 border border-zinc-800" x-text="selectedPaper.gsm + ' GSM'"></span>
+                    <button 
+                      @click="toggleCompare(selectedPaper.id)"
+                      :class="isInCompare(selectedPaper.id) ? 'bg-brand-500 text-zinc-950 border-brand-500' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white'"
+                      class="flex items-center gap-2 rounded-2xl border px-3.5 py-2 text-xs font-medium transition"
+                    >
+                      <i data-lucide="columns" class="h-4 w-4"></i>
+                      <span x-text="isInCompare(selectedPaper.id) ? 'อยู่ในรายการเปรียบเทียบ' : '+ เพิ่มในการเปรียบเทียบ'"></span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Simulated Texture Large Banner -->
+                <div 
+                  class="relative h-44 w-full overflow-hidden rounded-2xl border border-zinc-700/60 p-5 flex flex-col justify-between shadow-inner"
+                  :class="selectedPaper.textureClass"
+                >
+                  <div class="flex justify-between items-start">
+                    <span class="rounded-lg bg-zinc-950/80 backdrop-blur-md px-3 py-1 text-xs font-semibold text-zinc-100 border border-zinc-800">
+                      ผิวสัมผัสจำลอง (Simulated Texture)
+                    </span>
+                  </div>
+
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <span class="rounded-lg bg-zinc-950/80 backdrop-blur-md px-3 py-1 text-xs text-zinc-300 border border-zinc-800">
+                      ลักษณะผิว: <strong class="text-white ml-1" x-text="selectedPaper.finish"></strong>
+                    </span>
+                    <span class="rounded-lg bg-zinc-950/80 backdrop-blur-md px-3 py-1 text-xs text-brand-400 font-semibold border border-zinc-800">
+                      ระดับความแข็งแรง: <span x-text="getThicknessLabel(selectedPaper.gsm)"></span>
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Technical Specification Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                  
+                  <div class="space-y-4">
+                    <div>
+                      <h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-1">คำอธิบายและลักษณะเนื้อกระดาษ</h4>
+                      <p class="text-sm text-zinc-300 leading-relaxed" x-text="selectedPaper.description"></p>
+                    </div>
+
+                    <div class="rounded-2xl bg-emerald-950/20 border border-emerald-500/20 p-4 space-y-1.5">
+                      <div class="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                        <i data-lucide="check-circle" class="h-4 w-4"></i>
+                        <span>จุดเด่นสำคัญ</span>
+                      </div>
+                      <p class="text-xs text-zinc-300 leading-relaxed" x-text="selectedPaper.pros"></p>
+                    </div>
+
+                    <div class="rounded-2xl bg-amber-950/20 border border-amber-500/20 p-4 space-y-1.5">
+                      <div class="flex items-center gap-1.5 text-xs font-bold text-amber-400">
+                        <i data-lucide="alert-triangle" class="h-4 w-4"></i>
+                        <span>ข้อควรระวัง / เทคนิคการพิมพ์</span>
+                      </div>
+                      <p class="text-xs text-zinc-300 leading-relaxed" x-text="selectedPaper.cons || 'ไม่มีข้อจำกัดพิเศษในการพิมพ์'"></p>
+                    </div>
+                  </div>
+
+                  <div class="space-y-4">
+                    <div class="rounded-2xl bg-zinc-950 p-5 border border-zinc-800 space-y-3">
+                      <h4 class="text-xs font-semibold uppercase tracking-wider text-brand-500">การรองรับงานหลังพิมพ์ (Finishing)</h4>
+                      <p class="text-xs text-zinc-300 leading-relaxed" x-text="selectedPaper.finishingCompat"></p>
+                    </div>
+
+                    <div class="rounded-2xl bg-zinc-950 p-5 border border-zinc-800 space-y-3">
+                      <h4 class="text-xs font-semibold uppercase tracking-wider text-brand-500">ประเภทชิ้นงานที่เหมาะสมที่สุด</h4>
+                      <div class="flex flex-wrap gap-2">
+                        <template x-for="use in selectedPaper.suitableFor" :key="use">
+                          <span class="rounded-xl bg-zinc-900 border border-zinc-700/80 px-3 py-1.5 text-xs font-medium text-zinc-200" x-text="use"></span>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+        </template>
+
+        <!-- VIEW 2: CATALOG GRID VIEW (When viewing category or all papers) -->
+        <template x-if="!selectedPaperId && activeTab === 'catalog'">
+          <div class="space-y-6">
+            
+            <!-- Quick Preset Job Filter Pills -->
+            <div class="space-y-2 border-b border-zinc-800/80 pb-5">
+              <span class="text-xs font-medium text-zinc-500 uppercase tracking-wider">ตัวเลือกด่วนตามประเภทงานที่คุณต้องการพิมพ์:</span>
+              <div class="flex flex-wrap items-center gap-2">
+                <template x-for="preset in productPresets" :key="preset.id">
+                  <button 
+                    @click="applyPreset(preset)"
+                    :class="selectedPreset === preset.id 
+                      ? 'bg-brand-500 text-zinc-950 border-brand-500 font-bold shadow-md shadow-brand-500/10' 
+                      : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800'"
+                    class="flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs transition active:scale-95"
+                  >
+                    <i :data-lucide="preset.icon" class="h-3.5 w-3.5"></i>
+                    <span x-text="preset.name"></span>
+                  </button>
+                </template>
+                <button 
+                  x-show="selectedPreset !== 'all' || selectedCategory !== 'all' || searchQuery"
+                  @click="resetFilters()" 
+                  class="text-xs text-zinc-500 hover:text-zinc-300 underline px-2 py-1"
+                >
+                  ล้างตัวกรองทั้งหมด
+                </button>
+              </div>
+            </div>
+
+            <!-- Paper Cards Grid -->
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <template x-for="paper in filteredPapers" :key="paper.id">
+                <div class="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/90 p-5 transition duration-300 hover:-translate-y-1 hover:border-zinc-700 hover:shadow-2xl">
+                  
+                  <div>
+                    <!-- Texture Header -->
+                    <div 
+                      class="relative mb-4 h-28 w-full overflow-hidden rounded-xl border border-zinc-700/50 p-3 transition group-hover:scale-[1.01]"
+                      :class="paper.textureClass"
+                    >
+                      <div class="flex justify-between items-start">
+                        <span 
+                          class="inline-block rounded-md bg-zinc-950/80 backdrop-blur-md px-2.5 py-1 text-[10px] font-medium text-zinc-200 border border-zinc-800"
+                          x-text="paper.categoryName"
+                        ></span>
+                        
+                        <span class="rounded-lg bg-zinc-950 px-2.5 py-1 text-xs font-bold text-brand-500 border border-zinc-800">
+                          <span x-text="paper.gsm"></span> GSM
+                        </span>
+                      </div>
+
+                      <div class="absolute bottom-2.5 left-3 flex items-center gap-1.5 rounded-md bg-zinc-950/80 backdrop-blur-md px-2 py-0.5 text-[10px] text-zinc-300">
+                        <i data-lucide="sparkles" class="h-3 w-3 text-brand-500"></i>
+                        <span x-text="paper.finish"></span>
+                      </div>
+                    </div>
+
+                    <!-- Title & Tag -->
+                    <h3 
+                      @click="selectPaper(paper)"
+                      class="text-base font-semibold text-white group-hover:text-brand-500 cursor-pointer transition" 
+                      x-text="paper.name"
+                    ></h3>
+                    <p class="mt-1 text-xs text-zinc-400 leading-relaxed line-clamp-2" x-text="paper.description"></p>
+
+                    <!-- Rigidity Bar -->
+                    <div class="my-4 space-y-1 rounded-xl bg-zinc-950/60 p-3 border border-zinc-800/60">
+                      <div class="flex justify-between text-[11px]">
+                        <span class="text-zinc-500">ความแข็งแรง / ความหนาแน่น</span>
+                        <span class="font-medium text-brand-500" x-text="getThicknessLabel(paper.gsm)"></span>
+                      </div>
+                      <div class="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+                        <div 
+                          class="h-full rounded-full bg-gradient-to-r from-amber-600 to-brand-500 transition-all duration-500"
+                          :style="'width: ' + Math.min((paper.gsm / 400) * 100, 100) + '%'"
+                        ></div>
+                      </div>
+                    </div>
+
+                    <!-- Advantages -->
+                    <div class="space-y-1">
+                      <div class="flex items-center gap-1.5 text-xs font-medium text-zinc-300">
+                        <i data-lucide="check-circle-2" class="h-3.5 w-3.5 text-emerald-400"></i>
+                        <span>จุดเด่นสำคัญ</span>
+                      </div>
+                      <p class="text-xs text-zinc-400 leading-normal line-clamp-2" x-text="paper.pros"></p>
+                    </div>
+                  </div>
+
+                  <!-- Footer Actions -->
+                  <div class="mt-5 pt-4 border-t border-zinc-800/80 space-y-3">
+                    
+                    <div class="flex flex-wrap gap-1">
+                      <template x-for="use in paper.suitableFor.slice(0, 3)" :key="use">
+                        <span class="rounded-md bg-zinc-800/80 px-2 py-0.5 text-[10px] text-zinc-300" x-text="use"></span>
+                      </template>
+                      <span x-show="paper.suitableFor.length > 3" class="text-[10px] text-zinc-500 self-center" x-text="'+' + (paper.suitableFor.length - 3)"></span>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                      <button 
+                        @click="selectPaper(paper)"
+                        class="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800/80 py-2 text-xs font-medium text-zinc-200 transition hover:bg-zinc-700 hover:text-white"
+                      >
+                        <i data-lucide="info" class="h-3.5 w-3.5 text-brand-500"></i>
+                        <span>ดูสเปกอย่างละเอียด</span>
+                      </button>
+
+                      <button 
+                        @click="toggleCompare(paper.id)"
+                        :class="isInCompare(paper.id) ? 'bg-brand-500 text-zinc-950 border-brand-500' : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-white'"
+                        class="flex items-center justify-center rounded-xl border p-2 transition"
+                        :title="isInCompare(paper.id) ? 'นำออกจากตารางเปรียบเทียบ' : 'เพิ่มในตารางเปรียบเทียบ'"
+                      >
+                        <i data-lucide="columns" class="h-4 w-4"></i>
+                      </button>
+                    </div>
+
+                  </div>
+
+                </div>
+              </template>
+            </div>
+
+            <!-- Empty Filter State -->
+            <div x-show="filteredPapers.length === 0" class="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/50 p-12 text-center">
+              <i data-lucide="file-x" class="mx-auto h-12 w-12 text-zinc-600"></i>
+              <h3 class="mt-3 text-sm font-semibold text-zinc-300">ไม่พบกระดาษที่ตรงตามเงื่อนไข</h3>
+              <p class="mt-1 text-xs text-zinc-500">ลองเลือกหมวดหมู่อื่นจากแถบเมนูด้านซ้าย หรือล้างคำค้นหา</p>
+              <button @click="resetFilters()" class="mt-4 rounded-xl bg-brand-500 px-4 py-2 text-xs font-semibold text-zinc-950 transition hover:bg-brand-600">
+                ล้างตัวกรองทั้งหมด
+              </button>
+            </div>
+
+          </div>
+        </template>
+
+        <!-- VIEW 3: GSM SIMULATOR -->
+        <template x-if="!selectedPaperId && activeTab === 'simulator'">
+          <div class="rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 p-6 sm:p-10 shadow-2xl space-y-8">
+            <div class="space-y-2">
+              <div class="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 px-3 py-1 text-xs font-medium text-amber-400">
+                <i data-lucide="sliders" class="h-3.5 w-3.5"></i>
+                Interactive GSM Simulator
+              </div>
+              <h3 class="text-2xl font-bold text-white">ทดลองปรับระดับน้ำหนักแกรม (GSM)</h3>
+              <p class="text-xs text-zinc-400 leading-relaxed sm:text-sm max-w-2xl">
+                GSM (Gram per Square Meter) คือน้ำหนักของกระดาษต่อตารางเมตร ยิ่งแกรมสูง กระดาษจะยิ่งหนาและแข็งแรงมากขึ้น ลากแถบสไลเดอร์เพื่อดูชิ้นงานที่เหมาะสม
+              </p>
+            </div>
+
+            <!-- Slider Box -->
+            <div class="rounded-2xl border border-zinc-800 bg-zinc-950 p-6 sm:p-8 space-y-6">
+              
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-zinc-400">ระดับแกรมปัจจุบัน:</span>
+                <span class="text-3xl font-extrabold text-brand-500" x-text="gsmSimValue + ' GSM'"></span>
+              </div>
+
+              <input 
+                type="range" 
+                min="70" 
+                max="400" 
+                step="10" 
+                x-model.number="gsmSimValue"
+                class="w-full h-2.5 rounded-lg bg-zinc-800 appearance-none cursor-pointer accent-brand-500"
+              />
+
+              <div class="flex justify-between text-[10px] sm:text-xs text-zinc-500 font-medium">
+                <span>70 GSM (บางเบา)</span>
+                <span>130 GSM (มาตรฐาน)</span>
+                <span>250 GSM (หนากลาง)</span>
+                <span>350+ GSM (การ์ดหนา)</span>
+              </div>
+
+              <!-- Result Recommendation Card -->
+              <div class="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 space-y-3">
+                <div class="flex items-center justify-between text-xs">
+                  <span class="font-medium text-zinc-400">สัมผัสและการนำไปใช้งาน:</span>
+                  <span class="text-brand-500 font-bold" x-text="simulatedRecommendation.category"></span>
+                </div>
+                <p class="text-xs text-zinc-300 leading-relaxed" x-text="simulatedRecommendation.feelDescription"></p>
+                <div class="flex flex-wrap gap-2 pt-2">
+                  <template x-for="item in simulatedRecommendation.recommendedItems" :key="item">
+                    <span class="rounded-lg bg-brand-500/10 border border-brand-500/20 px-3 py-1 text-xs font-medium text-brand-400" x-text="item"></span>
+                  </template>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </template>
+
+        <!-- VIEW 4: COMPARISON MATRIX TABLE -->
+        <template x-if="!selectedPaperId && activeTab === 'matrix'">
+          <div class="space-y-6">
+            <div>
+              <h3 class="text-xl font-bold text-white">ตารางเปรียบเทียบสเปกกระดาษทั้งหมด</h3>
+              <p class="text-xs text-zinc-400">เปรียบเทียบสเปก การเคลือบผิว การใช้งาน และข้อแนะนำแบบเคียงข้างกัน</p>
+            </div>
+
+            <div class="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-sm">
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-zinc-950 text-zinc-400 border-b border-zinc-800 font-semibold uppercase tracking-wider">
+                    <tr>
+                      <th class="px-5 py-4">ชนิดกระดาษ</th>
+                      <th class="px-5 py-4">หมวดหมู่</th>
+                      <th class="px-5 py-4">ความหนา (GSM)</th>
+                      <th class="px-5 py-4">ผิวสัมผัส</th>
+                      <th class="px-5 py-4">งานพิมพ์ที่เหมาะสม</th>
+                      <th class="px-5 py-4">การเคลือบผิว (Finishing)</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-zinc-800/60 text-zinc-300">
+                    <template x-for="paper in paperList" :key="paper.id">
+                      <tr 
+                        @click="selectPaper(paper)" 
+                        class="hover:bg-zinc-800/50 cursor-pointer transition"
+                      >
+                        <td class="px-5 py-3.5 font-medium text-white" x-text="paper.name"></td>
+                        <td class="px-5 py-3.5 text-zinc-400" x-text="paper.categoryName"></td>
+                        <td class="px-5 py-3.5">
+                          <span class="inline-block rounded-md bg-zinc-950 px-2 py-0.5 font-bold text-brand-500 border border-zinc-800" x-text="paper.gsm + ' GSM'"></span>
+                        </td>
+                        <td class="px-5 py-3.5 text-zinc-400" x-text="paper.finish"></td>
+                        <td class="px-5 py-3.5">
+                          <div class="flex flex-wrap gap-1">
+                            <template x-for="use in paper.suitableFor" :key="use">
+                              <span class="rounded bg-zinc-950 border border-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400" x-text="use"></span>
+                            </template>
+                          </div>
+                        </td>
+                        <td class="px-5 py-3.5 text-zinc-400" x-text="paper.finishingCompat"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- VIEW 5: FINISHING KNOWLEDGE GUIDE -->
+        <template x-if="!selectedPaperId && activeTab === 'finishing'">
+          <div class="space-y-6">
+            <div class="border-b border-zinc-800 pb-4">
+              <h3 class="text-xl font-bold text-white">เทคนิคการเคลือบผิวและการแปรรูปหลังพิมพ์ (Finishing Guide)</h3>
+              <p class="text-xs text-zinc-400">เกร็ดความรู้ในการเลือกฟิล์มเคลือบ การปั๊มนูน/ปั๊มทอง และการกดรอยพับ</p>
+            </div>
+
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+              
+              <!-- Finishing Card 1 -->
+              <div class="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 space-y-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
+                  <i data-lucide="layers" class="h-5 w-5"></i>
+                </div>
+                <h4 class="text-base font-semibold text-white">PVC เงา vs ด้าน vs Soft-Touch</h4>
+                <p class="text-xs text-zinc-400 leading-relaxed">
+                  <strong>PVC เงา (Gloss)</strong> ดึงสีสันให้สดใสสะท้อนแสง <br />
+                  <strong>PVC ด้าน (Matte)</strong> ลุคเรียบหรู ลดแสงสะท้อน <br />
+                  <strong>Soft-Touch (กำมะหยี่)</strong> สัมผัสนุ่มนวลระดับพรีเมียม นิยมใช้ร่วมกับ Spot UV หรือ Stamp Gold
+                </p>
+              </div>
+
+              <!-- Finishing Card 2 -->
+              <div class="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 space-y-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
+                  <i data-lucide="scissors" class="h-5 w-5"></i>
+                </div>
+                <h4 class="text-base font-semibold text-white">รอยพับแตกแก้ไขด้วยการ Creasing</h4>
+                <p class="text-xs text-zinc-400 leading-relaxed">
+                  กระดาษที่มีความหนาตั้งแต่ 200 GSM ขึ้นไป หากพับทันที สันพับจะเกิดรอยแตกของเนื้อกระดาษ การกดรอยพับ (Creasing Line) ก่อนจะช่วยให้สันพับคมสวยงาม ไม่เสียหาย
+                </p>
+              </div>
+
+              <!-- Finishing Card 3 -->
+              <div class="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 space-y-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
+                  <i data-lucide="droplet" class="h-5 w-5"></i>
+                </div>
+                <h4 class="text-base font-semibold text-white">Coated vs Uncoated กับการซึมหมึก</h4>
+                <p class="text-xs text-zinc-400 leading-relaxed">
+                  <strong>Coated (กระดาษอาร์ต)</strong> หมึกไม่ซึมลงเนื้อกระดาษ สีสด คมชัด <br />
+                  <strong>Uncoated (กระดาษปอนด์/คราฟท์)</strong> หมึกซึมลงเนื้อกระดาษ สีนุ่มตา อ่านสบายตา และปั๊มตรา/เขียนทับได้ง่าย
+                </p>
+              </div>
+
+            </div>
+          </div>
+        </template>
+
+      </main>
+
+    </div>
+
+    <!-- COMPARISON MODAL (SIDE-BY-SIDE) -->
+    <div 
+      x-show="isCompareModalOpen" 
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style="display: none;"
+    >
+      <div @click="isCompareModalOpen = false" class="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm"></div>
+
+      <div class="relative w-full max-w-4xl rounded-3xl bg-zinc-900 p-6 sm:p-8 shadow-2xl border border-zinc-800 z-10 space-y-6 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between border-b border-zinc-800 pb-4">
+          <div>
+            <h3 class="text-lg font-bold text-white">เปรียบเทียบกระดาษแบบเทียบเคียง (Side-by-Side)</h3>
+            <p class="text-xs text-zinc-400">เปรียบเทียบสเปกกระดาษที่คุณเลือกไว้เพื่อการตัดสินใจที่แม่นยำ</p>
+          </div>
+          <button @click="isCompareModalOpen = false" class="rounded-xl p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white">
+            <i data-lucide="x" class="h-5 w-5"></i>
+          </button>
+        </div>
+
+        <template x-if="compareItems.length > 0">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <template x-for="paper in compareItems" :key="paper.id">
+              <div class="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 space-y-3 relative">
+                <button 
+                  @click="toggleCompare(paper.id)" 
+                  class="absolute top-3 right-3 text-zinc-500 hover:text-red-400"
+                  title="ลบออก"
+                >
+                  <i data-lucide="x" class="h-4 w-4"></i>
+                </button>
+
+                <span class="text-[10px] font-semibold uppercase text-brand-500" x-text="paper.categoryName"></span>
+                <h4 class="text-sm font-bold text-white" x-text="paper.name"></h4>
+                
+                <div class="space-y-2 text-xs border-t border-zinc-800/80 pt-3">
+                  <div>
+                    <span class="text-zinc-500">GSM:</span>
+                    <span class="font-bold text-brand-500 ml-1" x-text="paper.gsm"></span>
+                  </div>
+                  <div>
+                    <span class="text-zinc-500">ผิวสัมผัส:</span>
+                    <span class="text-zinc-200 ml-1" x-text="paper.finish"></span>
+                  </div>
+                  <div>
+                    <span class="text-zinc-500">จุดเด่น:</span>
+                    <p class="text-zinc-300 mt-0.5" x-text="paper.pros"></p>
+                  </div>
+                  <div>
+                    <span class="text-zinc-500">การเคลือบ:</span>
+                    <p class="text-zinc-300 mt-0.5" x-text="paper.finishingCompat"></p>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <template x-if="compareItems.length === 0">
+          <div class="py-12 text-center text-zinc-500 text-xs">
+            ยังไม่มีรายการกระดาษที่ถูกเลือก กรุณากดปุ่ม <i data-lucide="columns" class="inline h-3.5 w-3.5 text-brand-500"></i> บนการ์ดกระดาษเพื่อเพิ่มในการเปรียบเทียบ
+          </div>
+        </template>
+
+        <div class="flex justify-between items-center border-t border-zinc-800 pt-4">
+          <button 
+            x-show="compareList.length > 0" 
+            @click="compareList = []" 
+            class="text-xs text-red-400 hover:underline"
+          >
+            ล้างรายการเปรียบเทียบทั้งหมด
+          </button>
+          <button 
+            @click="isCompareModalOpen = false" 
+            class="ml-auto rounded-xl bg-zinc-800 px-5 py-2 text-xs font-medium text-white hover:bg-zinc-700"
+          >
+            ปิดหน้าต่าง
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function paperGuideSidebarApp() {
+      return {
+        isMobileMenuOpen: false,
+        selectedCategory: 'all',
+        selectedPaperId: null,
+        searchQuery: '',
+        selectedPreset: 'all',
+        activeTab: 'catalog', // 'catalog', 'simulator', 'matrix', 'finishing'
+        gsmSimValue: 250,
+
+        compareList: [],
+        isCompareModalOpen: false,
+
+        productPresets: [
+          { id: 'card', name: 'นามบัตร / การ์ด', category: 'art', paperId: '1', icon: 'credit-card' },
+          { id: 'flyer', name: 'ใบปลิว / แผ่นพับ', category: 'art', paperId: '2', icon: 'file-text' },
+          { id: 'letter', name: 'กระดาษ A4 / เอกสาร', category: 'uncoated', paperId: '3', icon: 'mail' },
+          { id: 'box', name: 'กล่องบรรจุภัณฑ์', category: 'art', paperId: '1', icon: 'package' },
+          { id: 'sticker', name: 'ฉลากสินค้ากันน้ำ', category: 'sticker', paperId: '6', icon: 'tag' },
+          { id: 'eco', name: 'งานคราฟท์ วินเทจ', category: 'kraft', paperId: '4', icon: 'leaf' },
+        ],
+
+        paperList: [
+          {
+            id: '1',
+            name: 'อาร์ตการ์ด 2 หน้า (Art Card)',
+            category: 'art',
+            categoryName: 'Art Paper',
+            gsm: 300,
+            finish: 'ผิวกึ่งมันกึ่งด้าน เรียบเนียนพิเศษ',
+            textureClass: 'texture-artcard',
+            description: 'เนื้อกระดาษแน่น แข็งแรง ทนทาน พิมพ์สีสดใส มักนำไปเคลือบ PVC ลามิเนตเงาหรือด้าน เพื่อเพิ่มความพรีเมียม',
+            pros: 'รองรับการปั๊มนูน, K-Gold, พับแล้วไม่แตกเมื่อทำรอยพับ (Creasing)',
+            cons: 'ต้องทำรอยพับก่อนดัดพับเพื่อป้องกันรอยร้าวที่สันพับ',
+            finishingCompat: 'เคลือบ PVC เงา/ด้าน, Spot UV, ปั๊มฟอยล์กบ, ไดคัท',
+            suitableFor: ['นามบัตร', 'กล่องสินค้า', 'ปกหนังสือ', 'การ์ดเชิญ']
+          },
+          {
+            id: '2',
+            name: 'กระดาษอาร์ตมัน (Glossy Art Paper)',
+            category: 'art',
+            categoryName: 'Art Paper',
+            gsm: 130,
+            finish: 'ผิวเงาสะท้อนแสงทั้งสองด้าน',
+            textureClass: 'texture-glossy',
+            description: 'กระดาษเนื้อเรียบเงา สะท้อนแสงได้ดี ซึมซับหมึกต่ำทำให้งานพิมพ์สีสดและคมชัดสูง มีราคาคุ้มค่า',
+            pros: 'สีสดใส ราคาย่อมเยา น้ำหนักเบา',
+            cons: 'เขียนทับด้วยปากกาลูกลื่นยากเนื่องจากผิวลื่น',
+            finishingCompat: 'พับแผ่นพับ, เคลือบวานิชเงา',
+            suitableFor: ['ใบปลิว', 'โบรชัวร์', 'แผ่นพับ 3 ตอน', 'แคตตาล็อก']
+          },
+          {
+            id: '2b',
+            name: 'กระดาษอาร์ตด้าน (Matte Art Paper)',
+            category: 'art',
+            categoryName: 'Art Paper',
+            gsm: 160,
+            finish: 'ผิวด้าน เรียบเนียน ไร้แสงสะท้อน',
+            textureClass: 'texture-matte',
+            description: 'เนื้อกระดาษเนียนนุ่ม สบายตา ลดแสงสะท้อน เหมาะกับงานพิมพ์ที่เน้นความอ่านง่ายและลุคพรีเมียม',
+            pros: 'อ่านสบายตา ผิวสัมผัสละมุน ให้ลุคทันสมัย',
+            cons: 'ความสดของสีจะดูซอฟต์กว่าอาร์ตมันเล็กน้อย',
+            finishingCompat: 'เคลือบ PVC ด้าน, Spot UV, เย็บแม็กเล่ม',
+            suitableFor: ['แคตตาล็อกพรีเมียม', 'เมนูอาหาร', 'โบรชัวร์องค์กร']
+          },
+          {
+            id: '3',
+            name: 'กระดาษปอนด์ขาว 80g (A4 Standard Bond)',
+            category: 'uncoated',
+            categoryName: 'Woodfree / ปอนด์',
+            gsm: 80,
+            finish: 'ผิวด้าน เรียบเนียนธรรมชาติ (กระดาษ A4 มาตรฐาน)',
+            textureClass: 'texture-woodfree',
+            description: 'กระดาษไร้สารเคลือบ เนื้อขาวสะอาด ซึมซับหมึกได้ดีเยี่ยม เหมาะกับการเขียนทับและพิมพ์เอกสาร',
+            pros: 'เขียนทับด้วยปากกา/ตราปั๊มได้ง่าย อ่านสบายตา คุ้มค่าที่สุด',
+            cons: 'หากพิมพ์สีเข้มมากๆ หมึกอาจจะดูดซึมทำให้สีดร็อปลงเล็กน้อย',
+            finishingCompat: 'เย็บแม็ก, เข้าเล่มไส้ใน',
+            suitableFor: ['หัวจดหมาย', 'ไส้ในสมุด', 'ใบเสร็จรับเงิน', 'เอกสาร A4 ทั่วไป']
+          },
+          {
+            id: '3b',
+            name: 'กระดาษปอนด์พรีเมียม 120g (Premium Woodfree)',
+            category: 'uncoated',
+            categoryName: 'Woodfree / ปอนด์',
+            gsm: 120,
+            finish: 'ผิวด้าน หนาแน่นนุ่มมือ',
+            textureClass: 'texture-woodfree',
+            description: 'กระดาษปอนด์ความหนาพิเศษ ให้ความตึงและแข็งแรงกว่ากระดาษ A4 ทั่วไป เหมาะกับเอกสารสำคัญ',
+            pros: 'หมึกไม่ซึมทะลุหลังง่าย ให้ความน่าเชื่อถือสูง',
+            cons: 'ราคาสูงกว่าปอนด์ 80g เล็กน้อย',
+            finishingCompat: 'พับแผ่นพับ, ปั๊มจม, พิมพ์ตราปั๊ม',
+            suitableFor: ['เอกสารสัญญาสำคัญ', 'ซองจดหมายพรีเมียม', 'เกียรติบัตร']
+          },
+          {
+            id: '4',
+            name: 'กระดาษคราฟท์น้ำตาล (Eco Brown Kraft)',
+            category: 'kraft',
+            categoryName: 'Kraft / คราฟท์',
+            gsm: 250,
+            finish: 'ผิวสากสีน้ำตาลธรรมชาติ (Vintage Look)',
+            textureClass: 'texture-kraft',
+            description: 'กระดาษรีไซเคิลเหนียวพิเศษ ให้ลุครักษ์โลก (Eco-friendly) นิยมใช้กับแบรนด์ออร์แกนิก',
+            pros: 'ทนทาน เหนียว ให้ความรู้สึกวินเทจ รักษ์โลก',
+            cons: 'พิมพ์สีสดพาสเทลยาก เนื่องจากพื้นหลังเป็นสีน้ำตาล',
+            finishingCompat: 'ปั๊มจม, ปั๊มฟอยล์สีดำ/สีทอง, ไดคัท',
+            suitableFor: ['ถุงกระดาษ', 'ป้ายแท็กสินค้า', 'กล่องสินค้าออร์แกนิก']
+          },
+          {
+            id: '5',
+            name: 'อาร์ตการ์ดเคลือบกำมะหยี่ (Velvet Soft-Touch)',
+            category: 'specialty',
+            categoryName: 'Specialty Card',
+            gsm: 350,
+            finish: 'ผิวด้านนุ่มนวลคล้ายกำมะหยี่ (Ultra Luxury)',
+            textureClass: 'texture-velvet',
+            description: 'กระดาษอาร์ตการ์ดหนาพิเศษ เคลือบฟิล์ม Soft-Touch สัมผัสนุ่มลึก ไม่สะท้อนแสง ให้ความรู้สึกหรูหรา',
+            pros: 'สัมผัสพรีเมียม นุ่มนวล โดดเด่นเมื่อทำ Spot UV หรือ Stamp Foil',
+            cons: 'ราคาสูงกว่าการเคลือบ PVC ด้านทั่วไป',
+            finishingCompat: 'Spot UV, ปั๊มฟอยล์ทอง/เงิน, ไดคัทมุมมน',
+            suitableFor: ['นามบัตร VIP', 'การ์ดเชิญหรู', 'กล่องน้ำหอม/เครื่องสำอาง']
+          },
+          {
+            id: '6',
+            name: 'สติกเกอร์ PP ขาวเงา/ด้าน (PP Sticker)',
+            category: 'sticker',
+            categoryName: 'Sticker / สติกเกอร์',
+            gsm: 120,
+            finish: 'ผิวพลาสติกกันน้ำ 100% ทนทานสูง',
+            textureClass: 'texture-sticker',
+            description: 'สติกเกอร์เนื้อพลาสติก PP ฉีกไม่ขาด กันน้ำ 100% เหมาะสำหรับติดแช่เย็นหรือสินค้าโดนน้ำ',
+            pros: 'กันน้ำ 100% กาวติดแน่น ไม่หลุดลอกง่าย',
+            cons: 'ราคาสูงกว่าสติกเกอร์กระดาษทั่วไป',
+            finishingCompat: 'ไดคัทตามทรง, เคลือบกันรอย',
+            suitableFor: ['ฉลากสินค้าแช่เย็น', 'แก้วเครื่องดื่ม', 'เครื่องสำอาง']
+          },
+          {
+            id: '7',
+            name: 'กระดาษการ์ดเดินลายผ้า (Linen Textured Card)',
+            category: 'specialty',
+            categoryName: 'Specialty Card',
+            gsm: 260,
+            finish: 'ผิวเดินลายเส้นผ้าบางๆ ทรงคุณค่า',
+            textureClass: 'texture-linen',
+            description: 'กระดาษการ์ดนำเข้าที่มี Texture ลายเส้นผ้าคลาสสิก ให้สัมผัสมีเอกลักษณ์ ไม่ลื่น',
+            pros: 'ให้ความรู้สึกเป็นทางการ หรูหรา มีมิติ',
+            cons: 'ไม่เหมาะกับการเคลือบฟิล์ม PVC ทับเพราะจะบดบังลายผ้า',
+            finishingCompat: 'ปั๊มทอง (Hot Foil), ปั๊มนูน, ไดคัท',
+            suitableFor: ['การ์ดแต่งงาน', 'เกียรติบัตร', 'นามบัตรผู้บริหาร']
+          },
+          {
+            id: '8',
+            name: 'กระดาษการ์ดมุก (Pearl Metallic Card)',
+            category: 'specialty',
+            categoryName: 'Specialty Card',
+            gsm: 280,
+            finish: 'ประกายมุกแวววาวเมื่อสะท้อนแสง',
+            textureClass: 'texture-pearl',
+            description: 'กระดาษการ์ดเคลือบผิวมุกระยิบระยับ เพิ่มความโดดเด่นสะดุดตาเมื่อเล่นกับแสงไฟ',
+            pros: 'สะท้อนแสงสวยงาม เพิ่มมูลค่าชิ้นงาน',
+            cons: 'แห้งช้ากว่ากระดาษทั่วไปเล็กน้อย',
+            finishingCompat: 'ปั๊มฟอยล์, ปั๊มจม, ไดคัท',
+            suitableFor: ['การ์ดเชิญ VIP', 'คูปองส่วนลดพิเศษ', 'ป้ายสินค้าพรีเมียม']
+          }
+        ],
+
+        initApp() {
+          this.$nextTick(() => {
+            if (window.lucide) lucide.createIcons();
+          });
+        },
+
+        get selectedPaper() {
+          if (!this.selectedPaperId) return null;
+          return this.paperList.find(p => p.id === this.selectedPaperId) || null;
+        },
+
+        get filteredPapers() {
+          return this.paperList.filter(paper => {
+            const query = this.searchQuery.toLowerCase().trim();
+            const matchesSearch = !query || 
+              paper.name.toLowerCase().includes(query) ||
+              paper.finish.toLowerCase().includes(query) ||
+              paper.description.toLowerCase().includes(query) ||
+              paper.suitableFor.some(s => s.toLowerCase().includes(query));
+
+            const matchesCat = this.selectedCategory === 'all' || paper.category === this.selectedCategory;
+
+            return matchesSearch && matchesCat;
+          });
+        },
+
+        get simulatedRecommendation() {
+          const gsm = this.gsmSimValue;
+          if (gsm < 100) {
+            return {
+              category: 'บางเบา (Lightweight Paper)',
+              feelDescription: 'เนื้อกระดาษบาง พับง่าย เหมาะสำหรับเนื้อหาหลายๆ หน้า หรือเอกสารสำนักงาน A4',
+              recommendedItems: ['กระดาษปอนด์ 80g', 'หัวจดหมาย', 'ไส้ในสมุด', 'ใบเสร็จรับเงิน']
+            };
+          } else if (gsm <= 180) {
+            return {
+              category: 'ความหนามาตรฐาน (Standard Flyer/Brochure)',
+              feelDescription: 'กระดาษหนากำลังดี พิมพ์สีสด ไม่หนาตึงเกินไป พับแล้วเรียบสวยงาม',
+              recommendedItems: ['กระดาษอาร์ตมัน 130g', 'โบรชัวร์', 'แผ่นพับ 3 ตอน', 'แคตตาล็อกสินค้า']
+            };
+          } else if (gsm <= 260) {
+            return {
+              category: 'หนากลาง / การ์ดอ่อน (Semi-Rigid Card)',
+              feelDescription: 'กระดาษเริ่มมีความแข็งตัว ไม่งอง่าย ให้ความรู้สึกมีราคา',
+              recommendedItems: ['กระดาษคราฟท์ 250g', 'การ์ดเดินลายผ้า', 'ป้ายแท็กเสื้อผ้า', 'ถุงกระดาษ']
+            };
+          } else {
+            return {
+              category: 'หนาพิเศษ / การ์ดแข็ง (Heavy Duty Cardboard)',
+              feelDescription: 'กระดาษหนาแน่นสูง แข็งแรงทนทาน ไม่งอตัวง่าย ต้องทำรอยพับก่อนดัด',
+              recommendedItems: ['อาร์ตการ์ด 300g', 'นามบัตร VIP', 'กล่องบรรจุภัณฑ์', 'ปกหนังสือ']
+            };
+          }
+        },
+
+        get compareItems() {
+          return this.paperList.filter(p => this.compareList.includes(p.id));
+        },
+
+        getPapersByCategory(catId) {
+          return this.paperList.filter(p => p.category === catId);
+        },
+
+        getThicknessLabel(gsm) {
+          if (gsm < 90) return 'บางเบา (Lightweight)';
+          if (gsm <= 160) return 'ความหนามาตรฐาน (Medium)';
+          if (gsm <= 260) return 'หนากลาง (Semi-Rigid)';
+          return 'หนาพิเศษ/การ์ด (Heavy Card)';
+        },
+
+        getCurrentBreadcrumb() {
+          if (this.selectedPaper) {
+            return this.selectedPaper.name;
+          }
+          if (this.activeTab === 'simulator') return 'ทดลองแกรม (GSM Simulator)';
+          if (this.activeTab === 'matrix') return 'ตารางเปรียบเทียบสเปก';
+          if (this.activeTab === 'finishing') return 'เทคนิคการเคลือบ & พับ';
+          
+          if (this.selectedCategory === 'art') return 'กระดาษอาร์ต (Art Paper)';
+          if (this.selectedCategory === 'uncoated') return 'กระดาษปอนด์ / A4 (Woodfree)';
+          if (this.selectedCategory === 'kraft') return 'กระดาษคราฟท์ (Kraft)';
+          if (this.selectedCategory === 'specialty') return 'กระดาษพิเศษ (Specialty)';
+          if (this.selectedCategory === 'sticker') return 'สติกเกอร์ (Sticker)';
+          
+          return 'รายการกระดาษทั้งหมด';
+        },
+
+        selectPaper(paper) {
+          this.selectedPaperId = paper.id;
+          this.activeTab = 'catalog';
+          if (window.innerWidth < 1024) {
+            this.isMobileMenuOpen = false;
+          }
+          this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+        },
+
+        applyPreset(preset) {
+          this.selectedPreset = preset.id;
+          this.selectedCategory = preset.category;
+          this.selectedPaperId = preset.paperId;
+          this.searchQuery = '';
+          this.activeTab = 'catalog';
+        },
+
+        resetFilters() {
+          this.searchQuery = '';
+          this.selectedCategory = 'all';
+          this.selectedPreset = 'all';
+          this.selectedPaperId = null;
+          this.activeTab = 'catalog';
+        },
+
+        resetToAll() {
+          this.resetFilters();
+          this.isMobileMenuOpen = false;
+        },
+
+        toggleCompare(id) {
+          if (this.compareList.includes(id)) {
+            this.compareList = this.compareList.filter(item => item !== id);
+          } else {
+            if (this.compareList.length >= 3) {
+              alert('คุณสามารถเลือกเปรียบเทียบได้สูงสุด 3 รายการพร้อมกัน');
+              return;
+            }
+            this.compareList.push(id);
+          }
+        },
+
+        isInCompare(id) {
+          return this.compareList.includes(id);
+        },
+
+        openCompareModal() {
+          this.isCompareModalOpen = true;
+          this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+        }
+      }
+    }
+  </script>
+</body>
+</html>

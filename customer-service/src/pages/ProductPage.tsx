@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState, useRef } from 'react'
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { getCategory, getProduct, type Product, type SpecOption } from '../data/catalog.ts'
 import { useShop } from '../context/ShopContext.tsx'
 import { computePrice, getQuantityTier } from '../utils/pricing.ts'
@@ -23,11 +23,15 @@ import {
   PrinterIcon,
   CartIcon,
 } from '../components/icons.tsx'
-import BoxModelViewer from '../components/3D/BoxModelViewer.tsx'
 import QuantityStepper from '../components/QuantityStepper.tsx'
 import { analyzeArtworkPreflight, type PreflightReport } from '../lib/preflightAnalyzer.ts'
 import PreflightChecklistModal from '../components/PreflightChecklistModal.tsx'
-import ArtworkStudioModal from '../components/ArtworkStudio/ArtworkStudioModal.tsx'
+import UploadProgressModal from '../components/UploadProgressModal.tsx'
+import SpotlightCard from '../components/reactbits/SpotlightCard.tsx'
+import ShinyText from '../components/reactbits/ShinyText.tsx'
+import BorderBeam from '../components/reactbits/BorderBeam.tsx'
+import ArtworkDocumentViewer from '../components/ArtworkDocumentViewer.tsx'
+import PriceBreakdownTable from '../components/PriceBreakdownTable.tsx'
 
 interface OptionButtonProps {
   option: SpecOption
@@ -102,6 +106,7 @@ function SpecGroup({ title, hint, options, value, onChange, language, currency, 
 
 export default function ProductPage() {
   const { slug } = useParams()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { currency, convertTo, setOrderDraft, addToCart, t, language } = useShop()
   const localProduct = getProduct(slug)
@@ -179,50 +184,28 @@ export default function ProductPage() {
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [preflightReport, setPreflightReport] = useState<PreflightReport | null>(null)
   const [showPreflightModal, setShowPreflightModal] = useState(false)
-  const [showStudioModal, setShowStudioModal] = useState(false)
+  const [showUploadProgress, setShowUploadProgress] = useState(false)
   const [preflightConfirmed, setPreflightConfirmed] = useState(false)
   const [pendingAction, setPendingAction] = useState<'cart' | 'buy' | null>(null)
   
   const [driveLink, setDriveLink] = useState('')
   const [permissionConfirmed, setPermissionConfirmed] = useState(false)
+  const [currentStep, setCurrentStep] = useState<1 | 2>(1)
   const [specialNotes, setSpecialNotes] = useState('')
+  const [colorPrintMode, setColorPrintMode] = useState<'cmyk' | 'grayscale'>('cmyk')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [showQuotationModal, setShowQuotationModal] = useState(false)
 
-  // 3D Packaging Box Model Studio State
-  const isPackagingProduct = Boolean(
-    product?.category === 'packaging' ||
-    product?.slug?.includes('box') ||
-    product?.slug?.includes('pack') ||
-    product?.image === 'box' ||
-    category?.slug?.includes('box') ||
-    category?.slug?.includes('pack')
-  )
-
-  const [is3DView, setIs3DView] = useState<boolean>(false)
-
   useEffect(() => {
-    if (isPackagingProduct) {
-      setIs3DView(true)
+    if (preflightReport?.colorSpace === 'Grayscale') {
+      setColorPrintMode('grayscale')
+    } else if (preflightReport?.colorSpace === 'CMYK') {
+      setColorPrintMode('cmyk')
     }
-  }, [isPackagingProduct])
-
-  const boxDimensions = useMemo(() => {
-    const s = sizeId.toLowerCase()
-    if (s.includes('large') || s.includes('l') || s.includes('240')) return { l: 240, w: 160, h: 90 }
-    if (s.includes('small') || s.includes('s') || s.includes('120')) return { l: 120, w: 85, h: 45 }
-    return { l: 180, w: 120, h: 65 } // Default luxury box
-  }, [sizeId])
-
-  const finishingEffect = useMemo<'none' | 'gold_foil' | 'silver_foil' | 'spot_uv' | 'matte'>(() => {
-    const f = finishingId.toLowerCase()
-    if (f.includes('gold') || f.includes('foil')) return 'gold_foil'
-    if (f.includes('silver')) return 'silver_foil'
-    if (f.includes('uv') || f.includes('spot') || f.includes('gloss')) return 'spot_uv'
-    return 'none'
-  }, [finishingId])
+  }, [preflightReport])
 
   const isOnDemand = Boolean(
     remoteProduct?.isOnDemand ||
@@ -235,13 +218,32 @@ export default function ProductPage() {
   useEffect(() => {
     if (product) {
       if (!sizeId && product.sizes.length > 0) setSizeId(product.sizes[0].id)
-      if (!materialId && product.materials.length > 0) setMaterialId(product.materials[0].id)
+      
+      const paperParam = searchParams.get('paper') || searchParams.get('material')
+      if (paperParam && product.materials.length > 0) {
+        const pLower = paperParam.toLowerCase()
+        const match = product.materials.find(
+          (m) =>
+            m.id.toLowerCase() === pLower ||
+            m.id.toLowerCase().includes(pLower) ||
+            pLower.includes(m.id.toLowerCase()) ||
+            m.label.toLowerCase().includes(pLower)
+        )
+        if (match) {
+          setMaterialId(match.id)
+        } else if (!materialId) {
+          setMaterialId(product.materials[0].id)
+        }
+      } else if (!materialId && product.materials.length > 0) {
+        setMaterialId(product.materials[0].id)
+      }
+
       if (!finishingId && product.finishings.length > 0) setFinishingId(product.finishings[0].id)
       if (quantity < minQty) {
         setQuantity(minQty)
       }
     }
-  }, [product, minQty])
+  }, [product, minQty, searchParams])
 
   const price = useMemo(() => {
     if (!product) return null
@@ -271,44 +273,105 @@ export default function ProductPage() {
     )
   }
 
+  const [tempFile, setTempFile] = useState<File | null>(null)
+  const [tempPreviewUrl, setTempPreviewUrl] = useState<string | null>(null)
+  const [uploadPercent, setUploadPercent] = useState<number>(0)
+
   const handleFileUpload = async (file: File) => {
     if (!file) return
 
-    setUploadedFileName(file.name)
-    setIsUploading(true)
-    setPreflightConfirmed(false)
+    setTempFile(file)
+    setShowUploadProgress(true)
 
     try {
-      const report = await analyzeArtworkPreflight(file, {
-        widthMM: boxDimensions.l,
-        heightMM: boxDimensions.h,
-      })
-      setPreflightReport(report)
-      setShowPreflightModal(true)
+      // Instantaneous zero-copy Blob wrapper with application/pdf type so Chrome/Safari PDF engine renders it visually
+      let viewBlob: Blob = file
+      const lowerName = file.name.toLowerCase()
+      if (lowerName.endsWith('.pdf') || lowerName.endsWith('.ai')) {
+        viewBlob = new Blob([file], { type: 'application/pdf' })
+      }
 
-      const url = await uploadArtworkFile(file)
-      setUploadedFileUrl(url)
+      const localUrl = URL.createObjectURL(viewBlob)
+      setTempPreviewUrl(localUrl)
+
+      // Fast non-blocking preflight analyzer
+      const report = await analyzeArtworkPreflight(file)
+      setPreflightReport(report)
+      setUploadedFileName(file.name)
+      setUploadedFileUrl(localUrl)
+      setCurrentStep(1)
     } catch {
-      setUploadedFileUrl(`local://${file.name}`)
-    } finally {
-      setIsUploading(false)
+      const localUrl = URL.createObjectURL(file)
+      setTempPreviewUrl(localUrl)
+      setUploadedFileName(file.name)
+      setUploadedFileUrl(localUrl)
+      setCurrentStep(1)
     }
   }
 
-  const handleStudioSave = (artworkDataUrl: string) => {
-    setUploadedFileUrl(artworkDataUrl)
-    setUploadedFileName('studio-custom-artwork.png')
-    setUploadMode('upload')
-    setPreflightReport({
-      dpi: 300,
-      dpiStatus: 'pass',
-      colorSpace: 'CMYK',
-      colorSpaceStatus: 'pass',
-      bleedMarginMM: 3,
-      bleedStatus: 'pass',
-      allPassed: true,
-      warnings: [],
-    })
+  const handleConfirmUpload = async () => {
+    if (tempFile) {
+      setIsUploading(true)
+      try {
+        const url = await uploadArtworkFile(tempFile)
+        setUploadedFileName(tempFile.name)
+        setUploadedFileUrl(url || tempPreviewUrl)
+      } catch {
+        setUploadedFileName(tempFile.name)
+        setUploadedFileUrl(tempPreviewUrl || `local://${tempFile.name}`)
+      } finally {
+        setIsUploading(false)
+      }
+    }
+    setPreflightConfirmed(true)
+    setShowPreflightModal(false)
+
+    if (pendingAction === 'cart') {
+      setPendingAction(null)
+      addToCart({
+        product: product!,
+        config: {
+          sizeId,
+          materialId,
+          finishingId,
+          quantity,
+          specLabels,
+        },
+        driveLink: tempPreviewUrl || uploadedFileUrl || tempFile?.name || '',
+        permissionConfirmed: true,
+        specialNotes,
+        price: price!,
+      })
+    } else if (pendingAction === 'buy') {
+      setPendingAction(null)
+      const item = {
+        product: product!,
+        config: {
+          sizeId,
+          materialId,
+          finishingId,
+          quantity,
+          specLabels,
+        },
+        driveLink: tempPreviewUrl || uploadedFileUrl || tempFile?.name || '',
+        permissionConfirmed: true,
+        specialNotes,
+        price: price!,
+      }
+      addToCart(item)
+      setOrderDraft(item)
+      navigate('/checkout')
+    }
+  }
+
+  const handleCancelUpload = () => {
+    setShowPreflightModal(false)
+    setPendingAction(null)
+    if (!uploadedFileName) {
+      setTempFile(null)
+      setTempPreviewUrl(null)
+      setPreflightReport(null)
+    }
   }
 
   const validateInputs = () => {
@@ -394,48 +457,6 @@ export default function ProductPage() {
     navigate('/checkout')
   }
 
-  const handleConfirmPreflight = () => {
-    setPreflightConfirmed(true)
-    setShowPreflightModal(false)
-
-    if (pendingAction === 'cart') {
-      setPendingAction(null)
-      addToCart({
-        product: product!,
-        config: {
-          sizeId,
-          materialId,
-          finishingId,
-          quantity,
-          specLabels,
-        },
-        driveLink: uploadMode === 'drive' ? driveLink.trim() : uploadedFileUrl || uploadedFileName,
-        permissionConfirmed: uploadMode === 'drive' ? permissionConfirmed : true,
-        specialNotes,
-        price: price!,
-      })
-    } else if (pendingAction === 'buy') {
-      setPendingAction(null)
-      const item = {
-        product: product!,
-        config: {
-          sizeId,
-          materialId,
-          finishingId,
-          quantity,
-          specLabels,
-        },
-        driveLink: uploadMode === 'drive' ? driveLink.trim() : uploadedFileUrl || uploadedFileName,
-        permissionConfirmed: uploadMode === 'drive' ? permissionConfirmed : true,
-        specialNotes,
-        price: price!,
-      }
-      addToCart(item)
-      setOrderDraft(item)
-      navigate('/checkout')
-    }
-  }
-
   const totalDisplay = convertTo(price?.total || 0)
   const productName = language === 'en' && product.nameEn ? product.nameEn : product.name
   const productDesc = language === 'en' && product.descriptionEn ? product.descriptionEn : product.description
@@ -443,8 +464,8 @@ export default function ProductPage() {
 
   return (
     <>
-      <section className="section section--alt product-page">
-        <div className="container">
+      <section className="section section--alt product-page min-h-[90vh]">
+        <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="breadcrumb" aria-label="breadcrumb">
             <Link to="/">{t('navHome')}</Link>
             <span>/</span>
@@ -453,331 +474,299 @@ export default function ProductPage() {
             <span className="current">{productName}</span>
           </nav>
 
-          <div className="product-layout">
-            <div className="product-gallery">
-              <div className="product-gallery-main">
-                {uploadedFileUrl && (uploadedFileUrl.startsWith('data:') || uploadedFileUrl.startsWith('http') || uploadedFileUrl.startsWith('blob:')) ? (
-                  <div className="w-full h-full p-4 flex flex-col items-center justify-center relative min-h-[380px]">
-                    <img
-                      src={uploadedFileUrl}
-                      alt="Custom Artwork Preview"
-                      className="max-h-[350px] max-w-full object-contain rounded-2xl shadow-2xl border border-gold/40"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowStudioModal(true)}
-                      className="mt-3 px-4 py-2 rounded-xl text-xs font-black bg-slate-900 text-amber-300 border border-gold shadow-lg hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-                    >
-                      ✏️ ແກ້ໄຂອາດເວິກໃນສະຕູດີໂອ (Edit in Studio)
-                    </button>
-                  </div>
-                ) : (
-                  <ProductArt art={product.image} />
-                )}
-              </div>
-              <div className="product-meta-card">
-                <h3>{t('serviceStandards')}</h3>
-                <ul>
-                  <li>
-                    <CheckIcon size={16} /> {t('serviceStd1')}
-                  </li>
-                  <li>
-                    <CheckIcon size={16} /> {t('serviceStd2')}
-                  </li>
-                  <li>
-                    <CheckIcon size={16} /> {t('serviceStd3')}
-                  </li>
-                </ul>
-
-                {/* Instant Quotation Action */}
-                <div className="pt-3 border-t border-slate-200 mt-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowQuotationModal(true)}
-                    className="w-full py-3 px-4 bg-gradient-to-r from-slate-900 to-primary-navy hover:from-primary-navy hover:to-slate-900 text-amber-300 hover:text-amber-200 text-xs font-black rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md border border-amber-500/30"
-                  >
-                    <DownloadIcon size={16} />
-                    <span>{t('viewQuotationBtn')}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="product-info">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="product-card-cat">{categoryName}</span>
-                {isOnDemand || minQty === 1 ? (
-                  <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-300 text-[11px] font-black px-3 py-1 rounded-full inline-flex items-center gap-1.5 border border-amber-300 dark:border-amber-500/40">
-                    <SparkleIcon size={12} />
-                    <span>⚡ ງານພິມຕາມສັ່ງ On-Demand (ບໍ່ມີຂັ້ນຕ່ຳ)</span>
-                  </span>
-                ) : (
-                  <span className="bg-slate-100 dark:bg-slate-850 text-slate-700 dark:text-slate-200 text-[11px] font-bold px-3 py-1 rounded-full inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-700">
-                    <span>📦 ງານພິມຈຳນວນຫຼາຍ (ຂັ້ນຕ່ຳ {minQty} ຊິ້ນ)</span>
-                  </span>
-                )}
-              </div>
-              <h1>{productName}</h1>
-              <p className="product-info-desc">{productDesc}</p>
-
-              <div className="product-price-line">
-                <span className="product-price-line-label">{t('startPriceLabel')}</span>
-                <span className="product-price-line-now">{formatMoney(convertTo(product.basePrice), currency)}</span>
-                <span className="product-price-line-unit">/ {language === 'en' ? 'Item' : 'ຊິ້ນ'}</span>
-              </div>
-              <div className="text-[11px] font-bold text-slate-500 bg-slate-50 py-1.5 px-3 rounded-xl border border-slate-200 inline-block mb-3">
-                {formatMultiCurrency(product.basePrice)}
-              </div>
-
-              <form
-                className="configurator"
-                onSubmit={handleBuyNow}
+          {/* 2-Step Guided Studio Wizard Navigation Stepper */}
+          <div className="my-6 max-w-2xl mx-auto">
+            <div className="grid grid-cols-2 gap-2 sm:gap-4 p-2 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-md">
+              {/* Step 1 Tab */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (uploadedFileName || tempPreviewUrl) setCurrentStep(1)
+                }}
+                className={`py-3 px-4 rounded-2xl text-xs sm:text-sm font-black transition flex items-center justify-center gap-2 cursor-pointer ${
+                  currentStep === 1
+                    ? 'bg-gradient-to-r from-slate-950 to-blue-950 text-amber-400 shadow-md border border-amber-500/30'
+                    : uploadedFileName || tempPreviewUrl
+                    ? 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    : 'text-slate-400 opacity-60 cursor-not-allowed'
+                }`}
               >
-                <SpecGroup
-                  title={t('sizeSelect')}
-                  options={product.sizes}
-                  value={sizeId}
-                  onChange={setSizeId}
-                  language={language}
-                  currency={currency}
-                  convertTo={convertTo}
-                />
-                <SpecGroup
-                  title={t('materialSelect')}
-                  options={product.materials}
-                  value={materialId}
-                  onChange={setMaterialId}
-                  language={language}
-                  currency={currency}
-                  convertTo={convertTo}
-                />
-                <SpecGroup
-                  title={t('finishingSelect')}
-                  options={product.finishings}
-                  value={finishingId}
-                  onChange={setFinishingId}
-                  language={language}
-                  currency={currency}
-                  convertTo={convertTo}
-                />
-                <QuantityStepper
-                  value={quantity}
-                  minQty={minQty}
-                  onChange={setQuantity}
-                  t={t}
-                  isOnDemand={isOnDemand}
-                  discountTiers={remoteProduct?.discountTiers}
-                />
+                <span className="w-6 h-6 rounded-full flex items-center justify-center bg-amber-500/20 text-amber-500 text-xs font-black">1</span>
+                <span>📤 1. ອັບໂຫຼດ & ກວດຟາຍ</span>
+              </button>
 
-                {/* Direct Upload vs Drive Toggle */}
-                <div className="spec-group">
-                  <div className="spec-group-head">
-                    <h3>{t('fileSendTitle')}</h3>
-                    <div className="luxury-upload-tabs">
-                      <button
-                        type="button"
-                        onClick={() => setUploadMode('upload')}
-                        className={`luxury-tab-btn ${uploadMode === 'upload' ? 'is-active' : ''}`}
-                      >
-                        {t('uploadDirect')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setUploadMode('drive')}
-                        className={`luxury-tab-btn ${uploadMode === 'drive' ? 'is-active' : ''}`}
-                      >
-                        {t('uploadDrive')}
-                      </button>
-                    </div>
-                  </div>
-
-                  {uploadMode === 'upload' ? (
-                    <div className="space-y-2.5">
-                      {/* Canva-like Online Design Studio Launch Button */}
-                      <button
-                        type="button"
-                        onClick={() => setShowStudioModal(true)}
-                        className="w-full py-3 px-4 rounded-2xl border-2 transition flex items-center justify-between font-extrabold text-xs sm:text-sm shadow-glow cursor-pointer"
-                        style={{
-                          background: 'linear-gradient(135deg, rgba(197, 160, 89, 0.22) 0%, rgba(14, 23, 47, 0.95) 100%)',
-                          borderColor: 'var(--gold)',
-                          color: '#EBD8B2',
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">🎨</span>
-                          <span>{language === 'en' ? 'Design & Customize Online Studio' : 'ອອກແບບ & ປັບແຕ່ງໜ້າປົກອອນລາຍ'}</span>
-                        </div>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-gold text-slate-950 font-black tracking-wide">
-                          Canva Studio
-                        </span>
-                      </button>
-
-                      <div className="flex items-center gap-2 my-1">
-                        <div className="flex-1 h-[1px] bg-slate-800" />
-                        <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
-                          {language === 'en' ? 'or upload file' : 'ຫຼື ອັບໂຫຼດຟາຍສຳເລັດຮູບ'}
-                        </span>
-                        <div className="flex-1 h-[1px] bg-slate-800" />
-                      </div>
-
-                      <label
-                        className={`luxury-dropzone cursor-pointer transition-all ${
-                          isDragOver ? 'border-amber-400 bg-amber-50/10 scale-[1.01]' : ''
-                        }`}
-                        onDragOver={(e) => {
-                          e.preventDefault()
-                          setIsDragOver(true)
-                        }}
-                        onDragLeave={() => setIsDragOver(false)}
-                        onDrop={(e) => {
-                          e.preventDefault()
-                          setIsDragOver(false)
-                          const file = e.dataTransfer.files?.[0]
-                          if (file) handleFileUpload(file)
-                        }}
-                      >
-                        <div className="dropzone-icon-box">
-                          <UploadCloudIcon size={32} />
-                        </div>
-                        <span className="text-sm font-bold text-center" style={{ color: 'var(--text-main)' }}>
-                          {uploadedFileName ? `📄 ${uploadedFileName}` : t('dropzoneText')}
-                        </span>
-                        <span className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
-                          {t('dropzoneHint')}
-                        </span>
-                        <input
-                          type="file"
-                          accept=".pdf,.ai,.psd,.png,.jpg,.jpeg,.tiff"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            if (file) handleFileUpload(file)
-                          }}
-                          className="hidden"
-                        />
-                      </label>
-                      {isUploading && <p className="text-xs text-blue-500 font-bold">{t('uploadingFile')}</p>}
-
-                      {preflightReport && (
-                        <div
-                          className="p-3 rounded-2xl border flex items-center justify-between gap-3 text-xs"
-                          style={{
-                            background: preflightReport.allPassed ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                            borderColor: preflightReport.allPassed ? '#10B981' : '#F59E0B',
-                          }}
-                        >
-                          <div className="flex items-center gap-2">
-                            <FileCheckIcon size={18} color={preflightReport.allPassed ? '#10B981' : '#F59E0B'} />
-                            <span className="font-bold" style={{ color: 'var(--text-main)' }}>
-                              {preflightReport.allPassed
-                                ? '✓ ไฟล์พร้อมพิมพ์ (300 DPI · CMYK · Bleed OK)'
-                                : '⚠️ ตรวจพบข้อสังเกตบางจุด (Preflight Notice)'}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setShowPreflightModal(true)}
-                            className="px-2.5 py-1 rounded-lg text-[11px] font-black border underline cursor-pointer"
-                            style={{
-                              background: 'var(--bg-card)',
-                              borderColor: 'var(--border-subtle)',
-                              color: 'var(--text-main)',
-                            }}
-                          >
-                            ดูรายงาน Checklist
-                          </button>
-                        </div>
-                      )}
-
-                      {errors.file && <p className="field-error">{errors.file}</p>}
-                    </div>
-                  ) : (
-                    <div>
-                      <div className={`drive-link-field ${errors.driveLink ? 'has-error' : ''}`}>
-                        <LinkIcon size={20} />
-                        <input
-                          type="url"
-                          placeholder={t('driveLinkPlaceholder')}
-                          value={driveLink}
-                          onChange={(e) => setDriveLink(e.target.value)}
-                        />
-                      </div>
-                      {errors.driveLink && <p className="field-error">{errors.driveLink}</p>}
-                      <p className="field-hint">{t('driveLinkHint')}</p>
-                      <label className={`permission-checkbox ${errors.permission ? 'has-error' : ''} mt-3`}>
-                        <input
-                          type="checkbox"
-                          checked={permissionConfirmed}
-                          onChange={(e) => setPermissionConfirmed(e.target.checked)}
-                        />
-                        <span className="checkbox-box" aria-hidden="true">
-                          <CheckIcon size={14} />
-                        </span>
-                        <span>{t('drivePermissionLabel')}</span>
-                      </label>
-                      {errors.permission && <p className="field-error">{errors.permission}</p>}
-                    </div>
-                  )}
-                </div>
-
-                {/* Luxury Notes Textarea */}
-                <div className="spec-group">
-                  <div className="spec-group-head">
-                    <h3>{t('notesTitle')}</h3>
-                  </div>
-                  <div className="luxury-textarea-wrap">
-                    <textarea
-                      rows={3}
-                      className="luxury-textarea"
-                      placeholder={t('notesPlaceholder')}
-                      value={specialNotes}
-                      onChange={(e) => setSpecialNotes(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="configurator-summary">
-                  <div className="configurator-summary-row">
-                    <span>{t('selectedSpecSummary')}</span>
-                    <strong>{specLabels.paper} · {specLabels.size} · {quantity} {language === 'en' ? 'pcs' : 'ຊິ້ນ'}</strong>
-                  </div>
-                  <div className="configurator-summary-total">
-                    <span>{t('estimatedTotal')}</span>
-                    <div className="text-right">
-                      <strong style={{ color: 'var(--gold)', fontSize: '1.45rem', display: 'block' }}>
-                        {formatMoney(totalDisplay, currency)}
-                      </strong>
-                      {price && (
-                        <span className="text-[10px] font-bold text-slate-500 block">
-                          {formatMultiCurrency(price.total)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="product-cta-group" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '16px' }}>
-                  <button
-                    type="button"
-                    onClick={handleAddToCart}
-                    className="btn btn--secondary btn--lg flex-1"
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', minWidth: '160px', border: '1px solid var(--border-gold)' }}
-                  >
-                    <CartIcon size={20} />
-                    <span>{t('addToCartBtn')}</span>
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn--gold btn--lg flex-1 shadow-glow"
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', minWidth: '180px' }}
-                  >
-                    <span>{t('buyNowBtn')}</span>
-                    <ArrowRightIcon size={20} />
-                  </button>
-                </div>
-              </form>
+              {/* Step 2 Tab */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (uploadedFileName || tempPreviewUrl) setCurrentStep(2)
+                }}
+                className={`py-3 px-4 rounded-2xl text-xs sm:text-sm font-black transition flex items-center justify-center gap-2 cursor-pointer ${
+                  currentStep === 2
+                    ? 'bg-gradient-to-r from-slate-950 to-blue-950 text-amber-400 shadow-md border border-amber-500/30'
+                    : uploadedFileName || tempPreviewUrl
+                    ? 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    : 'text-slate-400 opacity-60 cursor-not-allowed'
+                }`}
+              >
+                <span className="w-6 h-6 rounded-full flex items-center justify-center bg-amber-500/20 text-amber-500 text-xs font-black">2</span>
+                <span>📑 2. ເລືອກສເປັກ & ສະຫຼຸບລາຄາ</span>
+              </button>
             </div>
           </div>
+
+          {/* STEP 1: Upload & Massive PDF Document Proof Preview */}
+          {currentStep === 1 && (
+            <div>
+              {!uploadedFileName && !tempPreviewUrl ? (
+                <div className="py-8 sm:py-12 max-w-3xl mx-auto">
+                  <div className="p-8 sm:p-12 rounded-3xl border border-amber-500/30 bg-gradient-to-br from-white via-slate-50 to-amber-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-blue-950/40 shadow-2xl space-y-6 text-center">
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                      <UploadCloudIcon size={16} />
+                      <span>ຂັ້ນຕອນທີ 1: ອັບໂຫຼດຟາຍອາດເວິກ (STEP 1: UPLOAD ARTWORK)</span>
+                    </div>
+                    
+                    <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 m-0">
+                      ອັບໂຫຼດຟາຍ PDF ຫຼື ຮູບພາບເພື່ອເລີ່ມຕົ້ນ
+                    </h1>
+                    
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-lg mx-auto m-0 leading-relaxed">
+                      ລະບົບຈະວິເຄາະ Resolution (300 DPI), Process Color (CMYK) ແລະ ຈຳນວນໜ້າພິມອັດຕະໂນມັດ
+                    </p>
+
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="relative overflow-hidden p-10 sm:p-14 rounded-3xl border-2 border-dashed border-amber-500/40 hover:border-amber-500 bg-white/80 dark:bg-slate-950/80 cursor-pointer transition transform hover:-translate-y-1 shadow-lg flex flex-col items-center justify-center gap-4"
+                    >
+                      <BorderBeam size={200} duration={6} colorFrom="#C5A059" colorTo="#0284C7" />
+                      
+                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-gradient-to-br from-slate-950 to-blue-950 text-amber-400 border border-amber-500/40 shadow-xl">
+                        <UploadCloudIcon size={32} />
+                      </div>
+                      
+                      <div className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl text-sm font-black bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 text-slate-950 shadow-xl shadow-amber-500/25">
+                        <span>ເລືອກຟາຍ PDF / ຮູບພາບ (Choose File)</span>
+                      </div>
+                      
+                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        ຫຼື ລາກວາງຟາຍລົງທີ່ນີ້ (PDF, AI, PSD, PNG, JPG, TIFF)
+                      </span>
+                    </div>
+
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6 w-full max-w-[1720px] mx-auto">
+                  <ArtworkDocumentViewer
+                    fileUrl={tempPreviewUrl || uploadedFileUrl}
+                    fileName={uploadedFileName || tempFile?.name || null}
+                    fileType={tempFile?.type || ''}
+                    report={preflightReport}
+                    onReupload={() => fileInputRef.current?.click()}
+                  />
+
+                  {/* Step 1 Action Bar */}
+                  <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl flex flex-wrap items-center justify-between gap-4">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="btn btn--secondary flex items-center gap-2 text-xs font-bold"
+                    >
+                      <UploadCloudIcon size={16} />
+                      <span>🔄 ປ່ຽນຟາຍອື່ນ (Change File)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStep(2)}
+                      className="btn btn--gold btn--lg shadow-glow flex items-center gap-2 text-sm font-black px-8 py-4"
+                    >
+                      <span>ຕໍ່ໄປ: ເລືອກວັດສະດຸ & ສະຫຼຸບລາຄາ (Next: Choose Specs & View Price)</span>
+                      <ArrowRightIcon size={20} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STEP 2: Unified Interactive Spec Configurator & Live Price Comparison */}
+          {currentStep === 2 && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              {/* Left Column: Clean Material & Paper Configurator (5 cols) */}
+              <div className="lg:col-span-5 bg-white dark:bg-slate-900 p-6 sm:p-7 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl space-y-5">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div>
+                    <span className="text-[11px] font-black uppercase tracking-wider text-amber-500 block">
+                      {categoryName}
+                    </span>
+                    <h2 className="text-xl font-black text-slate-900 dark:text-slate-100 m-0">
+                      {productName}
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(1)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    🔍 ກວດຟາຍ
+                  </button>
+                </div>
+
+                <form
+                  className="configurator space-y-4"
+                  onSubmit={handleBuyNow}
+                >
+                  {/* Color Print Mode Selector (CMYK vs Grayscale) */}
+                  <div className="spec-group">
+                    <div className="spec-group-head">
+                      <h3>{language === 'en' ? 'Color Print Mode' : 'ລະບົບສີງານພິມ (Color Mode)'}</h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setColorPrintMode('cmyk')}
+                        className={`p-3 rounded-2xl border text-left transition flex items-center justify-between cursor-pointer ${
+                          colorPrintMode === 'cmyk'
+                            ? 'bg-amber-500/10 border-amber-500 text-amber-900 dark:text-amber-300 shadow-md ring-1 ring-amber-500'
+                            : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-400'
+                        }`}
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-black text-xs">🌈 ພິມ 4 ສີ (CMYK)</span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400">ສີສັນສົດໃສ คมชัด 100%</span>
+                        </div>
+                        {colorPrintMode === 'cmyk' && <CheckIcon size={16} color="#C5A059" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setColorPrintMode('grayscale')}
+                        className={`p-3 rounded-2xl border text-left transition flex items-center justify-between cursor-pointer ${
+                          colorPrintMode === 'grayscale'
+                            ? 'bg-slate-500/10 border-slate-500 text-slate-900 dark:text-slate-100 shadow-md ring-1 ring-slate-500'
+                            : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-400'
+                        }`}
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-black text-xs">⚫ ພິມຂາວ-ດຳ</span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400">ປະຢັດຕົ້ນທຶນ</span>
+                        </div>
+                        {colorPrintMode === 'grayscale' && <CheckIcon size={16} color="#64748B" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <SpecGroup
+                    title={t('sizeSelect')}
+                    options={product.sizes}
+                    value={sizeId}
+                    onChange={setSizeId}
+                    language={language}
+                    currency={currency}
+                    convertTo={convertTo}
+                  />
+                  <SpecGroup
+                    title={t('materialSelect')}
+                    options={product.materials}
+                    value={materialId}
+                    onChange={setMaterialId}
+                    language={language}
+                    currency={currency}
+                    convertTo={convertTo}
+                  />
+                  <SpecGroup
+                    title={t('finishingSelect')}
+                    options={product.finishings}
+                    value={finishingId}
+                    onChange={setFinishingId}
+                    language={language}
+                    currency={currency}
+                    convertTo={convertTo}
+                  />
+                  <QuantityStepper
+                    value={quantity}
+                    minQty={minQty}
+                    onChange={setQuantity}
+                    t={t}
+                    isOnDemand={isOnDemand}
+                    discountTiers={remoteProduct?.discountTiers}
+                  />
+
+                  {/* Luxury Notes Textarea */}
+                  <div className="spec-group">
+                    <div className="spec-group-head">
+                      <h3>{t('notesTitle')}</h3>
+                    </div>
+                    <div className="luxury-textarea-wrap">
+                      <textarea
+                        rows={2}
+                        className="luxury-textarea"
+                        placeholder={t('notesPlaceholder')}
+                        value={specialNotes}
+                        onChange={(e) => setSpecialNotes(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+              {/* Right Column: Real-time Live Price Comparison & Quotation Table (7 cols) */}
+              <div className="lg:col-span-7 space-y-4">
+                <PriceBreakdownTable
+                  quantity={quantity}
+                  pageCount={preflightReport?.pageCount || 1}
+                  isColor={colorPrintMode === 'cmyk'}
+                  coveragePercent={preflightReport?.colorCoveragePercent?.total || (colorPrintMode === 'cmyk' ? 20 : 5)}
+                  baseUnit={product.basePrice}
+                  sizeLabel={specLabels.size || 'Standard'}
+                  sizeAdd={product.sizes.find((x) => x.id === sizeId)?.add || 0}
+                  materialLabel={specLabels.paper || 'Standard'}
+                  materialAdd={product.materials.find((x) => x.id === materialId)?.add || 0}
+                  finishingLabel={specLabels.finishing || 'Standard'}
+                  finishingAdd={product.finishings.find((x) => x.id === finishingId)?.add || 0}
+                  discountPercent={Math.round((price?.discount || 0) * 100)}
+                  totalAmountTHB={price?.total || 0}
+                  currency={currency}
+                  convertTo={convertTo}
+                  language={language}
+                />
+
+                {/* Direct Action Group */}
+                <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl flex flex-wrap items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(1)}
+                    className="btn btn--secondary text-xs font-bold px-5 py-3.5"
+                  >
+                    ← ກວດສອບຟາຍ PDF
+                  </button>
+
+                  <div className="flex items-center gap-3 flex-1 justify-end flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleAddToCart}
+                      className="btn btn--secondary btn--lg flex items-center gap-2 px-5 py-3.5"
+                      style={{ border: '1px solid var(--border-gold)' }}
+                    >
+                      <CartIcon size={20} />
+                      <span>{t('addToCartBtn')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBuyNow}
+                      className="btn btn--gold btn--lg shadow-glow flex items-center gap-2 px-7 py-3.5 font-black"
+                    >
+                      <span>{t('buyNowBtn')}</span>
+                      <ArrowRightIcon size={20} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -853,26 +842,53 @@ export default function ProductPage() {
         </div>
       )}
 
-      {/* Preflight Inspection Checklist Modal */}
+      {/* Global Hidden File Input (Always mounted) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.ai,.psd,.png,.jpg,.jpeg,.tiff"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) handleFileUpload(file)
+          e.target.value = ''
+        }}
+        className="hidden"
+      />
+
+      {/* Upload Progress & Preflight Analysis Modal */}
+      <UploadProgressModal
+        isOpen={showUploadProgress}
+        fileName={tempFile?.name || ''}
+        fileSizeMB={(tempFile ? (tempFile.size / (1024 * 1024)).toFixed(2) : '0')}
+        onComplete={() => {
+          setShowUploadProgress(false)
+        }}
+        onCancel={() => {
+          setShowUploadProgress(false)
+          setTempFile(null)
+          setTempPreviewUrl(null)
+          setUploadedFileName(null)
+          setUploadedFileUrl(null)
+        }}
+      />
+
+      {/* Preflight Inspection Checklist & Instant Quotation Modal */}
       {showPreflightModal && preflightReport && (
         <PreflightChecklistModal
           report={preflightReport}
-          onConfirm={handleConfirmPreflight}
-          onCancel={() => {
-            setShowPreflightModal(false)
-            setPendingAction(null)
-          }}
+          previewUrl={tempPreviewUrl || uploadedFileUrl}
+          productName={productName}
+          specLabels={specLabels}
+          quantity={quantity}
+          priceTotal={price?.total || 0}
+          currency={currency}
+          formatMoney={formatMoney}
+          formatMultiCurrency={formatMultiCurrency}
+          onConfirm={handleConfirmUpload}
+          onCancel={handleCancelUpload}
         />
       )}
-
-      {/* Canva-like Online Artwork Studio Modal */}
-      <ArtworkStudioModal
-        isOpen={showStudioModal}
-        onClose={() => setShowStudioModal(false)}
-        onSave={handleStudioSave}
-        productName={productName}
-        initialImage={uploadedFileUrl}
-      />
     </>
   )
 }

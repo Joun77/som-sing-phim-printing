@@ -4,7 +4,7 @@ import { trackOrder, approveDigitalProof, rejectDigitalProof, type Order } from 
 import { formatMoney } from '../utils/currency.ts'
 import { useShop } from '../context/ShopContext.tsx'
 import { getProduct } from '../data/catalog.ts'
-import { computePrice } from '../utils/pricing.ts'
+import { computePrice, type PriceBreakdown } from '../utils/pricing.ts'
 import {
   SearchIcon,
   TruckIcon,
@@ -206,14 +206,12 @@ export default function TrackingPage() {
     const qty = order.quantity || 1
 
     const computed = computePrice(product, { sizeId, materialId, finishingId, quantity: qty })
-    const priceBreakdown = computed || {
-      baseTotal: order.total_price || 50,
-      optionsTotal: 0,
-      subtotal: order.total_price || 50,
-      discountPercent: 0,
-      discountAmount: 0,
-      total: order.total_price || 50,
+    const priceBreakdown: PriceBreakdown = computed || {
       unitPrice: order.total_price && qty ? Math.round((order.total_price / qty) * 100) / 100 : 50,
+      total: order.total_price || 50,
+      totalTHB: order.total_price || 50,
+      qty,
+      discount: 0,
     }
 
     addToCart({

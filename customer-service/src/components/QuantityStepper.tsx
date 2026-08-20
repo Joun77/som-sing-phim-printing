@@ -87,7 +87,7 @@ export function QuantityStepper({
           style={{ background: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
         >
           <div className="text-xs font-bold text-muted flex items-center gap-1.5 mb-2" style={{ color: 'var(--text-muted)' }}>
-            <ZapIcon size={14} style={{ color: 'var(--gold)' }} />
+            <ZapIcon size={14} color="var(--gold)" />
             <span>ຕາຕະລາງສ່ວນຫຼຸດຕາມຈຳນວນ (Volume Discount)</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
