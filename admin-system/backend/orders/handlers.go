@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"backend/db"
+	"backend/inventory"
 	"backend/notifications"
 	"backend/pricing"
 
@@ -384,13 +385,21 @@ func HandleUpdateOrderStatus(c *gin.Context) {
 	ordersStore[orderID] = order
 	storeMutex.Unlock()
 
-	// Trigger LINE Bot Flex notification asynchronously
+	// Trigger LINE Bot Flex & Email notifications asynchronously
 	go func(o Order, targetStatus string) {
 		lineID := o.CustomerPhone
 		if lineID == "" {
 			lineID = o.CustomerID
 		}
-		_ = notifications.SendOrderStatusFlexMessage(lineID, notifications.OrderNotificationData{
+		itemSummary := "Custom Print Order"
+		if len(o.Items) > 0 {
+			itemSummary = o.Items[0].JobName
+			if itemSummary == "" {
+				itemSummary = o.Items[0].ItemName
+			}
+		}
+
+		notiData := notifications.OrderNotificationData{
 			ID:             o.ID,
 			OrderNo:        o.OrderNo,
 			CustomerName:   o.CustomerName,
@@ -398,9 +407,16 @@ func HandleUpdateOrderStatus(c *gin.Context) {
 			CustomerLineID: lineID,
 			TotalAmountLAK: o.TotalAmountLAK,
 			Status:         targetStatus,
+			ItemSummary:    itemSummary,
 			TrackingNumber: o.InternalTrackingCode,
 			CourierName:    o.CourierName,
-		})
+		}
+
+		_ = notifications.SendOrderStatusFlexMessage(lineID, notiData)
+
+		if o.CustomerEmail != "" {
+			_ = notifications.SendOrderStatusEmail(o.CustomerEmail, notiData)
+		}
 	}(order, string(req.Status))
 
 	c.JSON(http.StatusOK, order)
@@ -432,88 +448,58 @@ func dischargeFIFOStockForOrder(o Order) error {
 			paperSku = item.CoverPaperID
 		}
 
-		qtyNeeded := float64(item.Quantity)
-		if item.PageCount > 1 {
-			qtyNeeded = float64(item.Quantity * ((item.PageCount + 1) / 2))
+		inkCov, _ := item.Specs["ink_coverage_percent"].(float64)
+		if inkCov == 0 {
+			inkCov, _ = item.Specs["inkCoveragePercent"].(float64)
 		}
 
-		if paperSku != "" {
-			rows, err := tx.Query(`
-				SELECT id, quantity
-				FROM inventory_batches
-				WHERE sku_id = $1 AND quantity > 0
-				ORDER BY received_date ASC, created_at ASC
-				FOR UPDATE
-			`, paperSku)
-
-			if err != nil {
-				_, _ = tx.Exec(`UPDATE materials SET stock_qty = GREATEST(0, stock_qty - $1) WHERE sku = $2 OR id::text = $2`, qtyNeeded, paperSku)
-			} else {
-				type batchRecord struct {
-					id  string
-					qty float64
-				}
-				var batches []batchRecord
-				for rows.Next() {
-					var b batchRecord
-					if err := rows.Scan(&b.id, &b.qty); err == nil {
-						batches = append(batches, b)
-					}
-				}
-				if err := rows.Err(); err != nil {
-					log.Printf("[DB WARNING] batches rows iteration error: %v", err)
-				}
-				rows.Close()
-
-				if len(batches) > 0 {
-					var totalAvail float64
-					for _, b := range batches {
-						totalAvail += b.qty
-					}
-
-					if totalAvail < qtyNeeded {
-						return fmt.Errorf("insufficient stock for SKU %s: required %.0f, available %.0f", paperSku, qtyNeeded, totalAvail)
-					}
-
-					rem := qtyNeeded
-					for _, b := range batches {
-						if rem <= 0 {
-							break
-						}
-						deduct := b.qty
-						if rem < deduct {
-							deduct = rem
-						}
-						_, err := tx.Exec(`UPDATE inventory_batches SET quantity = quantity - $1 WHERE id = $2`, deduct, b.id)
-						if err != nil {
-							return err
-						}
-						rem -= deduct
-					}
-				}
-
-				_, _ = tx.Exec(`UPDATE materials SET stock_qty = GREATEST(0, stock_qty - $1) WHERE sku = $2 OR id::text = $2`, qtyNeeded, paperSku)
-			}
-
-			// Check reorder threshold alert
-			var remainingQty, reorderThreshold float64
-			var matName string
-			_ = tx.QueryRow(`SELECT name, stock_qty, reorder_threshold FROM materials WHERE sku = $1 OR id::text = $1 LIMIT 1`, paperSku).Scan(&matName, &remainingQty, &reorderThreshold)
-			if reorderThreshold > 0 && remainingQty <= reorderThreshold {
-				log.Printf("[INVENTORY ALERT] Material '%s' (SKU: %s) is below reorder threshold! Current: %.2f, Threshold: %.2f", matName, paperSku, remainingQty, reorderThreshold)
-			}
+		// Deduct Paper and Ink using inventory.DeductInventoryForJob inside DB transaction
+		err := inventory.DeductInventoryForJob(tx, inventory.JobDeductionSpec{
+			OrderID:        o.ID,
+			OrderItemID:    item.ID,
+			PaperSKU:       paperSku,
+			Quantity:       item.Quantity,
+			PageCount:      item.PageCount,
+			CoverPaperID:   item.CoverPaperID,
+			InnerPaperID:   item.InnerPaperID,
+			AvgCovC:        item.AvgCovC,
+			AvgCovM:        item.AvgCovM,
+			AvgCovY:        item.AvgCovY,
+			AvgCovK:        item.AvgCovK,
+			InkCoveragePct: inkCov,
+		})
+		if err != nil {
+			log.Printf("[INVENTORY DEDUCTION ERROR] %v", err)
+			return err
 		}
 
 		// Create Job Ticket for shop floor routing if not exists
+		jobNumber := fmt.Sprintf("JOB-%s-%s", o.OrderNo, item.ID)
 		ticketNo := fmt.Sprintf("JT-%s-%s", o.OrderNo, item.ID)
 		if len(ticketNo) > 30 {
 			ticketNo = ticketNo[:30]
 		}
+		if len(jobNumber) > 30 {
+			jobNumber = jobNumber[:30]
+		}
+
+		routingSteps := "1. Prepress File Check -> 2. Digital/Offset Printing -> 3. Lamination -> 4. Die-cut/Trimming -> 5. Binding -> 6. QC Packaging"
+		assignedMachine := "Offset Press Heidelberg / Digital Indigo 7900"
+
 		_, _ = tx.Exec(`
-			INSERT INTO job_tickets (order_id, order_item_id, ticket_number, status, priority, created_at, updated_at)
-			VALUES ($1, $2, $3, 'QUEUED', 1, NOW(), NOW())
-			ON CONFLICT (ticket_number) DO NOTHING
-		`, o.ID, item.ID, ticketNo)
+			INSERT INTO job_tickets (
+				order_id, order_item_id, job_number, ticket_number, 
+				routing_steps, assigned_machine, status, priority, created_at, updated_at
+			) VALUES (
+				$1, $2, $3, $4, $5, $6, 'IN_PRODUCTION', 1, NOW(), NOW()
+			)
+			ON CONFLICT (ticket_number) DO UPDATE SET
+				job_number = EXCLUDED.job_number,
+				routing_steps = EXCLUDED.routing_steps,
+				assigned_machine = EXCLUDED.assigned_machine,
+				status = 'IN_PRODUCTION',
+				updated_at = NOW()
+		`, o.ID, item.ID, jobNumber, ticketNo, routingSteps, assignedMachine)
 	}
 
 	// Stamp stock_deducted_at in DB

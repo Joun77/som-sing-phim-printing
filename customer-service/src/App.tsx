@@ -8,6 +8,7 @@ import ProductPage from './pages/ProductPage.tsx'
 import CheckoutPage from './pages/CheckoutPage.tsx'
 import SuccessPage from './pages/SuccessPage.tsx'
 import TrackingPage from './pages/TrackingPage.tsx'
+import PrintGuidePage from './pages/PrintGuidePage.tsx'
 import { useShop } from './context/ShopContext.tsx'
 import InstallPromptBanner from './components/InstallPromptBanner.tsx'
 import ConciergeDock from './components/ConciergeDock.tsx'
@@ -62,6 +63,8 @@ export default function App() {
           <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/success/:orderId" element={<SuccessPage />} />
           <Route path="/track" element={<TrackingPage />} />
+          <Route path="/guide" element={<PrintGuidePage />} />
+          <Route path="/materials" element={<PrintGuidePage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>

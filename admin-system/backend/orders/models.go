@@ -82,6 +82,7 @@ type Order struct {
 	CustomerID           string      `json:"customer_id"`
 	CustomerName         string      `json:"customer_name"`
 	CustomerPhone        string      `json:"customer_phone"`
+	CustomerEmail        string      `json:"customer_email,omitempty"`
 	TotalAmountLAK       float64     `json:"total_amount_lak"`
 	DepositLAK           float64     `json:"deposit_lak"`
 	RemainingLAK         float64     `json:"remaining_lak"`
@@ -244,9 +245,12 @@ type JobTicket struct {
 	ID                     string     `json:"id"`
 	OrderID                string     `json:"order_id"`
 	OrderItemID            string     `json:"order_item_id"`
+	JobNumber              string     `json:"job_number"`
 	TicketNumber           string     `json:"ticket_number"`
+	RoutingSteps           string     `json:"routing_steps"`
+	AssignedMachine        string     `json:"assigned_machine"`
 	AssignedPrinterAssetID string     `json:"assigned_printer_asset_id"`
-	Status                 string     `json:"status"` // QUEUED, PRINTING, FINISHING, COMPLETED, CANCELLED
+	Status                 string     `json:"status"` // QUEUED, IN_PRODUCTION, PRINTING, FINISHING, COMPLETED, CANCELLED
 	QRCodeData             string     `json:"qr_code_data"`
 	Priority               int        `json:"priority"`
 	EstimatedDurationMins  int        `json:"estimated_duration_mins"`

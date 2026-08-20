@@ -651,7 +651,7 @@ export function WebCatalogPage() {
 
                     <div className="col-span-1 md:col-span-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-2">
                       <label className="block text-xs font-bold text-slate-700">
-                        ຮູບແບບການສັ່ງພິມ (Print Fulfillment Mode) *
+                        Print Mode: On-Demand (No MOQ) / Bulk Order (With MOQ) *
                       </label>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <button

@@ -166,24 +166,42 @@
   gap: 10px;
   text-align: left;
   background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
+  border: 1.5px solid var(--border-subtle);
   border-radius: var(--radius);
   padding: 12px 14px;
+  cursor: pointer;
   transition: border-color var(--t-fast), box-shadow var(--t-fast), background var(--t-fast);
 }
 
 .option-card:hover {
   border-color: var(--border-gold);
+  background: var(--bg-surface);
 }
 
 .option-card.is-selected {
-  border: 1.5px solid var(--gold);
+  border: 2px solid var(--gold);
   background: rgba(197, 160, 89, 0.12);
-  box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.2);
+  box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.2), 0 4px 14px rgba(197, 160, 89, 0.1);
 }
 
 .option-card.is-selected .option-card-main strong {
-  color: var(--gold);
+  color: var(--text-main);
+}
+
+.option-card.is-selected .option-card-main small {
+  color: var(--text-muted);
+}
+
+.dark .option-card.is-selected,
+[data-theme="dark"] .option-card.is-selected {
+  border-color: var(--gold);
+  background: rgba(197, 160, 89, 0.15);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.25), 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.dark .option-card.is-selected .option-card-main strong,
+[data-theme="dark"] .option-card.is-selected .option-card-main strong {
+  color: #FFFFFF;
 }
 
 .option-card-radio {
@@ -194,14 +212,22 @@
   height: 20px;
   border-radius: 50%;
   border: 2px solid var(--border-subtle);
-  color: var(--navy-dark);
+  color: #FFFFFF;
   flex-shrink: 0;
-  transition: border-color var(--t-fast), background var(--t-fast);
+  transition: border-color var(--t-fast), background var(--t-fast), color var(--t-fast);
 }
 
 .option-card.is-selected .option-card-radio {
   border-color: var(--gold);
   background: var(--gold);
+  color: #070D1E;
+}
+
+.dark .option-card.is-selected .option-card-radio,
+[data-theme="dark"] .option-card.is-selected .option-card-radio {
+  border-color: var(--gold);
+  background: var(--gold);
+  color: #070D1E;
 }
 
 .option-card-main {
@@ -214,6 +240,7 @@
 .option-card-main strong {
   font-size: 0.95rem;
   color: var(--text-main);
+  font-weight: 700;
 }
 
 .option-card-main small {
@@ -222,7 +249,7 @@
 }
 
 .option-card-price {
-  font-weight: 700;
+  font-weight: 800;
   font-size: 0.85rem;
   color: var(--gold);
 }

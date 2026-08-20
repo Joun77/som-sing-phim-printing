@@ -90,6 +90,9 @@ export default function Footer() {
           <h4>{isLao ? 'ລິ້ງດ່ວນ & ບໍລິການ' : 'Quick Links & Services'}</h4>
           <ul>
             <li>
+              <Link to="/guide">{isLao ? 'ຄູ່ມືວັດສະດຸ & ວິທີເຂົ້າເລັ້ມ' : 'Print & Binding Guide'}</Link>
+            </li>
+            <li>
               <Link to="/track">{t('navTrack')}</Link>
             </li>
             <li>

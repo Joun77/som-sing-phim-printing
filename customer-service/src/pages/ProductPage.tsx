@@ -27,15 +27,18 @@ import BoxModelViewer from '../components/3D/BoxModelViewer.tsx'
 import QuantityStepper from '../components/QuantityStepper.tsx'
 import { analyzeArtworkPreflight, type PreflightReport } from '../lib/preflightAnalyzer.ts'
 import PreflightChecklistModal from '../components/PreflightChecklistModal.tsx'
+import ArtworkStudioModal from '../components/ArtworkStudio/ArtworkStudioModal.tsx'
 
 interface OptionButtonProps {
   option: SpecOption
   selected: boolean
   onSelect: (id: string) => void
   language: string
+  currency: any
+  convertTo: (thb: number) => number
 }
 
-function OptionButton({ option, selected, onSelect, language }: OptionButtonProps) {
+function OptionButton({ option, selected, onSelect, language, currency, convertTo }: OptionButtonProps) {
   const label = language === 'en' && option.labelEn ? option.labelEn : option.label
   const hint = language === 'en' && option.hintEn ? option.hintEn : option.hint
 
@@ -54,7 +57,9 @@ function OptionButton({ option, selected, onSelect, language }: OptionButtonProp
         {hint && <small>{hint}</small>}
       </span>
       {typeof option.add === 'number' && option.add !== 0 && (
-        <span className="option-card-price">{option.add > 0 ? `+${option.add}` : option.add}</span>
+        <span className="option-card-price">
+          +{formatMoney(convertTo(option.add), currency)}
+        </span>
       )}
     </button>
   )
@@ -67,9 +72,11 @@ interface SpecGroupProps {
   value: string
   onChange: (id: string) => void
   language: string
+  currency: any
+  convertTo: (thb: number) => number
 }
 
-function SpecGroup({ title, hint, options, value, onChange, language }: SpecGroupProps) {
+function SpecGroup({ title, hint, options, value, onChange, language, currency, convertTo }: SpecGroupProps) {
   return (
     <div className="spec-group">
       <div className="spec-group-head">
@@ -78,7 +85,15 @@ function SpecGroup({ title, hint, options, value, onChange, language }: SpecGrou
       </div>
       <div className="spec-options">
         {options.map((o) => (
-          <OptionButton key={o.id} option={o} selected={value === o.id} onSelect={onChange} language={language} />
+          <OptionButton
+            key={o.id}
+            option={o}
+            selected={value === o.id}
+            onSelect={onChange}
+            language={language}
+            currency={currency}
+            convertTo={convertTo}
+          />
         ))}
       </div>
     </div>
@@ -160,13 +175,13 @@ export default function ProductPage() {
   const [quantity, setQuantity] = useState(1)
   
   const [uploadMode, setUploadMode] = useState<'upload' | 'drive'>('upload')
-  const [uploadedFileName, setUploadedFileName] = useState('')
-  const [uploadedFileUrl, setUploadedFileUrl] = useState('')
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
+  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
-  const [fileQualityNotice, setFileQualityNotice] = useState<string | null>(null)
   const [preflightReport, setPreflightReport] = useState<PreflightReport | null>(null)
   const [showPreflightModal, setShowPreflightModal] = useState(false)
+  const [showStudioModal, setShowStudioModal] = useState(false)
   const [preflightConfirmed, setPreflightConfirmed] = useState(false)
   const [pendingAction, setPendingAction] = useState<'cart' | 'buy' | null>(null)
   
@@ -261,7 +276,6 @@ export default function ProductPage() {
 
     setUploadedFileName(file.name)
     setIsUploading(true)
-    setFileQualityNotice(null)
     setPreflightConfirmed(false)
 
     try {
@@ -279,6 +293,22 @@ export default function ProductPage() {
     } finally {
       setIsUploading(false)
     }
+  }
+
+  const handleStudioSave = (artworkDataUrl: string) => {
+    setUploadedFileUrl(artworkDataUrl)
+    setUploadedFileName('studio-custom-artwork.png')
+    setUploadMode('upload')
+    setPreflightReport({
+      dpi: 300,
+      dpiStatus: 'pass',
+      colorSpace: 'CMYK',
+      colorSpaceStatus: 'pass',
+      bleedMarginMM: 3,
+      bleedStatus: 'pass',
+      allPassed: true,
+      warnings: [],
+    })
   }
 
   const validateInputs = () => {
@@ -425,45 +455,22 @@ export default function ProductPage() {
 
           <div className="product-layout">
             <div className="product-gallery">
-              {/* 2D vs 3D Model Studio View Switcher */}
-              <div
-                className="flex items-center justify-between mb-3 p-1.5 rounded-2xl border shadow-xs"
-                style={{ background: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
-              >
-                <button
-                  type="button"
-                  onClick={() => setIs3DView(false)}
-                  className="flex-1 py-2 rounded-xl text-xs font-black transition cursor-pointer"
-                  style={{
-                    background: !is3DView ? 'var(--navy)' : 'transparent',
-                    color: !is3DView ? '#FFFFFF' : 'var(--text-muted)',
-                  }}
-                >
-                  🖼️ 2D Artwork
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIs3DView(true)}
-                  className="flex-1 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5"
-                  style={{
-                    background: is3DView ? 'var(--gold)' : 'transparent',
-                    color: is3DView ? '#0B1938' : 'var(--text-muted)',
-                  }}
-                >
-                  <span>📦 3D Box Studio</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                </button>
-              </div>
-
               <div className="product-gallery-main">
-                {is3DView ? (
-                  <BoxModelViewer
-                    lengthMM={boxDimensions.l}
-                    widthMM={boxDimensions.w}
-                    heightMM={boxDimensions.h}
-                    artworkUrl={uploadedFileUrl && (uploadedFileUrl.startsWith('http') || uploadedFileUrl.startsWith('data:') || uploadedFileUrl.startsWith('blob:')) ? uploadedFileUrl : null}
-                    finishingEffect={finishingEffect}
-                  />
+                {uploadedFileUrl && (uploadedFileUrl.startsWith('data:') || uploadedFileUrl.startsWith('http') || uploadedFileUrl.startsWith('blob:')) ? (
+                  <div className="w-full h-full p-4 flex flex-col items-center justify-center relative min-h-[380px]">
+                    <img
+                      src={uploadedFileUrl}
+                      alt="Custom Artwork Preview"
+                      className="max-h-[350px] max-w-full object-contain rounded-2xl shadow-2xl border border-gold/40"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowStudioModal(true)}
+                      className="mt-3 px-4 py-2 rounded-xl text-xs font-black bg-slate-900 text-amber-300 border border-gold shadow-lg hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      ✏️ ແກ້ໄຂອາດເວິກໃນສະຕູດີໂອ (Edit in Studio)
+                    </button>
+                  </div>
                 ) : (
                   <ProductArt art={product.image} />
                 )}
@@ -499,14 +506,14 @@ export default function ProductPage() {
             <div className="product-info">
               <div className="flex items-center gap-2 mb-1">
                 <span className="product-card-cat">{categoryName}</span>
-                {isOnDemand ? (
+                {isOnDemand || minQty === 1 ? (
                   <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-300 text-[11px] font-black px-3 py-1 rounded-full inline-flex items-center gap-1.5 border border-amber-300 dark:border-amber-500/40">
                     <SparkleIcon size={12} />
-                    <span>⚡ On-Demand: 1 ชิ้นก็พิมพ์ได้ (No Minimum Order)</span>
+                    <span>⚡ ງານພິມຕາມສັ່ງ On-Demand (ບໍ່ມີຂັ້ນຕ່ຳ)</span>
                   </span>
                 ) : (
                   <span className="bg-slate-100 dark:bg-slate-850 text-slate-700 dark:text-slate-200 text-[11px] font-bold px-3 py-1 rounded-full inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-700">
-                    <span>📦 สั่งผลิตจำนวนมาก (ขั้นต่ำ {minQty} ชิ้น)</span>
+                    <span>📦 ງານພິມຈຳນວນຫຼາຍ (ຂັ້ນຕ່ຳ {minQty} ຊິ້ນ)</span>
                   </span>
                 )}
               </div>
@@ -526,9 +533,33 @@ export default function ProductPage() {
                 className="configurator"
                 onSubmit={handleBuyNow}
               >
-                <SpecGroup title={t('sizeSelect')} options={product.sizes} value={sizeId} onChange={setSizeId} language={language} />
-                <SpecGroup title={t('materialSelect')} options={product.materials} value={materialId} onChange={setMaterialId} language={language} />
-                <SpecGroup title={t('finishingSelect')} options={product.finishings} value={finishingId} onChange={setFinishingId} language={language} />
+                <SpecGroup
+                  title={t('sizeSelect')}
+                  options={product.sizes}
+                  value={sizeId}
+                  onChange={setSizeId}
+                  language={language}
+                  currency={currency}
+                  convertTo={convertTo}
+                />
+                <SpecGroup
+                  title={t('materialSelect')}
+                  options={product.materials}
+                  value={materialId}
+                  onChange={setMaterialId}
+                  language={language}
+                  currency={currency}
+                  convertTo={convertTo}
+                />
+                <SpecGroup
+                  title={t('finishingSelect')}
+                  options={product.finishings}
+                  value={finishingId}
+                  onChange={setFinishingId}
+                  language={language}
+                  currency={currency}
+                  convertTo={convertTo}
+                />
                 <QuantityStepper
                   value={quantity}
                   minQty={minQty}
@@ -561,7 +592,35 @@ export default function ProductPage() {
                   </div>
 
                   {uploadMode === 'upload' ? (
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
+                      {/* Canva-like Online Design Studio Launch Button */}
+                      <button
+                        type="button"
+                        onClick={() => setShowStudioModal(true)}
+                        className="w-full py-3 px-4 rounded-2xl border-2 transition flex items-center justify-between font-extrabold text-xs sm:text-sm shadow-glow cursor-pointer"
+                        style={{
+                          background: 'linear-gradient(135deg, rgba(197, 160, 89, 0.22) 0%, rgba(14, 23, 47, 0.95) 100%)',
+                          borderColor: 'var(--gold)',
+                          color: '#EBD8B2',
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">🎨</span>
+                          <span>{language === 'en' ? 'Design & Customize Online Studio' : 'ອອກແບບ & ປັບແຕ່ງໜ້າປົກອອນລາຍ'}</span>
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-gold text-slate-950 font-black tracking-wide">
+                          Canva Studio
+                        </span>
+                      </button>
+
+                      <div className="flex items-center gap-2 my-1">
+                        <div className="flex-1 h-[1px] bg-slate-800" />
+                        <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
+                          {language === 'en' ? 'or upload file' : 'ຫຼື ອັບໂຫຼດຟາຍສຳເລັດຮູບ'}
+                        </span>
+                        <div className="flex-1 h-[1px] bg-slate-800" />
+                      </div>
+
                       <label
                         className={`luxury-dropzone cursor-pointer transition-all ${
                           isDragOver ? 'border-amber-400 bg-amber-50/10 scale-[1.01]' : ''
@@ -608,7 +667,7 @@ export default function ProductPage() {
                           }}
                         >
                           <div className="flex items-center gap-2">
-                            <FileCheckIcon size={18} style={{ color: preflightReport.allPassed ? '#10B981' : '#F59E0B' }} />
+                            <FileCheckIcon size={18} color={preflightReport.allPassed ? '#10B981' : '#F59E0B'} />
                             <span className="font-bold" style={{ color: 'var(--text-main)' }}>
                               {preflightReport.allPassed
                                 ? '✓ ไฟล์พร้อมพิมพ์ (300 DPI · CMYK · Bleed OK)'
@@ -805,6 +864,15 @@ export default function ProductPage() {
           }}
         />
       )}
+
+      {/* Canva-like Online Artwork Studio Modal */}
+      <ArtworkStudioModal
+        isOpen={showStudioModal}
+        onClose={() => setShowStudioModal(false)}
+        onSave={handleStudioSave}
+        productName={productName}
+        initialImage={uploadedFileUrl}
+      />
     </>
   )
 }

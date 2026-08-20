@@ -127,6 +127,29 @@ export default function TrackingPage() {
     }
   }
 
+  useEffect(() => {
+    const q = searchParams.get('q') || searchParams.get('order') || searchParams.get('orderId')
+    if (q) {
+      setQuery(q)
+      executeSearch(q)
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    if (!order) return
+    const interval = setInterval(() => {
+      const id = order.order_id || order.id
+      if (id) {
+        trackOrder(id).then((res) => {
+          if (res && res.status !== order.status) {
+            setOrder(res)
+          }
+        }).catch(() => {})
+      }
+    }, 10000)
+    return () => clearInterval(interval)
+  }, [order])
+
   const handleApproveProof = async () => {
     if (!order) return
     setIsSubmittingProof(true)

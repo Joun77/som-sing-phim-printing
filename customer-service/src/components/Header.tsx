@@ -187,6 +187,13 @@ export default function Header() {
               )}
             </div>
 
+            <Link
+              to="/guide"
+              className="nav-link"
+              onClick={() => setMenuOpen(false)}
+            >
+              {language === 'en' ? 'Print Guide & Materials' : 'ຄູ່ມືວັດສະດຸ & ເຈ້ຍ'}
+            </Link>
             <button
               type="button"
               className="nav-link nav-link-btn"

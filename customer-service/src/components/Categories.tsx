@@ -30,12 +30,10 @@ export default function Categories() {
               <div className="category-card-top">
                 <span className="category-card-num">0{i + 1}</span>
                 <span className="category-card-icon-pill">
-                  {c.icon === 'album' && <FileTextIcon size={20} />}
-                  {c.icon === 'frame' && <LayersIcon size={20} />}
-                  {c.icon === 'sticker' && <PackageIcon size={20} />}
-                  {c.icon === 'card' && <FileTextIcon size={20} />}
                   {c.icon === 'doc' && <PrinterIcon size={20} />}
-                  {!['album', 'frame', 'sticker', 'card', 'doc'].includes(c.icon) && <SparkleIcon size={20} />}
+                  {c.icon === 'photo' && <LayersIcon size={20} />}
+                  {c.icon === 'sticker' && <PackageIcon size={20} />}
+                  {!['doc', 'photo', 'sticker'].includes(c.icon) && <SparkleIcon size={20} />}
                 </span>
               </div>
               <h3 className="category-card-title">{language === 'en' ? c.nameEn : c.name}</h3>

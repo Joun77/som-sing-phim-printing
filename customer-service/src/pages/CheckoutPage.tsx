@@ -62,7 +62,7 @@ export default function CheckoutPage() {
   const navigate = useNavigate()
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const [customer, setCustomer] = useState({ name: '', phone: '', address: '' })
+  const [customer, setCustomer] = useState({ name: '', phone: '', email: '', address: '' })
   const [courierId, setCourierId] = useState(COURIERS[0].id)
   const [slipImage, setSlipImage] = useState<File | null>(null)
   const [slipPreview, setSlipPreview] = useState<string | null>(null)
@@ -105,12 +105,29 @@ export default function CheckoutPage() {
       <section className="section text-center container" style={{ padding: '80px 24px' }}>
         <h2>{t('noItemsInCart')}</h2>
         <p className="text-muted">{t('selectProductFirst')}</p>
-        <Link to="/category/albums" className="btn btn--navy mt-2">
+        <Link to="/category/documents" className="btn btn--navy mt-2">
           {t('allCategoriesLink')}
         </Link>
       </section>
     )
   }
+
+  const hasOnDemandItem = useMemo(() => {
+    return checkoutItems.some(
+      (item) =>
+        item.product.isOnDemand ||
+        item.config.quantity === 1 ||
+        item.product.minQuantity === 1
+    )
+  }, [checkoutItems])
+
+  const [paymentType, setPaymentType] = useState<'full' | 'deposit'>('full')
+
+  useEffect(() => {
+    if (hasOnDemandItem) {
+      setPaymentType('full')
+    }
+  }, [hasOnDemandItem])
 
   const subtotal = checkoutItems.reduce(
     (sum, item) => sum + (item.price?.totalTHB || item.price?.total || 0),
@@ -120,7 +137,12 @@ export default function CheckoutPage() {
   const isFreeShipping = subtotal >= FREE_SHIPPING_THRESHOLD
   const shippingFee = isFreeShipping ? 0 : courier.fee
   const total = subtotal + shippingFee
+  const amountToPay = (!hasOnDemandItem && paymentType === 'deposit') ? Math.ceil(total * 0.5) : total
+  const remainingBalance = total - amountToPay
+
   const totalDisplay = convertTo(total)
+  const amountToPayDisplay = convertTo(amountToPay)
+  const remainingDisplay = convertTo(remainingBalance)
 
   const bankAccounts = useMemo(() => {
     try {
@@ -151,10 +173,10 @@ export default function CheckoutPage() {
       buildBcelOnePayPayload({
         accountNo: activeBankAccount.accountNumber,
         accountName: activeBankAccount.accountName,
-        amountLAK: total,
+        amountLAK: amountToPay,
         orderId: 'SSP-ORDER',
       }),
-    [total, activeBankAccount]
+    [amountToPay, activeBankAccount]
   )
 
   const triggerVerification = async (previewUrl: string) => {
@@ -166,7 +188,7 @@ export default function CheckoutPage() {
         order_id: 'PREVIEW-' + Date.now(),
         qr_payload: qrPayload,
         slip_image: previewUrl,
-        amount: total,
+        amount: amountToPay,
       })
       if (res.status === 'success' || res.new_status === 'PAID_PREPRESS') {
         setSlipVerified(true)
@@ -219,6 +241,8 @@ export default function CheckoutPage() {
         order_id: orderId,
         customer_name: customer.name.trim(),
         phone: customer.phone.trim(),
+        email: customer.email.trim(),
+        customer_email: customer.email.trim(),
         address: customer.address.trim(),
         product_id: firstItem.product.id,
         specs: {
@@ -328,6 +352,16 @@ export default function CheckoutPage() {
                 {errors.phone && <p className="field-error">{errors.phone}</p>}
               </div>
               <div className="field">
+                <label htmlFor="c-email">ອີເມວສຳລັບຮັບແຈ້ງເຕືອນສະຖານະ (Email Notification)</label>
+                <input
+                  id="c-email"
+                  type="email"
+                  placeholder="customer@example.com (ຮັບໃບເຊັດ ແລະ ອັບເດດສະຖານະງານພິມ)"
+                  value={customer.email}
+                  onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
+                />
+              </div>
+              <div className="field">
                 <label htmlFor="c-address">ທີ່ຢູ່ຈັດສົ່ງ (Delivery Address)</label>
                 <textarea
                   id="c-address"
@@ -414,6 +448,79 @@ export default function CheckoutPage() {
                 </div>
               )}
 
+              {/* Payment Type Selection (On-Demand Full vs Bulk 50% Deposit) */}
+              <div style={{ marginBottom: '18px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 800, display: 'block', marginBottom: '8px', color: 'var(--text-main)' }}>
+                  ເງື່ອນໄຂການຊຳລະເງິນ (Payment Term):
+                </span>
+
+                {hasOnDemandItem ? (
+                  <div
+                    style={{
+                      padding: '12px 16px',
+                      borderRadius: '14px',
+                      background: 'rgba(197, 160, 89, 0.12)',
+                      border: '1.5px solid var(--gold)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                    }}
+                  >
+                    <span style={{ fontSize: '1.2rem' }}>⚡</span>
+                    <div>
+                      <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)', display: 'block' }}>
+                        ງານພິມຕາມສັ່ງດ່ວນ (On-Demand) — ຊຳລະເຕັມຈຳນວນ 100%
+                      </strong>
+                      <small style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                        ງານພິມດ່ວນ 1 ຊິ້ນ / ບໍ່ມີຂັ້ນຕ່ຳ ລະບົບຈະເລີ່ມພິມທັນທີຫຼັງຊຳລະເຕັມຈຳນວນ
+                      </small>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentType('full')}
+                      style={{
+                        padding: '12px',
+                        borderRadius: '12px',
+                        textAlign: 'left',
+                        border: paymentType === 'full' ? '2px solid var(--gold)' : '1.5px solid var(--border-subtle)',
+                        background: paymentType === 'full' ? 'rgba(197, 160, 89, 0.12)' : 'var(--bg-card)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <strong style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-main)' }}>
+                        ✓ ຊຳລະເຕັມ 100%
+                      </strong>
+                      <small style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                        {formatMoney(totalDisplay, currency)} (ບໍ່ມີຍອດຄ້າງ)
+                      </small>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setPaymentType('deposit')}
+                      style={{
+                        padding: '12px',
+                        borderRadius: '12px',
+                        textAlign: 'left',
+                        border: paymentType === 'deposit' ? '2px solid var(--gold)' : '1.5px solid var(--border-subtle)',
+                        background: paymentType === 'deposit' ? 'rgba(197, 160, 89, 0.12)' : 'var(--bg-card)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <strong style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-main)' }}>
+                        ✓ ມັດຈຳ 50%
+                      </strong>
+                      <small style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                        {formatMoney(amountToPayDisplay, currency)} (ຍອດຄ້າງ 50%)
+                      </small>
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div className="payment-box">
                 <div className="payment-qr">
                   <span className="payment-qr-badge">
@@ -422,7 +529,7 @@ export default function CheckoutPage() {
                   <div className="payment-qr-canvas">
                     <QRCodeSVG value={qrPayload} size={180} bgColor="#ffffff" fgColor="#0C2340" level="M" />
                   </div>
-                  <p className="payment-qr-amount">ຍອດຊຳລະ {formatMoney(totalDisplay, currency)}</p>
+                  <p className="payment-qr-amount">ຍອດຊຳລະຕອນນີ້ {formatMoney(amountToPayDisplay, currency)}</p>
                 </div>
 
                 <div className="payment-bank">
@@ -443,13 +550,13 @@ export default function CheckoutPage() {
                       <strong className="bank-number">{activeBankAccount.accountNumber}</strong>
                     </li>
                     <li>
-                      <span>ຍອດໂອນ</span>
-                      <strong className="bank-number">{formatMoney(totalDisplay, currency)}</strong>
+                      <span>ຍອດໂອນຕອນນີ້</span>
+                      <strong className="bank-number">{formatMoney(amountToPayDisplay, currency)}</strong>
                     </li>
                   </ul>
                   <div className="bank-copy-actions">
                     <CopyButton text={activeBankAccount.accountNumber} label="ຄັດລອກເລກບັນຊີ" />
-                    <CopyButton text={String(total.toFixed(0))} label="ຄັດລອກຍອດເງິນ" />
+                    <CopyButton text={String(amountToPay.toFixed(0))} label="ຄັດລອກຍອດເງິນ" />
                   </div>
                 </div>
               </div>
@@ -536,7 +643,7 @@ export default function CheckoutPage() {
                         ctx.fillText('BCEL OnePay Receipt', 90, 70)
                         ctx.fillStyle = '#FFFFFF'
                         ctx.font = '15px sans-serif'
-                        ctx.fillText(`Amount: ₭ ${total.toLocaleString()}`, 50, 140)
+                        ctx.fillText(`Amount: ₭ ${amountToPay.toLocaleString()}`, 50, 140)
                         ctx.fillText(`Date: ${new Date().toLocaleDateString()}`, 50, 180)
                         ctx.fillText(`To: Som Sing Phim Atelier`, 50, 220)
                         ctx.fillStyle = '#10B981'
@@ -619,6 +726,18 @@ export default function CheckoutPage() {
                   <span>ຍອດລວມທັງໝົດ</span>
                   <strong>{formatMoney(totalDisplay, currency)}</strong>
                 </div>
+                {paymentType === 'deposit' && !hasOnDemandItem && (
+                  <>
+                    <div className="checkout-line" style={{ color: 'var(--gold)', fontWeight: 800 }}>
+                      <span>ຍອດຊຳລະຕອນນີ້ (ມັດຈຳ 50%)</span>
+                      <strong>{formatMoney(amountToPayDisplay, currency)}</strong>
+                    </div>
+                    <div className="checkout-line" style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                      <span>ຍອດຄ້າງຊຳລະກ່ອນຈັດສົ່ງ</span>
+                      <strong>{formatMoney(remainingDisplay, currency)}</strong>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="checkout-trust">

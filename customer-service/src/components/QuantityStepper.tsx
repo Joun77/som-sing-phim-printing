@@ -20,17 +20,27 @@ export function QuantityStepper({
   discountTiers,
 }: QuantityStepperProps) {
   const effectiveMin = isOnDemand ? 1 : Math.max(1, minQty)
+  const isBulk = effectiveMin > 1 && !isOnDemand
   const tier = getQuantityTier(value)
-  const hasBulkDiscount = discountTiers && discountTiers.length > 0
+  const activeTiers = (discountTiers && discountTiers.length > 0)
+    ? discountTiers
+    : isBulk
+    ? [
+        { minQuantity: Math.max(effectiveMin * 2, 100), discountPercentage: 5 },
+        { minQuantity: Math.max(effectiveMin * 5, 500), discountPercentage: 10 },
+        { minQuantity: Math.max(effectiveMin * 10, 1000), discountPercentage: 15 },
+      ]
+    : []
+  const hasBulkDiscount = activeTiers.length > 0
 
   return (
     <div className="spec-group">
       <div className="spec-group-head">
         <h3>{t('quantityLabel')}</h3>
         <span className="spec-group-hint">
-          {isOnDemand
-            ? '⚡ On-Demand: 1 ชิ้นก็พิมพ์ได้ (No Minimum Order)'
-            : `📦 สั่งผลิตจำนวนมาก (ขั้นต่ำ ${effectiveMin} ชิ้น)`}
+          {isOnDemand || effectiveMin === 1
+            ? '⚡ ງານພິມຕາມສັ່ງ On-Demand (ບໍ່ມີຂັ້ນຕ່ຳ)'
+            : `📦 ງານພິມຈຳນວນຫຼາຍ (ຂັ້ນຕ່ຳ ${effectiveMin} ຊິ້ນ)`}
         </span>
       </div>
 
@@ -78,10 +88,10 @@ export function QuantityStepper({
         >
           <div className="text-xs font-bold text-muted flex items-center gap-1.5 mb-2" style={{ color: 'var(--text-muted)' }}>
             <ZapIcon size={14} style={{ color: 'var(--gold)' }} />
-            <span>ตารางส่วนลดตามจำนวน (Volume Discount)</span>
+            <span>ຕາຕະລາງສ່ວນຫຼຸດຕາມຈຳນວນ (Volume Discount)</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {discountTiers!.map((dt, idx) => {
+            {activeTiers.map((dt, idx) => {
               const isActive = value >= dt.minQuantity
               return (
                 <div
@@ -93,9 +103,9 @@ export function QuantityStepper({
                     color: isActive ? '#10B981' : 'var(--text-muted)',
                   }}
                 >
-                  <div className="text-[11px] font-semibold">≥ {dt.minQuantity} ชิ้น</div>
+                  <div className="text-[11px] font-semibold">≥ {dt.minQuantity} ຊິ້ນ</div>
                   <div className="text-xs font-black" style={{ color: '#10B981' }}>
-                    ลด {dt.discountPercentage}%
+                    ຫຼຸດ {dt.discountPercentage}%
                   </div>
                 </div>
               )

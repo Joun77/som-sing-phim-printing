@@ -53,11 +53,10 @@
   --warning-soft: #FEF3C7;
 
   /* Typography */
+  --font-main: 'Plus Jakarta Sans', 'Noto Sans Lao', 'Noto Sans Thai', 'Sarabun', sans-serif;
   --font-serif: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
-  --font-thai: 'Plus Jakarta Sans', 'Noto Sans Lao', 'Sarabun', 'Noto Sans Thai', -apple-system, BlinkMacSystemFont,
-    'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-  --font-sans: 'Plus Jakarta Sans', 'Noto Sans Lao', 'Noto Sans Thai', 'Sarabun', -apple-system, BlinkMacSystemFont,
-    'Segoe UI', Roboto, sans-serif;
+  --font-thai: var(--font-main);
+  --font-sans: var(--font-main);
 
   /* Layout */
   --container: 1440px;
@@ -85,6 +84,16 @@
     #FFFFFF;
 }
 
+::selection {
+  background: rgba(197, 160, 89, 0.35);
+  color: #FFFFFF;
+}
+
+::-moz-selection {
+  background: rgba(197, 160, 89, 0.35);
+  color: #FFFFFF;
+}
+
 .dark,
 [data-theme="dark"] {
   /* ========================================================
@@ -93,7 +102,7 @@
   --bg-primary: #070D1E;            /* Deep Ink Blue Plate */
   --bg-surface: #0E172F;            /* Offset Press Charcoal Blue */
   --bg-card: #142145;               /* Solid Crisp Dark Card */
-  --bg-input: #091226;              /* High-Contrast Input Field */
+  --bg-input: #0A1329;              /* High-Contrast Input Field */
   --text-main: #FFFFFF;             /* 100% Pure Crisp White (No eye strain) */
   --text-muted: #94A3B8;            /* High-Contrast Slate Text */
   --border-gold: rgba(212, 175, 55, 0.4); /* Precise Foil Hairline */
@@ -134,7 +143,7 @@ html {
 
 body {
   margin: 0;
-  font-family: var(--font-thai);
+  font-family: var(--font-main);
   font-size: 16px;
   line-height: 1.6;
   color: var(--text-main);
@@ -173,7 +182,7 @@ h2,
 h3,
 h4,
 h5 {
-  font-family: var(--font-sans);
+  font-family: var(--font-main);
   color: var(--text-main);
   line-height: 1.25;
   margin: 0 0 0.5em;
@@ -213,7 +222,7 @@ p {
 }
 
 .section--alt {
-  background: var(--white);
+  background: var(--bg-surface);
 }
 
 .section--dark {
@@ -410,9 +419,10 @@ p {
 .field textarea {
   width: 100%;
   padding: 12px 14px;
-  border: 1.5px solid var(--slate-300);
+  border: 1.5px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  background: var(--white);
+  background: var(--bg-input);
+  color: var(--text-main);
   transition: border-color var(--t-fast), box-shadow var(--t-fast);
 }
 
