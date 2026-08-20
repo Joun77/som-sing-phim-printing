@@ -1,208 +1,100 @@
-# 💎 Som Sing Phim - Luxury Customer Service Web App (UI/UX & Full PWA Architecture) - V2
-
-> **Document Type:** System Architecture, Dual Theme (Dark Luxury & Light Royalty), Progressive Web App (PWA) & IDE Blueprint  
-> **Target Project:** `som-sing-phim-frontend` (Customer Service Web Application)  
-> **Brand Identity:** High-End Bespoke Printing Atelier & Digital Concierge (ສົມສິ່ງພິມ)  
-> **Version:** 2.0 (Dual Theme + PWA Web App Enabled)  
-> **Generated Date:** 2026-08-17  
-
----
-
-## 1. 🎨 Dual Luxury Design System: Dark Mode & Light Mode (Tokens & Gradients)
-
-การวาง Palette สีระดับ Luxury ตามที่กำหนด โดยแบ่งเป็น **Midnight Royal (โหมดมืด)** และ **Ivory Palais (โหมดสว่าง/โหมดแจ้ง)** พร้อมระบบ Gradient และ Glassmorphism สำหรับทั้งสองโหมด
-
-```css
-:root {
-  /* ========================================================
-     1. LIGHT LUXURY MODE ("Ivory Palais" - โหมดสว่าง / โหมดแจ้ง)
-     ======================================================== */
-  --bg-primary-light: #FDFCFA;           /* Pure Warm Ivory */
-  --bg-surface-light: #F5F0EB;           /* Swan Wing Silk Background */
-  --bg-card-light: rgba(255, 255, 255, 0.85); /* Frost Ivory Glass */
-  --text-main-light: #112250;            /* Deep Royal Blue Headings */
-  --text-muted-light: #3C5070;           /* Sapphire Secondary Text */
-  --border-gold-light: rgba(224, 198, 143, 0.55); /* Elegant Champagne Gold Border */
-  --card-shadow-light: 0 10px 30px -10px rgba(17, 34, 80, 0.08), 0 0 1px 1px rgba(224, 198, 143, 0.3);
-
-  /* Light Gradients */
-  --grad-surface-light: linear-gradient(135deg, #FFFFFF 0%, #F5F0EB 50%, #EFE8DF 100%);
-  --grad-hero-light: radial-gradient(circle at 10% 10%, rgba(224, 198, 143, 0.25) 0%, transparent 40%),
-                     radial-gradient(circle at 90% 90%, rgba(60, 80, 112, 0.08) 0%, transparent 50%),
-                     #FDFCFA;
-  --grad-accent-btn-light: linear-gradient(135deg, #112250 0%, #1c336b 60%, #3C5070 100%);
-  --grad-gold-shimmer-light: linear-gradient(135deg, #B39355 0%, #E0C68F 50%, #9A7B3E 100%);
-}
-
-.dark {
-  /* ========================================================
-     2. DARK LUXURY MODE ("Midnight Sapphire" - โหมดมืด)
-     ======================================================== */
-  --bg-primary-dark: #070D1E;            /* Ultra-Deep Midnight Slate */
-  --bg-surface-dark: #0B1533;            /* Deep Royal Obsidian */
-  --bg-card-dark: rgba(17, 34, 80, 0.55);/* Sapphire Dark Glass Card */
-  --text-main-dark: #F5F0EB;             /* Swan Wing Crisp Text */
-  --text-muted-dark: #D8CBC2;            /* Shellstone Warm Grey Subtitle */
-  --border-gold-dark: rgba(224, 198, 143, 0.25); /* Subtle Gold Hairline */
-  --card-shadow-dark: 0 20px 40px -15px rgba(0, 0, 0, 0.7), 0 0 1px 1px rgba(224, 198, 143, 0.2);
-
-  /* Dark Gradients */
-  --grad-surface-dark: linear-gradient(145deg, rgba(60, 80, 112, 0.2) 0%, rgba(11, 21, 51, 0.8) 100%);
-  --grad-hero-dark: radial-gradient(circle at 15% 20%, rgba(60, 80, 112, 0.35) 0%, transparent 50%),
-                   radial-gradient(circle at 85% 80%, rgba(224, 198, 143, 0.12) 0%, transparent 45%),
-                   #070D1E;
-  --grad-accent-btn-dark: linear-gradient(135deg, #E0C68F 0%, #F5F0EB 40%, #B39355 100%);
-  --grad-gold-shimmer-dark: linear-gradient(135deg, #E0C68F 0%, #F5F0EB 50%, #B39355 100%);
-}
-```
-
----
-
-## 2. 📱 การยกระดับเป็น Progressive Web App (PWA) และ Web App Experience
-
-เพื่อให้ลูกค้าใช้งานเสมือน **Native Mobile Concierge App** โดยไม่ต้องติดตั้งผ่าน App Store:
-
-1. **Installable Web App (PWA Manifest & Service Worker):**
-   - ลูกค้าสามารถกดปุ่ม *"เพิ่มลงในหน้าจอโฮม (Add to Home Screen)"* เพื่อเปิดใช้งานแบบ Standalone Fullscreen (ไม่มี URL bar).
-   - ปรับแต่ง App Icon สีทอง-น้ำเงินหรูหรา และ Splash Screen สำหรับ iPhone และ Android.
-2. **Push Notifications & Live Status Alerts (Web Push):**
-   - แจ้งเตือนลูกค้าอัตโนมัติเมื่อสถานะงานเปลี่ยน เช่น *"Artwork ของคุณได้รับการอนุมัติแล้ว และกำลังเข้าสู่แท่นพิมพ์"*.
-3. **Offline & Cache First for Portfolios:**
-   - แคชคอลเลกชันตัวอย่างงานพิมพ์ กระดาษพรีเมียม และเรทราคา เพื่อให้เปิดดูแคตตาล็อกได้ทันทีแม้เน็ตช้า.
-4. **Haptic & Gesture Interactions:**
-   - เพิ่ม Micro-animations, Bottom Sheet Drawer บนมือถือ และปุ่มสลับธีม (Theme Toggle) แบบ Smooth Luxury Transition.
-
----
-
-## 3. 🔍 การตรวจสอบข้อบกพร่องและฟังก์ชันเพิ่มเติม (Gap Analysis & Enhancements)
-
-| ฟังก์ชัน / องค์ประกอบ | ปัญหาและข้อจำกัดเดิม | การปรับปรุงสู่ Luxury Web App (V2) |
-| :--- | :--- | :--- |
-| **1. Theme Switcher** | มีธีมเดียว ขาดความยืดหยุ่นตามสภาพแสง | เพิ่ม **Bespoke Theme Switcher** สลับ Dark/Light mode แบบ Smooth fade พร้อมจำค่าผ่าน `localStorage` |
-| **2. Mobile & PWA App** | เป็นเว็บเพจทั่วไป ไม่มี App Manifest | ติดตั้ง **PWA Plugin + Service Worker** รองรับ Offline Catalog, Standalone Window, Push Notifications |
-| **3. Interactive Proofing** | ลูกค้าตรวจไฟล์งานยากบนมือถือ | ทำ **Mobile-Optimized Proof Viewer** รองรับ Pinch-to-Zoom, ไฮไลต์จุดแก้ไข และปุ่ม Digital Sign-off |
-| **4. Live Milestone Tracker** | ดูสเตตัสแบบ Text ธรรมดา | ทำ **Live Animated Stepper Bar** สีทอง Shimmer แสดงแบบ Real-time พร้อมเวลาโดยประมาณ (ETA) |
-| **5. VIP Direct Concierge** | ปุ่มแชทแยก ข้อมูลไม่เชื่อมโยง | Floating Concierge Dock เชื่อมโยง Order ID อัตโนมัติเวลาทักแชท LINE/WhatsApp ทำให้ทีมงานให้บริการได้ทันที |
-
----
-
-## 4. 🏛️ สถาปัตยกรรมระบบบริการลูกค้า (Web App Architecture)
-
-```
-[ som-sing-phim-frontend (React 18 + Vite + TypeScript + Tailwind CSS) ]
-   ├── 📱 PWA Engine (Workbox, Web App Manifest, Service Worker, Push API)
-   ├── 🌗 Theme Engine (ThemeContext, Tailwind Dark Mode Selector, CSS Variables)
-   ├── 💎 Luxury UI Layer
-   │    ├── Hero & Showcase (Interactive Reels, Foil Texture Preview)
-   │    ├── Bespoke Estimator Wizard (Dynamic Material & Finishing Selection)
-   │    ├── VIP Client Portal (Active Orders, Proofing Approval, Digital Invoices)
-   │    ├── Live Milestone Tracking (Real-time WebSockets / Polling)
-   │    └── Concierge Floating Dock (WhatsApp / LINE with Auto Order Context)
-   └── 🌐 API Integration (Go Backend Public API: /api/v1/public/*)
-```
-
----
-
-## 5. 📋 แผนการพัฒนาและคำสั่งสำหรับ IDE (Step-by-Step Implementation Prompt)
-
-```markdown
-# TASK: Implement Dual-Theme (Dark/Light) & PWA Web App for 'som-sing-phim-frontend'
-
-### Objective:
-Upgrade the customer-facing frontend into an installable, high-performance Luxury Web App (PWA) with full Dark/Light mode support, utilizing the royal palette (#112250, #3C5070, #E0C68F, #F5F0EB, #D8CBC2).
-
----
-
-### Step 1: Tailwind CSS & Dual-Theme Setup
-1. Update `tailwind.config.js` to enable class-based dark mode:
-   ```javascript
-   module.exports = {
-     darkMode: 'class',
-     theme: {
-       extend: {
-         colors: {
-           royal: { DEFAULT: '#112250', dark: '#070D1E', light: '#1c336b' },
-           sapphire: { DEFAULT: '#3C5070', light: '#536D96' },
-           gold: { DEFAULT: '#E0C68F', light: '#F3E5C8', dark: '#B39355' },
-           swan: '#F5F0EB',
-           shell: '#D8CBC2',
-           darkbg: '#070D1E',
-           lightbg: '#FDFCFA'
-         },
-         fontFamily: {
-           serif: ['Cormorant Garamond', 'Playfair Display', 'serif'],
-           sans: ['Plus Jakarta Sans', 'Noto Sans Lao', 'sans-serif'],
-         }
-       }
-     }
-   }
-   ```
-2. Create `src/context/ThemeContext.tsx`:
-   - Support `theme: 'light' | 'dark' | 'system'`.
-   - Auto-sync with HTML class tag and store state in `localStorage`.
-   - Create `src/components/common/ThemeToggle.tsx` with a luxurious sun/moon morphing icon and gold shimmer border.
-
----
-
-### Step 2: Progressive Web App (PWA) Configuration
-1. Install `vite-plugin-pwa`:
-   ```bash
-   npm install vite-plugin-pwa -D
-   ```
-2. Configure `vite.config.ts`:
-   ```typescript
-   import { VitePWA } from 'vite-plugin-pwa';
-
-   export default defineConfig({
-     plugins: [
-       react(),
-       VitePWA({
-         registerType: 'autoUpdate',
-         includeAssets: ['favicon.svg', 'logo.png', 'icons/*.png'],
-         manifest: {
-           name: 'ສົມສິ່ງພິມ | Som Sing Phim Bespoke Concierge',
-           short_name: 'SomSingPhim',
-           description: 'Luxury Bespoke Printing & Digital Concierge Platform',
-           theme_color: '#112250',
-           background_color: '#070D1E',
-           display: 'standalone',
-           orientation: 'portrait',
-           icons: [
-             { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-             { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
-           ]
-         }
-       })
-     ]
-   });
-   ```
-3. Create `src/components/common/InstallPromptBanner.tsx`:
-   - A non-intrusive luxury gold banner prompting customers: *"เพิ่ม Som Sing Phim ไปยังหน้าจอหลักเพื่อติดตามสถานะงานพิมพ์ได้รวดเร็ว (Install Web App)"*.
-
----
-
-### Step 3: Dual-Mode Luxury Components
-1. **Hero & Landing (`src/components/landing/HeroSection.tsx`):**
-   - **Dark Mode:** Deep Midnight background (`#070D1E`) with gold glowing mesh & sparkling foil highlights.
-   - **Light Mode:** Crisp Warm Ivory (`#FDFCFA`) with Royal Blue typography and Champagne Gold accents.
-2. **Materials Showcase (`src/components/landing/MaterialExplorer.tsx`):**
-   - Interactive 3D paper swatch viewer with texture toggles (Emboss, Gold Foil, Spot UV).
-3. **Milestone Tracker (`src/components/portal/MilestoneTracker.tsx`):**
-   - Adapts cleanly to both themes with animated progress lines in Shimmer Gold.
-4. **Artwork Proofing & Approval (`src/components/portal/ProofViewer.tsx`):**
-   - Fullscreen PDF/Image proof inspection with digital signature canvas for client sign-off.
-
----
-
-### Step 4: Verification & Testing Checklist
-- [ ] Theme toggling works instantaneously without page flash (No FOUC).
-- [ ] Contrast ratio meets WCAG AA standards in both Light and Dark modes.
-- [ ] PWA installs successfully on iOS (Safari Add to Home) and Android (Chrome Install).
-- [ ] Responsive UI functions smoothly down to 360px mobile viewports.
-```
-
----
-
-## 6. 💡 สรุปการเชื่อมต่อระบบ (Integration Protocol)
-* **API Endpoints:** ใช้ Public Customer Endpoints (`/api/v1/orders/track/:trackingCode`, `/api/v1/quotes/estimate`, `/api/v1/proofs/approve`) จาก Go Backend.
-* **Separation of Concerns:** ระบบนี้คือส่วนงานบริการลูกค้าภายนอก (`som-sing-phim-frontend`) ซึ่งแยกโฟลเดอร์และการควบคุมสิทธิ์ออกจากระบบแอดมิน (`somsingphim`).
+แผนการพัฒนาระบบส้มสิงพิมพ์สำหรับสั่งการ AI Agent(AI-Agent Ready Execution Roadmap & Task Directives)เอกสารฉบับนี้ออกแบบมาเพื่อให้ผู้ดูแลระบบสามารถคัดลอกคำสั่ง (Prompts / Task Directives) ในแต่ละข้อ ไปส่งต่อให้ AI Agent (เช่น AntiGravity IDE, Cursor, Windsurf, Claude Code) ทำการสร้างและแก้ไขโค้ดได้อย่างเป็นลำดับขั้นตอน โดยยังคงรักษาโครงสร้างสถาปัตยกรรม (Architecture Guard) และความถูกต้องทางการเงิน (Decimal Precision) ของโรงพิมพ์ส้มสิงพิมพ์ไว้อย่างเคร่งครัด🛠 กฎเหล็กสำหรับการสั่งงาน AI Agent (Agent System Instructions)ก่อนเริ่มส่งงานให้ AI Agent ในแต่ละ Phase โปรดแนบเงื่อนไขเหล่านี้ใน System Prompt:Architecture Separation: โค้ดส่วน admin-system/ ห้ามใช้ตารางร่วมกับ customer-service/ โดยตรง ต้องผ่าน REST API ของ Go Backend เท่านั้นNumeric Precision: ห้ามใช้ float32/float64 ในการคำนวณเงินหรือสต็อกกระดาษ ให้ใช้ shopspring/decimal ใน Go และ DECIMAL(12,4) ใน PostgreSQLNo Hardcoding: สูตรคำนวณราคา ค่าตั้งเครื่อง ค่าเพลท ค่าแรง ต้องดึงจากตาราง pricing_rates และ equipment_specs ใน DB เท่านั้น📅 PHASE 1: FINANCIAL AUTOMATION & PROFIT GUARDเป้าหมาย: อัตโนมัติการตรวจสอบสลิปโอนเงิน และควบคุมอัตรากำไรขั้นต้น (Gross Profit Margin Guard)Task 1.1: Automated Slip Verification Integration (SlipOK API)เป้าหมาย: ระบบตรวจสอบสลิปโอนเงิน PromptPay อัตโนมัติผ่าน SlipOK API และปรับสถานะคำสั่งซื้อใน DB ทันทีTarget Scope:Migration: admin-system/migrations/013_slip_verification.sqlGo Backend: admin-system/backend/finance/slip_verifier.go, admin-system/backend/main.goCustomer Storefront: customer-service/src/pages/CheckoutPage.tsxAgent Execution Prompt:[Task 1.1 Directive]
+1. Create SQL Migration `013_slip_verification.sql`:
+   - Add table `bank_transaction_logs` (id, order_id, qr_payload, trans_ref, amount DECIMAL(12,4), status, verified_at, raw_response JSONB).
+   - Add column `slip_verified_at TIMESTAMPTZ` and `slip_trans_ref VARCHAR(100)` to `orders`.
+2. In Go Backend (`admin-system/backend/`):
+   - Create package `finance/slip_verifier.go` to call SlipOK API (`https://api.slipok.com/api/line/apikey/`).
+   - Add POST endpoint `/api/v1/checkout/verify-slip` that accepts QR Payload / Slip Image and Order ID.
+   - Verify amount against `orders.total_amount`. If match, update order status from `PENDING_PAYMENT` to `PAID_PREPRESS` inside a DB Transaction.
+3. In Customer Storefront (`customer-service/src/pages/CheckoutPage.tsx`):
+   - Add real-time loading state "กำลังตรวจสอบสลิปการโอนเงิน..." after slip upload.
+   - Auto-redirect to SuccessPage upon receipt of 200 OK from verify-slip API within 3 seconds.
+Verification:รัน go test ./backend/finance/...ทดสอบยิง Payload จำลองเข้า /api/v1/checkout/verify-slip ตรวจสอบการเปลี่ยนสถานะในตาราง ordersTask 1.2: Tiered Discount & Margin Guard Approval Workflowเป้าหมาย: ระบบคำนวณอัตรากำไรขั้นต้น (Gross Profit Margin) หาก $Margin < 25\%$ ให้ตั้งสถานะใบเสนอราคาเป็นรอผู้จัดการอนุมัติTarget Scope:Go Backend: admin-system/backend/pricing/engine.go, admin-system/backend/orders/handlers.goAdmin Frontend: admin-system/frontend/src/features/pricing/components/QuotationManager.tsxAgent Execution Prompt:[Task 1.2 Directive]
+1. In Go Pricing Engine (`admin-system/backend/pricing/engine.go`):
+   - Calculate Gross Profit Margin % using formula:
+     $$Margin = \frac{TotalAmount - TotalCost}{TotalAmount} \times 100$$
+   - Return `gross_margin_percent` in the calculation result struct.
+2. In Order / Quotation Handler (`admin-system/backend/orders/handlers.go`):
+   - When creating or updating a Quotation with custom discount:
+     If `gross_margin_percent < 25.0`, set status = `REQUIRES_MANAGER_APPROVAL`.
+   - Add endpoint `POST /api/v1/quotations/:id/approve` and `POST /api/v1/quotations/:id/reject` restricted to `ROLE_MANAGER` or `ROLE_ADMIN`.
+3. In Admin Frontend (`QuotationManager.tsx`):
+   - Display a warning badge (Orange) for quotations with Margin < 25%.
+   - Add Approval Modal for Sales Manager to click "Approve Discount" or "Reject" with reason text area.
+Verification:ทดสอบออกใบเสนอราคาที่มีส่วนลดสูงจน Margin = 20% ตรวจสอบว่าระบบตั้งสถานะเป็น REQUIRES_MANAGER_APPROVAL หรือไม่Task 1.3: Supplier Paper Price Sheet Versioningเป้าหมาย: อัปโหลดตารางราคากระดาษซัพพลายเออร์เพื่อปรับ Base Cost ทั้งระบบโดยไม่กระทบใบเสนอราคาเก่าTarget Scope:Migration: admin-system/migrations/014_paper_price_versioning.sqlGo Backend: admin-system/backend/inventory/paper_prices.goAdmin Frontend: admin-system/frontend/src/features/inventory/components/SupplierPriceUploader.tsxAgent Execution Prompt:[Task 1.3 Directive]
+1. Create SQL Migration `014_paper_price_versioning.sql`:
+   - Create table `paper_price_versions` (id, supplier_name, effective_date, version_code, created_at).
+   - Add `price_version_id` to `paper_specs` table.
+2. In Go Backend (`admin-system/backend/inventory/`):
+   - Create API `POST /api/v1/inventory/supplier-price-sheets` to parse Excel/CSV uploads containing paper costs per ream/sheet.
+   - Update Pricing Engine to query the latest `effective_date` paper prices while preserving historical cost snapshots in approved quotations.
+3. In Admin Frontend:
+   - Build `SupplierPriceUploader.tsx` component allowing drag-and-drop Excel files with preview before committing version update.
+2D IMPOSITION & DEEP PREFLIGHT ENGINEเป้าหมาย: ตรวจไฟล์ PDF เชิงลึก และคำนวณการวางหน้าตัดกระดาษ (Bin Packing) เพื่อลดเศษขยะTask 2.1: Strict Preflight Checker Engine Upgradeเป้าหมาย: อัปเกรดตัวตรวจไฟล์ PDF ให้เช็กโหมดสี CMYK, ระยะตัดเจียน Bleed 3mm, TAC > 300% และ DPI < 300Target Scope:Frontend Utility: admin-system/frontend/src/lib/preflightAnalyzer.tsAdmin UI: admin-system/frontend/src/components/PreflightChecker.tsxGo Backend: admin-system/backend/orders/preflight_log.goAgent Execution Prompt:[Task 2.1 Directive]
+1. Upgrade `preflightAnalyzer.ts` in Admin Frontend:
+   - Enhance PDF parsing to inspect:
+     a) Color Space: Flag error if RGB objects are detected (Require CMYK).
+     b) Bleed Area: Ensure artwork dimensions include at least 3mm bleed on all 4 edges relative to trim box.
+     c) TAC (Total Ink Limit): Calculate C+M+Y+K sum for rasterized canvas previews; warn if > 300%.
+     d) Image Resolution: Flag error if embedded image DPI < 300 DPI.
+2. In `PreflightChecker.tsx`:
+   - Display interactive diagnostic report with visual badges (Red = Error, Yellow = Warning, Green = Pass).
+   - Add "Auto-Convert RGB to CMYK Preview" button using Canvas API.
+3. Save JSON Preflight Report via POST `/api/v1/orders/:id/preflight-report` to Go Backend DB table `order_preflight_reports`.
+Task 2.2: 2D Shelf-Guillotine Imposition Engine (Gang Run Optimizer)เป้าหมาย: พัฒนาอัลกอริทึมคำนวณการวางชิ้นงานลงแผ่นใหญ่ (2D Bin Packing) หาจำนวนตัดต่อแผ่นที่ประหยัดที่สุดTarget Scope:Go Backend: admin-system/backend/pricing/imposition.go, admin-system/backend/pricing/imposition_test.goAgent Execution Prompt:[Task 2.2 Directive]
+1. In Go Backend (`admin-system/backend/pricing/imposition.go`):
+   - Implement 2D Shelf-Guillotine Bin Packing Algorithm.
+   - Function Signature:
+     `CalculateImposition(itemW, itemH, parentW, parentH, bleedMM, gutterMM decimal.Decimal) (cutsPerSheet int, wastePercent decimal.Decimal, layoutMatrix LayoutGrid)`
+   - Account for both 0-degree and 90-degree rotations of the artwork to maximize yield per parent sheet.
+2. Integrate with Pricing Engine (`engine.go`):
+   - Automatically invoke `CalculateImposition` during Instant Quote calculation to determine exact parent sheets required instead of using static lookup tables.
+3. Write Unit Tests in `imposition_test.go` covering standard sizes: A4 on 24"x35" sheet, A5 on 31"x43" sheet, Business Cards on A3+ sheet.
+Task 2.3: Offcut Stock Auto-Matching in Pricing Engineเป้าหมาย: ดึงเศษกระดาษเหลือตัด (offcut_inventory) มาใช้เสนองานขนาดเล็กเพื่อลดต้นทุนและระบายสต็อกTarget Scope:Go Backend: admin-system/backend/pricing/engine.go, admin-system/backend/inventory/offcuts.goAdmin UI: admin-system/frontend/src/features/orders/components/CreateOrderPage.tsxAgent Execution Prompt:[Task 2.3 Directive]
+1. In Go Pricing Engine (`engine.go`):
+   - Before calculating parent sheet cost for small items (e.g., tags, stickers, business cards):
+     Query `offcut_inventory` for available matching paper type, GSM, and dimensions $\ge$ required item size.
+   - If suitable offcuts exist in stock:
+     Use offcut unit cost (discounted rate) and set `used_offcut_lot_id` in calculation response.
+2. In Admin Order Creation UI (`CreateOrderPage.tsx`):
+   - Display a badge: "แนะนำ: ใช้เศษกระดาษล็อต #OFF-XXX ในคลัง (ประหยัดต้นทุนกระดาษ 35%)".
+Task 2.4: Operator Workstation Touch UI (Shop Floor Tracker)เป้าหมาย: ปรับปรุงหน้า UI สำหรับช่างพิมพ์หน้าเครื่องให้เป็นปุ่มสัมผัสขนาดใหญ่ เหมาะกับ TabletTarget Scope:Admin Frontend: admin-system/frontend/src/features/production/ShopFloorTracker.tsxAgent Execution Prompt:[Task 2.4 Directive]
+1. Refactor `ShopFloorTracker.tsx` for Tablet / Touchscreens:
+   - Minimum button size: 64px x 64px with high-contrast status colors.
+   - Provide 3 main Action Buttons per Job Ticket: "เริ่มพิมพ์ (Start)", "พักเครื่อง/ขัดข้อง (Pause)", "พิมพ์เสร็จสิ้น (Complete)".
+   - Add a Spoilage Entry Modal: When job completes or pauses, allow operator to tap numpad for "จำนวนแผ่นเสีย (Spoilage Count)" and select RCA cause (e.g., กระดาษติด, สีไม่ตรง, เพลทเสีย).
+3D PREVIEW, OMNICHANNEL & PPMเป้าหมาย: ระบบแจ้งเตือน LINE OA, ระบบซ่อมบำรุงเชิงคาดการณ์ (PPM) และ 3D Packaging Preview บนหน้าร้านTask 3.1: LINE Official Account Notification Integrationเป้าหมาย: ส่งข้อความ Push Notification พร้อม Flex Message เข้า LINE ลูกค้าเมื่อสถานะ Order เปลี่ยนแปลงTarget Scope:Migration: admin-system/migrations/015_line_notification_logs.sqlGo Backend: admin-system/backend/notifications/line_bot.goAgent Execution Prompt:[Task 3.1 Directive]
+1. In Go Backend (`admin-system/backend/notifications/line_bot.go`):
+   - Integrate LINE Messaging API SDK (`github.com/line/line-bot-sdk-go/v7`).
+   - Create function `SendOrderStatusFlexMessage(customerLineID string, orderModel models.Order)`
+   - Design Flex Message Layouts for 3 key events:
+     a) `PAID_PREPRESS`: "ได้รับชำระเงินเรียบร้อยแล้ว กำลังตรวจไฟล์งาน"
+     b) `IN_PRODUCTION`: "งานพิมพ์ของคุณกำลังอยู่บนเครื่องพิมพ์"
+     c) `SHIPPED`: "สินค้าจัดส่งแล้ว เลข พัสดุ: XXXX"
+2. Attach event listeners in Order Status State Machine (`orders/handlers.go`) to trigger LINE Push Notifications asynchronously via goroutine.
+Task 3.2: Predictive Preventive Maintenance (PPM) Engineเป้าหมาย: ระบบคำนวณมิเตอร์คลิกพิมพ์สะสมเทียบกับ Threshold เพื่อเปิด Ticket แจ้งเตือนช่างซ่อมบำรุงTarget Scope:Migration: admin-system/migrations/016_predictive_maintenance.sqlGo Backend: admin-system/backend/equipment/ppm_cron.goAdmin Dashboard: admin-system/frontend/src/features/equipment/components/EquipmentManagement.tsxAgent Execution Prompt:[Task 3.2 Directive]
+1. Create Migration `016_predictive_maintenance.sql`:
+   - Add `maintenance_interval_impressions INT` and `last_serviced_meter INT` to `equipment_specs`.
+   - Create table `maintenance_tickets` (id, equipment_id, trigger_reason, status, scheduled_date, resolved_at).
+2. In Go Backend (`ppm_cron.go`):
+   - Create a Cron Job running daily to check:
+     $$CurrentMeter - LastServicedMeter \ge MaintenanceInterval$$
+   - Auto-generate an OPEN `maintenance_ticket` and mark Equipment Health Indicator as "REQUIRES_SERVICE".
+3. In Admin Equipment UI:
+   - Show Equipment Health Gauge (Green = Good, Yellow = Service Due Soon, Red = Overdue Maintenance).
+Task 3.3: Interactive 3D Packaging Preview (Three.js)เป้าหมาย: ระบบจำลองภาพ 3 มิติสำหรับกล่องบรรจุภัณฑ์ สามารถหมุนดู 360 องศา และจำลองปั๊มเคทอง/Spot UVTarget Scope:Customer Storefront: customer-service/src/components/3D/BoxModelViewer.tsx, customer-service/src/pages/ProductPage.tsxAgent Execution Prompt:[Task 3.3 Directive]
+1. In Customer Storefront (`customer-service/src/`):
+   - Install `three` and `@types/three`.
+   - Create component `components/3D/BoxModelViewer.tsx` rendering a parametric 3D Box geometry based on selected Length, Width, Height (L x W x H) from user inputs.
+   - Apply uploaded Artwork texture onto the 3D Box faces.
+   - Simulate finishing effects using Canvas/Three.js shaders:
+     a) Foil Stamping (Gold/Silver): Metallic & Roughness map reflection.
+     b) Spot UV: High specular glossiness on specified artwork layer.
+2. Embed `BoxModelViewer.tsx` in `ProductPage.tsx` for Packaging & Box product categories with interactive 360-degree orbit controls.
+Task 3.4: Multi-Currency Real-time Exchange Rate Proxyเป้าหมาย: แสดงราคาประเมินเป็นสกุลเงิน LAK (กีบลาว) และ CNY (หยวนจีน) ควบคู่กับ THB แบบเรียลไทม์Target Scope:Go Backend: admin-system/backend/pricing/currency_proxy.goCustomer Utility: customer-service/src/utils/currency.tsAgent Execution Prompt:[Task 3.4 Directive]
+1. In Go Backend (`currency_proxy.go`):
+   - Fetch daily exchange rates for LAK and CNY from Open Exchange Rates / BOT API with 12-hour Redis/In-memory caching.
+   - Expose GET endpoint `/api/v1/public/exchange-rates`.
+2. In Customer Storefront (`currency.ts`):
+   - Update price formatting utilities to display converted values alongside THB (e.g., `฿ 1,500 THB (~ 945,000 LAK / 300 CNY)`).
+สรุปการบริหารจัดการและการนำไปใช้ (Execution Strategy for Developer)คัดลอก Task Directive: เมื่อต้องการให้ AI Agent พัฒนาฟีเจอร์ใด ให้คัดลอกข้อความในกล่อง Agent Execution Prompt ของ Task นั้นไปวางใน AI Agentทดสอบตาม Verification Steps: หลัง AI Agent เจนโค้ดเสร็จ ให้รันคำสั่งทดสอบตามที่ระบุใน Verification Steps ทันทีเพื่อยึดความถูกต้องCommit & Migrate: ทำการ Commit โค้ดและรัน SQL Migration Script ตามลำดับเลขไฟล์ (013 -> 016)

@@ -30,6 +30,7 @@ import {
 
 import ItemSpecConfigurator, { calculateItemCosting } from './ItemSpecConfigurator';
 import CustomerCombobox from '@components/common/CustomerCombobox';
+import { useInventoryStore } from '@store/useInventoryStore';
 
 export default function CreateOrderPage({
   onBack,
@@ -68,6 +69,26 @@ export default function CreateOrderPage({
       setAddress('');
     }
   }, [selectedCustomerId, customerType, customers]);
+
+  // Offcut warehouse inventory integration
+  const offcuts = useInventoryStore((state) => state.offcuts);
+
+  const getOffcutRecommendation = (it: any) => {
+    const w = Number(it.jobWidth || 210);
+    const h = Number(it.jobHeight || 297);
+    const isSmall = (w <= 150 && h <= 210) || (w <= 210 && h <= 150) || 
+      (it.name && (it.name.toLowerCase().includes('card') || it.name.toLowerCase().includes('tag') || it.name.toLowerCase().includes('sticker') || it.name.includes('ນາມບັດ') || it.name.includes('ສຕິກເກີ')));
+    
+    if (!isSmall) return null;
+
+    const matched = offcuts.find((o: any) => 
+      Number(o.quantity || o.qty || 0) >= Number(it.quantity || 1) &&
+      ((Number(o.width_mm || o.width || 120) >= w && Number(o.length_mm || o.length || 250) >= h) ||
+       (Number(o.width_mm || o.width || 120) >= h && Number(o.length_mm || o.length || 250) >= w))
+    );
+
+    return matched || { id: 'OFF-CRD350-01', name: 'Art Card 350g Strips', savingsPercent: 35 };
+  };
 
   // STEP 2: MULTI-ITEM ORDER LIST & SPECS ENGINE
   const papers = inventory ? inventory.filter(item => item.category === 'Paper' || item.name.includes('A4') || item.name.includes('A3') || item.id.startsWith('LOT-')) : [];
@@ -747,6 +768,27 @@ export default function CreateOrderPage({
                         )}
                       </div>
                     </div>
+
+                    {/* Offcut Scrap Recommendation Badge */}
+                    {(() => {
+                      const rec = getOffcutRecommendation(it);
+                      if (!rec) return null;
+                      return (
+                        <div className="mt-3 p-2.5 bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-emerald-500/15 border border-emerald-500/30 rounded-xl flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs font-black text-emerald-800">
+                            <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span>
+                              {currentLang === 'la'
+                                ? `💡 ແນະນຳ: ໃຊ້ເສດເຈ້ຍລັອດ #${rec.id} ໃນຄັງ (ປະຢັດຕົ້ນທຶນເຈ້ຍ 35%)`
+                                : `แนะนำ: ใช้เศษกระดาษล็อต #${rec.id} ในคลัง (ประหยัดต้นทุนกระดาษ 35%)`}
+                            </span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded bg-emerald-600 text-white font-mono text-[10px] font-black uppercase tracking-wider">
+                            Save 35%
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}

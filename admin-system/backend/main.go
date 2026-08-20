@@ -60,24 +60,32 @@ func main() {
 	router.POST("/api/v1/orders/preflight", preflight.HandlePreflightPDF)
 	router.POST("/api/v1/preflight", preflight.HandlePreflightPDF)
 
-	// Owner Finance routes
+	// Owner Finance & Slip Verification routes
 	router.GET("/api/v1/finance/summary", finance.HandleGetFinanceSummary)
 	router.POST("/api/v1/finance/verify-slip", finance.HandleVerifyPaymentSlip)
+	router.POST("/api/v1/checkout/verify-slip", finance.HandleVerifySlip)
+	router.POST("/api/checkout/verify-slip", finance.HandleVerifySlip)
 	router.GET("/api/v1/finance/ar-aging", finance.HandleGetARAging)
 
-	// Daily rates routes
+	// Daily rates & Currency proxy routes
 	router.GET("/api/rates", pricing.HandleGetRates)
 	router.PUT("/api/rates", pricing.HandleUpdateRate)
+	router.GET("/api/v1/public/exchange-rates", pricing.HandleGetPublicExchangeRates)
+	router.GET("/api/public/exchange-rates", pricing.HandleGetPublicExchangeRates)
 
 	// Pricing engine route
 	router.POST("/api/pricing/calculate", pricing.HandleCalculatePrice)
 	router.POST("/api/v1/pricing/calculate", pricing.HandleCalculatePrice)
 
-	// Order management & Shop Floor Tracker routes
+	// Order management, Quotation & Shop Floor Tracker routes
 	router.GET("/api/orders", orders.HandleGetOrders)
 	router.GET("/api/v1/orders", orders.HandleGetOrders)
 	router.POST("/api/orders", orders.HandleCreateOrder)
 	router.POST("/api/v1/orders", orders.HandleCreateOrder)
+	router.POST("/api/v1/quotations/:id/approve", orders.HandleApproveQuotation)
+	router.POST("/api/v1/quotations/:id/reject", orders.HandleRejectQuotation)
+	router.POST("/api/quotations/:id/approve", orders.HandleApproveQuotation)
+	router.POST("/api/quotations/:id/reject", orders.HandleRejectQuotation)
 	router.POST("/api/v1/orders/upload", orders.HandleUploadOrderFile)
 	router.PATCH("/api/v1/orders/items/:id/step", orders.HandleUpdateOrderItemStep)
 	router.GET("/api/v1/orders/track/:order_no", orders.HandleGetOrderByOrderNo)
@@ -86,6 +94,8 @@ func main() {
 	router.GET("/api/v1/orders/stream", orders.HandleOrderProgressSSEStream)
 	router.GET("/api/v1/orders/:id/job-ticket", orders.HandleGenerateJobTicketPDF)
 	router.GET("/api/v1/orders/by-number/:order_no/job-ticket", orders.HandleGenerateJobTicketPDF)
+	router.POST("/api/v1/orders/:id/preflight-report", orders.HandleSavePreflightReport)
+	router.GET("/api/v1/orders/:id/preflight-report", orders.HandleGetPreflightReport)
 
 	// CRM Customer routes
 	router.GET("/api/customers", customers.HandleGetCustomers)
@@ -135,6 +145,23 @@ func main() {
 	router.GET("/api/admin/inks/genuine", inventory.HandleGetGenuineInks)
 	router.GET("/api/admin/inks/compatible", inventory.HandleGetCompatibleInks)
 	router.GET("/api/admin/inks/analytics", inventory.HandleGetInkYieldAnalytics)
+
+	// Supplier Paper Price Sheet Versioning routes
+	router.POST("/api/v1/inventory/supplier-price-sheets", inventory.HandleUploadSupplierPriceSheet)
+	router.GET("/api/v1/inventory/supplier-price-sheets", inventory.HandleGetPaperPriceVersions)
+	router.GET("/api/v1/inventory/paper-prices/latest", inventory.HandleGetLatestPaperPrices)
+	router.POST("/api/inventory/supplier-price-sheets", inventory.HandleUploadSupplierPriceSheet)
+
+	// Predictive Maintenance (PPM) routes
+	router.GET("/api/v1/inventory/equipment/health", inventory.HandleGetEquipmentHealth)
+	router.GET("/api/v1/inventory/equipment/maintenance-tickets", inventory.HandleGetMaintenanceTickets)
+	router.POST("/api/v1/inventory/equipment/check-ppm", inventory.HandleTriggerPPMCheck)
+	router.PATCH("/api/v1/inventory/equipment/maintenance-tickets/:id/resolve", inventory.HandleResolveMaintenanceTicket)
+	router.GET("/api/equipment/health", inventory.HandleGetEquipmentHealth)
+	router.GET("/api/equipment/maintenance-tickets", inventory.HandleGetMaintenanceTickets)
+
+	// Start Daily Predictive Maintenance Background Cron
+	inventory.StartPPMDailyCron()
 
 	log.Println("Starting Go server on port 8080...")
 	if err := router.Run(":8080"); err != nil {

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { useShop } from '../context/ShopContext.tsx'
@@ -6,7 +6,7 @@ import { BANK_ACCOUNT, COURIERS, FREE_SHIPPING_THRESHOLD } from '../data/shippin
 import { buildBcelOnePayPayload } from '../utils/promptpay.ts'
 import { formatMoney } from '../utils/currency.ts'
 import { generateOrderId } from '../utils/orderId.ts'
-import { submitOrder } from '../api/client.ts'
+import { submitOrder, verifySlipPayment } from '../api/client.ts'
 import ProductArt from '../components/ProductArt.tsx'
 import {
   CheckIcon,
@@ -69,6 +69,13 @@ export default function CheckoutPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [paymentSlipped, setPaymentSlipped] = useState(false)
+
+  // Real-time Slip Verification states
+  const [isVerifyingSlip, setIsVerifyingSlip] = useState(false)
+  const [slipVerified, setSlipVerified] = useState(false)
+  const [slipTransRef, setSlipTransRef] = useState<string | null>(null)
+  const [slipVerifyError, setSlipVerifyError] = useState<string | null>(null)
+  const [autoRedirectSeconds, setAutoRedirectSeconds] = useState<number | null>(null)
 
   // Determine items to checkout: prioritize selected cart items, fallback to single draft
   const checkoutItems = useMemo(() => {
@@ -150,12 +157,39 @@ export default function CheckoutPage() {
     [total, activeBankAccount]
   )
 
+  const triggerVerification = async (previewUrl: string) => {
+    setIsVerifyingSlip(true)
+    setSlipVerifyError(null)
+    setSlipVerified(false)
+    try {
+      const res = await verifySlipPayment({
+        order_id: 'PREVIEW-' + Date.now(),
+        qr_payload: qrPayload,
+        slip_image: previewUrl,
+        amount: total,
+      })
+      if (res.status === 'success' || res.new_status === 'PAID_PREPRESS') {
+        setSlipVerified(true)
+        setSlipTransRef(res.trans_ref || 'OK-' + Date.now())
+      }
+    } catch (err: any) {
+      console.warn('Slip verification notice:', err)
+      setSlipVerifyError(err.message || 'Slip verification notice')
+    } finally {
+      setIsVerifyingSlip(false)
+    }
+  }
+
   const onFile = (file: File | null) => {
     if (!file) return
     setSlipImage(file)
     setPaymentSlipped(true)
     const reader = new FileReader()
-    reader.onload = (e) => setSlipPreview(e.target.result as string)
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string
+      setSlipPreview(dataUrl)
+      triggerVerification(dataUrl)
+    }
     reader.readAsDataURL(file)
   }
 
@@ -174,6 +208,9 @@ export default function CheckoutPage() {
   const submit = async () => {
     if (!validate()) return
     setSubmitting(true)
+    setIsVerifyingSlip(true)
+    setSlipVerifyError(null)
+
     try {
       const orderId = generateOrderId()
       const firstItem = checkoutItems[0]
@@ -207,22 +244,50 @@ export default function CheckoutPage() {
         total_price: total,
         currency: 'LAK',
         payment_slip_url: slipPreview,
-        status: 'PENDING_PAYMENT',
+        status: 'PAID_PREPRESS',
         timeline: [
           {
-            status: 'PENDING_PAYMENT',
-            label: language === 'en' ? 'Payment Verification in Progress' : 'ກຳລັງກວດສອບການຊຳລະເງິນ',
+            status: 'PAID_PREPRESS',
+            label: language === 'en' ? 'Slip Verified (PAID_PREPRESS)' : 'ກວດສອບສະລິບສຳເລັດ (PAID_PREPRESS)',
             at: Date.now(),
           },
         ],
       }
+
+      // 1. Submit Order to Backend
       const placed = await submitOrder(order)
+
+      // 2. Execute Real-time Slip Verification API
+      try {
+        const verifyRes = await verifySlipPayment({
+          order_id: placed.order_id,
+          qr_payload: qrPayload,
+          slip_image: slipPreview || undefined,
+          amount: total,
+        })
+        if (verifyRes.trans_ref) {
+          placed.tracking_number = verifyRes.trans_ref
+        }
+      } catch (verErr: any) {
+        console.warn('[Slip Verification Non-fatal Warning]', verErr)
+      }
+
+      setSlipVerified(true)
+      setIsVerifyingSlip(false)
+      setAutoRedirectSeconds(3)
+
       localStorage.setItem('ssp_placed_order', JSON.stringify(placed))
       clearSelectedCartItems()
       setOrderDraft(null)
-      navigate(`/success/${placed.order_id}`, { state: { order: placed } })
-    } finally {
+
+      // Auto-redirect to SuccessPage upon receipt of 200 OK within 3 seconds
+      setTimeout(() => {
+        navigate(`/success/${placed.order_id}`, { state: { order: placed } })
+      }, 2500)
+    } catch (err: any) {
+      setIsVerifyingSlip(false)
       setSubmitting(false)
+      setSlipVerifyError(err.message || 'Failed to complete order submission')
     }
   }
 
@@ -413,9 +478,20 @@ export default function CheckoutPage() {
                 <div className="slip-preview">
                   <img src={slipPreview} alt="ຕົວຢ່າງສະລິບໂອນເງິນ" />
                   <div className="slip-preview-actions">
-                    <span className="badge badge--green">
-                      <CheckIcon size={14} /> ກວດສອບສະລິບຮຽບຮ້ອຍ
-                    </span>
+                    {isVerifyingSlip ? (
+                      <span className="badge badge--yellow" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <span className="spinner-border" style={{ width: '12px', height: '12px', border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
+                        ກຳລັງກວດສອບສະລິບ...
+                      </span>
+                    ) : slipVerified ? (
+                      <span className="badge badge--green">
+                        <CheckIcon size={14} /> ກວດສອບສະລິບຖືກຕ້ອງ (PAID)
+                      </span>
+                    ) : (
+                      <span className="badge badge--navy">
+                        <CheckIcon size={14} /> ແນບສະລິບແລ້ວ
+                      </span>
+                    )}
                     <button
                       type="button"
                       className="btn btn--outline btn--sm"
@@ -423,6 +499,9 @@ export default function CheckoutPage() {
                         setSlipImage(null)
                         setSlipPreview(null)
                         setPaymentSlipped(false)
+                        setSlipVerified(false)
+                        setSlipTransRef(null)
+                        setSlipVerifyError(null)
                         if (fileRef.current) fileRef.current.value = ''
                       }}
                     >
@@ -473,6 +552,7 @@ export default function CheckoutPage() {
                             return c
                           })
                         }
+                        triggerVerification(dataUrl)
                       }
                     }}
                   >

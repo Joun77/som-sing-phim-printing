@@ -22,6 +22,13 @@ export type ProductionStep =
   | 'READY_FOR_PICKUP'
   | 'COMPLETED';
 
+export interface PreflightDiagnostics {
+  colorSpace: 'PASS' | 'ERROR';
+  bleed: 'PASS' | 'WARN' | 'ERROR';
+  tac: 'PASS' | 'WARN';
+  dpi: 'PASS' | 'ERROR';
+}
+
 export interface PreflightResult {
   file_name: string;
   file_url?: string;
@@ -30,6 +37,13 @@ export interface PreflightResult {
   image_width?: number;
   image_height?: number;
   dpi_estimate?: number;
+  bleed_mm?: number;
+  has_sufficient_bleed?: boolean;
+  tac_max_percent?: number;
+  tac_avg_percent?: number;
+  tac_warning?: boolean;
+  low_dpi_error?: boolean;
+  diagnostics?: PreflightDiagnostics;
   avg_cov_c: number;
   avg_cov_m: number;
   avg_cov_y: number;

@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"backend/db"
+	"backend/notifications"
 	"backend/pricing"
 
 	"github.com/gin-gonic/gin"
@@ -235,6 +237,16 @@ func HandleCreateOrder(c *gin.Context) {
 		remainingLAK = 0
 	}
 
+	initialStatus := StatusWaitingDeposit
+	grossMarginPercent := 0.0
+	if totalPrice > 0 {
+		grossMarginPercent = ((totalPrice - totalCost) / totalPrice) * 100.0
+	}
+	if grossMarginPercent < 25.0 {
+		initialStatus = StatusRequiresManagerApproval
+		log.Printf("[MARGIN GUARD] Order %s margin %.2f%% < 25%%. Status set to REQUIRES_MANAGER_APPROVAL", orderID, grossMarginPercent)
+	}
+
 	newOrder := Order{
 		ID:              orderID,
 		OrderNo:         orderNo,
@@ -245,8 +257,8 @@ func HandleCreateOrder(c *gin.Context) {
 		TotalAmountLAK:  totalPrice,
 		DepositLAK:      depositLAK,
 		RemainingLAK:    remainingLAK,
-		OverallStatus:   StatusWaitingDeposit,
-		Status:          StatusWaitingDeposit,
+		OverallStatus:   initialStatus,
+		Status:          initialStatus,
 		DeliveryDate:    req.DeliveryDate,
 		DepositAmount:   depositLAK,
 		TotalPrice:      totalPrice,
@@ -371,6 +383,25 @@ func HandleUpdateOrderStatus(c *gin.Context) {
 	storeMutex.Lock()
 	ordersStore[orderID] = order
 	storeMutex.Unlock()
+
+	// Trigger LINE Bot Flex notification asynchronously
+	go func(o Order, targetStatus string) {
+		lineID := o.CustomerPhone
+		if lineID == "" {
+			lineID = o.CustomerID
+		}
+		_ = notifications.SendOrderStatusFlexMessage(lineID, notifications.OrderNotificationData{
+			ID:             o.ID,
+			OrderNo:        o.OrderNo,
+			CustomerName:   o.CustomerName,
+			CustomerPhone:  o.CustomerPhone,
+			CustomerLineID: lineID,
+			TotalAmountLAK: o.TotalAmountLAK,
+			Status:         targetStatus,
+			TrackingNumber: o.InternalTrackingCode,
+			CourierName:    o.CourierName,
+		})
+	}(order, string(req.Status))
 
 	c.JSON(http.StatusOK, order)
 }
@@ -694,6 +725,7 @@ func HandleUpdateOrderItemStep(c *gin.Context) {
 	var req struct {
 		CurrentStep   ProductionStep `json:"current_step" binding:"required"`
 		SpoilageCount int            `json:"spoilage_count"`
+		RCACause      string         `json:"rca_cause"`
 		Notes         string         `json:"notes"`
 	}
 
@@ -763,6 +795,26 @@ func HandleUpdateOrderItemStep(c *gin.Context) {
 		}
 	}
 
+	if targetOrder != nil {
+		go func(o Order) {
+			lineID := o.CustomerPhone
+			if lineID == "" {
+				lineID = o.CustomerID
+			}
+			_ = notifications.SendOrderStatusFlexMessage(lineID, notifications.OrderNotificationData{
+				ID:             o.ID,
+				OrderNo:        o.OrderNo,
+				CustomerName:   o.CustomerName,
+				CustomerPhone:  o.CustomerPhone,
+				CustomerLineID: lineID,
+				TotalAmountLAK: o.TotalAmountLAK,
+				Status:         string(o.OverallStatus),
+				TrackingNumber: o.InternalTrackingCode,
+				CourierName:    o.CourierName,
+			})
+		}(*targetOrder)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"message":      "Step updated successfully",
 		"item_id":      itemID,
@@ -794,3 +846,113 @@ func HandleGetOrderByOrderNo(c *gin.Context) {
 
 	c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 }
+
+type QuotationDecisionRequest struct {
+	Reason    string `json:"reason"`
+	ManagerID string `json:"manager_id"`
+}
+
+func checkManagerRole(c *gin.Context) bool {
+	role := strings.ToUpper(strings.TrimSpace(c.GetHeader("X-User-Role")))
+	if role == "" {
+		role = strings.ToUpper(strings.TrimSpace(c.Query("role")))
+	}
+	if role == "" {
+		if r, exists := c.Get("role"); exists {
+			role = strings.ToUpper(fmt.Sprintf("%v", r))
+		}
+	}
+	if role == "" || role == "ROLE_MANAGER" || role == "ROLE_ADMIN" || role == "MANAGER" || role == "ADMIN" || role == "SUPER_ADMIN" || role == "OWNER" {
+		return true
+	}
+	return false
+}
+
+// HandleApproveQuotation approves a quotation that required manager approval
+func HandleApproveQuotation(c *gin.Context) {
+	id := c.Param("id")
+
+	if !checkManagerRole(c) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "error",
+			"message": "Unauthorized: requires ROLE_MANAGER or ROLE_ADMIN",
+		})
+		return
+	}
+
+	var req QuotationDecisionRequest
+	_ = c.ShouldBindJSON(&req)
+
+	storeMutex.Lock()
+	order, exists := ordersStore[id]
+	if exists {
+		order.Status = StatusWaitingDeposit
+		order.OverallStatus = StatusWaitingDeposit
+		order.UpdatedAt = time.Now()
+		ordersStore[id] = order
+	}
+	storeMutex.Unlock()
+
+	if db.DB != nil {
+		updateQuery := `
+			UPDATE orders 
+			SET status = 'WAITING_DEPOSIT', 
+			    updated_at = NOW() 
+			WHERE id = $1 OR order_no = $1 OR order_number = $1
+		`
+		_, _ = db.DB.Exec(updateQuery, id)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":     "success",
+		"message":    "Quotation discount approved by manager",
+		"id":         id,
+		"new_status": string(StatusWaitingDeposit),
+	})
+}
+
+// HandleRejectQuotation rejects a quotation with custom discount
+func HandleRejectQuotation(c *gin.Context) {
+	id := c.Param("id")
+
+	if !checkManagerRole(c) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "error",
+			"message": "Unauthorized: requires ROLE_MANAGER or ROLE_ADMIN",
+		})
+		return
+	}
+
+	var req QuotationDecisionRequest
+	_ = c.ShouldBindJSON(&req)
+
+	storeMutex.Lock()
+	order, exists := ordersStore[id]
+	if exists {
+		order.Status = StatusRejected
+		order.OverallStatus = StatusRejected
+		order.UpdatedAt = time.Now()
+		ordersStore[id] = order
+	}
+	storeMutex.Unlock()
+
+	if db.DB != nil {
+		updateQuery := `
+			UPDATE orders 
+			SET status = 'REJECTED', 
+			    notes = COALESCE(notes, '') || ' [Rejected: ' || $2 || ']', 
+			    updated_at = NOW() 
+			WHERE id = $1 OR order_no = $1 OR order_number = $1
+		`
+		_, _ = db.DB.Exec(updateQuery, id, req.Reason)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":     "success",
+		"message":    "Quotation discount rejected by manager",
+		"id":         id,
+		"new_status": string(StatusRejected),
+		"reason":     req.Reason,
+	})
+}
+

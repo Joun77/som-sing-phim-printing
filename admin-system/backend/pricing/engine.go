@@ -7,6 +7,8 @@ import (
 	"math"
 	"strings"
 
+	"backend/inventory"
+
 	"github.com/shopspring/decimal"
 )
 
@@ -59,6 +61,7 @@ type CalculationRequest struct {
 	JobName          string              `json:"job_name" binding:"required"`
 	Quantity         int                 `json:"quantity" binding:"required,gt=0"`
 	PaperSku         string              `json:"paper_sku"`
+	PaperName        string              `json:"paper_name"`
 	PaperCostPerUnit float64             `json:"paper_cost_per_unit"` // Cost per ream/pack or unit
 	PaperFormat      string              `json:"paper_format"`        // "sheet" | "roll"
 	SheetsPerPack    int                 `json:"sheets_per_pack"`     // Sheets per pack/ream (default 500)
@@ -108,9 +111,11 @@ type CalculationRequest struct {
 	MaintenanceCostPerPage float64 `json:"maintenance_cost_per_page"`
 	MaintenanceRatePercent float64 `json:"maintenance_rate_percent"` // Maintenance rate % (default 20%)
 
-	// Job dimensions for Area Factor calculation
-	JobWidth  float64 `json:"job_width"`  // in mm
-	JobHeight float64 `json:"job_height"` // in mm
+	// Job dimensions for Area Factor & 2D Imposition calculation
+	JobWidth      float64 `json:"job_width"`       // in mm
+	JobHeight     float64 `json:"job_height"`      // in mm
+	BleedMarginMM float64 `json:"bleed_margin_mm"` // Bleed per edge in mm (default 0 or 2-3mm)
+	GutterMM      float64 `json:"gutter_mm"`       // Spacing between items in mm
 
 	// Custom finishing options list
 	CustomFinishingOptions []CustomFinishingOption `json:"custom_finishing_options"`
@@ -216,11 +221,18 @@ type CalculationResponse struct {
 	UnitPrice      float64 `json:"unit_price"`      // GrandTotal / Quantity
 
 	// Meta
+	GrossMarginPercent    float64                 `json:"gross_margin_percent"`
 	ProfitMargin          float64                 `json:"profit_margin"`
 	VolumeDiscountPercent float64                 `json:"volume_discount_percent"`
 	Currency              string                  `json:"currency"`
 	ExchangeRate          float64                 `json:"exchange_rate"`
 	CustomOptions         []CustomFinishingOption `json:"custom_options"`
+	Imposition            *LayoutGrid             `json:"imposition,omitempty"`
+	WastePercent          float64                 `json:"waste_percent,omitempty"`
+	UsedOffcutLotID       string                  `json:"used_offcut_lot_id,omitempty"`
+	OffcutSavingsPercent  float64                 `json:"offcut_savings_percent,omitempty"`
+	OffcutRecommended     bool                    `json:"offcut_recommended,omitempty"`
+	OffcutLotName         string                  `json:"offcut_lot_name,omitempty"`
 }
 
 // a4BaselineArea is the reference area (mm²) used for Paper Area Factor S (210 x 297 mm = 62370)
@@ -272,23 +284,23 @@ func CalculateBindingCostLAK(bType string, machinePriceLAK float64, lifetimeCycl
 	return roundToTwoDecimals(depreciation + consumable)
 }
 
-// CalculateCutLayout determines the maximum number of pieces that can fit on a parent sheet
+// CalculateCutLayout determines the maximum number of pieces that can fit on a parent sheet using 2D imposition
 func CalculateCutLayout(jobW, jobH, parentW, parentH float64) int {
 	if jobW <= 0 || jobH <= 0 || parentW <= 0 || parentH <= 0 {
 		return 1
 	}
-	portraitCuts := int(parentW/jobW) * int(parentH/jobH)
-	landscapeCuts := int(parentW/jobH) * int(parentH/jobW)
-	if landscapeCuts > portraitCuts {
-		if landscapeCuts < 1 {
-			return 1
-		}
-		return landscapeCuts
-	}
-	if portraitCuts < 1 {
+	cuts, _, _ := CalculateImposition(
+		decimal.NewFromFloat(jobW),
+		decimal.NewFromFloat(jobH),
+		decimal.NewFromFloat(parentW),
+		decimal.NewFromFloat(parentH),
+		decimal.Zero,
+		decimal.Zero,
+	)
+	if cuts < 1 {
 		return 1
 	}
-	return portraitCuts
+	return cuts
 }
 
 // CalculateJobPricing performs the backend pricing engine math with Decimal precision
@@ -390,12 +402,21 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	dAreaFactor := dJobW.Mul(dJobH).Div(dA4Base)
 
 	cutsPerSheet := req.CutsPerSheet
-	if cutsPerSheet <= 0 {
-		if req.ParentSheetWidthMM > 0 && req.ParentSheetHeightMM > 0 {
-			cutsPerSheet = CalculateCutLayout(jobW, jobH, req.ParentSheetWidthMM, req.ParentSheetHeightMM)
-		} else {
-			cutsPerSheet = 1
+	var impositionGrid *LayoutGrid
+	var calculatedWastePct float64
+	if req.ParentSheetWidthMM > 0 && req.ParentSheetHeightMM > 0 {
+		dParentW := decimal.NewFromFloat(req.ParentSheetWidthMM)
+		dParentH := decimal.NewFromFloat(req.ParentSheetHeightMM)
+		dBleed := decimal.NewFromFloat(req.BleedMarginMM)
+		dGutter := decimal.NewFromFloat(req.GutterMM)
+		cuts, wasteDec, grid := CalculateImposition(dJobW, dJobH, dParentW, dParentH, dBleed, dGutter)
+		if cutsPerSheet <= 0 {
+			cutsPerSheet = cuts
 		}
+		impositionGrid = &grid
+		calculatedWastePct = wasteDec.InexactFloat64()
+	} else if cutsPerSheet <= 0 {
+		cutsPerSheet = 1
 	}
 
 	// ── Step 2: Paper Cost & Offcut Rebate ────────────────────────────────────
@@ -435,6 +456,24 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		dPaperCost = dPaperCost.Sub(dOffcutRebate)
 		if dPaperCost.LessThan(decimal.Zero) {
 			dPaperCost = decimal.Zero
+		}
+	}
+
+	// Offcut inventory check for small items (tags, stickers, business cards <= 150x210 mm)
+	var usedOffcutLotID string
+	var offcutLotName string
+	var offcutSavingsPercent float64
+	var offcutRecommended bool
+
+	isSmallItem := (jobW <= 150 && jobH <= 210) || (jobW <= 210 && jobH <= 150)
+	if isSmallItem && req.PaperCostPerUnit > 0 {
+		if matchedOffcut := inventory.GetMatchingOffcut(req.PaperSku, req.PaperName, jobW, jobH, req.Quantity); matchedOffcut != nil {
+			usedOffcutLotID = matchedOffcut.ID
+			offcutLotName = matchedOffcut.Name
+			offcutSavingsPercent = 35.0
+			offcutRecommended = true
+			// Apply 35% savings on paper cost using warehouse offcut scrap
+			dPaperCost = dPaperCost.Mul(decimal.NewFromFloat(0.65))
 		}
 	}
 
@@ -782,6 +821,14 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	balanceDueFloat := roundToTwoDecimals(grandTotalFloat - depositAmountFloat)
 	unitPriceFloat := roundToTwoDecimals(grandTotalFloat / float64(req.Quantity))
 
+	// Calculate Gross Profit Margin %: ((TotalAmount - TotalCost) / TotalAmount) * 100
+	grossMarginPercent := 0.0
+	if grandTotalFloat > 0 {
+		grossMarginPercent = roundToTwoDecimals(((grandTotalFloat - netCostFloat) / grandTotalFloat) * 100.0)
+	} else if salePriceFloat > 0 {
+		grossMarginPercent = roundToTwoDecimals(((salePriceFloat - netCostFloat) / salePriceFloat) * 100.0)
+	}
+
 	// Populate TotalBreakdown and UnitBreakdown
 	totalBreakdown := CostBreakdownItem{
 		PaperCost:        roundToTwoDecimals(dPaperCost.InexactFloat64()),
@@ -848,11 +895,18 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		DepositAmount:         depositAmountFloat,
 		BalanceDue:            balanceDueFloat,
 		UnitPrice:             unitPriceFloat,
+		GrossMarginPercent:    grossMarginPercent,
 		ProfitMargin:          roundToTwoDecimals(dEffectiveMargin.InexactFloat64()),
 		VolumeDiscountPercent: roundToTwoDecimals(dVolumeDiscountPct.InexactFloat64()),
 		Currency:              req.TargetCurrency,
 		ExchangeRate:          1.0,
 		CustomOptions:         req.CustomFinishingOptions,
+		Imposition:            impositionGrid,
+		WastePercent:          roundToTwoDecimals(calculatedWastePct),
+		UsedOffcutLotID:       usedOffcutLotID,
+		OffcutSavingsPercent:  offcutSavingsPercent,
+		OffcutRecommended:     offcutRecommended,
+		OffcutLotName:         offcutLotName,
 	}
 
 	// Cache successful calculation

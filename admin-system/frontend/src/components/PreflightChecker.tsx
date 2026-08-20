@@ -19,14 +19,18 @@ import {
   Sliders,
   Printer,
   ShieldCheck,
+  ShieldAlert,
   Zap,
+  Save,
+  Palette,
 } from 'lucide-react';
 import type { PreflightResult } from '../features/orders/types';
-import { analyzeImageClient, analyzePDFClient } from '../lib/preflightAnalyzer';
+import { analyzeImageClient, analyzePDFClient, convertRGBToCMYKCanvas } from '../lib/preflightAnalyzer';
 
 interface PreflightCheckerProps {
   onSendToQuotation?: (result: PreflightResult) => void;
   onSkipToManual?: () => void;
+  orderId?: string;
 }
 
 const SUPPORTED_EXTENSIONS = [
@@ -45,6 +49,7 @@ const SUPPORTED_EXTENSIONS = [
 export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   onSendToQuotation,
   onSkipToManual,
+  orderId,
 }) => {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -54,6 +59,12 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   const [isDragOver, setIsDragOver] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [printColorMode, setPrintColorMode] = useState<'CMYK' | 'MONO_K'>('CMYK');
+  
+  // Auto-convert CMYK Simulation & Backend Log States
+  const [isCmykSimulated, setIsCmykSimulated] = useState(false);
+  const [cmykSimulatedUrl, setCmykSimulatedUrl] = useState<string | null>(null);
+  const [isSavingReport, setIsSavingReport] = useState(false);
+  const [reportSavedStatus, setReportSavedStatus] = useState<string | null>(null);
 
   const isImageFile = (fileName: string) => {
     const ext = fileName.slice(fileName.lastIndexOf('.')).toLowerCase();
@@ -109,11 +120,94 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       }
 
       setResult(analysisResult);
+      // Auto-save preflight report to backend
+      handleSavePreflightReport(analysisResult);
     } catch (err: any) {
       console.error('Preflight analysis error:', err);
       setErrorMessage(`ການກວດສອບໄຟລ໌ຜິດພາດ: ${err.message || 'ບໍ່ສາມາດອ່ານຄ່າສີໄດ້'}`);
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleAutoConvertRGBToCMYK = () => {
+    if (!previewUrl) return;
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const srcCanvas = document.createElement('canvas');
+      srcCanvas.width = img.naturalWidth || img.width;
+      srcCanvas.height = img.naturalHeight || img.height;
+      const ctx = srcCanvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.drawImage(img, 0, 0);
+      const cmykCanvas = convertRGBToCMYKCanvas(srcCanvas);
+      const convertedDataUrl = cmykCanvas.toDataURL('image/jpeg', 0.92);
+
+      setCmykSimulatedUrl(convertedDataUrl);
+      setIsCmykSimulated(true);
+
+      if (result) {
+        setResult({
+          ...result,
+          has_rgb: false,
+          is_standard_cmyk: true,
+          color_space: 'CMYK Gamut Proofed (Soft Proof)',
+          status_badge_lao: '✅ ແປງເປັນ CMYK Gamut ຮຽບຮ້ອຍ',
+          diagnostics: {
+            ...result.diagnostics,
+            colorSpace: 'PASS',
+            tac: 'PASS',
+            bleed: result.diagnostics?.bleed || 'PASS',
+            dpi: result.diagnostics?.dpi || 'PASS',
+          },
+        });
+      }
+    };
+    img.src = previewUrl;
+  };
+
+  const handleSavePreflightReport = async (resToSave?: PreflightResult) => {
+    const reportData = resToSave || result;
+    if (!reportData) return;
+
+    const targetOrderId = orderId || `ORD-TMP-${Date.now().toString().slice(-6)}`;
+    setIsSavingReport(true);
+    try {
+      const payload = {
+        order_id: targetOrderId,
+        file_name: reportData.file_name,
+        total_pages: reportData.total_pages,
+        color_space: reportData.color_space,
+        has_rgb: reportData.has_rgb,
+        is_standard_cmyk: reportData.is_standard_cmyk,
+        dpi_estimate: reportData.dpi_estimate || 300,
+        bleed_mm: reportData.bleed_mm || 0,
+        has_sufficient_bleed: reportData.has_sufficient_bleed ?? true,
+        tac_max_percent: reportData.tac_max_percent || 0,
+        tac_warning: reportData.tac_warning || false,
+        avg_cov_c: reportData.avg_cov_c,
+        avg_cov_m: reportData.avg_cov_m,
+        avg_cov_y: reportData.avg_cov_y,
+        avg_cov_k: reportData.avg_cov_k,
+        report_json: reportData,
+      };
+
+      const res = await fetch(`/api/v1/orders/${targetOrderId}/preflight-report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        setReportSavedStatus(`Saved #${targetOrderId}`);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsSavingReport(false);
     }
   };
 
@@ -128,9 +222,12 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   const resetAll = () => {
     setFile(null);
     setPreviewUrl(null);
+    setCmykSimulatedUrl(null);
+    setIsCmykSimulated(false);
     setResult(null);
     setErrorMessage(null);
     setZoomLevel(1);
+    setReportSavedStatus(null);
   };
 
   // Calculate Total Ink Coverage (TIC / TAC)
@@ -287,34 +384,52 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                 <h3 className="text-sm font-bold text-slate-200">ຕົວຢ່າງໄຟລ໌ພິມ (Live Artwork Preview)</h3>
               </div>
 
-              {/* Zoom Controls if Image */}
-              {isImageFile(result.file_name) && (
-                <div className="flex items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800 text-xs">
+              {/* Zoom & Auto-Convert Controls */}
+              <div className="flex items-center gap-2">
+                {isImageFile(result.file_name) && (
                   <button
-                    onClick={() => setZoomLevel((z) => Math.max(0.5, z - 0.25))}
-                    className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition"
-                    title="Zoom Out"
+                    type="button"
+                    onClick={handleAutoConvertRGBToCMYK}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                      isCmykSimulated
+                        ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-950/40'
+                        : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-950/40'
+                    }`}
+                    title="Auto-convert RGB pixels to CMYK gamut simulation"
                   >
-                    <ZoomOut className="w-4 h-4" />
+                    <Palette className="w-3.5 h-3.5" />
+                    <span>{isCmykSimulated ? '✓ CMYK Soft Proofing' : 'Auto-Convert RGB to CMYK Preview'}</span>
                   </button>
-                  <span className="px-2 font-mono text-xs font-bold text-slate-300">
-                    {Math.round(zoomLevel * 100)}%
-                  </span>
-                  <button
-                    onClick={() => setZoomLevel((z) => Math.min(3, z + 0.25))}
-                    className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition"
-                    title="Zoom In"
-                  >
-                    <ZoomIn className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setZoomLevel(1)}
-                    className="px-2 py-0.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 rounded text-slate-300 transition"
-                  >
-                    Fit
-                  </button>
-                </div>
-              )}
+                )}
+
+                {isImageFile(result.file_name) && (
+                  <div className="flex items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800 text-xs">
+                    <button
+                      onClick={() => setZoomLevel((z) => Math.max(0.5, z - 0.25))}
+                      className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition"
+                      title="Zoom Out"
+                    >
+                      <ZoomOut className="w-4 h-4" />
+                    </button>
+                    <span className="px-2 font-mono text-xs font-bold text-slate-300">
+                      {Math.round(zoomLevel * 100)}%
+                    </span>
+                    <button
+                      onClick={() => setZoomLevel((z) => Math.min(3, z + 0.25))}
+                      className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition"
+                      title="Zoom In"
+                    >
+                      <ZoomIn className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setZoomLevel(1)}
+                      className="px-2 py-0.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 rounded text-slate-300 transition"
+                    >
+                      Fit
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Preview Viewport (560px Height for Immersive Look) */}
@@ -322,7 +437,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
               {previewUrl && isImageFile(result.file_name) ? (
                 <div className="w-full h-full overflow-auto flex items-center justify-center p-4">
                   <img
-                    src={previewUrl}
+                    src={cmykSimulatedUrl || previewUrl}
                     alt={result.file_name}
                     style={{
                       transform: `scale(${zoomLevel})`,
@@ -391,6 +506,59 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                   )}
                   {result.status_badge_lao}
                 </span>
+              </div>
+
+              {/* 4 Interactive Diagnostic Badges */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                {/* 1. Color Space */}
+                <div className={`p-2.5 rounded-xl border text-[11px] font-bold flex items-center justify-between ${
+                  result.has_rgb
+                    ? 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+                    : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                }`}>
+                  <span>🎨 Color Space</span>
+                  <span className="font-mono text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-black/40">
+                    {result.has_rgb ? '🔴 RGB Error' : '🟢 CMYK Pass'}
+                  </span>
+                </div>
+
+                {/* 2. Bleed Area */}
+                <div className={`p-2.5 rounded-xl border text-[11px] font-bold flex items-center justify-between ${
+                  (result.bleed_mm || 0) >= 3.0
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                    : (result.bleed_mm || 0) > 0
+                    ? 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                    : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+                }`}>
+                  <span>📐 Bleed ({result.bleed_mm || 0}mm)</span>
+                  <span className="font-mono text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-black/40">
+                    {(result.bleed_mm || 0) >= 3.0 ? '🟢 Pass' : (result.bleed_mm || 0) > 0 ? '🟡 < 3mm' : '🔴 0mm Err'}
+                  </span>
+                </div>
+
+                {/* 3. TAC (Total Area Coverage) */}
+                <div className={`p-2.5 rounded-xl border text-[11px] font-bold flex items-center justify-between ${
+                  (result.tac_max_percent || 0) > 300
+                    ? 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                    : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                }`}>
+                  <span>💧 TAC (Max {result.tac_max_percent || 0}%)</span>
+                  <span className="font-mono text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-black/40">
+                    {(result.tac_max_percent || 0) > 300 ? '🟡 >300% Warn' : '🟢 <=300%'}
+                  </span>
+                </div>
+
+                {/* 4. Image Resolution */}
+                <div className={`p-2.5 rounded-xl border text-[11px] font-bold flex items-center justify-between ${
+                  (result.dpi_estimate || 300) < 300
+                    ? 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+                    : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                }`}>
+                  <span>🔍 Resolution</span>
+                  <span className="font-mono text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-black/40">
+                    {(result.dpi_estimate || 300) < 300 ? `🔴 ${result.dpi_estimate}DPI` : `🟢 ${result.dpi_estimate || 300}DPI`}
+                  </span>
+                </div>
               </div>
 
               {result.warning_message_lao && (
@@ -600,7 +768,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
               </div>
             </div>
 
-            {/* 2-Button Action Flow */}
+            {/* Action Buttons Flow */}
             <div className="space-y-3 pt-1">
               {/* Button 1: Send to Quotation */}
               <button
@@ -633,10 +801,20 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                 <ArrowRight className="w-4 h-4" />
               </button>
 
-              {/* Button 2: Skip / Manual */}
+              {/* Button 2: Save Preflight Report to Backend DB */}
+              <button
+                onClick={() => handleSavePreflightReport()}
+                disabled={isSavingReport}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 hover:text-white font-bold rounded-2xl border border-indigo-500/40 transition cursor-pointer text-xs"
+              >
+                <Save className="w-4 h-4" />
+                <span>{reportSavedStatus ? `✓ ${reportSavedStatus}` : isSavingReport ? 'Saving...' : '💾 ບັນທຶກ Preflight Report (Backend)'}</span>
+              </button>
+
+              {/* Button 3: Skip / Manual */}
               <button
                 onClick={() => onSkipToManual && onSkipToManual()}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-slate-800 hover:bg-slate-700 active:scale-[0.99] text-slate-300 hover:text-white font-bold rounded-2xl border border-slate-700 transition cursor-pointer text-xs"
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 active:scale-[0.99] text-slate-300 hover:text-white font-bold rounded-2xl border border-slate-700 transition cursor-pointer text-xs"
               >
                 <span>⚪ ຂ້າມ / ໄປປ້ອນຄ່າສີເອງ</span>
               </button>

@@ -24,13 +24,59 @@ type Offcut struct {
 }
 
 var (
-	offcutsStore = make(map[string]Offcut)
-	storeMutex   sync.RWMutex
-	offcutSeq    int
+	offcutsStore = map[string]Offcut{
+		"OFF-CRD350-01": {
+			ID:               "OFF-CRD350-01",
+			ParentMaterialID: "PAP-CRD-350",
+			Name:             "Art Card 350g Card Strips",
+			WidthMm:          120,
+			LengthMm:         250,
+			Quantity:         1500,
+			Location:         "Shelf A-02",
+			CreatedAt:        time.Now().Add(-48 * time.Hour),
+		},
+		"OFF-ART130-01": {
+			ID:               "OFF-ART130-01",
+			ParentMaterialID: "PAP-ART-130",
+			Name:             "Art Paper 130g Offcut Remnant",
+			WidthMm:          200,
+			LengthMm:         300,
+			Quantity:         2000,
+			Location:         "Shelf B-01",
+			CreatedAt:        time.Now().Add(-24 * time.Hour),
+		},
+	}
+	storeMutex sync.RWMutex
+	offcutSeq  int
 )
 
-func init() {
-	offcutSeq = 0
+// GetMatchingOffcut searches for available offcut scrap matching size and quantity
+func GetMatchingOffcut(paperSku, paperName string, jobW, jobH float64, requiredQty int) *Offcut {
+	if db.DB != nil {
+		offcuts, err := getOffcutsFromDB()
+		if err == nil && len(offcuts) > 0 {
+			for _, o := range offcuts {
+				if o.Quantity >= float64(requiredQty) {
+					// Check dimensions with or without rotation
+					if (o.WidthMm >= jobW && o.LengthMm >= jobH) || (o.WidthMm >= jobH && o.LengthMm >= jobW) {
+						return &o
+					}
+				}
+			}
+		}
+	}
+
+	storeMutex.RLock()
+	defer storeMutex.RUnlock()
+	for _, o := range offcutsStore {
+		if o.Quantity >= float64(requiredQty) {
+			if (o.WidthMm >= jobW && o.LengthMm >= jobH) || (o.WidthMm >= jobH && o.LengthMm >= jobW) {
+				match := o
+				return &match
+			}
+		}
+	}
+	return nil
 }
 
 // HandleGetOffcuts returns the list of offcut scraps

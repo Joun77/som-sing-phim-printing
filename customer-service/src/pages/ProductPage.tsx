@@ -3,7 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom'
 import { getCategory, getProduct, type Product, type SpecOption } from '../data/catalog.ts'
 import { useShop } from '../context/ShopContext.tsx'
 import { computePrice, getQuantityTier } from '../utils/pricing.ts'
-import { formatMoney } from '../utils/currency.ts'
+import { formatMoney, formatMultiCurrency, fetchLiveExchangeRates } from '../utils/currency.ts'
 import ProductArt from '../components/ProductArt.tsx'
 import { fetchPublicProductBySlug, RemoteProduct, uploadArtworkFile } from '../api/client.ts'
 import {
@@ -23,6 +23,7 @@ import {
   PrinterIcon,
   CartIcon,
 } from '../components/icons.tsx'
+import BoxModelViewer from '../components/3D/BoxModelViewer.tsx'
 
 interface OptionButtonProps {
   option: SpecOption
@@ -206,6 +207,39 @@ export default function ProductPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [showQuotationModal, setShowQuotationModal] = useState(false)
 
+  // 3D Packaging Box Model Studio State
+  const isPackagingProduct = Boolean(
+    product?.category === 'packaging' ||
+    product?.slug?.includes('box') ||
+    product?.slug?.includes('pack') ||
+    product?.image === 'box' ||
+    category?.slug?.includes('box') ||
+    category?.slug?.includes('pack')
+  )
+
+  const [is3DView, setIs3DView] = useState<boolean>(false)
+
+  useEffect(() => {
+    if (isPackagingProduct) {
+      setIs3DView(true)
+    }
+  }, [isPackagingProduct])
+
+  const boxDimensions = useMemo(() => {
+    const s = sizeId.toLowerCase()
+    if (s.includes('large') || s.includes('l') || s.includes('240')) return { l: 240, w: 160, h: 90 }
+    if (s.includes('small') || s.includes('s') || s.includes('120')) return { l: 120, w: 85, h: 45 }
+    return { l: 180, w: 120, h: 65 } // Default luxury box
+  }, [sizeId])
+
+  const finishingEffect = useMemo<'none' | 'gold_foil' | 'silver_foil' | 'spot_uv' | 'matte'>(() => {
+    const f = finishingId.toLowerCase()
+    if (f.includes('gold') || f.includes('foil')) return 'gold_foil'
+    if (f.includes('silver')) return 'silver_foil'
+    if (f.includes('uv') || f.includes('spot') || f.includes('gloss')) return 'spot_uv'
+    return 'none'
+  }, [finishingId])
+
   useEffect(() => {
     if (product) {
       if (!sizeId && product.sizes.length > 0) setSizeId(product.sizes[0].id)
@@ -366,8 +400,41 @@ export default function ProductPage() {
 
           <div className="product-layout">
             <div className="product-gallery">
+              {/* 2D vs 3D Model Studio View Switcher */}
+              <div className="flex items-center justify-between mb-3 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => setIs3DView(false)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
+                    !is3DView ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  🖼️ 2D Artwork
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIs3DView(true)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                    is3DView ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  <span>📦 3D Box Studio</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                </button>
+              </div>
+
               <div className="product-gallery-main">
-                <ProductArt art={product.image} />
+                {is3DView ? (
+                  <BoxModelViewer
+                    lengthMM={boxDimensions.l}
+                    widthMM={boxDimensions.w}
+                    heightMM={boxDimensions.h}
+                    artworkUrl={uploadedFileUrl && (uploadedFileUrl.startsWith('http') || uploadedFileUrl.startsWith('data:') || uploadedFileUrl.startsWith('blob:')) ? uploadedFileUrl : null}
+                    finishingEffect={finishingEffect}
+                  />
+                ) : (
+                  <ProductArt art={product.image} />
+                )}
               </div>
               <div className="product-meta-card">
                 <h3>{t('serviceStandards')}</h3>
@@ -406,6 +473,9 @@ export default function ProductPage() {
                 <span className="product-price-line-label">{t('startPriceLabel')}</span>
                 <span className="product-price-line-now">{formatMoney(convertTo(product.basePrice), currency)}</span>
                 <span className="product-price-line-unit">/ {language === 'en' ? 'Item' : 'ຊິ້ນ'}</span>
+              </div>
+              <div className="text-[11px] font-bold text-slate-500 bg-slate-50 py-1.5 px-3 rounded-xl border border-slate-200 inline-block mb-3">
+                {formatMultiCurrency(product.basePrice)}
               </div>
 
               <form
@@ -520,9 +590,16 @@ export default function ProductPage() {
                   </div>
                   <div className="configurator-summary-total">
                     <span>{t('estimatedTotal')}</span>
-                    <strong style={{ color: '#002B5B', fontSize: '1.45rem' }}>
-                      {formatMoney(totalDisplay, currency)}
-                    </strong>
+                    <div className="text-right">
+                      <strong style={{ color: '#002B5B', fontSize: '1.45rem', display: 'block' }}>
+                        {formatMoney(totalDisplay, currency)}
+                      </strong>
+                      {price && (
+                        <span className="text-[10px] font-bold text-slate-500 block">
+                          {formatMultiCurrency(price.total)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 

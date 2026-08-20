@@ -7,14 +7,17 @@ import (
 type OrderStatus string
 
 const (
-	StatusDraft           OrderStatus = "DRAFT"
-	StatusWaitingDeposit  OrderStatus = "WAITING_DEPOSIT"
-	StatusPrepressCheck   OrderStatus = "PREPRESS_CHECK"
-	StatusWaitingApproval OrderStatus = "WAITING_APPROVAL"
-	StatusReadyToPrint    OrderStatus = "READY_TO_PRINT"
-	StatusInProduction    OrderStatus = "IN_PRODUCTION"
-	StatusCompleted       OrderStatus = "COMPLETED"
-	StatusDelivered       OrderStatus = "DELIVERED"
+	StatusDraft                   OrderStatus = "DRAFT"
+	StatusRequiresManagerApproval OrderStatus = "REQUIRES_MANAGER_APPROVAL"
+	StatusApproved                OrderStatus = "APPROVED"
+	StatusRejected                OrderStatus = "REJECTED"
+	StatusWaitingDeposit          OrderStatus = "WAITING_DEPOSIT"
+	StatusPrepressCheck           OrderStatus = "PREPRESS_CHECK"
+	StatusWaitingApproval         OrderStatus = "WAITING_APPROVAL"
+	StatusReadyToPrint            OrderStatus = "READY_TO_PRINT"
+	StatusInProduction            OrderStatus = "IN_PRODUCTION"
+	StatusCompleted               OrderStatus = "COMPLETED"
+	StatusDelivered               OrderStatus = "DELIVERED"
 )
 
 // BindingType Enum

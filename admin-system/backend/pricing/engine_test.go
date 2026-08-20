@@ -627,6 +627,35 @@ func TestBilingualBookDynamicPricingWithPreflight(t *testing.T) {
 	}
 }
 
+func TestSmallItemOffcutRecommendation(t *testing.T) {
+	req := CalculationRequest{
+		JobName:          "Luxury Business Cards",
+		Quantity:         500,
+		JobWidth:         90.0,
+		JobHeight:        54.0,
+		PaperSku:         "PAP-CRD-350",
+		PaperName:        "Art Card 350g",
+		PaperCostPerUnit: 250000.0,
+		SheetsPerPack:    250,
+		TargetCurrency:   "LAK",
+	}
+
+	res, err := CalculateJobPricing(req)
+	if err != nil {
+		t.Fatalf("Calculation failed: %v", err)
+	}
+
+	if !res.OffcutRecommended {
+		t.Errorf("Expected OffcutRecommended to be true for 90x54mm card matching offcut stock")
+	}
+	if res.UsedOffcutLotID != "OFF-CRD350-01" {
+		t.Errorf("Expected used offcut lot OFF-CRD350-01, got %s", res.UsedOffcutLotID)
+	}
+	if res.OffcutSavingsPercent != 35.0 {
+		t.Errorf("Expected 35%% savings, got %f", res.OffcutSavingsPercent)
+	}
+}
+
 
 
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Boxes, Plus, Scissors, RotateCw, AlertTriangle } from 'lucide-react';
+import { Boxes, Plus, Scissors, RotateCw, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import InventoryTable from './InventoryTable';
@@ -7,6 +7,7 @@ import InventoryMaterialDetailsPage from './details/InventoryMaterialDetailsPage
 import AddMaterialModal from './modals/AddMaterialModal';
 import OffcutModal from './modals/OffcutModal';
 import StockDischargeModal from './modals/StockDischargeModal';
+import SupplierPriceUploader from './SupplierPriceUploader';
 
 export default function InventoryManagement() {
   const { 
@@ -28,6 +29,7 @@ export default function InventoryManagement() {
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
   const [isOffcutOpen, setIsOffcutOpen] = useState(false);
   const [isDischargeOpen, setIsDischargeOpen] = useState(false);
+  const [isPriceUploaderOpen, setIsPriceUploaderOpen] = useState(false);
   const [selectedDischargeItem, setSelectedDischargeItem] = useState(null);
 
   // Restock lot state
@@ -111,6 +113,13 @@ export default function InventoryManagement() {
         </div>
         <div className="flex flex-wrap gap-2.5">
           <button
+            onClick={() => setIsPriceUploaderOpen(true)}
+            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-2xl transition cursor-pointer shadow-sm"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
+            <span>{currentLang === 'lo' ? 'ອັບໂຫຼດລາຄາເຈ້ຍ (Excel/CSV)' : 'Paper Price Sheets'}</span>
+          </button>
+          <button
             onClick={() => { setSelectedDischargeItem(null); setIsDischargeOpen(true); }}
             className="flex items-center gap-1.5 px-4.5 py-2.5 bg-rose-50 border border-rose-100 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-2xl transition cursor-pointer"
           >
@@ -119,7 +128,7 @@ export default function InventoryManagement() {
           </button>
           <button
             onClick={() => setIsOffcutOpen(true)}
-            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-2xl transition cursor-pointer"
+            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-2xl transition cursor-pointer"
           >
             <Scissors className="w-4 h-4" />
             <span>+ Add Offcut Remnant</span>
@@ -296,6 +305,20 @@ export default function InventoryManagement() {
         onClose={() => {
           setIsDischargeOpen(false);
           setSelectedDischargeItem(null);
+        }}
+      />
+
+      {/* Supplier Price Sheet Uploader & Versioning Modal */}
+      <SupplierPriceUploader
+        isOpen={isPriceUploaderOpen}
+        onClose={() => setIsPriceUploaderOpen(false)}
+        onSuccess={() => {
+          showToast(
+            currentLang === 'lo'
+              ? 'ອັບເດດຖານຂໍ້ມູນລາຄາກະດາດທັງລະບົບແລ້ວ'
+              : 'System-wide paper price database updated',
+            'success'
+          );
         }}
       />
     </div>
