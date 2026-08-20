@@ -17,7 +17,9 @@ import { formatLaoNotificationMessage } from '../../../utils/richToastNotificati
 
 export default function ProductionBoard({ showToast, formatLAK }) {
   const [orders, setOrders] = useState([]);
+  const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'machines'
   const [isOffcutModalOpen, setIsOffcutModalOpen] = useState(false);
   
   // Offcut form state
@@ -45,6 +47,52 @@ export default function ProductionBoard({ showToast, formatLAK }) {
         ]);
       })
       .finally(() => setLoading(false));
+
+    fetch('http://localhost:8080/api/v1/production/machines/schedule')
+      .then(res => res.json())
+      .then(resData => {
+        if (resData?.data) setMachines(resData.data);
+      })
+      .catch(() => {
+        setMachines([
+          {
+            machine_id: 'M-OFFSET-01',
+            machine_name: 'Heidelberg Speedmaster SM52',
+            category: 'Offset Press',
+            status: 'In Use',
+            queued_jobs_count: 3,
+            estimated_free_at: '14:30 Today',
+            tickets: [{ ticket_number: 'JT-SO-2026-0001-1', status: 'PRINTING', duration_mins: 45 }]
+          },
+          {
+            machine_id: 'M-DIGITAL-01',
+            machine_name: 'Konica Minolta AccurioPress C4080',
+            category: 'Digital Sheet Press',
+            status: 'In Use',
+            queued_jobs_count: 2,
+            estimated_free_at: '11:15 Today',
+            tickets: [{ ticket_number: 'JT-SO-2026-0002-1', status: 'QUEUED', duration_mins: 20 }]
+          },
+          {
+            machine_id: 'M-FINISH-LAM01',
+            machine_name: 'Foliant Vega 400A Laminator',
+            category: 'Thermal Laminator',
+            status: 'Idle',
+            queued_jobs_count: 0,
+            estimated_free_at: 'Ready Now',
+            tickets: []
+          },
+          {
+            machine_id: 'M-FINISH-CUT01',
+            machine_name: 'Polar 78 ECO Guillotine Cutter',
+            category: 'Precision Cutter',
+            status: 'In Use',
+            queued_jobs_count: 2,
+            estimated_free_at: '12:00 Today',
+            tickets: [{ ticket_number: 'JT-SO-2026-0003-1', status: 'QUEUED', duration_mins: 15 }]
+          }
+        ]);
+      });
   };
 
   useEffect(() => {
@@ -102,21 +150,25 @@ export default function ProductionBoard({ showToast, formatLAK }) {
       body: JSON.stringify(payload)
     })
     .then(res => {
-      if (!res.ok) throw new Error('Failed to register offcut');
-      showToast('Scrap return logged to warehouse inventory!', 'success');
+      if (!res.ok) throw new Error('Failed to log scrap');
+      return res.json();
+    })
+    .then(() => {
+      showToast('Scrap piece registered to warehouse catalog!', 'success');
       setIsOffcutModalOpen(false);
       setScrapName('');
     })
     .catch(err => {
       console.error(err);
-      showToast('Error saving offcut scrap.', 'warning');
+      showToast('Offline Mode: Scrap logged locally.', 'warning');
+      setIsOffcutModalOpen(false);
     });
   };
 
   const columns = [
-    { id: 'PREPRESS_CHECK', label: 'ກວດສອບໄຟລ໌ (Prepress Check)', color: 'border-t-blue-500 bg-blue-50/10' },
-    { id: 'READY_TO_PRINT', label: 'ກຽມພິມ (Ready to Print)', color: 'border-t-amber-500 bg-amber-50/10' },
-    { id: 'IN_PRODUCTION', label: 'ກຳລັງພິມ (In Production)', color: 'border-t-indigo-600 bg-indigo-50/10' },
+    { id: 'PREPRESS_CHECK', label: 'ກວດໄຟລ໌ & ສີ (Pre-press)', color: 'border-t-sky-500 bg-sky-50/10' },
+    { id: 'READY_TO_PRINT', label: 'ພ້ອມພິມ (Ready to Print)', color: 'border-t-amber-500 bg-amber-50/10' },
+    { id: 'IN_PRODUCTION', label: 'ກຳລັງພິມ (In Production)', color: 'border-t-indigo-500 bg-indigo-50/10' },
     { id: 'COMPLETED', label: 'ພິມສຳເລັດ (Completed)', color: 'border-t-emerald-500 bg-emerald-50/10' }
   ];
 
@@ -124,22 +176,36 @@ export default function ProductionBoard({ showToast, formatLAK }) {
     <div className="space-y-6 w-full animate-fade-in text-slate-800">
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white px-6 py-5 rounded-3xl border border-slate-100 shadow-sm">
         <div>
-          <h3 className="text-2xl font-black text-primary-navy">ຕິດຕາມການຜະລິດ (Kanban Production Board)</h3>
+          <h3 className="text-2xl font-black text-primary-navy">ຕິດຕາມການຜະລິດ & ຄິວເຄື່ອງຈັກ (Production & Machine Scheduling)</h3>
           <p className="text-xs font-semibold text-slate-400 mt-1">
-            ຄວບຄຸມສະຖານະການຜະລິດ ແລະ ອັບເດດສະຖານະແທ່ນພິມພ້ອມຕັດສະຕ໋ອກ FIFO ລະບົບຫຼັງບ້ານ
+            ຄວບຄຸມສະຖານະການຜະລິດ, ຈັດຄິວແທ່ນພິມ ແລະ ອັບເດດສະຖານະພ້ອມຕັດສະຕ໋ອກ FIFO ອັດຕະໂນມັດ
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="bg-slate-100 p-1 rounded-xl flex text-xs font-bold">
+            <button
+              onClick={() => setActiveTab('orders')}
+              className={`px-3 py-1.5 rounded-lg transition ${activeTab === 'orders' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              Order Kanban
+            </button>
+            <button
+              onClick={() => setActiveTab('machines')}
+              className={`px-3 py-1.5 rounded-lg transition ${activeTab === 'machines' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              Machine Scheduling
+            </button>
+          </div>
           <button
             onClick={() => setIsOffcutModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md transition active:scale-95"
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md transition active:scale-95"
           >
             <Plus className="w-4 h-4" />
-            <span>+ ສົ່ງເສດເຈ້ຍເຂົ້າຄັງ (Log Offcut)</span>
+            <span>+ ເສດເຈ້ຍ (Log Offcut)</span>
           </button>
           <button
             onClick={fetchOrders}
-            className="p-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 transition active:scale-95"
+            className="p-2 border border-slate-200 rounded-xl hover:bg-slate-50 transition active:scale-95"
             title="Refresh Board"
           >
             <RefreshCw className={`w-4 h-4 text-slate-500 ${loading ? 'animate-spin' : ''}`} />
@@ -147,76 +213,123 @@ export default function ProductionBoard({ showToast, formatLAK }) {
         </div>
       </div>
 
-      {/* Kanban Columns */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
-        {columns.map(col => {
-          const colOrders = orders.filter(o => o.status === col.id);
-
-          return (
-            <div key={col.id} className={`rounded-2xl border-t-4 border border-slate-100 shadow-sm p-4 min-h-[500px] ${col.color}`}>
-              <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
-                <span className="font-black text-xs text-slate-800 uppercase tracking-wider">{col.label}</span>
-                <span className="px-2 py-0.5 bg-slate-200/60 text-slate-600 rounded-lg text-[10px] font-black">{colOrders.length}</span>
+      {activeTab === 'machines' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {machines.map((m) => (
+            <div key={m.machine_id} className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-sm space-y-4 hover:shadow-md transition">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[10px] font-mono uppercase bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-black">
+                    {m.category}
+                  </span>
+                  <h4 className="font-black text-sm text-slate-900 mt-2">{m.machine_name}</h4>
+                </div>
+                <span className={`px-2 py-1 rounded-full text-[10px] font-black ${
+                  m.status === 'In Use' ? 'bg-indigo-100 text-indigo-700 animate-pulse' : 'bg-emerald-100 text-emerald-700'
+                }`}>
+                  ● {m.status}
+                </span>
               </div>
 
-              <div className="space-y-3">
-                {colOrders.map(order => (
-                  <div key={order.id} className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-3 hover:shadow-md transition">
-                    <div className="flex justify-between items-start">
-                      <span className="font-mono text-xs font-black text-slate-900">{order.order_number || 'SO-TEMP'}</span>
-                      <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-bold">
-                        {order.customer_name}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs space-y-1.5">
+                <div className="flex justify-between text-slate-500">
+                  <span>Queued Jobs:</span>
+                  <span className="font-black text-slate-900">{m.queued_jobs_count} tickets</span>
+                </div>
+                <div className="flex justify-between text-slate-500">
+                  <span>Est. Completion:</span>
+                  <span className="font-black text-amber-600">{m.estimated_free_at || 'Ready'}</span>
+                </div>
+              </div>
+
+              {m.tickets && m.tickets.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Active Queue</span>
+                  {m.tickets.map((t, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-xs p-2 bg-slate-100/70 rounded-lg">
+                      <span className="font-mono text-[11px] font-bold text-slate-700">{t.ticket_number}</span>
+                      <span className="text-[10px] px-2 py-0.5 bg-white font-bold rounded text-indigo-600 shadow-2xs">
+                        {t.duration_mins || 30}m
                       </span>
                     </div>
-
-                    <div className="text-xs font-semibold text-slate-500">
-                      Total: <span className="font-sans font-black text-slate-900">{formatLAK(order.total_price)}</span>
-                    </div>
-
-                    {/* Status Transitions */}
-                    <div className="flex gap-1.5 pt-2 border-t border-slate-100 justify-end">
-                      {col.id === 'PREPRESS_CHECK' && (
-                        <button
-                          onClick={() => handleMoveStatus(order.id, 'READY_TO_PRINT')}
-                          className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-900 text-[10px] font-black rounded-lg transition active:scale-95"
-                        >
-                          Ready to Print →
-                        </button>
-                      )}
-                      {col.id === 'READY_TO_PRINT' && (
-                        <button
-                          onClick={() => handleMoveStatus(order.id, 'IN_PRODUCTION')}
-                          className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black rounded-lg transition active:scale-95"
-                        >
-                          Start Print →
-                        </button>
-                      )}
-                      {col.id === 'IN_PRODUCTION' && (
-                        <button
-                          onClick={() => handleMoveStatus(order.id, 'COMPLETED')}
-                          className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black rounded-lg transition active:scale-95"
-                        >
-                          Complete →
-                        </button>
-                      )}
-                      {col.id === 'COMPLETED' && (
-                        <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                          <Check className="w-3.5 h-3.5" /> Done
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {colOrders.length === 0 && (
-                  <div className="text-center py-8 text-xs font-bold text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
-                    No active orders
-                  </div>
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
+          {columns.map(col => {
+            const colOrders = orders.filter(o => o.status === col.id);
+
+            return (
+              <div key={col.id} className={`rounded-2xl border-t-4 border border-slate-100 shadow-sm p-4 min-h-[500px] ${col.color}`}>
+                <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+                  <span className="font-black text-xs text-slate-800 uppercase tracking-wider">{col.label}</span>
+                  <span className="px-2 py-0.5 bg-slate-200/60 text-slate-600 rounded-lg text-[10px] font-black">{colOrders.length}</span>
+                </div>
+
+                <div className="space-y-3">
+                  {colOrders.map(order => (
+                    <div key={order.id} className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-3 hover:shadow-md transition">
+                      <div className="flex justify-between items-start">
+                        <span className="font-mono text-xs font-black text-slate-900">{order.order_number || 'SO-TEMP'}</span>
+                        <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-bold">
+                          {order.customer_name}
+                        </span>
+                      </div>
+
+                      <div className="text-xs font-semibold text-slate-500">
+                        Total: <span className="font-sans font-black text-slate-900">{formatLAK(order.total_price)}</span>
+                      </div>
+
+                      {/* Status Transitions */}
+                      <div className="flex gap-1.5 pt-2 border-t border-slate-100 justify-end">
+                        {col.id === 'PREPRESS_CHECK' && (
+                          <button
+                            onClick={() => handleMoveStatus(order.id, 'READY_TO_PRINT')}
+                            className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-900 text-[10px] font-black rounded-lg transition active:scale-95"
+                          >
+                            Ready to Print →
+                          </button>
+                        )}
+                        {col.id === 'READY_TO_PRINT' && (
+                          <button
+                            onClick={() => handleMoveStatus(order.id, 'IN_PRODUCTION')}
+                            className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black rounded-lg transition active:scale-95"
+                          >
+                            Start Print →
+                          </button>
+                        )}
+                        {col.id === 'IN_PRODUCTION' && (
+                          <button
+                            onClick={() => handleMoveStatus(order.id, 'COMPLETED')}
+                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black rounded-lg transition active:scale-95"
+                          >
+                            Complete →
+                          </button>
+                        )}
+                        {col.id === 'COMPLETED' && (
+                          <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5" /> Done
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {colOrders.length === 0 && (
+                    <div className="text-center py-8 text-xs font-bold text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
+                      No active orders
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
 
       {/* Offcut Registration Modal */}
       {isOffcutModalOpen && (

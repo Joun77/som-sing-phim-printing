@@ -201,6 +201,12 @@ CREATE TABLE orders (
     currency VARCHAR(10) DEFAULT 'LAK',
     exchange_rate NUMERIC(12, 6) DEFAULT 1.000000,
     google_drive_link TEXT, -- File access for production prepress
+    stock_deducted_at TIMESTAMP WITH TIME ZONE NULL,
+    proof_url TEXT NULL,
+    proof_approved_at TIMESTAMP WITH TIME ZONE NULL,
+    proof_rejected_at TIMESTAMP WITH TIME ZONE NULL,
+    proof_signature_ip VARCHAR(50) NULL,
+    proof_rejection_reason TEXT NULL,
     created_by UUID REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -208,6 +214,30 @@ CREATE TABLE orders (
 
 CREATE INDEX idx_orders_order_number ON orders(order_number);
 CREATE INDEX idx_orders_status ON orders(status);
+CREATE INDEX idx_orders_stock_deducted ON orders(stock_deducted_at);
+
+-- 4.1 Production Job Tickets Table
+CREATE TABLE job_tickets (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
+    order_item_id UUID REFERENCES order_items(id) ON DELETE CASCADE,
+    ticket_number VARCHAR(100) UNIQUE NOT NULL,
+    assigned_printer_asset_id VARCHAR(50) REFERENCES printers(asset_id),
+    status VARCHAR(50) NOT NULL DEFAULT 'QUEUED', -- QUEUED, PRINTING, FINISHING, COMPLETED, CANCELLED
+    qr_code_data TEXT,
+    priority INT NOT NULL DEFAULT 1,
+    estimated_duration_mins INT NOT NULL DEFAULT 0,
+    started_at TIMESTAMP WITH TIME ZONE NULL,
+    completed_at TIMESTAMP WITH TIME ZONE NULL,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_job_tickets_order ON job_tickets(order_id);
+CREATE INDEX idx_job_tickets_printer ON job_tickets(assigned_printer_asset_id);
+CREATE INDEX idx_job_tickets_status ON job_tickets(status);
+
 
 
 -- 5. Order Items Table (Pricing Snapshot)
@@ -278,6 +308,7 @@ CREATE TABLE IF NOT EXISTS public_products (
     thumbnail_url VARCHAR(500),
     gallery_urls TEXT[] DEFAULT '{}',
     min_quantity INT DEFAULT 1,
+    is_on_demand BOOLEAN DEFAULT false,
     lead_time_days INT DEFAULT 2,
     is_active BOOLEAN DEFAULT true,
     is_archived BOOLEAN DEFAULT false,

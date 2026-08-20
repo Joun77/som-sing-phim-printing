@@ -1,0 +1,110 @@
+import React from 'react'
+import { MinusIcon, PlusIcon, ZapIcon } from './icons'
+import { getQuantityTier } from '../utils/pricing'
+
+export interface QuantityStepperProps {
+  value: number
+  minQty: number
+  onChange: (n: number) => void
+  t: (key: any) => string
+  isOnDemand?: boolean
+  discountTiers?: Array<{ minQuantity: number; discountPercentage: number }>
+}
+
+export function QuantityStepper({
+  value,
+  minQty,
+  onChange,
+  t,
+  isOnDemand,
+  discountTiers,
+}: QuantityStepperProps) {
+  const effectiveMin = isOnDemand ? 1 : Math.max(1, minQty)
+  const tier = getQuantityTier(value)
+  const hasBulkDiscount = discountTiers && discountTiers.length > 0
+
+  return (
+    <div className="spec-group">
+      <div className="spec-group-head">
+        <h3>{t('quantityLabel')}</h3>
+        <span className="spec-group-hint">
+          {isOnDemand
+            ? '⚡ On-Demand: 1 ชิ้นก็พิมพ์ได้ (No Minimum Order)'
+            : `📦 สั่งผลิตจำนวนมาก (ขั้นต่ำ ${effectiveMin} ชิ้น)`}
+        </span>
+      </div>
+
+      <div className="qty-row flex-wrap gap-3">
+        <div className="qty-stepper">
+          <button
+            type="button"
+            onClick={() => onChange(Math.max(effectiveMin, value - 1))}
+            disabled={value <= effectiveMin}
+            aria-label="Decrease quantity"
+            className={value <= effectiveMin ? 'opacity-40 cursor-not-allowed' : ''}
+          >
+            <MinusIcon />
+          </button>
+          <input
+            type="number"
+            min={effectiveMin}
+            value={value}
+            onChange={(e) => {
+              const parsed = parseInt(e.target.value, 10)
+              onChange(isNaN(parsed) ? effectiveMin : Math.max(effectiveMin, parsed))
+            }}
+            aria-label="Quantity"
+          />
+          <button type="button" onClick={() => onChange(value + 1)} aria-label="Increase quantity">
+            <PlusIcon />
+          </button>
+        </div>
+
+        {!hasBulkDiscount && tier.discount > 0 && (
+          <span className="qty-discount-badge inline-flex items-center gap-1">
+            <ZapIcon size={14} />
+            <span>
+              {t('currentDiscount')} {tier.discount * 100}%{tier.max !== Infinity ? ` (≤ ${tier.max})` : ''}
+            </span>
+          </span>
+        )}
+      </div>
+
+      {/* Tiered volume discount table */}
+      {hasBulkDiscount && (
+        <div
+          className="w-full mt-3 p-3 rounded-2xl border"
+          style={{ background: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
+        >
+          <div className="text-xs font-bold text-muted flex items-center gap-1.5 mb-2" style={{ color: 'var(--text-muted)' }}>
+            <ZapIcon size={14} style={{ color: 'var(--gold)' }} />
+            <span>ตารางส่วนลดตามจำนวน (Volume Discount)</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {discountTiers!.map((dt, idx) => {
+              const isActive = value >= dt.minQuantity
+              return (
+                <div
+                  key={idx}
+                  className="p-2 rounded-xl text-center border transition-all"
+                  style={{
+                    background: isActive ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-card)',
+                    borderColor: isActive ? '#10B981' : 'var(--border-subtle)',
+                    color: isActive ? '#10B981' : 'var(--text-muted)',
+                  }}
+                >
+                  <div className="text-[11px] font-semibold">≥ {dt.minQuantity} ชิ้น</div>
+                  <div className="text-xs font-black" style={{ color: '#10B981' }}>
+                    ลด {dt.discountPercentage}%
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default QuantityStepper

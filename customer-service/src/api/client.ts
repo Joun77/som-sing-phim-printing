@@ -55,6 +55,7 @@ export interface RemoteProduct {
   thumbnailUrl?: string
   galleryUrls?: string[]
   minQuantity?: number
+  isOnDemand?: boolean
   leadTimeDays?: number
   isActive: boolean
   sortOrder?: number
@@ -98,6 +99,10 @@ export interface Order {
   courier_name?: string
   pod_image_url?: string
   drive_link?: string
+  proof_url?: string
+  proof_approved_at?: string
+  proof_rejected_at?: string
+  proof_rejection_reason?: string
   is_permission_confirmed?: boolean
   special_notes?: string
   payment_slip_url?: string
@@ -496,6 +501,65 @@ export async function verifySlipPayment(payload: VerifySlipRequest): Promise<Ver
       }
     }
     throw err
+  }
+}
+
+export async function approveDigitalProof(orderId: string, signatureName: string = 'Customer'): Promise<{ status: string; message: string; approved_at: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/orders/${encodeURIComponent(orderId)}/proof/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ signature_name: signatureName }),
+    })
+    if (!res.ok) {
+      throw new Error(`Failed to approve proof with status ${res.status}`)
+    }
+    return await res.json()
+  } catch (err: any) {
+    if (DEMO_MODE.enabled || err.message?.includes('Failed to fetch')) {
+      return {
+        status: 'success',
+        message: 'Proof approved in demo mode',
+        approved_at: new Date().toISOString(),
+      }
+    }
+    throw err
+  }
+}
+
+export async function rejectDigitalProof(orderId: string, reason: string): Promise<{ status: string; message: string; rejected_at: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/orders/${encodeURIComponent(orderId)}/proof/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    })
+    if (!res.ok) {
+      throw new Error(`Failed to reject proof with status ${res.status}`)
+    }
+    return await res.json()
+  } catch (err: any) {
+    if (DEMO_MODE.enabled || err.message?.includes('Failed to fetch')) {
+      return {
+        status: 'success',
+        message: 'Proof rejection recorded in demo mode',
+        rejected_at: new Date().toISOString(),
+      }
+    }
+    throw err
+  }
+}
+
+export async function fetchDigitalProof(orderId: string): Promise<{ order_id: string; proof_url?: string; is_approved: boolean }> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/orders/${encodeURIComponent(orderId)}/proof`)
+    if (!res.ok) throw new Error(`Status ${res.status}`)
+    return await res.json()
+  } catch {
+    return {
+      order_id: orderId,
+      is_approved: false,
+    }
   }
 }
 

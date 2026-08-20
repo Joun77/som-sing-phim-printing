@@ -27,6 +27,7 @@ export interface PublicProduct {
   thumbnailUrl: string;
   galleryUrls: string[];
   minQuantity: number;
+  isOnDemand?: boolean;
   leadTimeDays: number;
   isActive: boolean;
   isArchived?: boolean;
@@ -47,6 +48,7 @@ export interface CreateProductInput {
   thumbnailUrl: string;
   galleryUrls: string[];
   minQuantity: number;
+  isOnDemand?: boolean;
   leadTimeDays: number;
   isActive: boolean;
   sortOrder: number;

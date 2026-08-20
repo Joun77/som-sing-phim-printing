@@ -10,6 +10,7 @@
   --bg-primary: #FFFFFF;           /* Crisp Paper White */
   --bg-surface: #F8FAFC;           /* Fine Silk Background */
   --bg-card: #FFFFFF;              /* Clean Card */
+  --bg-input: #FFFFFF;             /* Crisp Form Input */
   --text-main: #0B1938;            /* Deep Ink Blue (WCAG AAA) */
   --text-muted: #3E5275;           /* Clear Slate Text */
   --border-gold: rgba(197, 160, 89, 0.45); /* Elegant Metallic Trim */
@@ -91,9 +92,10 @@
      ======================================================== */
   --bg-primary: #070D1E;            /* Deep Ink Blue Plate */
   --bg-surface: #0E172F;            /* Offset Press Charcoal Blue */
-  --bg-card: #111D3B;               /* Solid Crisp Dark Card */
+  --bg-card: #142145;               /* Solid Crisp Dark Card */
+  --bg-input: #091226;              /* High-Contrast Input Field */
   --text-main: #FFFFFF;             /* 100% Pure Crisp White (No eye strain) */
-  --text-muted: #CBD5E1;            /* High-Contrast Light Slate */
+  --text-muted: #94A3B8;            /* High-Contrast Slate Text */
   --border-gold: rgba(212, 175, 55, 0.4); /* Precise Foil Hairline */
   --border-subtle: rgba(255, 255, 255, 0.12);
   --card-shadow: 0 16px 36px -10px rgba(0, 0, 0, 0.7), 0 0 1px 1px rgba(212, 175, 55, 0.25);
@@ -109,10 +111,9 @@
   --slate-600: #E2E8F0;
   --slate-700: #F8FAFC;
   --text: #FFFFFF;
-  --white: #111D3B;
 
   /* Gradients (Dark Press) */
-  --grad-surface: linear-gradient(145deg, #111D3B 0%, #0E172F 100%);
+  --grad-surface: linear-gradient(145deg, #142145 0%, #0E172F 100%);
   --grad-navy: linear-gradient(135deg, #070D1E 0%, #182C56 60%, #070D1E 100%);
   --grad-gold: linear-gradient(135deg, #EBD8B2 0%, #C5A059 50%, #8F6D2C 100%);
   --grad-gold-hover: linear-gradient(135deg, #FFF0BA 0%, #E5C158 50%, #C59828 100%);
@@ -163,6 +164,8 @@ select {
   font-family: inherit;
   font-size: 1rem;
   color: var(--text-main);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
 }
 
 h1,

@@ -24,6 +24,9 @@ import {
   CartIcon,
 } from '../components/icons.tsx'
 import BoxModelViewer from '../components/3D/BoxModelViewer.tsx'
+import QuantityStepper from '../components/QuantityStepper.tsx'
+import { analyzeArtworkPreflight, type PreflightReport } from '../lib/preflightAnalyzer.ts'
+import PreflightChecklistModal from '../components/PreflightChecklistModal.tsx'
 
 interface OptionButtonProps {
   option: SpecOption
@@ -77,45 +80,6 @@ function SpecGroup({ title, hint, options, value, onChange, language }: SpecGrou
         {options.map((o) => (
           <OptionButton key={o.id} option={o} selected={value === o.id} onSelect={onChange} language={language} />
         ))}
-      </div>
-    </div>
-  )
-}
-
-interface QuantityStepperProps {
-  value: number
-  onChange: (n: number) => void
-  t: (key: any) => string
-}
-
-function QuantityStepper({ value, onChange, t }: QuantityStepperProps) {
-  const tier = getQuantityTier(value)
-  return (
-    <div className="spec-group">
-      <div className="spec-group-head">
-        <h3>{t('quantityLabel')}</h3>
-        <span className="spec-group-hint">{t('quantityHint')}</span>
-      </div>
-      <div className="qty-row">
-        <div className="qty-stepper">
-          <button type="button" onClick={() => onChange(Math.max(1, value - 1))} aria-label="Decrease quantity">
-            <MinusIcon />
-          </button>
-          <input
-            type="number"
-            min="1"
-            value={value}
-            onChange={(e) => onChange(Math.max(1, parseInt(e.target.value, 10) || 1))}
-            aria-label="Quantity"
-          />
-          <button type="button" onClick={() => onChange(value + 1)} aria-label="Increase quantity">
-            <PlusIcon />
-          </button>
-        </div>
-        <span className="qty-discount-badge inline-flex items-center gap-1">
-          <ZapIcon size={14} />
-          <span>{t('currentDiscount')} {tier.discount * 100}%{tier.max !== Infinity ? ` (≤ ${tier.max})` : ''}</span>
-        </span>
       </div>
     </div>
   )
@@ -199,7 +163,12 @@ export default function ProductPage() {
   const [uploadedFileName, setUploadedFileName] = useState('')
   const [uploadedFileUrl, setUploadedFileUrl] = useState('')
   const [isUploading, setIsUploading] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
   const [fileQualityNotice, setFileQualityNotice] = useState<string | null>(null)
+  const [preflightReport, setPreflightReport] = useState<PreflightReport | null>(null)
+  const [showPreflightModal, setShowPreflightModal] = useState(false)
+  const [preflightConfirmed, setPreflightConfirmed] = useState(false)
+  const [pendingAction, setPendingAction] = useState<'cart' | 'buy' | null>(null)
   
   const [driveLink, setDriveLink] = useState('')
   const [permissionConfirmed, setPermissionConfirmed] = useState(false)
@@ -240,16 +209,24 @@ export default function ProductPage() {
     return 'none'
   }, [finishingId])
 
+  const isOnDemand = Boolean(
+    remoteProduct?.isOnDemand ||
+    (remoteProduct?.minQuantity === 1) ||
+    product?.isOnDemand ||
+    (product?.minQuantity === 1)
+  )
+  const minQty = isOnDemand ? 1 : (remoteProduct?.minQuantity || product?.minQuantity || 1)
+
   useEffect(() => {
     if (product) {
       if (!sizeId && product.sizes.length > 0) setSizeId(product.sizes[0].id)
       if (!materialId && product.materials.length > 0) setMaterialId(product.materials[0].id)
       if (!finishingId && product.finishings.length > 0) setFinishingId(product.finishings[0].id)
-      if (remoteProduct?.minQuantity && quantity < remoteProduct.minQuantity) {
-        setQuantity(remoteProduct.minQuantity)
+      if (quantity < minQty) {
+        setQuantity(minQty)
       }
     }
-  }, [product, remoteProduct])
+  }, [product, minQty])
 
   const price = useMemo(() => {
     if (!product) return null
@@ -285,22 +262,16 @@ export default function ProductPage() {
     setUploadedFileName(file.name)
     setIsUploading(true)
     setFileQualityNotice(null)
-
-    if (file.type.startsWith('image/')) {
-      const img = new Image()
-      img.src = URL.createObjectURL(file)
-      img.onload = () => {
-        if (img.width < 1200 || img.height < 1200) {
-          setFileQualityNotice(t('fileQualityNoticeLow'))
-        } else {
-          setFileQualityNotice(t('fileQualityNoticeHigh'))
-        }
-      }
-    } else {
-      setFileQualityNotice(t('fileQualityDoc'))
-    }
+    setPreflightConfirmed(false)
 
     try {
+      const report = await analyzeArtworkPreflight(file, {
+        widthMM: boxDimensions.l,
+        heightMM: boxDimensions.h,
+      })
+      setPreflightReport(report)
+      setShowPreflightModal(true)
+
       const url = await uploadArtworkFile(file)
       setUploadedFileUrl(url)
     } catch {
@@ -340,6 +311,12 @@ export default function ProductPage() {
     if (!product || !price) return
     if (!validateInputs()) return
 
+    if (uploadMode === 'upload' && preflightReport && !preflightConfirmed) {
+      setPendingAction('cart')
+      setShowPreflightModal(true)
+      return
+    }
+
     addToCart({
       product,
       config: {
@@ -361,6 +338,12 @@ export default function ProductPage() {
     if (!product || !price) return
     if (!validateInputs()) return
 
+    if (uploadMode === 'upload' && preflightReport && !preflightConfirmed) {
+      setPendingAction('buy')
+      setShowPreflightModal(true)
+      return
+    }
+
     const item = {
       product,
       config: {
@@ -379,6 +362,48 @@ export default function ProductPage() {
     addToCart(item)
     setOrderDraft(item)
     navigate('/checkout')
+  }
+
+  const handleConfirmPreflight = () => {
+    setPreflightConfirmed(true)
+    setShowPreflightModal(false)
+
+    if (pendingAction === 'cart') {
+      setPendingAction(null)
+      addToCart({
+        product: product!,
+        config: {
+          sizeId,
+          materialId,
+          finishingId,
+          quantity,
+          specLabels,
+        },
+        driveLink: uploadMode === 'drive' ? driveLink.trim() : uploadedFileUrl || uploadedFileName,
+        permissionConfirmed: uploadMode === 'drive' ? permissionConfirmed : true,
+        specialNotes,
+        price: price!,
+      })
+    } else if (pendingAction === 'buy') {
+      setPendingAction(null)
+      const item = {
+        product: product!,
+        config: {
+          sizeId,
+          materialId,
+          finishingId,
+          quantity,
+          specLabels,
+        },
+        driveLink: uploadMode === 'drive' ? driveLink.trim() : uploadedFileUrl || uploadedFileName,
+        permissionConfirmed: uploadMode === 'drive' ? permissionConfirmed : true,
+        specialNotes,
+        price: price!,
+      }
+      addToCart(item)
+      setOrderDraft(item)
+      navigate('/checkout')
+    }
   }
 
   const totalDisplay = convertTo(price?.total || 0)
@@ -401,22 +426,29 @@ export default function ProductPage() {
           <div className="product-layout">
             <div className="product-gallery">
               {/* 2D vs 3D Model Studio View Switcher */}
-              <div className="flex items-center justify-between mb-3 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs">
+              <div
+                className="flex items-center justify-between mb-3 p-1.5 rounded-2xl border shadow-xs"
+                style={{ background: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
+              >
                 <button
                   type="button"
                   onClick={() => setIs3DView(false)}
-                  className={`flex-1 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
-                    !is3DView ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
-                  }`}
+                  className="flex-1 py-2 rounded-xl text-xs font-black transition cursor-pointer"
+                  style={{
+                    background: !is3DView ? 'var(--navy)' : 'transparent',
+                    color: !is3DView ? '#FFFFFF' : 'var(--text-muted)',
+                  }}
                 >
                   🖼️ 2D Artwork
                 </button>
                 <button
                   type="button"
                   onClick={() => setIs3DView(true)}
-                  className={`flex-1 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 ${
-                    is3DView ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' : 'text-slate-500 hover:text-slate-900'
-                  }`}
+                  className="flex-1 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5"
+                  style={{
+                    background: is3DView ? 'var(--gold)' : 'transparent',
+                    color: is3DView ? '#0B1938' : 'var(--text-muted)',
+                  }}
                 >
                   <span>📦 3D Box Studio</span>
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -465,7 +497,19 @@ export default function ProductPage() {
             </div>
 
             <div className="product-info">
-              <span className="product-card-cat">{categoryName}</span>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="product-card-cat">{categoryName}</span>
+                {isOnDemand ? (
+                  <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-300 text-[11px] font-black px-3 py-1 rounded-full inline-flex items-center gap-1.5 border border-amber-300 dark:border-amber-500/40">
+                    <SparkleIcon size={12} />
+                    <span>⚡ On-Demand: 1 ชิ้นก็พิมพ์ได้ (No Minimum Order)</span>
+                  </span>
+                ) : (
+                  <span className="bg-slate-100 dark:bg-slate-850 text-slate-700 dark:text-slate-200 text-[11px] font-bold px-3 py-1 rounded-full inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-700">
+                    <span>📦 สั่งผลิตจำนวนมาก (ขั้นต่ำ {minQty} ชิ้น)</span>
+                  </span>
+                )}
+              </div>
               <h1>{productName}</h1>
               <p className="product-info-desc">{productDesc}</p>
 
@@ -485,7 +529,14 @@ export default function ProductPage() {
                 <SpecGroup title={t('sizeSelect')} options={product.sizes} value={sizeId} onChange={setSizeId} language={language} />
                 <SpecGroup title={t('materialSelect')} options={product.materials} value={materialId} onChange={setMaterialId} language={language} />
                 <SpecGroup title={t('finishingSelect')} options={product.finishings} value={finishingId} onChange={setFinishingId} language={language} />
-                <QuantityStepper value={quantity} onChange={setQuantity} t={t} />
+                <QuantityStepper
+                  value={quantity}
+                  minQty={minQty}
+                  onChange={setQuantity}
+                  t={t}
+                  isOnDemand={isOnDemand}
+                  discountTiers={remoteProduct?.discountTiers}
+                />
 
                 {/* Direct Upload vs Drive Toggle */}
                 <div className="spec-group">
@@ -511,17 +562,34 @@ export default function ProductPage() {
 
                   {uploadMode === 'upload' ? (
                     <div className="space-y-2">
-                      <label className="luxury-dropzone cursor-pointer">
+                      <label
+                        className={`luxury-dropzone cursor-pointer transition-all ${
+                          isDragOver ? 'border-amber-400 bg-amber-50/10 scale-[1.01]' : ''
+                        }`}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          setIsDragOver(true)
+                        }}
+                        onDragLeave={() => setIsDragOver(false)}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          setIsDragOver(false)
+                          const file = e.dataTransfer.files?.[0]
+                          if (file) handleFileUpload(file)
+                        }}
+                      >
                         <div className="dropzone-icon-box">
                           <UploadCloudIcon size={32} />
                         </div>
-                        <span className="text-sm font-bold text-slate-800 text-center">
-                          {uploadedFileName || t('dropzoneText')}
+                        <span className="text-sm font-bold text-center" style={{ color: 'var(--text-main)' }}>
+                          {uploadedFileName ? `📄 ${uploadedFileName}` : t('dropzoneText')}
                         </span>
-                        <span className="text-xs text-slate-500 font-semibold">{t('dropzoneHint')}</span>
+                        <span className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
+                          {t('dropzoneHint')}
+                        </span>
                         <input
                           type="file"
-                          accept=".pdf,.ai,.psd,.png,.jpg,.jpeg"
+                          accept=".pdf,.ai,.psd,.png,.jpg,.jpeg,.tiff"
                           onChange={(e) => {
                             const file = e.target.files?.[0]
                             if (file) handleFileUpload(file)
@@ -529,13 +597,39 @@ export default function ProductPage() {
                           className="hidden"
                         />
                       </label>
-                      {isUploading && <p className="text-xs text-blue-600 font-bold">{t('uploadingFile')}</p>}
-                      {fileQualityNotice && (
-                        <div className="p-3.5 bg-emerald-50 text-emerald-900 text-xs font-bold rounded-2xl flex items-center gap-2 border border-emerald-200 shadow-sm">
-                          <FileCheckIcon size={18} />
-                          <span>{fileQualityNotice}</span>
+                      {isUploading && <p className="text-xs text-blue-500 font-bold">{t('uploadingFile')}</p>}
+
+                      {preflightReport && (
+                        <div
+                          className="p-3 rounded-2xl border flex items-center justify-between gap-3 text-xs"
+                          style={{
+                            background: preflightReport.allPassed ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                            borderColor: preflightReport.allPassed ? '#10B981' : '#F59E0B',
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <FileCheckIcon size={18} style={{ color: preflightReport.allPassed ? '#10B981' : '#F59E0B' }} />
+                            <span className="font-bold" style={{ color: 'var(--text-main)' }}>
+                              {preflightReport.allPassed
+                                ? '✓ ไฟล์พร้อมพิมพ์ (300 DPI · CMYK · Bleed OK)'
+                                : '⚠️ ตรวจพบข้อสังเกตบางจุด (Preflight Notice)'}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowPreflightModal(true)}
+                            className="px-2.5 py-1 rounded-lg text-[11px] font-black border underline cursor-pointer"
+                            style={{
+                              background: 'var(--bg-card)',
+                              borderColor: 'var(--border-subtle)',
+                              color: 'var(--text-main)',
+                            }}
+                          >
+                            ดูรายงาน Checklist
+                          </button>
                         </div>
                       )}
+
                       {errors.file && <p className="field-error">{errors.file}</p>}
                     </div>
                   ) : (
@@ -591,7 +685,7 @@ export default function ProductPage() {
                   <div className="configurator-summary-total">
                     <span>{t('estimatedTotal')}</span>
                     <div className="text-right">
-                      <strong style={{ color: '#002B5B', fontSize: '1.45rem', display: 'block' }}>
+                      <strong style={{ color: 'var(--gold)', fontSize: '1.45rem', display: 'block' }}>
                         {formatMoney(totalDisplay, currency)}
                       </strong>
                       {price && (
@@ -698,6 +792,18 @@ export default function ProductPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Preflight Inspection Checklist Modal */}
+      {showPreflightModal && preflightReport && (
+        <PreflightChecklistModal
+          report={preflightReport}
+          onConfirm={handleConfirmPreflight}
+          onCancel={() => {
+            setShowPreflightModal(false)
+            setPendingAction(null)
+          }}
+        />
       )}
     </>
   )

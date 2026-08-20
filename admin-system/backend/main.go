@@ -97,6 +97,23 @@ func main() {
 	router.POST("/api/v1/orders/:id/preflight-report", orders.HandleSavePreflightReport)
 	router.GET("/api/v1/orders/:id/preflight-report", orders.HandleGetPreflightReport)
 
+	// Digital Proof Management routes
+	router.POST("/api/v1/orders/:id/proof", orders.HandleUploadDigitalProof)
+	router.POST("/api/orders/:id/proof", orders.HandleUploadDigitalProof)
+	router.POST("/api/v1/orders/:id/proof/approve", orders.HandleApproveDigitalProof)
+	router.POST("/api/orders/:id/proof/approve", orders.HandleApproveDigitalProof)
+	router.POST("/api/v1/orders/:id/proof/reject", orders.HandleRejectDigitalProof)
+	router.POST("/api/orders/:id/proof/reject", orders.HandleRejectDigitalProof)
+	router.GET("/api/v1/orders/:id/proof", orders.HandleGetDigitalProof)
+	router.GET("/api/orders/:id/proof", orders.HandleGetDigitalProof)
+
+	// Production Scheduling & Machine Queue routes
+	router.GET("/api/v1/production/machines/schedule", spoilage.HandleGetMachineSchedule)
+	router.GET("/api/production/machines/schedule", spoilage.HandleGetMachineSchedule)
+	router.POST("/api/v1/production/spoilage", spoilage.HandleCreateSpoilageLog)
+	router.GET("/api/v1/analytics/spoilage-profit", spoilage.HandleGetSpoilageProfitAnalytics)
+	router.GET("/api/analytics/spoilage-profit", spoilage.HandleGetSpoilageProfitAnalytics)
+
 	// CRM Customer routes
 	router.GET("/api/customers", customers.HandleGetCustomers)
 	router.POST("/api/customers", customers.HandleCreateCustomer)

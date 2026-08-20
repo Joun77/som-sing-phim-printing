@@ -55,6 +55,7 @@ export function WebCatalogPage() {
   const [galleryUrls, setGalleryUrls] = useState<string[]>([]);
   const [galleryInput, setGalleryInput] = useState('');
   const [minQuantity, setMinQuantity] = useState(50);
+  const [isOnDemand, setIsOnDemand] = useState(false);
   const [leadTimeDays, setLeadTimeDays] = useState(2);
   const [isActive, setIsActive] = useState(true);
   const [sortOrder, setSortOrder] = useState(0);
@@ -161,6 +162,7 @@ export function WebCatalogPage() {
     setFeatures(['กันน้ำ 100%', 'ไดคัทคมชัด พร้อมใช้งาน']);
     setThumbnailUrl('');
     setGalleryUrls([]);
+    setIsOnDemand(false);
     setMinQuantity(50);
     setLeadTimeDays(2);
     setIsActive(true);
@@ -186,6 +188,7 @@ export function WebCatalogPage() {
     setFeatures(p.features || []);
     setThumbnailUrl(p.thumbnailUrl || '');
     setGalleryUrls(p.galleryUrls || []);
+    setIsOnDemand(p.isOnDemand ?? (p.minQuantity === 1));
     setMinQuantity(p.minQuantity || 1);
     setLeadTimeDays(p.leadTimeDays || 2);
     setIsActive(p.isActive);
@@ -257,7 +260,8 @@ export function WebCatalogPage() {
       features,
       thumbnailUrl,
       galleryUrls,
-      minQuantity: Number(minQuantity) || 1,
+      minQuantity: isOnDemand ? 1 : (Number(minQuantity) || 1),
+      isOnDemand,
       leadTimeDays: Number(leadTimeDays) || 1,
       isActive,
       sortOrder: Number(sortOrder) || 0,
@@ -457,9 +461,15 @@ export function WebCatalogPage() {
 
                     {/* Min Qty & Lead Time */}
                     <td className="py-4 px-4">
-                      <div className="text-xs">
-                        <span className="font-bold text-slate-800">{p.minQuantity} ชิ้น</span>
-                        <span className="text-slate-400 ml-1">({p.leadTimeDays} วัน)</span>
+                      <div className="text-xs space-y-0.5">
+                        {p.isOnDemand || p.minQuantity === 1 ? (
+                          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-md">
+                            ⚡ On-Demand (1 ชิ้น)
+                          </span>
+                        ) : (
+                          <span className="font-bold text-slate-800">MOQ: {p.minQuantity} ชิ้น</span>
+                        )}
+                        <div className="text-slate-400 text-[11px]">({p.leadTimeDays} วัน)</div>
                       </div>
                     </td>
 
@@ -639,17 +649,76 @@ export function WebCatalogPage() {
                       </select>
                     </div>
 
+                    <div className="col-span-1 md:col-span-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-2">
+                      <label className="block text-xs font-bold text-slate-700">
+                        ຮູບແບບການສັ່ງພິມ (Print Fulfillment Mode) *
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsOnDemand(true);
+                            setMinQuantity(1);
+                          }}
+                          className={`p-3 rounded-xl border text-left transition flex items-start gap-2.5 ${
+                            isOnDemand
+                              ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-400 text-slate-900 shadow-sm'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="p-1.5 rounded-lg bg-amber-500 text-slate-900 mt-0.5">
+                            <Sparkles className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="text-xs font-black text-slate-900">⚡ On-Demand (ບໍ່ມີຂັ້ນຕ່ຳ)</div>
+                            <div className="text-[11px] text-slate-500 mt-0.5">ສັ່ງພິມໄດ້ຕັ້ງແຕ່ 1 ຊິ້ນ ຕາມຄວາມຕ້ອງການລູກຄ້າ</div>
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsOnDemand(false);
+                            if (minQuantity <= 1) setMinQuantity(50);
+                          }}
+                          className={`p-3 rounded-xl border text-left transition flex items-start gap-2.5 ${
+                            !isOnDemand
+                              ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-500 text-slate-900 shadow-sm'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="p-1.5 rounded-lg bg-primary-navy text-white mt-0.5">
+                            <PackageCheck className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="text-xs font-black text-slate-900">📦 Bulk Order (ມີຂັ້ນຕ່ຳ MOQ)</div>
+                            <div className="text-[11px] text-slate-500 mt-0.5">ກຳນົດຈຳນວນຂັ້ນຕ່ຳ ເຊັ່ນ 50, 100, 500 ຊິ້ນ</div>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+
                     <div>
                       <label className="block text-xs font-bold text-slate-600 mb-1">
-                        ຈຳນວນສັ່ງຂັ້ນຕ່ຳ (Min Qty)
+                        ຈຳນວນສັ່ງຂັ້ນຕ່ຳ (Min Qty / MOQ)
                       </label>
                       <input
                         type="number"
                         min="1"
-                        value={minQuantity}
+                        disabled={isOnDemand}
+                        value={isOnDemand ? 1 : minQuantity}
                         onChange={(e) => setMinQuantity(Number(e.target.value))}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-medium focus:border-accent-sky outline-none"
+                        className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium outline-none ${
+                          isOnDemand
+                            ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                            : 'border-slate-200 focus:border-accent-sky bg-white'
+                        }`}
                       />
+                      {isOnDemand && (
+                        <span className="text-[10px] text-amber-600 font-bold mt-1 block">
+                          ⚡ ລັອກຂັ້ນຕ່ຳທີ່ 1 ຊິ້ນສຳລັບ On-Demand
+                        </span>
+                      )}
                     </div>
 
                     <div>

@@ -36,6 +36,8 @@ export interface Product {
   category: string
   bestseller: boolean
   basePrice: number
+  minQuantity?: number
+  isOnDemand?: boolean
   image: string
   short: string
   shortEn?: string

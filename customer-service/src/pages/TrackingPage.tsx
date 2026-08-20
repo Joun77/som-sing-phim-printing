@@ -1,8 +1,10 @@
 import { useState, useEffect, type FormEvent } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { trackOrder, type Order } from '../api/client.ts'
+import { useSearchParams, useNavigate } from 'react-router-dom'
+import { trackOrder, approveDigitalProof, rejectDigitalProof, type Order } from '../api/client.ts'
 import { formatMoney } from '../utils/currency.ts'
 import { useShop } from '../context/ShopContext.tsx'
+import { getProduct } from '../data/catalog.ts'
+import { computePrice } from '../utils/pricing.ts'
 import {
   SearchIcon,
   TruckIcon,
@@ -15,6 +17,7 @@ import {
   AlertCircleIcon,
   FileTextIcon,
   SparkleIcon,
+  EyeIcon,
 } from '../components/icons.tsx'
 
 interface Step {
@@ -85,6 +88,7 @@ function StepIconRenderer({ type }: { type: Step['icon'] }) {
 }
 
 export default function TrackingPage() {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') || searchParams.get('order') || '')
   const [order, setOrder] = useState<Order | null>(null)
@@ -94,8 +98,11 @@ export default function TrackingPage() {
   const [revisionRequested, setRevisionRequested] = useState(false)
   const [revisionNotes, setRevisionNotes] = useState('')
   const [showRevisionBox, setShowRevisionBox] = useState(false)
+  const [isSubmittingProof, setIsSubmittingProof] = useState(false)
+  const [zoomProof, setZoomProof] = useState(false)
+  const [reorderSuccess, setReorderSuccess] = useState(false)
 
-  const { currency, convertTo, t, language } = useShop()
+  const { currency, convertTo, t, language, addToCart, openCart } = useShop()
   const steps = language === 'en' ? STEPS_EN : STEPS_LO
 
   const executeSearch = async (orderId: string) => {
@@ -103,6 +110,7 @@ export default function TrackingPage() {
     if (!q) return
     setLoading(true)
     setNotFound(false)
+    setReorderSuccess(false)
     try {
       const res = await trackOrder(q)
       if (res) {
@@ -119,6 +127,95 @@ export default function TrackingPage() {
     }
   }
 
+  const handleApproveProof = async () => {
+    if (!order) return
+    setIsSubmittingProof(true)
+    try {
+      await approveDigitalProof(order.order_id || order.id || '', order.customer_name || 'Customer')
+      setProofApproved(true)
+      setOrder((prev) => (prev ? { ...prev, status: 'FILE_CONFIRMED', proof_approved_at: new Date().toISOString() } : null))
+    } catch (err) {
+      console.error('Failed to approve proof:', err)
+    } finally {
+      setIsSubmittingProof(false)
+    }
+  }
+
+  const handleSendRevision = async () => {
+    if (!revisionNotes.trim() || !order) return
+    setIsSubmittingProof(true)
+    try {
+      await rejectDigitalProof(order.order_id || order.id || '', revisionNotes.trim())
+      setRevisionRequested(true)
+      setShowRevisionBox(false)
+      setOrder((prev) => (prev ? { ...prev, status: 'PREPRESS_CHECK', proof_rejection_reason: revisionNotes.trim() } : null))
+    } catch (err) {
+      console.error('Failed to submit revision:', err)
+    } finally {
+      setIsSubmittingProof(false)
+    }
+  }
+
+  const handleReorder = () => {
+    if (!order) return
+    const targetSlug = order.product_id || 'brochures'
+    const product = getProduct(targetSlug) || getProduct('brochures') || {
+      id: targetSlug,
+      slug: targetSlug,
+      name: order.product_id || 'Custom Print Order',
+      nameEn: order.product_id || 'Custom Print Order',
+      category: 'general',
+      bestseller: false,
+      basePrice: order.total_price && order.quantity ? Math.round(order.total_price / order.quantity) : 50,
+      image: 'album',
+      short: '',
+      shortEn: '',
+      description: '',
+      descriptionEn: '',
+      sizes: [{ id: order.specs?.size || 'standard', label: order.specs?.size || 'Standard', hint: '', add: 0 }],
+      materials: [{ id: order.specs?.paper || 'standard', label: order.specs?.paper || 'Standard', hint: '', add: 0 }],
+      finishings: [{ id: order.specs?.finishing || 'standard', label: order.specs?.finishing || 'Standard', hint: '', add: 0 }],
+    }
+
+    const sizeId = product.sizes.find(s => s.label === order.specs?.size || s.id === order.specs?.size)?.id || product.sizes[0]?.id || 'standard'
+    const materialId = product.materials.find(m => m.label === order.specs?.paper || m.id === order.specs?.paper)?.id || product.materials[0]?.id || 'standard'
+    const finishingId = product.finishings.find(f => f.label === order.specs?.finishing || f.id === order.specs?.finishing)?.id || product.finishings[0]?.id || 'standard'
+    const qty = order.quantity || 1
+
+    const computed = computePrice(product, { sizeId, materialId, finishingId, quantity: qty })
+    const priceBreakdown = computed || {
+      baseTotal: order.total_price || 50,
+      optionsTotal: 0,
+      subtotal: order.total_price || 50,
+      discountPercent: 0,
+      discountAmount: 0,
+      total: order.total_price || 50,
+      unitPrice: order.total_price && qty ? Math.round((order.total_price / qty) * 100) / 100 : 50,
+    }
+
+    addToCart({
+      product,
+      config: {
+        sizeId,
+        materialId,
+        finishingId,
+        quantity: qty,
+        specLabels: {
+          size: order.specs?.size || product.sizes[0]?.label || 'Standard',
+          paper: order.specs?.paper || product.materials[0]?.label || 'Standard',
+          finishing: order.specs?.finishing || product.finishings[0]?.label || 'Standard',
+        },
+      },
+      driveLink: order.drive_link || order.proof_url || '',
+      permissionConfirmed: order.is_permission_confirmed ?? true,
+      specialNotes: order.special_notes ? `[Re-order from ${order.order_id}] ${order.special_notes}` : `[Re-order from ${order.order_id}]`,
+      price: priceBreakdown,
+    })
+
+    setReorderSuccess(true)
+    openCart()
+  }
+
   useEffect(() => {
     const initialQ = searchParams.get('q') || searchParams.get('order')
     if (initialQ) {
@@ -127,7 +224,6 @@ export default function TrackingPage() {
     }
   }, [searchParams])
 
-  // Polling for live status updates every 20 seconds
   useEffect(() => {
     if (!order?.order_id) return
     const interval = setInterval(() => {
@@ -141,18 +237,6 @@ export default function TrackingPage() {
   const search = async (e?: FormEvent) => {
     if (e) e.preventDefault()
     executeSearch(query)
-  }
-
-  const handleApproveProof = () => {
-    if (!order) return
-    setProofApproved(true)
-    setOrder((prev) => (prev ? { ...prev, status: 'FILE_CONFIRMED' } : null))
-  }
-
-  const handleSendRevision = () => {
-    if (!revisionNotes.trim()) return
-    setRevisionRequested(true)
-    setShowRevisionBox(false)
   }
 
   const currentIdx = order ? stepIndex(order.status) : 0
@@ -225,7 +309,6 @@ export default function TrackingPage() {
               </div>
             </div>
 
-            {/* Stepper Progress Bar */}
             <div className="timeline">
               {steps.map((step, i) => {
                 const current = i === currentIdx
@@ -246,7 +329,6 @@ export default function TrackingPage() {
               })}
             </div>
 
-            {/* Artwork Proof Review & Approval Box (Point of Transition to FILE_CONFIRMED) */}
             <div className="tracking-proof-box" style={{
               background: 'var(--bg-elevated)',
               border: '1px solid var(--border-gold)',
@@ -254,15 +336,40 @@ export default function TrackingPage() {
               padding: '20px',
               margin: '24px 0'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                <div style={{ padding: '8px', background: 'var(--gold-soft)', borderRadius: '10px', color: 'var(--gold)' }}>
-                  <SparkleIcon size={22} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ padding: '8px', background: 'var(--gold-soft)', borderRadius: '10px', color: 'var(--gold)' }}>
+                    <SparkleIcon size={22} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text)' }}>{t('proofTitle')}</h3>
+                    <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: 'var(--text-dim)' }}>{t('proofSub')}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text)' }}>{t('proofTitle')}</h3>
-                  <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: 'var(--text-dim)' }}>{t('proofSub')}</p>
-                </div>
+
+                {(order.proof_url || order.drive_link) && (
+                  <button
+                    type="button"
+                    onClick={() => setZoomProof(true)}
+                    className="btn btn--outline btn--sm"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <EyeIcon size={16} />
+                    <span>{language === 'en' ? 'Interactive Proof Viewer' : 'ເບິ່ງຕົວຢ່າງ Proof ແບບລະອຽດ'}</span>
+                  </button>
+                )}
               </div>
+
+              {order.proof_url && (
+                <div style={{ marginBottom: '16px', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(212,175,55,0.3)', maxHeight: '240px', display: 'flex', justifyContent: 'center', background: '#1e293b' }}>
+                  <img
+                    src={order.proof_url}
+                    alt="Digital Proof Preview"
+                    style={{ maxHeight: '240px', objectFit: 'contain', cursor: 'zoom-in' }}
+                    onClick={() => setZoomProof(true)}
+                  />
+                </div>
+              )}
 
               {order.drive_link && (
                 <div style={{ padding: '10px 14px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid rgba(212,175,55,0.2)', marginBottom: '16px', wordBreak: 'break-all', fontSize: '0.88rem' }}>
@@ -289,16 +396,18 @@ export default function TrackingPage() {
                     type="button"
                     onClick={handleApproveProof}
                     className="btn btn--gold"
+                    disabled={isSubmittingProof}
                     style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                   >
                     <CheckIcon size={18} />
-                    <span>{t('approveProofBtn')}</span>
+                    <span>{isSubmittingProof ? 'Processing...' : t('approveProofBtn')}</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setShowRevisionBox(!showRevisionBox)}
                     className="btn btn--outline"
+                    disabled={isSubmittingProof}
                   >
                     <span>{t('requestRevisionBtn')}</span>
                   </button>
@@ -322,7 +431,7 @@ export default function TrackingPage() {
                       type="button"
                       onClick={handleSendRevision}
                       className="btn btn--gold btn--sm"
-                      disabled={!revisionNotes.trim()}
+                      disabled={!revisionNotes.trim() || isSubmittingProof}
                     >
                       {language === 'en' ? 'Send Request' : 'ສົ່ງຄຳຮ້ອງຂໍແກ້ໄຂ'}
                     </button>
@@ -338,7 +447,52 @@ export default function TrackingPage() {
               )}
             </div>
 
-            {/* Shipping & Delivery Info */}
+            {zoomProof && (
+              <div 
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  zIndex: 9999,
+                  background: 'rgba(0,0,0,0.85)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '24px'
+                }}
+                onClick={() => setZoomProof(false)}
+              >
+                <div 
+                  style={{
+                    background: '#0f172a',
+                    borderRadius: '16px',
+                    padding: '24px',
+                    maxWidth: '90vw',
+                    maxHeight: '90vh',
+                    overflow: 'auto',
+                    border: '1px solid var(--border-gold)',
+                    position: 'relative'
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h3 style={{ margin: 0, color: 'var(--gold)' }}>Digital Proof Zoom Review</h3>
+                    <button 
+                      type="button" 
+                      onClick={() => setZoomProof(false)}
+                      className="btn btn--outline btn--sm"
+                    >
+                      ✕ Close
+                    </button>
+                  </div>
+                  <img
+                    src={order.proof_url || order.drive_link || ''}
+                    alt="Full Proof Preview"
+                    style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: '8px' }}
+                  />
+                </div>
+              </div>
+            )}
+
             {(order.status === 'SHIPPED' || order.status === 'DELIVERED' || order.tracking_number) && (
               <div className="tracking-shipping">
                 <div className="flex items-center gap-3">
@@ -358,28 +512,71 @@ export default function TrackingPage() {
               </div>
             )}
 
-            {order.total_price ? (
-              <div className="tracking-order-summary">
-                <span>{t('trackTotalPaid')}</span>
-                <strong className="text-xl font-black text-slate-900">
-                  {formatMoney(convertTo(order.total_price), currency)}
-                </strong>
-                <span className="badge badge--green">{t('trackPaidBadge')}</span>
-              </div>
-            ) : null}
+            {/* Total Paid & Actions */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+              {order.total_price ? (
+                <div className="tracking-order-summary">
+                  <span>{t('trackTotalPaid')}</span>
+                  <strong className="text-xl font-black text-slate-900">
+                    {formatMoney(convertTo(order.total_price), currency)}
+                  </strong>
+                  <span className="badge badge--green">{t('trackPaidBadge')}</span>
+                </div>
+              ) : null}
 
-            <a
-              href={`https://wa.me/8562088888888?text=${waMessage}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn btn--navy btn--lg btn--block tracking-wa"
-            >
-              <WhatsAppIcon size={20} />
-              <span>{t('trackWaBtn')}</span>
-            </a>
+              {/* One-Click Re-Order Hub Button on Completed/Delivered Orders */}
+              {(order.status === 'COMPLETED' || order.status === 'DELIVERED' || stepIndex(order.status) >= 4) && (
+                <div
+                  className="p-4 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(197, 160, 89, 0.15) 0%, rgba(2, 132, 199, 0.1) 100%)',
+                    borderColor: 'var(--border-gold)',
+                  }}
+                >
+                  <div>
+                    <h4 className="text-sm font-black m-0" style={{ color: 'var(--text-main)' }}>
+                      🔁 สั่งพิมพ์ซ้ำ (Re-order)
+                    </h4>
+                    <p className="text-xs m-0" style={{ color: 'var(--text-muted)' }}>
+                      คัดลอกสเปกงานเดิม ({order.specs?.paper || ''} {order.specs?.size || ''}) และไฟล์อาร์ตเวิร์กลงตะกร้าทันที
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleReorder}
+                    className="btn btn--gold btn--md shadow-glow w-full sm:w-auto cursor-pointer"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                  >
+                    <RefreshIcon size={18} />
+                    <span>{reorderSuccess ? '✓ เพิ่มลงตะกร้าแล้ว (Added)' : '🔁 สั่งพิมพ์ซ้ำ (Re-order)'}</span>
+                  </button>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleReorder}
+                className="btn btn--gold btn--lg btn--block cursor-pointer"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
+              >
+                <RefreshIcon size={20} />
+                <span>{reorderSuccess ? '✓ เพิ่มลงตะกร้าสินค้าแล้ว' : '🔁 สั่งพิมพ์ซ้ำ (Re-order)'}</span>
+              </button>
+
+              <a
+                href={`https://wa.me/8562088888888?text=${waMessage}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn--navy btn--lg btn--block tracking-wa"
+              >
+                <WhatsAppIcon size={20} />
+                <span>{t('trackWaBtn')}</span>
+              </a>
+            </div>
           </div>
         )}
       </div>
     </section>
   )
 }
+

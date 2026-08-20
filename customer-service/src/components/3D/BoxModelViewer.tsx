@@ -319,7 +319,10 @@ export const BoxModelViewer: React.FC<BoxModelViewerProps> = ({
   };
 
   return (
-    <div className="relative w-full bg-gradient-to-b from-slate-900 via-slate-950 to-black rounded-3xl border border-slate-800/80 overflow-hidden shadow-2xl">
+    <div
+      className="relative w-full rounded-3xl border overflow-hidden shadow-2xl"
+      style={{ background: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
+    >
       {/* 3D Viewport Canvas */}
       <div ref={containerRef} className="w-full h-[340px] sm:h-[400px] cursor-grab active:cursor-grabbing touch-none" />
 

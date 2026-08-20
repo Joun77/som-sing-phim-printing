@@ -92,6 +92,12 @@ type Order struct {
 	TotalPrice           float64     `json:"total_price"`
 	TotalCost            float64     `json:"total_cost"`
 	GoogleDriveLink      string      `json:"google_drive_link"`
+	StockDeductedAt      *time.Time  `json:"stock_deducted_at,omitempty"`
+	ProofURL             string      `json:"proof_url,omitempty"`
+	ProofApprovedAt      *time.Time  `json:"proof_approved_at,omitempty"`
+	ProofRejectedAt      *time.Time  `json:"proof_rejected_at,omitempty"`
+	ProofSignatureIP     string      `json:"proof_signature_ip,omitempty"`
+	ProofRejectionReason string      `json:"proof_rejection_reason,omitempty"`
 	Items                []OrderItem `json:"items"`
 	InternalTrackingCode string      `json:"internal_tracking_code,omitempty"`
 	CourierName          string      `json:"courier_name,omitempty"`
@@ -231,6 +237,48 @@ type QuotationCalculationResponse struct {
 	TaxAmount         float64 `json:"tax_amount"`
 	TotalGrandTotal   float64 `json:"total_grand_total"`
 	UnitPrice         float64 `json:"unit_price"`
+}
+
+// JobTicket represents a production job sheet routed to a specific machine/operator
+type JobTicket struct {
+	ID                     string     `json:"id"`
+	OrderID                string     `json:"order_id"`
+	OrderItemID            string     `json:"order_item_id"`
+	TicketNumber           string     `json:"ticket_number"`
+	AssignedPrinterAssetID string     `json:"assigned_printer_asset_id"`
+	Status                 string     `json:"status"` // QUEUED, PRINTING, FINISHING, COMPLETED, CANCELLED
+	QRCodeData             string     `json:"qr_code_data"`
+	Priority               int        `json:"priority"`
+	EstimatedDurationMins  int        `json:"estimated_duration_mins"`
+	StartedAt              *time.Time `json:"started_at,omitempty"`
+	CompletedAt            *time.Time `json:"completed_at,omitempty"`
+	Notes                  string     `json:"notes,omitempty"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
+}
+
+// Digital Proof Payloads
+type UploadProofRequest struct {
+	ProofURL string `json:"proof_url" binding:"required"`
+}
+
+type ApproveProofRequest struct {
+	SignatureName string `json:"signature_name"`
+	ClientIP      string `json:"client_ip"`
+}
+
+type RejectProofRequest struct {
+	Reason string `json:"reason" binding:"required"`
+}
+
+type ProofStatusResponse struct {
+	OrderID         string     `json:"order_id"`
+	ProofURL        string     `json:"proof_url"`
+	IsApproved      bool       `json:"is_approved"`
+	ApprovedAt      *time.Time `json:"approved_at,omitempty"`
+	RejectedAt      *time.Time `json:"rejected_at,omitempty"`
+	RejectionReason string     `json:"rejection_reason,omitempty"`
+	SignatureIP     string     `json:"signature_ip,omitempty"`
 }
 
 
