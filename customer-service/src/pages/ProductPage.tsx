@@ -32,6 +32,10 @@ import ShinyText from '../components/reactbits/ShinyText.tsx'
 import BorderBeam from '../components/reactbits/BorderBeam.tsx'
 import ArtworkDocumentViewer from '../components/ArtworkDocumentViewer.tsx'
 import PriceBreakdownTable from '../components/PriceBreakdownTable.tsx'
+import MultiBookOrderManager from '../components/MultiBookOrderManager.tsx'
+import type { BookOrderItem } from '../types/order.ts'
+import { calculateSpineThickness } from '../utils/spineCalculator.ts'
+import { BookOpen, Ruler, Layers, Settings2, FileCheck, CheckCircle2 } from 'lucide-react'
 
 interface OptionButtonProps {
   option: SpecOption
@@ -245,10 +249,50 @@ export default function ProductPage() {
     }
   }, [product, minQty, searchParams])
 
-  const price = useMemo(() => {
+  const isBookProduct = useMemo(() => {
+    if (!product) return false
+    return (
+      product.slug === 'doc-copy-binding' ||
+      product.category === 'book' ||
+      product.slug.includes('binding') ||
+      product.slug.includes('book')
+    )
+  }, [product])
+
+  const [bookItems, setBookItems] = useState<BookOrderItem[]>([
+    {
+      id: 'book-init-1',
+      title: 'ປຶ້ມພາສາລາວ (Book 1)',
+      innerPageCount: 60,
+      spineThicknessMm: 3.8,
+      quantity: 1,
+      sizeId: 'a4',
+      materialId: 'bond-80',
+      colorMode: 'cmyk',
+      unitPriceThb: 50,
+      totalPriceThb: 50,
+    },
+  ])
+
+  const basePrice = useMemo(() => {
     if (!product) return null
     return computePrice(product, { sizeId, materialId, finishingId, quantity })
   }, [product, sizeId, materialId, finishingId, quantity])
+
+  const price = useMemo(() => {
+    if (isBookProduct) {
+      const totalThb = bookItems.reduce((sum, b) => sum + (b.totalPriceThb || 0), 0)
+      const totalQty = bookItems.reduce((sum, b) => sum + (b.quantity || 1), 0)
+      return {
+        unitPrice: Math.round(totalThb / Math.max(1, totalQty)),
+        total: totalThb,
+        totalTHB: totalThb,
+        qty: totalQty,
+        discount: 0,
+      }
+    }
+    return basePrice
+  }, [isBookProduct, bookItems, basePrice])
 
   const specLabels = useMemo(() => {
     if (!product) return { size: '', paper: '', finishing: '' }
@@ -377,7 +421,11 @@ export default function ProductPage() {
   const validateInputs = () => {
     const nextErrors: Record<string, string> = {}
     
-    if (uploadMode === 'drive') {
+    if (isBookProduct) {
+      if (!bookItems || bookItems.length === 0) {
+        nextErrors.file = language === 'en' ? 'Please add at least 1 book' : 'ກະລຸນາເພີ່ມລາຍການປຶ້ມຢ່າງໜ້ອຍ 1 ຫົວ'
+      }
+    } else if (uploadMode === 'drive') {
       if (!driveLink.trim()) {
         nextErrors.driveLink = language === 'en' ? 'Please provide a Google Drive link' : 'ກະລຸນາແນບລິ້ງ Google Drive ຂອງຟາຍງານ'
       } else if (!/^https?:\/\/drive\.google\.com\//.test(driveLink.trim())) {
@@ -404,11 +452,15 @@ export default function ProductPage() {
     if (!product || !price) return
     if (!validateInputs()) return
 
-    if (uploadMode === 'upload' && preflightReport && !preflightConfirmed) {
+    if (!isBookProduct && uploadMode === 'upload' && preflightReport && !preflightConfirmed) {
       setPendingAction('cart')
       setShowPreflightModal(true)
       return
     }
+
+    const effectiveQty = isBookProduct
+      ? bookItems.reduce((sum, b) => sum + b.quantity, 0)
+      : quantity
 
     addToCart({
       product,
@@ -416,13 +468,18 @@ export default function ProductPage() {
         sizeId,
         materialId,
         finishingId,
-        quantity,
+        quantity: effectiveQty,
         specLabels,
       },
-      driveLink: uploadMode === 'drive' ? driveLink.trim() : uploadedFileUrl || uploadedFileName,
+      driveLink: isBookProduct
+        ? bookItems[0]?.coverFileName || bookItems[0]?.innerFileName || 'multi-book-batch'
+        : uploadMode === 'drive'
+        ? driveLink.trim()
+        : uploadedFileUrl || uploadedFileName || '',
       permissionConfirmed: uploadMode === 'drive' ? permissionConfirmed : true,
       specialNotes,
       price: price!,
+      bookItems: isBookProduct ? bookItems : undefined,
     })
   }
 
@@ -431,11 +488,15 @@ export default function ProductPage() {
     if (!product || !price) return
     if (!validateInputs()) return
 
-    if (uploadMode === 'upload' && preflightReport && !preflightConfirmed) {
+    if (!isBookProduct && uploadMode === 'upload' && preflightReport && !preflightConfirmed) {
       setPendingAction('buy')
       setShowPreflightModal(true)
       return
     }
+
+    const effectiveQty = isBookProduct
+      ? bookItems.reduce((sum, b) => sum + b.quantity, 0)
+      : quantity
 
     const item = {
       product,
@@ -443,13 +504,18 @@ export default function ProductPage() {
         sizeId,
         materialId,
         finishingId,
-        quantity,
+        quantity: effectiveQty,
         specLabels,
       },
-      driveLink: uploadMode === 'drive' ? driveLink.trim() : uploadedFileUrl || uploadedFileName,
+      driveLink: isBookProduct
+        ? bookItems[0]?.coverFileName || bookItems[0]?.innerFileName || 'multi-book-batch'
+        : uploadMode === 'drive'
+        ? driveLink.trim()
+        : uploadedFileUrl || uploadedFileName || '',
       permissionConfirmed: uploadMode === 'drive' ? permissionConfirmed : true,
       specialNotes,
       price: price!,
+      bookItems: isBookProduct ? bookItems : undefined,
     }
 
     addToCart(item)
@@ -480,15 +546,11 @@ export default function ProductPage() {
               {/* Step 1 Tab */}
               <button
                 type="button"
-                onClick={() => {
-                  if (uploadedFileName || tempPreviewUrl) setCurrentStep(1)
-                }}
+                onClick={() => setCurrentStep(1)}
                 className={`py-3 px-4 rounded-2xl text-xs sm:text-sm font-black transition flex items-center justify-center gap-2 cursor-pointer ${
                   currentStep === 1
                     ? 'bg-gradient-to-r from-slate-950 to-blue-950 text-amber-400 shadow-md border border-amber-500/30'
-                    : uploadedFileName || tempPreviewUrl
-                    ? 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    : 'text-slate-400 opacity-60 cursor-not-allowed'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <span className="w-6 h-6 rounded-full flex items-center justify-center bg-amber-500/20 text-amber-500 text-xs font-black">1</span>
@@ -499,12 +561,12 @@ export default function ProductPage() {
               <button
                 type="button"
                 onClick={() => {
-                  if (uploadedFileName || tempPreviewUrl) setCurrentStep(2)
+                  if (isBookProduct || uploadedFileName || tempPreviewUrl) setCurrentStep(2)
                 }}
                 className={`py-3 px-4 rounded-2xl text-xs sm:text-sm font-black transition flex items-center justify-center gap-2 cursor-pointer ${
                   currentStep === 2
                     ? 'bg-gradient-to-r from-slate-950 to-blue-950 text-amber-400 shadow-md border border-amber-500/30'
-                    : uploadedFileName || tempPreviewUrl
+                    : isBookProduct || uploadedFileName || tempPreviewUrl
                     ? 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                     : 'text-slate-400 opacity-60 cursor-not-allowed'
                 }`}
@@ -518,7 +580,33 @@ export default function ProductPage() {
           {/* STEP 1: Upload & Massive PDF Document Proof Preview */}
           {currentStep === 1 && (
             <div>
-              {!uploadedFileName && !tempPreviewUrl ? (
+              {isBookProduct ? (
+                <div className="space-y-6 w-full max-w-[1720px] mx-auto">
+                  <MultiBookOrderManager
+                    product={product}
+                    masterSizeId={sizeId}
+                    masterMaterialId={materialId}
+                    masterFinishingId={finishingId}
+                    bookItems={bookItems}
+                    onChange={setBookItems}
+                    currency={currency}
+                    convertTo={convertTo}
+                    language={language}
+                  />
+
+                  {/* Step 1 Action Bar */}
+                  <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl flex flex-wrap items-center justify-between gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStep(2)}
+                      className="btn btn--gold btn--lg shadow-glow flex items-center gap-2 text-sm font-black px-8 py-4 ml-auto"
+                    >
+                      <span>ຕໍ່ໄປ: ເລືອກວັດສະດຸ & ສະຫຼຸບລາຄາ (Next: Choose Specs & View Price)</span>
+                      <ArrowRightIcon size={20} />
+                    </button>
+                  </div>
+                </div>
+              ) : !uploadedFileName && !tempPreviewUrl ? (
                 <div className="py-8 sm:py-12 max-w-3xl mx-auto">
                   <div className="p-8 sm:p-12 rounded-3xl border border-amber-500/30 bg-gradient-to-br from-white via-slate-50 to-amber-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-blue-950/40 shadow-2xl space-y-6 text-center">
                     <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
@@ -609,130 +697,301 @@ export default function ProductPage() {
                   <button
                     type="button"
                     onClick={() => setCurrentStep(1)}
-                    className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1"
                   >
-                    🔍 ກວດຟາຍ
+                    <span>{isBookProduct ? 'ແກ້ໄຂຟາຍປຶ້ມ' : 'ກວດຟາຍ'}</span>
                   </button>
                 </div>
 
-                <form
-                  className="configurator space-y-4"
-                  onSubmit={handleBuyNow}
-                >
-                  {/* Color Print Mode Selector (CMYK vs Grayscale) */}
-                  <div className="spec-group">
-                    <div className="spec-group-head">
-                      <h3>{language === 'en' ? 'Color Print Mode' : 'ລະບົບສີງານພິມ (Color Mode)'}</h3>
+                {isBookProduct ? (
+                  /* Step 2 Left: Per-Book Batch Overview */
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        {language === 'en' ? 'Titles in this Batch' : 'ລາຍການປຶ້ມໃນຊຸດນີ້'}
+                      </h3>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                        {bookItems.length} {language === 'en' ? 'Titles' : 'ເລື່ອງ'}
+                      </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => setColorPrintMode('cmyk')}
-                        className={`p-3 rounded-2xl border text-left transition flex items-center justify-between cursor-pointer ${
-                          colorPrintMode === 'cmyk'
-                            ? 'bg-amber-500/10 border-amber-500 text-amber-900 dark:text-amber-300 shadow-md ring-1 ring-amber-500'
-                            : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-400'
-                        }`}
-                      >
-                        <div className="flex flex-col">
-                          <span className="font-black text-xs">🌈 ພິມ 4 ສີ (CMYK)</span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">ສີສັນສົດໃສ คมชัด 100%</span>
-                        </div>
-                        {colorPrintMode === 'cmyk' && <CheckIcon size={16} color="#C5A059" />}
-                      </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setColorPrintMode('grayscale')}
-                        className={`p-3 rounded-2xl border text-left transition flex items-center justify-between cursor-pointer ${
-                          colorPrintMode === 'grayscale'
-                            ? 'bg-slate-500/10 border-slate-500 text-slate-900 dark:text-slate-100 shadow-md ring-1 ring-slate-500'
-                            : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-400'
-                        }`}
-                      >
-                        <div className="flex flex-col">
-                          <span className="font-black text-xs">⚫ ພິມຂາວ-ດຳ</span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">ປະຢັດຕົ້ນທຶນ</span>
+                    <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+                      {bookItems.map((b, idx) => (
+                        <div
+                          key={b.id || idx}
+                          className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-2 text-xs"
+                        >
+                          <div className="flex items-center justify-between font-black">
+                            <span className="text-slate-900 dark:text-slate-100 truncate max-w-[200px]">
+                              {idx + 1}. {b.title || `ເລື່ອງທີ ${idx + 1}`}
+                            </span>
+                            <span className="text-amber-600 dark:text-amber-400 font-mono">
+                              {formatMoney(convertTo(b.totalPriceThb), currency)}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap gap-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                            <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 uppercase">
+                              {(b.sizeId || sizeId || 'a4').toUpperCase()}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800">
+                              ປົກ: {b.coverPaperId === 'artcard-300' ? 'ອາດກາດ 300g' : b.coverPaperId === 'artcard-350' ? 'ອາດກາດ 350g' : 'ອາດກາດ 260g'}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                              {b.finishingId === 'matte-lam' ? 'ເຄືອບດ້ານ' : b.finishingId === 'spot-uv' ? 'Spot UV' : 'ເຄືອບເງົາ'}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                              ເນື້ອໃນ: {b.materialId === 'greenread-75' ? 'ຖະໜອມສາຍຕາ 75g' : b.materialId === 'art-105' ? 'ອາດດ້ານ 105g' : 'ປອນ 80g'}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold">
+                              {b.innerPageCount}pp (ສັນ {b.spineThicknessMm}mm)
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800 font-bold">
+                              x{b.quantity} ຫົວ
+                            </span>
+                          </div>
                         </div>
-                        {colorPrintMode === 'grayscale' && <CheckIcon size={16} color="#64748B" />}
-                      </button>
+                      ))}
+                    </div>
+
+                    {/* Luxury Notes Textarea */}
+                    <div className="spec-group pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <div className="spec-group-head">
+                        <h3>{t('notesTitle')}</h3>
+                      </div>
+                      <div className="luxury-textarea-wrap">
+                        <textarea
+                          rows={2}
+                          className="luxury-textarea"
+                          placeholder={t('notesPlaceholder')}
+                          value={specialNotes}
+                          onChange={(e) => setSpecialNotes(e.target.value)}
+                        />
+                      </div>
                     </div>
                   </div>
+                ) : (
+                  /* Standard Product Spec Form */
+                  <form
+                    className="configurator space-y-4"
+                    onSubmit={handleBuyNow}
+                  >
+                    {/* Color Print Mode Selector (CMYK vs Grayscale) */}
+                    <div className="spec-group">
+                      <div className="spec-group-head">
+                        <h3>{language === 'en' ? 'Color Print Mode' : 'ລະບົບສີງານພິມ (Color Mode)'}</h3>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setColorPrintMode('cmyk')}
+                          className={`p-3 rounded-2xl border text-left transition flex items-center justify-between cursor-pointer ${
+                            colorPrintMode === 'cmyk'
+                              ? 'bg-amber-500/10 border-amber-500 text-amber-900 dark:text-amber-300 shadow-md ring-1 ring-amber-500'
+                              : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-400'
+                          }`}
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-black text-xs">ພິມ 4 ສີ (CMYK)</span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">ສີສັນສົດໃສ คมชัด 100%</span>
+                          </div>
+                          {colorPrintMode === 'cmyk' && <CheckIcon size={16} color="#C5A059" />}
+                        </button>
 
-                  <SpecGroup
-                    title={t('sizeSelect')}
-                    options={product.sizes}
-                    value={sizeId}
-                    onChange={setSizeId}
-                    language={language}
-                    currency={currency}
-                    convertTo={convertTo}
-                  />
-                  <SpecGroup
-                    title={t('materialSelect')}
-                    options={product.materials}
-                    value={materialId}
-                    onChange={setMaterialId}
-                    language={language}
-                    currency={currency}
-                    convertTo={convertTo}
-                  />
-                  <SpecGroup
-                    title={t('finishingSelect')}
-                    options={product.finishings}
-                    value={finishingId}
-                    onChange={setFinishingId}
-                    language={language}
-                    currency={currency}
-                    convertTo={convertTo}
-                  />
-                  <QuantityStepper
-                    value={quantity}
-                    minQty={minQty}
-                    onChange={setQuantity}
-                    t={t}
-                    isOnDemand={isOnDemand}
-                    discountTiers={remoteProduct?.discountTiers}
-                  />
+                        <button
+                          type="button"
+                          onClick={() => setColorPrintMode('grayscale')}
+                          className={`p-3 rounded-2xl border text-left transition flex items-center justify-between cursor-pointer ${
+                            colorPrintMode === 'grayscale'
+                              ? 'bg-slate-500/10 border-slate-500 text-slate-900 dark:text-slate-100 shadow-md ring-1 ring-slate-500'
+                              : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-400'
+                          }`}
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-black text-xs">ພິມຂາວ-ດຳ</span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">ປະຢັດຕົ້ນທຶນ</span>
+                          </div>
+                          {colorPrintMode === 'grayscale' && <CheckIcon size={16} color="#64748B" />}
+                        </button>
+                      </div>
+                    </div>
 
-                  {/* Luxury Notes Textarea */}
-                  <div className="spec-group">
-                    <div className="spec-group-head">
-                      <h3>{t('notesTitle')}</h3>
+                    <SpecGroup
+                      title={t('sizeSelect')}
+                      options={product.sizes}
+                      value={sizeId}
+                      onChange={setSizeId}
+                      language={language}
+                      currency={currency}
+                      convertTo={convertTo}
+                    />
+                    <SpecGroup
+                      title={t('materialSelect')}
+                      options={product.materials}
+                      value={materialId}
+                      onChange={setMaterialId}
+                      language={language}
+                      currency={currency}
+                      convertTo={convertTo}
+                    />
+                    <SpecGroup
+                      title={t('finishingSelect')}
+                      options={product.finishings}
+                      value={finishingId}
+                      onChange={setFinishingId}
+                      language={language}
+                      currency={currency}
+                      convertTo={convertTo}
+                    />
+                    <QuantityStepper
+                      value={quantity}
+                      minQty={minQty}
+                      onChange={setQuantity}
+                      t={t}
+                      isOnDemand={isOnDemand}
+                      discountTiers={remoteProduct?.discountTiers}
+                    />
+
+                    {/* Luxury Notes Textarea */}
+                    <div className="spec-group">
+                      <div className="spec-group-head">
+                        <h3>{t('notesTitle')}</h3>
+                      </div>
+                      <div className="luxury-textarea-wrap">
+                        <textarea
+                          rows={2}
+                          className="luxury-textarea"
+                          placeholder={t('notesPlaceholder')}
+                          value={specialNotes}
+                          onChange={(e) => setSpecialNotes(e.target.value)}
+                        />
+                      </div>
                     </div>
-                    <div className="luxury-textarea-wrap">
-                      <textarea
-                        rows={2}
-                        className="luxury-textarea"
-                        placeholder={t('notesPlaceholder')}
-                        value={specialNotes}
-                        onChange={(e) => setSpecialNotes(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </form>
+                  </form>
+                )}
               </div>
 
               {/* Right Column: Real-time Live Price Comparison & Quotation Table (7 cols) */}
               <div className="lg:col-span-7 space-y-4">
-                <PriceBreakdownTable
-                  quantity={quantity}
-                  pageCount={preflightReport?.pageCount || 1}
-                  isColor={colorPrintMode === 'cmyk'}
-                  coveragePercent={preflightReport?.colorCoveragePercent?.total || (colorPrintMode === 'cmyk' ? 20 : 5)}
-                  baseUnit={product.basePrice}
-                  sizeLabel={specLabels.size || 'Standard'}
-                  sizeAdd={product.sizes.find((x) => x.id === sizeId)?.add || 0}
-                  materialLabel={specLabels.paper || 'Standard'}
-                  materialAdd={product.materials.find((x) => x.id === materialId)?.add || 0}
-                  finishingLabel={specLabels.finishing || 'Standard'}
-                  finishingAdd={product.finishings.find((x) => x.id === finishingId)?.add || 0}
-                  discountPercent={Math.round((price?.discount || 0) * 100)}
-                  totalAmountTHB={price?.total || 0}
-                  currency={currency}
-                  convertTo={convertTo}
-                  language={language}
-                />
+                {isBookProduct ? (
+                  /* Dedicated Multi-Book Batch Quotation Sheet */
+                  <div className="p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-5">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="w-5 h-5 text-amber-500" />
+                        <h3 className="text-base font-black text-slate-900 dark:text-slate-100 m-0">
+                          {language === 'en' ? 'Batch Order Quotation' : 'ໃບສະເໜີລາຄາພິມປຶ້ມຍົກຊຸດ'}
+                        </h3>
+                      </div>
+                      <span className="text-xs font-bold text-slate-500">
+                        POD No Min.
+                      </span>
+                    </div>
+
+                    {/* Batch Items Quotation Table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 font-extrabold uppercase text-[11px]">
+                            <th className="py-2.5 px-2">ລາຍການປຶ້ມ (Title & Specs)</th>
+                            <th className="py-2.5 px-2 text-center">ໜ້າ / ສັນ</th>
+                            <th className="py-2.5 px-2 text-center">ຈຳນວນ</th>
+                            <th className="py-2.5 px-2 text-right">ລາຄາ/ຫົວ</th>
+                            <th className="py-2.5 px-2 text-right">ລວມ</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium text-slate-800 dark:text-slate-200">
+                          {bookItems.map((b, idx) => (
+                            <tr key={b.id || idx}>
+                              <td className="py-3 px-2">
+                                <div className="font-extrabold text-slate-900 dark:text-slate-100 text-xs">
+                                  {b.title || `ເລື່ອງທີ ${idx + 1}`}
+                                </div>
+                                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                                  {(b.sizeId || sizeId || 'a4').toUpperCase()} · {b.finishingId === 'matte-lam' ? 'ເຄືອບດ້ານ' : 'ເຄືອບເງົາ'} · {b.colorMode === 'grayscale' ? 'ຂາວດຳ' : '4 ສີ'}
+                                </div>
+                              </td>
+                              <td className="py-3 px-2 text-center font-mono text-[11px]">
+                                {b.innerPageCount}p ({b.spineThicknessMm}mm)
+                              </td>
+                              <td className="py-3 px-2 text-center font-bold font-mono">
+                                {b.quantity}
+                              </td>
+                              <td className="py-3 px-2 text-right font-mono">
+                                {formatMoney(convertTo(b.unitPriceThb), currency)}
+                              </td>
+                              <td className="py-3 px-2 text-right font-bold text-slate-900 dark:text-slate-100 font-mono">
+                                {formatMoney(convertTo(b.totalPriceThb), currency)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Batch Metrics Highlights */}
+                    <div className="grid grid-cols-3 gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-center">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-500 block uppercase">ຫົວເລື່ອງລວມ</span>
+                        <span className="text-base font-black text-slate-900 dark:text-slate-100 font-mono">
+                          {bookItems.length}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-500 block uppercase">ຈຳນວນພິມລວມ</span>
+                        <span className="text-base font-black text-slate-900 dark:text-slate-100 font-mono">
+                          {bookItems.reduce((sum, b) => sum + b.quantity, 0)} ຫົວ
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-500 block uppercase">ໜ້າພິມທັງໝົດ</span>
+                        <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                          {bookItems.reduce((sum, b) => sum + b.innerPageCount * b.quantity, 0)} pp
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Grand Total Bar */}
+                    <div className="flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-blue-950 text-white shadow-lg">
+                      <div>
+                        <span className="text-xs text-slate-400 block font-semibold">
+                          {language === 'en' ? 'Grand Total Price' : 'ຍອດລວມສຸດທິທຸກຫົວ:'}
+                        </span>
+                        <span className="text-xs text-amber-400 font-mono font-bold">
+                          {formatMoney(bookItems.reduce((sum, b) => sum + b.totalPriceThb, 0), 'THB')}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-2xl font-black text-amber-400 font-mono">
+                          {formatMoney(
+                            convertTo(bookItems.reduce((sum, b) => sum + b.totalPriceThb, 0)),
+                            currency
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Standard Product Price Breakdown Table */
+                  <PriceBreakdownTable
+                    quantity={quantity}
+                    pageCount={preflightReport?.pageCount || 1}
+                    isColor={colorPrintMode === 'cmyk'}
+                    coveragePercent={preflightReport?.colorCoveragePercent?.total || (colorPrintMode === 'cmyk' ? 20 : 5)}
+                    baseUnit={product.basePrice}
+                    sizeLabel={specLabels.size || 'Standard'}
+                    sizeAdd={product.sizes.find((x) => x.id === sizeId)?.add || 0}
+                    materialLabel={specLabels.paper || 'Standard'}
+                    materialAdd={product.materials.find((x) => x.id === materialId)?.add || 0}
+                    finishingLabel={specLabels.finishing || 'Standard'}
+                    finishingAdd={product.finishings.find((x) => x.id === finishingId)?.add || 0}
+                    discountPercent={Math.round((price?.discount || 0) * 100)}
+                    totalAmountTHB={price?.total || 0}
+                    currency={currency}
+                    convertTo={convertTo}
+                    language={language}
+                  />
+                )}
 
                 {/* Direct Action Group */}
                 <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl flex flex-wrap items-center justify-between gap-3">
@@ -741,7 +1000,7 @@ export default function ProductPage() {
                     onClick={() => setCurrentStep(1)}
                     className="btn btn--secondary text-xs font-bold px-5 py-3.5"
                   >
-                    ← ກວດສອບຟາຍ PDF
+                    <span>← {isBookProduct ? 'ແກ້ໄຂຟາຍປຶ້ມ' : 'ກວດສອບຟາຍ PDF'}</span>
                   </button>
 
                   <div className="flex items-center gap-3 flex-1 justify-end flex-wrap">

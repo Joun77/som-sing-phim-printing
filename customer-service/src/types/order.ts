@@ -6,6 +6,26 @@ export interface CartItemSpecSelection {
   priceDeltaThb: number;
 }
 
+export interface BookOrderItem {
+  id: string;
+  title: string;
+  coverFileName?: string;
+  coverFileUrl?: string;
+  coverPageCount?: number;
+  coverPaperId?: string;
+  innerFileName?: string;
+  innerFileUrl?: string;
+  innerPageCount: number;
+  spineThicknessMm: number;
+  quantity: number;
+  sizeId?: string;
+  materialId?: string;
+  finishingId?: string;
+  colorMode?: 'cmyk' | 'grayscale';
+  unitPriceThb: number;
+  totalPriceThb: number;
+}
+
 export interface CartItem {
   id: string;
   productId: string;
@@ -18,6 +38,7 @@ export interface CartItem {
   totalPriceThb: number;
   artworkDriveUrl?: string;
   customNotes?: string;
+  bookItems?: BookOrderItem[];
 }
 
 export interface CustomerDetails {

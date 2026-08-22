@@ -15,7 +15,6 @@ import {
   CartIcon,
 } from './icons.tsx'
 import { CURRENCIES } from '../utils/currency.ts'
-import ThemeToggle from './ThemeToggle.tsx'
 
 const SOCIALS = [
   { label: 'Facebook', href: 'https://www.facebook.com/', Icon: FacebookIcon },
@@ -211,9 +210,16 @@ export default function Header() {
           </div>
 
           <div className="header-actions">
-            <ThemeToggle />
             <LanguageSwitcher />
             <CurrencySwitcher />
+            <button
+              type="button"
+              className="btn btn--gold btn--track shadow-glow"
+              onClick={() => navigate('/track')}
+            >
+              <SearchIcon size={18} />
+              <span>{t('navTrack')}</span>
+            </button>
             <button
               type="button"
               className="header-cart-btn"
@@ -225,14 +231,6 @@ export default function Header() {
               {cartCount > 0 && (
                 <span className="header-cart-badge">{cartCount}</span>
               )}
-            </button>
-            <button
-              type="button"
-              className="btn btn--gold btn--track shadow-glow"
-              onClick={() => navigate('/track')}
-            >
-              <SearchIcon size={18} />
-              <span>{t('navTrack')}</span>
             </button>
           </div>
         </nav>

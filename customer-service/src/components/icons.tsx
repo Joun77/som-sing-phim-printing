@@ -364,3 +364,36 @@ export function EyeIcon({ size = 22 }: IconProps) {
     </svg>
   )
 }
+
+export function BookIcon({ size = 20 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z" />
+      <path d="M6 6h10" />
+      <path d="M6 10h10" />
+    </svg>
+  )
+}
+
+export function RulerIcon({ size = 20 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m21.3 8.7-5-5a2 2 0 0 0-2.8 0L2.7 14.5a2 2 0 0 0 0 2.8l5 5a2 2 0 0 0 2.8 0L21.3 11.5a2 2 0 0 0 0-2.8Z" />
+      <path d="m14.5 4.5 1.5 1.5" />
+      <path d="m11.5 7.5 1.5 1.5" />
+      <path d="m8.5 10.5 1.5 1.5" />
+      <path d="m5.5 13.5 1.5 1.5" />
+    </svg>
+  )
+}
+
+export function FileImageIcon({ size = 20 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <circle cx="10" cy="12" r="2" />
+      <path d="m20 17-1.296-1.296a2.41 2.41 0 0 0-3.408 0L9 22" />
+    </svg>
+  )
+}

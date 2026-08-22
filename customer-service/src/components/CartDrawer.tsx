@@ -175,6 +175,26 @@ export default function CartDrawer() {
                         )}
                       </div>
 
+                      {/* Multi-Book Batch Breakdown */}
+                      {item.bookItems && item.bookItems.length > 0 && (
+                        <div className="mt-2 p-2 rounded-xl bg-amber-50/50 dark:bg-slate-900/80 border border-amber-500/20 text-[11px] space-y-1">
+                          <div className="font-bold text-amber-900 dark:text-amber-300 flex items-center justify-between">
+                            <span>📚 ລາຍການປຶ້ມ ({item.bookItems.length} ເລື່ອງ):</span>
+                            <span>{item.bookItems.reduce((s, b) => s + b.quantity, 0)} ຫົວລວມ</span>
+                          </div>
+                          <div className="space-y-0.5 max-h-24 overflow-y-auto pr-1">
+                            {item.bookItems.map((b, bIdx) => (
+                              <div key={b.id || bIdx} className="flex items-center justify-between text-slate-600 dark:text-slate-400 text-[10px]">
+                                <span className="truncate max-w-[140px]">📖 {b.title || `ເລື່ອງທີ ${bIdx + 1}`}</span>
+                                <span className="text-slate-500">
+                                  {b.innerPageCount} ໜ້າ ({b.spineThicknessMm}mm) × {b.quantity}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="flex items-baseline justify-between mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                         <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
                           {t('quantityLabel')}: {item.config.quantity.toLocaleString()} {item.product.unit || 'pcs'}

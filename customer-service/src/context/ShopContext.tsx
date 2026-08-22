@@ -30,6 +30,8 @@ export interface OrderDraft {
   price: PriceBreakdown
 }
 
+import type { BookOrderItem } from '../types/order.ts'
+
 export interface CartItem {
   id: string
   product: Product
@@ -40,6 +42,11 @@ export interface CartItem {
   price: PriceBreakdown
   selected: boolean
   createdAt: number
+  bookItems?: BookOrderItem[]
+  coverFileName?: string
+  coverFileUrl?: string
+  innerFileName?: string
+  innerFileUrl?: string
 }
 
 export interface ShopContextValue {

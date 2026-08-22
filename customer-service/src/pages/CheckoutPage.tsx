@@ -371,15 +371,48 @@ export default function CheckoutPage() {
         finishing: checkoutItems.map((i) => i.config?.specLabels?.finishing || '').join(' | '),
       },
       quantity: checkoutItems.reduce((sum, i) => sum + (i.config?.quantity || 1), 0),
-      items: checkoutItems.map((i) => ({
-        product_id: i.product?.id || 'custom-print',
-        product_name: i.product?.name || 'Print Item',
-        quantity: i.config?.quantity || 1,
-        specs: i.config?.specLabels,
-        unit_price: i.price?.unitPrice || 0,
-        total_price: i.price?.total || 0,
-        drive_link: i.driveLink,
-      })),
+      items: checkoutItems.flatMap((i) => {
+        if (i.bookItems && i.bookItems.length > 0) {
+          return i.bookItems.map((b) => ({
+            product_id: i.product?.id || 'doc-copy-binding',
+            product_name: `${i.product?.name || 'ເຂົ້າເລັ້ມສັນກາວ'} - ${b.title || 'ປຶ້ມ'}`,
+            job_name: b.title || 'ປຶ້ມ',
+            name: `${i.product?.name || 'ເຂົ້າເລັ້ມສັນກາວ'} - ${b.title || 'ປຶ້ມ'}`,
+            quantity: b.quantity || 1,
+            page_count: b.innerPageCount || 60,
+            spine_width_mm: b.spineThicknessMm || 3.8,
+            cover_file_url: b.coverFileUrl || b.coverFileName || '',
+            inner_file_url: b.innerFileUrl || b.innerFileName || '',
+            specs: {
+              ...i.config?.specLabels,
+              size: (b.sizeId || i.config?.sizeId || 'a4').toUpperCase(),
+              cover_paper: b.coverPaperId || 'artcard-260',
+              cover_pages: `${b.coverPageCount || 1} spread`,
+              paper: b.materialId || i.config?.materialId || 'bond-80',
+              finishing: b.finishingId || i.config?.finishingId || 'gloss-lam',
+              spine: `${b.spineThicknessMm}mm`,
+              pages: `${b.innerPageCount}pp`,
+              color_mode: b.colorMode || 'cmyk',
+            },
+            unit_price: b.unitPriceThb || 0,
+            total_price: b.totalPriceThb || 0,
+            drive_link: b.innerFileUrl || b.coverFileUrl || i.driveLink,
+          }))
+        }
+        return [
+          {
+            product_id: i.product?.id || 'custom-print',
+            product_name: i.product?.name || 'Print Item',
+            job_name: i.product?.name || 'Print Item',
+            name: i.product?.name || 'Print Item',
+            quantity: i.config?.quantity || 1,
+            specs: i.config?.specLabels,
+            unit_price: i.price?.unitPrice || 0,
+            total_price: i.price?.total || 0,
+            drive_link: i.driveLink,
+          },
+        ]
+      }),
       drive_link: checkoutItems.map((i) => i.driveLink).filter(Boolean).join(', '),
       is_permission_confirmed: checkoutItems.every((i) => i.permissionConfirmed),
       special_notes: checkoutItems.map((i) => i.specialNotes).filter(Boolean).join('; '),
@@ -1116,6 +1149,25 @@ export default function CheckoutPage() {
                         {item.config.specLabels.paper && <li>{language === 'en' ? 'Material' : 'ວັດສະດຸ'}: {item.config.specLabels.paper}</li>}
                         {item.config.specLabels.finishing && <li>{language === 'en' ? 'Finishing' : 'ເຕັກນິກ'}: {item.config.specLabels.finishing}</li>}
                       </ul>
+
+                      {/* Multi-Book Details in Checkout */}
+                      {item.bookItems && item.bookItems.length > 0 && (
+                        <div style={{ marginTop: '8px', padding: '8px 10px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.2)', fontSize: '0.78rem' }}>
+                          <strong style={{ display: 'block', marginBottom: '4px', color: '#b45309' }}>
+                            📚 {language === 'en' ? 'Included Books' : 'ລາຍການປຶ້ມໃນຊຸດ'} ({item.bookItems.length} {language === 'en' ? 'Titles' : 'ເລື່ອງ'}):
+                          </strong>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            {item.bookItems.map((b, bIdx) => (
+                              <div key={b.id || bIdx} style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                                <span>📖 {b.title || `ເລື່ອງທີ ${bIdx + 1}`}</span>
+                                <span style={{ fontWeight: 600 }}>
+                                  {b.innerPageCount} {language === 'en' ? 'pp' : 'ໜ້າ'} (ສັນ {b.spineThicknessMm}mm) × {b.quantity}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

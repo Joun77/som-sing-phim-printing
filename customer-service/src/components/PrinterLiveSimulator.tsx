@@ -28,7 +28,7 @@ const PRINT_JOBS: PrintJob[] = [
   },
   {
     id: 'business-card',
-    nameLao: 'ນາມບັດສີພິມຄົມຊັດ + ປ້ຳຟອຍຄຳແທ້',
+    nameLao: 'ນາມບັດ Soft-Touch + ປ້ຳຟອຍຄຳແທ້',
     nameEn: 'Luxury Gold Foil Art Card',
     type: 'BUSINESS CARD / FOIL',
     paper: '350 GSM Art Card Matt + Soft Touch',
@@ -73,12 +73,12 @@ export default function PrinterLiveSimulator() {
       }
     })
 
-    // Reset paper position at top inside feeder
+    // Reset paper position at top inside feeder slot
     tl.set(paperRef.current, {
-      y: -140,
+      y: -145,
       opacity: 0,
       scale: 0.94,
-      filter: 'brightness(1.1) drop-shadow(0 4px 6px rgba(0,0,0,0.2))'
+      filter: 'brightness(1.1) drop-shadow(0 4px 8px rgba(0,0,0,0.3))'
     })
 
     // Laser head scan active
@@ -107,14 +107,14 @@ export default function PrinterLiveSimulator() {
       ease: 'power2.out'
     }, 0.2)
 
-    // Paper landing gentle bounce & floating sheen
+    // Paper landing gentle bounce
     tl.to(paperRef.current, {
-      y: 8,
-      duration: 0.25,
+      y: 6,
+      duration: 0.22,
       ease: 'power1.inOut',
       yoyo: true,
       repeat: 1
-    }, '-=0.2')
+    }, '-=0.25')
 
     // Laser fades out
     tl.to(laserBeamRef.current, {
@@ -128,19 +128,19 @@ export default function PrinterLiveSimulator() {
     triggerPrintAnimation()
   }, { scope: containerRef, dependencies: [selectedJob.id] })
 
-  // Auto-cycle idle print every 7 seconds if not manually clicked
+  // Auto-cycle idle print every 8 seconds if not manually clicked
   useEffect(() => {
     const timer = setInterval(() => {
       if (!isPrinting) {
         triggerPrintAnimation()
       }
-    }, 7500)
+    }, 8000)
     return () => clearInterval(timer)
   }, [isPrinting])
 
   return (
     <div className="printer-showcase-container" ref={containerRef}>
-      {/* Printer Machine Outer Frame */}
+      {/* Printer Machine Outer Chassis */}
       <div className="printer-press-chassis">
         {/* Machine Head Status & CMYK Gauges */}
         <div className="printer-top-bar">
@@ -148,7 +148,7 @@ export default function PrinterLiveSimulator() {
             <span className="printer-led-status animate-pulse" />
             <span className="printer-model-text">SOM SING PHIM • PRO PRESS C9070</span>
           </div>
-          
+
           {/* CMYK Live Ink Levels */}
           <div className="printer-cmyk-gauges" ref={inkLevelRef}>
             <div className="cmyk-gauge" title="Cyan 98%"><span className="gauge-fill bg-cyan-400" style={{ height: '95%' }} /></div>
@@ -167,7 +167,7 @@ export default function PrinterLiveSimulator() {
         <div className="printer-eject-slot">
           {/* Laser Carriage Scanline */}
           <div className="printer-laser-line" ref={laserBeamRef} />
-          
+
           {/* Mechanical Roller */}
           <div className="printer-roller" ref={rollerRef}>
             <span className="roller-ridge" />
@@ -220,7 +220,7 @@ export default function PrinterLiveSimulator() {
           </div>
         </div>
 
-        {/* Printer Output Output Tray */}
+        {/* Printer Output Tray */}
         <div className="printer-tray-catch">
           <div className="tray-lip" />
         </div>
@@ -283,3 +283,6 @@ export default function PrinterLiveSimulator() {
     </div>
   )
 }
+
+
+
