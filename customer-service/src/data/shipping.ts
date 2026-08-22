@@ -11,6 +11,7 @@ export interface Courier {
   eta: string
   freeAbove: number
   color: string
+  logoUrl?: string
 }
 
 export const COURIERS: Courier[] = [
@@ -22,6 +23,7 @@ export const COURIERS: Courier[] = [
     eta: '1-2 ວັນ (1-2 Days)',
     freeAbove: 300000,
     color: '#d97706',
+    logoUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&q=80&w=150',
   },
   {
     id: 'hal_logistics',
@@ -31,15 +33,7 @@ export const COURIERS: Courier[] = [
     eta: '1-2 ວັນ (1-2 Days)',
     freeAbove: 350000,
     color: '#2563eb',
-  },
-  {
-    id: 'self_pickup',
-    name: 'Self Pickup (ຮັບເອງທີ່ຮ້ານ)',
-    short: 'Self Pickup',
-    fee: 0,
-    eta: 'ທັນທີ (Immediate)',
-    freeAbove: 0,
-    color: '#059669',
+    logoUrl: 'http://localhost:8080/api/v1/orders/files/logo_1787356736419680000.png',
   },
 ]
 
@@ -55,6 +49,7 @@ export interface BankAccount {
   accountNumber: string
   bcelOnePayQr: string
   promptpayName: string
+  logoUrl?: string
 }
 
 export const BANK_ACCOUNT: BankAccount = {
@@ -62,6 +57,7 @@ export const BANK_ACCOUNT: BankAccount = {
   branch: 'Vientiane Head Office',
   accountName: 'Som-Sing Phim Printing Shop',
   accountNumber: '160-12-00-01234567-001',
-  bcelOnePayQr: '/assets/images/bcel-qr-placeholder.png',
+  bcelOnePayQr: 'http://localhost:8080/api/v1/orders/files/logo_1787357758979996000.jpg',
   promptpayName: 'Som-Sing Phim',
+  logoUrl: 'http://localhost:8080/api/v1/orders/files/logo_1787357720008347000.png',
 }

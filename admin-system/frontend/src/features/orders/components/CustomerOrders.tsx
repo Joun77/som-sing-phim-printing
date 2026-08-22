@@ -13,6 +13,10 @@ import {
 import OrdersTable from './OrdersTable';
 import CreateOrderPage from './CreateOrderPage';
 import OrderDetailsPage from './OrderDetailsPage';
+import OrderReceptionPage from './OrderReceptionPage';
+import ProductionTrackingPage from './ProductionTrackingPage';
+import OrderDeliveryPage from './OrderDeliveryPage';
+import OrderCompletedSummaryPage from './OrderCompletedSummaryPage';
 import Lightbox from './Lightbox';
 import OrderDetailsModal from './OrderDetailsModal';
 import { QuotationManager } from '@features/pricing';
@@ -22,7 +26,8 @@ import SubmitQuotationModal from './SubmitQuotationModal';
 export default function CustomerOrders({ initialSubTab = 'orders' }) {
   const { 
     orders, 
-    updateOrderStatus, 
+    updateOrderStatus,
+    updateOrderPaymentStatus,
     settleOrderBalance, 
     deleteOrder, 
     updatePreflightCheck,
@@ -56,10 +61,25 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
     initialSubTab === 'production' ? 'Printing' : initialSubTab === 'deliveries' ? 'Ready' : 'All'
   );
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [activeOrderStep, setActiveOrderStep] = useState(1);
   const [isAddOrderOpen, setIsAddOrderOpen] = useState(initialSubTab === 'create_order');
   const [lightbox, setLightbox] = useState(null);
   const [quoteModalOrder, setQuoteModalOrder] = useState(null);
   const focusRef = useRef(null);
+
+  useEffect(() => {
+    if (selectedOrder) {
+      if (selectedOrder.status === 'Delivered' || selectedOrder.status === 'COMPLETED' || initialSubTab === 'completed') {
+        setActiveOrderStep(4);
+      } else if (selectedOrder.status === 'Ready' || selectedOrder.status === 'READY_FOR_PICKUP' || initialSubTab === 'deliveries') {
+        setActiveOrderStep(3);
+      } else if (['Printing', 'Cutting', 'IN_PRODUCTION'].includes(selectedOrder.status) || initialSubTab === 'production') {
+        setActiveOrderStep(2);
+      } else {
+        setActiveOrderStep(1);
+      }
+    }
+  }, [selectedOrder?.id, initialSubTab]);
 
   useEffect(() => {
     if (initialSubTab === 'create_order') {
@@ -113,23 +133,46 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
   // Multi-currency formatter from context (prop name kept as formatLAK for downstream components)
   const formatLAK = formatCurrency;
 
-  const statuses = ['All', 'Received', 'Printing', 'Cutting', 'Ready', 'Delivered'];
+  const statuses = [
+    { id: 'All', labelLo: 'ທັງໝົດ', labelEn: 'All' },
+    { id: 'Received', labelLo: 'ຮັບອໍເດີ', labelEn: 'Received' },
+    { id: 'Printing', labelLo: 'ຂັ້ນຕອນການພິມ', labelEn: 'Printing' },
+    { id: 'Ready', labelLo: 'ຂັ້ນຕອນການຈັດສົ່ງ', labelEn: 'Delivery' },
+    { id: 'Delivered', labelLo: 'ສຳເລັດທັງໝົດ', labelEn: 'Completed' },
+    { id: 'Cancelled', labelLo: 'ຍົກເລີກ', labelEn: 'Cancelled' },
+  ];
 
-  const handleStatusChange = useCallback((orderId, currentStatus) => {
-    let nextStatus = 'Received';
-    if (currentStatus === 'Received') nextStatus = 'Printing';
-    else if (currentStatus === 'Printing') nextStatus = 'Cutting';
-    else if (currentStatus === 'Cutting') nextStatus = 'Ready';
-    else if (currentStatus === 'Ready') nextStatus = 'Delivered';
+  const handleStatusChange = useCallback((orderId, targetOrCurrentStatus) => {
+    let nextStatus = targetOrCurrentStatus;
+    let paymentUpdate = null;
+
+    if (targetOrCurrentStatus === 'Received') nextStatus = 'Printing';
+    else if (targetOrCurrentStatus === 'Printing') nextStatus = 'Cutting';
+    else if (targetOrCurrentStatus === 'Cutting') nextStatus = 'Ready';
+    else if (targetOrCurrentStatus === 'Ready') nextStatus = 'Delivered';
+    else if (targetOrCurrentStatus === 'PREPRESS_CHECK') {
+      nextStatus = 'PREPRESS_CHECK';
+      paymentUpdate = 'Paid';
+    } else if (targetOrCurrentStatus === 'PENDING') {
+      nextStatus = 'Pending';
+      paymentUpdate = 'Unpaid';
+    } else if (targetOrCurrentStatus === 'IN_PRODUCTION') {
+      nextStatus = 'Printing';
+    }
 
     updateOrderStatus(orderId, nextStatus);
-    showToast(currentLang === 'lo' ? 'ອັບເດດສະຖານະການຜະລິດສຳເລັດ!' : 'Production status updated!', 'success');
     
     if (selectedOrder && selectedOrder.id === orderId) {
-      const updated = orders.find(o => o.id === orderId);
-      if (updated) setSelectedOrder(updated);
+      setSelectedOrder(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: nextStatus,
+          paymentStatus: paymentUpdate || prev.paymentStatus
+        };
+      });
     }
-  }, [orders, selectedOrder, updateOrderStatus, showToast, currentLang]);
+  }, [selectedOrder, updateOrderStatus]);
 
   const handlePreflightToggle = useCallback((field, value) => {
     if (!selectedOrder) return;
@@ -164,21 +207,39 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
 
   const getPaymentStatusIcon = useCallback((status) => {
     switch (status) {
-      case 'Pending': return <Clock className="w-3.5 h-3.5 text-red-500" />;
-      case 'Deposit Paid': return <Clock className="w-3.5 h-3.5 text-indigo-500" />;
-      case 'Fully Paid': return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />;
-      case 'Overdue': return <AlertTriangle className="w-3.5 h-3.5 text-red-600 animate-bounce" />;
-      default: return <Clock className="w-3.5 h-3.5 text-slate-500" />;
+      case 'Paid':
+      case 'Fully Paid':
+      case 'PAID':
+        return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />;
+      case 'Deposit':
+      case 'Deposit Paid':
+        return <Clock className="w-3.5 h-3.5 text-amber-600" />;
+      case 'Pending':
+      case 'Unpaid':
+        return <Clock className="w-3.5 h-3.5 text-rose-500" />;
+      case 'Overdue':
+        return <AlertTriangle className="w-3.5 h-3.5 text-red-600 animate-bounce" />;
+      default:
+        return <Clock className="w-3.5 h-3.5 text-slate-400" />;
     }
   }, []);
 
   const getPaymentStatusBadge = useCallback((status) => {
     switch (status) {
-      case 'Pending': return 'bg-red-50 text-red-700 border-red-100';
-      case 'Deposit Paid': return 'bg-indigo-50 text-indigo-700 border-indigo-100';
-      case 'Fully Paid': return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-      case 'Overdue': return 'bg-red-100 text-red-800 border-red-200 font-extrabold animate-bounce';
-      default: return 'bg-slate-50 text-slate-700';
+      case 'Paid':
+      case 'Fully Paid':
+      case 'PAID':
+        return 'bg-emerald-50 text-emerald-700 border-emerald-300 font-extrabold';
+      case 'Deposit':
+      case 'Deposit Paid':
+        return 'bg-amber-50 text-amber-800 border-amber-300 font-bold';
+      case 'Pending':
+      case 'Unpaid':
+        return 'bg-rose-50 text-rose-700 border-rose-200 font-medium';
+      case 'Overdue':
+        return 'bg-red-100 text-red-800 border-red-200 font-extrabold animate-bounce';
+      default:
+        return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   }, []);
 
@@ -234,19 +295,28 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
 
   const filteredOrders = useMemo(() => {
     if (initialSubTab === 'completed') {
-      return orders.filter(o => o.status === 'Delivered' && o.paymentStatus === 'Fully Paid');
+      return orders.filter(o => o.status === 'Delivered' || o.status === 'COMPLETED');
     }
     if (initialSubTab === 'cancelled') {
-      return orders.filter(o => o.status === 'Cancelled');
-    }
-    if (initialSubTab === 'production') {
-      return orders.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled');
-    }
-    if (initialSubTab === 'deliveries') {
-      return orders.filter(o => o.status !== 'Cancelled');
+      return orders.filter(o => o.status === 'Cancelled' || o.status === 'CANCELLED');
     }
     if (filterStatus === 'All') {
-      return orders.filter(o => o.status !== 'Cancelled');
+      return orders.filter(o => o.status !== 'Cancelled' && o.status !== 'CANCELLED');
+    }
+    if (filterStatus === 'Received') {
+      return orders.filter(o => ['Received', 'Pending', 'PREPRESS_CHECK', 'QUOTATION'].includes(o.status));
+    }
+    if (filterStatus === 'Printing') {
+      return orders.filter(o => ['Printing', 'Cutting', 'IN_PRODUCTION'].includes(o.status));
+    }
+    if (filterStatus === 'Ready') {
+      return orders.filter(o => ['Ready', 'READY_FOR_PICKUP'].includes(o.status));
+    }
+    if (filterStatus === 'Delivered') {
+      return orders.filter(o => ['Delivered', 'COMPLETED'].includes(o.status));
+    }
+    if (filterStatus === 'Cancelled') {
+      return orders.filter(o => ['Cancelled', 'CANCELLED'].includes(o.status));
     }
     return orders.filter(ord => ord.status === filterStatus);
   }, [orders, initialSubTab, filterStatus]);
@@ -299,189 +369,65 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             onClose={() => setLightbox(null)}
           />
         )}
-        <OrderDetailsPage 
-          order={selectedOrder} 
-          onBack={() => setSelectedOrder(null)} 
-          formatLAK={formatLAK}
-          t={t}
-          currentLang={currentLang}
-          handleStatusChange={handleStatusChange}
-          handlePreflightToggle={handlePreflightToggle}
-          deleteOrder={deleteOrder}
-          showToast={showToast}
-          askConfirmation={askConfirmation}
-          setLightbox={setLightbox}
-          setIsSettleOpen={setIsSettleOpen}
-          setSettleAmount={setSettleAmount}
-          setSettleStep={setSettleStep}
-          getStatusBadgeClass={getStatusBadgeClass}
-          getStatusIcon={getStatusIcon}
-          getPaymentStatusBadge={getPaymentStatusBadge}
-          getPaymentStatusIcon={getPaymentStatusIcon}
-          viewMode={initialSubTab}
-          updateProductionStep={updateProductionStep}
-          addSpoilageLog={addSpoilageLog}
-          inventory={inventory}
-        />
-
-        {/* STEP-BY-STEP BALANCE SETTLEMENT DIALOG */}
-        {isSettleOpen && (
-          <dialog
-            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-transparent outline-none border-none w-full h-full"
-            open
-          >
-            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsSettleOpen(false)} />
-            
-            <div className="relative bg-white w-full max-w-sm rounded-3xl shadow-2xl p-8 z-10 border border-slate-100 animate-fade-in flex flex-col justify-between">
-              <div>
-                <div className="flex justify-between items-center border-b pb-4 mb-5">
-                  <div>
-                    <span className="text-xs uppercase font-extrabold text-emerald-600 tracking-wider font-sans">
-                      {t('orders.step')} {settleStep} {t('orders.of')} 2
-                    </span>
-                    <h3 className="text-lg font-black text-primary-navy mt-1">
-                      {t('orders.settle_title')}
-                    </h3>
-                  </div>
-                  <button 
-                    onClick={() => setIsSettleOpen(false)}
-                    className="p-2 hover:bg-slate-100 rounded-xl text-slate-400"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <div className="flex gap-2 mb-6">
-                  {[1, 2].map(st => (
-                    <div 
-                      key={st} 
-                      className={`h-2 flex-1 rounded-full transition-all duration-300 ${st <= settleStep ? 'bg-emerald-500' : 'bg-slate-100'}`}
-                    />
-                  ))}
-                </div>
-
-                <form onSubmit={handleSettleSubmit} className="space-y-4 text-xs sm:text-sm">
-                  {settleStep === 1 && (
-                    <div className="space-y-4 animate-fade-in">
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{t('orders.unpaid_balance')}</label>
-                        <p className="text-lg font-black text-red-600 font-sans bg-red-50/50 p-4 rounded-2xl border border-red-100">
-                          {formatLAK(selectedOrder.remainingUnpaidBalance)}
-                        </p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{t('orders.amount_to_pay')} *</label>
-                        <input
-                          type="number"
-                          required
-                          min="1000"
-                          max={selectedOrder.remainingUnpaidBalance}
-                          value={settleAmount}
-                          onChange={(e) => setSettleAmount(Number(e.target.value))}
-                          className="w-full min-h-[50px] px-4 py-3 border-2 rounded-2xl focus:outline-none text-base font-black font-sans text-slate-900"
-                        />
-
-                        <div className="flex gap-2 pt-1.5">
-                          <button
-                            type="button"
-                            onClick={() => applySettlePreset(50)}
-                            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 border rounded-xl text-xs font-bold transition active:scale-95"
-                          >
-                            {t('orders.pay_50')}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => applySettlePreset(100)}
-                            className="px-4 py-2.5 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold transition active:scale-95"
-                          >
-                            {t('orders.pay_100')}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {settleStep === 2 && (
-                    <div className="space-y-4 animate-fade-in">
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{t('orders.payment_method')}</label>
-                        <div className="grid grid-cols-3 gap-2">
-                          {['BCEL One', 'Cash', 'Transfer'].map(method => {
-                            const active = settleMethod === method;
-                            return (
-                              <button
-                                key={method}
-                                type="button"
-                                onClick={() => setSettleMethod(method)}
-                                className={`p-3 border-2 rounded-xl font-bold text-xs transition flex flex-col items-center justify-center gap-1.5 ${
-                                  active 
-                                    ? 'border-accent-sky bg-blue-50/50 text-primary-navy shadow-sm' 
-                                    : 'border-slate-200 hover:border-slate-300 text-slate-500 bg-white'
-                                }`}
-                              >
-                                <span>{method}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Slip Reference Note</label>
-                        <input
-                          type="text"
-                          value={settleSlip}
-                          onChange={(e) => setSettleSlip(e.target.value)}
-                          placeholder="Note or reference..."
-                          className="w-full px-3 py-2 border-2 rounded-xl focus:outline-none text-xs font-bold"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex justify-end gap-3 pt-4 border-t">
-                    {settleStep === 2 && (
-                      <button
-                        type="button"
-                        onClick={() => setSettleStep(1)}
-                        className="px-4 py-2 border rounded-xl text-slate-500 hover:bg-slate-50 text-xs font-bold transition"
-                      >
-                        Back
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setIsSettleOpen(false)}
-                      className="px-4 py-2 border rounded-xl text-slate-400 hover:bg-slate-50 text-xs font-bold transition"
-                    >
-                      Cancel
-                    </button>
-                    {settleStep === 1 ? (
-                      <button
-                        type="button"
-                        onClick={() => setSettleStep(2)}
-                        className="px-5 py-2 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-bold transition shadow-md"
-                      >
-                        Next
-                      </button>
-                    ) : (
-                      <button
-                        type="submit"
-                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-md"
-                      >
-                        Settle Balance
-                      </button>
-                    )}
-                  </div>
-                </form>
-              </div>
-            </div>
-          </dialog>
+        {activeOrderStep === 1 && (
+          <OrderReceptionPage
+            order={selectedOrder}
+            onBack={() => setSelectedOrder(null)}
+            onSelectStep={(step) => setActiveOrderStep(step)}
+            formatLAK={formatLAK}
+            currentLang={currentLang}
+            handleStatusChange={handleStatusChange}
+            onUpdatePayment={updateOrderPaymentStatus}
+            showToast={showToast}
+            setLightbox={setLightbox}
+          />
+        )}
+        {activeOrderStep === 2 && (
+          <ProductionTrackingPage
+            order={selectedOrder}
+            onBack={() => setSelectedOrder(null)}
+            onSelectStep={(step) => setActiveOrderStep(step)}
+            formatLAK={formatLAK}
+            t={t}
+            currentLang={currentLang}
+            handleStatusChange={handleStatusChange}
+            deleteOrder={deleteOrder}
+            showToast={showToast}
+            askConfirmation={askConfirmation}
+            getStatusBadgeClass={getStatusBadgeClass}
+            getStatusIcon={getStatusIcon}
+            getPaymentStatusBadge={getPaymentStatusBadge}
+            getPaymentStatusIcon={getPaymentStatusIcon}
+            setLightbox={setLightbox}
+          />
+        )}
+        {activeOrderStep === 3 && (
+          <OrderDeliveryPage
+            order={selectedOrder}
+            onBack={() => setSelectedOrder(null)}
+            onSelectStep={(step) => setActiveOrderStep(step)}
+            formatLAK={formatLAK}
+            currentLang={currentLang}
+            handleStatusChange={handleStatusChange}
+            onUpdatePayment={updateOrderPaymentStatus}
+            showToast={showToast}
+            setLightbox={setLightbox}
+          />
+        )}
+        {activeOrderStep === 4 && (
+          <OrderCompletedSummaryPage
+            order={selectedOrder}
+            onBack={() => setSelectedOrder(null)}
+            onSelectStep={(step) => setActiveOrderStep(step)}
+            formatLAK={formatLAK}
+            currentLang={currentLang}
+            setLightbox={setLightbox}
+          />
         )}
       </>
     );
   }
+
 
   return (
     <div className="space-y-8 animate-fade-in print:hidden text-slate-800 w-full">
@@ -525,22 +471,28 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
 
       {/* Filter tab bar only on 'orders' tab */}
       {initialSubTab === 'orders' && (
-        <div className="flex flex-wrap gap-1.5 p-1 bg-white rounded-2xl border max-w-3xl">
-          {statuses.map(st => (
-            <button
-              key={st}
-              onClick={() => setFilterStatus(st)}
-              className={`
-                px-5 py-3 rounded-xl text-xs sm:text-sm font-extrabold transition-all min-h-[46px]
-                ${filterStatus === st 
-                  ? 'bg-primary-navy text-white shadow-md' 
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                }
-              `}
-            >
-              {st === 'All' ? (currentLang === 'lo' ? 'ທັງໝົດ' : 'All') : t(`status.${st}`)}
-            </button>
-          ))}
+        <div className="flex flex-wrap gap-1.5 p-1 bg-white rounded-2xl border border-slate-100 shadow-xs max-w-4xl">
+          {statuses.map(st => {
+            const isActive = filterStatus === st.id;
+            const label = currentLang === 'lo' ? st.labelLo : st.labelEn;
+
+            return (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => setFilterStatus(st.id)}
+                className={`
+                  px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all min-h-[44px] cursor-pointer
+                  ${isActive 
+                    ? 'bg-slate-900 text-white shadow-md' 
+                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+                  }
+                `}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       )}
 

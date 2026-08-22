@@ -15,13 +15,21 @@ import {
   Mail,
   Phone,
   MapPin,
-  Check
+  Check,
+  Truck,
+  CreditCard,
+  Plus
 } from 'lucide-react';
+import { CourierManagementModal } from '../../orders/components/CourierManagementModal';
+import { BankManagementModal } from '../../finance/components/BankManagementModal';
 
 export function ProfileSettingsPage() {
-  const { showToast, currency, setCurrency } = useApp();
+  const { showToast, currency, setCurrency, couriers, bankAccounts } = useApp();
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
+
+  const [isCourierModalOpen, setIsCourierModalOpen] = useState(false);
+  const [isBankModalOpen, setIsBankModalOpen] = useState(false);
 
   // Form states
   const [profileName, setProfileName] = useState('ຮ້ານ ສົມສິ່ງພິມ (Som Sing Owner)');
@@ -291,6 +299,107 @@ export function ProfileSettingsPage() {
           </div>
         </div>
 
+        {/* SECTION 3: COURIERS & LOGISTICS MASTER DATA */}
+        <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-sky-50 text-sky-600 rounded-2xl flex items-center justify-center border border-sky-100">
+                <Truck className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-slate-900">
+                  {currentLang === 'lo' ? 'ຈັດການບໍລິສັດຂົນສົ່ງ (Couriers & Logistics)' : 'Shipping Couriers & Logistics'}
+                </h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  {currentLang === 'lo' ? 'ເພີ່ມ, ແກ້ໄຂ ແລະ ອັບໂຫຼດໂລໂກ້ບໍລິສັດຂົນສົ່ງສຳລັບລະບົບ' : 'Manage shipping company names, logos and default fees.'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsCourierModalOpen(true)}
+              className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-black shadow-md shadow-sky-600/20 active:scale-95 transition flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{currentLang === 'lo' ? '+ ເພີ່ມບໍລິສັດຂົນສົ່ງ' : '+ Add Courier'}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
+            {(couriers || []).map((c: any) => (
+              <div
+                key={c.id}
+                onClick={() => setIsCourierModalOpen(true)}
+                className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-sky-300 hover:bg-sky-50/40 transition flex flex-col items-center text-center gap-2 cursor-pointer group"
+              >
+                <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 flex items-center justify-center p-1 shadow-xs group-hover:scale-105 transition overflow-hidden">
+                  {c.logoUrl ? (
+                    <img src={c.logoUrl} alt={c.name} className="w-full h-full object-contain" />
+                  ) : (
+                    <Truck className="w-6 h-6 text-slate-400" />
+                  )}
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-xs font-black text-slate-900 group-hover:text-sky-700">{c.shortName || c.name}</div>
+                  <div className="text-[10.5px] text-slate-500 font-medium">{c.fee ? `${c.fee.toLocaleString()}₭` : 'ຟຣີ'}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* SECTION 4: BANK ACCOUNTS & PAYMENT METHODS */}
+        <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center border border-emerald-100">
+                <CreditCard className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-slate-900">
+                  {currentLang === 'lo' ? 'ຈັດການບັນຊີທະນາຄານ (Bank Accounts & QR)' : 'Bank Accounts & Payment QR'}
+                </h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  {currentLang === 'lo' ? 'ບັນຊີທະນາຄານສຳລັບໃຫ້ລູກຄ້າໂອນເງິນ ແລະ ສະແກນ QR Code' : 'Manage bank accounts and QR codes for payment checkout.'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsBankModalOpen(true)}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/20 active:scale-95 transition flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{currentLang === 'lo' ? '+ ເພີ່ມບັນຊີທະນາຄານ' : '+ Add Bank Account'}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+            {(bankAccounts || []).map((b: any) => (
+              <div
+                key={b.id}
+                onClick={() => setIsBankModalOpen(true)}
+                className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-emerald-300 hover:bg-emerald-50/40 transition flex items-center gap-3.5 cursor-pointer group"
+              >
+                <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center p-1 shrink-0 overflow-hidden group-hover:scale-105 transition">
+                  {b.qrCodeUrl ? (
+                    <img src={b.qrCodeUrl} alt={b.bankName} className="w-full h-full object-contain" />
+                  ) : (
+                    <CreditCard className="w-6 h-6 text-emerald-600" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-black text-slate-900 truncate group-hover:text-emerald-700">{b.bankName}</div>
+                  <div className="text-[11px] text-slate-600 font-mono font-bold">{b.accountNumber}</div>
+                  <div className="text-[10px] text-slate-400 truncate">{b.accountName}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Action Footers */}
         <div className="flex justify-end gap-4 pt-4">
           <button
@@ -303,6 +412,20 @@ export function ProfileSettingsPage() {
         </div>
 
       </form>
+
+      {/* Courier Modal */}
+      <CourierManagementModal
+        isOpen={isCourierModalOpen}
+        onClose={() => setIsCourierModalOpen(false)}
+        currentLang={currentLang}
+      />
+
+      {/* Bank Account Modal */}
+      <BankManagementModal
+        isOpen={isBankModalOpen}
+        onClose={() => setIsBankModalOpen(false)}
+        currentLang={currentLang}
+      />
     </div>
   );
 }

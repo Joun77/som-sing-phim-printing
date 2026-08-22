@@ -1,6 +1,11 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { useGSAP } from '@gsap/react'
 import { useShop } from '../context/ShopContext.tsx'
 import { SparkleIcon } from './icons.tsx'
+
+gsap.registerPlugin(ScrollTrigger)
 
 interface MaterialFinish {
   id: string
@@ -76,11 +81,76 @@ export default function MaterialExplorer() {
   const [activeFinish, setActiveFinish] = useState<MaterialFinish>(FINISHES[0])
   const { language } = useShop()
   const isLao = language === 'lo'
+  const containerRef = useRef<HTMLElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
+
+  useGSAP(() => {
+    if (!containerRef.current) return
+
+    gsap.fromTo(
+      '.material-explorer-head',
+      { y: 25, opacity: 0.3 },
+      {
+        y: 0,
+        opacity: 1,
+        duration: 0.6,
+        ease: 'power2.out',
+        scrollTrigger: {
+          trigger: containerRef.current,
+          start: 'top 85%',
+          toggleActions: 'play none none none'
+        }
+      }
+    )
+
+    gsap.fromTo(
+      '.material-picker-item',
+      { x: -20, opacity: 0.3 },
+      {
+        x: 0,
+        opacity: 1,
+        stagger: 0.06,
+        duration: 0.5,
+        ease: 'power2.out',
+        scrollTrigger: {
+          trigger: '.material-picker-list',
+          start: 'top 80%',
+          toggleActions: 'play none none none'
+        }
+      }
+    )
+
+    gsap.fromTo(
+      '.material-preview-stage',
+      { scale: 0.96, opacity: 0.4 },
+      {
+        scale: 1,
+        opacity: 1,
+        duration: 0.6,
+        ease: 'power2.out',
+        scrollTrigger: {
+          trigger: '.material-preview-stage',
+          start: 'top 80%',
+          toggleActions: 'play none none none'
+        }
+      }
+    )
+  }, { scope: containerRef })
+
+  // Trigger smooth card flip/fade on active finish change
+  useGSAP(() => {
+    if (!cardRef.current) return
+    gsap.fromTo(
+      cardRef.current,
+      { opacity: 0.4, scale: 0.96, rotateY: -8 },
+      { opacity: 1, scale: 1, rotateY: 0, duration: 0.45, ease: 'power2.out' }
+    )
+  }, { dependencies: [activeFinish.id] })
 
   return (
-    <section className="section material-explorer-section">
+    <section className="section material-explorer-section" ref={containerRef}>
       <div className="container">
-        <div className="section-head text-center">
+        <div className="section-head text-center material-explorer-head">
           <div className="section-badge inline-flex items-center gap-2">
             <div className="cmyk-bar">
               <span className="cmyk-dot cmyk-dot--c" />
@@ -133,7 +203,7 @@ export default function MaterialExplorer() {
 
           {/* 3D Interactive Swatch Preview Card */}
           <div className="material-preview-stage">
-            <div className="material-card-3d">
+            <div className="material-card-3d" ref={cardRef}>
               <div
                 className="material-card-surface"
                 style={{

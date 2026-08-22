@@ -563,4 +563,32 @@ export async function fetchDigitalProof(orderId: string): Promise<{ order_id: st
   }
 }
 
+export async function fetchCouriers(): Promise<any[]> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/public/couriers`)
+    if (!res.ok) throw new Error(`Status ${res.status}`)
+    const json = await res.json()
+    if (json.status === 'success' && Array.isArray(json.data) && json.data.length > 0) {
+      return json.data
+    }
+    return []
+  } catch {
+    return []
+  }
+}
+
+export async function fetchPaymentMethods(): Promise<any[]> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/public/payment-methods`)
+    if (!res.ok) throw new Error(`Status ${res.status}`)
+    const json = await res.json()
+    if (json.status === 'success' && Array.isArray(json.data) && json.data.length > 0) {
+      return json.data
+    }
+    return []
+  } catch {
+    return []
+  }
+}
+
 

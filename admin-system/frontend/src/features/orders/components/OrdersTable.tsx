@@ -57,7 +57,6 @@ export default function OrdersTable({
               getPaymentStatusBadge={getPaymentStatusBadge}
               getPaymentStatusIcon={getPaymentStatusIcon}
               onViewDetails={onViewDetails}
-              onOpenQuoteModal={onOpenQuoteModal}
               isSelected={selectedOrder?.id === ord.id}
               focusRef={selectedOrder?.id === ord.id ? focusRef : null}
             />

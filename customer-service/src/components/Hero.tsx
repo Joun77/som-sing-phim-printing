@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useShop } from '../context/ShopContext.tsx'
+import gsap from 'gsap'
+import { useGSAP } from '@gsap/react'
 import { 
   ClockIcon, 
   PrinterIcon, 
@@ -13,10 +15,25 @@ import {
   StarIcon
 } from './icons.tsx'
 
+import PrinterLiveSimulator from './PrinterLiveSimulator.tsx'
+
 export default function Hero() {
   const [trackInput, setTrackInput] = useState('')
   const navigate = useNavigate()
-  const { t, language } = useShop()
+  const { t } = useShop()
+  const heroRef = useRef<HTMLElement>(null)
+
+  useGSAP(() => {
+    const tl = gsap.timeline({ defaults: { ease: 'power3.out' } })
+
+    tl.from('.hero-badge-group', { opacity: 0, y: -20, duration: 0.6 })
+      .from('.hero-title', { opacity: 0, y: 30, duration: 0.8 }, '-=0.4')
+      .from('.hero-sub', { opacity: 0, y: 20, duration: 0.6 }, '-=0.4')
+      .from('.hero-search-box', { opacity: 0, y: 20, scale: 0.96, duration: 0.6 }, '-=0.3')
+      .from('.hero-cta .btn', { opacity: 0, y: 15, stagger: 0.15, duration: 0.5 }, '-=0.3')
+      .from('.hero-points li', { opacity: 0, y: 15, stagger: 0.1, duration: 0.4 }, '-=0.3')
+      .from('.hero-visual', { opacity: 0, x: 40, scale: 0.95, duration: 0.9 }, '-=0.8')
+  }, { scope: heroRef })
 
   const handleTrackSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,7 +45,7 @@ export default function Hero() {
   }
 
   return (
-    <section className="hero">
+    <section className="hero" ref={heroRef}>
       {/* Dynamic Background Glows */}
       <div className="hero-bg" aria-hidden="true">
         <div className="hero-blob hero-blob--1" />
@@ -113,67 +130,9 @@ export default function Hero() {
           </ul>
         </div>
 
-        {/* Right: Modern Luxury Glass Showcase Card */}
+        {/* Right: Live Interactive Industrial Press Simulation */}
         <div className="hero-visual">
-          <div className="hero-glass-card">
-            {/* Top Bar */}
-            <div className="hero-glass-header">
-              <div className="glass-dots">
-                <span className="dot dot--red" />
-                <span className="dot dot--yellow" />
-                <span className="dot dot--green" />
-              </div>
-              <div className="glass-title">SOM SING PHIM · DIGITAL & OFFSET PRESS</div>
-              <span className="glass-live-pill">CMYK PROOF</span>
-            </div>
-
-            {/* Showcase Visual Content */}
-            <div className="hero-glass-body">
-              <div className="glass-preview-banner">
-                <div className="preview-tag">NEW ARRIVAL</div>
-                <h4>{language === 'en' ? 'Waterproof Glossy PP Sticker' : 'ສະຕິກເກີ PP ຂາວເງົາກັນນ້ຳ 100%'}</h4>
-                <p>{language === 'en' ? 'Ultra-HD print, precision kiss-cut, easy to peel.' : 'ພິມລະອຽດສູງ ໄດຄັດຄົມຊັດ ພ້ອມລອກຕິດ'}</p>
-                <div className="preview-price-tag">
-                  <span>{t('startPriceLabel')}</span>
-                  <strong>₭ 35,000 / Sheet</strong>
-                </div>
-              </div>
-
-              {/* Dynamic Feature Badges */}
-              <div className="glass-features-grid">
-                <div className="feature-pill">
-                  <CheckIcon size={14} /> <span>{language === 'en' ? '100% Waterproof & Freeze-proof' : 'ກັນນ້ຳ ແຊ່ຕູ້ເຢັນໄດ້'}</span>
-                </div>
-                <div className="feature-pill">
-                  <CheckIcon size={14} /> <span>{language === 'en' ? 'Kiss-Cut & Die-Cut Single' : 'ໄດຄັດ 50% & 100%'}</span>
-                </div>
-                <div className="feature-pill">
-                  <CheckIcon size={14} /> <span>{language === 'en' ? 'Up to 20% Volume Tier Discount' : 'ສ່ວນຫຼຸດ Tier ສູງສຸດ 20%'}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Floating Live Badges */}
-            <div className="hero-float-card hero-float-card--1 animate-float-slow">
-              <div className="float-icon-box float-icon-box--gold">
-                <PrinterIcon size={20} />
-              </div>
-              <div>
-                <strong>{language === 'en' ? 'Express 24-48h' : 'ພິມດ່ວນ 24-48 ຊມ.'}</strong>
-                <small>{language === 'en' ? 'Fast professional digital print' : 'ຮອງຮັບງານດ່ວນທຸກປະເພດ'}</small>
-              </div>
-            </div>
-
-            <div className="hero-float-card hero-float-card--2 animate-float-delayed">
-              <div className="float-icon-box float-icon-box--green">
-                <TruckIcon size={20} />
-              </div>
-              <div>
-                <strong>{language === 'en' ? 'Nationwide Delivery' : 'ຈັດສົ່ງທົ່ວປະເທດລາວ'}</strong>
-                <small>Anousith & HAL Express</small>
-              </div>
-            </div>
-          </div>
+          <PrinterLiveSimulator />
         </div>
       </div>
     </section>

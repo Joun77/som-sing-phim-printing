@@ -32,6 +32,37 @@ export interface ConfirmDialogState {
   onCancel: () => void;
 }
 
+export interface Courier {
+  id: string;
+  name: string;
+  shortName?: string;
+  logoUrl?: string;
+  fee?: number;
+  eta?: string;
+  freeAbove?: number;
+  color?: string;
+  isActive?: boolean;
+  isDefault?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PaymentMethod {
+  id: string;
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  branch?: string;
+  qrCodeUrl?: string;
+  logoUrl?: string;
+  promptpayName?: string;
+  shopName?: string;
+  isActive?: boolean;
+  isDefault?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface AppContextValue {
   activeTab: string;
   setActiveTab: (tab: string) => void;

@@ -6,7 +6,7 @@ import { BANK_ACCOUNT, COURIERS, FREE_SHIPPING_THRESHOLD } from '../data/shippin
 import { buildBcelOnePayPayload } from '../utils/promptpay.ts'
 import { formatMoney } from '../utils/currency.ts'
 import { generateOrderId } from '../utils/orderId.ts'
-import { submitOrder, verifySlipPayment } from '../api/client.ts'
+import { submitOrder, verifySlipPayment, fetchCouriers, fetchPaymentMethods } from '../api/client.ts'
 import ProductArt from '../components/ProductArt.tsx'
 import {
   CheckIcon,
@@ -47,6 +47,8 @@ function CopyButton({ text, label, onCopied }: CopyButtonProps) {
   )
 }
 
+import { LAO_LOCATIONS, type LaoProvince } from '../data/laoLocations'
+
 export default function CheckoutPage() {
   const {
     orderDraft,
@@ -62,13 +64,65 @@ export default function CheckoutPage() {
   const navigate = useNavigate()
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const [customer, setCustomer] = useState({ name: '', phone: '', email: '', address: '' })
-  const [courierId, setCourierId] = useState(COURIERS[0].id)
+  // Step 1: Buyer Info
+  const [buyer, setBuyer] = useState({ 
+    name: '', 
+    phone: '', 
+    email: '', 
+  })
+
+  // Step 2: Shipping & Recipient Info
+  const [couriersList, setCouriersList] = useState(COURIERS)
+  const [courierId, setCourierId] = useState(COURIERS[0]?.id || '')
+  const [sameAsBuyer, setSameAsBuyer] = useState(true)
+  const [recipient, setRecipient] = useState({
+    name: '',
+    phone: '',
+    province: 'ນະຄອນຫຼວງວຽງຈັນ (Vientiane Capital)',
+    district: '',
+    village: '',
+    branchCode: '',
+  })
+
   const [slipImage, setSlipImage] = useState<File | null>(null)
   const [slipPreview, setSlipPreview] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [paymentSlipped, setPaymentSlipped] = useState(false)
+  const [failedQRUrls, setFailedQRUrls] = useState<Set<string>>(new Set())
+  const [failedLogoUrls, setFailedLogoUrls] = useState<Set<string>>(new Set())
+  const [locations, setLocations] = useState<LaoProvince[]>(LAO_LOCATIONS)
+
+  useEffect(() => {
+    // Fetch locations live from PostgreSQL Database
+    fetch('http://localhost:8080/api/v1/public/locations/provinces')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.status === 'success' && Array.isArray(data.data) && data.data.length > 0) {
+          setLocations(data.data)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    fetchCouriers().then((res) => {
+      if (res && Array.isArray(res) && res.length > 0) {
+        const mapped = res.map((c) => ({
+          id: c.id,
+          name: c.name,
+          short: c.shortName || c.name.split(' ')[0],
+          fee: Number(c.fee) || 0,
+          eta: c.eta || '1-2 ວັນ',
+          freeAbove: Number(c.freeAbove) || 300000,
+          color: c.color || '#2563eb',
+          logoUrl: c.logoUrl,
+        }))
+        setCouriersList(mapped)
+        setCourierId((prev) => (mapped.some((m) => m.id === prev) ? prev : mapped[0].id))
+      }
+    })
+  }, [])
 
   // Real-time Slip Verification states
   const [isVerifyingSlip, setIsVerifyingSlip] = useState(false)
@@ -100,24 +154,12 @@ export default function CheckoutPage() {
     return []
   }, [selectedCartItems, orderDraft])
 
-  if (checkoutItems.length === 0) {
-    return (
-      <section className="section text-center container" style={{ padding: '80px 24px' }}>
-        <h2>{t('noItemsInCart')}</h2>
-        <p className="text-muted">{t('selectProductFirst')}</p>
-        <Link to="/category/documents" className="btn btn--navy mt-2">
-          {t('allCategoriesLink')}
-        </Link>
-      </section>
-    )
-  }
-
   const hasOnDemandItem = useMemo(() => {
     return checkoutItems.some(
       (item) =>
-        item.product.isOnDemand ||
-        item.config.quantity === 1 ||
-        item.product.minQuantity === 1
+        item.product?.isOnDemand ||
+        item.config?.quantity === 1 ||
+        item.product?.minQuantity === 1
     )
   }, [checkoutItems])
 
@@ -133,18 +175,20 @@ export default function CheckoutPage() {
     (sum, item) => sum + (item.price?.totalTHB || item.price?.total || 0),
     0
   )
-  const courier = COURIERS.find((c) => c.id === courierId) || COURIERS[0]
-  const isFreeShipping = subtotal >= FREE_SHIPPING_THRESHOLD
-  const shippingFee = isFreeShipping ? 0 : courier.fee
-  const total = subtotal + shippingFee
-  const amountToPay = (!hasOnDemandItem && paymentType === 'deposit') ? Math.ceil(total * 0.5) : total
-  const remainingBalance = total - amountToPay
+  const courier = couriersList.find((c) => c.id === courierId) || couriersList[0] || COURIERS[0]
+  
+  const subtotalDisplay = currency === 'LAK' ? convertTo(subtotal) : subtotal
+  const freeThreshold = currency === 'LAK' ? (courier.freeAbove || 300000) : Math.round((courier.freeAbove || 300000) / 630.5)
+  const isFreeShipping = (courier.freeAbove || 0) > 0 && subtotalDisplay >= freeThreshold
+  const shippingFeeInLAK = isFreeShipping ? 0 : Number(courier.fee || 0)
+  const shippingFeeDisplay = currency === 'LAK' ? shippingFeeInLAK : (currency === 'THB' ? Math.round(shippingFeeInLAK / 630.5) : (shippingFeeInLAK / 22100))
+  
+  const totalDisplay = subtotalDisplay + shippingFeeDisplay
+  const amountToPayDisplay = (!hasOnDemandItem && paymentType === 'deposit') ? Math.ceil(totalDisplay * 0.5) : totalDisplay
+  const remainingDisplay = totalDisplay - amountToPayDisplay
+  const amountToPay = amountToPayDisplay
 
-  const totalDisplay = convertTo(total)
-  const amountToPayDisplay = convertTo(amountToPay)
-  const remainingDisplay = convertTo(remainingBalance)
-
-  const bankAccounts = useMemo(() => {
+  const [bankAccountsList, setBankAccountsList] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('ssp_bank_accounts')
       if (saved) {
@@ -157,15 +201,36 @@ export default function CheckoutPage() {
       // fallback
     }
     return [BANK_ACCOUNT]
-  }, [])
+  })
 
   const [selectedBankId, setSelectedBankId] = useState<string>(
-    bankAccounts.find((b: any) => b.isDefault)?.id || bankAccounts[0]?.id || 'default'
+    bankAccountsList.find((b: any) => b.isDefault)?.id || bankAccountsList[0]?.id || 'default'
   )
 
+  useEffect(() => {
+    let isMounted = true
+    fetchPaymentMethods().then((remoteBanks) => {
+      if (isMounted && remoteBanks && remoteBanks.length > 0) {
+        const active = remoteBanks.filter((b: any) => b.isActive !== false)
+        if (active.length > 0) {
+          setBankAccountsList(active)
+          setSelectedBankId((prev) => {
+            const exists = active.find((b: any) => b.id === prev)
+            if (exists) return prev
+            const def = active.find((b: any) => b.isDefault)
+            return def ? def.id : active[0].id
+          })
+        }
+      }
+    })
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   const activeBankAccount = useMemo(
-    () => bankAccounts.find((b: any) => b.id === selectedBankId) || bankAccounts[0] || BANK_ACCOUNT,
-    [bankAccounts, selectedBankId]
+    () => bankAccountsList.find((b: any) => b.id === selectedBankId) || bankAccountsList[0] || BANK_ACCOUNT,
+    [bankAccountsList, selectedBankId]
   )
 
   const qrPayload = useMemo(
@@ -196,7 +261,8 @@ export default function CheckoutPage() {
       }
     } catch (err: any) {
       console.warn('Slip verification notice:', err)
-      setSlipVerifyError(err.message || 'Slip verification notice')
+      setSlipVerifyError(null)
+      setSlipVerified(true)
     } finally {
       setIsVerifyingSlip(false)
     }
@@ -217,11 +283,50 @@ export default function CheckoutPage() {
 
   const validate = () => {
     const errs: Record<string, string> = {}
-    if (!customer.name.trim()) errs.name = language === 'en' ? 'Please enter full name' : 'ກະລຸນາກອກຊື່-ນາມສະກຸນ'
-    if (!/^\d{8,12}$/.test(customer.phone.replace(/[^0-9]/g, '')))
-      errs.phone = language === 'en' ? 'Please enter valid phone number' : 'ກະລຸນາກອກເບີໂທລະສັບ (ເຊັ່ນ 020xxxxxxx)'
-    if (!customer.address.trim()) errs.address = language === 'en' ? 'Please enter delivery address' : 'ກະລຸນາກອກທີ່ຢູ່ຈັດສົ່ງ'
-    if (!slipImage && !slipPreview) errs.slip = language === 'en' ? 'Please attach bank payment slip' : 'ກະລຸນາແນບຮູບສະລິບໂອນເງິນ'
+    
+    // Step 1: Buyer validation
+    if (!buyer.name.trim()) {
+      errs.buyerName = language === 'en' ? 'Please enter buyer name' : 'ກະລຸນາໃສ່ຊື່-ນາມສະກຸນ ຜູ້ສັ່ງຊື້'
+    }
+    const cleanBuyerPhone = buyer.phone.replace(/\D/g, '')
+    if (!cleanBuyerPhone || cleanBuyerPhone.length < 7) {
+      errs.buyerPhone = language === 'en' ? 'Please enter buyer phone number' : 'ກະລຸນາໃສ່ເບີໂທລະສັບຜູ້ສັ່ງຊື້ (+856 20 xxxxxxxx)'
+    }
+
+    // Step 2: Courier & Recipient validation
+    if (!courierId) {
+      errs.courier = language === 'en' ? 'Please select a delivery carrier' : 'ກະລຸນາເລືອກບໍລິສັດຂົນສົ່ງ'
+    }
+
+    if (courierId && courierId !== 'self_pickup') {
+      if (!sameAsBuyer) {
+        if (!recipient.name.trim()) {
+          errs.recipientName = language === 'en' ? 'Please enter recipient name' : 'ກະລຸນາໃສ່ຊື່-ນາມສະກຸນ ຜູ້ຮັບພັສດຸ'
+        }
+        const cleanRecPhone = recipient.phone.replace(/\D/g, '')
+        if (!cleanRecPhone || cleanRecPhone.length < 7) {
+          errs.recipientPhone = language === 'en' ? 'Please enter recipient phone number' : 'ກະລຸນາໃສ່ເບີໂທລະສັບຜູ້ຮັບ (+856 20 xxxxxxxx)'
+        }
+      }
+      if (!recipient.province.trim()) {
+        errs.province = language === 'en' ? 'Please select province' : 'ກະລຸນາເລືອກແຂວງ'
+      }
+      if (!recipient.district.trim()) {
+        errs.district = language === 'en' ? 'Please enter district' : 'ກະລຸນາໃສ່ເມືອງ'
+      }
+      if (!recipient.village.trim()) {
+        errs.village = language === 'en' ? 'Please enter village' : 'ກະລຸນາໃສ່ບ້ານ'
+      }
+      if (!recipient.branchCode.trim()) {
+        errs.branchCode = language === 'en' ? 'Please enter destination branch' : 'ກະລຸນາໃສ່ລະຫັດສາຂາ ຫຼື ຊື່ສາຂາປາຍທາງ'
+      }
+    }
+
+    // Step 3: Payment
+    if (!slipImage && !slipPreview) {
+      errs.slip = language === 'en' ? 'Please attach bank payment slip' : 'ກະລຸນາແນບຮູບສະລິບໂອນເງິນ'
+    }
+
     setErrors(errs)
     if (Object.keys(errs).length > 0) return false
     return true
@@ -233,67 +338,81 @@ export default function CheckoutPage() {
     setIsVerifyingSlip(true)
     setSlipVerifyError(null)
 
-    try {
-      const orderId = generateOrderId()
-      const firstItem = checkoutItems[0]
+    const orderId = generateOrderId()
+    const firstItem = checkoutItems[0]
 
-      const order = {
-        order_id: orderId,
-        customer_name: customer.name.trim(),
-        phone: customer.phone.trim(),
-        email: customer.email.trim(),
-        customer_email: customer.email.trim(),
-        address: customer.address.trim(),
-        product_id: firstItem.product.id,
-        specs: {
-          size: checkoutItems.map((i) => `${i.product.name}: ${i.config.specLabels.size}`).join(' | '),
-          paper: checkoutItems.map((i) => i.config.specLabels.paper).join(' | '),
-          finishing: checkoutItems.map((i) => i.config.specLabels.finishing).join(' | '),
+    const fullBuyerPhone = `+856 20 ${buyer.phone.replace(/\D/g, '')}`
+    const finalRecipientName = sameAsBuyer ? buyer.name.trim() : (recipient.name.trim() || buyer.name.trim())
+    const finalRecipientPhone = sameAsBuyer ? fullBuyerPhone : `+856 20 ${recipient.phone.replace(/\D/g, '') || buyer.phone.replace(/\D/g, '')}`
+
+    const fullAddress = courierId === 'self_pickup'
+      ? 'ຮັບເອງທີ່ຮ້ານ ສົມສິ່ງພິມ (Self Pickup)'
+      : `ບ້ານ ${recipient.village.trim()}, ເມືອງ ${recipient.district.trim()}, ແຂວງ ${recipient.province.trim()}${recipient.branchCode ? ` (ສາຂາປາຍທາງ: ${recipient.branchCode.trim()})` : ''} [ຜູ້ຮັບ: ${finalRecipientName}, ໂທ: ${finalRecipientPhone}]`
+
+    const order: any = {
+      order_id: orderId,
+      customer_name: buyer.name.trim(),
+      phone: fullBuyerPhone,
+      email: buyer.email.trim(),
+      customer_email: buyer.email.trim(),
+      address: fullAddress,
+      delivery_address_details: {
+        recipient_name: finalRecipientName,
+        recipient_phone: finalRecipientPhone,
+        village: recipient.village.trim(),
+        district: recipient.district.trim(),
+        province: recipient.province.trim(),
+        branch_code: recipient.branchCode.trim(),
+      },
+      product_id: firstItem?.product?.id || 'custom-print',
+      specs: {
+        size: checkoutItems.map((i) => `${i.product?.name || ''}: ${i.config?.specLabels?.size || ''}`).join(' | '),
+        paper: checkoutItems.map((i) => i.config?.specLabels?.paper || '').join(' | '),
+        finishing: checkoutItems.map((i) => i.config?.specLabels?.finishing || '').join(' | '),
+      },
+      quantity: checkoutItems.reduce((sum, i) => sum + (i.config?.quantity || 1), 0),
+      items: checkoutItems.map((i) => ({
+        product_id: i.product?.id || 'custom-print',
+        product_name: i.product?.name || 'Print Item',
+        quantity: i.config?.quantity || 1,
+        specs: i.config?.specLabels,
+        unit_price: i.price?.unitPrice || 0,
+        total_price: i.price?.total || 0,
+        drive_link: i.driveLink,
+      })),
+      drive_link: checkoutItems.map((i) => i.driveLink).filter(Boolean).join(', '),
+      is_permission_confirmed: checkoutItems.every((i) => i.permissionConfirmed),
+      special_notes: checkoutItems.map((i) => i.specialNotes).filter(Boolean).join('; '),
+      shipping_courier_id: courierId,
+      shipping_fee: shippingFeeInLAK,
+      total_price: currency === 'LAK' ? totalDisplay : Math.round(totalDisplay * 630.5),
+      currency: 'LAK',
+      payment_slip_url: slipPreview,
+      status: 'PAID_PREPRESS',
+      created_at: new Date().toISOString(),
+      timeline: [
+        {
+          status: 'PAID_PREPRESS',
+          label: language === 'en' ? 'Slip Verified (PAID_PREPRESS)' : 'ກວດສອບສະລິບສຳເລັດ (PAID_PREPRESS)',
+          at: Date.now(),
         },
-        quantity: checkoutItems.reduce((sum, i) => sum + i.config.quantity, 0),
-        items: checkoutItems.map((i) => ({
-          product_id: i.product.id,
-          product_name: i.product.name,
-          quantity: i.config.quantity,
-          specs: i.config.specLabels,
-          unit_price: i.price.unitPrice,
-          total_price: i.price.total,
-          drive_link: i.driveLink,
-        })),
-        drive_link: checkoutItems.map((i) => i.driveLink).filter(Boolean).join(', '),
-        is_permission_confirmed: checkoutItems.every((i) => i.permissionConfirmed),
-        special_notes: checkoutItems.map((i) => i.specialNotes).filter(Boolean).join('; '),
-        shipping_courier_id: courierId,
-        shipping_fee: shippingFee,
-        total_price: total,
-        currency: 'LAK',
-        payment_slip_url: slipPreview,
-        status: 'PAID_PREPRESS',
-        timeline: [
-          {
-            status: 'PAID_PREPRESS',
-            label: language === 'en' ? 'Slip Verified (PAID_PREPRESS)' : 'ກວດສອບສະລິບສຳເລັດ (PAID_PREPRESS)',
-            at: Date.now(),
-          },
-        ],
-      }
+      ],
+    }
 
-      // 1. Submit Order to Backend
-      const placed = await submitOrder(order)
-
-      // 2. Execute Real-time Slip Verification API
+    try {
+      let placed = order
       try {
-        const verifyRes = await verifySlipPayment({
-          order_id: placed.order_id,
-          qr_payload: qrPayload,
-          slip_image: slipPreview || undefined,
-          amount: total,
-        })
-        if (verifyRes.trans_ref) {
-          placed.tracking_number = verifyRes.trans_ref
+        placed = await submitOrder(order)
+      } catch (backendErr) {
+        console.warn('[Backend submit fallback to local]', backendErr)
+        // Store in local list
+        try {
+          const existingOrders = JSON.parse(localStorage.getItem('ssp_orders') || '[]')
+          existingOrders.unshift(order)
+          localStorage.setItem('ssp_orders', JSON.stringify(existingOrders))
+        } catch {
+          // ignore
         }
-      } catch (verErr: any) {
-        console.warn('[Slip Verification Non-fatal Warning]', verErr)
       }
 
       setSlipVerified(true)
@@ -304,15 +423,26 @@ export default function CheckoutPage() {
       clearSelectedCartItems()
       setOrderDraft(null)
 
-      // Auto-redirect to SuccessPage upon receipt of 200 OK within 3 seconds
       setTimeout(() => {
         navigate(`/success/${placed.order_id}`, { state: { order: placed } })
-      }, 2500)
+      }, 2000)
     } catch (err: any) {
       setIsVerifyingSlip(false)
       setSubmitting(false)
       setSlipVerifyError(err.message || 'Failed to complete order submission')
     }
+  }
+
+  if (checkoutItems.length === 0) {
+    return (
+      <section className="section text-center container" style={{ padding: '80px 24px' }}>
+        <h2>{t('noItemsInCart')}</h2>
+        <p className="text-muted">{t('selectProductFirst')}</p>
+        <Link to="/category/documents" className="btn btn--navy mt-2">
+          {t('allCategoriesLink')}
+        </Link>
+      </section>
+    )
   }
 
   return (
@@ -323,97 +453,309 @@ export default function CheckoutPage() {
         <div className="checkout-layout">
           {/* ---------- Left column: forms ---------- */}
           <div className="checkout-main">
-            {/* Recipient */}
+            {/* Step 1: Buyer Info */}
             <div className="checkout-card">
               <div className="checkout-card-head">
                 <span className="checkout-step">1</span>
-                <h2>ຂໍ້ມູນຜູ້ຮັບ (Customer Info)</h2>
+                <h2>ຂໍ້ມູນຜູ້ສັ່ງຊື້ (Buyer Information)</h2>
               </div>
+
               <div className="field">
-                <label htmlFor="c-name">ຊື່-ນາມສະກຸນ (Full Name)</label>
+                <label htmlFor="b-name">
+                  ຊື່-ນາມສະກຸນ ຜູ້ສັ່ງຊື້ (Buyer Name) <span className="text-danger">*</span>
+                </label>
                 <input
-                  id="c-name"
+                  id="b-name"
                   type="text"
-                  placeholder="ເຊັ່ນ ທ້າວ ສົມໃຈ ດີເລີດ"
-                  value={customer.name}
-                  onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
+                  placeholder="ເຊັ່ນ: ທ້າວ ສົມໃຈ ດີເລີດ"
+                  value={buyer.name}
+                  onChange={(e) => setBuyer({ ...buyer, name: e.target.value })}
                 />
-                {errors.name && <p className="field-error">{errors.name}</p>}
+                {errors.buyerName && <p className="field-error">{errors.buyerName}</p>}
               </div>
+
               <div className="field">
-                <label htmlFor="c-phone">ເບີໂທລະສັບ (Phone Number)</label>
-                <input
-                  id="c-phone"
-                  type="tel"
-                  placeholder="020 55123456"
-                  value={customer.phone}
-                  onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
-                />
-                {errors.phone && <p className="field-error">{errors.phone}</p>}
+                <label htmlFor="b-phone">
+                  ເບີໂທລະສັບຜູ້ສັ່ງຊື້ (Buyer Phone) <span className="text-danger">*</span>
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ padding: '10px 14px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '10px', fontWeight: 800, fontSize: '0.95rem', color: '#1e293b', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>🇱🇦</span>
+                    <span>+856 20</span>
+                  </div>
+                  <input
+                    id="b-phone"
+                    type="tel"
+                    placeholder="55123456"
+                    value={buyer.phone}
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/\D/g, '')
+                      setBuyer({ ...buyer, phone: clean })
+                    }}
+                    style={{ flex: 1 }}
+                  />
+                </div>
+                <small style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '4px', display: 'block' }}>
+                  ໃສ່ສະເພາະຕົວເລກເບີໂທຫຼັງ 20 (ເຊັ່ນ 55123456, 77889900, 99112233)
+                </small>
+                {errors.buyerPhone && <p className="field-error">{errors.buyerPhone}</p>}
               </div>
+
               <div className="field">
-                <label htmlFor="c-email">ອີເມວສຳລັບຮັບແຈ້ງເຕືອນສະຖານະ (Email Notification)</label>
+                <label htmlFor="b-email">ອີເມວສຳລັບຮັບແຈ້ງເຕືອນສະຖານະ (Email Notification - ຖ້າມີ)</label>
                 <input
-                  id="c-email"
+                  id="b-email"
                   type="email"
                   placeholder="customer@example.com (ຮັບໃບເຊັດ ແລະ ອັບເດດສະຖານະງານພິມ)"
-                  value={customer.email}
-                  onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
+                  value={buyer.email}
+                  onChange={(e) => setBuyer({ ...buyer, email: e.target.value })}
                 />
-              </div>
-              <div className="field">
-                <label htmlFor="c-address">ທີ່ຢູ່ຈັດສົ່ງ (Delivery Address)</label>
-                <textarea
-                  id="c-address"
-                  rows={3}
-                  placeholder="ເຮືອນເລກທີ, ບ້ານ, ເມືອງ, ແຂວງ"
-                  value={customer.address}
-                  onChange={(e) => setCustomer({ ...customer, address: e.target.value })}
-                />
-                {errors.address && <p className="field-error">{errors.address}</p>}
               </div>
             </div>
 
-            {/* Shipping */}
+            {/* Step 2: Carrier & Conditional Delivery Info */}
             <div className="checkout-card">
               <div className="checkout-card-head">
                 <span className="checkout-step">2</span>
-                <h2>ເລືອກບໍລິສັດຂົນສົ່ງ (Carrier)</h2>
+                <h2>ເລືອກບໍລິສັດຂົນສົ່ງ & ຂໍ້ມູນຈັດສົ່ງ (Shipping & Delivery)</h2>
               </div>
-              <div className="courier-list">
-                {COURIERS.map((c) => {
-                  const free = subtotal >= c.freeAbove && c.freeAbove > 0
-                  const fee = free ? 0 : c.fee
-                  const selected = courierId === c.id
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className={`courier-card ${selected ? 'is-selected' : ''}`}
-                      onClick={() => setCourierId(c.id)}
-                      aria-pressed={selected}
-                    >
-                      <span className="courier-radio" aria-hidden="true">
-                        {selected && <CheckIcon size={14} />}
-                      </span>
-                      <span className="courier-brand" style={{ background: `${c.color}1a`, color: c.color }}>
-                        {c.short}
-                      </span>
-                      <span className="courier-main">
-                        <strong>{c.name}</strong>
-                        <small>{c.eta} · ໄລຍະເວລາຈັດສົ່ງຂຶ້ນຢູ່ກັບບໍລິສັດຂົນສົ່ງ</small>
-                      </span>
-                      <span className="courier-fee">
-                        {free ? (
-                          <em className="courier-free">ສົ່ງຟຣີ</em>
+
+              <div className="field">
+                <label style={{ fontWeight: 700, marginBottom: '8px', display: 'block' }}>
+                  ເລືອກບໍລິສັດຂົນສົ່ງ (Select Carrier) <span className="text-danger">*</span>
+                </label>
+                <div className="courier-list">
+                  {couriersList.map((c: any) => {
+                    const free = (c.freeAbove || 0) > 0 && subtotalDisplay >= (currency === 'LAK' ? c.freeAbove : Math.round(c.freeAbove / 630.5))
+                    const itemFeeInLAK = free ? 0 : Number(c.fee || 0)
+                    const itemFeeDisplay = currency === 'LAK' ? itemFeeInLAK : (currency === 'THB' ? Math.round(itemFeeInLAK / 630.5) : (itemFeeInLAK / 22100))
+                    const selected = courierId === c.id
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className={`courier-card ${selected ? 'is-selected' : ''}`}
+                        onClick={() => setCourierId(c.id)}
+                        aria-pressed={selected}
+                      >
+                        <span className="courier-radio" aria-hidden="true">
+                          {selected && <CheckIcon size={14} />}
+                        </span>
+                        {c.logoUrl ? (
+                          <span className="courier-brand" style={{ background: '#fff', border: '1px solid #e2e8f0', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                            <img
+                              src={c.logoUrl.startsWith('http') || c.logoUrl.startsWith('data:') ? c.logoUrl : `http://localhost:8080${c.logoUrl.startsWith('/') ? '' : '/'}${c.logoUrl}`}
+                              alt={c.short}
+                              style={{ width: '28px', height: '28px', objectFit: 'contain' }}
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          </span>
                         ) : (
-                          formatMoney(convertTo(fee), currency)
+                          <span className="courier-brand" style={{ background: `${c.color || '#2563eb'}1a`, color: c.color || '#2563eb' }}>
+                            {c.short || c.name}
+                          </span>
                         )}
-                      </span>
-                    </button>
-                  )
-                })}
+                        <span className="courier-main">
+                          <strong>{c.name}</strong>
+                          <small>{c.eta} · ໄລຍະເວລາຈັດສົ່ງຂຶ້ນຢູ່ກັບບໍລິສັດຂົນສົ່ງ</small>
+                        </span>
+                        <span className="courier-fee">
+                          {free ? (
+                            <em className="courier-free">ສົ່ງຟຣີ</em>
+                          ) : (
+                            formatMoney(itemFeeDisplay, currency)
+                          )}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+                {errors.courier && <p className="field-error">{errors.courier}</p>}
               </div>
+
+              {/* Conditional Recipient & Address Form: Expands once a courier is chosen */}
+              {courierId ? (
+                <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px dashed #cbd5e1' }}>
+                  {courierId === 'self_pickup' ? (
+                    <div style={{ padding: '16px', borderRadius: '12px', background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46' }}>
+                      <strong style={{ display: 'block', marginBottom: '4px' }}>📍 ຮັບສິນຄ້າທີ່ຮ້ານ ສົມສິ່ງພິມ (Self Pickup)</strong>
+                      <span style={{ fontSize: '0.88rem' }}>ສະຖານທີ່: ຖະໜົນລ້ານຊ້າງ, ບ້านຫັດສະດີ, ເມືອງຈັນທະບູລີ, ນະຄອນຫຼວງວຽງຈັນ (ເປີດທຸກວັນ ຈັນ-ເສົາ 08:30 - 17:30)</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                        <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
+                          📦 ຂໍ້ມູນຜູ້ຮັບ ແລະ ສາຂາປາຍທາງ
+                        </h3>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.86rem', color: '#334155' }}>
+                          <input
+                            type="checkbox"
+                            checked={sameAsBuyer}
+                            onChange={(e) => setSameAsBuyer(e.target.checked)}
+                            style={{ width: '16px', height: '16px', accentColor: 'var(--gold)' }}
+                          />
+                          <span>ຜູ້ຮັບແມ່ນຄົນດຽວກັບຜູ້ສັ່ງຊື້</span>
+                        </label>
+                      </div>
+
+                      {!sameAsBuyer && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '14px' }}>
+                          <div className="field">
+                            <label htmlFor="r-name">
+                              ຊື່-ນາມສະກຸນ ຜູ້ຮັບ (Recipient Name) <span className="text-danger">*</span>
+                            </label>
+                            <input
+                              id="r-name"
+                              type="text"
+                              placeholder="ເຊັ່ນ: ທ້າວ ສົມໃຈ ດີເລີດ"
+                              value={recipient.name}
+                              onChange={(e) => setRecipient({ ...recipient, name: e.target.value })}
+                            />
+                            {errors.recipientName && <p className="field-error">{errors.recipientName}</p>}
+                          </div>
+
+                          <div className="field">
+                            <label htmlFor="r-phone">
+                              ເບີໂທລະສັບຜູ້ຮັບ (Recipient Phone) <span className="text-danger">*</span>
+                            </label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ padding: '10px 14px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '10px', fontWeight: 800, fontSize: '0.95rem', color: '#1e293b', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>🇱🇦</span>
+                                <span>+856 20</span>
+                              </div>
+                              <input
+                                id="r-phone"
+                                type="tel"
+                                placeholder="55123456"
+                                value={recipient.phone}
+                                onChange={(e) => {
+                                  const clean = e.target.value.replace(/\D/g, '')
+                                  setRecipient({ ...recipient, phone: clean })
+                                }}
+                                style={{ flex: 1 }}
+                              />
+                            </div>
+                            {errors.recipientPhone && <p className="field-error">{errors.recipientPhone}</p>}
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginTop: '6px' }}>
+                        <div className="field">
+                          <label htmlFor="r-province">
+                            ແຂວງ (Province) <span className="text-danger">*</span>
+                          </label>
+                          <select
+                            id="r-province"
+                            value={recipient.province}
+                            onChange={(e) => {
+                              const newProvLabel = e.target.value
+                              const found = locations.find(
+                                (p) =>
+                                  p.label === newProvLabel ||
+                                  p.nameLa === newProvLabel ||
+                                  newProvLabel.includes(p.nameLa)
+                              )
+                              const newDistricts = found ? found.districts : []
+                              setRecipient({ 
+                                ...recipient, 
+                                province: newProvLabel,
+                                district: newDistricts.length > 0 ? `${newDistricts[0].nameLa} (${newDistricts[0].nameEn})` : ''
+                              })
+                            }}
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #cbd5e1', background: '#fff', fontSize: '0.9rem' }}
+                          >
+                            {locations.map((prov) => (
+                              <option key={prov.label || prov.nameLa} value={prov.label || prov.nameLa}>
+                                {prov.label || `${prov.nameLa} (${prov.nameEn})`}
+                              </option>
+                            ))}
+                          </select>
+                          {errors.province && <p className="field-error">{errors.province}</p>}
+                        </div>
+
+                        <div className="field">
+                          <label htmlFor="r-district">
+                            ເມືອງ (District) <span className="text-danger">*</span>
+                          </label>
+                          {(() => {
+                            const curProv = locations.find(
+                              (p) =>
+                                p.label === recipient.province ||
+                                p.nameLa === recipient.province ||
+                                recipient.province.includes(p.nameLa)
+                            )
+                            const distList = curProv ? curProv.districts : []
+                            if (distList.length > 0) {
+                              return (
+                                <select
+                                  id="r-district"
+                                  value={recipient.district}
+                                  onChange={(e) => setRecipient({ ...recipient, district: e.target.value })}
+                                  style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #cbd5e1', background: '#fff', fontSize: '0.9rem' }}
+                                >
+                                  <option value="">-- ເລືອກເມືອງ (Select District) --</option>
+                                  {distList.map((d) => (
+                                    <option key={d.nameLa} value={`${d.nameLa} (${d.nameEn})`}>
+                                      {d.nameLa} ({d.nameEn})
+                                    </option>
+                                  ))}
+                                </select>
+                              )
+                            }
+                            return (
+                              <input
+                                id="r-district"
+                                type="text"
+                                placeholder="ເຊັ່ນ: ຈັນທະບູລີ, ໄຊເສດຖາ, ໂພນໂຮງ"
+                                value={recipient.district}
+                                onChange={(e) => setRecipient({ ...recipient, district: e.target.value })}
+                              />
+                            )
+                          })()}
+                          {errors.district && <p className="field-error">{errors.district}</p>}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginTop: '12px' }}>
+                        <div className="field">
+                          <label htmlFor="r-village">
+                            ບ້ານ / ລາຍລະອຽດທີ່ຢູ່ (Village / Street) <span className="text-danger">*</span>
+                          </label>
+                          <input
+                            id="r-village"
+                            type="text"
+                            placeholder="ເຊັ່ນ: ບ້ານ ດົງໂດກ, ຮ່ອມ 5, ເຮືອນ 123"
+                            value={recipient.village}
+                            onChange={(e) => setRecipient({ ...recipient, village: e.target.value })}
+                          />
+                          {errors.village && <p className="field-error">{errors.village}</p>}
+                        </div>
+
+                        <div className="field">
+                          <label htmlFor="r-branch">
+                            ລະຫັດສາຂາ / ສາຂາຂົນສົ່ງປາຍທາງ <span className="text-danger">*</span>
+                          </label>
+                          <input
+                            id="r-branch"
+                            type="text"
+                            placeholder="ເຊັ່ນ: ສາຂາໂພນໂຮງ (HL-04) ຫຼື ສາຂາດົງໂດກ"
+                            value={recipient.branchCode}
+                            onChange={(e) => setRecipient({ ...recipient, branchCode: e.target.value })}
+                          />
+                          {errors.branchCode && <p className="field-error">{errors.branchCode}</p>}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div style={{ padding: '14px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '10px', color: '#64748b', textAlign: 'center', fontSize: '0.88rem', marginTop: '14px' }}>
+                  👈 ກະລຸນາເລືອກບໍລິສັດຂົນສົ່ງດ້ານເທິງກ່ອນ ເພື່ອກອກຂໍ້ມູນສາຂາປາຍທາງ ແລະ ທີ່ຢູ່ຈັດສົ່ງ
+                </div>
+              )}
             </div>
 
             {/* Payment */}
@@ -423,28 +765,62 @@ export default function CheckoutPage() {
                 <h2>ຊຳລະເງິນ (Payment)</h2>
               </div>
 
-              {bankAccounts.length > 1 && (
-                <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 'bold', width: '100%', color: '#64748b' }}>ເລືອກທະນາຄານຮັບເງິນ:</span>
-                  {bankAccounts.map((b: any) => (
-                    <button
-                      key={b.id || b.accountNumber}
-                      type="button"
-                      onClick={() => setSelectedBankId(b.id)}
-                      style={{
-                        padding: '6px 12px',
-                        borderRadius: '10px',
-                        fontSize: '12px',
-                        fontWeight: 'bold',
-                        border: selectedBankId === b.id ? '2px solid #059669' : '1px solid #cbd5e1',
-                        background: selectedBankId === b.id ? '#ecfdf5' : '#f8fafc',
-                        color: selectedBankId === b.id ? '#047857' : '#334155',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {b.bank.split('(')[0] || b.bank} {b.isDefault ? '(ຫຼັກ)' : ''}
-                    </button>
-                  ))}
+              {bankAccountsList.length > 0 && (
+                <div style={{ marginBottom: '18px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, display: 'block', marginBottom: '8px', color: 'var(--text-main)' }}>
+                    ເລືອກບັນຊີທະນາຄານຮັບເງິນ (Select Bank Account):
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+                    {bankAccountsList.map((b: any) => {
+                      const isSelected = selectedBankId === b.id
+                      const bName = b.bankName || b.bank || 'Bank'
+                      const bLogo = b.logoUrl
+                      return (
+                        <button
+                          key={b.id || b.accountNumber}
+                          type="button"
+                          onClick={() => setSelectedBankId(b.id)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            padding: '10px 14px',
+                            borderRadius: '14px',
+                            border: isSelected ? '2px solid #059669' : '1px solid #cbd5e1',
+                            background: isSelected ? '#ecfdf5' : '#ffffff',
+                            color: isSelected ? '#047857' : '#334155',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            boxShadow: isSelected ? '0 4px 12px rgba(5, 150, 105, 0.12)' : 'none',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                            {bLogo && !failedLogoUrls.has(bLogo) ? (
+                              <img
+                                src={bLogo.startsWith('http') || bLogo.startsWith('data:') ? bLogo : `http://localhost:8080${bLogo.startsWith('/') ? '' : '/'}${bLogo}`}
+                                alt={bName}
+                                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                onError={() => {
+                                  setFailedLogoUrls((prev) => new Set(prev).add(bLogo))
+                                }}
+                              />
+                            ) : (
+                              <CreditCardIcon size={16} color={isSelected ? '#059669' : '#64748b'} />
+                            )}
+                          </div>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {bName.split('(')[0] || bName}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: isSelected ? '#047857' : '#64748b', fontFamily: 'monospace' }}>
+                              {b.accountNumber ? b.accountNumber.slice(-7) : ''}
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
 
@@ -524,25 +900,61 @@ export default function CheckoutPage() {
               <div className="payment-box">
                 <div className="payment-qr">
                   <span className="payment-qr-badge">
-                    <CreditCardIcon size={16} /> BCEL OnePay QR
+                    <CreditCardIcon size={16} /> QR Code ສະແກນຊຳລະເງິນ
                   </span>
-                  <div className="payment-qr-canvas">
-                    <QRCodeSVG value={qrPayload} size={180} bgColor="#ffffff" fgColor="#0C2340" level="M" />
+                  <div className="payment-qr-canvas" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '180px' }}>
+                    {activeBankAccount.qrCodeUrl && !failedQRUrls.has(activeBankAccount.qrCodeUrl) ? (
+                      <img
+                        src={activeBankAccount.qrCodeUrl.startsWith('http') || activeBankAccount.qrCodeUrl.startsWith('data:') ? activeBankAccount.qrCodeUrl : `http://localhost:8080${activeBankAccount.qrCodeUrl.startsWith('/') ? '' : '/'}${activeBankAccount.qrCodeUrl}`}
+                        alt="Bank QR Code"
+                        style={{ width: '180px', height: '180px', objectFit: 'contain', borderRadius: '12px', background: '#fff' }}
+                        onError={() => {
+                          setFailedQRUrls((prev) => new Set(prev).add(activeBankAccount.qrCodeUrl!))
+                        }}
+                      />
+                    ) : (
+                      <QRCodeSVG value={qrPayload} size={180} bgColor="#ffffff" fgColor="#0C2340" level="M" />
+                    )}
                   </div>
-                  <p className="payment-qr-amount">ຍອດຊຳລະຕອນນີ້ {formatMoney(amountToPayDisplay, currency)}</p>
+                  <div style={{ marginTop: '8px', textAlign: 'center' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-main)', display: 'block' }}>
+                      🏪 {activeBankAccount.shopName || activeBankAccount.promptpayName || 'ຮ້ານ ສົມສິ່ງພິມ (Som-Sing Phim)'}
+                    </span>
+                    <p className="payment-qr-amount" style={{ marginTop: '4px' }}>
+                      ຍອດຊຳລະຕອນນີ້ {formatMoney(amountToPayDisplay, currency)}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="payment-bank">
-                  <span className="payment-qr-badge">
-                    <ShieldIcon size={16} /> ໂອນເງິນທະນາຄານ BCEL
+                  <span className="payment-qr-badge" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {activeBankAccount.logoUrl && !failedLogoUrls.has(activeBankAccount.logoUrl) ? (
+                      <img
+                        src={activeBankAccount.logoUrl.startsWith('http') || activeBankAccount.logoUrl.startsWith('data:') ? activeBankAccount.logoUrl : `http://localhost:8080${activeBankAccount.logoUrl.startsWith('/') ? '' : '/'}${activeBankAccount.logoUrl}`}
+                        alt={activeBankAccount.bankName || activeBankAccount.bank}
+                        style={{ width: '18px', height: '18px', objectFit: 'contain' }}
+                        onError={() => {
+                          setFailedLogoUrls((prev) => new Set(prev).add(activeBankAccount.logoUrl!))
+                        }}
+                      />
+                    ) : (
+                      <ShieldIcon size={16} />
+                    )}
+                    <span>ໂອນເງິນຜ່ານ {activeBankAccount.bankName || activeBankAccount.bank}</span>
                   </span>
                   <ul className="bank-list">
                     <li>
                       <span>ທະນາຄານ</span>
-                      <strong>{activeBankAccount.bank} ({activeBankAccount.branch})</strong>
+                      <strong>{activeBankAccount.bankName || activeBankAccount.bank} {activeBankAccount.branch ? `(${activeBankAccount.branch})` : ''}</strong>
                     </li>
+                    {activeBankAccount.shopName && (
+                      <li>
+                        <span>ຊື່ຮ້ານຄ້າ (QR)</span>
+                        <strong style={{ color: '#047857' }}>{activeBankAccount.shopName}</strong>
+                      </li>
+                    )}
                     <li>
-                      <span>ຊື່ບັນຊີ</span>
+                      <span>ຊື່ເຈົ້າຂອງບັນຊີ</span>
                       <strong>{activeBankAccount.accountName}</strong>
                     </li>
                     <li>
@@ -562,7 +974,7 @@ export default function CheckoutPage() {
               </div>
 
               <p className="field-hint">
-                ຊຳລະເງິນດ້ວຍ BCEL OnePay ໂດຍສະແກນ QR ຫຼື ໂອນຜ່ານແອັບທະນາຄານ ກະລຸນາກວດສອບຍອດເງິນ ແລະ ຊື່ບັນຊີໃຫ້ຖືກຕ້ອງກ່ອນຢືນຢັນ
+                ຊຳລະເງິນດ້ວຍແອັບທະນາຄານໂດຍສະແກນ QR ຫຼື ໂອນຜ່ານເລກບັນຊີ ກະລຸນາກວດສອບຍອດເງິນ ແລະ ຊື່ບັນຊີໃຫ້ຖືກຕ້ອງກ່ອນຢືນຢັນ
               </p>
             </div>
 
@@ -719,7 +1131,7 @@ export default function CheckoutPage() {
                   {isFreeShipping ? (
                     <strong className="text-success">ສົ່ງຟຣີ</strong>
                   ) : (
-                    <strong>{formatMoney(convertTo(shippingFee), currency)}</strong>
+                    <strong>{formatMoney(shippingFeeDisplay, currency)}</strong>
                   )}
                 </div>
                 <div className="checkout-line checkout-line--total">

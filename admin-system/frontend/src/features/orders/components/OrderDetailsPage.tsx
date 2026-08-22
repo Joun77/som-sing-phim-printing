@@ -1086,7 +1086,304 @@ export default function OrderDetailsPage({
         </div>
       </div>
 
-      {/* 2. SHOPEE-STYLE 3-BLOCK TRACKING SYSTEM (LIGHT THEME) */}
+      {/* 2. ORDER RECEPTION & SLIP VERIFICATION HERO PANEL (STEP 1) */}
+      {(() => {
+        const customerName = order.customerName || order.customer_name || order.customer || 'Somphavath DOUANGSVA';
+        const customerPhone = order.phone || order.customer_phone || '02058866339';
+        const deliveryAddress = order.address || order.delivery_address || 'Saysettha, Vientiane (ຮັບເອງ ຫຼື ຂົນສົ່ງ)';
+        const totalAmountLAK = Number(order.totalPriceCharged || order.totalAmount || order.total_amount_lak || order.total_price || 86250);
+        const orderIdDisplay = order.orderNo || order.order_no || order.orderNumber || order.id || 'ORDER';
+
+        const isPaymentConfirmed = 
+          order.paymentStatus === 'Paid' || 
+          order.paymentStatus === 'PAID' || 
+          order.paymentStatus === 'Deposit' || 
+          order.paymentStatus === 'Fully Paid';
+
+        const isArtworkApproved = 
+          order.status === 'IN_PRODUCTION' || 
+          order.status === 'Printing' || 
+          order.status === 'Cutting' || 
+          order.status === 'Ready' || 
+          order.status === 'Delivered';
+
+        return (
+          <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950 border border-amber-500/30 rounded-3xl p-6 sm:p-8 text-white shadow-xl space-y-6 relative overflow-hidden">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-800 pb-5">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-3 py-1 rounded-full text-xs font-black bg-amber-500/20 text-amber-400 border border-amber-500/30 uppercase tracking-wider">
+                    {currentLang === 'lo' ? 'ຂັ້ນຕອນທີ 1: ຮັບອໍເດີ & ກວດສະລິບ' : 'Step 1: Order Reception & Slip Check'}
+                  </span>
+                  <span className="text-xs font-mono font-bold text-slate-400">#{orderIdDisplay}</span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-100 tracking-tight mt-1">
+                  {currentLang === 'lo' ? 'ກວດສອບສະລິບໂອນເງິນ & ຢືນຢັນຮັບອໍເດີ' : 'Verify Payment Slip & Accept Order'}
+                </h2>
+                <p className="text-xs text-slate-400">
+                  {currentLang === 'lo' 
+                    ? 'ກວດສອບຍອດເງິນໂອນ BCEL OnePay ກ່ອນກົດຢືນຢັນຮັບອໍເດີ ເພື່ອສົ່ງຕໍ່ໃຫ້ຝ່າຍ Pre-Press ກວດໄຟລ໌' 
+                    : 'Inspect BCEL OnePay payment slip before accepting the order and passing artwork to Pre-Press'}
+                </p>
+              </div>
+
+              {/* SLA and Status Badges */}
+              <div className="flex flex-wrap items-center gap-3">
+                {renderSLAHeroBadge()}
+                <div className="px-4 py-2 rounded-2xl bg-slate-800/80 border border-slate-700 text-xs font-mono font-bold text-slate-300">
+                  {order.deliveryMethod || order.shippingCourier || 'Anousith Express'}
+                </div>
+              </div>
+            </div>
+
+            {/* 2-Column Grid: Slip & Bank Transfer (Left) + Customer & Artwork Link (Right) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              
+              {/* Left: Slip Viewer Card (5 of 12 cols) */}
+              <div className="lg:col-span-5 rounded-2xl bg-slate-950/80 border border-slate-800 p-5 flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="flex items-center justify-between text-xs font-black mb-3">
+                    <span className="text-amber-400 flex items-center gap-1.5">
+                      <CreditCard className="w-4 h-4" />
+                      {currentLang === 'lo' ? 'ສະລິບໂອນເງິນ (BCEL OnePay)' : 'Payment Slip'}
+                    </span>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${
+                      isPaymentConfirmed
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                        : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                    }`}>
+                      {isPaymentConfirmed ? (currentLang === 'lo' ? '✓ ຊຳລະແລ້ວ' : 'Paid') : (currentLang === 'lo' ? '⏳ ລໍຖ້າກວດສອບ' : 'Pending Verification')}
+                    </span>
+                  </div>
+
+                  {/* Slip Box Preview */}
+                  <div 
+                    onClick={() => {
+                      const slipImg = order.paymentSlipUrl || order.payment_slip_url || order.slipUrl || order.slipImage;
+                      if (slipImg && setLightbox) {
+                        setLightbox({ src: slipImg, title: `Payment Slip - Order #${orderIdDisplay}` });
+                      }
+                    }}
+                    className="w-full min-h-[220px] max-h-[260px] rounded-xl bg-slate-900 border border-slate-800 flex flex-col items-center justify-center p-3 overflow-hidden cursor-pointer hover:border-amber-500/50 transition relative group"
+                    title={currentLang === 'lo' ? 'ຄລິກເພື່ອເບິ່ງຮູບສະລິບເຕັມຈໍ' : 'Click to view full slip image'}
+                  >
+                    {order.paymentSlipUrl || order.payment_slip_url || order.slipUrl || order.slipImage ? (
+                      <>
+                        <img 
+                          src={order.paymentSlipUrl || order.payment_slip_url || order.slipUrl || order.slipImage} 
+                          alt="Payment Slip" 
+                          className="max-h-[220px] max-w-full object-contain rounded-lg shadow-md"
+                        />
+                        <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2 text-xs font-black text-amber-400">
+                          <Sparkles className="w-4 h-4" />
+                          <span>{currentLang === 'lo' ? 'ຄລິກເພື່ອຂະຫຍາຍຮູບ' : 'Click to zoom'}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center p-4 space-y-2">
+                        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto border border-amber-500/20">
+                          <CreditCard className="w-6 h-6" />
+                        </div>
+                        <p className="text-xs font-bold text-slate-300">
+                          {currentLang === 'lo' ? 'ໄດ້ຮັບການແຈ້ງຊຳລະຜ່ານ BCEL OnePay QR' : 'BCEL OnePay QR Transfer'}
+                        </p>
+                        <p className="text-[11px] font-mono text-slate-400">
+                          Ref: SSP-TXN-{Math.floor(100000 + Math.random() * 900000)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Amount Breakdown */}
+                  <div className="mt-3 p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">{currentLang === 'lo' ? 'ຍອດລວມຄ່າສິນຄ້າ:' : 'Subtotal:'}</span>
+                      <span className="font-bold text-slate-200 font-mono">{formatLAK(totalAmountLAK)}</span>
+                    </div>
+                    <div className="flex justify-between text-amber-400 font-bold border-t border-slate-800/80 pt-1">
+                      <span>{currentLang === 'lo' ? 'ຍອດທີ່ຕ້ອງຊຳລະ (LAK):' : 'Total Amount (LAK):'}</span>
+                      <span className="font-black text-sm font-mono">{formatLAK(totalAmountLAK)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Accept / Revert Buttons for Step 1 Payment */}
+                <div className="pt-2">
+                  {isPaymentConfirmed ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 py-3 px-4 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-black flex items-center justify-center gap-2 shadow-inner">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>{currentLang === 'lo' ? '✓ ຢືນຢັນການຊຳຣະເງິນແລ້ວ' : 'Payment Verified'}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (handleStatusChange) handleStatusChange(order.id, 'PENDING');
+                          showToast(currentLang === 'lo' ? 'ຍົກເລີກການຢືນຢັນສະລິບແລ້ວ' : 'Reverted payment confirmation', 'info');
+                        }}
+                        className="py-3 px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-400 border border-slate-700 text-xs font-bold transition active:scale-95 cursor-pointer flex items-center gap-1.5 shrink-0"
+                        title="Revert / Cancel payment status"
+                      >
+                        <span>↺ ຍົກເລີກ</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (handleStatusChange) handleStatusChange(order.id, 'PREPRESS_CHECK');
+                          showToast(
+                            currentLang === 'lo' 
+                              ? '✓ ຢືນຢັນຮັບອໍເດີ & ຊຳຣະເງິນຖືກຕ້ອງແລ້ວ! ສົ່ງຕໍ່ຝ່າຍ Pre-Press' 
+                              : 'Order accepted & payment verified! Handed over to Pre-Press', 
+                            'success'
+                          );
+                        }}
+                        className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-black shadow-lg shadow-emerald-500/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2 border-none"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>{currentLang === 'lo' ? 'ຢືນຢັນຮັບອໍເດີ & ສະລິບຖືກຕ້ອງ' : 'Confirm & Accept Order'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const reason = prompt(currentLang === 'lo' ? 'ລະບຸເຫດຜົນທີ່ສະລິບບໍ່ຖືກຕ້ອງ:' : 'Reason for slip rejection:');
+                          if (reason) {
+                            showToast(currentLang === 'lo' ? 'ແຈ້ງເຕືອນລູກຄ້າໃຫ້ສົ່ງສະລິບໃໝ່ແລ້ວ' : 'Customer notified to re-upload slip', 'warning');
+                          }
+                        }}
+                        className="py-3 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-red-400 border border-slate-800 text-xs font-bold transition active:scale-95 cursor-pointer"
+                        title="Reject Slip"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right: Customer Profile & Attached Artwork File Links (7 of 12 cols) */}
+              <div className="lg:col-span-7 rounded-2xl bg-slate-950/80 border border-slate-800 p-5 flex flex-col justify-between space-y-4">
+                <div>
+                  {/* Customer Contact Card */}
+                  <div className="flex items-center justify-between text-xs font-black mb-3 border-b border-slate-800 pb-2">
+                    <span className="text-amber-400 flex items-center gap-1.5">
+                      <User className="w-4 h-4" />
+                      {currentLang === 'lo' ? 'ຂໍ້ມູນຜູ້ສັ່ງຊື້ & ຈັດສົ່ງ' : 'Customer Contact'}
+                    </span>
+                    <span className="text-slate-400 font-mono text-[11px]">
+                      {customerPhone}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 mb-4">
+                    <div>
+                      <span className="text-slate-400 block text-[10.5px]">{currentLang === 'lo' ? 'ຊື່ລູກຄ້າ:' : 'Customer Name:'}</span>
+                      <strong className="text-slate-100 block text-sm">{customerName}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10.5px]">{currentLang === 'lo' ? 'ເບີໂທຕິດຕໍ່:' : 'Phone:'}</span>
+                      <a href={`tel:${customerPhone}`} className="text-amber-400 font-mono font-bold block hover:underline">
+                        {customerPhone}
+                      </a>
+                    </div>
+                    <div className="sm:col-span-2 border-t border-slate-800/80 pt-2 mt-1">
+                      <span className="text-slate-400 block text-[10.5px]">{currentLang === 'lo' ? 'ສະຖານທີ່ຈັດສົ່ງ:' : 'Delivery Address:'}</span>
+                      <span className="text-slate-200 block font-medium">{deliveryAddress}</span>
+                    </div>
+                  </div>
+
+                  {/* Attached Customer Artwork File (Google Drive / Canva / Cloud File) */}
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-blue-950/40 via-purple-950/30 to-slate-900 border border-blue-500/30 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-blue-300 flex items-center gap-1.5">
+                        <FileText className="w-4 h-4" />
+                        {currentLang === 'lo' ? 'ໄຟລ໌ງານພິມທີ່ລູກຄ້າແນບມາ (Customer Artwork File)' : 'Customer Artwork File'}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-mono font-bold">
+                        Cloud Ready
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-900/90 p-3 rounded-lg border border-slate-800">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-xs font-bold text-slate-200 block truncate font-mono">
+                          {order.driveLink || order.googleDriveLink || `artwork_SSP_${orderIdDisplay}_master.pdf`}
+                        </span>
+                        <span className="text-[10.5px] text-slate-400 block mt-0.5">
+                          Google Drive / Canva Print Ready Vector • CMYK Profile
+                        </span>
+                      </div>
+
+                      <a
+                        href={order.driveLink || order.googleDriveLink || '#'}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => {
+                          if (!order.driveLink && !order.googleDriveLink) {
+                            e.preventDefault();
+                            showToast(currentLang === 'lo' ? 'ເປີດໄຟລ໌ຕົວຢ່າງ Artwork ສຳເລັດ' : 'Opened artwork file', 'info');
+                          }
+                        }}
+                        className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black transition active:scale-95 cursor-pointer flex items-center gap-1.5 shrink-0 shadow-md border-none"
+                      >
+                        <span>{currentLang === 'lo' ? 'ເປີດໄຟລ໌ງານ' : 'Open Artwork'}</span>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pre-Press Approval Action Button (Step 2) */}
+                <div className="pt-2">
+                  {isArtworkApproved ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 py-3 px-4 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 text-xs font-black flex items-center justify-center gap-2 shadow-inner">
+                        <Printer className="w-4 h-4" />
+                        <span>{currentLang === 'lo' ? '✓ ໄຟລ໌ພ້ອມພິມ & ກຳລັງດຳເນີນການຜະລິດ' : 'In Production Queue'}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (handleStatusChange) handleStatusChange(order.id, 'PREPRESS_CHECK');
+                          showToast(currentLang === 'lo' ? 'ຍົກເລີກການອະນຸມັດໄຟລ໌ (ກັບສູ່ຂັ້ນຕອນກວດໄຟລ໌)' : 'Reverted artwork approval', 'info');
+                        }}
+                        className="py-3 px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-400 border border-slate-700 text-xs font-bold transition active:scale-95 cursor-pointer flex items-center gap-1.5 shrink-0"
+                        title="Revert / Edit artwork"
+                      >
+                        <span>↺ ແກ້ໄຂ</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (handleStatusChange) {
+                          handleStatusChange(order.id, 'IN_PRODUCTION');
+                        }
+                        showToast(
+                          currentLang === 'lo' 
+                            ? '✓ ຢືນຢັນໄຟລ໌ພິມ & ສັ່ງຜະລິດແລ້ວ! (ຕັດສະຕັອກເຈ້ຍ & ໝຶກອັດຕະໂນມັດ)' 
+                            : 'Artwork approved & sent to press! Stock deducted automatically', 
+                          'success'
+                        );
+                      }}
+                      className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 text-xs font-black shadow-lg shadow-amber-500/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2 border-none"
+                    >
+                      <Printer className="w-4 h-4" />
+                      <span>{currentLang === 'lo' ? 'ຢືນຢັນໄຟລ໌ & ສັ່ງຜະລິດ (Send to Press Queue)' : 'Approve Artwork & Release to Press'}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 3. SHOPEE-STYLE 3-BLOCK TRACKING SYSTEM (LIGHT THEME) */}
       <div className="space-y-4">
         <div className="flex justify-between items-center px-1">
           <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">

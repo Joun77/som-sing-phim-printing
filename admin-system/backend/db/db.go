@@ -70,6 +70,8 @@ func RunMigrations(db *sql.DB) error {
 		"migrations/002_employees_offcuts_inbound.sql",
 		"../migrations/010_bilingual_books_preflight_and_shop_tracker.sql",
 		"migrations/010_bilingual_books_preflight_and_shop_tracker.sql",
+		"../migrations/018_lao_provinces_and_districts.sql",
+		"migrations/018_lao_provinces_and_districts.sql",
 		"../schema.sql",
 		"schema.sql",
 	}

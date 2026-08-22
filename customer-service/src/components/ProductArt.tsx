@@ -1,196 +1,288 @@
 // ============================================================
-// Product artwork — abstract brand-flavored SVG illustrations
-// Used in place of photography. Navy + champagne palette.
+// Som Sing Phim - Ultra-Premium Realistic Vector Print Mockups
+// Digital & Offset Print on Demand Showcase Visuals
 // ============================================================
 
-import type { ReactNode, SVGProps } from 'react'
+import React from 'react'
 
 interface ArtShellProps {
-  children: ReactNode
+  children: React.ReactNode
   bg?: string
+  accent?: string
 }
 
-function ArtShell({ children, bg }: ArtShellProps) {
+function ArtShell({ children, bg, accent = '#E2BD56' }: ArtShellProps) {
   return (
-    <svg viewBox="0 0 320 240" width="100%" height="100%" aria-hidden="true">
+    <svg viewBox="0 0 360 260" width="100%" height="100%" className="w-full h-full object-cover" aria-hidden="true">
       <defs>
-        <linearGradient id="navyG" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#0C2340" />
-          <stop offset="100%" stopColor="#07152B" />
+        <linearGradient id="artChassisG" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#0B1B38" />
+          <stop offset="50%" stopColor="#07152B" />
+          <stop offset="100%" stopColor="#030A17" />
         </linearGradient>
-        <linearGradient id="goldG" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#E2BD56" />
-          <stop offset="100%" stopColor="#C59B27" />
+        <linearGradient id="goldLuxuryG" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#FCE794" />
+          <stop offset="50%" stopColor="#E2BD56" />
+          <stop offset="100%" stopColor="#9E761E" />
         </linearGradient>
-        <radialGradient id="glowG" cx="0.5" cy="0.3" r="0.8">
-          <stop offset="0%" stopColor="#E2BD56" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#E2BD56" stopOpacity="0" />
+        <linearGradient id="cmykRainbowG" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#00F0FF" />
+          <stop offset="33%" stopColor="#FF007A" />
+          <stop offset="66%" stopColor="#FFDE00" />
+          <stop offset="100%" stopColor="#00E599" />
+        </linearGradient>
+        <radialGradient id="artGlowCenter" cx="50%" cy="40%" r="65%">
+          <stop offset="0%" stopColor={accent} stopOpacity="0.22" />
+          <stop offset="100%" stopColor="#000" stopOpacity="0" />
         </radialGradient>
+        <filter id="dropShadowG" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="12" stdDeviation="10" floodColor="#000" floodOpacity="0.65" />
+        </filter>
+        <filter id="softGlowFoil" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
       </defs>
-      <rect width="320" height="240" rx="18" fill={bg || 'url(#navyG)'} />
-      <rect width="320" height="240" rx="18" fill="url(#glowG)" />
+
+      {/* Background Frame */}
+      <rect width="360" height="260" rx="16" fill={bg || 'url(#artChassisG)'} />
+      <rect width="360" height="260" rx="16" fill="url(#artGlowCenter)" />
+
+      {/* Grid Alignment Matrix for Printing */}
+      <path d="M20 30 h320 M20 230 h320 M40 20 v220 M320 20 v220" stroke="rgba(255,255,255,0.04)" strokeWidth="1" strokeDasharray="4 4" />
+      
+      {/* CMYK Color Proof Bar in Top Right */}
+      <g transform="translate(265, 16)">
+        <rect x="0" y="0" width="8" height="8" rx="2" fill="#00FFFF" />
+        <rect x="12" y="0" width="8" height="8" rx="2" fill="#FF00FF" />
+        <rect x="24" y="0" width="8" height="8" rx="2" fill="#FFFF00" />
+        <rect x="36" y="0" width="8" height="8" rx="2" fill="#000000" stroke="rgba(255,255,255,0.3)" />
+        <rect x="48" y="0" width="8" height="8" rx="2" fill="url(#goldLuxuryG)" />
+      </g>
+
+      {/* Registration Cross Marks */}
+      <g stroke="rgba(255,255,255,0.25)" strokeWidth="1">
+        <circle cx="25" cy="25" r="5" fill="none" />
+        <line x1="16" y1="25" x2="34" y2="25" />
+        <line x1="25" y1="16" x2="25" y2="34" />
+      </g>
+
       {children}
     </svg>
   )
 }
 
-interface PhotoProps {
-  x: number
-  y: number
-  w: number
-  h: number
-}
-
-function Photo({ x, y, w, h }: PhotoProps) {
-  return (
-    <g>
-      <rect x={x} y={y} width={w} height={h} rx="4" fill="#fff" opacity="0.94" />
-      <circle cx={x + w * 0.28} cy={y + h * 0.3} r="5" fill="#E2BD56" />
-      <path d={`M${x} ${y + h * 0.72} L${x + w * 0.42} ${y + h * 0.45} L${x + w * 0.68} ${y + h * 0.62} L${x + w} ${y + h * 0.3} V${y + h} H${x} Z`} fill="#C59B27" opacity="0.85" />
-      <path d={`M${x + w * 0.5} ${y + h * 0.5} l10 -9`} stroke="#E2BD56" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-    </g>
-  )
-}
-
-export function AlbumArt() {
-  return (
-    <ArtShell>
-      <rect x="72" y="58" width="176" height="132" rx="8" fill="#fff" opacity="0.97" />
-      <rect x="66" y="52" width="188" height="140" rx="8" fill="url(#goldG)" opacity="0.55" />
-      <Photo x={86} y={72} w={70} h={70} />
-      <Photo x={164} y={72} w={70} h={70} />
-      <Photo x={86} y={148} w={70} h={36} />
-      <Photo x={164} y={148} w={70} h={36} />
-      <rect x="66" y="52" width="188" height="18" rx="4" fill="url(#goldG)" />
-      <rect x="70" y="58" width="60" height="6" rx="3" fill="#0C2340" opacity="0.7" />
-    </ArtShell>
-  )
-}
-
-export function AlbumPreviewArt() {
-  return (
-    <ArtShell>
-      <rect x="60" y="46" width="200" height="152" rx="10" fill="#fff" opacity="0.97" />
-      <rect x="52" y="38" width="216" height="164" rx="12" fill="url(#goldG)" opacity="0.5" />
-      <rect x="52" y="38" width="216" height="26" rx="6" fill="url(#goldG)" />
-      <rect x="58" y="46" width="90" height="8" rx="4" fill="#0C2340" opacity="0.75" />
-      <Photo x={70} y={80} w={176} h={92} />
-      <rect x="70" y="182" width="56" height="7" rx="3.5" fill="#0C2340" opacity="0.35" />
-      <rect x="134" y="182" width="40" height="7" rx="3.5" fill="#0C2340" opacity="0.2" />
-    </ArtShell>
-  )
-}
-
-export function FrameArt() {
-  return (
-    <ArtShell>
-      <rect x="86" y="42" width="148" height="156" rx="8" fill="url(#goldG)" />
-      <rect x="96" y="52" width="128" height="136" rx="6" fill="#0C2340" />
-      <Photo x={104} y={62} w={112} h={116} />
-      <rect x="86" y="196" width="34" height="8" rx="4" fill="#E2BD56" />
-      <circle cx="160" cy="42" r="5" fill="#E2BD56" opacity="0.8" />
-    </ArtShell>
-  )
-}
-
-export function SignArt() {
-  return (
-    <ArtShell>
-      <path d="M60 70 L160 40 L260 70 L160 100 Z" fill="#fff" opacity="0.97" />
-      <path d="M60 70 L160 40 L160 100 L60 70 Z" fill="#E2BD56" opacity="0.6" />
-      <text x="160" y="82" textAnchor="middle" fontFamily="Sarabun, sans-serif" fontWeight="700" fontSize="26" fill="#0C2340">LOGO</text>
-      <rect x="96" y="100" width="12" height="74" fill="#C59B27" />
-      <rect x="212" y="100" width="12" height="74" fill="#C59B27" />
-      <rect x="100" y="174" width="40" height="8" rx="4" fill="#E2BD56" opacity="0.7" />
-    </ArtShell>
-  )
-}
-
+// 1. Stickers & Die-Cut Labels Art
 export function StickerArt() {
-  const shapes = [
-    { x: 60, y: 56, r: 46 },
-    { x: 170, y: 70, r: 60, star: true },
-    { x: 100, y: 150, r: 42 },
-    { x: 218, y: 160, r: 40 },
-  ]
   return (
-    <ArtShell>
-      {shapes.map((s, i) =>
-        s.star ? (
-          <path
-            key={i}
-            d={`M${s.x} ${s.y - s.r} l${s.r * 0.28} ${s.r * 0.6} h${s.r * 0.62} l-${s.r * 0.5} ${s.r * 0.36} l${s.r * 0.2} ${s.r * 0.6} l-${s.r * 0.58} -${s.r * 0.34} l-${s.r * 0.58} ${s.r * 0.34} l${s.r * 0.2} -${s.r * 0.6} l-${s.r * 0.5} -${s.r * 0.36} h${s.r * 0.62} z`}
-            fill={i % 2 ? '#E2BD56' : '#fff'}
-            opacity="0.95"
-          />
-        ) : (
-          <path
-            key={i}
-            d={`M${s.x - s.r} ${s.y} a${s.r} ${s.r} 0 1 1 ${s.r * 2} 0 a${s.r} ${s.r} 0 1 1 -${s.r * 2} 0`}
-            fill={i % 2 ? '#fff' : '#E2BD56'}
-            opacity="0.95"
-          />
-        )
-      )}
-      <text x="160" y="236" textAnchor="middle" fontFamily="Sarabun, sans-serif" fontSize="11" fill="#E2BD56" opacity="0.7">STICKER PACK</text>
+    <ArtShell accent="#FF6B6B">
+      <g filter="url(#dropShadowG)">
+        {/* Backing Release Liner Sheet */}
+        <rect x="65" y="45" width="230" height="170" rx="12" fill="#F8FAFC" stroke="rgba(226,189,86,0.5)" strokeWidth="1.5" />
+        
+        {/* Kiss-Cut Grid Line */}
+        <rect x="75" y="55" width="210" height="150" rx="8" fill="none" stroke="#E2E8F0" strokeWidth="1" strokeDasharray="3 3" />
+        
+        {/* Main Die-Cut Holographic Sticker 1 */}
+        <g transform="translate(85, 68)">
+          <rect width="90" height="90" rx="45" fill="url(#cmykRainbowG)" opacity="0.9" />
+          <circle cx="45" cy="45" r="38" fill="#07152B" />
+          <path d="M45 22 L51 37 L67 37 L54 47 L59 63 L45 52 L31 63 L36 47 L23 37 L39 37 Z" fill="url(#goldLuxuryG)" />
+          <text x="45" y="78" textAnchor="middle" fill="#E2BD56" fontSize="8" fontWeight="800" letterSpacing="1">SOM SING PHIM</text>
+        </g>
+
+        {/* Die-Cut Peeling Sticker 2 (Showing Easy-Peel Effect) */}
+        <g transform="translate(190, 72)">
+          <rect width="85" height="52" rx="8" fill="linear-gradient(135deg, #10B981 0%, #059669 100%)" />
+          <rect x="6" y="6" width="73" height="40" rx="6" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
+          <text x="42" y="25" textAnchor="middle" fill="#FFFFFF" fontSize="9" fontWeight="900">WATERPROOF</text>
+          <text x="42" y="38" textAnchor="middle" fill="rgba(255,255,255,0.9)" fontSize="8" fontWeight="700">100% PP GLOSS</text>
+          
+          {/* Peeling Edge Corner */}
+          <path d="M65 52 L85 32 L85 52 Z" fill="#D1D5DB" />
+          <path d="M65 52 L85 32 L65 32 Z" fill="#E5E7EB" filter="url(#dropShadowG)" />
+        </g>
+
+        {/* Small Round Badge 3 */}
+        <g transform="translate(195, 138)">
+          <circle cx="40" cy="30" r="24" fill="url(#goldLuxuryG)" />
+          <circle cx="40" cy="30" r="20" fill="#0C2340" />
+          <text x="40" y="33" textAnchor="middle" fill="#E2BD56" fontSize="8" fontWeight="800">KISS-CUT</text>
+        </g>
+      </g>
     </ArtShell>
   )
 }
 
+// 2. Luxury Business Card & Gold Foil Art
 export function CardArt() {
   return (
-    <ArtShell>
-      <rect x="66" y="44" width="188" height="150" rx="12" fill="#fff" opacity="0.97" />
-      <path d="M66 44 h188 v36 a18 18 0 0 1 -18 18 h-152 a18 18 0 0 1 -18 -18 z" fill="url(#goldG)" />
-      <path d="M120 60 a16 12 0 1 1 32 0 a16 12 0 1 1 -32 0" fill="#0C2340" opacity="0.85" />
-      <path d="M92 108 h70 a6 6 0 0 1 6 6 v8 a6 6 0 0 1 -6 6 h-70 a6 6 0 0 1 -6 -6 v-8 a6 6 0 0 1 6 -6" fill="#0C2340" opacity="0.28" />
-      <path d="M92 140 h50 a5 5 0 0 1 5 5 v6 a5 5 0 0 1 -5 5 h-50 a5 5 0 0 1 -5 -5 v-6 a5 5 0 0 1 5 -5" fill="#C59B27" opacity="0.7" />
+    <ArtShell accent="#E2BD56">
+      <g filter="url(#dropShadowG)">
+        {/* Bottom Card in Stack */}
+        <rect x="75" y="70" width="200" height="120" rx="10" fill="#1E293B" transform="rotate(-6 175 130)" opacity="0.6" />
+        
+        {/* Middle Card */}
+        <rect x="78" y="62" width="205" height="125" rx="10" fill="#0F172A" stroke="rgba(255,255,255,0.1)" strokeWidth="1" transform="rotate(-2 180 125)" />
+        
+        {/* Top Hero Luxury Card */}
+        <g transform="translate(80, 52)">
+          {/* Dark Velvet Card Texture */}
+          <rect width="210" height="130" rx="12" fill="linear-gradient(135deg, #09152B 0%, #030814 100%)" stroke="rgba(226,189,86,0.6)" strokeWidth="1.5" />
+          
+          {/* Hot Stamping Gold Foil Border */}
+          <rect x="10" y="10" width="190" height="110" rx="8" fill="none" stroke="url(#goldLuxuryG)" strokeWidth="1.5" />
+          
+          {/* Embossed Gold Emblem */}
+          <circle cx="45" cy="50" r="18" fill="url(#goldLuxuryG)" filter="url(#softGlowFoil)" />
+          <circle cx="45" cy="50" r="15" fill="#07152B" />
+          <path d="M45 39 L49 47 L58 48 L51 54 L53 62 L45 57 L37 62 L39 54 L32 48 L41 47 Z" fill="url(#goldLuxuryG)" />
+          
+          {/* Gold Stamped Typography */}
+          <text x="75" y="46" fill="url(#goldLuxuryG)" fontSize="13" fontWeight="900" letterSpacing="1">SOM SING PHIM</text>
+          <text x="75" y="58" fill="#94A3B8" fontSize="8" fontWeight="600" letterSpacing="2">PREMIUM ART CARD 350 GSM</text>
+          
+          <line x1="75" y1="68" x2="185" y2="68" stroke="url(#goldLuxuryG)" strokeWidth="1" opacity="0.6" />
+          
+          <text x="25" y="102" fill="#E2E8F0" fontSize="8" fontWeight="700">✓ Soft-Touch Matte</text>
+          <text x="110" y="102" fill="#FCE794" fontSize="8" fontWeight="700">★ Hot Gold Foil</text>
+        </g>
+      </g>
     </ArtShell>
   )
 }
 
-export function PostcardArt() {
+// 3. Document, Spiral & Perfect Glue Binding Art
+export function DocArt() {
   return (
-    <ArtShell>
-      <rect x="60" y="56" width="200" height="138" rx="8" fill="#fff" opacity="0.97" />
-      <rect x="60" y="56" width="200" height="60" rx="8" fill="#0C2340" opacity="0.9" />
-      <circle cx="120" cy="86" r="16" fill="#E2BD56" opacity="0.8" />
-      <circle cx="160" cy="86" r="10" fill="#E2BD56" opacity="0.5" />
-      <path d="M76 138 l14 0" stroke="#0C2340" strokeWidth="4" strokeLinecap="round" opacity="0.3" />
-      <path d="M76 150 l28 0" stroke="#0C2340" strokeWidth="4" strokeLinecap="round" opacity="0.22" />
-      <rect x="224" y="120" width="22" height="16" rx="2" fill="none" stroke="#C59B27" strokeWidth="3" />
-      <rect x="228" y="128" width="14" height="8" fill="none" stroke="#C59B27" strokeWidth="2.5" />
+    <ArtShell accent="#38BDF8">
+      <g filter="url(#dropShadowG)">
+        {/* Document Pages Layer */}
+        <rect x="85" y="42" width="190" height="175" rx="6" fill="#E2E8F0" transform="rotate(4 180 130)" />
+        <rect x="80" y="40" width="190" height="175" rx="6" fill="#F8FAFC" transform="rotate(2 175 127)" />
+        
+        {/* Main Cover Page */}
+        <g transform="translate(75, 38)">
+          <rect width="195" height="180" rx="8" fill="#FFFFFF" stroke="#CBD5E1" strokeWidth="1.5" />
+          
+          {/* Cover Header Banner */}
+          <rect width="195" height="52" rx="8" fill="linear-gradient(135deg, #0284C7 0%, #0369A1 100%)" />
+          <text x="32" y="28" fill="#FFFFFF" fontSize="12" fontWeight="900">ANNUAL REPORT</text>
+          <text x="32" y="42" fill="#BAE6FD" fontSize="8" fontWeight="700">PRINT ON DEMAND • NO MOQ</text>
+
+          {/* Wire-O / Spiral Binding Rings on Left */}
+          <g transform="translate(10, 8)">
+            {[0, 18, 36, 54, 72, 90, 108, 126, 144, 160].map((y, idx) => (
+              <g key={idx} transform={`translate(0, ${y})`}>
+                <rect x="0" y="0" width="12" height="6" rx="3" fill="#1E293B" />
+                <path d="M-3 3 h18" stroke="url(#goldLuxuryG)" strokeWidth="2.5" strokeLinecap="round" />
+              </g>
+            ))}
+          </g>
+
+          {/* Document Content Simulation (Graphs & Tables) */}
+          <g transform="translate(35, 68)">
+            <rect x="0" y="0" width="145" height="6" rx="3" fill="#0C2340" opacity="0.75" />
+            <rect x="0" y="12" width="105" height="5" rx="2.5" fill="#94A3B8" opacity="0.5" />
+            
+            {/* Color Chart Graphic */}
+            <rect x="0" y="26" width="65" height="65" rx="6" fill="#F1F5F9" />
+            <circle cx="32" cy="58" r="22" fill="none" stroke="#0284C7" strokeWidth="6" strokeDasharray="90 40" />
+            <circle cx="32" cy="58" r="22" fill="none" stroke="#E2BD56" strokeWidth="6" strokeDasharray="30 100" strokeDashoffset="-90" />
+
+            {/* Table Lines */}
+            <rect x="75" y="26" width="70" height="16" rx="4" fill="#E0F2FE" />
+            <rect x="75" y="48" width="70" height="12" rx="3" fill="#F8FAFC" stroke="#E2E8F0" />
+            <rect x="75" y="66" width="70" height="12" rx="3" fill="#F8FAFC" stroke="#E2E8F0" />
+          </g>
+        </g>
+      </g>
     </ArtShell>
   )
 }
 
-export function BookArt() {
+// 4. Photobook & Hardcover Album Art
+export function AlbumArt() {
   return (
-    <ArtShell>
-      <rect x="90" y="44" width="140" height="152" rx="8" fill="#fff" opacity="0.97" />
-      <rect x="90" y="44" width="140" height="22" rx="4" fill="url(#goldG)" />
-      <path d="M90 152 h140" stroke="#E2BD56" strokeWidth="2" opacity="0.5" />
-      <path d="M104 92 h56 a5 5 0 0 1 5 5 v6 a5 5 0 0 1 -5 5 h-56 a5 5 0 0 1 -5 -5 v-6 a5 5 0 0 1 5 -5" fill="#0C2340" opacity="0.3" />
-      <path d="M104 118 h70 a5 5 0 0 1 5 5 v6 a5 5 0 0 1 -5 5 h-70 a5 5 0 0 1 -5 -5 v-6 a5 5 0 0 1 5 -5" fill="#0C2340" opacity="0.18" />
-      <path d="M104 144 h44 a5 5 0 0 1 5 5 v6 a5 5 0 0 1 -5 5 h-44 a5 5 0 0 1 -5 -5 v-6 a5 5 0 0 1 5 -5" fill="#C59B27" opacity="0.65" />
+    <ArtShell accent="#EC4899">
+      <g filter="url(#dropShadowG)">
+        {/* Open Hardcover Layflat Photobook */}
+        <g transform="translate(55, 48)">
+          {/* Outer Hardcover Base */}
+          <rect x="0" y="0" width="250" height="165" rx="8" fill="#0F172A" stroke="url(#goldLuxuryG)" strokeWidth="1.5" />
+          
+          {/* Left Page (Full Bleed Photo) */}
+          <g transform="translate(8, 8)">
+            <rect width="112" height="149" rx="4" fill="linear-gradient(135deg, #1E1B4B 0%, #312E81 100%)" />
+            <circle cx="56" cy="65" r="26" fill="url(#goldLuxuryG)" opacity="0.8" />
+            <path d="M10 120 L45 80 L75 105 L102 70 L112 120 Z" fill="#EC4899" opacity="0.85" />
+            <text x="56" y="138" textAnchor="middle" fill="#FFFFFF" fontSize="8" fontWeight="800">LAYFLAT 180°</text>
+          </g>
+
+          {/* Center Book Gutter Crease */}
+          <rect x="122" y="4" width="6" height="157" fill="linear-gradient(90deg, rgba(0,0,0,0.5), transparent, rgba(0,0,0,0.5))" />
+
+          {/* Right Page (Gallery Typography & Image Grid) */}
+          <g transform="translate(130, 8)">
+            <rect width="112" height="149" rx="4" fill="#FFFFFF" />
+            <rect x="8" y="10" width="96" height="58" rx="4" fill="linear-gradient(135deg, #F43F5E 0%, #FB923C 100%)" />
+            <rect x="8" y="76" width="75" height="7" rx="3" fill="#0C2340" />
+            <rect x="8" y="88" width="96" height="4" rx="2" fill="#94A3B8" />
+            <rect x="8" y="96" width="85" height="4" rx="2" fill="#94A3B8" />
+            <rect x="8" y="104" width="90" height="4" rx="2" fill="#94A3B8" />
+
+            <g transform="translate(8, 120)">
+              <rect width="44" height="20" rx="3" fill="#F1F5F9" />
+              <rect x="52" width="44" height="20" rx="3" fill="#F1F5F9" />
+            </g>
+          </g>
+        </g>
+      </g>
     </ArtShell>
   )
 }
 
-export const ART = {
-  album: AlbumArt,
-  'album-preview': AlbumPreviewArt,
-  frame: FrameArt,
-  sign: SignArt,
+// 5. Brochure & Tri-Fold Flyer Art
+export function BrochureArt() {
+  return (
+    <ArtShell accent="#10B981">
+      <g filter="url(#dropShadowG)">
+        <g transform="translate(60, 45)">
+          {/* Panel 1 (Back) */}
+          <rect x="0" y="10" width="75" height="160" rx="6" fill="#0F172A" stroke="#E2BD56" strokeWidth="1" transform="skewY(-6)" />
+          {/* Panel 2 (Middle) */}
+          <rect x="80" y="5" width="75" height="160" rx="6" fill="#1E293B" stroke="#E2BD56" strokeWidth="1" />
+          {/* Panel 3 (Front Cover) */}
+          <g transform="translate(160, 0)">
+            <rect width="80" height="165" rx="6" fill="linear-gradient(135deg, #10B981 0%, #047857 100%)" stroke="#FFFFFF" strokeWidth="1" />
+            <circle cx="40" cy="45" r="22" fill="url(#goldLuxuryG)" />
+            <text x="40" y="90" textAnchor="middle" fill="#FFFFFF" fontSize="10" fontWeight="900">TRI-FOLD</text>
+            <text x="40" y="104" textAnchor="middle" fill="#A7F3D0" fontSize="7" fontWeight="700">FLYER / PROMO</text>
+            <rect x="12" y="120" width="56" height="6" rx="3" fill="#FFFFFF" opacity="0.9" />
+            <rect x="16" y="132" width="48" height="5" rx="2.5" fill="#A7F3D0" opacity="0.8" />
+          </g>
+        </g>
+      </g>
+    </ArtShell>
+  )
+}
+
+export const ART: Record<string, React.FC> = {
+  doc: DocArt,
+  documents: DocArt,
   sticker: StickerArt,
+  stickers: StickerArt,
   card: CardArt,
-  postcard: PostcardArt,
-  book: BookArt,
+  photos: AlbumArt,
+  album: AlbumArt,
+  brochure: BrochureArt,
+  book: DocArt,
 }
 
-export type ProductArtProps = { art: string } & SVGProps<SVGSVGElement>
+export type ProductArtProps = { art: string } & React.SVGProps<SVGSVGElement>
 
 export default function ProductArt({ art, ...props }: ProductArtProps) {
-  const Cmp = ART[art] || AlbumArt
+  const normalizedKey = art.toLowerCase().trim()
+  const Cmp = ART[normalizedKey] || DocArt
   return <Cmp {...props} />
 }

@@ -16,6 +16,7 @@ import (
 	"backend/orders"
 	"backend/preflight"
 	"backend/pricing"
+	"backend/settings"
 	"backend/spoilage"
 
 	"github.com/gin-gonic/gin"
@@ -176,6 +177,44 @@ func main() {
 	router.PATCH("/api/v1/inventory/equipment/maintenance-tickets/:id/resolve", inventory.HandleResolveMaintenanceTicket)
 	router.GET("/api/equipment/health", inventory.HandleGetEquipmentHealth)
 	router.GET("/api/equipment/maintenance-tickets", inventory.HandleGetMaintenanceTickets)
+
+	// Couriers & Payment Methods Master Data routes (Admin & Public)
+	router.GET("/api/v1/public/couriers", settings.HandleGetCouriers)
+	router.GET("/api/v1/couriers", settings.HandleGetCouriers)
+	router.GET("/api/couriers", settings.HandleGetCouriers)
+	router.POST("/api/v1/admin/couriers", settings.HandleCreateCourier)
+	router.POST("/api/v1/couriers", settings.HandleCreateCourier)
+	router.POST("/api/couriers", settings.HandleCreateCourier)
+	router.PUT("/api/v1/admin/couriers/:id", settings.HandleUpdateCourier)
+	router.PUT("/api/v1/couriers/:id", settings.HandleUpdateCourier)
+	router.DELETE("/api/v1/admin/couriers/:id", settings.HandleDeleteCourier)
+	router.DELETE("/api/v1/couriers/:id", settings.HandleDeleteCourier)
+
+	router.POST("/api/v1/admin/couriers/sync", settings.HandleSyncCouriers)
+	router.POST("/api/admin/couriers/sync", settings.HandleSyncCouriers)
+	router.POST("/api/v1/admin/couriers/upload-logo", settings.HandleUploadLogo)
+	router.POST("/api/v1/couriers/upload-logo", settings.HandleUploadLogo)
+
+	router.GET("/api/v1/public/payment-methods", settings.HandleGetPaymentMethods)
+	router.GET("/api/v1/payment-methods", settings.HandleGetPaymentMethods)
+	router.GET("/api/payment-methods", settings.HandleGetPaymentMethods)
+	router.POST("/api/v1/admin/payment-methods", settings.HandleCreatePaymentMethod)
+	router.POST("/api/v1/payment-methods", settings.HandleCreatePaymentMethod)
+	router.POST("/api/v1/admin/payment-methods/sync", settings.HandleSyncPaymentMethods)
+	router.POST("/api/admin/payment-methods/sync", settings.HandleSyncPaymentMethods)
+	router.PUT("/api/v1/admin/payment-methods/:id", settings.HandleUpdatePaymentMethod)
+	router.PUT("/api/v1/payment-methods/:id", settings.HandleUpdatePaymentMethod)
+	router.DELETE("/api/v1/admin/payment-methods/:id", settings.HandleDeletePaymentMethod)
+	// Seed Lao Provinces & Districts to PostgreSQL
+	settings.SeedLocationsToDB(db.GetDB())
+
+	// Lao Provinces & Districts Database routes (Public & Admin)
+	router.GET("/api/v1/public/locations/provinces", settings.HandleGetLaoProvinces)
+	router.GET("/api/v1/locations/provinces", settings.HandleGetLaoProvinces)
+	router.GET("/api/locations/provinces", settings.HandleGetLaoProvinces)
+	router.GET("/api/v1/public/locations/districts", settings.HandleGetLaoDistricts)
+	router.GET("/api/v1/locations/districts", settings.HandleGetLaoDistricts)
+	router.GET("/api/locations/districts", settings.HandleGetLaoDistricts)
 
 	// Start Daily Predictive Maintenance Background Cron
 	inventory.StartPPMDailyCron()

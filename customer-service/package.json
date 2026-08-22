@@ -15,8 +15,10 @@
     "deploy": "npm run build && npx -y firebase-tools@latest deploy --only hosting"
   },
   "dependencies": {
+    "@gsap/react": "^2.1.2",
     "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^4.3.4",
+    "gsap": "^3.15.0",
     "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

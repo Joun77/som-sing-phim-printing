@@ -34,38 +34,37 @@ export const PriceBreakdownTable: React.FC<PriceBreakdownTableProps> = ({
   finishingLabel,
   finishingAdd,
   discountPercent,
-  totalAmountTHB,
   currency,
   convertTo,
-  language,
+  language
 }) => {
   const pagesPerItem = Math.max(1, pageCount)
   const totalPrintedPages = pagesPerItem * quantity
-  const totalSheets = pagesPerItem * quantity // 1 Page = 1 Sheet direct match
 
-  // Dynamic Ink Calculation based on actual Coverage % + 35% Margin
-  // Baseline: 5% standard ink coverage -> scaled by actual detected coverage %
-  const effectiveCoverage = isColor ? Math.max(5, coveragePercent || 20) : 5
-  const inkCoverageRatePerSheetTHB = isColor
-    ? (0.22 * (effectiveCoverage / 5)) * 1.35
-    : (0.08 * (effectiveCoverage / 5)) * 1.35
+  // 1. Calculate combined rate per page/sheet (Base print + Ink coverage + Size + Paper Material)
+  const effectiveCoverage = Math.max(5, Math.min(100, coveragePercent))
+  const inkRatePerSheetTHB = isColor
+    ? Math.max(0.4, Number(((effectiveCoverage / 100) * 2.8).toFixed(2)))
+    : 0.25
+  const paperAndPrintBasePerSheetTHB = (baseUnit * 0.3) + sizeAdd + materialAdd
+  const combinedRatePerSheetTHB = paperAndPrintBasePerSheetTHB + inkRatePerSheetTHB
+  const totalPrintAndPaperTHB = combinedRatePerSheetTHB * totalPrintedPages
 
-  const paperBaseRateTHB = Math.max(0.60, 0.45 + materialAdd + sizeAdd)
-  const combinedRatePerSheetTHB = inkCoverageRatePerSheetTHB + paperBaseRateTHB
-  const totalPrintAndPaperTHB = totalSheets * combinedRatePerSheetTHB
-
-  // Finishing & Binding Rate per book/item
-  const finishingServiceRateTHB = Math.max(0, finishingAdd || (pagesPerItem > 1 ? 8 : 0))
+  // 2. Finishing & Binding Service Fee per unit
+  const finishingServiceRateTHB = finishingAdd + (baseUnit * 0.2)
   const totalFinishingServiceTHB = finishingServiceRateTHB * quantity
 
+  // 3. Gross before discount
   const grossCalculatedTHB = totalPrintAndPaperTHB + totalFinishingServiceTHB
-  const finalTotalTHB = totalAmountTHB > 0 ? totalAmountTHB : grossCalculatedTHB
-  const discountSavingsTHB = (finalTotalTHB * discountPercent) / (100 - discountPercent || 100)
+
+  // 4. Discount calculation
+  const discountSavingsTHB = (grossCalculatedTHB * discountPercent) / 100
+  const finalTotalTHB = Math.max(0, grossCalculatedTHB - discountSavingsTHB)
 
   return (
-    <div className="w-full rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 shadow-xl overflow-hidden">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 flex items-center justify-between">
+    <div className="border border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 shadow-sm overflow-hidden text-slate-800 dark:text-slate-200 my-4 transition-all">
+      {/* Header Bar */}
+      <div className="bg-slate-50 dark:bg-slate-850/80 px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
           <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-slate-100 m-0 uppercase tracking-wider">
@@ -75,7 +74,12 @@ export const PriceBreakdownTable: React.FC<PriceBreakdownTableProps> = ({
         {discountPercent > 0 && (
           <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
             <SparkleIcon size={13} />
-            <span>{language === 'en' ? `Tier Discount -${discountPercent}%` : `ສ່ວນຫຼຸດພິເ      {/* Table Content */}
+            <span>{language === 'en' ? `Tier Discount -${discountPercent}%` : `ສ່ວນຫຼຸດ Tier -${discountPercent}%`}</span>
+          </span>
+        )}
+      </div>
+
+      {/* Table Content */}
       <div className="p-6">
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left">
@@ -179,35 +183,6 @@ export const PriceBreakdownTable: React.FC<PriceBreakdownTableProps> = ({
               {language === 'en'
                 ? `Total ${totalPrintedPages} pages across ${quantity} set(s)`
                 : `ລວມທັງໝົດ ${totalPrintedPages} ໜ້າ (ຄິດໄລ່ຈາກຟາຍ ${pagesPerItem} ໜ້າ × ${quantity} ຊຸດ/ເຫຼັ້ມ)`}
-            </p>
-          </div>
-
-          <div className="flex items-baseline gap-3">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              {language === 'en' ? 'Net Quotation Total:' : 'ຍອດລວມສຸດທິ:'}
-            </span>
-            <span className="text-2xl sm:text-3xl font-black text-amber-600 dark:text-amber-400 font-mono">
-              {formatMoney(convertTo(finalTotalTHB), currency)}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default PriceBreakdownTable
-� ${pagesPerItem} ໜ້າ × ${quantity} ຊຸດ/ເຫຼັ້ມ)`}
-            </p>
-          </div>
-ulatedTHB / quantity), currency)} / Set`
-                  : `ລາຄາສະເລ່ຍ: ${formatMoney(convertTo(grossCalculatedTHB / quantity), currency)} / ເຫຼັ້ມ (ຊຸດ)`}
-              </span>
-            </div>
-            <p className="m-0 text-[11px] text-slate-400">
-              {language === 'en'
-                ? `Total ${totalSheets} sheets across ${quantity} set(s)`
-                : `ລວມທັງໝົດ ${totalSheets} ແຜ່ນ (ຄິດໄລ່ ${pagesPerItem} ແຜ່ນ/ເຫຼັ້ມ × ${quantity} ເຫຼັ້ມ)`}
             </p>
           </div>
 

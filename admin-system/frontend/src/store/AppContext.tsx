@@ -33,6 +33,58 @@ const initialPurchaseRequisitions: any[] = [];
 const initialDeliveries: any[] = [];
 const initialPrinterColorLinks: any[] = [];
 
+const initialCouriers = [
+  {
+    id: 'anousith_express',
+    name: 'Anousith Express (ອະນຸສິດ ເອັກສະເປຣັສ)',
+    shortName: 'Anousith',
+    logoUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&q=80&w=150',
+    fee: 15000,
+    eta: '1-2 ວັນ (1-2 Days)',
+    freeAbove: 300000,
+    color: '#d97706',
+    isActive: true,
+    isDefault: true,
+  },
+  {
+    id: 'hal_logistics',
+    name: 'HAL Logistics (ຮົງອາລຸນ ຂົນສົ່ງ)',
+    shortName: 'HAL',
+    logoUrl: 'http://localhost:8080/api/v1/orders/files/logo_1787356736419680000.png',
+    fee: 20000,
+    eta: '1-2 ວັນ (1-2 Days)',
+    freeAbove: 350000,
+    color: '#2563eb',
+    isActive: true,
+    isDefault: false,
+  },
+];
+
+const initialPaymentMethods = [
+  {
+    id: 'bcel_one',
+    bankName: 'BCEL (ທະນາຄານການຄ້າຕ່າງປະເທດລາວ ມະຫາຊົນ)',
+    accountName: 'Som-Sing Phim Printing Shop',
+    accountNumber: '160-12-00-01234567-001',
+    branch: 'Vientiane Head Office',
+    qrCodeUrl: '/assets/images/bcel-qr-placeholder.png',
+    promptpayName: 'Som-Sing Phim',
+    isActive: true,
+    isDefault: true,
+  },
+  {
+    id: 'ldb_trust',
+    bankName: 'LDB (ທະນາຄານ ພັດທະນາລາວ)',
+    accountName: 'Som-Sing Phim Printing Shop',
+    accountNumber: '010-00-11-98765432-001',
+    branch: 'Lane Xang Branch',
+    qrCodeUrl: '/assets/images/bcel-qr-placeholder.png',
+    promptpayName: 'Som-Sing Phim',
+    isActive: true,
+    isDefault: false,
+  },
+];
+
 // Multi-Currency configuration (all internal values are stored in LAK base)
 const CURRENCY_META = {
   LAK: { symbol: '₭', locale: 'lo-LA', currency: 'LAK', rate: 1 },
@@ -215,6 +267,32 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     safeSetItem('ss_print_deliveries_v6', deliveries);
   }, [deliveries]);
+
+  // ---- Couriers & Logistics Master Data ----
+  const [couriers, setCouriers] = useState(() => {
+    const saved = localStorage.getItem('ss_print_couriers_v1');
+    return saved ? JSON.parse(saved) : initialCouriers;
+  });
+
+  useEffect(() => {
+    safeSetItem('ss_print_couriers_v1', couriers);
+    if (couriers && couriers.length > 0) {
+      syncCouriersToBackend(couriers);
+    }
+  }, [couriers]);
+
+  // ---- Payment Methods / Bank Accounts Master Data ----
+  const [bankAccounts, setBankAccounts] = useState(() => {
+    const saved = localStorage.getItem('ss_print_bank_accounts_v1');
+    return saved ? JSON.parse(saved) : initialPaymentMethods;
+  });
+
+  useEffect(() => {
+    safeSetItem('ss_print_bank_accounts_v1', bankAccounts);
+    if (bankAccounts && bankAccounts.length > 0) {
+      syncBankAccountsToBackend(bankAccounts);
+    }
+  }, [bankAccounts]);
 
   // ---- Role-Based Access Control (simulation) ----
   const [activeRole, setActiveRole] = useState(() => {
@@ -418,11 +496,174 @@ export const AppProvider = ({ children }) => {
         }
       })
       .catch(err => console.warn('Inbound fetch notice:', err));
+
+    const localCouriers = localStorage.getItem('ss_print_couriers_v1');
+    if (localCouriers) {
+      try {
+        const parsed = JSON.parse(localCouriers);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          fetch('http://localhost:8080/api/v1/admin/couriers/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(parsed)
+          }).catch(err => console.warn('Couriers sync notice:', err));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    } else {
+      fetch('http://localhost:8080/api/v1/couriers')
+        .then(res => (res && res.ok ? res.json() : null))
+        .then(resData => {
+          if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
+            setCouriers(resData.data);
+          }
+        })
+        .catch(err => console.warn('Couriers fetch notice:', err));
+    }
+
+    const localBanks = localStorage.getItem('ss_print_bank_accounts_v1');
+    if (localBanks) {
+      try {
+        const parsed = JSON.parse(localBanks);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          fetch('http://localhost:8080/api/v1/admin/payment-methods/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(parsed)
+          }).catch(err => console.warn('Payment methods sync notice:', err));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    } else {
+      fetch('http://localhost:8080/api/v1/payment-methods')
+        .then(res => (res && res.ok ? res.json() : null))
+        .then(resData => {
+          if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
+            setBankAccounts(resData.data);
+          }
+        })
+        .catch(err => console.warn('Payment methods fetch notice:', err));
+    }
   }, []);
+  const normalizeCustomerOrder = (raw: any) => {
+    if (!raw) return null;
+    const items = Array.isArray(raw.items) && raw.items.length > 0
+      ? raw.items.map((it: any, idx: number) => ({
+          id: it.id || `item-${idx + 1}`,
+          name: it.product_name || it.name || 'ງານສິ່ງພິມ (Custom Print)',
+          quantity: Number(it.quantity) || 1,
+          pageCount: Number(it.page_count) || 1,
+          paperSize: it.specs?.size || it.paperSize || 'A4',
+          paperType: it.specs?.paper || it.paperType || 'Art 80g',
+          finishing: it.specs?.finishing || it.finishing || 'None',
+          unitPrice: Number(it.unit_price) || 0,
+          totalPrice: Number(it.total_price) || Number(raw.total_price) || 0,
+          driveLink: it.drive_link || raw.drive_link || '',
+        }))
+      : [{
+          id: 'item-1',
+          name: raw.product_name || (raw.specs && raw.specs.size ? `ງານພິມ (${raw.specs.size})` : 'Custom Print Item'),
+          quantity: Number(raw.quantity) || 1,
+          pageCount: 1,
+          paperSize: raw.specs?.size || 'A4',
+          paperType: raw.specs?.paper || 'Art 80g',
+          finishing: raw.specs?.finishing || 'None',
+          unitPrice: Number(raw.total_price) / (Number(raw.quantity) || 1),
+          totalPrice: Number(raw.total_price) || 0,
+          driveLink: raw.drive_link || '',
+        }];
+
+    return {
+      id: raw.order_id || raw.id || `SSP-${Math.floor(10000 + Math.random() * 90000)}`,
+      orderNo: raw.order_id || raw.id || raw.order_no,
+      customerName: raw.customer_name || raw.customerName || 'ລູກຄ້າທົ່ວໄປ (Customer)',
+      phone: raw.phone || raw.customer_phone || '',
+      email: raw.email || raw.customer_email || '',
+      address: raw.address || '',
+      items,
+      status: raw.status === 'PAID_PREPRESS' ? 'Pending' : (raw.status || 'Pending'),
+      paymentStatus: raw.payment_slip_url || raw.status === 'PAID_PREPRESS' ? 'Paid' : 'Unpaid',
+      paymentMethod: 'BCEL OnePay QR',
+      paymentSlipUrl: raw.payment_slip_url || '',
+      driveLink: raw.drive_link || '',
+      totalAmount: Number(raw.total_price) || Number(raw.total_amount_lak) || 0,
+      paidAmount: raw.payment_slip_url || raw.status === 'PAID_PREPRESS' ? (Number(raw.total_price) || 0) : 0,
+      remainingAmount: 0,
+      shippingCourier: raw.shipping_courier_id || 'Anousith Express',
+      shippingFee: Number(raw.shipping_fee) || 0,
+      createdAt: raw.created_at || new Date().toISOString(),
+      promisedDeliveryDate: new Date(Date.now() + 48 * 3600 * 1000).toISOString().split('T')[0],
+    };
+  };
+
   const [orders, setOrders] = useState(() => {
     const saved = localStorage.getItem('ss_print_orders_v6');
-    return saved ? JSON.parse(saved) : initialOrders;
+    let baseList = saved ? JSON.parse(saved) : initialOrders;
+    
+    // Merge any customer-service placed orders
+    try {
+      const existingIds = new Set(baseList.map((o: any) => o.id || o.orderNo));
+
+      // 1. Check ssp_orders array
+      const sspOrdersRaw = localStorage.getItem('ssp_orders') || localStorage.getItem('ssp_orders_v1');
+      if (sspOrdersRaw) {
+        const sspList = JSON.parse(sspOrdersRaw);
+        if (Array.isArray(sspList)) {
+          for (const sspOrd of sspList) {
+            const norm = normalizeCustomerOrder(sspOrd);
+            if (norm && !existingIds.has(norm.id) && !existingIds.has(norm.orderNo)) {
+              baseList = [norm, ...baseList];
+              existingIds.add(norm.id);
+            }
+          }
+        }
+      }
+
+      // 2. Check ssp_placed_order single object
+      const sspPlacedRaw = localStorage.getItem('ssp_placed_order');
+      if (sspPlacedRaw) {
+        const placed = JSON.parse(sspPlacedRaw);
+        const norm = normalizeCustomerOrder(placed);
+        if (norm && !existingIds.has(norm.id) && !existingIds.has(norm.orderNo)) {
+          baseList = [norm, ...baseList];
+          existingIds.add(norm.id);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return baseList;
   });
+
+  // Listen for storage events across tabs to instantly sync newly placed customer orders
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if ((e.key === 'ssp_orders' || e.key === 'ssp_placed_order' || e.key === 'ssp_orders_v1') && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          const list = Array.isArray(parsed) ? parsed : [parsed];
+          setOrders((prev: any[]) => {
+            const existingIds = new Set(prev.map(o => o.id || o.orderNo));
+            let updated = [...prev];
+            for (const sspOrd of list) {
+              const norm = normalizeCustomerOrder(sspOrd);
+              if (norm && !existingIds.has(norm.id) && !existingIds.has(norm.orderNo)) {
+                updated = [norm, ...updated];
+                existingIds.add(norm.id);
+              }
+            }
+            return updated;
+          });
+        } catch {
+          // ignore
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
   const [spoilageLogs, setSpoilageLogs] = useState(() => {
     const saved = localStorage.getItem('ss_print_spoilage_v6');
     return saved ? JSON.parse(saved) : initialSpoilageLogs;
@@ -1332,8 +1573,26 @@ export const AppProvider = ({ children }) => {
           paymentMethod: method,
           paymentSlipNote: slipNote || ord.paymentSlipNote,
           paymentStatus: fullyPaid ? 'Fully Paid' : 'Deposit Paid',
-          paidDateTime: timeNow,
+          paidDateTime: fullyPaid ? timeNow : ord.paidDateTime,
           activityLog: [newLog, ...logs]
+        };
+      }
+      return ord;
+    }));
+  };
+
+  const updateOrderPaymentStatus = (orderId, newPaymentStatus, depositAmount, remainingBalance, slipUrl) => {
+    setOrders(prev => prev.map(ord => {
+      if (ord.id === orderId) {
+        const total = Number(ord.totalPriceCharged || ord.totalAmount || ord.total_amount_lak || 0);
+        const dep = depositAmount !== undefined ? depositAmount : (newPaymentStatus === 'Paid' ? total : (newPaymentStatus === 'Deposit' ? Math.round(total / 2) : 0));
+        const rem = remainingBalance !== undefined ? remainingBalance : (newPaymentStatus === 'Paid' ? 0 : (total - (dep || 0)));
+        return {
+          ...ord,
+          paymentStatus: newPaymentStatus,
+          depositAmountPaid: dep,
+          remainingUnpaidBalance: rem,
+          ...(slipUrl ? { paymentSlipUrl: slipUrl } : {})
         };
       }
       return ord;
@@ -1959,9 +2218,113 @@ export const AppProvider = ({ children }) => {
     setDowntimeLogs(initialDowntimeLogs);
     setPurchaseRequisitions(initialPurchaseRequisitions);
     setDeliveries(initialDeliveries);
+    setCouriers(initialCouriers);
+    setBankAccounts(initialPaymentMethods);
     setExchangeRates(DEFAULT_RATES);
     setRatesUpdatedAt('');
     setRateMode('sell');
+  };
+
+  // ---- Couriers CRUD Helpers ----
+  const syncCouriersToBackend = async (list: any[]) => {
+    try {
+      await fetch('http://localhost:8080/api/v1/admin/couriers/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(list)
+      });
+    } catch (err) {
+      console.warn('Sync couriers error:', err);
+    }
+  };
+
+  const addCourier = async (newCourier: any) => {
+    const courierObj = {
+      id: newCourier.id || `courier_${Date.now()}`,
+      name: newCourier.name,
+      shortName: newCourier.shortName || newCourier.name,
+      logoUrl: newCourier.logoUrl || '',
+      fee: Number(newCourier.fee) || 0,
+      eta: newCourier.eta || '1-2 ວັນ',
+      freeAbove: Number(newCourier.freeAbove) || 0,
+      color: newCourier.color || '#2563eb',
+      isActive: newCourier.isActive !== false,
+      isDefault: Boolean(newCourier.isDefault)
+    };
+
+    setCouriers(prev => {
+      const nextList = [...prev.filter(c => c.id !== courierObj.id), courierObj];
+      syncCouriersToBackend(nextList);
+      return nextList;
+    });
+    return courierObj;
+  };
+
+  const updateCourier = async (id: string, updated: any) => {
+    setCouriers(prev => {
+      const nextList = prev.map(c => c.id === id ? { ...c, ...updated } : c);
+      syncCouriersToBackend(nextList);
+      return nextList;
+    });
+  };
+
+  const deleteCourier = async (id: string) => {
+    setCouriers(prev => {
+      const nextList = prev.filter(c => c.id !== id);
+      syncCouriersToBackend(nextList);
+      return nextList;
+    });
+  };
+
+  // ---- Bank Accounts CRUD Helpers ----
+  const syncBankAccountsToBackend = async (list: any[]) => {
+    try {
+      await fetch('http://localhost:8080/api/v1/admin/payment-methods/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(list)
+      });
+    } catch (err) {
+      console.warn('Sync bank accounts error:', err);
+    }
+  };
+
+  const addBankAccount = async (newBank: any) => {
+    const bankObj = {
+      id: newBank.id || `bank_${Date.now()}`,
+      bankName: newBank.bankName,
+      accountName: newBank.accountName,
+      accountNumber: newBank.accountNumber,
+      branch: newBank.branch || '',
+      qrCodeUrl: newBank.qrCodeUrl || '',
+      logoUrl: newBank.logoUrl || '',
+      promptpayName: newBank.promptpayName || '',
+      isActive: newBank.isActive !== false,
+      isDefault: Boolean(newBank.isDefault)
+    };
+
+    setBankAccounts(prev => {
+      const nextList = [...prev.filter(b => b.id !== bankObj.id), bankObj];
+      syncBankAccountsToBackend(nextList);
+      return nextList;
+    });
+    return bankObj;
+  };
+
+  const updateBankAccount = async (id: string, updated: any) => {
+    setBankAccounts(prev => {
+      const nextList = prev.map(b => b.id === id ? { ...b, ...updated } : b);
+      syncBankAccountsToBackend(nextList);
+      return nextList;
+    });
+  };
+
+  const deleteBankAccount = async (id: string) => {
+    setBankAccounts(prev => {
+      const nextList = prev.filter(b => b.id !== id);
+      syncBankAccountsToBackend(nextList);
+      return nextList;
+    });
   };
 
   return (
@@ -2013,6 +2376,16 @@ export const AppProvider = ({ children }) => {
       setDeliveries,
       addDelivery,
       updateDelivery,
+      couriers,
+      setCouriers,
+      addCourier,
+      updateCourier,
+      deleteCourier,
+      bankAccounts,
+      setBankAccounts,
+      addBankAccount,
+      updateBankAccount,
+      deleteBankAccount,
       activeRole,
       setActiveRole,
       canAccess,
@@ -2058,6 +2431,7 @@ export const AppProvider = ({ children }) => {
       addOrderVersion,
       addOrder,
       updateOrderStatus,
+      updateOrderPaymentStatus,
       settleOrderBalance,
       deleteOrder,
       addSpoilageLog,
