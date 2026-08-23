@@ -168,6 +168,7 @@ func main() {
 	router.GET("/api/v1/inventory/inbound", invHandler.HandleGetInboundHistory)
 	router.POST("/api/v1/inventory/inbound/cancel", invHandler.HandleCancelInbound)
 	router.POST("/api/v1/inventory/inbound/:id/cancel", invHandler.HandleCancelInbound)
+	router.DELETE("/api/v1/inventory/inbound/:id", invHandler.HandleDeleteInbound)
 	router.GET("/api/v1/materials", invHandler.HandleGetMaterials)
 	router.GET("/api/v1/materials/:id", invHandler.HandleGetMaterialByID)
 	router.PUT("/api/v1/materials/:id", invHandler.HandleUpdateMaterialDirect)
