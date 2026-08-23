@@ -74,6 +74,9 @@ func RunMigrations(db *sql.DB) error {
 		"migrations/018_lao_provinces_and_districts.sql",
 		"../migrations/019_dynamic_categories_and_bilingual_catalog.sql",
 		"migrations/019_dynamic_categories_and_bilingual_catalog.sql",
+		"../migrations/020_inventory_inbound_fix.sql",
+		"migrations/020_inventory_inbound_fix.sql",
+		"migrations/000002_inventory_inbound_fix.sql",
 		"../schema.sql",
 		"schema.sql",
 	}

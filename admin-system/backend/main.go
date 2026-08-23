@@ -13,6 +13,7 @@ import (
 	"backend/finance"
 	"backend/hr"
 	"backend/inbound"
+	"backend/internal/handler"
 	"backend/inventory"
 	"backend/middleware"
 	"backend/orders"
@@ -162,6 +163,18 @@ func main() {
 	router.DELETE("/api/employees/:id", hr.HandleDeleteEmployee)
 
 	// Inbound Procurement routes
+	invHandler := handler.NewInventoryHandler()
+	router.POST("/api/v1/inventory/inbound", invHandler.HandleProcessInbound)
+	router.GET("/api/v1/inventory/inbound", invHandler.HandleGetInboundHistory)
+	router.POST("/api/v1/inventory/inbound/cancel", invHandler.HandleCancelInbound)
+	router.POST("/api/v1/inventory/inbound/:id/cancel", invHandler.HandleCancelInbound)
+	router.GET("/api/v1/materials", invHandler.HandleGetMaterials)
+	router.GET("/api/v1/materials/:id", invHandler.HandleGetMaterialByID)
+	router.PUT("/api/v1/materials/:id", invHandler.HandleUpdateMaterialDirect)
+	router.GET("/api/v1/inventory/ink-bottles", invHandler.HandleGetInkBottles)
+	router.POST("/api/v1/inventory/ink-bottles", invHandler.HandleIntakeInkBottle)
+	router.POST("/api/v1/inventory/ink-bottles/deduct", invHandler.HandleDeductInkBottle)
+
 	router.GET("/api/inbound", inbound.HandleGetInboundTransactions)
 	router.POST("/api/inbound", inbound.HandleCreateInboundTransaction)
 	router.PUT("/api/inbound/:id", inbound.HandleUpdateInboundTransaction)

@@ -1,6 +1,10 @@
 export * from './types';
+export * from './api/inventoryApi';
 export { default as InventoryManagement } from './components/InventoryManagement';
 export { default as InventoryTable } from './components/InventoryTable';
+export { default as StockTable } from './components/StockTable';
+export { default as InboundHistoryTable } from './components/InboundHistoryTable';
+export { default as InboundFormModal } from './components/InboundFormModal';
 export { default as DynamicSpecDetail } from './components/details/DynamicSpecDetail';
 export { default as DynamicSpecForm } from './components/forms/DynamicSpecForm';
 export { default as SupplierPriceUploader } from './components/SupplierPriceUploader';
