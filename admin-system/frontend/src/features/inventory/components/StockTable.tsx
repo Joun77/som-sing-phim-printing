@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Edit3, Plus, AlertCircle, CheckCircle2, AlertTriangle, XCircle, Search, Layers, RefreshCw, X } from 'lucide-react';
+import { Edit3, Plus, CheckCircle2, AlertTriangle, XCircle, Search, X } from 'lucide-react';
 import { MaterialMaster } from '../types';
-import { updateMaterial } from '../api/inventoryApi';
+import { updateMaterialDirect } from '../api/inventoryApi';
 
 interface StockTableProps {
   materials: MaterialMaster[];
@@ -20,9 +20,9 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
   const [editCategory, setEditCategory] = useState('');
   const [editPurchaseUnit, setEditPurchaseUnit] = useState('');
   const [editConsumptionUnit, setEditConsumptionUnit] = useState('');
-  const [editMultiplier, setEditMultiplier] = useState<number>(1);
-  const [editPurchaseCost, setEditPurchaseCost] = useState<number>(0);
-  const [editMinAlert, setEditMinAlert] = useState<number>(10);
+  const [editMultiplier, setEditMultiplier] = useState<number | string>(1);
+  const [editPurchaseCost, setEditPurchaseCost] = useState<number | string>(0);
+  const [editMinAlert, setEditMinAlert] = useState<number | string>(10);
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -55,7 +55,7 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
     setEditLoading(true);
     setEditError(null);
     try {
-      await updateMaterial(editingMaterial.id || editingMaterial.sku, {
+      await updateMaterialDirect(editingMaterial.id || editingMaterial.sku, {
         name: editName,
         category: editCategory,
         purchase_unit: editPurchaseUnit,
@@ -297,8 +297,9 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
                   <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">เกณฑ์เตือนใกล้หมด</label>
                   <input
                     type="number"
+                    step="any"
                     value={editMinAlert}
-                    onChange={(e) => setEditMinAlert(Number(e.target.value))}
+                    onChange={(e) => setEditMinAlert(e.target.value)}
                     className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 font-semibold"
                   />
                 </div>
@@ -327,8 +328,9 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
                   <label className="block text-[11px] text-slate-500 mb-1">ตัวคูณ (Multiplier)</label>
                   <input
                     type="number"
+                    step="any"
                     value={editMultiplier}
-                    onChange={(e) => setEditMultiplier(Number(e.target.value))}
+                    onChange={(e) => setEditMultiplier(e.target.value)}
                     className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
                   />
                 </div>
@@ -340,8 +342,9 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
                 </label>
                 <input
                   type="number"
+                  step="any"
                   value={editPurchaseCost}
-                  onChange={(e) => setEditPurchaseCost(Number(e.target.value))}
+                  onChange={(e) => setEditPurchaseCost(e.target.value)}
                   className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">

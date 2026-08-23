@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RotateCcw, AlertTriangle, CheckCircle, XCircle, Search, Calendar, User, FileText } from 'lucide-react';
+import { RotateCcw, AlertTriangle, CheckCircle, XCircle, Search, Calendar } from 'lucide-react';
 import { StockInboundRecord, CancelInboundPayload } from '../types';
 import { cancelInbound } from '../api/inventoryApi';
 

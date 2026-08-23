@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, PackagePlus, RefreshCw, AlertCircle, CheckCircle2, DollarSign, Layers } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, PackagePlus, RefreshCw, AlertCircle, CheckCircle2, DollarSign, Layers, Search } from 'lucide-react';
 import { MaterialMaster, CreateInboundPayload } from '../types';
 import { createInbound } from '../api/inventoryApi';
 
@@ -15,6 +15,9 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Search filter for existing material
+  const [searchTerm, setSearchTerm] = useState('');
+
   // Form Fields
   const [selectedMaterialId, setSelectedMaterialId] = useState<string>('');
   const [skuCode, setSkuCode] = useState('');
@@ -22,15 +25,27 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
   const [category, setCategory] = useState('paper');
   const [supplierName, setSupplierName] = useState('');
   const [poNumber, setPoNumber] = useState('');
+  const [lotBatchNumber, setLotBatchNumber] = useState('');
   const [inboundDate, setInboundDate] = useState(new Date().toISOString().split('T')[0]);
-  const [quantityReceived, setQuantityReceived] = useState<number>(1);
+  const [quantityReceived, setQuantityReceived] = useState<number | string>(1);
   const [purchaseUnit, setPurchaseUnit] = useState('รีม');
-  const [purchaseMultiplier, setPurchaseMultiplier] = useState<number>(500);
-  const [unitPurchasePrice, setUnitPurchasePrice] = useState<number>(0);
+  const [purchaseMultiplier, setPurchaseMultiplier] = useState<number | string>(500);
+  const [unitPurchasePrice, setUnitPurchasePrice] = useState<number | string>(0);
   const [paymentMethod, setPaymentMethod] = useState('TRANSFER');
   const [origin, setOrigin] = useState('TH');
-  const [tariffFee, setTariffFee] = useState<number>(0);
-  const [freightFee, setFreightFee] = useState<number>(0);
+  const [tariffFee, setTariffFee] = useState<number | string>(0);
+  const [freightFee, setFreightFee] = useState<number | string>(0);
+
+  // Filtered materials for easy search
+  const filteredMaterials = useMemo(() => {
+    if (!searchTerm.trim()) return materials;
+    const term = searchTerm.toLowerCase();
+    return materials.filter(m => 
+      (m.name && m.name.toLowerCase().includes(term)) ||
+      (m.sku && m.sku.toLowerCase().includes(term)) ||
+      (m.category && m.category.toLowerCase().includes(term))
+    );
+  }, [materials, searchTerm]);
 
   // Auto-fill when selecting an existing material
   useEffect(() => {
@@ -57,12 +72,18 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
     if (materials && materials.length > 0 && !selectedMaterialId && mode === 'existing') {
       setSelectedMaterialId(materials[0].id || materials[0].sku);
     }
-  }, [materials, mode]);
+  }, [materials, mode, selectedMaterialId]);
 
   if (!isOpen) return null;
 
-  const totalItemCost = Number(quantityReceived || 0) * Number(unitPurchasePrice || 0);
-  const grandTotal = totalItemCost + Number(tariffFee || 0) + Number(freightFee || 0);
+  const numQty = parseFloat(String(quantityReceived)) || 0;
+  const numPrice = parseFloat(String(unitPurchasePrice)) || 0;
+  const numMult = parseFloat(String(purchaseMultiplier)) || 1;
+  const numTariff = parseFloat(String(tariffFee)) || 0;
+  const numFreight = parseFloat(String(freightFee)) || 0;
+
+  const totalItemCost = numQty * numPrice;
+  const grandTotal = totalItemCost + numTariff + numFreight;
 
   // Estimated Moving Average Cost Simulation
   const selectedMat = materials.find(m => m.id === selectedMaterialId || m.sku === selectedMaterialId);
@@ -70,9 +91,9 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
   if (selectedMat && mode === 'existing') {
     const currentStock = Number(selectedMat.stock_qty || 0);
     const currentCost = Number(selectedMat.cost_per_consumption_unit || 0);
-    const mult = Number(purchaseMultiplier || selectedMat.purchase_multiplier || 1);
-    const incomingConsumptionQty = Number(quantityReceived || 0) * mult;
-    const incomingConsumptionCost = Number(unitPurchasePrice || 0) / (mult > 0 ? mult : 1);
+    const mult = numMult > 0 ? numMult : 1;
+    const incomingConsumptionQty = numQty * mult;
+    const incomingConsumptionCost = numPrice / mult;
 
     if (currentStock <= 0) {
       estimatedNewUnitCost = incomingConsumptionCost;
@@ -96,7 +117,7 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
       setError('กรุณาระบุชื่อสินค้า');
       return;
     }
-    if (quantityReceived <= 0) {
+    if (numQty <= 0) {
       setError('จำนวนรับเข้าต้องมากกว่า 0');
       return;
     }
@@ -111,15 +132,15 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
         supplier_name: supplierName,
         po_number: poNumber,
         inbound_date: inboundDate,
-        quantity_received: Number(quantityReceived),
+        quantity_received: numQty,
         purchase_unit: purchaseUnit,
-        purchase_multiplier: Number(purchaseMultiplier),
-        unit_purchase_price: Number(unitPurchasePrice),
-        total_price: Number(grandTotal),
+        purchase_multiplier: numMult,
+        unit_purchase_price: numPrice,
+        total_price: grandTotal,
         payment_method: paymentMethod,
         origin: origin,
-        tariff_fee: Number(tariffFee),
-        freight_fee: Number(freightFee),
+        tariff_fee: numTariff,
+        freight_fee: numFreight,
       };
 
       await createInbound(payload);
@@ -194,19 +215,31 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
             </div>
           )}
 
-          {/* Mode 1: Existing Item Selection */}
+          {/* Mode 1: Existing Item Selection with Quick Filter */}
           {mode === 'existing' && (
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-                เลือกสินค้าจากคลัง Master Stock <span className="text-rose-500">*</span>
-              </label>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider">
+                  เลือกสินค้าจากคลัง Master Stock <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative w-48">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="พิมพ์ค้นหาชื่อ/SKU..."
+                    className="w-full pl-8 pr-3 py-1 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
               <select
                 value={selectedMaterialId}
                 onChange={(e) => setSelectedMaterialId(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium"
               >
                 <option value="">-- เลือกรหัส / ชื่อสินค้า --</option>
-                {materials.map((m) => (
+                {filteredMaterials.map((m) => (
                   <option key={m.id} value={m.id}>
                     [{m.sku || m.id}] {m.name} ({m.category}) - คงเหลือ: {Number(m.stock_qty || 0).toLocaleString()} {m.consumption_unit}
                   </option>
@@ -284,8 +317,8 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
             </div>
           </div>
 
-          {/* Inbound Date & PO Number */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Inbound Date, PO & Lot Number */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">วันที่รับเข้า</label>
               <input
@@ -296,13 +329,23 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">เลขที่เอกสาร PO / บิลจัดซื้อ</label>
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">เลขที่ PO / บิลจัดซื้อ</label>
               <input
                 type="text"
                 value={poNumber}
                 onChange={(e) => setPoNumber(e.target.value)}
                 className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 placeholder="PO-2026-0801"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Lot / Batch Number</label>
+              <input
+                type="text"
+                value={lotBatchNumber}
+                onChange={(e) => setLotBatchNumber(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                placeholder="LOT-202608-A"
               />
             </div>
           </div>
@@ -318,10 +361,10 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
                 <label className="block text-xs text-slate-500 mb-1">จำนวนที่สั่งซื้อ</label>
                 <input
                   type="number"
-                  min="1"
+                  min="0.0001"
                   step="any"
                   value={quantityReceived}
-                  onChange={(e) => setQuantityReceived(Number(e.target.value))}
+                  onChange={(e) => setQuantityReceived(e.target.value)}
                   className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   required
                 />
@@ -340,17 +383,17 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
                 <label className="block text-xs text-slate-500 mb-1">ตัวคูณ (Multiplier)</label>
                 <input
                   type="number"
-                  min="1"
+                  min="0.0001"
                   step="any"
                   value={purchaseMultiplier}
-                  onChange={(e) => setPurchaseMultiplier(Number(e.target.value))}
+                  onChange={(e) => setPurchaseMultiplier(e.target.value)}
                   className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   placeholder="500 แผ่น/รีม"
                 />
               </div>
             </div>
             <p className="text-[11px] text-slate-500">
-              ⚡ แปลงเป็นหน่วยตัดสต็อกใช้งานจริง: <strong className="text-blue-700">{(quantityReceived * purchaseMultiplier).toLocaleString()}</strong> หน่วย
+              ⚡ แปลงเป็นหน่วยตัดสต็อกใช้งานจริง: <strong className="text-blue-700">{(numQty * numMult).toLocaleString()}</strong> หน่วย
             </p>
           </div>
 
@@ -368,7 +411,7 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
                   min="0"
                   step="any"
                   value={unitPurchasePrice}
-                  onChange={(e) => setUnitPurchasePrice(Number(e.target.value))}
+                  onChange={(e) => setUnitPurchasePrice(e.target.value)}
                   className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   required
                 />
