@@ -72,7 +72,7 @@ export interface RemoteSpecGroup {
   titleEn: string
   displayType: 'cards' | 'dropdown'
   groupType: string
-  options: PublicProductOption[]
+  options: PublicProductOptionItem[]
 }
 
 export interface RemoteFeaturesConfig {
@@ -82,6 +82,8 @@ export interface RemoteFeaturesConfig {
   hasPreflightCheck?: boolean
   hasCustomDim?: boolean
 }
+
+import type { ProductInfoTab } from '../data/catalog'
 
 export interface RemoteProduct {
   id: number
@@ -104,6 +106,7 @@ export interface RemoteProduct {
   features?: string[]
   thumbnailUrl?: string
   galleryUrls?: string[]
+  infoTabs?: ProductInfoTab[]
   minQuantity?: number
   isOnDemand?: boolean
   leadTimeDays?: number

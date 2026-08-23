@@ -39,11 +39,23 @@ export interface SpecGroup {
 }
 
 export interface FeaturesConfig {
+  hasGeneralDocUpload?: boolean
   hasCoverUpload?: boolean
   hasInnerUpload?: boolean
   hasSpineCalc?: boolean
   hasPreflightCheck?: boolean
   hasCustomDim?: boolean
+  uploadWorkflow?: 'general_document' | 'artwork_preflight' | 'custom'
+  allowedFileTypes?: string[]
+}
+
+export interface ProductInfoTab {
+  id: string
+  titleLo: string
+  titleEn: string
+  icon?: string
+  contentLo: string
+  contentEn: string
 }
 
 export interface Product {
@@ -61,6 +73,7 @@ export interface Product {
   image: string
   thumbnailUrl?: string
   galleryUrls?: string[]
+  infoTabs?: ProductInfoTab[]
   short: string
   shortEn?: string
   description: string

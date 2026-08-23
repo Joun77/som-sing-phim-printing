@@ -834,6 +834,16 @@ func HandleSaveInventorySKU(c *gin.Context) {
 		return
 	}
 
+	if item.ID == "" {
+		item.ID = "SKU-" + time.Now().Format("150405")
+	}
+
+	if db.DB != nil {
+		if err := saveInventoryItemToDB(item); err != nil {
+			log.Printf("[DB ERROR] Failed to save inventory item to DB: %v", err)
+		}
+	}
+
 	assetStoreMutex.Lock()
 	inventoryStore[item.ID] = item
 	assetStoreMutex.Unlock()
@@ -851,6 +861,12 @@ func HandleUpdateInventorySKU(c *gin.Context) {
 	}
 	item.ID = id
 
+	if db.DB != nil {
+		if err := saveInventoryItemToDB(item); err != nil {
+			log.Printf("[DB ERROR] Failed to update inventory item in DB: %v", err)
+		}
+	}
+
 	assetStoreMutex.Lock()
 	inventoryStore[item.ID] = item
 	assetStoreMutex.Unlock()
@@ -862,11 +878,36 @@ func HandleUpdateInventorySKU(c *gin.Context) {
 func HandleDeleteInventorySKU(c *gin.Context) {
 	id := c.Param("id")
 
+	if db.DB != nil {
+		_, err := db.DB.Exec(`DELETE FROM materials WHERE id = $1 OR sku = $1`, id)
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to delete material from DB: %v", err)
+		}
+	}
+
 	assetStoreMutex.Lock()
 	delete(inventoryStore, id)
 	assetStoreMutex.Unlock()
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "SKU deleted"})
+}
+
+// HandleDeleteEquipment deletes equipment / printer asset
+func HandleDeleteEquipment(c *gin.Context) {
+	id := c.Param("id")
+
+	if db.DB != nil {
+		_, err := db.DB.Exec(`DELETE FROM printers WHERE asset_id = $1 OR serial_number = $1`, id)
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to delete printer from DB: %v", err)
+		}
+	}
+
+	assetStoreMutex.Lock()
+	delete(equipmentStore, id)
+	assetStoreMutex.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Equipment deleted"})
 }
 
 // DeductInventoryStockFIFOPessimisticLock performs strict FIFO stock deduction with FOR UPDATE row locks to prevent race conditions

@@ -320,6 +320,9 @@ export default function ProductPage() {
           }))
         })),
         featuresConfig: remoteProduct.featuresConfig,
+        thumbnailUrl: remoteProduct.thumbnailUrl || '',
+        galleryUrls: remoteProduct.galleryUrls || [],
+        infoTabs: remoteProduct.infoTabs,
         sizes: sizes.length > 0 ? sizes : [{ id: 'standard', label: language === 'en' ? 'Standard Size' : 'ຂະໜາດມາດຕະຖານ', hint: '', add: 0 }],
         materials: mats.length > 0 ? mats : [{ id: 'standard_mat', label: language === 'en' ? 'Standard Material' : 'ວັດສະດຸມາດຕະຖານ', hint: '', add: 0 }],
         finishings: finishings.length > 0 ? finishings : [{ id: 'standard_cut', label: language === 'en' ? 'Straight Cut' : 'ຕັດກົງມາດຕະຖານ', hint: '', add: 0 }],
@@ -453,6 +456,36 @@ export default function ProductPage() {
       return next
     })
   }
+
+  // Dynamic Upload Workflow & Allowed Extensions based on Product Features Config
+  const isGeneralDocWorkflow = useMemo(() => {
+    return (
+      product?.featuresConfig?.uploadWorkflow === 'general_document' ||
+      product?.category === 'documents' ||
+      product?.featuresConfig?.hasPreflightCheck === false
+    )
+  }, [product])
+
+  const allowedExtensions = useMemo(() => {
+    const configured = product?.featuresConfig?.allowedFileTypes
+    if (configured && configured.length > 0) {
+      const extMap: Record<string, string> = {
+        pdf: '.pdf,application/pdf',
+        ai: '.ai,.eps,application/postscript',
+        psd: '.psd,image/vnd.adobe.photoshop',
+        png: '.png,image/png',
+        jpg: '.jpg,.jpeg,image/jpeg',
+        docx: '.docx,.doc,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        xlsx: '.xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        pptx: '.pptx,.ppt,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        zip: '.zip,.rar,application/zip,application/x-rar-compressed',
+      }
+      return configured.map((k) => extMap[k] || `.${k}`).join(',')
+    }
+    return isGeneralDocWorkflow
+      ? '.pdf,application/pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.txt,.jpg,.jpeg,.png,image/*'
+      : 'image/*,application/pdf,.pdf,.ai,.psd,.png,.jpg,.jpeg,.tiff,.zip'
+  }, [product?.featuresConfig?.allowedFileTypes, isGeneralDocWorkflow])
 
   const isOnDemand = Boolean(
     remoteProduct?.isOnDemand ||
@@ -722,21 +755,55 @@ export default function ProductPage() {
 
   const productImages = useMemo(() => {
     const list: string[] = []
-    if (product?.image && product.image !== 'doc' && product.image !== 'sticker' && product.image !== 'card' && product.image !== 'photos') {
-      list.push(product.image)
-    } else if (product?.thumbnailUrl) {
-      list.push(product.thumbnailUrl)
+    const resolveImg = (url?: string) => {
+      if (!url || typeof url !== 'string') return null
+      const trimmed = url.trim()
+      if (!trimmed || ['doc', 'sticker', 'card', 'photos', 'album'].includes(trimmed.toLowerCase())) return null
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) return trimmed
+      if (trimmed.startsWith('/uploads') || trimmed.startsWith('uploads/')) {
+        const base = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+        return `${base.replace(/\/+$/, '')}/${trimmed.replace(/^\/+/, '')}`
+      }
+      return trimmed
     }
-    if (product?.galleryUrls && Array.isArray(product.galleryUrls)) {
-      product.galleryUrls.forEach((u) => {
-        if (u && !list.includes(u)) list.push(u)
+
+    const cover = resolveImg(product?.thumbnailUrl) || resolveImg(remoteProduct?.thumbnailUrl) || resolveImg(product?.image)
+    if (cover) list.push(cover)
+
+    const galleries = product?.galleryUrls || remoteProduct?.galleryUrls || []
+    if (Array.isArray(galleries)) {
+      galleries.forEach((u) => {
+        const resolved = resolveImg(u)
+        if (resolved && !list.includes(resolved)) list.push(resolved)
       })
     }
     return list
-  }, [product])
+  }, [product, remoteProduct])
 
   const [activePhotoIndex, setActivePhotoIndex] = useState(0)
-  const [infoTab, setInfoTab] = useState<'description' | 'materials' | 'bleed' | 'shipping'>('description')
+  const [selectedCustomTab, setSelectedCustomTab] = useState<string>('description')
+  const [imageLoadError, setImageLoadError] = useState(false)
+
+  const allowedTypesDisplay = useMemo(() => {
+    const types = product?.featuresConfig?.allowedFileTypes
+    if (types && types.length > 0) {
+      const nameMap: Record<string, string> = {
+        pdf: 'PDF (.pdf)',
+        ai: 'Illustrator (.ai)',
+        psd: 'Photoshop (.psd)',
+        png: 'PNG (.png)',
+        jpg: 'JPG / JPEG (.jpg)',
+        docx: 'Word (.docx)',
+        xlsx: 'Excel (.xlsx)',
+        pptx: 'PowerPoint (.pptx)',
+        zip: 'ZIP / RAR (.zip)',
+      }
+      return types.map((t) => nameMap[t] || t.toUpperCase()).join(', ')
+    }
+    return isGeneralDocWorkflow
+      ? 'Word (.docx), Excel (.xlsx), PowerPoint (.pptx), PDF, ຮູບພາບ (.jpg, .png)'
+      : 'PDF, Photoshop, Illustrator, PNG, JPG'
+  }, [product?.featuresConfig?.allowedFileTypes, isGeneralDocWorkflow])
 
   const validateInputs = () => {
     const nextErrors: Record<string, string> = {}
@@ -848,6 +915,41 @@ export default function ProductPage() {
   const productDesc = language === 'en' && product?.descriptionEn ? product.descriptionEn : (product?.description || '')
   const categoryName = language === 'en' && category?.nameEn ? category.nameEn : (category?.name || '')
 
+  if (isLoading && !product) {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+        <p className="text-sm font-bold text-slate-500 animate-pulse">
+          {language === 'en' ? 'Loading product details...' : 'ກຳລັງໂຫຼດຂໍ້ມູນສິນຄ້າ...'}
+        </p>
+      </div>
+    )
+  }
+
+  if (!product) {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-4 text-center px-4">
+        <div className="w-16 h-16 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-500 flex items-center justify-center text-2xl font-black">
+          ✕
+        </div>
+        <h2 className="text-xl font-black text-slate-900 dark:text-white">
+          {language === 'en' ? 'Product Not Found' : 'ບໍ່ພົບສິນຄ້ານີ້ໃນລະບົບ'}
+        </h2>
+        <p className="text-xs text-slate-500 max-w-sm">
+          {language === 'en'
+            ? 'The requested product might have been moved or is currently unavailable.'
+            : 'ສິນຄ້າທີ່ທ່ານຕ້ອງການອາດຖືກຍ້າຍ ຫຼື ປິດໃຫ້ບໍລິການຊົ່ວຄາວ'}
+        </p>
+        <Link
+          to="/"
+          className="px-6 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold text-xs shadow-md"
+        >
+          {language === 'en' ? 'Back to Catalog' : 'ກັບໄປໜ້າຫຼັກ'}
+        </Link>
+      </div>
+    )
+  }
+
   return (
     <>
       <section className="section section--alt product-page min-h-[90vh]">
@@ -868,21 +970,30 @@ export default function ProductPage() {
                 <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-4">
                   {/* Main Featured Photo Box */}
                   <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-slate-950 flex items-center justify-center border border-slate-200 dark:border-slate-800 shadow-inner group">
-                    {productImages.length > 0 ? (
+                    {productImages.length > 0 && !imageLoadError ? (
                       <img
                         src={productImages[activePhotoIndex] || productImages[0]}
                         alt={`${productName} view ${activePhotoIndex + 1}`}
+                        onError={() => setImageLoadError(true)}
                         className="w-full h-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-500">
-                        <ProductArt art={product.image} className="w-full h-full" />
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-950/40 to-slate-900 text-amber-400 p-6 text-center space-y-2">
+                        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shadow-lg">
+                          <span className="text-3xl">
+                            {product?.category === 'stickers' ? '🏷️' : product?.category === 'photos' ? '🖼️' : '📄'}
+                          </span>
+                        </div>
+                        <span className="text-sm font-black text-slate-200">{productName}</span>
+                        <span className="text-xs text-slate-400 font-mono">
+                          {product?.unit ? `ລາຄາເລີ່ມຕົ້ນ / ${product.unit}` : 'Som Sing Phim Quality'}
+                        </span>
                       </div>
                     )}
 
                     {/* Overlaid Badges */}
                     <div className="absolute top-3 left-3 flex flex-col gap-1.5 pointer-events-none">
-                      {product.bestseller && (
+                      {product?.bestseller && (
                         <span className="px-3 py-1 rounded-full text-xs font-black bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 shadow-md">
                           ★ {language === 'en' ? 'Bestseller' : 'ສິນຄ້າຍອດນິຍົມ'}
                         </span>
@@ -989,7 +1100,9 @@ export default function ProductPage() {
                       <div className="flex items-center gap-2">
                         <UploadCloudIcon size={20} color="#C5A059" />
                         <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                          {language === 'en' ? 'Step 1: Upload Artwork(s) or Image(s)' : 'ຂັ້ນຕອນທີ 1: ອັບໂຫຼດຟາຍອາດເວິກ / ຮູບພາບ (ເລືອກໄດ້ຫຼາຍຟາຍ)'}
+                          {isGeneralDocWorkflow
+                            ? (language === 'en' ? 'Step 1: Upload Your Documents' : 'ຂັ້ນຕອນທີ 1: ອັບໂຫຼດເອກະສານຂອງທ່ານ (ເລືອກໄດ້ຫຼາຍຟາຍ)')
+                            : (language === 'en' ? 'Step 1: Upload Artwork(s) or Image(s)' : 'ຂັ້ນຕອນທີ 1: ອັບໂຫຼດຟາຍອາດເວິກ / ຮູບພາບ (ເລືອກໄດ້ຫຼາຍຟາຍ)')}
                         </h3>
                       </div>
 
@@ -1045,10 +1158,16 @@ export default function ProductPage() {
                         </div>
                         <div className="space-y-1">
                           <div className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl text-sm font-black bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 text-slate-950 shadow-xl shadow-amber-500/25">
-                            <span>{isDragOver ? 'ປ່ອຍຟາຍລົງບ່ອນນີ້ເລີຍ (Drop Files Here) 🚀' : 'ເລືອກຟາຍ ຫຼື ລາກມາວາງບ່ອນນີ້ (Choose or Drag & Drop Files)'}</span>
+                            <span>
+                              {isDragOver
+                                ? 'ປ່ອຍຟາຍລົງບ່ອນນີ້ເລີຍ (Drop Files Here) 🚀'
+                                : isGeneralDocWorkflow
+                                ? 'ເລືອກຟາຍເອກະສານ ຫຼື ລາກມາວາງ (Upload Documents)'
+                                : 'ເລືອກຟາຍອາດເວິກ ຫຼື ລາກມາວາງ (Upload Artworks)'}
+                            </span>
                           </div>
                           <span className="text-xs text-slate-500 dark:text-slate-400 block pt-2">
-                            ລາກມາວາງໄດ້ຫຼາຍຟາຍພ້ອມກັນ (PDF, AI, PSD, PNG, JPG, TIFF) · ລະບົບກວດ 300 DPI & CMYK ອັດຕະໂນມັດ
+                            {language === 'en' ? 'Supported formats: ' : 'ຮອງຮັບຟາຍ: '}{allowedTypesDisplay} · {language === 'en' ? 'Auto Preflight Check' : 'ກວດສອບມາດຕະຖານອັດຕະໂນມັດ'}
                           </span>
                         </div>
                       </div>
@@ -1575,62 +1694,51 @@ export default function ProductPage() {
             </div>
           )}
 
-          {/* 📑 BOTTOM SECTION: Comprehensive Product Knowledge, Materials & Bleed Margin Guides */}
+          {/* 📑 BOTTOM SECTION: Comprehensive Product Knowledge & Dynamic Info Tabs Studio */}
           <div className="my-12 p-6 sm:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-6">
-            {/* Tab Navigation */}
+            {/* Dynamic Tab Navigation */}
             <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 dark:border-slate-800 pb-3">
               <button
                 type="button"
-                onClick={() => setInfoTab('description')}
-                className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-2 ${
-                  infoTab === 'description'
-                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                onClick={() => setSelectedCustomTab('description')}
+                className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-2 flex-shrink-0 ${
+                  selectedCustomTab === 'description'
+                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <span>📝 {language === 'en' ? 'Description & Details' : 'ລາຍລະອຽດສິນຄ້າ'}</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setInfoTab('materials')}
-                className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-2 ${
-                  infoTab === 'materials'
-                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
-              >
-                <span>📜 {language === 'en' ? 'Paper & Material Guide' : 'ຄູ່ມືວັດສະດຸ & ປະເພດເຈ້ຍ'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setInfoTab('bleed')}
-                className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-2 ${
-                  infoTab === 'bleed'
-                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
-              >
-                <span>📐 {language === 'en' ? 'Bleed & File Specs' : 'ໄລຍະຕັດຕົກ & ມາດຕະຖານຟາຍ'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setInfoTab('shipping')}
-                className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-2 ${
-                  infoTab === 'shipping'
-                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
-              >
-                <span>🚚 {language === 'en' ? 'Turnaround & Shipping' : 'ໄລຍະເວລາຜະລິດ & ການຈັດສົ່ງ'}</span>
-              </button>
+              {/* Dynamic Tabs from Admin Backend */}
+              {(product.infoTabs && product.infoTabs.length > 0
+                ? product.infoTabs
+                : [
+                    { id: 'materials', titleLo: 'ຄູ່ມືວັດສະດຸ & ເຈ້ຍ', titleEn: 'Materials & Paper Guide', icon: '📜', contentLo: '• Art Card 260g - 350g: ເຈ້ຍເນື້ອແໜ້ນ ຜິວລຽບ ເໝາະສຳລັບໂປສເຕີ, ນາມບັດ, ປົກປຶ້ມ\n• Greenread 75g: ເຈ້ຍຖະໜອມສາຍຕາ ນ້ຳໜັກເບົາ\n• Sticker PP: ກັນນ້ຳ 100% ຕິດແໜ້ນ', contentEn: 'Premium grade paper and synthetic materials.' },
+                    { id: 'bleed', titleLo: 'ໄລຍະຕັດຕົກ & ມາດຕະຖານຟາຍ', titleEn: 'Bleed & File Specs', icon: '📐', contentLo: '• ເຜື່ອໄລຍະຕັດຕົກ (Bleed) +3mm ຮອບດ້ານ\n• ຄວາມລະອຽດແນະນຳ 300 DPI ຂຶ້ນໄປ\n• ໂໝດສີແນະນຳ CMYK Process Color', contentEn: 'Add +3mm bleed margin. Resolution at 300 DPI minimum.' },
+                    { id: 'shipping', titleLo: 'ໄລຍະເວລາຜະລິດ & ການຈັດສົ່ງ', titleEn: 'Turnaround & Shipping', icon: '🚚', contentLo: '• ໄລຍະເວລາຜະລິດ: 1 - 2 ວັນລັດຖະການ\n• ຈັດສົ່ງທົ່ວປະເທດລາວຜ່ານ Anousith, HAL, Express\n• ນະຄອນຫຼວງວຽງຈັນ ສົ່ງດ່ວນເຖິງທີ່ພາຍໃນມື້', contentEn: 'Production time: 1-2 business days. Nationwide shipping.' },
+                  ]
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setSelectedCustomTab(tab.id)}
+                  className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-2 flex-shrink-0 ${
+                    selectedCustomTab === tab.id
+                      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <span>
+                    {tab.icon || '📌'} {language === 'en' && tab.titleEn ? tab.titleEn : tab.titleLo}
+                  </span>
+                </button>
+              ))}
             </div>
 
-            {/* Tab Contents */}
-            {infoTab === 'description' && (
-              <div className="space-y-4 text-xs sm:text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+            {/* Tab Contents: Description */}
+            {selectedCustomTab === 'description' && (
+              <div className="space-y-4 text-xs sm:text-sm leading-relaxed text-slate-700 dark:text-slate-300 animate-fadeIn">
                 <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
                   {productName} — {productDesc || 'ສິນຄ້າພິມຄຸນນະພາບສູງ ມາດຕະຖານໂຮງພິມ ສົມສິ່ງພິມ'}
                 </h3>
@@ -1639,7 +1747,9 @@ export default function ProductPage() {
                 </p>
                 {product.features && product.features.length > 0 && (
                   <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
-                    <span className="font-bold text-slate-900 dark:text-white block">ຄຸນສົມບັດເດັ່ນ:</span>
+                    <span className="font-bold text-slate-900 dark:text-white block">
+                      {language === 'en' ? 'Key Highlights:' : 'ຄຸນສົມບັດເດັ່ນ:'}
+                    </span>
                     <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-400">
                       {product.features.map((feat, fIdx) => (
                         <li key={fIdx}>{feat}</li>
@@ -1650,85 +1760,34 @@ export default function ProductPage() {
               </div>
             )}
 
-            {infoTab === 'materials' && (
-              <div className="space-y-4 text-xs sm:text-sm text-slate-700 dark:text-slate-300">
-                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-                  ຄູ່ມືການເລືອກເຈ້ຍ ແລະ ວັດສະດຸພິມ
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
-                    <span className="font-black text-amber-600 dark:text-amber-400 block text-sm">Art Card (ອາດກາດ 260g - 350g)</span>
-                    <p className="text-[11px] text-slate-500 leading-relaxed">
-                      ເຈ້ຍເນື້ອແໜ້ນ ຜິວລຽບ ເໝາະສຳລັບໂປສກາດ, ນາມບັດ, ປົກປຶ້ມ ແລະ ກາດແຕ່ງດອງ ຮັບຮອງການເຄືອບດ້ານ/ເງົາ ແລະ Spot UV ໄດ້ດີເລີດ.
-                    </p>
+            {/* Render Selected Dynamic Custom Tab Content */}
+            {selectedCustomTab !== 'description' && (() => {
+              const allTabs = (product.infoTabs && product.infoTabs.length > 0)
+                ? product.infoTabs
+                : [
+                    { id: 'materials', titleLo: 'ຄູ່ມືວັດສະດຸ & ເຈ້ຍ', titleEn: 'Materials & Paper Guide', icon: '📜', contentLo: '• Art Card 260g - 350g: ເຈ້ຍເນື້ອແໜ້ນ ຜິວລຽບ ເໝາະສຳລັບໂປສເຕີ, ນາມບັດ, ປົກປຶ້ມ\n• Greenread 75g: ເຈ້ຍຖະໜອມສາຍຕາ ນ້ຳໜັກເບົາ\n• Sticker PP: ກັນນ້ຳ 100% ຕິດແໜ້ນ', contentEn: 'Premium grade paper and synthetic materials.' },
+                    { id: 'bleed', titleLo: 'ໄລຍະຕັດຕົກ & ມາດຕະຖານຟາຍ', titleEn: 'Bleed & File Specs', icon: '📐', contentLo: '• ເຜື່ອໄລຍະຕັດຕົກ (Bleed) +3mm ຮອບດ້ານ\n• ຄວາມລະອຽດແນະນຳ 300 DPI ຂຶ້ນໄປ\n• ໂໝດສີແນະນຳ CMYK Process Color', contentEn: 'Add +3mm bleed margin. Resolution at 300 DPI minimum.' },
+                    { id: 'shipping', titleLo: 'ໄລຍະເວລາຜະລິດ & ການຈັດສົ່ງ', titleEn: 'Turnaround & Shipping', icon: '🚚', contentLo: '• ໄລຍະເວລາຜະລິດ: 1 - 2 ວັນລັດຖະການ\n• ຈັດສົ່ງທົ່ວປະເທດລາວຜ່ານ Anousith, HAL, Express\n• ນະຄອນຫຼວງວຽງຈັນ ສົ່ງດ່ວນເຖິງທີ່ພາຍໃນມື້', contentEn: 'Production time: 1-2 business days. Nationwide shipping.' },
+                  ]
+              const currentTab = allTabs.find((t) => t.id === selectedCustomTab)
+              if (!currentTab) return null
+
+              return (
+                <div className="space-y-4 text-xs sm:text-sm text-slate-700 dark:text-slate-300 animate-fadeIn">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">{currentTab.icon || '📌'}</span>
+                    <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white m-0">
+                      {language === 'en' && currentTab.titleEn ? currentTab.titleEn : currentTab.titleLo}
+                    </h3>
                   </div>
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
-                    <span className="font-black text-blue-600 dark:text-blue-400 block text-sm">Greenread (ຖະໜອມສາຍຕາ 75g)</span>
-                    <p className="text-[11px] text-slate-500 leading-relaxed">
-                      ເຈ້ຍສີຄຣີມນວນຕາ ສະທ້ອນແສງໜ້ອຍ ນ້ຳໜັກເບົາ ເໝາະສຳລັບເນື້ອໃນປຶ້ມນິຍາຍ, ວາລະສານ ແລະ ປຶ້ມອ່ານທົ່ວໄປ.
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
-                    <span className="font-black text-emerald-600 dark:text-emerald-400 block text-sm">Sticker PP / PVC Synthetic</span>
-                    <p className="text-[11px] text-slate-500 leading-relaxed">
-                      ສະຕິກເກີພາດສະຕິກກັນນ້ຳ 100% ຈີກບໍ່ຂາດ ທົນຄວາມເຢັນແລະຄວາມຮ້ອນ ເໝາະສຳລັບສະຫຼາກສິນຄ້າ ແລະ ແກ້ວເຄື່ອງດື່ມ.
+                  <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
+                    <p className="whitespace-pre-line text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
+                      {language === 'en' && currentTab.contentEn ? currentTab.contentEn : currentTab.contentLo}
                     </p>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {infoTab === 'bleed' && (
-              <div className="space-y-4 text-xs sm:text-sm text-slate-700 dark:text-slate-300">
-                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-                  ມາດຕະຖານການກຽມຟາຍພິມ (Artwork & Bleed Margin Guidelines)
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
-                    <span className="font-bold text-slate-900 dark:text-white block">📐 ໄລຍະຕັດຕົກ (Bleed) & ເສັ້ນປອດໄພ (Safe Zone):</span>
-                    <ul className="space-y-1.5 text-slate-600 dark:text-slate-400 text-xs">
-                      <li>• <strong>Bleed:</strong> ຕ້ອງເຜື່ອໄລຍະພື້ນຫຼັງອອກມາ <strong>+2 mm</strong> ທຸກດ້ານເພື່ອບໍ່ໃຫ້ເຫັນຂອບຂາວເວລາຕັດ</li>
-                      <li>• <strong>Safe Margin:</strong> ຂໍ້ຄວາມແລະໂລໂກ້ສຳຄັນຄວນຢູ່ຫ່າງຈາກຂອບຕັດຢ່າງໜ້ອຍ <strong>3 mm</strong></li>
-                      <li>• <strong>Color Mode:</strong> ແນະນຳຕັ້ງຄ່າສີເປັນ <strong>CMYK 100%</strong></li>
-                    </ul>
-                  </div>
-
-                  <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
-                    <span className="font-bold text-slate-900 dark:text-white block">🔍 ຄວາມລະອຽດ & ຮູບແບບຟາຍ:</span>
-                    <ul className="space-y-1.5 text-slate-600 dark:text-slate-400 text-xs">
-                      <li>• <strong>Resolution:</strong> 300 DPI ຂຶ້ນໄປເພື່ອຄວາມຄົມຊັດສູງສຸດ</li>
-                      <li>• <strong>Font:</strong> ກະລຸນາ Create Outlines / Convert to Curves ທຸກຕົວໜັງສື</li>
-                      <li>• <strong>Format:</strong> PDF (Print Ready), AI, PSD, TIFF, PNG/JPG ຄວາມລະອຽດສູງ</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {infoTab === 'shipping' && (
-              <div className="space-y-4 text-xs sm:text-sm text-slate-700 dark:text-slate-300">
-                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-                  ໄລຍະເວລາການຜະລິດ ແລະ ບໍລິການຈັດສົ່ງ
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
-                    <span className="font-bold text-slate-900 dark:text-white block">⏱️ ໄລຍະເວລາຜະລິດ (Production Turnaround):</span>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                      • ງານພິມດິຈິຕອນທົ່ວໄປ (Print on Demand): 1 - 2 ວັນທຳການ<br />
-                      • ງານປຶ້ມ / ເຂົ້າເລັ້ມສັນກາວ / ສະຕິກເກີダイカット: 2 - 4 ວັນທຳການ<br />
-                      • ງານດ່ວນ: ສາມາດຕິດຕໍ່ແຈ້ງແອັດມິນເພື່ອຈັດຄິວດ່ວນພິເສດໄດ້
-                    </p>
-                  </div>
-
-                  <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
-                    <span className="font-bold text-slate-900 dark:text-white block">🚚 ບໍລິສັດຂົນສົ່ງທີ່ຮອງຮັບ:</span>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                      ຈັດສົ່ງທົ່ວປະເທດລາວຜ່ານ Anousith Express, HAL Logistics, Mixay Express, Flash Express ພ້ອມເລກ Tracking ຕິດຕາມພັດສະດຸຕະຫຼອດ 24 ຊົ່ວໂມງ.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+              )
+            })()}
           </div>
         </div>
       </section>
@@ -1810,7 +1869,7 @@ export default function ProductPage() {
         ref={fileInputRef}
         type="file"
         multiple
-        accept="image/*,application/pdf,.pdf,.ai,.psd,.png,.jpg,.jpeg,.tiff"
+        accept={allowedExtensions}
         onChange={(e) => {
           if (e.target.files && e.target.files.length > 0) {
             const chosen = Array.from(e.target.files)

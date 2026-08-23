@@ -37,7 +37,7 @@ import {
   UploadCloud,
   Star
 } from 'lucide-react';
-import { PublicProduct, CreateProductInput, PublicProductOption, ProductDiscountTier, PublicCategory, PricingModel, SpecGroup, FeaturesConfig } from './types';
+import { PublicProduct, CreateProductInput, PublicProductOption, ProductDiscountTier, PublicCategory, PricingModel, SpecGroup, FeaturesConfig, ProductInfoTab } from './types';
 import { CategoryManagerModal } from './CategoryManagerModal';
 import { useApp } from '@store/AppContext';
 
@@ -50,6 +50,33 @@ const PRICING_MODELS: { id: PricingModel; label: string; desc: string }[] = [
   { id: 'FIXED_UNIT', label: 'ລາຄາຄົງທີ່ຕໍ່ຊິ້ນ / ບໍລິການ (Fixed Unit / Service)', desc: 'ກັອບປີ້ເອກະສານ, ບໍລິການແປງໄຟລ໌, ຕາຢາງ' },
 ];
 
+const DEFAULT_INFO_TABS: ProductInfoTab[] = [
+  {
+    id: 'materials',
+    titleLo: 'ຄູ່ມືວັດສະດຸ & ປະເພດເຈ້ຍ',
+    titleEn: 'Materials & Paper Guide',
+    icon: '📜',
+    contentLo: '• Art Card 260g - 350g: ເຈ້ຍເນື້ອແໜ້ນ ຜິວລຽບ ເໝາະສຳລັບໂປສເຕີ, ນາມບັດ, ປົກປຶ້ມ\n• Greenread 75g: ເຈ້ຍຖະໜອມສາຍຕາ ນ້ຳໜັກເບົາ\n• Sticker PP / PVC: ກັນນ້ຳ 100% ຕິດແໜ້ນ ທົນທານ',
+    contentEn: 'Premium grade paper and synthetic materials for professional printing.',
+  },
+  {
+    id: 'bleed',
+    titleLo: 'ໄລຍະຕັດຕົກ & ມາດຕະຖານຟາຍ',
+    titleEn: 'Bleed & File Specs',
+    icon: '📐',
+    contentLo: '• ເຜື່ອໄລຍະຕັດຕົກ (Bleed) +3mm ຮອບດ້ານ\n• ຄວາມລະອຽດແນະນຳ 300 DPI ຂຶ້ນໄປ\n• ໂໝດສີແນະນຳ CMYK Process Color',
+    contentEn: 'Add +3mm bleed margin. Resolution at 300 DPI minimum. CMYK color profile recommended.',
+  },
+  {
+    id: 'shipping',
+    titleLo: 'ໄລຍະເວລາຜະລິດ & ການຈັດສົ່ງ',
+    titleEn: 'Production & Delivery',
+    icon: '🚚',
+    contentLo: '• ໄລຍະເວລາຜະລິດ: 1 - 2 ວັນລັດຖະການ\n• ຈັດສົ່ງທົ່ວປະເທດລາວຜ່ານ Anousith, HAL, Express\n• ນະຄອນຫຼວງວຽງຈັນ ສົ່ງດ່ວນເຖິງທີ່ພາຍໃນມື້',
+    contentEn: 'Production time: 1-2 business days. Nationwide express shipping.',
+  },
+];
+
 export function WebCatalogPage() {
   const { showToast, askConfirmation } = useApp();
   const queryClient = useQueryClient();
@@ -58,7 +85,7 @@ export function WebCatalogPage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  const [activeFormTab, setActiveFormTab] = useState<'general' | 'groups' | 'discounts'>('general');
+  const [activeFormTab, setActiveFormTab] = useState<'general' | 'groups' | 'discounts' | 'infotabs'>('general');
   const [editingProduct, setEditingProduct] = useState<PublicProduct | null>(null);
 
   // Form State (Bilingual + Pricing Model)
@@ -79,6 +106,7 @@ export function WebCatalogPage() {
   const [featureInput, setFeatureInput] = useState('');
   const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [galleryUrls, setGalleryUrls] = useState<string[]>([]);
+  const [infoTabs, setInfoTabs] = useState<ProductInfoTab[]>(DEFAULT_INFO_TABS);
   const [minQuantity, setMinQuantity] = useState(1);
   const [isOnDemand, setIsOnDemand] = useState(true);
   const [leadTimeDays, setLeadTimeDays] = useState(2);
@@ -439,6 +467,7 @@ export function WebCatalogPage() {
     });
     setSpecGroups([]);
     setDiscountTiers([]);
+    setInfoTabs(DEFAULT_INFO_TABS);
     setActiveFormTab('general');
     setIsModalOpen(true);
   };
@@ -461,6 +490,7 @@ export function WebCatalogPage() {
     setFeatures(p.features || []);
     setThumbnailUrl(p.thumbnailUrl || '');
     setGalleryUrls(p.galleryUrls || []);
+    setInfoTabs(p.infoTabs && p.infoTabs.length > 0 ? p.infoTabs : DEFAULT_INFO_TABS);
     setMinQuantity(p.minQuantity || 1);
     setIsOnDemand(p.isOnDemand || false);
     setLeadTimeDays(p.leadTimeDays || 2);
@@ -650,6 +680,7 @@ export function WebCatalogPage() {
       features,
       thumbnailUrl,
       galleryUrls,
+      infoTabs,
       minQuantity,
       isOnDemand,
       leadTimeDays,
@@ -975,7 +1006,18 @@ export function WebCatalogPage() {
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                   }`}
                 >
-                  3. ສ່ວນຫຼຸດຈຳນວນ ({discountTiers.length})
+                  3. ສ່ວນຫຼຸດ ({discountTiers.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveFormTab('infotabs')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    activeFormTab === 'infotabs'
+                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  4. ແຖບຂໍ້ມູນດ້ານລຸ່ມ ({infoTabs.length})
                 </button>
               </div>
 
@@ -1069,13 +1111,185 @@ export function WebCatalogPage() {
                     </div>
                   </div>
 
-                  {/* Feature Module Toggles */}
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-2">
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                      <Settings2 className="w-4 h-4 text-indigo-500" />
-                      ເລືອກຟັງຊັນການເຮັດວຽກຂອງສິນຄ້ານີ້ (Enabled Workflow Features):
-                    </span>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2">
+                  {/* Feature Module Toggles & Dynamic File Upload Configuration */}
+                  <div className="p-5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700 pb-3">
+                      <span className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-1.5 uppercase tracking-wider">
+                        <Settings2 className="w-4 h-4 text-indigo-500" />
+                        ຮູບແບບການອັບໂຫຼດ & ຟັງຊັນຂອງສິນຄ້າ (Upload Workflow & Feature Engine)
+                      </span>
+                    </div>
+
+                    {/* 1. Upload Workflow Mode Presets */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                        ຮູບແບບການອັບໂຫຼດຂອງສິນຄ້ານີ້ (Upload Mode):
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div
+                          onClick={() => {
+                            setFeaturesConfig({
+                              ...featuresConfig,
+                              uploadWorkflow: 'artwork_preflight',
+                              hasPreflightCheck: true,
+                              allowedFileTypes: ['pdf', 'ai', 'psd', 'png', 'jpg'],
+                            });
+                          }}
+                          className={`p-3.5 rounded-xl border-2 cursor-pointer transition flex flex-col gap-1.5 ${
+                            featuresConfig.uploadWorkflow === 'artwork_preflight' || !featuresConfig.uploadWorkflow
+                              ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 shadow-sm'
+                              : 'border-slate-200 dark:border-slate-700 hover:border-indigo-300 bg-white dark:bg-slate-900'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                              🎨 Artwork Preflight
+                            </span>
+                            {(featuresConfig.uploadWorkflow === 'artwork_preflight' || !featuresConfig.uploadWorkflow) && (
+                              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-slate-500 leading-tight">
+                            ສຳລັບສະຕິກເກີ, ໂປສເຕີ, ນາມບັດ (PDF, AI, PSD, 300 DPI, Bleed)
+                          </span>
+                        </div>
+
+                        <div
+                          onClick={() => {
+                            setFeaturesConfig({
+                              ...featuresConfig,
+                              uploadWorkflow: 'general_document',
+                              hasPreflightCheck: false,
+                              allowedFileTypes: ['pdf', 'docx', 'xlsx', 'pptx', 'png', 'jpg'],
+                            });
+                          }}
+                          className={`p-3.5 rounded-xl border-2 cursor-pointer transition flex flex-col gap-1.5 ${
+                            featuresConfig.uploadWorkflow === 'general_document'
+                              ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 shadow-sm'
+                              : 'border-slate-200 dark:border-slate-700 hover:border-indigo-300 bg-white dark:bg-slate-900'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                              📁 ເອກະສານ & ກັອບປີ້
+                            </span>
+                            {featuresConfig.uploadWorkflow === 'general_document' && (
+                              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-slate-500 leading-tight">
+                            ສຳລັບກັອບປີ້ເອກະສານ, ລາຍງານ, ປຶ້ມ (PDF, Word, Excel, PPT, ຮູບ)
+                          </span>
+                        </div>
+
+                        <div
+                          onClick={() => {
+                            setFeaturesConfig({
+                              ...featuresConfig,
+                              uploadWorkflow: 'custom',
+                            });
+                          }}
+                          className={`p-3.5 rounded-xl border-2 cursor-pointer transition flex flex-col gap-1.5 ${
+                            featuresConfig.uploadWorkflow === 'custom'
+                              ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 shadow-sm'
+                              : 'border-slate-200 dark:border-slate-700 hover:border-indigo-300 bg-white dark:bg-slate-900'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                              ⚙️ ກຳນົດເອງ (Custom)
+                            </span>
+                            {featuresConfig.uploadWorkflow === 'custom' && (
+                              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-slate-500 leading-tight">
+                            ເລືອກປະເພດຟາຍ ແລະ ເປີດ/ປິດຟັງຊັນໄດ້ຕາມຕ້ອງການ
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2. Allowed File Types Checklist */}
+                    <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                          ປະເພດຟາຍທີ່ອະນຸຍາດໃຫ້ລູກຄ້າອັບໂຫຼດ (Allowed File Formats):
+                        </label>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {(featuresConfig.allowedFileTypes || ['pdf', 'ai', 'psd', 'png', 'jpg']).length} ປະເພດທີ່ເລືອກ
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                        {[
+                          { key: 'pdf', label: 'PDF (.pdf)', icon: '📄' },
+                          { key: 'ai', label: 'Illustrator (.ai)', icon: '🎨' },
+                          { key: 'psd', label: 'Photoshop (.psd)', icon: '🖼️' },
+                          { key: 'png', label: 'PNG Image (.png)', icon: '📷' },
+                          { key: 'jpg', label: 'JPEG / JPG (.jpg)', icon: '🌅' },
+                          { key: 'docx', label: 'Word (.docx, .doc)', icon: '📑' },
+                          { key: 'xlsx', label: 'Excel (.xlsx, .xls)', icon: '📊' },
+                          { key: 'pptx', label: 'PowerPoint (.pptx)', icon: '📽️' },
+                          { key: 'zip', label: 'ZIP / RAR (.zip)', icon: '📦' },
+                        ].map((fmt) => {
+                          const currentList = featuresConfig.allowedFileTypes || ['pdf', 'ai', 'psd', 'png', 'jpg'];
+                          const isChecked = currentList.includes(fmt.key);
+                          return (
+                            <label
+                              key={fmt.key}
+                              className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer text-xs transition ${
+                                isChecked
+                                  ? 'bg-white dark:bg-slate-900 border-indigo-500 font-bold text-slate-900 dark:text-white shadow-xs'
+                                  : 'bg-slate-100/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-500'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  let next = [...currentList];
+                                  if (e.target.checked) {
+                                    if (!next.includes(fmt.key)) next.push(fmt.key);
+                                  } else {
+                                    next = next.filter((k) => k !== fmt.key);
+                                  }
+                                  setFeaturesConfig({
+                                    ...featuresConfig,
+                                    allowedFileTypes: next,
+                                    uploadWorkflow: 'custom',
+                                  });
+                                }}
+                                className="w-3.5 h-3.5 text-indigo-600 rounded"
+                              />
+                              <span>{fmt.icon} {fmt.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 3. Advanced Workflow Toggles */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-2 border-t border-slate-200 dark:border-slate-700">
+                      <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(featuresConfig.hasGeneralDocUpload || featuresConfig.uploadWorkflow === 'general_document')}
+                          onChange={(e) =>
+                            setFeaturesConfig({
+                              ...featuresConfig,
+                              hasGeneralDocUpload: e.target.checked,
+                              uploadWorkflow: e.target.checked ? 'general_document' : 'artwork_preflight',
+                              hasPreflightCheck: !e.target.checked,
+                            })
+                          }
+                          className="w-4 h-4 text-indigo-600 rounded"
+                        />
+                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                          📁 ອັບໂຫຼດເອກະສານທົ່ວໄປ (General Doc)
+                        </span>
+                      </label>
+
                       <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 cursor-pointer">
                         <input
                           type="checkbox"
@@ -1084,7 +1298,7 @@ export function WebCatalogPage() {
                           className="w-4 h-4 text-indigo-600 rounded"
                         />
                         <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                          ແຍກອັບໂຫຼດຟາຍປົກ (Cover File)
+                          ແຍກອັບໂຫຼດຟາຍປົກ (Cover)
                         </span>
                       </label>
 
@@ -1096,7 +1310,7 @@ export function WebCatalogPage() {
                           className="w-4 h-4 text-indigo-600 rounded"
                         />
                         <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                          ອັບໂຫຼດຟາຍເນື້ອໃນ (Inner Pages)
+                          ອັບໂຫຼດຟາຍເນື້ອໃນ (Inner)
                         </span>
                       </label>
 
@@ -1108,7 +1322,7 @@ export function WebCatalogPage() {
                           className="w-4 h-4 text-indigo-600 rounded"
                         />
                         <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                          ຄຳນວນສັນປົກ (Spine Calculator)
+                          ຄຳນວນສັນປົກ (Spine Calc)
                         </span>
                       </label>
 
@@ -1120,7 +1334,7 @@ export function WebCatalogPage() {
                           className="w-4 h-4 text-indigo-600 rounded"
                         />
                         <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                          ກວດສອບ PDF CMYK / DPI
+                          ກວດ Preflight 300 DPI/CMYK
                         </span>
                       </label>
 
@@ -1775,6 +1989,170 @@ export function WebCatalogPage() {
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 4: Dynamic Info Tabs & Guides Builder (Product Bottom Tabs) */}
+              {activeFormTab === 'infotabs' && (
+                <div className="space-y-6 animate-fadeIn">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                        ແຖບຂໍ້ມູນ & ຄູ່ມືເພີ່ມເຕີມດ້ານລຸ່ມ (Dynamic Product Info Tabs)
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        ກຳນົດຫົວຂໍ້, ໄອຄອນ, ຄູ່ມືເຈ້ຍ, ໄລຍະຕັດຕົກ, ການຮັບປະກັນ ຫຼື ຂໍ້ມູນອື່ນໆ ທີ່ຈະສະແດງໃນ 4 ແຖບລຸ່ມສຸດຂອງໜ້າສິນຄ້າ
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newId = `tab_${Date.now()}`;
+                        setInfoTabs((prev) => [
+                          ...prev,
+                          {
+                            id: newId,
+                            titleLo: 'ຫົວຂໍ້ໃໝ່',
+                            titleEn: 'New Section',
+                            icon: '💡',
+                            contentLo: '',
+                            contentEn: '',
+                          },
+                        ]);
+                      }}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      + ເພີ່ມແຖບຂໍ້ມູນໃໝ່
+                    </button>
+                  </div>
+
+                  {infoTabs.length === 0 ? (
+                    <div className="py-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+                      <p className="text-xs text-slate-400">ຍັງບໍ່ມີແຖບຂໍ້ມູນເພີ່ມເຕີມ (ຄລິກປຸ່ມດ້ານເທິງເພື່ອເພີ່ມ)</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {infoTabs.map((tab, idx) => (
+                        <div
+                          key={tab.id || idx}
+                          className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-3"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs font-black">
+                                #{idx + 1}
+                              </span>
+                              <input
+                                type="text"
+                                value={tab.icon || '📝'}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setInfoTabs((prev) =>
+                                    prev.map((t, i) => (i === idx ? { ...t, icon: val } : t))
+                                  );
+                                }}
+                                placeholder="ໄອຄອນ (e.g. 📜, 📐, 🚚, 💡)"
+                                className="w-16 px-2 py-1 text-center text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold"
+                                title="Icon / Emoji"
+                              />
+                              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                {tab.titleLo || `ແຖບທີ ${idx + 1}`}
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInfoTabs((prev) => prev.filter((_, i) => i !== idx));
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                              title="ລຶບແຖບນີ້"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                                ຊື່ແຖບ (ພາສາລາວ) <span className="text-rose-500">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={tab.titleLo}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setInfoTabs((prev) =>
+                                    prev.map((t, i) => (i === idx ? { ...t, titleLo: val } : t))
+                                  );
+                                }}
+                                placeholder="ຕົວຢ່າງ: ຄູ່ມືວັດສະດຸ & ເຈ້ຍ"
+                                className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                                Tab Title (English)
+                              </label>
+                              <input
+                                type="text"
+                                value={tab.titleEn}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setInfoTabs((prev) =>
+                                    prev.map((t, i) => (i === idx ? { ...t, titleEn: val } : t))
+                                  );
+                                }}
+                                placeholder="e.g. Materials & Paper Specs"
+                                className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                                ເນື້ອໃນລາຍລະອຽດ (ພາສາລາວ)
+                              </label>
+                              <textarea
+                                rows={3}
+                                value={tab.contentLo}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setInfoTabs((prev) =>
+                                    prev.map((t, i) => (i === idx ? { ...t, contentLo: val } : t))
+                                  );
+                                }}
+                                placeholder="ພິມລາຍລະອຽດ ຫຼື ຈຸດເດັ່ນຂອງແຖບນີ້..."
+                                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                                Content (English)
+                              </label>
+                              <textarea
+                                rows={3}
+                                value={tab.contentEn}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setInfoTabs((prev) =>
+                                    prev.map((t, i) => (i === idx ? { ...t, contentEn: val } : t))
+                                  );
+                                }}
+                                placeholder="Content description in English..."
+                                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>

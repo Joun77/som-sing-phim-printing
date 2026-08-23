@@ -235,13 +235,48 @@ func saveInboundWithTx(item InboundTransaction) error {
 		return fmt.Errorf("inbound record insert failed: %w", err)
 	}
 
-	// Increment material stock_qty atomically if material exists
-	if item.SKUCode != "" {
-		_, _ = tx.Exec(`
-			UPDATE materials
-			SET stock_qty = stock_qty + $1,
-			    updated_at = CURRENT_TIMESTAMP
-			WHERE sku = $2 OR id = $2`, item.Quantity, item.SKUCode)
+	// Increment material stock_qty atomically or insert new material into materials table
+	if item.SKUCode != "" || item.ItemName != "" {
+		sku := strings.TrimSpace(item.SKUCode)
+		if sku == "" {
+			sku = item.ID
+		}
+		name := strings.TrimSpace(item.ItemName)
+		if name == "" {
+			name = sku
+		}
+		cat := strings.TrimSpace(item.Category)
+		if cat == "" {
+			cat = "Paper"
+		}
+		unit := strings.TrimSpace(item.Unit)
+		if unit == "" {
+			unit = "Unit"
+		}
+
+		costPerUnit := item.TotalPrice
+		if item.Quantity > 0 {
+			costPerUnit = item.TotalPrice / item.Quantity
+		}
+
+		_, err = tx.Exec(`
+			INSERT INTO materials (
+				id, sku, name, category, stock_qty, consumption_unit,
+				purchase_unit, purchase_multiplier, cost_per_purchase_unit,
+				cost_per_consumption_unit, reorder_threshold, technical_specs, updated_at
+			) VALUES (
+				$1, $2, $3, $4, $5, $6, $7, 1, $8, $9, 50, $10, CURRENT_TIMESTAMP
+			)
+			ON CONFLICT (id) DO UPDATE SET
+				stock_qty = materials.stock_qty + EXCLUDED.stock_qty,
+				cost_per_purchase_unit = EXCLUDED.cost_per_purchase_unit,
+				cost_per_consumption_unit = EXCLUDED.cost_per_consumption_unit,
+				updated_at = CURRENT_TIMESTAMP`,
+			sku, sku, name, cat, item.Quantity, unit, unit,
+			item.TotalPrice, costPerUnit, specsJSON)
+		if err != nil {
+			log.Printf("[DB WARNING] Failed to upsert material from inbound: %v", err)
+		}
 	}
 
 	return tx.Commit()

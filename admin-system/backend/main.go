@@ -153,6 +153,7 @@ func main() {
 	router.GET("/api/equipment", inventory.HandleGetEquipment)
 	router.POST("/api/equipment", inventory.HandleCreateEquipment)
 	router.PUT("/api/equipment/:id", inventory.HandleUpdateEquipment)
+	router.DELETE("/api/equipment/:id", inventory.HandleDeleteEquipment)
 
 	// HR Employee Management routes
 	router.GET("/api/employees", hr.HandleGetEmployees)
@@ -171,6 +172,7 @@ func main() {
 	router.GET("/api/v1/assets/:id", inventory.HandleGetAssetByIDV1)
 	router.POST("/api/v1/assets/inbound", inventory.HandleInboundAssetV1)
 	router.PUT("/api/v1/assets/:id", inventory.HandleUpdateAssetV1)
+	router.DELETE("/api/v1/assets/:id", inventory.HandleDeleteEquipment)
 
 	// Inventory Material SKU CRUD & Stock Discharge & FIFO Batches routes
 	router.GET("/api/inventory/offcuts", inventory.HandleGetOffcuts)
@@ -180,6 +182,9 @@ func main() {
 	router.GET("/api/inventory", inventory.HandleGetInventoryItems)
 	router.POST("/api/inventory", inventory.HandleSaveInventorySKU)
 	router.PUT("/api/inventory/:id", inventory.HandleUpdateInventorySKU)
+	router.PUT("/api/inventory/items/:id", inventory.HandleUpdateInventorySKU)
+	router.DELETE("/api/inventory/:id", inventory.HandleDeleteInventorySKU)
+	router.DELETE("/api/inventory/items/:id", inventory.HandleDeleteInventorySKU)
 	// Genuine & Compatible Ink Analytics routes
 	router.GET("/api/admin/inks/genuine", inventory.HandleGetGenuineInks)
 	router.GET("/api/admin/inks/compatible", inventory.HandleGetCompatibleInks)

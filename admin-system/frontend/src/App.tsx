@@ -92,8 +92,11 @@ function AppContent() {
                     }}
                   />
                 )}
-                {(activeTab === 'orders' || activeTab === 'create_order' || activeTab === 'production' || activeTab === 'deliveries' || activeTab === 'quotation') && (
-                  <CustomerOrders initialSubTab={activeTab} />
+                {activeTab === 'quotation' && (
+                  <QuotationManager />
+                )}
+                {(activeTab === 'orders' || activeTab === 'create_order' || activeTab === 'production' || activeTab === 'deliveries') && (
+                  <CustomerOrders initialSubTab={activeTab === 'orders' ? 'orders' : activeTab} />
                 )}
                 {activeTab === 'tracker' && <ShopFloorTracker />}
                 {activeTab === 'inbound' && <InboundManagement />}

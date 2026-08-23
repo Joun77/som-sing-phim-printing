@@ -17,10 +17,12 @@ export default function InboundEditModal({ item, onSave, onClose }: InboundEditM
   const category = (item.category || '').toUpperCase();
   const [formData, setFormData] = useState({ ...item });
 
-  const [receiptDate, setReceiptDate] = useState(item.receiptDate || new Date().toISOString().split('T')[0]);
+  const [itemName, setItemName] = useState(item.name || item.itemName || '');
+  const [supplierName, setSupplierName] = useState(item.supplier || item.supplierName || '');
+  const [receiptDate, setReceiptDate] = useState(item.receiptDate || item.inboundDate || new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState(item.paymentMethod || 'TRANSFER');
   const [totalPrice, setTotalPrice] = useState(item.totalPrice || 0);
-  const [initialQty, setInitialQty] = useState(item.initialQty || item.currentQty || 1);
+  const [initialQty, setInitialQty] = useState(item.initialQty || item.currentQty || item.quantity || 1);
   const [supplierPhone, setSupplierPhone] = useState(item.supplier_phone || item.specs?.supplier_phone || '');
   const [purchaseLink, setPurchaseLink] = useState(item.purchase_link || item.specs?.purchase_link || '');
 
@@ -50,9 +52,15 @@ export default function InboundEditModal({ item, onSave, onClose }: InboundEditM
     const updatedItem = {
       ...item,
       ...formData,
+      name: itemName,
+      itemName: itemName,
+      supplier: supplierName,
+      supplierName: supplierName,
       receiptDate,
+      inboundDate: receiptDate,
       paymentMethod,
       totalPrice: Number(totalPrice),
+      quantity: Number(initialQty),
       initialQty: Number(initialQty),
       currentQty: Number(initialQty),
       supplier_phone: supplierPhone,
@@ -109,6 +117,31 @@ export default function InboundEditModal({ item, onSave, onClose }: InboundEditM
           </h4>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
+            <div className="md:col-span-2">
+              <label className="block text-slate-600 font-bold mb-1">
+                {currentLang === 'lo' ? 'ຊື່ສິນຄ້າ / ລາຍການ (Item Name)' : 'Item Name'}
+              </label>
+              <input
+                type="text"
+                value={itemName}
+                onChange={(e) => setItemName(e.target.value)}
+                required
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800 focus:outline-none focus:border-sky-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-600 font-bold mb-1">
+                {currentLang === 'lo' ? 'ຜູ້ສະໜອງ / ຮ້ານຄ້າ (Supplier Name)' : 'Supplier Name'}
+              </label>
+              <input
+                type="text"
+                value={supplierName}
+                onChange={(e) => setSupplierName(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800 focus:outline-none focus:border-sky-500"
+              />
+            </div>
+
             <div>
               <label className="block text-slate-600 font-bold mb-1 flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-slate-400" />

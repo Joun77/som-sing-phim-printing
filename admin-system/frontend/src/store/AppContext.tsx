@@ -18,8 +18,222 @@ const getPastDateTimeString = (daysAgo, hour = 9, minute = 30) => {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-const initialInventory: any[] = [];
-const initialEquipment: any[] = [];
+const initialInventory: any[] = [
+  {
+    id: 'PAP-ART-260',
+    sku: 'PAP-ART-260',
+    name: 'Art Card Paper 260gsm (A3+ 320x480mm)',
+    category: 'Paper',
+    supplier: 'SCG Paper Thailand',
+    stockQty: 2500,
+    minStockThreshold: 500,
+    costPerPurchaseUnit: 950000,
+    costPerConsumptionUnit: 1900,
+    purchaseMultiplier: 500,
+    purchaseUnit: 'ແພັກ',
+    consumptionUnit: 'ແຜ່ນ',
+    specs: {
+      brand: 'Double A / SCG Premium',
+      paperType: 'Art Card Gloss',
+      grammage: '260 gsm',
+      size: 'A3+ (320 x 480 mm)',
+      sheetsPerPack: '500'
+    },
+    batches: [
+      {
+        id: 'LOT-260-01',
+        purchaseDate: '2026-08-01',
+        supplierName: 'SCG Paper Thailand',
+        purchasePricePerReam: 950000,
+        costPerSheet: 1900,
+        initialQty: 2500,
+        currentQty: 2500
+      }
+    ]
+  },
+  {
+    id: 'PAP-WF-80',
+    sku: 'PAP-WF-80',
+    name: 'Woodfree Bond Paper 80gsm (A4 210x297mm)',
+    category: 'Paper',
+    supplier: 'Double A Lao Distributor',
+    stockQty: 5000,
+    minStockThreshold: 1000,
+    costPerPurchaseUnit: 190000,
+    costPerConsumptionUnit: 380,
+    purchaseMultiplier: 500,
+    purchaseUnit: 'ແພັກ',
+    consumptionUnit: 'ແຜ່ນ',
+    specs: {
+      brand: 'Double A 80g',
+      paperType: 'Woodfree Bond',
+      grammage: '80 gsm',
+      size: 'A4 (210 x 297 mm)',
+      sheetsPerPack: '500'
+    },
+    batches: [
+      {
+        id: 'LOT-80-01',
+        purchaseDate: '2026-08-02',
+        supplierName: 'Double A Lao Distributor',
+        purchasePricePerReam: 190000,
+        costPerSheet: 380,
+        initialQty: 5000,
+        currentQty: 5000
+      }
+    ]
+  },
+  {
+    id: 'INK-FUJI-CMYK',
+    sku: 'INK-FUJI-CMYK',
+    name: 'Fuji Xerox EA-Eco Toner Set (CMYK)',
+    category: 'Ink',
+    supplier: 'FujiFilm Business Innovation',
+    stockQty: 4,
+    minStockThreshold: 1,
+    costPerPurchaseUnit: 6800000,
+    costPerConsumptionUnit: 1700000,
+    purchaseMultiplier: 1,
+    purchaseUnit: 'ຂວດ',
+    consumptionUnit: 'ຂວດ',
+    specs: {
+      brand: 'Fuji Xerox OEM',
+      colorSystem: '4 Colors (C, M, Y, K)'
+    },
+    batches: [
+      {
+        id: 'LOT-INK-01',
+        purchaseDate: '2026-08-03',
+        supplierName: 'FujiFilm Business Innovation',
+        purchasePricePerReam: 6800000,
+        costPerSheet: 1700000,
+        initialQty: 4,
+        currentQty: 4
+      }
+    ]
+  }
+];
+const initialEquipment: any[] = [
+  {
+    id: 'PRN-FUJI-V180',
+    name: 'Fuji Xerox Versant 180 Press',
+    brand: 'Fuji Xerox',
+    model: 'Versant 180',
+    serialNumber: 'FXV180-202401',
+    category: 'Printer',
+    printerCategory: 'Digital Color Press',
+    status: 'In Use',
+    location: 'Main Press Floor (Room A)',
+    purchaseCost: 450000000,
+    lifespanYears: 5,
+    printedPagesCapacity: 1500000,
+    printedCount: 234500,
+    calculatedCostPerPage: 300,
+    purchaseDate: '2024-01-15',
+    warrantyExpiration: '2027-01-15',
+    lastMaintenanceDate: '2026-07-20',
+    components: [
+      { name: 'Drum Unit Black', usage: 35, threshold: 90 },
+      { name: 'Drum Unit Color (CMY)', usage: 42, threshold: 90 },
+      { name: 'Fuser Unit 220V', usage: 50, threshold: 90 },
+      { name: 'Transfer Belt Assembly', usage: 28, threshold: 85 }
+    ]
+  },
+  {
+    id: 'PRN-EPSON-L1800',
+    name: 'Epson L1800 6-Color Photo',
+    brand: 'Epson',
+    model: 'L1800',
+    serialNumber: 'EP-L1800-8832',
+    category: 'Printer',
+    printerCategory: 'Inkjet Photo',
+    status: 'In Use',
+    location: 'Digital Finishing Room',
+    purchaseCost: 18500000,
+    lifespanYears: 3,
+    printedPagesCapacity: 200000,
+    printedCount: 42100,
+    calculatedCostPerPage: 92.5,
+    purchaseDate: '2024-06-10',
+    warrantyExpiration: '2026-06-10',
+    lastMaintenanceDate: '2026-08-01',
+    components: [
+      { name: 'MicroPiezo Printhead', usage: 25, threshold: 85 },
+      { name: 'Waste Ink Pad', usage: 48, threshold: 90 }
+    ]
+  },
+  {
+    id: 'MAC-CUTTER-920',
+    name: 'QZYK920 Hydraulic Paper Guillotine',
+    brand: 'QZYK',
+    model: '920-Program Control',
+    serialNumber: 'QZ-920-1102',
+    category: 'Cutter',
+    postPressSubtype: 'guillotine',
+    status: 'In Use',
+    location: 'Cutting & Binding Section',
+    purchaseCost: 85000000,
+    lifespanYears: 10,
+    printedPagesCapacity: 3000000,
+    printedCount: 520000,
+    calculatedCostPerPage: 28.3,
+    purchaseDate: '2023-03-20',
+    warrantyExpiration: '2028-03-20',
+    lastMaintenanceDate: '2026-08-10',
+    components: [
+      { name: 'High-Speed Steel Blade (ໃບມີດ)', usage: 30, threshold: 95 },
+      { name: 'Cutting Stick (ແທ່ງຮອງຕັດ)', usage: 45, threshold: 90 },
+      { name: 'Hydraulic Oil Pressure (ນ້ຳມັນໄຮໂດຼລິກ)', usage: 20, threshold: 90 }
+    ]
+  },
+  {
+    id: 'MAC-LAM-FM360',
+    name: 'FM-360 Roll Laminator Hot & Cold',
+    brand: 'Boway',
+    model: 'FM-360',
+    serialNumber: 'BW-FM360-449',
+    category: 'Laminator',
+    postPressSubtype: 'laminator',
+    status: 'In Use',
+    location: 'Lamination Bay',
+    purchaseCost: 22000000,
+    lifespanYears: 5,
+    printedPagesCapacity: 800000,
+    printedCount: 115000,
+    calculatedCostPerPage: 27.5,
+    purchaseDate: '2024-02-01',
+    warrantyExpiration: '2027-02-01',
+    lastMaintenanceDate: '2026-07-15',
+    components: [
+      { name: 'Silicon Heating Roller (ລູກກິ້ງຄວາມຮ້ອນ)', usage: 22, threshold: 85 },
+      { name: 'Temperature Sensor SLA', usage: 15, threshold: 90 }
+    ]
+  },
+  {
+    id: 'MAC-BIND-WD50',
+    name: 'WD-50A Perfect Glue Thermal Binder',
+    brand: 'Superbind',
+    model: 'WD-50A',
+    serialNumber: 'SB-WD50-992',
+    category: 'Binder',
+    postPressSubtype: 'binder',
+    status: 'In Use',
+    location: 'Book Binding Workshop',
+    purchaseCost: 35000000,
+    lifespanYears: 6,
+    printedPagesCapacity: 600000,
+    printedCount: 78000,
+    calculatedCostPerPage: 58.3,
+    purchaseDate: '2023-11-10',
+    warrantyExpiration: '2026-11-10',
+    lastMaintenanceDate: '2026-08-05',
+    components: [
+      { name: 'Milling Cutter Head (ຫົວປາດສັນປຶ້ມ)', usage: 28, threshold: 90 },
+      { name: 'Hot Melt Glue Tank (ໝໍ້ຕົ້ມກາວ)', usage: 35, threshold: 90 },
+      { name: 'Side Glue Roller (ລູກກິ້ງກາວຂ້າງ)', usage: 20, threshold: 85 }
+    ]
+  }
+];
 const initialCustomers: any[] = [];
 const initialOffcuts: any[] = [];
 const initialPurchaseOrders: any[] = [];
@@ -417,7 +631,26 @@ export const AppProvider = ({ children }) => {
     };
   };
 
+  const getDeletedIds = (): Set<string> => {
+    try {
+      const raw = localStorage.getItem('som_sing_deleted_item_ids');
+      if (raw) return new Set(JSON.parse(raw));
+    } catch (e) {}
+    return new Set();
+  };
+
+  const recordDeletedId = (id: string) => {
+    if (!id) return;
+    try {
+      const set = getDeletedIds();
+      set.add(id);
+      set.add(id.toLowerCase());
+      localStorage.setItem('som_sing_deleted_item_ids', JSON.stringify(Array.from(set)));
+    } catch (e) {}
+  };
+
   const [inventory, setInventory] = useState(() => {
+    const deletedIds = getDeletedIds();
     const saved = localStorage.getItem('ss_print_inventory_v6');
     if (saved) {
       try {
@@ -425,70 +658,122 @@ export const AppProvider = ({ children }) => {
         const unique = [];
         const seen = new Set();
         for (const item of parsed) {
-          if (item && item.id && !seen.has(item.id)) {
+          if (item && item.id && !seen.has(item.id) && !deletedIds.has(item.id) && !deletedIds.has(item.id.toLowerCase())) {
             seen.add(item.id);
             unique.push(sanitizeInventoryItem(item));
           }
         }
-        return unique;
+        if (unique.length > 0) return unique;
+        return initialInventory.filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase()));
       } catch (e) {
-        return initialInventory;
+        return initialInventory.filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase()));
       }
     }
-    return initialInventory;
+    return initialInventory.filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase()));
   });
+
   const [equipment, setEquipment] = useState(() => {
+    const deletedIds = getDeletedIds();
     const saved = localStorage.getItem('ss_print_equipment_v6');
-    return saved ? JSON.parse(saved) : initialEquipment;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase()));
+        }
+      } catch (e) {}
+    }
+    return initialEquipment.filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase()));
   });
 
-  useEffect(() => {
-    fetch('http://localhost:8080/api/v1/assets')
-      .then(res => (res && res.ok ? res.json() : null))
-      .then(resData => {
-        if (resData && resData.status === 'success' && Array.isArray(resData.data)) {
-          setEquipment(resData.data);
-        }
-      })
-      .catch(err => console.warn('Assets fetch notice:', err));
+  const refreshData = async () => {
+    const deletedIds = getDeletedIds();
 
-    fetch('http://localhost:8080/api/inventory/items')
-      .then(res => (res && res.ok ? res.json() : null))
-      .then(resData => {
-        if (resData && resData.status === 'success' && Array.isArray(resData.data)) {
-          setInventory(resData.data.map(sanitizeInventoryItem));
+    // 1. Assets / Equipment
+    try {
+      const res = await fetch('http://localhost:8080/api/v1/assets');
+      if (res && res.ok) {
+        const resData = await res.json();
+        if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
+          setEquipment(prevEq => {
+            const mapById = new Map();
+            (prevEq || []).filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach(item => mapById.set(item.id, item));
+            resData.data.filter((i: any) => !deletedIds.has(i.id) && !deletedIds.has(i.id?.toLowerCase())).forEach((item: any) => {
+              if (mapById.has(item.id)) {
+                mapById.set(item.id, { ...mapById.get(item.id), ...item });
+              } else {
+                mapById.set(item.id, item);
+              }
+            });
+            const merged = Array.from(mapById.values());
+            safeSetItem('ss_print_equipment_v6', merged);
+            return merged;
+          });
         }
-      })
-      .catch(err => console.warn('Inventory fetch notice:', err));
+      }
+    } catch (e) {}
 
-    fetch('http://localhost:8080/api/orders')
-      .then(res => (res && res.ok ? res.json() : null))
-      .then(data => {
+    // 2. Inventory Items
+    try {
+      const res = await fetch('http://localhost:8080/api/inventory/items');
+      if (res && res.ok) {
+        const resData = await res.json();
+        if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
+          const mapped = resData.data.map(sanitizeInventoryItem);
+          setInventory(prevInv => {
+            const mapById = new Map();
+            (prevInv || []).filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach(item => mapById.set(item.id, item));
+            mapped.filter((i: any) => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach((item: any) => {
+              if (mapById.has(item.id)) {
+                mapById.set(item.id, { ...mapById.get(item.id), ...item });
+              } else {
+                mapById.set(item.id, item);
+              }
+            });
+            const merged = Array.from(mapById.values());
+            safeSetItem('ss_print_inventory_v6', merged);
+            return merged;
+          });
+        }
+      }
+    } catch (e) {}
+
+    // 3. Orders
+    try {
+      const res = await fetch('http://localhost:8080/api/orders');
+      if (res && res.ok) {
+        const data = await res.json();
         if (Array.isArray(data)) setOrders(data);
-      })
-      .catch(err => console.warn('Orders fetch notice:', err));
+      }
+    } catch (e) {}
 
-    fetch('http://localhost:8080/api/customers')
-      .then(res => (res && res.ok ? res.json() : null))
-      .then(resData => {
+    // 4. Customers
+    try {
+      const res = await fetch('http://localhost:8080/api/customers');
+      if (res && res.ok) {
+        const resData = await res.json();
         if (resData && resData.status === 'success' && Array.isArray(resData.data)) {
           setCustomers(resData.data);
         }
-      })
-      .catch(err => console.warn('Customers fetch notice:', err));
+      }
+    } catch (e) {}
 
-    fetch('http://localhost:8080/api/spoilage')
-      .then(res => (res && res.ok ? res.json() : null))
-      .then(resData => {
+    // 5. Spoilage
+    try {
+      const res = await fetch('http://localhost:8080/api/spoilage');
+      if (res && res.ok) {
+        const resData = await res.json();
         if (resData && resData.status === 'success' && Array.isArray(resData.data)) {
           setSpoilageLogs(resData.data);
         }
-      })
-      .catch(err => console.warn('Spoilage fetch notice:', err));
+      }
+    } catch (e) {}
 
-    fetch('http://localhost:8080/api/inbound')
-      .then(res => (res && res.ok ? res.json() : null))
-      .then(resData => {
+    // 6. Inbound Transactions
+    try {
+      const res = await fetch('http://localhost:8080/api/inbound');
+      if (res && res.ok) {
+        const resData = await res.json();
         if (resData && resData.status === 'success' && Array.isArray(resData.data)) {
           const mappedInbound = resData.data.map((item: any) => ({
             id: item.id,
@@ -510,8 +795,8 @@ export const AppProvider = ({ children }) => {
           }));
           setLinkedInboundEntries(mappedInbound);
         }
-      })
-      .catch(err => console.warn('Inbound fetch notice:', err));
+      }
+    } catch (e) {}
 
     const localCouriers = localStorage.getItem('ss_print_couriers_v1');
     if (localCouriers) {
@@ -562,6 +847,10 @@ export const AppProvider = ({ children }) => {
         })
         .catch(err => console.warn('Payment methods fetch notice:', err));
     }
+  };
+
+  useEffect(() => {
+    refreshData();
   }, []);
   const normalizeCustomerOrder = (raw: any) => {
     if (!raw) return null;
@@ -704,7 +993,20 @@ export const AppProvider = ({ children }) => {
   });
   const [linkedInboundEntries, setLinkedInboundEntries] = useState(() => {
     const saved = localStorage.getItem('ss_print_inbound_entries_v6');
-    return saved ? JSON.parse(saved) : sampleInboundData;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    const rawLocal = localStorage.getItem('som_sing_inbound_list');
+    if (rawLocal) {
+      try {
+        const parsed = JSON.parse(rawLocal);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return sampleInboundData;
   });
   const [printerColorLinks, setPrinterColorLinks] = useState(() => {
     const saved = localStorage.getItem('ss_print_color_links_v6');
@@ -850,15 +1152,24 @@ export const AppProvider = ({ children }) => {
 
     setInventory(prev => {
       let updated = false;
+      const existingIds = new Set(prev.map(item => item.id.toLowerCase()));
+      const existingNames = new Set(prev.map(item => item.name.toLowerCase()));
+
       const newInv = prev.map(item => {
         const matches = allInboundEntries.filter(
-          (e: any) => e && (e.sku === item.id || e.id === item.id || e.skuCode === item.id || e.name === item.name)
+          (e: any) => e && (
+            (e.sku && e.sku.toLowerCase() === item.id.toLowerCase()) || 
+            (e.id && e.id.toLowerCase() === item.id.toLowerCase()) || 
+            (e.skuCode && e.skuCode.toLowerCase() === item.id.toLowerCase()) || 
+            (e.name && e.name.toLowerCase() === item.name.toLowerCase()) ||
+            (e.itemName && e.itemName.toLowerCase() === item.name.toLowerCase())
+          )
         );
         if (matches.length === 0) return item;
 
-        const sheetsPerPack = item.purchaseMultiplier || matches[0].sheetsPerPack || 500;
+        const sheetsPerPack = item.purchaseMultiplier || matches[0].sheetsPerPack || matches[0].specs?.sheetsPerPack || 500;
         const totalSheetsFromInbound = matches.reduce((sum, e) => {
-          const packQty = Number(e.importQty || 1);
+          const packQty = Number(e.importQty || e.quantity || e.currentQty || 1);
           return sum + (packQty * sheetsPerPack);
         }, 0);
 
@@ -868,11 +1179,11 @@ export const AppProvider = ({ children }) => {
         const constructedBatches = matches.map(e => ({
           id: e.poNumber || e.id || `LOT-${item.id}`,
           purchaseDate: e.receiptDate || e.importDate || new Date().toISOString().split('T')[0],
-          supplierName: e.supplier || e.vendor || '',
+          supplierName: e.supplier || e.vendor || e.supplierName || '',
           purchasePricePerReam: Number(e.totalPrice || e.unitPrice || latestPrice),
           costPerSheet: perSheetPrice,
-          initialQty: Number(e.importQty || 1) * sheetsPerPack,
-          currentQty: Number(e.importQty || 1) * sheetsPerPack
+          initialQty: Number(e.importQty || e.quantity || 1) * sheetsPerPack,
+          currentQty: Number(e.importQty || e.quantity || 1) * sheetsPerPack
         }));
 
         const hasRealBatches = (item.batches || []).some(b => b.id && !b.id.includes('-EMPTY'));
@@ -888,8 +1199,115 @@ export const AppProvider = ({ children }) => {
         }
         return item;
       });
+
+      // Find any inbound item not yet represented in inventory
+      const newlyDiscoveredItems: any[] = [];
+      allInboundEntries.forEach((e: any) => {
+        if (!e) return;
+        const isMachinery = e.category === 'PRINTER' || e.category === 'CUTTER' || e.category === 'MACHINERY';
+        if (isMachinery) return;
+
+        const sku = (e.sku || e.skuCode || e.id || '').trim();
+        const name = (e.name || e.itemName || sku).trim();
+        if (!sku && !name) return;
+
+        const alreadyExists = (sku && existingIds.has(sku.toLowerCase())) || 
+                              (name && existingNames.has(name.toLowerCase())) ||
+                              newlyDiscoveredItems.some(it => it.id.toLowerCase() === sku.toLowerCase() || it.name.toLowerCase() === name.toLowerCase());
+
+        if (!alreadyExists) {
+          const isPaper = e.category === 'Paper' || e.category === 'PAPER' || e.category === 'MATERIAL';
+          const sheetsPerPack = Number(e.sheetsPerPack || e.specs?.sheetsPerPack || (isPaper ? 500 : 1));
+          const packQty = Number(e.importQty || e.quantity || e.currentQty || 1);
+          const totalStock = isPaper ? packQty * sheetsPerPack : packQty;
+          const price = Number(e.totalPrice || e.unitPrice || 95000);
+          const unitPrice = isPaper ? Math.round(price / sheetsPerPack) : price;
+
+          newlyDiscoveredItems.push(sanitizeInventoryItem({
+            id: sku || `SKU-${Date.now()}`,
+            name: name,
+            category: isPaper ? 'Paper' : (e.category === 'INK' ? 'Ink' : (e.category || 'Finishing')),
+            stockQty: totalStock,
+            consumptionUnit: isPaper ? 'แผ่น' : (e.unit || 'Units'),
+            purchaseUnit: isPaper ? 'แพ็ก' : (e.unit || 'Units'),
+            purchaseMultiplier: sheetsPerPack,
+            costPerPurchaseUnit: price,
+            costPerConsumptionUnit: unitPrice,
+            reorderThreshold: 50,
+            specs: e.specs || {},
+            batches: [
+              {
+                id: `LOT-${sku || Date.now()}`,
+                purchaseDate: e.receiptDate || e.importDate || new Date().toISOString().split('T')[0],
+                supplierName: e.supplier || e.vendor || e.supplierName || '',
+                purchasePricePerReam: price,
+                costPerSheet: unitPrice,
+                initialQty: totalStock,
+                currentQty: totalStock
+              }
+            ]
+          }));
+          if (sku) existingIds.add(sku.toLowerCase());
+          if (name) existingNames.add(name.toLowerCase());
+        }
+      });
+
+      if (newlyDiscoveredItems.length > 0) {
+        updated = true;
+        return [...newInv, ...newlyDiscoveredItems];
+      }
+
       return updated ? newInv : prev;
     });
+
+    // Auto-sync machinery and printers from inbound logs into equipment
+    const machineryEntries = allInboundEntries.filter((e: any) => {
+      if (!e) return false;
+      const cat = (e.category || '').toUpperCase();
+      return cat === 'PRINTER' || cat === 'MACHINERY' || cat === 'CUTTER' || cat === 'LAMINATOR' || cat === 'BINDER';
+    });
+
+    if (machineryEntries.length > 0) {
+      setEquipment(prevEq => {
+        let eqUpdated = false;
+        const currentEqIds = new Set(prevEq.map(m => (m.id || '').toLowerCase()));
+        const toAdd: any[] = [];
+
+        machineryEntries.forEach((m: any) => {
+          const id = (m.id || m.sku || `MAC-${Date.now()}`).trim();
+          if (!currentEqIds.has(id.toLowerCase())) {
+            currentEqIds.add(id.toLowerCase());
+            eqUpdated = true;
+            const isPrn = m.category === 'PRINTER' || m.category === 'Printer';
+            toAdd.push({
+              id,
+              name: m.name || m.itemName || `${m.brand || 'Equipment'} ${m.model || id}`,
+              brand: m.brand || 'Industrial',
+              model: m.model || id,
+              serialNumber: m.serialNumber || m.sn || id,
+              category: isPrn ? 'Printer' : (m.category === 'CUTTER' ? 'Cutter' : (m.category === 'LAMINATOR' ? 'Laminator' : 'Binder')),
+              printerCategory: isPrn ? (m.printerCategory || 'Digital Color Press') : undefined,
+              status: 'In Use',
+              location: m.location || 'Press Floor',
+              purchaseCost: Number(m.totalPrice || m.price || 50000000),
+              lifespanYears: Number(m.lifespanYears || 5),
+              printedPagesCapacity: Number(m.printedPagesCapacity || 1000000),
+              printedCount: 0,
+              calculatedCostPerPage: Number(m.calculatedCostPerPage || 50),
+              purchaseDate: m.receiptDate || m.importDate || new Date().toISOString().split('T')[0],
+              warrantyExpiration: new Date(new Date().setFullYear(new Date().getFullYear() + 2)).toISOString().split('T')[0],
+              lastMaintenanceDate: new Date().toISOString().split('T')[0],
+              components: [
+                { name: isPrn ? 'Drum Unit SLA' : 'Main Blade / Roller', usage: 0, threshold: 90 },
+                { name: isPrn ? 'Fuser Kit' : 'Motor System', usage: 0, threshold: 90 }
+              ]
+            });
+          }
+        });
+
+        return eqUpdated ? [...prevEq, ...toAdd] : prevEq;
+      });
+    }
   }, [linkedInboundEntries]);
 
   // Solver for overdue orders
@@ -918,35 +1336,45 @@ export const AppProvider = ({ children }) => {
 
   // FIFO Paper Costing functions
   const getFIFOCostPerSheet = (itemId, sheetsNeeded) => {
-    const item = inventory.find(i => i.id === itemId);
+    if (!itemId) return 0;
+    const item = inventory.find(i => 
+      i.id === itemId || 
+      i.sku === itemId || 
+      i.id?.toLowerCase() === itemId?.toLowerCase() || 
+      (i.sku && i.sku.toLowerCase() === itemId.toLowerCase()) || 
+      i.name === itemId
+    );
     if (!item) return 0;
+    const baseCost = Number(item.costPerConsumptionUnit) || Number(item.costPerSheet) || (Number(item.costPerPurchaseUnit) && Number(item.purchaseMultiplier) ? Number(item.costPerPurchaseUnit) / Number(item.purchaseMultiplier) : 0) || Number(item.unitCost) || 0;
     if (!item.batches || item.batches.length === 0) {
-      return item.costPerConsumptionUnit;
+      return baseCost;
     }
 
     const sortedBatches = [...item.batches]
-      .filter(b => b.currentQty > 0)
-      .sort((a, b) => a.purchaseDate.localeCompare(b.purchaseDate));
+      .filter(b => Number(b.currentQty) > 0)
+      .sort((a, b) => (a.purchaseDate || '').localeCompare(b.purchaseDate || ''));
 
     if (sortedBatches.length === 0) {
-      return item.costPerConsumptionUnit;
+      return baseCost;
     }
 
-    let remainingNeeded = sheetsNeeded;
+    let remainingNeeded = Number(sheetsNeeded) || 1;
     let accumulatedCost = 0;
 
     for (let batch of sortedBatches) {
-      const take = Math.min(remainingNeeded, batch.currentQty);
-      accumulatedCost += take * batch.costPerSheet;
+      const bQty = Number(batch.currentQty) || 0;
+      const bCost = Number(batch.costPerSheet) || baseCost;
+      const take = Math.min(remainingNeeded, bQty);
+      accumulatedCost += take * bCost;
       remainingNeeded -= take;
       if (remainingNeeded <= 0) break;
     }
 
     if (remainingNeeded > 0) {
-      accumulatedCost += remainingNeeded * item.costPerConsumptionUnit;
+      accumulatedCost += remainingNeeded * baseCost;
     }
 
-    return accumulatedCost / sheetsNeeded;
+    return (Number(sheetsNeeded) || 1) > 0 ? (accumulatedCost / (Number(sheetsNeeded) || 1)) : baseCost;
   };
 
   const deductStockFIFO = (itemId, sheetsNeeded) => {
@@ -1021,10 +1449,18 @@ export const AppProvider = ({ children }) => {
   };
 
   const deleteInventoryFromBackend = (id: string) => {
-    setInventory(prev => prev.filter(item => item.id !== id && item.id.toLowerCase() !== id.toLowerCase()));
+    recordDeletedId(id);
+    setInventory(prev => {
+      const next = prev.filter(item => item.id !== id && item.id.toLowerCase() !== id.toLowerCase() && item.sku !== id && (item.sku || '').toLowerCase() !== id.toLowerCase());
+      safeSetItem('ss_print_inventory_v6', next);
+      return next;
+    });
     fetch(`http://localhost:8080/api/inventory/${id}`, {
       method: 'DELETE'
     }).catch(err => console.log('Inventory delete backend sync notice:', err));
+    fetch(`http://localhost:8080/api/inventory/items/${id}`, {
+      method: 'DELETE'
+    }).catch(err => console.log('Inventory items delete backend sync notice:', err));
   };
 
   // Add a new batch to inventory
@@ -1166,18 +1602,29 @@ export const AppProvider = ({ children }) => {
     });
   };
   const editInventorySku = (itemId, updatedFields) => {
-    setInventory(prev => prev.map(item => {
-      if (item.id === itemId) {
-        const updatedItem = { ...item, ...updatedFields };
-        fetch(`http://localhost:8080/api/inventory/items/${itemId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedItem)
-        }).catch(err => console.log('API inventory update notice:', err));
-        return updatedItem;
-      }
-      return item;
-    }));
+    setInventory(prev => {
+      const next = prev.map(item => {
+        if (item.id === itemId || item.id?.toLowerCase() === itemId?.toLowerCase() || item.sku === itemId) {
+          const updatedItem = sanitizeInventoryItem({ ...item, ...updatedFields });
+          return updatedItem;
+        }
+        return item;
+      });
+      safeSetItem('ss_print_inventory_v6', next);
+      return next;
+    });
+
+    const payload = { id: itemId, ...updatedFields };
+    fetch(`http://localhost:8080/api/inventory/items/${itemId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => console.log('API inventory items update notice:', err));
+    fetch(`http://localhost:8080/api/inventory/${itemId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => console.log('API inventory update notice:', err));
   };
 
   // CRM Credit Limit Check
@@ -1722,29 +2169,47 @@ export const AppProvider = ({ children }) => {
   };
 
   const updateEquipment = (eqId: string, updatedFields: Record<string, any>) => {
-    setEquipment(prev => prev.map(eq => {
-      if (eq.id === eqId) {
-        const merged = { ...eq, ...updatedFields };
-        if (merged.purchaseCost && merged.printedPagesCapacity) {
-          merged.calculatedCostPerPage = merged.purchaseCost / merged.printedPagesCapacity;
+    setEquipment(prev => {
+      const next = prev.map(eq => {
+        if (eq.id === eqId || eq.id?.toLowerCase() === eqId?.toLowerCase() || eq.serialNumber === eqId) {
+          const merged = { ...eq, ...updatedFields };
+          if (merged.purchaseCost && merged.printedPagesCapacity) {
+            merged.calculatedCostPerPage = merged.purchaseCost / merged.printedPagesCapacity;
+          }
+          return merged;
         }
-        // Async sync to backend
-        fetch(`http://localhost:8080/api/equipment/${eqId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(merged)
-        }).catch(err => console.log('API equipment update notice:', err));
-        return merged;
-      }
-      return eq;
-    }));
+        return eq;
+      });
+      safeSetItem('ss_print_equipment_v6', next);
+      return next;
+    });
+
+    const payload = { id: eqId, ...updatedFields };
+    fetch(`http://localhost:8080/api/equipment/${eqId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => console.log('API equipment update notice:', err));
+    fetch(`http://localhost:8080/api/v1/assets/${eqId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => console.log('API assets update notice:', err));
   };
 
   const deleteEquipment = (eqId: string) => {
-    setEquipment(prev => prev.filter(eq => eq.id !== eqId));
+    recordDeletedId(eqId);
+    setEquipment(prev => {
+      const next = prev.filter(eq => eq.id !== eqId && eq.serialNumber !== eqId && eq.id.toLowerCase() !== eqId.toLowerCase());
+      safeSetItem('ss_print_equipment_v6', next);
+      return next;
+    });
     fetch(`http://localhost:8080/api/equipment/${eqId}`, {
       method: 'DELETE'
     }).catch(err => console.log('API equipment delete notice:', err));
+    fetch(`http://localhost:8080/api/v1/assets/${eqId}`, {
+      method: 'DELETE'
+    }).catch(err => console.log('API assets delete notice:', err));
   };
 
   const addMeterReading = (readingData: {
@@ -1864,7 +2329,15 @@ export const AppProvider = ({ children }) => {
   };
 
   const deleteInboundEntry = (id) => {
-    setLinkedInboundEntries(prev => prev.filter(item => item.id !== id));
+    recordDeletedId(id);
+    setLinkedInboundEntries(prev => {
+      const next = prev.filter(item => item.id !== id && item.poNumber !== id && item.id?.toLowerCase() !== id?.toLowerCase());
+      safeSetItem('ss_print_inbound_entries_v6', next);
+      return next;
+    });
+    fetch(`http://localhost:8080/api/inbound/${id}`, {
+      method: 'DELETE'
+    }).catch(err => console.log('API inbound delete notice:', err));
   };
 
   const updateEquipmentMaintenance = (eqId) => {
@@ -2137,19 +2610,22 @@ export const AppProvider = ({ children }) => {
 
   const updateInboundEntry = (updatedEntry: any) => {
     setLinkedInboundEntries(prev => {
-      const newList = prev.map(item => (item.id === updatedEntry.id || item.poNumber === updatedEntry.id) ? updatedEntry : item);
+      const newList = prev.map(item => (item.id === updatedEntry.id || item.poNumber === updatedEntry.id) ? { ...item, ...updatedEntry } : item);
+      safeSetItem('ss_print_inbound_entries_v6', newList);
       return newList;
     });
 
     const targetSku = updatedEntry.skuCode || updatedEntry.sku || updatedEntry.id;
+    const itemName = updatedEntry.itemName || updatedEntry.name || '';
     const cat = (updatedEntry.category || '').toLowerCase();
     const isPaper = cat === 'paper' || cat === 'material';
-    const sheetsPerPack = Number(updatedEntry.sheetsPerPack || updatedEntry.specs?.sheetsPerPack || 500);
-    const packQty = Number(updatedEntry.quantity || updatedEntry.importQty || 1);
+    const isEquip = cat === 'printer' || cat === 'machinery' || cat === 'cutter' || cat === 'laminator' || cat === 'binder';
+    const sheetsPerPack = Number(updatedEntry.sheetsPerPack || updatedEntry.specs?.sheetsPerPack || updatedEntry.specs?.sheets_per_pack || updatedEntry.specs?.sheets_per_ream || 500);
+    const packQty = Number(updatedEntry.quantity || updatedEntry.importQty || updatedEntry.currentQty || updatedEntry.initialQty || 1);
     const totalSheets = isPaper ? packQty * sheetsPerPack : packQty;
     const totalPrice = Number(updatedEntry.totalPrice || 95000);
-    const costPerPurchase = Number(updatedEntry.unitPrice || (totalPrice / packQty));
-    const costPerConsumption = isPaper ? Math.round(totalPrice / totalSheets) : costPerPurchase;
+    const costPerPurchase = Number(updatedEntry.unitPrice || (totalPrice / Math.max(1, packQty)));
+    const costPerConsumption = isPaper ? Math.round(totalPrice / Math.max(1, totalSheets)) : costPerPurchase;
 
     fetch(`http://localhost:8080/api/inbound/${updatedEntry.id}`, {
       method: 'PUT',
@@ -2157,12 +2633,42 @@ export const AppProvider = ({ children }) => {
       body: JSON.stringify(updatedEntry)
     }).catch(err => console.warn('Update Inbound API notice:', err));
 
+    if (isEquip) {
+      setEquipment(prev => {
+        const next = prev.map(eq => {
+          const isMatch = eq.id === targetSku || eq.id === updatedEntry.id || eq.serialNumber === targetSku || (itemName && eq.name && eq.name.toLowerCase() === itemName.toLowerCase());
+          if (isMatch) {
+            return {
+              ...eq,
+              name: itemName || eq.name,
+              price: totalPrice,
+              purchaseCost: totalPrice,
+              vendor: updatedEntry.supplierName || updatedEntry.supplier || eq.vendor,
+              specs: { ...(eq.specs || {}), ...(updatedEntry.specs || {}) }
+            };
+          }
+          return eq;
+        });
+        safeSetItem('ss_print_equipment_v6', next);
+        return next;
+      });
+      return;
+    }
+
     setInventory(prev => {
-      return prev.map(invItem => {
-        if (invItem.id === targetSku || invItem.id.toLowerCase() === targetSku.toLowerCase() || invItem.name === updatedEntry.itemName) {
+      let matched = false;
+      const next = prev.map(invItem => {
+        const isMatch = invItem.id === targetSku || 
+                        invItem.sku === targetSku || 
+                        invItem.id?.toLowerCase() === targetSku?.toLowerCase() || 
+                        (invItem.sku && invItem.sku.toLowerCase() === targetSku?.toLowerCase()) || 
+                        (itemName && invItem.name && invItem.name.toLowerCase() === itemName.toLowerCase());
+
+        if (isMatch) {
+          matched = true;
           const existingBatches = invItem.batches || [];
 
-          // Find index of existing batch lot (DO NOT CREATE NEW LOT IF IT EXISTS)
+          // Find index of existing batch lot
           const batchIndex = existingBatches.findIndex((b: any) =>
             b.id === updatedEntry.id ||
             b.id === `LOT-${updatedEntry.id}` ||
@@ -2174,7 +2680,6 @@ export const AppProvider = ({ children }) => {
           let updatedBatches = [...existingBatches];
 
           if (batchIndex !== -1) {
-            // Overwrite existing batch lot in place
             updatedBatches[batchIndex] = {
               ...updatedBatches[batchIndex],
               id: updatedBatches[batchIndex].id || `LOT-${updatedEntry.id}`,
@@ -2187,7 +2692,6 @@ export const AppProvider = ({ children }) => {
               currentQty: totalSheets
             };
           } else {
-            // Append only if truly new
             updatedBatches.push({
               id: `LOT-${updatedEntry.id}`,
               poNumber: updatedEntry.poNumber || updatedEntry.id,
@@ -2204,10 +2708,13 @@ export const AppProvider = ({ children }) => {
 
           const newItem = {
             ...invItem,
+            name: itemName || invItem.name,
             stockQty: newStockQty,
+            purchaseMultiplier: isPaper ? sheetsPerPack : (invItem.purchaseMultiplier || 1),
             costPerPurchaseUnit: costPerPurchase,
             costPerConsumptionUnit: costPerConsumption,
             supplier: updatedEntry.supplierName || updatedEntry.supplier || invItem.supplier,
+            specs: { ...(invItem.specs || {}), ...(updatedEntry.specs || {}) },
             batches: updatedBatches
           };
 
@@ -2216,6 +2723,40 @@ export const AppProvider = ({ children }) => {
         }
         return invItem;
       });
+
+      if (!matched) {
+        const newItem = {
+          id: targetSku,
+          sku: targetSku,
+          name: itemName || targetSku,
+          category: isPaper ? 'Paper' : (cat === 'ink' ? 'Ink' : 'Finishing'),
+          stockQty: totalSheets,
+          consumptionUnit: isPaper ? 'แผ่น' : (updatedEntry.unit || 'Units'),
+          purchaseUnit: isPaper ? 'แพ็ก' : (updatedEntry.unit || 'Units'),
+          purchaseMultiplier: isPaper ? sheetsPerPack : 1,
+          costPerPurchaseUnit: costPerPurchase,
+          costPerConsumptionUnit: costPerConsumption,
+          reorderThreshold: 50,
+          specs: updatedEntry.specs || {},
+          batches: [
+            {
+              id: `LOT-${updatedEntry.id}`,
+              poNumber: updatedEntry.poNumber || updatedEntry.id,
+              purchaseDate: updatedEntry.inboundDate || updatedEntry.receiptDate || new Date().toISOString().split('T')[0],
+              supplierName: updatedEntry.supplierName || updatedEntry.supplier || '',
+              purchasePricePerReam: totalPrice,
+              costPerSheet: costPerConsumption,
+              initialQty: totalSheets,
+              currentQty: totalSheets
+            }
+          ]
+        };
+        saveInventoryToBackend(newItem);
+        next.unshift(newItem);
+      }
+
+      safeSetItem('ss_print_inventory_v6', next);
+      return next;
     });
   };
 
@@ -2471,7 +3012,8 @@ export const AppProvider = ({ children }) => {
       updateEquipmentComponentUsage,
       resetEquipmentComponent,
       updateEquipmentMaintenance,
-      resetToDefaultData
+      resetToDefaultData,
+      refreshData
     }}>
       {children}
     </AppContext.Provider>

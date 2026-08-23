@@ -8,7 +8,7 @@ import EditEquipmentModal from './modals/EditEquipmentModal';
 import EquipmentDetailsPage from './details/EquipmentDetailsPage';
 
 export default function EquipmentManagement() {
-  const { equipment, updateEquipmentMaintenance, showToast, formatCurrency } = useApp();
+  const { equipment, deleteEquipment, updateEquipmentMaintenance, showToast, askConfirmation, formatCurrency } = useApp();
   const { i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
 
@@ -29,6 +29,18 @@ export default function EquipmentManagement() {
 
   const handleViewDetails = (eq) => {
     setSelectedEquipmentId(eq.id);
+  };
+
+  const handleDeleteEquipment = (eq: any) => {
+    askConfirmation(
+      currentLang === 'lo' 
+        ? `ທ່ານຕ້ອງການລຶບເຄື່ອງຈັກ "${eq.name}" (${eq.id}) ຫຼື ບໍ່?` 
+        : `Are you sure you want to delete equipment "${eq.name}" (${eq.id})?`,
+      () => {
+        deleteEquipment(eq.id);
+        showToast(currentLang === 'lo' ? 'ລຶບເຄື່ອງຈັກຮຽບຮ້ອຍແລ້ວ' : 'Equipment deleted successfully', 'success');
+      }
+    );
   };
 
   const filteredMachines = equipment.filter(eq => {
@@ -166,6 +178,7 @@ export default function EquipmentManagement() {
         onMaintenance={handleMaintenanceReset}
         onViewDetails={handleViewDetails}
         onEdit={(item) => setEditingItem(item)}
+        onDelete={handleDeleteEquipment}
         formatLAK={formatCurrency}
       />
 

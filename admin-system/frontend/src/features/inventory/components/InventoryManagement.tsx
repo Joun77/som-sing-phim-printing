@@ -88,12 +88,29 @@ export default function InventoryManagement() {
 
   // Filter logic: Exclude Machinery items (category PRINTER or CUTTER) from warehouse inventory
   const filteredItems = inventory.filter(item => {
-    const isMachinery = item.category === 'PRINTER' || item.category === 'CUTTER' || item.category === 'Equipment';
+    if (!item) return false;
+    const cat = (item.category || '').toLowerCase();
+    const isMachinery = cat === 'printer' || cat === 'cutter' || cat === 'laminator' || cat === 'binder' || cat === 'equipment' || cat === 'machinery';
     if (isMachinery) return false;
 
-    const matchesTab = activeTab === 'All' || item.category === activeTab;
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          item.id.toLowerCase().includes(searchQuery.toLowerCase());
+    let matchesTab = activeTab === 'All';
+    if (activeTab === 'Paper') {
+      matchesTab = cat === 'paper' || cat === 'material';
+    } else if (activeTab === 'Ink') {
+      matchesTab = cat === 'ink' || cat === 'toner';
+    } else if (activeTab === 'Hardware') {
+      matchesTab = cat === 'hardware';
+    } else if (activeTab === 'Finishing') {
+      matchesTab = cat === 'finishing' || cat === 'film' || cat === 'glue';
+    } else if (activeTab !== 'All') {
+      matchesTab = cat === activeTab.toLowerCase();
+    }
+
+    const nameStr = (item.name || item.itemName || '').toLowerCase();
+    const idStr = (item.id || item.sku || '').toLowerCase();
+    const q = (searchQuery || '').toLowerCase();
+    const matchesSearch = !q || nameStr.includes(q) || idStr.includes(q);
+
     return matchesTab && matchesSearch;
   });
 

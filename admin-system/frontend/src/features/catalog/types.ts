@@ -55,11 +55,14 @@ export interface SpecGroup {
 }
 
 export interface FeaturesConfig {
+  hasGeneralDocUpload?: boolean;
   hasCoverUpload: boolean;
   hasInnerUpload: boolean;
   hasSpineCalc: boolean;
   hasPreflightCheck: boolean;
   hasCustomDim: boolean;
+  uploadWorkflow?: 'general_document' | 'artwork_preflight' | 'custom';
+  allowedFileTypes?: string[];
 }
 
 export interface ProductDiscountTier {
@@ -71,6 +74,15 @@ export interface ProductDiscountTier {
 }
 
 export type PricingModel = 'STANDARD_FLAT' | 'BOOK_MULTIPART' | 'SQM_CUSTOM' | 'FIXED_UNIT';
+
+export interface ProductInfoTab {
+  id: string;
+  titleLo: string;
+  titleEn: string;
+  icon?: string;
+  contentLo: string;
+  contentEn: string;
+}
 
 export interface PublicProduct {
   id: number;
@@ -93,6 +105,7 @@ export interface PublicProduct {
   features: string[];
   thumbnailUrl: string;
   galleryUrls: string[];
+  infoTabs?: ProductInfoTab[];
   minQuantity: number;
   isOnDemand?: boolean;
   leadTimeDays: number;
@@ -125,6 +138,7 @@ export interface CreateProductInput {
   features: string[];
   thumbnailUrl: string;
   galleryUrls: string[];
+  infoTabs?: ProductInfoTab[];
   minQuantity: number;
   isOnDemand?: boolean;
   leadTimeDays: number;

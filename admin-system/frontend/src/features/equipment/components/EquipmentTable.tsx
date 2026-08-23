@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldAlert, CheckCircle, Eye, Edit } from 'lucide-react';
+import { ShieldAlert, CheckCircle, Eye, Edit, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import type { Equipment } from '../types';
@@ -8,11 +8,12 @@ interface EquipmentTableProps {
   machines: Equipment[];
   onViewDetails: (eq: any) => void;
   onEdit?: (eq: any) => void;
+  onDelete?: (eq: any) => void;
   formatLAK: (num: number) => string;
   onMaintenance?: (eqId: any) => void;
 }
 
-export default function EquipmentTable({ machines, onViewDetails, onEdit, formatLAK }: EquipmentTableProps) {
+export default function EquipmentTable({ machines, onViewDetails, onEdit, onDelete, formatLAK }: EquipmentTableProps) {
   const { t } = useTranslation();
   const { printerColorLinks, inventory } = useApp();
 
@@ -208,6 +209,16 @@ export default function EquipmentTable({ machines, onViewDetails, onEdit, format
                           >
                             <Edit className="w-3.5 h-3.5" />
                             <span>แก้ไข</span>
+                          </button>
+                        )}
+                        {onDelete && (
+                          <button
+                            onClick={() => onDelete(eq)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 text-[10px] font-extrabold rounded-xl transition active:scale-95 cursor-pointer border border-rose-200"
+                            title="ลบเครื่องจักร"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>ลบ</span>
                           </button>
                         )}
                       </div>

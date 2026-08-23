@@ -17,7 +17,8 @@ import {
   Coins,
   LogOut,
   Globe,
-  ExternalLink
+  ExternalLink,
+  Calculator
 } from 'lucide-react';
 
 export default function Navbar() {
@@ -48,9 +49,10 @@ export default function Navbar() {
 
   const navItems = [
     { id: 'dashboard', labelLao: 'ແຜງຄວບຄຸມ', labelEn: 'Dashboard', icon: LayoutDashboard },
+    { id: 'quotation', labelLao: 'ໃບສະເໜີລາຄາ', labelEn: 'Quotations', icon: Calculator },
+    { id: 'orders', labelLao: 'ອໍເດີ', labelEn: 'Orders', icon: ShoppingCart },
     { id: 'catalog', labelLao: 'ສິນຄ້າໜ້າເວັບ', labelEn: 'Web Catalog', icon: Globe },
     { id: 'preflight', labelLao: 'ກວດໄຟລ໌ CMYK', labelEn: 'Preflight', icon: Cpu },
-    { id: 'orders', labelLao: 'ອໍເດີ', labelEn: 'Orders', icon: ShoppingCart },
     { id: 'finance', labelLao: 'ການເງິນ & ບັນຊີ', labelEn: 'Finance', icon: Coins },
     { id: 'inbound', labelLao: 'ນຳເຂົ້າ', labelEn: 'Inbound', icon: Truck },
     { id: 'inventory', labelLao: 'ຄັງສິນຄ້າ', labelEn: 'Inventory', icon: Boxes },

@@ -192,5 +192,6 @@ export interface AppContextValue {
   resetEquipmentComponent: (...args: any[]) => any;
   updateEquipmentMaintenance: (...args: any[]) => any;
   resetToDefaultData: (...args: any[]) => any;
+  refreshData: () => Promise<void>;
   [key: string]: any;
 }

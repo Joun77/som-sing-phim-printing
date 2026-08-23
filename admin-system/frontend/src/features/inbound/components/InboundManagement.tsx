@@ -16,7 +16,12 @@ import {
   CreditCard,
   Image as ImageIcon,
   DollarSign,
-  Calendar
+  Calendar,
+  PackagePlus,
+  Layers,
+  FileSpreadsheet,
+  Filter,
+  RefreshCw
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
@@ -48,13 +53,16 @@ export const resolveInboundItemName = (item: any): string => {
 };
 
 export default function InboundManagement() {
-   const { showToast, askConfirmation, formatCurrency, addEquipment, addInventorySku, addInventoryBatch, updateInboundEntry, saveInventoryToBackend, inventory, addStock, addPrinterColorLink } = useApp();
+   const { showToast, askConfirmation, formatCurrency, addEquipment, addInventorySku, addInventoryBatch, updateInboundEntry, saveInventoryToBackend, inventory, addStock, addPrinterColorLink, refreshData } = useApp();
   const { i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
 
   // Filters state
   const [activeCategoryFilter, setActiveCategoryFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Drawers & Modals state
   const [selectedDrawerItem, setSelectedDrawerItem] = useState<any>(null);
@@ -63,24 +71,47 @@ export default function InboundManagement() {
   const [lightboxImg, setLightboxImg] = useState(null);
 
   // Initial Master Dataset imported from standalone JSON file
-  const [inboundList, setInboundList] = useState<InboundEntry[]>(sampleInboundData);
-
-  useEffect(() => {
+  const [inboundList, setInboundList] = useState<InboundEntry[]>(() => {
     const savedLocal = localStorage.getItem('som_sing_inbound_list');
     if (savedLocal) {
       try {
         const parsed = JSON.parse(savedLocal);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setInboundList(parsed);
-        }
-      } catch (e) {
-        console.log('Failed to load local inbound data', e);
-      }
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
     }
+    const savedCtx = localStorage.getItem('ss_print_inbound_entries_v6');
+    if (savedCtx) {
+      try {
+        const parsed = JSON.parse(savedCtx);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return sampleInboundData;
+  });
 
-    fetch('http://localhost:8080/api/inbound')
-      .then(res => res.json())
-      .then(data => {
+  const getDeletedIds = (): Set<string> => {
+    try {
+      const raw = localStorage.getItem('som_sing_deleted_item_ids');
+      if (raw) return new Set(JSON.parse(raw));
+    } catch (e) {}
+    return new Set();
+  };
+
+  const recordDeletedId = (id: string) => {
+    try {
+      const set = getDeletedIds();
+      set.add(id);
+      set.add(id.toLowerCase());
+      localStorage.setItem('som_sing_deleted_item_ids', JSON.stringify(Array.from(set)));
+    } catch (e) {}
+  };
+
+  const fetchInbound = async () => {
+    try {
+      const res = await fetch('http://localhost:8080/api/inbound');
+      if (res.ok) {
+        const data = await res.json();
+        const deletedIds = getDeletedIds();
         if (data.status === 'success' && Array.isArray(data.data) && data.data.length > 0) {
           const mapped = data.data.map((item: any) => ({
             id: item.id,
@@ -106,11 +137,34 @@ export default function InboundManagement() {
             },
             receiptUrl: item.receiptSlip || ''
           }));
-          setInboundList(mapped);
-          localStorage.setItem('som_sing_inbound_list', JSON.stringify(mapped));
+          setInboundList(prevList => {
+            const mapById = new Map();
+            sampleInboundData.filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach(item => mapById.set(item.id, item));
+            (prevList || []).filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach(item => mapById.set(item.id, item));
+            mapped.filter((i: any) => !deletedIds.has(i.id) && !deletedIds.has(i.id?.toLowerCase())).forEach((item: any) => mapById.set(item.id, item));
+            const merged = Array.from(mapById.values());
+            localStorage.setItem('som_sing_inbound_list', JSON.stringify(merged));
+            return merged;
+          });
         }
-      })
-      .catch(err => console.log('Using local inbound data fallback', err));
+      }
+    } catch (err) {
+      console.log('Using local inbound data fallback', err);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      fetchInbound(),
+      refreshData()
+    ]);
+    setIsRefreshing(false);
+    showToast(currentLang === 'lo' ? 'ດຶງຂໍ້ມູນລ່າສຸດສຳເລັດ!' : 'All data refreshed successfully!', 'success');
+  };
+
+  useEffect(() => {
+    fetchInbound();
   }, []);
 
   // Form input state (Common Master)
@@ -543,69 +597,27 @@ export default function InboundManagement() {
     };
 
     if (editingItem) {
-      setInboundList(prev => prev.map(item => item.id === editingItem.id ? payload : item));
-      saveInboundToBackend(payload);
+      setInboundList(prev => {
+        const newList = prev.map(item => item.id === editingItem.id ? payload : item);
+        localStorage.setItem('som_sing_inbound_list', JSON.stringify(newList));
+        return newList;
+      });
+      updateInboundEntry(payload);
+      saveInboundToBackend(payload, true);
       showToast(currentLang === 'lo' ? 'ອັບເດດຂໍ້ມູນນຳເຂົ້າຮຽບຮ້ອຍແລ້ວ!' : 'Inbound entry updated!', 'success');
     } else {
-      setInboundList(prev => [payload, ...prev]);
-      saveInboundToBackend(payload);
-
-      // Cross-module sync: Add to Equipment or Inventory
-      if (payload.category === 'PRINTER' || payload.category === 'CUTTER' || payload.category === 'MACHINERY') {
-        addEquipment({
-          id: payload.id,
-          name: payload.name,
-          brand: payload.name.split(' ')[0] || 'Generic',
-          model: payload.name.split(' ').slice(1).join(' ') || payload.name,
-          serialNumber: payload.sku || payload.id,
-          category: payload.category === 'PRINTER' ? 'Printer' : (payload.category === 'CUTTER' ? 'Cutter' : 'Processing Tools'),
-          printerCategory: (payload as any).specs?.printerCategory || 'Inkjet',
-          colorSchemeType: 'CMYK',
-          totalColorSlots: 4,
-          expectedLifeA4Pages: 200000,
-          maintenanceRatePercent: 20,
-          price: payload.totalPrice,
-          purchaseCost: payload.totalPrice,
-          vendor: payload.supplier,
-          warrantyExpirationYear: 2028,
-          location: 'Main Dept',
-          status: 'In Use'
-        });
-      } else {
-        const existingItem = inventory.find(item => item.id === payload.sku || item.id === payload.id);
-        if (existingItem) {
-          addStock(existingItem.id, payload.currentQty);
-        } else {
-          addInventorySku({
-            id: payload.sku || payload.id,
-            name: payload.name,
-            category: payload.category === 'MATERIAL' ? 'Paper' : (payload.category === 'INK' ? 'Ink' : 'Finishing'),
-            stockQty: payload.currentQty,
-            consumptionUnit: payload.unit,
-            purchaseUnit: payload.unit,
-            purchaseMultiplier: 1,
-            costPerPurchaseUnit: payload.totalPrice / (payload.currentQty || 1),
-            costPerConsumptionUnit: payload.totalPrice / (payload.currentQty || 1),
-            reorderThreshold: 10,
-            batches: [
-              {
-                id: `LOT-${payload.id}-001`,
-                purchaseDate: payload.receiptDate || new Date().toISOString().split('T')[0],
-                supplierName: payload.supplier,
-                purchasePricePerReam: payload.totalPrice,
-                costPerSheet: payload.totalPrice / (payload.currentQty || 1),
-                initialQty: payload.currentQty,
-                currentQty: payload.currentQty
-              }
-            ]
-          });
-        }
-      }
-
+      setInboundList(prev => {
+        const newList = [payload, ...prev];
+        localStorage.setItem('som_sing_inbound_list', JSON.stringify(newList));
+        return newList;
+      });
+      updateInboundEntry(payload);
+      saveInboundToBackend(payload, false);
       showToast(currentLang === 'lo' ? 'ບັນທຶກຂໍ້ມູນນຳເຂົ້າສິນຄ້າໃໝ່ຮຽບຮ້ອຍແລ້ວ!' : 'New inbound entry created!', 'success');
     }
 
     setIsModalOpen(false);
+    setEditingItem(null);
   };
 
   // Delete Entry
@@ -613,8 +625,9 @@ export default function InboundManagement() {
     askConfirmation(
       currentLang === 'lo' ? 'ທ່ານຕ້ອງການລຶບລາຍການນຳເຂົ້ານີ້ ຫຼື ບໍ່?' : 'Are you sure you want to delete this inbound record?',
       () => {
+        recordDeletedId(id);
         setInboundList(prev => {
-          const newList = prev.filter(i => i.id !== id);
+          const newList = prev.filter(i => i.id !== id && i.id?.toLowerCase() !== id?.toLowerCase() && i.poNumber !== id);
           localStorage.setItem('som_sing_inbound_list', JSON.stringify(newList));
           return newList;
         });
@@ -625,18 +638,25 @@ export default function InboundManagement() {
     );
   };
 
-  // Filter Data
-  // Date filter state (YYYY-MM-DD)
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const isCategoryMatch = (itemCat: string, filterId: string) => {
+    if (filterId === 'ALL') return true;
+    const cat = (itemCat || '').toUpperCase();
+    if (filterId === 'MATERIAL') return cat === 'MATERIAL' || cat === 'PAPER';
+    if (filterId === 'INK') return cat === 'INK' || cat === 'TONER';
+    if (filterId === 'PRINTER') return cat === 'PRINTER' || cat === 'MACHINERY';
+    if (filterId === 'CUTTER') return cat === 'CUTTER' || cat === 'LAMINATOR' || cat === 'BINDER';
+    return cat === filterId.toUpperCase();
+  };
 
   // Filtered dataset including date range, category, and search query
   const filteredData = inboundList.filter(item => {
-    const matchCategory = activeCategoryFilter === 'ALL' || item.category === activeCategoryFilter;
-    const matchQuery = !searchQuery || 
-      item.poNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.sku.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!item) return false;
+    const matchCategory = isCategoryMatch(item.category, activeCategoryFilter);
+    const po = (item.poNumber || item.id || '').toLowerCase();
+    const name = (item.name || item.itemName || '').toLowerCase();
+    const sku = (item.sku || '').toLowerCase();
+    const q = (searchQuery || '').toLowerCase();
+    const matchQuery = !q || po.includes(q) || name.includes(q) || sku.includes(q);
     
     let matchDate = true;
     if (startDate && item.receiptDate < startDate) matchDate = false;
@@ -653,89 +673,108 @@ export default function InboundManagement() {
     <div className="space-y-6 text-slate-800 antialiased">
       {/* Header Action Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-xs">
-        <div className="flex items-center space-x-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-blue-900 flex items-center justify-center shadow-md shadow-blue-900/20 text-white shrink-0">
-            <Boxes className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="font-extrabold text-2xl text-slate-900 tracking-tight flex items-center gap-2">
-              <span>{currentLang === 'lo' ? 'ນຳເຂົ້າສິນຄ້າ & ອຸປະກອນ' : 'Inbound Procurement'}</span>
-              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">ERP Inbound</span>
-            </h2>
-            <p className="text-xs font-semibold text-slate-400 mt-1">
-              Complete ERP Inbound Receipt, Freight Tariff & Landed Cost Ledger
-            </p>
-          </div>
+        <div>
+          <h2 className="font-extrabold text-2xl text-slate-900 tracking-tight flex items-center gap-2">
+            <PackagePlus className="w-8 h-8 text-indigo-600" />
+            <span>{currentLang === 'lo' ? 'ບັນທຶກການນຳເຂົ້າສິນຄ້າ (Inbound Master)' : 'Inbound Master Management'}</span>
+          </h2>
+          <p className="text-sm font-semibold text-slate-400 mt-1">
+            {currentLang === 'lo' 
+              ? 'ຈັດການປະຫວັດການນຳເຂົ້າ, ເພີ່ມສິນຄ້າໃໝ່, ອັດຕາແລກປ່ຽນ ແລະ ຄຳນວນຕົ້ນທຶນແທ້ຈິງ' 
+              : 'Track and manage material receipts, calculate real landed costs, and import assets'}
+          </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Global Import Action Button */}
+        <div className="flex items-center gap-2.5">
           <button
-            onClick={() => handleOpenModal()}
-            className="flex items-center gap-2 px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-xs rounded-2xl shadow-md shadow-sky-600/20 transition active:scale-95 cursor-pointer"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 px-4 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-2xl font-bold shadow-xs hover:border-slate-300 transition active:scale-98 cursor-pointer disabled:opacity-60"
+            title={currentLang === 'lo' ? 'ດຶງຂໍ້ມູນລ່າສຸດ' : 'Refresh live data'}
           >
-            <Plus className="w-4 h-4" />
-            <span>{currentLang === 'lo' ? 'ນຳເຂົ້າສິນຄ້າ / ອຸປະກອນໃໝ່' : 'Add Inbound Entry'}</span>
+            <RefreshCw className={`w-4 h-4 text-indigo-600 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="text-xs">{currentLang === 'lo' ? 'ຣີເຟຣຊຂໍ້ມູນ' : 'Refresh'}</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setEditingItem(null);
+              setIsModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white rounded-2xl font-bold shadow-lg shadow-indigo-200 transition cursor-pointer"
+          >
+            <Plus className="w-5 h-5" />
+            <span>{currentLang === 'lo' ? 'ບັນທຶກການນຳເຂົ້າໃໝ່' : 'New Inbound Entry'}</span>
           </button>
         </div>
       </div>
 
-      {/* Summary KPI Cards & Date Filter Bar */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* KPI Card 1: Total Inbound Quantity */}
+      {/* Summary KPI Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* KPI 1 */}
         <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider block">
-              {currentLang === 'lo' ? 'ສະຫຼຸບຈຳນວນນຳເຂົ້າທັງໝົດ' : 'Total Inbound Quantity'}
-            </span>
-            <span className="text-2xl font-black text-slate-900 font-mono block">
-              {totalInboundQty.toLocaleString()} <span className="text-xs font-bold text-slate-400">{currentLang === 'lo' ? 'ລາຍການ / ຊິ້ນ' : 'Items/Pcs'}</span>
-            </span>
+          <div>
+            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase">
+              {currentLang === 'lo' ? 'ລາຍການທັງໝົດ' : 'Total Items'}
+            </p>
+            <h3 className="text-2xl font-extrabold text-slate-900 mt-1">{filteredData.length}</h3>
+            <p className="text-xs text-slate-500 font-semibold mt-1">
+              {currentLang === 'lo' ? 'ລາຍການທີ່ສະແດງ' : 'Filtered entries'}
+            </p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-900 shrink-0">
-            <Boxes className="w-6 h-6" />
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+            <PackagePlus className="w-6 h-6" />
           </div>
         </div>
 
-        {/* KPI Card 2: Total Inbound Purchase Value */}
+        {/* KPI 2 */}
         <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider block">
-              {currentLang === 'lo' ? 'ສະຫຼຸບຍອດມູນຄ່ານຳເຂົ້າທັງໝົດ' : 'Total Inbound Value'}
-            </span>
-            <span className="text-2xl font-black text-emerald-600 font-mono block">
-              {formatLAK(totalInboundValue)}
-            </span>
+          <div>
+            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase">
+              {currentLang === 'lo' ? 'ຈຳນວນນຳເຂົ້າລວມ' : 'Total Inbound Qty'}
+            </p>
+            <h3 className="text-2xl font-extrabold text-slate-900 mt-1">{totalInboundQty.toLocaleString()}</h3>
+            <p className="text-xs text-slate-500 font-semibold mt-1">
+              {currentLang === 'lo' ? 'ຫົວໜ່ວຍທັງໝົດ' : 'Total units received'}
+            </p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-700 shrink-0 font-black text-xl select-none">
-            ₭
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+            <Layers className="w-6 h-6" />
           </div>
         </div>
 
-        {/* Date Filter Card (Day/Month/Year) */}
-        <div className="bg-white p-4.5 rounded-3xl border border-slate-100 shadow-xs flex flex-col justify-center space-y-2">
-          <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <Calendar className="w-3.5 h-3.5 text-sky-600" />
-            <span>{currentLang === 'lo' ? 'ຟິວເຕີຕາມວັນທີ (Date Filter)' : 'Date Filter'}</span>
-          </span>
-          <div className="grid grid-cols-2 gap-2 text-xs font-bold">
-            <div>
-              <span className="text-[10px] text-slate-400 block mb-0.5">{currentLang === 'lo' ? 'ແຕ່ວັນທີ:' : 'From:'}</span>
-              <input 
-                type="date" 
-                value={startDate} 
-                onChange={(e) => setStartDate(e.target.value)} 
-                className="w-full bg-slate-50 text-slate-800 px-2.5 py-1.5 rounded-xl border border-slate-200 focus:border-sky-500 outline-none text-xs" 
-              />
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-400 block mb-0.5">{currentLang === 'lo' ? 'ເຖິງວັນທີ:' : 'To:'}</span>
-              <input 
-                type="date" 
-                value={endDate} 
-                onChange={(e) => setEndDate(e.target.value)} 
-                className="w-full bg-slate-50 text-slate-800 px-2.5 py-1.5 rounded-xl border border-slate-200 focus:border-sky-500 outline-none text-xs" 
-              />
-            </div>
+        {/* KPI 3 */}
+        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase">
+              {currentLang === 'lo' ? 'ມູນຄ່ານຳເຂົ້າລວມ' : 'Total Inbound Value'}
+            </p>
+            <h3 className="text-2xl font-extrabold text-slate-900 mt-1">{formatCurrency(totalInboundValue)}</h3>
+            <p className="text-xs text-slate-500 font-semibold mt-1">
+              {currentLang === 'lo' ? 'ຕົ້ນທຶນຕົວຈິງ' : 'Actual Landed Cost'}
+            </p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-sky-50 flex items-center justify-center text-sky-600">
+            <FileSpreadsheet className="w-6 h-6" />
+          </div>
+        </div>
+
+        {/* KPI 4 */}
+        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase">
+              {currentLang === 'lo' ? 'ໝວດໝູ່ທີ່ໃຊ້ງານ' : 'Active Category'}
+            </p>
+            <h3 className="text-lg font-extrabold text-slate-900 mt-1 truncate">
+              {activeCategoryFilter}
+            </h3>
+            <p className="text-xs text-slate-500 font-semibold mt-1">
+              {filteredData.length} entries found
+            </p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600">
+            <Filter className="w-6 h-6" />
           </div>
         </div>
       </div>
@@ -765,7 +804,7 @@ export default function InboundManagement() {
               <span className={`ml-1.5 px-2 py-0.5 rounded-full text-[10px] ${
                 activeCategoryFilter === tab.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
               }`}>
-                {tab.id === 'ALL' ? inboundList.length : inboundList.filter(i => i.category === tab.id).length}
+                {tab.id === 'ALL' ? inboundList.length : inboundList.filter(i => isCategoryMatch(i.category, tab.id)).length}
               </span>
             </button>
           ))}
@@ -955,7 +994,7 @@ export default function InboundManagement() {
                   </div>
                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
                     <span className="text-[11px] text-slate-400 font-extrabold block mb-1">Total Inbound Qty</span>
-                    <span className="text-sm md:text-base font-black text-sky-700">
+                    <div className="text-sm md:text-base font-black text-sky-700">
                       {(() => {
                         const cat = (selectedDrawerItem.category || '').toUpperCase();
                         const rawQty = Number(selectedDrawerItem.initialQty || selectedDrawerItem.currentQty) || 1;
@@ -970,20 +1009,53 @@ export default function InboundManagement() {
                           if (isSheet) {
                             const sheetsPerPack = Number(selectedDrawerItem.specs?.sheetsPerPack || selectedDrawerItem.specs?.sheets_per_ream || selectedDrawerItem.sheetsPerPack || selectedDrawerItem.sheets_per_ream) || 500;
                             const totalSheets = rawQty * sheetsPerPack;
-                            return `${totalSheets.toLocaleString()} ${currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'}`;
+                            return (
+                              <div>
+                                <span className="block">{totalSheets.toLocaleString()} {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'}</span>
+                                <span className="text-[10px] text-slate-400 font-bold block mt-0.5 font-sans">({rawQty} {currentLang === 'lo' ? 'ແພັກ' : 'packs'} x {sheetsPerPack} {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'})</span>
+                              </div>
+                            );
                           } else {
                             return `${rawQty} ${currentLang === 'lo' ? 'ມ້ວນ' : 'roll'}`;
                           }
                         }
                         return `${rawQty} ${selectedDrawerItem.unit || ''}`;
                       })()}
-                    </span>
+                    </div>
                   </div>
                   <div className="bg-blue-50/60 p-4 rounded-2xl border border-blue-100">
-                    <span className="text-[11px] text-blue-900 font-extrabold block mb-1">Unit Cost</span>
-                    <span className="text-sm md:text-base font-black text-blue-950">
-                      {formatLAK(Math.round((selectedDrawerItem.totalPrice || 0) / (selectedDrawerItem.initialQty || selectedDrawerItem.currentQty || 1)))}
+                    <span className="text-[11px] text-blue-900 font-extrabold block mb-1">
+                      {(() => {
+                        const cat = (selectedDrawerItem.category || '').toUpperCase();
+                        if (cat === 'PAPER' || cat === 'MATERIAL') {
+                          return currentLang === 'lo' ? 'ຕົ້ນທຶນຕໍ່ແຜ່ນ (Cost/Sheet)' : 'Cost Per Sheet';
+                        }
+                        return currentLang === 'lo' ? 'ຕົ້ນທຶນຕໍ່ໜ່ວຍ (Unit Cost)' : 'Unit Cost';
+                      })()}
                     </span>
+                    <div className="text-sm md:text-base font-black text-blue-950">
+                      {(() => {
+                        const cat = (selectedDrawerItem.category || '').toUpperCase();
+                        const rawQty = Number(selectedDrawerItem.initialQty || selectedDrawerItem.currentQty) || 1;
+                        const totalPrice = Number(selectedDrawerItem.totalPrice) || 0;
+                        if (cat === 'PAPER' || cat === 'MATERIAL') {
+                          const isSheet = (selectedDrawerItem.specs?.paperFormat || selectedDrawerItem.paperFormat || 'sheet').toLowerCase() === 'sheet';
+                          if (isSheet) {
+                            const sheetsPerPack = Number(selectedDrawerItem.specs?.sheetsPerPack || selectedDrawerItem.specs?.sheets_per_ream || selectedDrawerItem.sheetsPerPack || selectedDrawerItem.sheets_per_ream) || 500;
+                            const totalSheets = rawQty * sheetsPerPack;
+                            const costPerSheet = Math.round(totalPrice / Math.max(1, totalSheets));
+                            const costPerPack = Math.round(totalPrice / Math.max(1, rawQty));
+                            return (
+                              <div>
+                                <span className="block text-emerald-700">{formatLAK(costPerSheet)} <span className="text-xs font-bold text-slate-500">/ {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheet'}</span></span>
+                                <span className="text-[10px] text-slate-400 font-bold block mt-0.5 font-sans">({formatLAK(costPerPack)} / {currentLang === 'lo' ? 'ແພັກ' : 'pack'})</span>
+                              </div>
+                            );
+                          }
+                        }
+                        return `${formatLAK(Math.round(totalPrice / Math.max(1, rawQty)))} / ${selectedDrawerItem.unit || 'Unit'}`;
+                      })()}
+                    </div>
                   </div>
                 </div>
 
