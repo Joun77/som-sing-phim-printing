@@ -10,6 +10,8 @@ export interface SpecOption {
   hint: string
   hintEn?: string
   add: number
+  materialSku?: string
+  paperCode?: string
 }
 
 export interface Category {
@@ -24,6 +26,24 @@ export interface Category {
   icon: string
   description: string
   descriptionEn?: string
+  sortOrder?: number
+}
+
+export interface SpecGroup {
+  id: string
+  titleLo: string
+  titleEn: string
+  displayType: 'cards' | 'dropdown'
+  groupType: string
+  options: SpecOption[]
+}
+
+export interface FeaturesConfig {
+  hasCoverUpload?: boolean
+  hasInnerUpload?: boolean
+  hasSpineCalc?: boolean
+  hasPreflightCheck?: boolean
+  hasCustomDim?: boolean
 }
 
 export interface Product {
@@ -39,13 +59,21 @@ export interface Product {
   minQuantity?: number
   isOnDemand?: boolean
   image: string
+  thumbnailUrl?: string
+  galleryUrls?: string[]
   short: string
   shortEn?: string
   description: string
   descriptionEn?: string
+  pricingModel?: 'STANDARD_FLAT' | 'BOOK_MULTIPART' | 'SQM_CUSTOM' | 'FIXED_UNIT' | string
+  featuresConfig?: FeaturesConfig
+  specGroups?: SpecGroup[]
+  features?: string[]
   sizes: SpecOption[]
   materials: SpecOption[]
   finishings: SpecOption[]
+  options?: any[]
+  discountTiers?: any[]
 }
 
 export const CATEGORIES: Category[] = [

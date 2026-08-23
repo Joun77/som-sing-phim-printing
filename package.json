@@ -6,7 +6,11 @@
     "dev:admin": "cd admin-system/frontend && npm run dev",
     "dev:customer": "cd customer-service && npm run dev",
     "dev": "concurrently -n \"backend,admin,customer\" -c \"green,cyan,yellow\" \"npm run dev:backend\" \"npm run dev:admin\" \"npm run dev:customer\"",
-    "dev:all": "npm run dev"
+    "dev:all": "npm run dev",
+    "docker:up": "docker compose up -d",
+    "docker:backend": "docker compose up -d db backend",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
   },
   "devDependencies": {
     "concurrently": "^10.0.4"

@@ -45,9 +45,9 @@ func InitDB() (*sql.DB, error) {
 	db.SetConnMaxLifetime(5 * time.Minute)
 
 	if err := db.Ping(); err != nil {
-		log.Printf("[DB WARNING] Could not ping PostgreSQL at %s: %v (Using in-memory fallback if DB unreachable)", connStr, err)
-		DB = db
-		return db, err
+		log.Printf("[DB WARNING] Could not ping PostgreSQL at %s: %v (Using in-memory fallback)", connStr, err)
+		DB = nil
+		return nil, err
 	}
 
 	log.Println("[DB SUCCESS] Successfully connected to PostgreSQL database!")
@@ -72,6 +72,8 @@ func RunMigrations(db *sql.DB) error {
 		"migrations/010_bilingual_books_preflight_and_shop_tracker.sql",
 		"../migrations/018_lao_provinces_and_districts.sql",
 		"migrations/018_lao_provinces_and_districts.sql",
+		"../migrations/019_dynamic_categories_and_bilingual_catalog.sql",
+		"migrations/019_dynamic_categories_and_bilingual_catalog.sql",
 		"../schema.sql",
 		"schema.sql",
 	}

@@ -15,8 +15,10 @@ RUN apk --no-cache add ca-certificates tzdata ghostscript
 
 WORKDIR /app
 COPY --from=builder /app/server .
-COPY assets ./assets
-RUN mkdir -p uploads/orders uploads/preflight
+COPY --from=builder /app/assets ./assets
+COPY --from=builder /app/couriers_data.json ./couriers_data.json
+COPY --from=builder /app/payment_methods_data.json ./payment_methods_data.json
+RUN mkdir -p uploads/orders uploads/preflight uploads/products
 
 EXPOSE 8080
 

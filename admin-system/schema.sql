@@ -297,13 +297,40 @@ CREATE TABLE offcuts (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 9. Public Web Catalog & Tier Discounts
+-- 9. Public Web Catalog & Dynamic Categories
+CREATE TABLE IF NOT EXISTS public_categories (
+    id SERIAL PRIMARY KEY,
+    slug VARCHAR(100) UNIQUE NOT NULL,
+    name_lo VARCHAR(200) NOT NULL,
+    name_en VARCHAR(200) NOT NULL,
+    tagline_lo TEXT DEFAULT '',
+    tagline_en TEXT DEFAULT '',
+    description_lo TEXT DEFAULT '',
+    description_en TEXT DEFAULT '',
+    icon VARCHAR(50) NOT NULL DEFAULT 'folder',
+    sort_order INT NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS public_products (
     id SERIAL PRIMARY KEY,
+    category_id INT REFERENCES public_categories(id) ON DELETE SET NULL,
     name VARCHAR(255) NOT NULL,
+    name_lo VARCHAR(255),
+    name_en VARCHAR(255),
     slug VARCHAR(255) UNIQUE NOT NULL,
     category VARCHAR(100) NOT NULL,
     description TEXT,
+    description_lo TEXT,
+    description_en TEXT,
+    pricing_model VARCHAR(50) DEFAULT 'STANDARD_FLAT',
+    base_price NUMERIC(15, 2) DEFAULT 0.00,
+    unit VARCHAR(50) DEFAULT 'ຊິ້ນ',
+    bestseller BOOLEAN DEFAULT false,
+    spec_groups JSONB DEFAULT '[]',
+    features_config JSONB DEFAULT '{}',
     features TEXT[] DEFAULT '{}',
     thumbnail_url VARCHAR(500),
     gallery_urls TEXT[] DEFAULT '{}',
@@ -323,7 +350,14 @@ CREATE TABLE IF NOT EXISTS public_product_options (
     product_id INT NOT NULL REFERENCES public_products(id) ON DELETE CASCADE,
     option_type VARCHAR(50) NOT NULL,
     label VARCHAR(100) NOT NULL,
+    label_lo VARCHAR(150),
+    label_en VARCHAR(150),
+    hint_lo VARCHAR(255),
+    hint_en VARCHAR(255),
     value VARCHAR(100) NOT NULL,
+    material_sku VARCHAR(100),
+    paper_code VARCHAR(100),
+    add_price NUMERIC(15, 2) DEFAULT 0.00,
     is_default BOOLEAN DEFAULT false,
     extra_cost_rate NUMERIC(10, 4) DEFAULT 0.0000,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -337,9 +371,12 @@ CREATE TABLE IF NOT EXISTS product_discount_tiers (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_public_categories_slug ON public_categories(slug);
+CREATE INDEX IF NOT EXISTS idx_public_categories_active ON public_categories(is_active);
 CREATE INDEX IF NOT EXISTS idx_public_products_slug ON public_products(slug);
 CREATE INDEX IF NOT EXISTS idx_public_products_category ON public_products(category);
 CREATE INDEX IF NOT EXISTS idx_public_products_active ON public_products(is_active) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_public_product_options_pid ON public_product_options(product_id);
 CREATE INDEX IF NOT EXISTS idx_product_discount_tiers_pid ON product_discount_tiers(product_id);
+
 

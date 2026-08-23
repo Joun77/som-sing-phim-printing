@@ -323,11 +323,27 @@ export const AppProvider = ({ children }) => {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const askConfirmation = (message, onConfirm) => {
+  const askConfirmation = (msgOrOptions: any, onConfirmCallback?: () => void) => {
+    if (typeof msgOrOptions === 'object' && msgOrOptions !== null) {
+      const message = msgOrOptions.message || msgOrOptions.title || '';
+      const cb = msgOrOptions.onConfirm || onConfirmCallback || (() => {});
+      setConfirmDialog({
+        message: typeof message === 'string' ? message : JSON.stringify(message),
+        onConfirm: () => {
+          cb();
+          setConfirmDialog(null);
+        },
+        onCancel: () => {
+          setConfirmDialog(null);
+        }
+      });
+      return;
+    }
+
     setConfirmDialog({
-      message,
+      message: String(msgOrOptions || ''),
       onConfirm: () => {
-        onConfirm();
+        if (onConfirmCallback) onConfirmCallback();
         setConfirmDialog(null);
       },
       onCancel: () => {

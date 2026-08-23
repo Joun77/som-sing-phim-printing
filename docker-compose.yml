@@ -4,16 +4,16 @@ services:
     container_name: somsing_postgres
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: somsing_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-somsing_db}
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./admin-system/migrations:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d somsing_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-somsing_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -25,15 +25,19 @@ services:
     container_name: somsing_backend
     restart: always
     environment:
-      DATABASE_URL: postgres://postgres:postgres@db:5432/somsing_db?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-somsing_db}?sslmode=disable}
       DB_HOST: db
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: somsing_db
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DB_NAME: ${POSTGRES_DB:-somsing_db}
       DB_SSLMODE: disable
+      PORT: ${BACKEND_PORT:-8080}
+      JWT_SECRET: ${JWT_SECRET:-somsing_super_secret_jwt_key_2026}
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT:-8080}:8080"
+    volumes:
+      - backend_uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -45,7 +49,7 @@ services:
     container_name: somsing_admin_system
     restart: always
     ports:
-      - "3000:80"
+      - "${ADMIN_PORT:-3000}:80"
     depends_on:
       - backend
 
@@ -56,9 +60,10 @@ services:
     container_name: somsing_customer_service
     restart: always
     ports:
-      - "5173:80"
+      - "${CUSTOMER_PORT:-5173}:80"
     depends_on:
       - backend
 
 volumes:
   postgres_data:
+  backend_uploads:

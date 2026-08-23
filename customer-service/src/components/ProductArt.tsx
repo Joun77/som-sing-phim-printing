@@ -279,10 +279,28 @@ export const ART: Record<string, React.FC> = {
   book: DocArt,
 }
 
-export type ProductArtProps = { art: string } & React.SVGProps<SVGSVGElement>
+export type ProductArtProps = { art: string; className?: string } & React.HTMLAttributes<HTMLDivElement>
 
-export default function ProductArt({ art, ...props }: ProductArtProps) {
+export default function ProductArt({ art, className = '', ...props }: ProductArtProps) {
+  if (!art) return <DocArt />
+  const isUrl = art.startsWith('http') || art.startsWith('/api') || art.startsWith('/uploads') || art.startsWith('/images') || art.includes('/')
+  if (isUrl) {
+    return (
+      <div className={`w-full h-full relative overflow-hidden flex items-center justify-center bg-slate-900 ${className}`} {...props}>
+        <img
+          src={art}
+          alt="Product preview"
+          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          loading="lazy"
+          onError={(e) => {
+            // fallback if image not found
+            e.currentTarget.style.display = 'none'
+          }}
+        />
+      </div>
+    )
+  }
   const normalizedKey = art.toLowerCase().trim()
   const Cmp = ART[normalizedKey] || DocArt
-  return <Cmp {...props} />
+  return <Cmp />
 }

@@ -15,7 +15,7 @@ import {
 } from './icons.tsx'
 
 export default function Footer() {
-  const { t, language } = useShop()
+  const { t, language, categories } = useShop()
   const isLao = language === 'lo'
 
   const SOCIAL_LINKS = [
@@ -77,7 +77,7 @@ export default function Footer() {
         <div className="footer-col">
           <h4>{t('navCategories')}</h4>
           <ul>
-            {CATEGORIES.map((c) => (
+            {(categories || []).map((c) => (
               <li key={c.slug}>
                 <Link to={`/category/${c.slug}`}>{isLao ? c.name : c.nameEn}</Link>
               </li>
@@ -99,7 +99,14 @@ export default function Footer() {
               <a href="#how-it-works">{t('navHowItWorks')}</a>
             </li>
             <li>
-              <a href="#contact">{t('navContact')}</a>
+              <a 
+                href="https://som-sing-phim-admin.web.app" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-amber-600 font-bold"
+              >
+                {isLao ? '🔒 ລະບົບຈັດການຫຼັງຮ້ານ (Admin ERP)' : '🔒 Staff / Admin Portal'}
+              </a>
             </li>
             <li>
               <span className="text-muted text-xs">

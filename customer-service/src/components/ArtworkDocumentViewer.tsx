@@ -8,6 +8,7 @@ interface ArtworkDocumentViewerProps {
   fileType?: string
   report: PreflightReport | null
   onReupload: () => void
+  onDelete?: () => void
 }
 
 export const ArtworkDocumentViewer: React.FC<ArtworkDocumentViewerProps> = ({
@@ -16,6 +17,7 @@ export const ArtworkDocumentViewer: React.FC<ArtworkDocumentViewerProps> = ({
   fileType = '',
   report,
   onReupload,
+  onDelete,
 }) => {
   const isAi = fileName?.toLowerCase().endsWith('.ai')
   const isPdf = fileType.includes('pdf') || fileName?.toLowerCase().endsWith('.pdf') || Boolean(isAi)
@@ -119,6 +121,17 @@ export const ArtworkDocumentViewer: React.FC<ArtworkDocumentViewerProps> = ({
             >
               🔄 ປ່ຽນຟາຍ
             </button>
+
+            {onDelete && (
+              <button
+                type="button"
+                onClick={onDelete}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/40 transition cursor-pointer"
+                title="ລຶບຟາຍນີ້"
+              >
+                🗑️ ລຶບ
+              </button>
+            )}
           </div>
         </div>
 

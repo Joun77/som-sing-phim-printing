@@ -3,7 +3,6 @@ import { useShop } from '../context/ShopContext.tsx'
 import { formatMoney } from '../utils/currency.ts'
 import { PrinterIcon, CheckIcon, TruckIcon } from '../components/icons.tsx'
 import ProductArt from '../components/ProductArt.tsx'
-import { getProduct } from '../data/catalog.ts'
 import type { Order } from '../api/client.ts'
 
 function useOrder(): Order | null {
@@ -17,7 +16,7 @@ function useOrder(): Order | null {
 
 export default function SuccessPage() {
   const order = useOrder()
-  const { currency, convertTo, t, language } = useShop()
+  const { currency, convertTo, t, language, getProduct } = useShop()
 
   if (!order) {
     return (

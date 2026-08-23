@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { CATEGORIES } from '../data/catalog.ts'
 import { useShop } from '../context/ShopContext.tsx'
 import {
   ChevronDownIcon,
@@ -43,26 +42,21 @@ function Logo() {
 
 function LanguageSwitcher() {
   const { language, setLanguage } = useShop()
+  const next = language === 'lo' ? 'en' : 'lo'
+  const label = language === 'lo' ? 'ລາວ' : 'EN'
+  const flag = language === 'lo' ? '🇱🇦' : '🇬🇧'
 
   return (
-    <div className="luxury-lang-switcher" role="group" aria-label="Language Switcher">
-      <button
-        type="button"
-        onClick={() => setLanguage('lo')}
-        className={`luxury-lang-btn ${language === 'lo' ? 'is-active' : ''}`}
-        aria-pressed={language === 'lo'}
-      >
-        <span>ລາວ (LAO)</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => setLanguage('en')}
-        className={`luxury-lang-btn ${language === 'en' ? 'is-active' : ''}`}
-        aria-pressed={language === 'en'}
-      >
-        <span>EN (ENG)</span>
-      </button>
-    </div>
+    <button
+      type="button"
+      className="lang-toggle-btn"
+      onClick={() => setLanguage(next)}
+      aria-label={`Switch to ${next === 'lo' ? 'ພາສາລາວ' : 'English'}`}
+      title={next === 'lo' ? 'ສ່ຽງໄປ ພາສາລາວ' : 'Switch to English'}
+    >
+      <span className="lang-toggle-flag" aria-hidden="true">{flag}</span>
+      <span className="lang-toggle-label">{label}</span>
+    </button>
   )
 }
 
@@ -118,8 +112,12 @@ function CurrencySwitcher() {
               {c.code === currency && <CheckIcon size={14} />}
             </button>
           ))}
-          {ratesLoaded && currency === 'LAK' && (
-            <div className="currency-note">ອັດຕາ: 1 THB ≈ ₭ {Math.round(convertTo(1))}</div>
+          {ratesLoaded && (
+            <div className="currency-note" style={{ fontSize: '0.75rem', opacity: 0.85, marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '4px' }}>
+              {language === 'en'
+                ? `Daily Rate: 1 THB ≈ ₭ ${Math.round(rates.THB || 630.5)}`
+                : `ອັດຕາແລກປ່ຽນປະຈຳວັນ: 1 THB ≈ ₭ ${Math.round(rates.THB || 630.5)}`}
+            </div>
           )}
         </div>
       )}
@@ -132,7 +130,25 @@ export default function Header() {
   const [catOpen, setCatOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
-  const { t, language, openCart, cartCount } = useShop()
+  const { t, language, openCart, cartCount, categories = [] } = useShop()
+
+  // Close menu on route change
+  useEffect(() => {
+    setMenuOpen(false)
+    setCatOpen(false)
+  }, [location.pathname])
+
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (menuOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [menuOpen])
 
   const handleNavAnchor = (hash: string) => {
     setMenuOpen(false)
@@ -145,6 +161,7 @@ export default function Header() {
       navigate(`/${hash}`)
     }
   }
+
 
   return (
     <header className="header">
@@ -168,7 +185,7 @@ export default function Header() {
               </button>
               {catOpen && (
                 <div className="nav-dropdown">
-                  {CATEGORIES.map((c) => (
+                  {(categories || []).map((c) => (
                     <Link
                       key={c.slug}
                       to={`/category/${c.slug}`}
@@ -222,7 +239,7 @@ export default function Header() {
             </button>
             <button
               type="button"
-              className="header-cart-btn"
+              className="header-cart-btn hidden-mobile"
               onClick={openCart}
               aria-label="Open Shopping Cart"
               title={t('cartTitle')}
@@ -235,17 +252,33 @@ export default function Header() {
           </div>
         </nav>
 
-        <button
-          type="button"
-          className="header-burger"
-          aria-label="Toggle Menu"
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((v) => !v)}
-        >
-          <span className={menuOpen ? 'is-x' : ''} />
-          <span className={menuOpen ? 'is-x' : ''} />
-          <span className={menuOpen ? 'is-x' : ''} />
-        </button>
+        {/* Mobile Header Quick Actions */}
+        <div className="header-mobile-actions">
+          <LanguageSwitcher />
+          <button
+            type="button"
+            className="header-cart-btn"
+            onClick={openCart}
+            aria-label="Open Shopping Cart"
+            title={t('cartTitle')}
+          >
+            <CartIcon size={20} />
+            {cartCount > 0 && (
+              <span className="header-cart-badge">{cartCount}</span>
+            )}
+          </button>
+          <button
+            type="button"
+            className="header-burger"
+            aria-label="Toggle Menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            <span className={menuOpen ? 'is-x' : ''} />
+            <span className={menuOpen ? 'is-x' : ''} />
+            <span className={menuOpen ? 'is-x' : ''} />
+          </button>
+        </div>
       </div>
     </header>
   )

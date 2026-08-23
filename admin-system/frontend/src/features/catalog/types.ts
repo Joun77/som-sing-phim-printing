@@ -1,12 +1,65 @@
+export interface PublicCategory {
+  id: number;
+  slug: string;
+  nameLo: string;
+  nameEn: string;
+  taglineLo?: string;
+  taglineEn?: string;
+  descriptionLo?: string;
+  descriptionEn?: string;
+  icon: string;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateCategoryInput {
+  slug?: string;
+  nameLo: string;
+  nameEn: string;
+  taglineLo?: string;
+  taglineEn?: string;
+  descriptionLo?: string;
+  descriptionEn?: string;
+  icon: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
 export interface PublicProductOption {
   id?: number;
   productId?: number;
   optionType: 'material' | 'size' | 'finishing' | 'cutting' | 'binding' | string;
   label: string;
+  labelLo?: string;
+  labelEn?: string;
+  hintLo?: string;
+  hintEn?: string;
   value: string;
+  materialSku?: string;
+  paperCode?: string;
+  addPrice?: number;
   isDefault?: boolean;
   extraCostRate?: number;
   createdAt?: string;
+}
+
+export interface SpecGroup {
+  id: string;
+  titleLo: string;
+  titleEn: string;
+  displayType: 'cards' | 'dropdown';
+  groupType: 'cover_paper' | 'inner_paper' | 'cover_lamination' | 'binding' | 'size' | 'cutting' | 'custom' | string;
+  options: PublicProductOption[];
+}
+
+export interface FeaturesConfig {
+  hasCoverUpload: boolean;
+  hasInnerUpload: boolean;
+  hasSpineCalc: boolean;
+  hasPreflightCheck: boolean;
+  hasCustomDim: boolean;
 }
 
 export interface ProductDiscountTier {
@@ -17,12 +70,26 @@ export interface ProductDiscountTier {
   createdAt?: string;
 }
 
+export type PricingModel = 'STANDARD_FLAT' | 'BOOK_MULTIPART' | 'SQM_CUSTOM' | 'FIXED_UNIT';
+
 export interface PublicProduct {
   id: number;
+  categoryId?: number;
+  categorySlug?: string;
   name: string;
+  nameLo?: string;
+  nameEn?: string;
   slug: string;
   category: string;
   description: string;
+  descriptionLo?: string;
+  descriptionEn?: string;
+  pricingModel: PricingModel;
+  basePrice: number;
+  unit: string;
+  bestseller: boolean;
+  specGroups?: SpecGroup[];
+  featuresConfig?: FeaturesConfig;
   features: string[];
   thumbnailUrl: string;
   galleryUrls: string[];
@@ -40,10 +107,21 @@ export interface PublicProduct {
 }
 
 export interface CreateProductInput {
+  categoryId?: number;
   name: string;
+  nameLo?: string;
+  nameEn?: string;
   slug?: string;
   category: string;
   description: string;
+  descriptionLo?: string;
+  descriptionEn?: string;
+  pricingModel: PricingModel;
+  basePrice: number;
+  unit: string;
+  bestseller: boolean;
+  specGroups?: SpecGroup[];
+  featuresConfig?: FeaturesConfig;
   features: string[];
   thumbnailUrl: string;
   galleryUrls: string[];
@@ -55,7 +133,14 @@ export interface CreateProductInput {
   options: {
     optionType: string;
     label: string;
+    labelLo?: string;
+    labelEn?: string;
+    hintLo?: string;
+    hintEn?: string;
     value: string;
+    materialSku?: string;
+    paperCode?: string;
+    addPrice?: number;
     isDefault: boolean;
     extraCostRate: number;
   }[];

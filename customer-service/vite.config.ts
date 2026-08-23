@@ -73,4 +73,18 @@ export default defineConfig({
     // NOTE: API calls go directly to http://localhost:8080 (CORS-enabled on the
     // Go backend), so no dev proxy is required. Use VITE_API_BASE_URL to override.
   },
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-animation': ['gsap', '@gsap/react'],
+          'vendor-icons': ['lucide-react'],
+        },
+      },
+    },
+  },
 })
+
+

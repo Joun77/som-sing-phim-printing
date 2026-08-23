@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { useGSAP } from '@gsap/react'
-import { getBestsellers } from '../data/catalog.ts'
 import { useShop } from '../context/ShopContext.tsx'
 import { formatMoneyCompact } from '../utils/currency.ts'
 import ProductArt from './ProductArt.tsx'
@@ -13,93 +12,35 @@ import { fetchPublicProducts, RemoteProduct } from '../api/client.ts'
 gsap.registerPlugin(ScrollTrigger)
 
 export default function BestSellers() {
-  const { currency, convertTo, t, language } = useShop()
+  const { currency, convertTo, t, language, products } = useShop()
   const isLao = language === 'lo'
-  const localItems = getBestsellers()
-  const [remoteProducts, setRemoteProducts] = useState<RemoteProduct[]>([])
 
-  useEffect(() => {
-    fetchPublicProducts().then((res) => {
-      if (res && res.length > 0) {
-        setRemoteProducts(res)
-      }
-    })
-  }, [])
+  // Pick top 4 products (bestsellers first)
+  const bestProducts = products.filter(p => p.bestseller).concat(products.filter(p => !p.bestseller)).slice(0, 4)
 
-  // Featured 4 print-on-demand items
-  const items: Array<{
-    id: string
-    slug: string
-    name: string
-    category: string
-    basePrice: number
-    image: string
-    short: string
-    features: string[]
-    badge?: string
-  }> = remoteProducts.length > 0
-    ? remoteProducts.slice(0, 4).map((rp, i) => ({
-        id: String(rp.id),
-        slug: rp.slug,
-        name: rp.name,
-        category: rp.category,
-        basePrice: 50,
-        image: rp.thumbnailUrl || (i === 0 ? 'sticker' : i === 1 ? 'card' : i === 2 ? 'doc' : 'album'),
-        short: rp.description || '',
-        features: rp.features || (isLao ? ['ພິມດິຈິຕອນ 4 ສີ', 'ຈັດສົ່ງດ່ວນ 24-48h'] : ['Ultra-HD Print', '24-48h Delivery']),
-        badge: i === 0 ? (isLao ? '🔥 ອັນດັບ 1 ຂາຍດີສຸດ' : '#1 Best Seller') : undefined
-      }))
-    : [
-        {
-          id: 'sticker-pp',
-          slug: 'sticker-pp-waterproof',
-          name: isLao ? 'ສະຕິກເກີ PP ຂາວເງົາກັນນ້ຳ 100% ໄດຄັດ' : '100% Waterproof Glossy PP Sticker',
-          category: 'STICKER & LABEL',
-          basePrice: 35,
-          image: 'sticker',
-          short: isLao ? 'ສະຕິກເກີເນື້ອ PP ພລາສຕິກກັນນ້ຳ ຕິດແກ້ວ/ຂວດ ແຊ່ຕູ້ເຢັນ ໄດຄັດ 50% ພ້ອມລອກຕິດ' : '100% waterproof PP vinyl, freeze-proof, precision kiss-cut ready to peel.',
-          features: isLao ? ['ກັນນ້ຳ 100% ແຊ່ເຢັນໄດ້', 'ໄດຄັດຄົມຊັດ ±0.1mm'] : ['100% Waterproof', 'Kiss-Cut ±0.1mm'],
-          badge: isLao ? '🔥 ອັນດັບ 1 ຂາຍດີສຸດ' : '#1 Best Seller'
-        },
-        {
-          id: 'card-luxury',
-          slug: 'card-luxury-foil',
-          name: isLao ? 'ນາມບັດພຣີມ່ຽມ 350 GSM + ປ້ຳຟອຍຄຳ' : 'Luxury 350 GSM Gold Foil Business Card',
-          category: 'BUSINESS CARD',
-          basePrice: 40,
-          image: 'card',
-          short: isLao ? 'ເຈ້ຍອາດກາດໜາ 350g ເຄືອບດ້ານ Soft-Touch ປ້ຳຟອຍຄຳແທ້ສະທ້ອນແສງຫຼູຫຼາ' : 'Heavyweight 350 GSM stock, soft-touch matte velvet coating with metallic hot foil.',
-          features: isLao ? ['ເຈ້ຍອາດກາດ 350g', 'ປ້ຳຟອຍຄຳ Metallic'] : ['350 GSM Art Card', 'Hot Stamping Foil']
-        },
-        {
-          id: 'doc-binding',
-          slug: 'doc-copy-binding',
-          name: isLao ? 'ກັອບປີ້ເອກະສານ & ເຂົ້າເລັ້ມສັນກາວ/ສັນຫ່ວງ' : 'Document Copy & Thermal Glue/Wire-O Binding',
-          category: 'DOCUMENTS & BOOKS',
-          basePrice: 20,
-          image: 'doc',
-          short: isLao ? 'ພິມສີ-ຂາວດຳ ຄົມຊັດ ເຂົ້າເລັ້ມສັນກາວຮ້ອນ ສັນຫ່ວງກະດູກງູ ຫຼື ເຢັບມຸມດ່ວນ' : 'High-speed color & B&W document printing with perfect thermal glue or wire-o binding.',
-          features: isLao ? ['ເລີ່ມຕົ້ນ 1 ຊຸດ (No MOQ)', 'ເຂົ້າເລັ້ມແຂງແຮງ'] : ['1 Set Minimum (No MOQ)', 'Durable Binding']
-        },
-        {
-          id: 'album-photobook',
-          slug: 'album-classic',
-          name: isLao ? 'ອັນບັ້ມຮູບພາບປົກແຂງ Layflat 180°' : 'Hardcover 180° Layflat Photobook',
-          category: 'PHOTO ALBUM',
-          basePrice: 50,
-          image: 'album',
-          short: isLao ? 'ປົກແຂງຈົ່ວປັງຫຼູຫຼາ ເປີດກາງຮາບພຽງໄດ້ 180 ອົງສາ ພິມສີ CMYK ຄົມຊັດລະດັບແກເລີຣີ' : 'Rigid hardcover photobook with seamless 180° layflat binding and archival gallery ink.',
-          features: isLao ? ['ເປີດຮາບພຽງ 180°', 'ປົກແຂງເຄືອບດ້ານ'] : ['180° Layflat Open', 'Hardcover Lamination']
-        }
-      ]
+  const items = bestProducts.map((p, i) => ({
+    id: p.id,
+    slug: p.slug,
+    name: isLao ? p.name : (p.nameEn || p.name),
+    category: p.category.toUpperCase(),
+    basePrice: p.basePrice || 35,
+    image: p.image || (i === 0 ? 'sticker' : i === 1 ? 'card' : i === 2 ? 'doc' : 'album'),
+    short: isLao ? (p.short || p.description) : (p.shortEn || p.descriptionEn || p.description),
+    features: p.features && p.features.length > 0 
+      ? p.features.slice(0, 2) 
+      : (isLao ? ['ພິມດິຈິຕອນ 4 ສີ', 'ຈັດສົ່ງດ່ວນ 24-48h'] : ['Ultra-HD Print', '24-48h Delivery']),
+    badge: i === 0 ? (isLao ? '🔥 ອັນດັບ 1 ຂາຍດີສຸດ' : '#1 Best Seller') : undefined
+  }))
 
   const containerRef = useRef<HTMLElement>(null)
 
   useGSAP(() => {
     if (!containerRef.current) return
+    const cards = containerRef.current.querySelectorAll('.bestseller-product-card')
+    if (cards.length === 0) return
 
     gsap.fromTo(
-      '.bestseller-product-card',
+      cards,
       { y: 30, opacity: 0.3 },
       {
         y: 0,

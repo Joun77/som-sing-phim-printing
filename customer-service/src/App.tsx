@@ -12,6 +12,7 @@ import PrintGuidePage from './pages/PrintGuidePage.tsx'
 import { useShop } from './context/ShopContext.tsx'
 import InstallPromptBanner from './components/InstallPromptBanner.tsx'
 import ConciergeDock from './components/ConciergeDock.tsx'
+import BottomNavigation from './components/BottomNavigation.tsx'
 import Footer from './components/Footer.tsx'
 
 function ScrollToAnchor() {
@@ -44,16 +45,9 @@ function NotFound() {
 }
 
 export default function App() {
-  const { demoMode } = useShop()
-
   return (
     <>
       <ScrollToAnchor />
-      {demoMode && (
-        <div className="demo-banner" role="status">
-          ໂຫມດສາທິດ (Demo Mode) — ລະບົບຫຼັງບ້ານ Go ບໍ່ພ້ອມໃຊ້ງານ, ໃຊ້ຂໍ້ມູນຕົວຢ່າງແທນ. ເປີດ Backend ທີ່ port 8080 ເພື່ອເຊື່ອມຕໍ່ API ຕົວຈິງ.
-        </div>
-      )}
       <Header />
       <main>
         <Routes>
@@ -72,6 +66,8 @@ export default function App() {
       <CartDrawer />
       <InstallPromptBanner />
       <ConciergeDock />
+      <BottomNavigation />
     </>
   )
 }
+

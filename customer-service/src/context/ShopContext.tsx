@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { DEMO_MODE, checkHealth, getRates, type Order } from '../api/client.ts'
+import { DEMO_MODE, checkHealth, getRates, fetchPublicCategories, fetchPublicProducts, type Order, type RemoteCategory, type RemoteProduct } from '../api/client.ts'
 import { convert } from '../utils/currency.ts'
-import type { Product } from '../data/catalog.ts'
+import type { Category, Product, SpecOption } from '../data/catalog.ts'
 import type { PriceBreakdown } from '../utils/pricing.ts'
 import { TRANSLATIONS, type Language } from '../utils/i18n.ts'
 
@@ -65,6 +65,14 @@ export interface ShopContextValue {
   setOrderDraft: (d: OrderDraft | null) => void
   placedOrder: Order | null
   setPlacedOrder: (o: Order | null) => void
+  // Dynamic Catalog state
+  categories: Category[]
+  products: Product[]
+  catalogLoading: boolean
+  refreshCatalog: () => Promise<void>
+  getCategory: (slug?: string) => Category | undefined
+  getProduct: (slug?: string) => Product | undefined
+  getProductsByCategory: (catSlug?: string) => Product[]
   // Cart state & actions
   cart: CartItem[]
   isCartOpen: boolean
@@ -107,6 +115,12 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const [orderDraft, setOrderDraft] = useState<OrderDraft | null>(null)
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null)
   const [isCartOpen, setIsCartOpen] = useState(false)
+
+  // Dynamic Catalog State (Live from DB)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  const [catalogLoading, setCatalogLoading] = useState(true)
+
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
       const saved = localStorage.getItem('ssp_cart_items')
@@ -187,6 +201,118 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     baseUrl: '',
   })
 
+  // Catalog Fetcher & Transformer (Live from Database)
+  const refreshCatalog = async () => {
+    setCatalogLoading(true)
+    try {
+      const [remoteCats, remoteProds] = await Promise.all([
+        fetchPublicCategories(),
+        fetchPublicProducts(),
+      ])
+
+      if (remoteCats) {
+        const transformedCats: Category[] = (remoteCats || []).map((rc: RemoteCategory) => ({
+          id: rc.slug,
+          slug: rc.slug,
+          name: rc.nameLo || rc.slug,
+          nameEn: rc.nameEn || rc.slug,
+          short: rc.nameLo || rc.slug,
+          shortEn: rc.nameEn,
+          tagline: rc.taglineLo || '',
+          taglineEn: rc.taglineEn || '',
+          icon: rc.icon || 'doc',
+          description: rc.descriptionLo || '',
+          descriptionEn: rc.descriptionEn || '',
+          sortOrder: rc.sortOrder,
+        }))
+        setCategories(transformedCats)
+      }
+
+      if (remoteProds) {
+        const transformedProds: Product[] = (remoteProds || []).map((rp: RemoteProduct) => {
+          const sizes: SpecOption[] = (rp.options || [])
+            .filter((o) => o.optionType === 'size')
+            .map((o) => ({
+              id: o.value,
+              label: o.labelLo || o.label,
+              labelEn: o.labelEn || o.label,
+              hint: o.hintLo || '',
+              hintEn: o.hintEn || '',
+              add: o.addPrice || 0,
+            }))
+
+          const materials: SpecOption[] = (rp.options || [])
+            .filter((o) => o.optionType === 'material' || o.optionType === 'paper')
+            .map((o) => ({
+              id: o.value,
+              label: o.labelLo || o.label,
+              labelEn: o.labelEn || o.label,
+              hint: o.hintLo || '',
+              hintEn: o.hintEn || '',
+              add: o.addPrice || 0,
+              materialSku: o.materialSku,
+              paperCode: o.paperCode,
+            }))
+
+          const finishings: SpecOption[] = (rp.options || [])
+            .filter((o) => o.optionType === 'finishing' || o.optionType === 'cutting' || o.optionType === 'binding')
+            .map((o) => ({
+              id: o.value,
+              label: o.labelLo || o.label,
+              labelEn: o.labelEn || o.label,
+              hint: o.hintLo || '',
+              hintEn: o.hintEn || '',
+              add: o.addPrice || 0,
+            }))
+
+          // Fallback defaults if options array is empty
+          if (sizes.length === 0) {
+            sizes.push({ id: 'standard', label: 'ມາດຕະຖານ (Standard)', labelEn: 'Standard Size', hint: '', add: 0 })
+          }
+          if (materials.length === 0) {
+            materials.push({ id: 'standard_paper', label: 'ກະດາດມາດຕະຖານ', labelEn: 'Standard Paper', hint: '', add: 0 })
+          }
+          if (finishings.length === 0) {
+            finishings.push({ id: 'none', label: 'ບໍ່ເຄືອບ / ຕັດກົງ', labelEn: 'None / Straight Cut', hint: '', add: 0 })
+          }
+
+          return {
+            id: String(rp.id),
+            slug: rp.slug,
+            name: rp.nameLo || rp.name,
+            nameEn: rp.nameEn || '',
+            category: rp.categorySlug || rp.category,
+            bestseller: rp.bestseller || false,
+            basePrice: rp.basePrice || 0,
+            unit: rp.unit || 'ຊິ້ນ',
+            minQuantity: rp.minQuantity || 1,
+            isOnDemand: rp.isOnDemand ?? true,
+            image: rp.thumbnailUrl || 'doc',
+            thumbnailUrl: rp.thumbnailUrl || '',
+            galleryUrls: rp.galleryUrls || [],
+            short: rp.descriptionLo || rp.description || '',
+            shortEn: rp.descriptionEn || '',
+            description: rp.descriptionLo || rp.description || '',
+            descriptionEn: rp.descriptionEn || '',
+            pricingModel: rp.pricingModel || 'STANDARD_FLAT',
+            features: rp.features || [],
+            sizes,
+            materials,
+            finishings,
+            options: rp.options,
+            discountTiers: rp.discountTiers,
+          }
+        })
+
+        setProducts(transformedProds)
+      }
+    } catch (err) {
+      console.warn('[Catalog Refresh Error]', err)
+    } finally {
+      setCatalogLoading(false)
+    }
+  }
+
   useEffect(() => {
     let alive = true
     getRates().then((r) => {
@@ -200,6 +326,10 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         setConnection({ status: 'demo', message: 'ໃຊ້ຂໍ້ມູນຕົວຢ່າງ (Demo Mode)', baseUrl: '' })
       }
     })
+
+    // Fetch dynamic catalog on mount
+    refreshCatalog()
+
     return () => {
       alive = false
     }
@@ -212,6 +342,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         setDemoMode(false)
         setConnection({ status: 'connected', message: 'ເຊື່ອມຕໍ່ກັບລະບົບຫຼັງບ້ານແລ້ວ', baseUrl: res.baseUrl })
+        refreshCatalog()
         return true
       }
       setDemoMode(true)
@@ -220,6 +351,44 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     },
     []
   )
+
+  const getCategory = (slug?: string) => {
+    if (!slug) return undefined
+    const s = slug.toLowerCase()
+    return categories.find(
+      (c) =>
+        c.slug.toLowerCase() === s ||
+        c.id.toLowerCase() === s ||
+        (s === 'sticker' && c.slug === 'stickers') ||
+        (s === 'stickers' && c.slug === 'sticker') ||
+        (s === 'business_card' && c.slug === 'business_cards') ||
+        (s === 'business_cards' && c.slug === 'business_card') ||
+        (s === 'book' && c.slug === 'documents') ||
+        (s === 'photo' && c.slug === 'photos')
+    )
+  }
+
+  const getProduct = (slug?: string) => {
+    if (!slug) return undefined
+    return products.find((p) => p.slug === slug || p.id === slug)
+  }
+
+  const getProductsByCategory = (catSlug?: string) => {
+    if (!catSlug) return products
+    const s = catSlug.toLowerCase()
+    return products.filter((p) => {
+      const pCat = (p.category || '').toLowerCase()
+      return (
+        pCat === s ||
+        (s === 'stickers' && pCat === 'sticker') ||
+        (s === 'sticker' && pCat === 'stickers') ||
+        (s === 'business_cards' && pCat === 'business_card') ||
+        (s === 'business_card' && pCat === 'business_cards') ||
+        (s === 'documents' && (pCat === 'book' || pCat === 'doc' || pCat === 'documents')) ||
+        (s === 'photos' && pCat === 'photo')
+      )
+    })
+  }
 
   // Save placed order so the receipt page survives refresh.
   useEffect(() => {
@@ -251,6 +420,15 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       setOrderDraft,
       placedOrder,
       setPlacedOrder,
+      // Dynamic Catalog
+      categories,
+      products,
+      catalogLoading,
+      refreshCatalog,
+      getCategory,
+      getProduct,
+      getProductsByCategory,
+      // Cart
       cart,
       isCartOpen,
       setIsCartOpen,
@@ -277,6 +455,9 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       testConnection,
       orderDraft,
       placedOrder,
+      categories,
+      products,
+      catalogLoading,
       cart,
       isCartOpen,
       selectedCartItems,

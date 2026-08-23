@@ -28,12 +28,33 @@ export interface HealthResponse {
   baseUrl: string
 }
 
+export interface RemoteCategory {
+  id: number
+  slug: string
+  nameLo: string
+  nameEn: string
+  taglineLo?: string
+  taglineEn?: string
+  descriptionLo?: string
+  descriptionEn?: string
+  icon: string
+  sortOrder: number
+  isActive: boolean
+}
+
 export interface PublicProductOptionItem {
   id?: number
   productId?: number
   optionType: string
   label: string
+  labelLo?: string
+  labelEn?: string
+  hintLo?: string
+  hintEn?: string
   value: string
+  materialSku?: string
+  paperCode?: string
+  addPrice?: number
   isDefault?: boolean
   extraCostRate?: number
 }
@@ -45,12 +66,41 @@ export interface PublicProductDiscountTier {
   discountPercentage: number
 }
 
+export interface RemoteSpecGroup {
+  id: string
+  titleLo: string
+  titleEn: string
+  displayType: 'cards' | 'dropdown'
+  groupType: string
+  options: PublicProductOption[]
+}
+
+export interface RemoteFeaturesConfig {
+  hasCoverUpload?: boolean
+  hasInnerUpload?: boolean
+  hasSpineCalc?: boolean
+  hasPreflightCheck?: boolean
+  hasCustomDim?: boolean
+}
+
 export interface RemoteProduct {
   id: number
+  categoryId?: number
+  categorySlug?: string
   name: string
+  nameLo?: string
+  nameEn?: string
   slug: string
   category: string
   description?: string
+  descriptionLo?: string
+  descriptionEn?: string
+  pricingModel?: string
+  basePrice?: number
+  unit?: string
+  bestseller?: boolean
+  specGroups?: RemoteSpecGroup[]
+  featuresConfig?: RemoteFeaturesConfig
   features?: string[]
   thumbnailUrl?: string
   galleryUrls?: string[]
@@ -391,56 +441,112 @@ interface RawOrder {
   status?: string
   created_at?: string
   timeline?: TimelineEntry[]
+  tracking_number?: string
+  tracking?: string
+  shipping_courier?: string
+  shipping_courier_id?: string
+  shipping_fee?: number
+  internal_tracking_code?: string
+  courier_name?: string
+  pod_image_url?: string
+  drive_link?: string
+  proof_url?: string
+  proof_approved_at?: string
+  proof_rejected_at?: string
+  proof_rejection_reason?: string
+  is_permission_confirmed?: boolean
+  special_notes?: string
+  payment_slip_url?: string
 }
 
 // Map backend order model (order_number, Status*) into frontend tracking shape.
 function normalizeRemoteOrder(o: RawOrder): Order {
   const statusMap: Record<string, string> = {
     DRAFT: 'PENDING_SLIP_CHECK',
+    QUOTATION: 'PENDING_SLIP_CHECK',
+    PENDING_PAYMENT: 'PENDING_SLIP_CHECK',
     WAITING_DEPOSIT: 'PENDING_SLIP_CHECK',
-    PREPRESS_CHECK: 'PENDING_SLIP_CHECK',
-    WAITING_APPROVAL: 'PAYMENT_APPROVED',
-    READY_TO_PRINT: 'PAYMENT_APPROVED',
+    ORDER_CREATED: 'ORDER_CREATED',
+    PAID_PREPRESS: 'ORDER_CREATED',
+    PREPRESS_CHECK: 'ORDER_CREATED',
+    WAITING_APPROVAL: 'WAITING_APPROVAL',
+    PROOF_REJECTED: 'PROOF_REJECTED',
+    FILE_CONFIRMED: 'FILE_CONFIRMED',
+    READY_TO_PRINT: 'FILE_CONFIRMED',
     IN_PRODUCTION: 'IN_PRODUCTION',
-    COMPLETED: 'SHIPPED',
+    POST_PRESS: 'POST_PRESS',
+    FINISHING: 'FINISHING',
+    SHIPPED: 'SHIPPED',
+    READY_FOR_DELIVERY: 'SHIPPED',
     DELIVERED: 'DELIVERED',
+    COMPLETED: 'DELIVERED',
+    CANCELLED: 'CANCELLED',
   }
   return {
-    order_id: o.order_number || o.id,
+    order_id: o.order_number || o.id || '',
     order_number: o.order_number,
-    customer_name: o.customer_name,
+    customer_name: o.customer_name || '',
     phone: o.customer_phone,
     specs: (o.items && o.items[0] && o.items[0].specs) || {},
     quantity: o.items && o.items[0] ? o.items[0].quantity : 1,
-    total_price: o.total_price,
+    total_price: o.total_price || 0,
     currency: o.currency || 'LAK',
-    status: statusMap[o.status] || 'PENDING_SLIP_CHECK',
+    status: (o.status && statusMap[o.status]) || o.status || 'PENDING_SLIP_CHECK',
     created_at: o.created_at,
     timeline: o.timeline || [],
+    tracking_number: o.tracking_number || o.tracking,
+    tracking: o.tracking || o.tracking_number,
+    shipping_courier: o.shipping_courier || o.courier_name,
+    shipping_courier_id: o.shipping_courier_id,
+    shipping_fee: o.shipping_fee,
+    internal_tracking_code: o.internal_tracking_code,
+    courier_name: o.courier_name || o.shipping_courier,
+    pod_image_url: o.pod_image_url,
+    drive_link: o.drive_link,
+    proof_url: o.proof_url,
+    proof_approved_at: o.proof_approved_at,
+    proof_rejected_at: o.proof_rejected_at,
+    proof_rejection_reason: o.proof_rejection_reason,
+    is_permission_confirmed: o.is_permission_confirmed,
+    special_notes: o.special_notes,
+    payment_slip_url: o.payment_slip_url,
+  }
+}
+
+export async function fetchPublicCategories(): Promise<RemoteCategory[]> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/public/categories?active=true`).catch(() => null)
+    if (!res || !res.ok) return []
+    const json = await res.json()
+    if (Array.isArray(json)) return json
+    if (json && Array.isArray(json.data)) return json.data
+    return []
+  } catch {
+    return []
   }
 }
 
 export async function fetchPublicProducts(category?: string): Promise<RemoteProduct[]> {
   try {
     const qs = category ? `?category=${encodeURIComponent(category)}` : ''
-    const res = await fetch(`${API_BASE}/v1/public/products${qs}`)
-    if (!res.ok) throw new Error('Failed to fetch public products')
+    const res = await fetch(`${API_BASE}/v1/public/products${qs}`).catch(() => null)
+    if (!res || !res.ok) return []
     const json = await res.json()
-    return json.data || []
-  } catch (err) {
-    console.warn('[Public Products Fallback]', err)
+    if (Array.isArray(json)) return json
+    if (json && Array.isArray(json.data)) return json.data
+    return []
+  } catch {
     return []
   }
 }
 
 export async function fetchPublicProductBySlug(slug: string): Promise<RemoteProduct | null> {
   try {
-    const res = await fetch(`${API_BASE}/v1/public/products/${encodeURIComponent(slug)}`)
-    if (!res.ok) throw new Error('Product not found')
+    const res = await fetch(`${API_BASE}/v1/public/products/${encodeURIComponent(slug)}`).catch(() => null)
+    if (!res || !res.ok) return null
     const json = await res.json()
     return json.data || null
-  } catch (err) {
-    console.warn('[Public Product Slug Fallback]', err)
+  } catch {
     return null
   }
 }

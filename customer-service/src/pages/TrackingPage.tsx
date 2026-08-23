@@ -3,7 +3,6 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { trackOrder, approveDigitalProof, rejectDigitalProof, type Order } from '../api/client.ts'
 import { formatMoney } from '../utils/currency.ts'
 import { useShop } from '../context/ShopContext.tsx'
-import { getProduct } from '../data/catalog.ts'
 import { computePrice, type PriceBreakdown } from '../utils/pricing.ts'
 import {
   SearchIcon,
@@ -102,7 +101,7 @@ export default function TrackingPage() {
   const [zoomProof, setZoomProof] = useState(false)
   const [reorderSuccess, setReorderSuccess] = useState(false)
 
-  const { currency, convertTo, t, language, addToCart, openCart } = useShop()
+  const { currency, convertTo, t, language, addToCart, openCart, getProduct } = useShop()
   const steps = language === 'en' ? STEPS_EN : STEPS_LO
 
   const executeSearch = async (orderId: string) => {
@@ -115,8 +114,15 @@ export default function TrackingPage() {
       const res = await trackOrder(q)
       if (res) {
         setOrder(res)
-        if (res.status === 'FILE_CONFIRMED' || stepIndex(res.status) >= 2) {
+        if (res.status === 'FILE_CONFIRMED' || stepIndex(res.status) >= 2 || res.proof_approved_at) {
           setProofApproved(true)
+        } else {
+          setProofApproved(false)
+        }
+        if (res.status === 'PROOF_REJECTED' || res.proof_rejected_at) {
+          setRevisionRequested(true)
+        } else {
+          setRevisionRequested(false)
         }
       } else {
         setOrder(null)
@@ -329,6 +335,65 @@ export default function TrackingPage() {
                 </span>
               </div>
             </div>
+
+            {/* Action Required Alert for Proof Approval */}
+            {order.status === 'WAITING_APPROVAL' && !proofApproved && (
+              <div
+                className="p-4 rounded-2xl border mb-6 flex items-center justify-between gap-4 animate-pulse"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.15) 0%, rgba(212, 175, 55, 0.25) 100%)',
+                  borderColor: 'var(--gold)',
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-500">
+                    <SparkleIcon size={24} />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-black m-0" style={{ color: 'var(--text-main)' }}>
+                      {language === 'en' ? 'Action Required: Digital Proof Ready' : '🔔 ຕ້ອງກວດສອບ: ໄຟລ໌ Proof ພ້ອມໃຫ້ກວດແລ້ວ'}
+                    </h4>
+                    <p className="text-xs sm:text-sm m-0" style={{ color: 'var(--text-muted)' }}>
+                      {language === 'en'
+                        ? 'Please inspect the digital proof below and click "Approve Proof" to begin printing.'
+                        : 'ກະລຸນາກວດສອບໄຟລ໌ຕົວຢ່າງ Proof ດ້ານລຸ່ມ ແລະ ກົດ "ຢືນຢັນແບບພິມ (Approve)" ເພື່ອເລີ່ມຕົ້ນພິມຈິງ'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setZoomProof(true)}
+                  className="btn btn--gold btn--sm shrink-0"
+                >
+                  <EyeIcon size={16} />
+                  <span>{language === 'en' ? 'Review Now' : 'ກວດສອບດຽວນີ້'}</span>
+                </button>
+              </div>
+            )}
+
+            {order.status === 'PROOF_REJECTED' && (
+              <div
+                className="p-4 rounded-2xl border mb-6 flex items-center gap-3"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  borderColor: 'rgba(239, 68, 68, 0.3)',
+                }}
+              >
+                <div className="p-2 rounded-lg bg-red-500/20 text-red-500">
+                  <AlertCircleIcon size={20} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black m-0 text-red-400">
+                    {language === 'en' ? 'Revision in Progress' : 'ກຳລັງດຳເນີນການແກ້ໄຂແບບຕາມຄຳຮ້ອງຂໍ'}
+                  </h4>
+                  <p className="text-xs m-0 text-slate-400">
+                    {order.proof_rejection_reason
+                      ? `${language === 'en' ? 'Note' : 'ລາຍລະອຽດ'}: "${order.proof_rejection_reason}"`
+                      : (language === 'en' ? 'Graphic team is updating the artwork.' : 'ທີມງານກຣາຟິກກຳລັງປັບແກ້ໄຟລ໌ຕາມທີ່ທ່ານແຈ້ງ')}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="timeline">
               {steps.map((step, i) => {

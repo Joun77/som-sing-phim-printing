@@ -4,6 +4,8 @@ import (
 	"log"
 	"net/http"
 
+	"time"
+
 	"backend/auth"
 	"backend/catalog"
 	"backend/customers"
@@ -28,10 +30,16 @@ func main() {
 		log.Printf("Starting with fallback mode (DB connection error: %v)", err)
 	}
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery())
 
-	// Enable CORS
+	// Observability & Security Middlewares
+	router.Use(middleware.RequestLoggerMiddleware())
+	router.Use(middleware.SecurityHeadersMiddleware())
 	router.Use(middleware.CORSMiddleware())
+
+	// General API Rate Limiting (180 req/min per IP)
+	router.Use(middleware.RateLimitMiddleware(180, time.Minute))
 
 	// Static file server for uploaded order files & preflight uploads
 	router.Static("/api/v1/orders/files", "./uploads")
@@ -47,15 +55,28 @@ func main() {
 	router.POST("/api/auth/login", auth.HandleLogin)
 	router.POST("/api/v1/auth/login", auth.HandleLogin)
 
-	// Web Product Catalog routes (Admin & Public)
+	// Web Product Catalog & Categories routes (Admin & Public)
+	router.GET("/api/v1/admin/catalog/categories", catalog.HandleGetCategories)
+	router.POST("/api/v1/admin/catalog/categories", catalog.HandleAdminCreateCategory)
+	router.PUT("/api/v1/admin/catalog/categories/:id", catalog.HandleAdminUpdateCategory)
+	router.DELETE("/api/v1/admin/catalog/categories/:id", catalog.HandleAdminDeleteCategory)
+	router.PUT("/api/v1/admin/catalog/categories/reorder", catalog.HandleAdminReorderCategories)
+
+	router.GET("/api/v1/public/catalog/categories", catalog.HandleGetCategories)
+	router.GET("/api/v1/public/categories", catalog.HandleGetCategories)
+	router.GET("/api/categories", catalog.HandleGetCategories)
+
 	router.GET("/api/v1/admin/catalog/products", catalog.HandleAdminGetProducts)
 	router.POST("/api/v1/admin/catalog/products", catalog.HandleAdminCreateProduct)
 	router.PUT("/api/v1/admin/catalog/products/:id", catalog.HandleAdminUpdateProduct)
 	router.PATCH("/api/v1/admin/catalog/products/:id/toggle", catalog.HandleAdminToggleProduct)
+	router.PUT("/api/v1/admin/catalog/products/:id/toggle", catalog.HandleAdminToggleProduct)
 	router.DELETE("/api/v1/admin/catalog/products/:id", catalog.HandleAdminSoftDeleteProduct)
 	router.POST("/api/v1/admin/catalog/upload", catalog.HandleAdminUploadImage)
 	router.GET("/api/v1/public/products", catalog.HandlePublicGetProducts)
 	router.GET("/api/v1/public/products/:slug", catalog.HandlePublicGetProductBySlug)
+	router.GET("/api/products", catalog.HandlePublicGetProducts)
+	router.GET("/api/products/:slug", catalog.HandlePublicGetProductBySlug)
 
 	// PDF Preflight CMYK Extraction routes
 	router.POST("/api/v1/orders/preflight", preflight.HandlePreflightPDF)

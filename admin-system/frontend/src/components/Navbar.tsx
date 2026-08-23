@@ -16,7 +16,8 @@ import {
   Users,
   Coins,
   LogOut,
-  Globe
+  Globe,
+  ExternalLink
 } from 'lucide-react';
 
 export default function Navbar() {
@@ -105,7 +106,19 @@ export default function Navbar() {
           </nav>
 
           {/* Right: Actions & User Profile */}
-          <div className="hidden lg:flex items-center gap-3 shrink-0">
+          <div className="hidden lg:flex items-center gap-2.5 shrink-0">
+            {/* View Customer Storefront Link */}
+            <a
+              href="https://som-sing-phim-service.web.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-2 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 hover:text-amber-200 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer select-none shadow-sm"
+              title={currentLang === 'en' ? 'Open Customer Storefront' : 'ເປີດໜ້າຮ້ານລູກຄ້າ'}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>{currentLang === 'en' ? 'Storefront' : 'ໜ້າຮ້ານ'}</span>
+            </a>
+
             {/* Language Switcher */}
             <button 
               onClick={toggleLanguage}
