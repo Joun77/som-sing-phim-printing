@@ -35,6 +35,12 @@ export default function InboundEditModal({ item, onSave, onClose }: InboundEditM
         ...updatedSpecs
       }
     }));
+
+    if (updatedSpecs.colorName && (!itemName || itemName.includes('ໝຶກ') || itemName.includes('Ink'))) {
+      const brand = updatedSpecs.brand || formData.specs?.brand || '';
+      const prefix = brand ? `${brand} ` : 'ໝຶກ ';
+      setItemName(`${prefix}${updatedSpecs.colorName}`);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {

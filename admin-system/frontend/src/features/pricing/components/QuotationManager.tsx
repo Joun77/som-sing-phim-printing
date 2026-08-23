@@ -5,6 +5,7 @@ import CustomerCombobox from '@components/common/CustomerCombobox';
 import ItemSpecConfigurator from '@features/orders/components/ItemSpecConfigurator';
 import ManualPrinterAllocator from '@features/orders/components/ManualPrinterAllocator';
 import { PrinterAllocation } from '@features/orders/types';
+import { calculateMachineUnitCost } from '@utils/machineCostCalculator';
 import { 
   Calculator, 
   ShieldAlert, 
@@ -497,17 +498,23 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       yellowMl += yAllocMl;
       blackMl += kAllocMl;
 
-      // Machine depreciation and electricity calculation per allocation
+      // Machine depreciation and maintenance reserve calculation per allocation
       const rawPrnId = (alloc.printer_id || '').split('__')[0];
       const prn = equipment.find(e => e.id === rawPrnId || e.id === alloc.printer_id || e.name === alloc.printer_name);
-      const prnPrice = Number(prn?.price || prn?.purchasePrice || prn?.purchaseCost || 0);
-      const maintRate = Number((prn as any)?.maintenanceRatePercent || 20);
-      const lifePages = Number((prn as any)?.expectedLifeA4Pages || (prn as any)?.printedPagesCapacity || 500000);
-      const costPerPage = Number(alloc.cost_per_page || (prn as any)?.costPerPage || (prn as any)?.calculatedCostPerPage || 50);
+      const prnPrice = Number(prn?.purchasePrice || prn?.purchaseCost || prn?.price || prn?.MachinePrice || 0);
+      const maintRate = Number((prn as any)?.maintenanceRatePercent || (prn as any)?.maintenance_rate_percent || 20);
+      const lifePages = Number((prn as any)?.expectedLifeA4Pages || (prn as any)?.printedPagesCapacity || (prn as any)?.TargetTotalPages || 500000);
+      const costPerPageFallback = Number(alloc.cost_per_page || (prn as any)?.costPerPage || (prn as any)?.calculatedCostPerPage || 50);
 
-      const deprPerSheet = lifePages > 0 && prnPrice > 0
-        ? ((prnPrice * (1 + maintRate / 100)) / lifePages) * areaFactor
-        : costPerPage;
+      const machineCalc = calculateMachineUnitCost({
+        purchase_price_lak: prnPrice,
+        expected_life_pages: lifePages,
+        maintenance_rate_percent: maintRate
+      });
+
+      const deprPerSheet = machineCalc.totalMachineCost > 0
+        ? machineCalc.totalMachineCost * areaFactor
+        : costPerPageFallback;
 
       machDepr += Math.round(deprPerSheet * allocPages * sideFactor);
       electricityCost += Math.round(allocPages * sideFactor * 40);

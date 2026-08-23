@@ -32,15 +32,39 @@ import DynamicSpecDetail from '@features/inventory/components/details/DynamicSpe
 import ProcurementDetailCard from '@features/inventory/components/details/ProcurementDetailCard';
 import InboundEditModal from './modals/InboundEditModal';
 import type { InboundEntry } from '../types';
+import { formatCompositeItemName } from '@utils/costCalculator';
 
 export const resolveInboundItemName = (item: any): string => {
   if (!item) return '-';
+  const specs = item.specs || item.technical_specs || {};
+  const cat = (item.category || item.categoryPill || '').toLowerCase();
+
+  // Ink: Prioritize specific brand and color
+  if (cat.includes('ink') || cat.includes('ໝຶກ')) {
+    const brand = specs.brand || item.brand || '';
+    const colorName = specs.colorName || specs.color_name || item.colorName || '';
+    const colorGroup = specs.colorGroup || specs.color_group || item.colorGroup || '';
+
+    if (colorName) {
+      const prefix = brand ? `${brand} - ` : '';
+      const groupSuffix = colorGroup && !colorName.toLowerCase().includes(colorGroup.toLowerCase()) ? ` (${colorGroup})` : '';
+      return `${prefix}${colorName}${groupSuffix}`;
+    }
+  }
+
+  // Paper: Prioritize name, grammage and format
+  if (cat.includes('paper') || cat.includes('material') || cat.includes('ເຈ້ຍ')) {
+    const baseName = item.name || item.itemName || specs.paperName || 'Paper';
+    const gsm = specs.grammageGsm || specs.grammage || item.grammageGsm;
+    const format = specs.paperFormat || specs.standardSize || item.paperFormat;
+    if (gsm && format && !baseName.toLowerCase().includes(`${gsm}`)) {
+      return `${baseName} - ${gsm}gsm (${format})`;
+    }
+    return baseName;
+  }
+
   if (item.name && item.name.trim() !== '') return item.name;
   if (item.itemName && item.itemName.trim() !== '') return item.itemName;
-  
-  const specs = item.specs || item.technical_specs || {};
-  if (specs.ink_name && specs.ink_name.trim() !== '') return specs.ink_name;
-  if (specs.paperName && specs.paperName.trim() !== '') return specs.paperName;
   if (specs.brand || specs.model || specs.series) {
     return `${specs.brand || ''} ${specs.series || ''} ${specs.model || ''}`.trim();
   }

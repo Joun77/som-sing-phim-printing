@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowLeft, Trash2, Edit3, ShieldAlert, Package, Calendar, Truck, Layers, AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
+import { calculatePaperUnitCost } from '@utils/costCalculator';
 import EditMaterialModal from '../modals/EditMaterialModal';
 import AssetEditModal from '../modals/AssetEditModal';
 import DynamicSpecDetail from './DynamicSpecDetail';
@@ -19,24 +20,22 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
   let targetLot = null;
 
   if (parentSkuId) {
-    targetItem = inventory.find(i => i.id === parentSkuId);
-    if (targetItem && targetItem.batches) {
-      targetLot = targetItem.batches.find(b => b.id === lotId) || targetItem.batches[0];
-    }
+    targetItem = inventory.find(i => i.id === parentSkuId || i.id.toLowerCase() === parentSkuId.toLowerCase());
   }
 
   if (!targetItem && lotId) {
     for (const item of inventory) {
-      if (item.batches) {
-        const found = item.batches.find(b => b.id === lotId);
-        if (found) {
-          targetItem = item;
-          targetLot = found;
-          break;
-        }
+      const match = (item.batches || []).find((b: any) => b.id === lotId || b.id?.toLowerCase() === lotId?.toLowerCase() || b.poNumber === lotId);
+      if (match) {
+        targetItem = item;
+        targetLot = match;
+        break;
       }
     }
   }
+
+  const isSheetPaper = (targetItem?.category || '').toLowerCase() === 'paper' || (targetItem?.category || '').toLowerCase() === 'material';
+  const multiplier = Number(targetItem?.purchaseMultiplier || targetItem?.specs?.sheetsPerPack || 500);
 
   const matchedInboundEntries = (linkedInboundEntries || []).filter(
     (e: any) => e && (e.sku === targetItem?.id || e.id === targetItem?.id || e.skuCode === targetItem?.id || e.name === targetItem?.name)
@@ -44,18 +43,25 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
 
   const realBatches = (targetItem?.batches || []).filter((b: any) => b.id && !b.id.includes('-EMPTY'));
 
-  const combinedBatches = realBatches.length > 0 ? realBatches : matchedInboundEntries.map((e: any) => ({
-    id: e.poNumber || e.id || `LOT-${targetItem?.id}`,
-    purchaseDate: e.receiptDate || e.importDate || '-',
-    supplierName: e.supplier || e.vendor || '',
-    purchasePricePerReam: e.totalPrice || e.unitPrice || targetItem?.costPerPurchaseUnit || 0,
-    costPerSheet: targetItem?.costPerConsumptionUnit || 0,
-    initialQty: (e.importQty || 1) * (targetItem?.purchaseMultiplier || 500),
-    currentQty: (e.importQty || 1) * (targetItem?.purchaseMultiplier || 500)
-  }));
+  const combinedBatches = realBatches.length > 0 ? realBatches : matchedInboundEntries.map((e: any) => {
+    const packQty = Number(e.importQty || 1);
+    const totalSheets = isSheetPaper ? packQty * multiplier : packQty;
+    const totalCost = Number(e.totalPrice || (e.unitPrice ? e.unitPrice * packQty : targetItem?.costPerPurchaseUnit || 0));
+    const reamCost = packQty > 0 ? Math.round(totalCost / packQty) : totalCost;
+    const calculatedPerSheet = isSheetPaper
+      ? calculatePaperUnitCost({ totalCost, packCount: packQty, sheetsPerPack: multiplier, totalSheets })
+      : reamCost;
 
-  const isSheetPaper = (targetItem?.category || '').toLowerCase() === 'paper' || (targetItem?.category || '').toLowerCase() === 'material';
-  const multiplier = Number(targetItem?.purchaseMultiplier || targetItem?.specs?.sheetsPerPack || 500);
+    return {
+      id: e.poNumber || e.id || `LOT-${targetItem?.id}`,
+      purchaseDate: e.receiptDate || e.importDate || '-',
+      supplierName: e.supplier || e.vendor || '',
+      purchasePricePerReam: reamCost,
+      costPerSheet: calculatedPerSheet,
+      initialQty: totalSheets,
+      currentQty: totalSheets
+    };
+  });
 
   const realStockQty = combinedBatches.length > 0
     ? combinedBatches.reduce((sum: number, b: any) => sum + (Number(b.currentQty) || 0), 0)
@@ -69,6 +75,14 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
   }
 
   const activeLot = targetLot || (combinedBatches.length > 0 ? combinedBatches[0] : null);
+  const lotPurchaseReamPrice = Number(activeLot?.purchasePricePerReam || targetItem?.costPerPurchaseUnit || 95000);
+  const perSheetCost = isSheetPaper
+    ? (activeLot?.costPerSheet && activeLot.costPerSheet < lotPurchaseReamPrice
+        ? activeLot.costPerSheet
+        : (targetItem?.costPerConsumptionUnit && targetItem.costPerConsumptionUnit < lotPurchaseReamPrice
+            ? targetItem.costPerConsumptionUnit
+            : calculatePaperUnitCost({ totalCost: lotPurchaseReamPrice, packCount: 1, sheetsPerPack: multiplier })))
+    : Number(activeLot?.costPerSheet || targetItem?.costPerConsumptionUnit || 0);
 
   const lotData = {
     parentItem: targetItem,
@@ -77,8 +91,8 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
     purchaseDate: activeLot?.purchaseDate || targetItem?.receiptDate || targetItem?.importDate || '-',
     supplierName: activeLot?.supplierName || targetItem?.supplierName || targetItem?.supplier || targetItem?.vendor || '-',
     paymentMethod: activeLot?.paymentMethod || targetItem?.paymentMethod || 'TRANSFER',
-    costPerSheet: activeLot?.costPerSheet || targetItem?.costPerConsumptionUnit || Math.round((targetItem?.costPerPurchaseUnit || 95000) / multiplier),
-    purchasePrice: activeLot?.purchasePricePerReam || targetItem?.costPerPurchaseUnit || 95000,
+    costPerSheet: perSheetCost,
+    purchasePrice: lotPurchaseReamPrice,
     currentQty: effectiveStock,
     initialQty: effectiveStock,
     usageHistory: targetItem?.usageHistory || targetItem?.dischargeLogs || []

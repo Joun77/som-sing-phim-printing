@@ -171,7 +171,16 @@ export default function InventoryTable({ items, activeTab, onRestockItem, onView
                       </td>
 
                       {/* Color Name */}
-                      <td className="py-3.5 px-4 font-bold text-slate-900">{parent.colorName || parent.name}</td>
+                      <td className="py-3.5 px-4">
+                        <span className="font-bold text-slate-900 block">{(() => {
+                          const brand = parent.brand || parent.specs?.brand || '';
+                          const color = parent.colorName || parent.name;
+                          return brand && !color.toLowerCase().includes(brand.toLowerCase()) ? `${brand} - ${color}` : color;
+                        })()}</span>
+                        {parent.inkCode && parent.inkCode !== parent.id && (
+                          <span className="text-[10px] text-slate-400 font-mono block">{parent.inkCode}</span>
+                        )}
+                      </td>
                       
                       {/* Group */}
                       <td className="py-3.5 px-4">{parent.colorGroup || '-'}</td>
@@ -249,7 +258,14 @@ export default function InventoryTable({ items, activeTab, onRestockItem, onView
                     <td className="py-4.5 px-6 font-mono text-xs uppercase tracking-wider text-slate-500">#{lot.id}</td>
                     <td className="py-4.5 px-6">
                       <div>
-                        <span className="font-extrabold text-slate-800 block leading-tight">{parent.name}</span>
+                        <span className="font-extrabold text-slate-800 block leading-tight">{(() => {
+                          const gsm = parent.specs?.grammageGsm || parent.specs?.grammage;
+                          const format = parent.specs?.paperFormat || parent.specs?.standardSize;
+                          if (gsm && format && !parent.name.toLowerCase().includes(`${gsm}`)) {
+                            return `${parent.name} - ${gsm}gsm (${format})`;
+                          }
+                          return parent.name;
+                        })()}</span>
                         <span className="text-[10px] font-mono font-bold text-slate-400 block mt-1 uppercase">{parent.id}</span>
                       </div>
                     </td>

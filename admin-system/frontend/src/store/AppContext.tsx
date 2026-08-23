@@ -2686,7 +2686,7 @@ export const AppProvider = ({ children }) => {
               poNumber: updatedEntry.poNumber || updatedEntry.id,
               purchaseDate: updatedEntry.inboundDate || updatedEntry.receiptDate || updatedBatches[batchIndex].purchaseDate,
               supplierName: updatedEntry.supplierName || updatedEntry.supplier || updatedBatches[batchIndex].supplierName,
-              purchasePricePerReam: totalPrice,
+              purchasePricePerReam: costPerPurchase,
               costPerSheet: costPerConsumption,
               initialQty: totalSheets,
               currentQty: totalSheets
@@ -2697,7 +2697,7 @@ export const AppProvider = ({ children }) => {
               poNumber: updatedEntry.poNumber || updatedEntry.id,
               purchaseDate: updatedEntry.inboundDate || updatedEntry.receiptDate || new Date().toISOString().split('T')[0],
               supplierName: updatedEntry.supplierName || updatedEntry.supplier || 'Unknown Supplier',
-              purchasePricePerReam: totalPrice,
+              purchasePricePerReam: costPerPurchase,
               costPerSheet: costPerConsumption,
               initialQty: totalSheets,
               currentQty: totalSheets
@@ -2744,7 +2744,7 @@ export const AppProvider = ({ children }) => {
               poNumber: updatedEntry.poNumber || updatedEntry.id,
               purchaseDate: updatedEntry.inboundDate || updatedEntry.receiptDate || new Date().toISOString().split('T')[0],
               supplierName: updatedEntry.supplierName || updatedEntry.supplier || '',
-              purchasePricePerReam: totalPrice,
+              purchasePricePerReam: costPerPurchase,
               costPerSheet: costPerConsumption,
               initialQty: totalSheets,
               currentQty: totalSheets

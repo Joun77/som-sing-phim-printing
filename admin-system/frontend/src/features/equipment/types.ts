@@ -4,14 +4,31 @@ export interface EquipmentComponent {
   threshold: number;
 }
 
+export interface MachineSpec {
+  id: string;
+  asset_id?: string;
+  brand?: string;
+  model?: string;
+  purchase_price_lak: number;
+  expected_life_pages: number;
+  maintenance_rate_percent: number;
+  color_scheme?: string[];
+  depreciation_per_sheet_lak?: number;
+  maintenance_per_sheet_lak?: number;
+  machine_cost_per_sheet_lak?: number;
+}
+
 export interface Equipment {
   id: string;
   name: string;
   purchaseCost: number;
   purchasePrice?: number;
+  purchase_price_lak?: number;
   MachinePrice?: number;
   lifespanYears: number;
   printedPagesCapacity: number;
+  expected_life_pages?: number;
+  expectedLifeA4Pages?: number;
   TargetTotalPages?: number;
   printedCount: number;
   calculatedCostPerPage: number;
@@ -19,7 +36,11 @@ export interface Equipment {
   postPressSubtype?: 'guillotine' | 'sticker_plotter' | 'hole_drill' | 'binder' | 'folder' | 'laminator' | string;
   estMonthlyVolume?: number;
   maintenanceRatePercent?: number;
+  maintenance_rate_percent?: number;
   costPerConsumptionUnit?: number;
+  depreciation_per_sheet_lak?: number;
+  maintenance_per_sheet_lak?: number;
+  machine_cost_per_sheet_lak?: number;
   printerType?: string;
   printerCategory?: string;
   brand?: string;

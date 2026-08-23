@@ -249,15 +249,57 @@ func saveInboundWithTx(item InboundTransaction) error {
 		if cat == "" {
 			cat = "Paper"
 		}
+		catLower := strings.ToLower(cat)
+		isPaper := strings.Contains(catLower, "paper") || strings.Contains(catLower, "material") || strings.Contains(catLower, "ເຈ້ຍ")
+		isInk := strings.Contains(catLower, "ink") || strings.Contains(catLower, "ໝຶກ")
+
 		unit := strings.TrimSpace(item.Unit)
 		if unit == "" {
-			unit = "Unit"
+			if isPaper {
+				unit = "แพ็ก"
+			} else if isInk {
+				unit = "ขวด"
+			} else {
+				unit = "Unit"
+			}
 		}
 
-		costPerUnit := item.TotalPrice
-		if item.Quantity > 0 {
-			costPerUnit = item.TotalPrice / item.Quantity
+		consumptionUnit := "Unit"
+		multiplier := 1.0
+		if isPaper {
+			consumptionUnit = "แผ่น"
+			multiplier = 500.0
+			if item.Specs != nil {
+				if v, ok := item.Specs["sheets_per_pack"].(float64); ok && v > 0 {
+					multiplier = v
+				} else if v, ok := item.Specs["sheets_per_ream"].(float64); ok && v > 0 {
+					multiplier = v
+				} else if v, ok := item.Specs["sheetsPerPack"].(float64); ok && v > 0 {
+					multiplier = v
+				}
+			}
+		} else if isInk {
+			consumptionUnit = "ml"
+			multiplier = 100.0
+			if item.Specs != nil {
+				if v, ok := item.Specs["volume"].(float64); ok && v > 0 {
+					multiplier = v
+				} else if v, ok := item.Specs["volumePerBottle"].(float64); ok && v > 0 {
+					multiplier = v
+				}
+			}
 		}
+
+		costPerPurchase := item.TotalPrice
+		if item.Quantity > 0 {
+			costPerPurchase = item.TotalPrice / item.Quantity
+		}
+		costPerConsumption := costPerPurchase
+		if multiplier > 0 {
+			costPerConsumption = costPerPurchase / multiplier
+		}
+
+		stockQtyToAdd := item.Quantity * multiplier
 
 		_, err = tx.Exec(`
 			INSERT INTO materials (
@@ -265,15 +307,16 @@ func saveInboundWithTx(item InboundTransaction) error {
 				purchase_unit, purchase_multiplier, cost_per_purchase_unit,
 				cost_per_consumption_unit, reorder_threshold, technical_specs, updated_at
 			) VALUES (
-				$1, $2, $3, $4, $5, $6, $7, 1, $8, $9, 50, $10, CURRENT_TIMESTAMP
+				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 50, $11, CURRENT_TIMESTAMP
 			)
 			ON CONFLICT (id) DO UPDATE SET
 				stock_qty = materials.stock_qty + EXCLUDED.stock_qty,
+				purchase_multiplier = EXCLUDED.purchase_multiplier,
 				cost_per_purchase_unit = EXCLUDED.cost_per_purchase_unit,
 				cost_per_consumption_unit = EXCLUDED.cost_per_consumption_unit,
 				updated_at = CURRENT_TIMESTAMP`,
-			sku, sku, name, cat, item.Quantity, unit, unit,
-			item.TotalPrice, costPerUnit, specsJSON)
+			sku, sku, name, cat, stockQtyToAdd, consumptionUnit, unit,
+			multiplier, costPerPurchase, costPerConsumption, specsJSON)
 		if err != nil {
 			log.Printf("[DB WARNING] Failed to upsert material from inbound: %v", err)
 		}

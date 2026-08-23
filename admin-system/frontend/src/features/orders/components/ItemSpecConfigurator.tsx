@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { calculateBackendPricing, PricingCalculationResult } from '@features/pricing';
+import { calculateMachineUnitCost } from '@utils/machineCostCalculator';
 import { 
   Sliders, 
   Copy, 
@@ -138,14 +139,19 @@ export function calculateItemCosting(item: any, inventory: any[] = [], equipment
     totalPaperInkCost = totalPaperCost + totalInkCost;
   }
 
-  // Machine Depreciation & Maintenance
-  const machinePrice = Number(printerItem?.price || printerItem?.machinePrice || 0);
-  const targetTotalPages = Number(printerItem?.targetTotalPages || printerItem?.targetPages || 1000000);
-  const maintenanceCostPerPage = Number(printerItem?.maintenanceCostPerPage || printerItem?.maintenanceCost || 0);
+  // Machine Depreciation & Maintenance (Canonical Machinery Cost Formula)
+  const machinePrice = Number(printerItem?.purchasePrice || printerItem?.purchaseCost || printerItem?.price || printerItem?.machinePrice || 0);
+  const targetTotalPages = Number(printerItem?.expectedLifeA4Pages || printerItem?.printedPagesCapacity || printerItem?.targetTotalPages || printerItem?.targetPages || 1000000);
+  const maintRate = Number(printerItem?.maintenanceRatePercent || printerItem?.maintenance_rate_percent || 20);
 
-  const depreciationCostPerPage = targetTotalPages > 0 ? (machinePrice / targetTotalPages) : 0;
-  const depreciationCost = Math.round(depreciationCostPerPage * qty);
-  const maintenanceCost = Math.round(maintenanceCostPerPage * qty);
+  const machineUnitCalc = calculateMachineUnitCost({
+    purchase_price_lak: machinePrice,
+    expected_life_pages: targetTotalPages,
+    maintenance_rate_percent: maintRate
+  });
+
+  const depreciationCost = Math.round(machineUnitCalc.depreciation * qty);
+  const maintenanceCost = Math.round(machineUnitCalc.maintenance * qty);
   const totalMachineCost = depreciationCost + maintenanceCost;
 
   // Custom Finishing options

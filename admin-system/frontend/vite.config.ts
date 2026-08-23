@@ -16,6 +16,7 @@ export default defineConfig({
       '@store': path.resolve(import.meta.dirname, './src/store'),
       '@types': path.resolve(import.meta.dirname, './src/types'),
       '@lib': path.resolve(import.meta.dirname, './src/lib'),
+      '@utils': path.resolve(import.meta.dirname, './src/utils'),
     },
   },
   plugins: [

@@ -21,7 +21,8 @@
       "@components/*": ["src/components/*"],
       "@store/*": ["src/store/*"],
       "@types/*": ["src/types/*"],
-      "@lib/*": ["src/lib/*"]
+      "@lib/*": ["src/lib/*"],
+      "@utils/*": ["src/utils/*"]
     }
   },
   "include": ["src", "vite.config.ts"]

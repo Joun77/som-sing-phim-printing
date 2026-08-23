@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowLeft, Trash2, Edit3, ShieldAlert, Package, Calendar, Truck, Layers, AlertTriangle, CheckCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
+import { calculatePaperUnitCost } from '@utils/costCalculator';
 import EditMaterialModal from '../modals/EditMaterialModal';
 import AssetEditModal from '../modals/AssetEditModal';
 import DynamicSpecDetail from './DynamicSpecDetail';
@@ -73,12 +74,18 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
   const combinedBatches = realBatches.length > 0 ? realBatches : matchedInboundEntries.map((e: any) => {
     const packQty = Number(e.importQty || 1);
     const totalSheets = isSheetPaper ? packQty * multiplier : packQty;
+    const totalCost = Number(e.totalPrice || (e.unitPrice ? e.unitPrice * packQty : targetItem?.costPerPurchaseUnit || 0));
+    const reamCost = packQty > 0 ? Math.round(totalCost / packQty) : totalCost;
+    const calculatedPerSheet = isSheetPaper
+      ? calculatePaperUnitCost({ totalCost, packCount: packQty, sheetsPerPack: multiplier, totalSheets })
+      : reamCost;
+
     return {
       id: e.poNumber || e.id || `LOT-${targetItem?.id}`,
       purchaseDate: e.receiptDate || e.importDate || '-',
       supplierName: e.supplier || e.vendor || '',
-      purchasePricePerReam: e.totalPrice || e.unitPrice || targetItem?.costPerPurchaseUnit || 0,
-      costPerSheet: Math.round((e.totalPrice || e.unitPrice || targetItem?.costPerPurchaseUnit || 95000) / multiplier),
+      purchasePricePerReam: reamCost,
+      costPerSheet: calculatedPerSheet,
       initialQty: totalSheets,
       currentQty: totalSheets
     };
@@ -107,8 +114,13 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
     activeCurrentQty = activeCurrentQty * multiplier;
   }
 
+  const lotPurchaseReamPrice = Number(activeLot?.purchasePricePerReam || activeLot?.purchasePrice || targetItem?.costPerPurchaseUnit || 95000);
   const perSheetCost = isSheetPaper
-    ? Math.round(Number(activeLot?.purchasePricePerReam || activeLot?.purchasePrice || targetItem?.costPerPurchaseUnit || 95000) / multiplier)
+    ? (activeLot?.costPerSheet && activeLot.costPerSheet < lotPurchaseReamPrice
+        ? activeLot.costPerSheet
+        : (targetItem?.costPerConsumptionUnit && targetItem.costPerConsumptionUnit < lotPurchaseReamPrice
+            ? targetItem.costPerConsumptionUnit
+            : calculatePaperUnitCost({ totalCost: lotPurchaseReamPrice, packCount: 1, sheetsPerPack: multiplier })))
     : Number(activeLot?.costPerSheet || targetItem?.costPerConsumptionUnit || 0);
 
   const lotData = {
@@ -119,7 +131,7 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
     supplierName: activeLot?.supplierName || targetItem?.supplierName || targetItem?.supplier || targetItem?.vendor || '-',
     paymentMethod: activeLot?.paymentMethod || targetItem?.paymentMethod || 'TRANSFER',
     costPerSheet: perSheetCost,
-    purchasePrice: activeLot?.purchasePricePerReam || targetItem?.costPerPurchaseUnit || 95000,
+    purchasePrice: lotPurchaseReamPrice,
     currentQty: activeCurrentQty,
     initialQty: activeInitialQty,
     usageHistory: targetItem?.usageHistory || targetItem?.dischargeLogs || []
