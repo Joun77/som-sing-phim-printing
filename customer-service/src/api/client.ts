@@ -700,4 +700,227 @@ export async function fetchPaymentMethods(): Promise<any[]> {
   }
 }
 
+export interface DynamicPricingRequest {
+  template_id: string
+  quantity: number
+  actual_coverage?: number
+  width_mm?: number
+  height_mm?: number
+  grommets_count?: number
+  lamination_type?: string
+  edge_folding?: boolean
+  selected_addons?: Record<string, any>
+}
+
+export interface AddonItemBreakdown {
+  name: string
+  type: string
+  quantity: number
+  unit_price: number
+  total_cost: number
+}
+
+export interface DynamicPriceBreakdown {
+  template_id: string
+  template_name: string
+  material_id: string
+  material_name: string
+  quantity: number
+  min_order_quantity: number
+  area_m2: number
+  perimeter_m: number
+  base_unit_price: number
+  base_material_cost: number
+  baseline_coverage_percent: number
+  actual_coverage_percent: number
+  coverage_delta_percent: number
+  coverage_surcharge_multiplier: number
+  coverage_surcharge: number
+  addon_cost: number
+  itemized_addons?: AddonItemBreakdown[]
+  subtotal: number
+  min_total_price: number
+  min_price_applied: boolean
+  final_price: number
+  final_unit_price: number
+}
+
+export interface ProductPricingTemplateItem {
+  id: string
+  name: string
+  material_id: string
+  baseline_coverage_percent: number
+  coverage_surcharge_multiplier: number
+  min_order_quantity: number
+  min_total_price: number
+  addon_rates?: Record<string, any>
+  is_active: boolean
+}
+
+export async function fetchPricingTemplates(): Promise<ProductPricingTemplateItem[]> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/pricing/templates`)
+    if (!res.ok) throw new Error(`Status ${res.status}`)
+    const json = await res.json()
+    if (json.status === 'success' && Array.isArray(json.data)) {
+      return json.data
+    }
+    return []
+  } catch {
+    return [
+      {
+        id: 'tpl_vinyl_outdoor',
+        name: 'ไวนิล Outdoor Hi-Res 440g',
+        material_id: 'mat_vinyl_440',
+        baseline_coverage_percent: 15,
+        coverage_surcharge_multiplier: 1.25,
+        min_order_quantity: 1,
+        min_total_price: 35000,
+        addon_rates: {
+          grommets_unit_price: 500,
+          lamination_price_per_m2: 15000,
+          folding_price_per_meter: 3000,
+        },
+        is_active: true,
+      },
+      {
+        id: 'tpl_canvas_cotton',
+        name: 'ผ้าใบแคนวาส Premium Cotton 380g',
+        material_id: 'mat_canvas_380',
+        baseline_coverage_percent: 20,
+        coverage_surcharge_multiplier: 1.5,
+        min_order_quantity: 1,
+        min_total_price: 80000,
+        addon_rates: {
+          grommets_unit_price: 1000,
+          lamination_price_per_m2: 25000,
+          folding_price_per_meter: 5000,
+        },
+        is_active: true,
+      },
+      {
+        id: 'tpl_pp_sticker',
+        name: 'PP Sticker กันน้ำ + ไดคัท',
+        material_id: 'mat_pp_sticker',
+        baseline_coverage_percent: 15,
+        coverage_surcharge_multiplier: 1.1,
+        min_order_quantity: 2,
+        min_total_price: 50000,
+        addon_rates: {
+          lamination_price_per_m2: 18000,
+        },
+        is_active: true,
+      },
+    ]
+  }
+}
+
+export async function calculateDynamicPrice(req: DynamicPricingRequest): Promise<DynamicPriceBreakdown> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/pricing/calculate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    })
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}))
+      throw new Error(errJson.message || `Status ${res.status}`)
+    }
+    const json = await res.json()
+    if (json.status === 'success' && json.data) {
+      return json.data
+    }
+    throw new Error('Invalid calculation response format')
+  } catch (err: any) {
+    // Client-side fallback calculation for seamless offline / demo mode
+    const qty = Math.max(1, req.quantity)
+    const widthM = (req.width_mm || 1000) / 1000
+    const heightM = (req.height_mm || 2000) / 1000
+    const areaM2 = Math.round(widthM * heightM * 10000) / 10000
+    const perimeterM = Math.round((widthM + heightM) * 2 * 10000) / 10000
+
+    const baseUnitRate = 45000 // 45,000 LAK per m2 base
+    const baseMaterialCost = Math.round(baseUnitRate * areaM2 * qty)
+    const baseline = 15
+    const actual = req.actual_coverage || 15
+    let coverageSurcharge = 0
+    let coverageDelta = 0
+    if (actual > baseline) {
+      coverageDelta = actual - baseline
+      coverageSurcharge = Math.round(baseMaterialCost * ((actual - baseline) / baseline) * 1.25)
+    }
+
+    const itemizedAddons: AddonItemBreakdown[] = []
+    let addonCost = 0
+
+    if (req.grommets_count && req.grommets_count > 0) {
+      const totalG = req.grommets_count * qty
+      const gCost = totalG * 500
+      itemizedAddons.push({
+        name: `ตอกตาไก่ (${req.grommets_count} จุด/ชิ้น)`,
+        type: 'grommets',
+        quantity: totalG,
+        unit_price: 500,
+        total_cost: gCost,
+      })
+      addonCost += gCost
+    }
+
+    if (req.lamination_type && req.lamination_type !== 'NONE') {
+      const lCost = Math.round(areaM2 * qty * 15000)
+      itemizedAddons.push({
+        name: `เคลือบผิว (${req.lamination_type})`,
+        type: 'lamination',
+        quantity: areaM2 * qty,
+        unit_price: 15000,
+        total_cost: lCost,
+      })
+      addonCost += lCost
+    }
+
+    if (req.edge_folding) {
+      const fCost = Math.round(perimeterM * qty * 3000)
+      itemizedAddons.push({
+        name: 'พับขอบรอบด้าน',
+        type: 'folding',
+        quantity: perimeterM * qty,
+        unit_price: 3000,
+        total_cost: fCost,
+      })
+      addonCost += fCost
+    }
+
+    const subtotal = baseMaterialCost + coverageSurcharge + addonCost
+    const minTotalPrice = 35000
+    const minPriceApplied = subtotal < minTotalPrice
+    const finalPrice = minPriceApplied ? minTotalPrice : subtotal
+
+    return {
+      template_id: req.template_id || 'demo_template',
+      template_name: 'ไวนิล Outdoor Hi-Res (Simulation)',
+      material_id: 'mat_default',
+      material_name: 'ไวนิล 440g',
+      quantity: qty,
+      min_order_quantity: 1,
+      area_m2: areaM2,
+      perimeter_m: perimeterM,
+      base_unit_price: Math.round(baseMaterialCost / qty),
+      base_material_cost: baseMaterialCost,
+      baseline_coverage_percent: baseline,
+      actual_coverage_percent: actual,
+      coverage_delta_percent: coverageDelta,
+      coverage_surcharge_multiplier: 1.25,
+      coverage_surcharge: coverageSurcharge,
+      addon_cost: addonCost,
+      itemized_addons: itemizedAddons,
+      subtotal: subtotal,
+      min_total_price: minTotalPrice,
+      min_price_applied: minPriceApplied,
+      final_price: finalPrice,
+      final_unit_price: Math.round(finalPrice / qty),
+    }
+  }
+}
+
+
 

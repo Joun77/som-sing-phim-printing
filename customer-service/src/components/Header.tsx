@@ -61,7 +61,7 @@ function LanguageSwitcher() {
 }
 
 function CurrencySwitcher() {
-  const { currency, setCurrency, convertTo, rates, ratesLoaded } = useShop()
+  const { currency, setCurrency, convertTo, rates, ratesLoaded, language } = useShop()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 

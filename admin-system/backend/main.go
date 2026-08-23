@@ -164,20 +164,11 @@ func main() {
 
 	// Inbound Procurement routes
 	invHandler := handler.NewInventoryHandler()
-	router.POST("/api/v1/inventory/inbound", invHandler.HandleProcessInbound)
-	router.GET("/api/v1/inventory/inbound", invHandler.HandleGetInboundHistory)
-	router.POST("/api/v1/inventory/inbound/cancel", invHandler.HandleCancelInbound)
-	router.POST("/api/v1/inventory/inbound/:id/cancel", invHandler.HandleCancelInbound)
-	router.DELETE("/api/v1/inventory/inbound/:id", invHandler.HandleDeleteInbound)
-	router.GET("/api/v1/materials", invHandler.HandleGetMaterials)
-	router.GET("/api/v1/materials/:id", invHandler.HandleGetMaterialByID)
-	router.PUT("/api/v1/materials/:id", invHandler.HandleUpdateMaterialDirect)
-	router.GET("/api/v1/inventory/materials", invHandler.HandleGetMaterials)
-	router.GET("/api/v1/inventory/materials/:id", invHandler.HandleGetMaterialByID)
-	router.PUT("/api/v1/inventory/materials/:id", invHandler.HandleUpdateMaterialDirect)
-	router.GET("/api/v1/inventory/ink-bottles", invHandler.HandleGetInkBottles)
-	router.POST("/api/v1/inventory/ink-bottles", invHandler.HandleIntakeInkBottle)
-	router.POST("/api/v1/inventory/ink-bottles/deduct", invHandler.HandleDeductInkBottle)
+	invHandler.RegisterRoutes(router)
+
+	// Pricing Template & Dynamic Coverage Engine routes
+	pricingHandler := handler.NewPricingHandler()
+	pricingHandler.RegisterRoutes(router)
 
 	router.GET("/api/inbound", inbound.HandleGetInboundTransactions)
 	router.POST("/api/inbound", inbound.HandleCreateInboundTransaction)
