@@ -10,16 +10,17 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-func TestPricingService_CalculatePricing(t *testing.T) {
+func TestPricingService_CalculatePricing_CM2Basis(t *testing.T) {
 	svc := service.NewPricingService()
 
+	// Test A5 size using WidthCM/HeightCM (14.8cm x 21.0cm)
 	req := domain.PricingCalculationRequest{
 		JobName:             "Brochure A5 160gsm",
 		Quantity:            100,
 		PageCount:           1,
 		PaperCostPerUnitLAK: 1200,
-		UnfoldedWidthMM:     decimal.NewFromFloat(148.0),
-		UnfoldedHeightMM:    decimal.NewFromFloat(210.0),
+		WidthCM:             decimal.NewFromFloat(14.8),
+		HeightCM:            decimal.NewFromFloat(21.0),
 		InkCoveragePercent:  decimal.NewFromFloat(25.0),
 		InkCostPerMlLAK:     1800,
 		LaminationType:      "GLOSS",

@@ -48,6 +48,8 @@ export interface CustomPrintSpecs {
   binding?: string;
   width_mm?: number;
   height_mm?: number;
+  width_cm?: number;
+  height_cm?: number;
   pages?: number;
   grommets_count?: number;
   edge_folding?: boolean;
@@ -60,7 +62,10 @@ export interface CustomPrintSpecs {
   additional_notes?: string;
 }
 
-export interface CostBreakdown {
+// PrintSpecification is an alias to CustomPrintSpecs
+export type PrintSpecification = CustomPrintSpecs;
+
+export interface InternalOrderPricing {
   base_material_cost_lak: number;
   ink_usage_cost_lak: number;
   plate_cost_lak: number;
@@ -77,6 +82,10 @@ export interface CostBreakdown {
   ink_savings_lak?: number;
   ink_savings_percent?: number;
 }
+
+// CostBreakdown and AdminPricingBreakdown are aliases to InternalOrderPricing
+export type CostBreakdown = InternalOrderPricing;
+export type AdminPricingBreakdown = InternalOrderPricing;
 
 export interface OrderItem {
   id: string;
@@ -97,10 +106,57 @@ export interface OrderItem {
   unit_cost_lak: number;
   unit_price_lak: number;
   total_price_lak: number;
-  cost_breakdown?: CostBreakdown;
+  cost_breakdown?: InternalOrderPricing;
   created_at: string;
   updated_at: string;
 }
+
+export interface TimelineEntry {
+  status: string;
+  label: string;
+  timestamp: number;
+}
+
+export interface PublicOrderItem {
+  id: string;
+  job_name: string;
+  item_name: string;
+  quantity: number;
+  page_count: number;
+  paper_size: string;
+  binding_type: BindingType;
+  current_step: ProductionStep;
+  specs: CustomPrintSpecs;
+  unit_price_lak: number;
+  total_price_lak: number;
+}
+
+export interface PublicOrderTrackingDTO {
+  order_id: string;
+  order_no: string;
+  tracking_code: string;
+  customer_name: string;
+  customer_phone?: string;
+  overall_status: OrderStatus;
+  status_text: string;
+  total_amount_lak: number;
+  deposit_lak: number;
+  remaining_lak: number;
+  currency: string;
+  courier_name?: string;
+  shipping_tracking_number?: string;
+  proof_url?: string;
+  proof_approved_at?: string | null;
+  proof_rejected_at?: string | null;
+  proof_rejection_reason?: string;
+  google_drive_link?: string;
+  timeline: TimelineEntry[];
+  items: PublicOrderItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+export type CustomerTrackingResponse = PublicOrderTrackingDTO;
 
 export interface Order {
   id: string;
@@ -141,6 +197,8 @@ export interface OrderItemInput {
   paper_format?: 'sheet' | 'roll';
   sheets_per_pack?: number;
   cuts_per_sheet?: number;
+  width_cm?: number;
+  height_cm?: number;
   unfolded_width_mm?: number;
   unfolded_height_mm?: number;
   ink_coverage_percent?: number;
@@ -165,6 +223,7 @@ export interface OrderItemInput {
 
 export interface CreateOrderInput {
   order_no?: string;
+  tracking_code?: string;
   customer_name: string;
   customer_phone?: string;
   customer_email?: string;
@@ -183,6 +242,8 @@ export interface PricingCalculationRequest {
   paper_format?: string;
   sheets_per_pack?: number;
   cuts_per_sheet?: number;
+  width_cm?: number;
+  height_cm?: number;
   unfolded_width_mm?: number;
   unfolded_height_mm?: number;
   page_count?: number;
@@ -208,11 +269,13 @@ export interface PricingCalculationRequest {
   min_total_price_lak?: number;
 }
 
-export interface PricingResponse {
+export interface PricingCalculationResponse {
   job_name: string;
   quantity: number;
   unit_price_lak: number;
   total_price_lak: number;
-  cost_breakdown: CostBreakdown;
+  cost_breakdown: InternalOrderPricing;
   currency: string;
 }
+
+export type PricingResponse = PricingCalculationResponse;

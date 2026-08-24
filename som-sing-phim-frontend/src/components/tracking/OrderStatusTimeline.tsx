@@ -159,7 +159,7 @@ export const OrderStatusTimeline: React.FC<OrderStatusTimelineProps> = ({
           <div className="text-right flex flex-col items-start md:items-end">
             <span className="text-xs text-slate-500">{lang === 'en' ? 'Total Retail Price' : lang === 'th' ? 'ราคารวมสุทธิ' : 'ຍອດເງິນລວມ'}</span>
             <div className="text-2xl font-black text-amber-600 font-mono">
-              {order.total_amount_lak.toLocaleString()} ₭
+              {order.total_amount_lak.toLocaleString()} ₭ ({order.currency || 'LAK'})
             </div>
             <div className="flex items-center gap-2 mt-1">
               {order.deposit_lak > 0 && (
@@ -214,7 +214,6 @@ export const OrderStatusTimeline: React.FC<OrderStatusTimelineProps> = ({
             {LIFECYCLE_STEPS.map((step, index) => {
               const isPast = index < activeIndex;
               const isCurrent = index === activeIndex;
-              const isFuture = index > activeIndex;
 
               const title = lang === 'en' ? step.labelEn : lang === 'th' ? step.labelThai : step.labelLao;
               const desc = lang === 'en' ? step.descEn : lang === 'th' ? step.descThai : step.descLao;
@@ -263,7 +262,7 @@ export const OrderStatusTimeline: React.FC<OrderStatusTimelineProps> = ({
         </div>
       </div>
 
-      {/* Item Specs & Retail Breakdown (Authoritative from Backend) */}
+      {/* Item Specs & Retail Breakdown (Authoritative from Backend without internal cost leaks) */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
         <h3 className="text-base font-bold text-slate-900 mb-4">
           {lang === 'en' ? 'Ordered Items & Print Specs' : lang === 'th' ? 'รายการสินค้าและสเปกการพิมพ์' : 'ລາຍການສິນຄ້າ ແລະ ສະເປັກງານພິມ'}

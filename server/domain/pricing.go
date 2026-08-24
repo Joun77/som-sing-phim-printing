@@ -4,8 +4,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// CostBreakdown holds authoritative itemized cost components with strict LAK integer precision
-type CostBreakdown struct {
+// InternalOrderPricing holds authoritative itemized cost components with strict LAK integer precision
+type InternalOrderPricing struct {
 	BaseMaterialCostLAK    int64           `json:"base_material_cost_lak"`
 	InkUsageCostLAK        int64           `json:"ink_usage_cost_lak"`
 	PlateCostLAK           int64           `json:"plate_cost_lak"`
@@ -23,6 +23,9 @@ type CostBreakdown struct {
 	InkSavingsPercent      decimal.Decimal `json:"ink_savings_percent,omitempty"`
 }
 
+// CostBreakdown is an alias to InternalOrderPricing for backward compatibility
+type CostBreakdown = InternalOrderPricing
+
 // PricingCalculationRequest represents the authoritative input payload for calculating job prices
 type PricingCalculationRequest struct {
 	JobName                    string          `json:"job_name"`
@@ -32,8 +35,10 @@ type PricingCalculationRequest struct {
 	PaperFormat                string          `json:"paper_format,omitempty"` // "sheet" | "roll"
 	SheetsPerPack              int             `json:"sheets_per_pack,omitempty"`
 	CutsPerSheet               int             `json:"cuts_per_sheet,omitempty"`
-	UnfoldedWidthMM            decimal.Decimal `json:"unfolded_width_mm"`
-	UnfoldedHeightMM           decimal.Decimal `json:"unfolded_height_mm"`
+	WidthCM                    decimal.Decimal `json:"width_cm,omitempty"`
+	HeightCM                   decimal.Decimal `json:"height_cm,omitempty"`
+	UnfoldedWidthMM            decimal.Decimal `json:"unfolded_width_mm,omitempty"`
+	UnfoldedHeightMM           decimal.Decimal `json:"unfolded_height_mm,omitempty"`
 	PageCount                  int             `json:"page_count,omitempty"`
 	InkCoveragePercent         decimal.Decimal `json:"ink_coverage_percent"`
 	InkCostPerMlLAK            int64           `json:"ink_cost_per_ml_lak"`
@@ -59,12 +64,12 @@ type PricingCalculationRequest struct {
 
 // PricingCalculationResponse returns the full internal breakdown for Admin
 type PricingCalculationResponse struct {
-	JobName       string        `json:"job_name"`
-	Quantity      int           `json:"quantity"`
-	UnitPriceLAK  int64         `json:"unit_price_lak"`
-	TotalPriceLAK int64         `json:"total_price_lak"`
-	CostBreakdown CostBreakdown `json:"cost_breakdown"`
-	Currency      string        `json:"currency"`
+	JobName       string                `json:"job_name"`
+	Quantity      int                   `json:"quantity"`
+	UnitPriceLAK  int64                 `json:"unit_price_lak"`
+	TotalPriceLAK int64                 `json:"total_price_lak"`
+	CostBreakdown InternalOrderPricing  `json:"cost_breakdown"`
+	Currency      string                `json:"currency"`
 }
 
 // PublicPricingResponse returns customer-facing retail price without internal costs

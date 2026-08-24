@@ -1,5 +1,12 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import type { CreateOrderInput, OrderItemInput, PricingCalculationRequest, PricingResponse, CostBreakdown } from '../../types/order';
+import type {
+  CreateOrderInput,
+  OrderItemInput,
+  PricingCalculationRequest,
+  PricingResponse,
+  CostBreakdown,
+  BindingType,
+} from '../../types/order';
 import { usePricingCalculator } from '../../hooks/usePricingCalculator';
 
 interface OrderCreationFormProps {
@@ -19,7 +26,7 @@ const CostBreakdownPanel = React.memo(function CostBreakdownPanel({
   if (!pricing) {
     return (
       <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-slate-500">
-        <p className="text-sm">ກະລຸນາເລືອກຈຳນວນ ແລະ ສະເປັກງານພິມເພື່ອຄິດໄລ່ລາຄາອັດຕະໂນມັດ</p>
+        <p className="text-sm">ກະລຸນາເລືອກຈຳນວນ ແລະ ສະເປັກງານພິມເພື່ອຄິດໄລ່ລາຄາອັດຕະໂນມັດ (cm² Area Engine)</p>
       </div>
     );
   }
@@ -31,7 +38,7 @@ const CostBreakdownPanel = React.memo(function CostBreakdownPanel({
       <div className="flex items-center justify-between border-b border-amber-200/80 pb-3 mb-4">
         <div>
           <span className="text-xs font-semibold uppercase tracking-wider text-amber-800">
-            Real-time Engine Calculation
+            Real-time LAK Engine Calculation (cm² Basis)
           </span>
           <h4 className="text-base font-bold text-slate-900">
             {pricing.job_name} ({pricing.quantity.toLocaleString()} ຊິ້ນ)
@@ -132,13 +139,14 @@ export const OrderCreationForm: React.FC<OrderCreationFormProps> = ({
   const [useCompatibleInk, setUseCompatibleInk] = useState<boolean>(true);
   const [laminationType, setLaminationType] = useState<string>('GLOSS');
   const [laminationCostLAK, setLaminationCostLAK] = useState<number>(400);
-  const [bindingType, setBindingType] = useState<string>('NONE');
+  const [bindingType, setBindingType] = useState<BindingType>('NONE');
   const [bindingCostLAK, setBindingCostLAK] = useState<number>(0);
   const [grommetsCount, setGrommetsCount] = useState<number>(0);
   const [edgeFolding, setEdgeFolding] = useState<boolean>(false);
   const [markupMarginPercent, setMarkupMarginPercent] = useState<number>(35);
 
   const [copiedTracking, setCopiedTracking] = useState<boolean>(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // Generated tracking code preview
   const generatedTrackingCode = useMemo(() => {
@@ -148,12 +156,14 @@ export const OrderCreationForm: React.FC<OrderCreationFormProps> = ({
     return `SSP-${stamp}-${rand}`;
   }, []);
 
-  // Request payload for pricing hook
+  // Request payload for pricing hook (with cm² support)
   const pricingRequest: PricingCalculationRequest = useMemo(
     () => ({
       job_name: jobName,
       quantity,
       paper_cost_per_unit_lak: paperCostPerUnit,
+      width_cm: unfoldedWidthMM > 0 ? unfoldedWidthMM / 10 : 0,
+      height_cm: unfoldedHeightMM > 0 ? unfoldedHeightMM / 10 : 0,
       unfolded_width_mm: unfoldedWidthMM,
       unfolded_height_mm: unfoldedHeightMM,
       page_count: 1,
@@ -203,8 +213,20 @@ export const OrderCreationForm: React.FC<OrderCreationFormProps> = ({
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
+      setValidationError(null);
+
       if (!customerName.trim()) {
-        alert('ກະລຸນາປ້ອນຊື່ລູກຄ້າ');
+        setValidationError('ກະລຸນາປ້ອນຊື່ລູກຄ້າ / Please enter customer name');
+        return;
+      }
+
+      if (quantity <= 0) {
+        setValidationError('ຈຳນວນຕ້ອງຫຼາຍກວ່າ 0 / Quantity must be greater than 0');
+        return;
+      }
+
+      if (unfoldedWidthMM <= 0 || unfoldedHeightMM <= 0) {
+        setValidationError('ກະລຸນາກຳນົດຂະໜາດງານພິມ / Please specify valid dimensions');
         return;
       }
 
@@ -212,24 +234,29 @@ export const OrderCreationForm: React.FC<OrderCreationFormProps> = ({
         job_name: jobName,
         quantity,
         paper_cost_per_unit_lak: paperCostPerUnit,
+        width_cm: unfoldedWidthMM / 10,
+        height_cm: unfoldedHeightMM / 10,
         unfolded_width_mm: unfoldedWidthMM,
         unfolded_height_mm: unfoldedHeightMM,
         ink_coverage_percent: inkCoveragePercent,
         use_compatible_ink: useCompatibleInk,
         lamination_type: laminationType,
         lamination_cost_lak: laminationCostLAK,
+        binding_type: bindingType,
         binding_cost_lak: bindingCostLAK,
         grommets_count: grommetsCount,
         edge_folding: edgeFolding,
         markup_margin_percent: markupMarginPercent,
         specs: {
-          size: `${unfoldedWidthMM}x${unfoldedHeightMM} mm`,
+          size: `${unfoldedWidthMM}x${unfoldedHeightMM} mm (${(unfoldedWidthMM / 10).toFixed(1)}x${(unfoldedHeightMM / 10).toFixed(1)} cm)`,
           paper: `Art Paper (${paperCostPerUnit} ₭/sheet)`,
           finishing: laminationType !== 'NONE' ? laminationType : 'Normal',
           lamination: laminationType,
           binding: bindingType,
           width_mm: unfoldedWidthMM,
           height_mm: unfoldedHeightMM,
+          width_cm: unfoldedWidthMM / 10,
+          height_cm: unfoldedHeightMM / 10,
           grommets_count: grommetsCount,
           edge_folding: edgeFolding,
           ink_coverage_percent: inkCoveragePercent,
@@ -238,6 +265,7 @@ export const OrderCreationForm: React.FC<OrderCreationFormProps> = ({
 
       const orderPayload: CreateOrderInput = {
         order_no: generatedTrackingCode,
+        tracking_code: generatedTrackingCode,
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
         customer_email: customerEmail.trim(),
@@ -282,7 +310,7 @@ export const OrderCreationForm: React.FC<OrderCreationFormProps> = ({
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900">ສ້າງລາຍການສັ່ງພິມໃໝ່ (Create Order)</h2>
-          <p className="text-xs text-slate-500">ຄຳນວນຕົ້ນທຶນແບບ Debounced 300ms ແລະ ສ້າງລະຫັດ Tracking ອັດຕະໂນມັດ</p>
+          <p className="text-xs text-slate-500">ຄຳນວນຕົ້ນທຶນແບບ Debounced 300ms (cm² Precision) ແລະ ຜູກລະຫັດ Tracking ອັດຕະໂນມັດ</p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-mono font-bold bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-300">
@@ -297,6 +325,12 @@ export const OrderCreationForm: React.FC<OrderCreationFormProps> = ({
           </button>
         </div>
       </div>
+
+      {validationError && (
+        <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-700">
+          ⚠️ {validationError}
+        </div>
+      )}
 
       {/* Customer Info */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

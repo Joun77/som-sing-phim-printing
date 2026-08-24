@@ -15,38 +15,55 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// SSEBroadcaster manages active SSE client channels for real-time order updates
+// SSEConnectionEvent represents typed initial handshake payload for stream clients
+type SSEConnectionEvent struct {
+	Event     string `json:"event"`
+	Message   string `json:"message"`
+	Tracking  string `json:"tracking,omitempty"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+// SSEPingEvent represents typed heartbeat keep-alive payload
+type SSEPingEvent struct {
+	Event     string `json:"event"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+// SSEBroadcaster manages active SSE client channels for per-order and broadcast updates
 type SSEBroadcaster struct {
 	mu      sync.RWMutex
-	clients map[chan domain.CustomerTrackingResponse]bool
+	clients map[chan domain.PublicOrderTrackingDTO]string
 }
 
 var broadcaster = &SSEBroadcaster{
-	clients: make(map[chan domain.CustomerTrackingResponse]bool),
+	clients: make(map[chan domain.PublicOrderTrackingDTO]string),
 }
 
-// Subscribe adds a client channel to broadcaster
-func (b *SSEBroadcaster) Subscribe() chan domain.CustomerTrackingResponse {
+// Subscribe adds a client channel to broadcaster with optional per-order tracking filter
+func (b *SSEBroadcaster) Subscribe(trackingCode string) chan domain.PublicOrderTrackingDTO {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	ch := make(chan domain.CustomerTrackingResponse, 10)
-	b.clients[ch] = true
+	ch := make(chan domain.PublicOrderTrackingDTO, 10)
+	b.clients[ch] = trackingCode
 	return ch
 }
 
 // Unsubscribe removes a client channel
-func (b *SSEBroadcaster) Unsubscribe(ch chan domain.CustomerTrackingResponse) {
+func (b *SSEBroadcaster) Unsubscribe(ch chan domain.PublicOrderTrackingDTO) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	delete(b.clients, ch)
 	close(ch)
 }
 
-// Broadcast sends order event to all connected SSE clients
-func (b *SSEBroadcaster) Broadcast(event domain.CustomerTrackingResponse) {
+// Broadcast sends order event to connected SSE clients, respecting per-order filters
+func (b *SSEBroadcaster) Broadcast(event domain.PublicOrderTrackingDTO) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	for ch := range b.clients {
+	for ch, filter := range b.clients {
+		if filter != "" && filter != event.TrackingCode && filter != event.OrderNo && filter != event.OrderID {
+			continue
+		}
 		select {
 		case ch <- event:
 		default:
@@ -84,7 +101,7 @@ func (h *OrderHandler) RegisterRoutes(r *gin.Engine) {
 		// Public & Customer Tracking endpoints (Masked internal operational costs)
 		apiV1.GET("/orders/track/:tracking_code", h.HandleTrackOrder)
 
-		// Real-time lifecycle Server-Sent Events (SSE) stream
+		// Real-time lifecycle Server-Sent Events (SSE) stream (Supports ?tracking=:code)
 		apiV1.GET("/orders/stream", h.HandleOrderStream)
 	}
 
@@ -150,24 +167,30 @@ func (h *OrderHandler) HandleTrackOrder(c *gin.Context) {
 	})
 }
 
-// HandleOrderStream provides real-time SSE streaming for live order status updates
+// HandleOrderStream provides real-time SSE streaming for live order status updates (per-order or global)
 func (h *OrderHandler) HandleOrderStream(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
 	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 
-	clientChan := broadcaster.Subscribe()
+	trackingCode := c.Query("tracking")
+	if trackingCode == "" {
+		trackingCode = c.Query("tracking_code")
+	}
+
+	clientChan := broadcaster.Subscribe(trackingCode)
 	defer broadcaster.Unsubscribe(clientChan)
 
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
 	// Initial Connection Event
-	initMsg := map[string]interface{}{
-		"event":     "CONNECTED",
-		"message":   "Order lifecycle real-time stream established",
-		"timestamp": time.Now().Unix(),
+	initMsg := SSEConnectionEvent{
+		Event:     "CONNECTED",
+		Message:   "Order lifecycle real-time stream established",
+		Tracking:  trackingCode,
+		Timestamp: time.Now().Unix(),
 	}
 	initBytes, _ := json.Marshal(initMsg)
 	c.SSEvent("connection", string(initBytes))
@@ -185,9 +208,9 @@ func (h *OrderHandler) HandleOrderStream(c *gin.Context) {
 			}
 			return true
 		case <-ticker.C:
-			pingMsg := map[string]interface{}{
-				"event":     "PING",
-				"timestamp": time.Now().Unix(),
+			pingMsg := SSEPingEvent{
+				Event:     "PING",
+				Timestamp: time.Now().Unix(),
 			}
 			pingBytes, _ := json.Marshal(pingMsg)
 			c.SSEvent("ping", string(pingBytes))

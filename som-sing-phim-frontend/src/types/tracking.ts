@@ -43,6 +43,8 @@ export interface PublicPrintSpecs {
   binding?: string;
   width_mm?: number;
   height_mm?: number;
+  width_cm?: number;
+  height_cm?: number;
   pages?: number;
   grommets_count?: number;
   edge_folding?: boolean;

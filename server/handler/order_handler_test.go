@@ -106,8 +106,8 @@ func TestOrderHandler_TrackOrder_Masking(t *testing.T) {
 	}
 
 	var res struct {
-		Status string                          `json:"status"`
-		Data   domain.CustomerTrackingResponse `json:"data"`
+		Status string                        `json:"status"`
+		Data   domain.PublicOrderTrackingDTO `json:"data"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
 		t.Fatalf("failed to decode response: %v", err)

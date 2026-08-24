@@ -67,6 +67,8 @@ type CustomPrintSpecs struct {
 	Binding            string          `json:"binding,omitempty"`
 	WidthMM            decimal.Decimal `json:"width_mm,omitempty"`
 	HeightMM           decimal.Decimal `json:"height_mm,omitempty"`
+	WidthCM            decimal.Decimal `json:"width_cm,omitempty"`
+	HeightCM           decimal.Decimal `json:"height_cm,omitempty"`
 	Pages              int             `json:"pages,omitempty"`
 	GrommetsCount      int             `json:"grommets_count,omitempty"`
 	EdgeFolding        bool            `json:"edge_folding,omitempty"`
@@ -81,27 +83,27 @@ type CustomPrintSpecs struct {
 
 // OrderItem represents an individual line item with exact integer LAK pricing
 type OrderItem struct {
-	ID                string           `json:"id"`
-	OrderID           string           `json:"order_id"`
-	JobName           string           `json:"job_name"`
-	ItemName          string           `json:"item_name"`
-	Quantity          int              `json:"quantity"`
-	PageCount         int              `json:"page_count"`
-	PaperSize         string           `json:"paper_size"`
-	CoverPaperID      string           `json:"cover_paper_id,omitempty"`
-	InnerPaperID      string           `json:"inner_paper_id,omitempty"`
-	CoverFileURL      string           `json:"cover_file_url,omitempty"`
-	InnerFileURL      string           `json:"inner_file_url,omitempty"`
-	BindingType       BindingType      `json:"binding_type"`
-	SpineWidthMM      decimal.Decimal  `json:"spine_width_mm"`
-	CurrentStep       ProductionStep   `json:"current_step"`
-	Specs             CustomPrintSpecs `json:"specs"`
-	UnitCostLAK       int64            `json:"unit_cost_lak"`
-	UnitPriceLAK      int64            `json:"unit_price_lak"`
-	TotalPriceLAK     int64            `json:"total_price_lak"`
-	CostBreakdown     *CostBreakdown   `json:"cost_breakdown,omitempty"`
-	CreatedAt         time.Time        `json:"created_at"`
-	UpdatedAt         time.Time        `json:"updated_at"`
+	ID                string                `json:"id"`
+	OrderID           string                `json:"order_id"`
+	JobName           string                `json:"job_name"`
+	ItemName          string                `json:"item_name"`
+	Quantity          int                   `json:"quantity"`
+	PageCount         int                   `json:"page_count"`
+	PaperSize         string                `json:"paper_size"`
+	CoverPaperID      string                `json:"cover_paper_id,omitempty"`
+	InnerPaperID      string                `json:"inner_paper_id,omitempty"`
+	CoverFileURL      string                `json:"cover_file_url,omitempty"`
+	InnerFileURL      string                `json:"inner_file_url,omitempty"`
+	BindingType       BindingType           `json:"binding_type"`
+	SpineWidthMM      decimal.Decimal       `json:"spine_width_mm"`
+	CurrentStep       ProductionStep        `json:"current_step"`
+	Specs             CustomPrintSpecs      `json:"specs"`
+	UnitCostLAK       int64                 `json:"unit_cost_lak"`
+	UnitPriceLAK      int64                 `json:"unit_price_lak"`
+	TotalPriceLAK     int64                 `json:"total_price_lak"`
+	CostBreakdown     *InternalOrderPricing `json:"cost_breakdown,omitempty"`
+	CreatedAt         time.Time             `json:"created_at"`
+	UpdatedAt         time.Time             `json:"updated_at"`
 }
 
 // Order represents an authoritative print order domain entity with exact LAK precision
@@ -156,8 +158,8 @@ type PublicOrderItem struct {
 	TotalPriceLAK int64            `json:"total_price_lak"`
 }
 
-// CustomerTrackingResponse represents the public tracking response with all internal operational costs masked
-type CustomerTrackingResponse struct {
+// PublicOrderTrackingDTO represents the public tracking response with all internal operational costs masked
+type PublicOrderTrackingDTO struct {
 	OrderID                string            `json:"order_id"`
 	OrderNo                string            `json:"order_no"`
 	TrackingCode           string            `json:"tracking_code"`
@@ -182,8 +184,11 @@ type CustomerTrackingResponse struct {
 	UpdatedAt              time.Time         `json:"updated_at"`
 }
 
-// MaskForCustomer converts an authoritative Order into a safe CustomerTrackingResponse
-func (o *Order) MaskForCustomer() CustomerTrackingResponse {
+// CustomerTrackingResponse is an alias to PublicOrderTrackingDTO for backward compatibility
+type CustomerTrackingResponse = PublicOrderTrackingDTO
+
+// MaskForCustomer converts an authoritative Order into a safe PublicOrderTrackingDTO
+func (o *Order) MaskForCustomer() PublicOrderTrackingDTO {
 	publicItems := make([]PublicOrderItem, len(o.Items))
 	for i, item := range o.Items {
 		publicItems[i] = PublicOrderItem{
@@ -232,7 +237,7 @@ func (o *Order) MaskForCustomer() CustomerTrackingResponse {
 		statusText = "ຍົກເລີກ / Cancelled"
 	}
 
-	return CustomerTrackingResponse{
+	return PublicOrderTrackingDTO{
 		OrderID:                o.ID,
 		OrderNo:                o.OrderNo,
 		TrackingCode:           trackingCode,

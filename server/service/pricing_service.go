@@ -16,7 +16,7 @@ type IPricingService interface {
 	CalculatePublicPricing(ctx context.Context, req domain.PricingCalculationRequest) (*domain.PublicPricingResponse, error)
 }
 
-// PricingService implements the authoritative print pricing engine with exact LAK integer precision
+// PricingService implements the authoritative print pricing engine with exact LAK integer precision and cm² area basis
 type PricingService struct{}
 
 // NewPricingService creates a new PricingService instance
@@ -39,17 +39,24 @@ func (s *PricingService) CalculatePricing(ctx context.Context, req domain.Pricin
 	pagesDec := decimal.NewFromInt(int64(pageCount))
 	totalImpressionsDec := qtyDec.Mul(pagesDec)
 
-	// 1. Calculate Unfolded Dimensions & Area (m²)
-	var areaM2 decimal.Decimal
-	a4AreaM2 := decimal.NewFromFloat(0.06237) // Standard A4 area in m²
+	// 1. Calculate Dimensions & Area in cm²
+	// Area (cm²) = Width (cm) * Height (cm)
+	var widthCM, heightCM, areaCM2 decimal.Decimal
+	a4AreaCM2 := decimal.NewFromFloat(623.70) // Standard A4 (21.0cm x 29.7cm) in cm²
 	areaScaleFactor := decimal.NewFromInt(1)
 
-	if req.UnfoldedWidthMM.GreaterThan(decimal.Zero) && req.UnfoldedHeightMM.GreaterThan(decimal.Zero) {
-		widthM := req.UnfoldedWidthMM.Div(decimal.NewFromInt(1000))
-		heightM := req.UnfoldedHeightMM.Div(decimal.NewFromInt(1000))
-		areaM2 = widthM.Mul(heightM).Round(6)
-		if a4AreaM2.GreaterThan(decimal.Zero) {
-			areaScaleFactor = areaM2.Div(a4AreaM2).Round(4)
+	if req.WidthCM.GreaterThan(decimal.Zero) && req.HeightCM.GreaterThan(decimal.Zero) {
+		widthCM = req.WidthCM
+		heightCM = req.HeightCM
+	} else if req.UnfoldedWidthMM.GreaterThan(decimal.Zero) && req.UnfoldedHeightMM.GreaterThan(decimal.Zero) {
+		widthCM = req.UnfoldedWidthMM.Div(decimal.NewFromInt(10))
+		heightCM = req.UnfoldedHeightMM.Div(decimal.NewFromInt(10))
+	}
+
+	if widthCM.GreaterThan(decimal.Zero) && heightCM.GreaterThan(decimal.Zero) {
+		areaCM2 = widthCM.Mul(heightCM).Round(4)
+		if a4AreaCM2.GreaterThan(decimal.Zero) {
+			areaScaleFactor = areaCM2.Div(a4AreaCM2).Round(4)
 		}
 	}
 
@@ -62,8 +69,10 @@ func (s *PricingService) CalculatePricing(ctx context.Context, req domain.Pricin
 		costPerSheet := paperCostPerUnitDec.Div(decimal.NewFromInt(int64(req.SheetsPerPack)))
 		totalSheetsNeeded := int(math.Ceil(float64(req.Quantity*pageCount) / float64(req.CutsPerSheet)))
 		rawMaterialCostDec = costPerSheet.Mul(decimal.NewFromInt(int64(totalSheetsNeeded)))
-	} else if req.PaperFormat == "roll" && areaM2.GreaterThan(decimal.Zero) {
-		// Roll-fed area calculation
+	} else if req.PaperFormat == "roll" && areaCM2.GreaterThan(decimal.Zero) {
+		// Roll-fed area calculation based on cm² (or normalized to m² if unit rate is per m²)
+		// Base rate per cm² = rate / 10,000 cm² (if per m²) or direct area calculation
+		areaM2 := areaCM2.Div(decimal.NewFromInt(10000))
 		rawMaterialCostDec = paperCostPerUnitDec.Mul(areaM2).Mul(qtyDec)
 	} else {
 		// Direct unit cost fallback
@@ -84,7 +93,7 @@ func (s *PricingService) CalculatePricing(ctx context.Context, req domain.Pricin
 		covPct = decimal.NewFromFloat(15.0) // 15% standard CMYK baseline
 	}
 
-	// ISO Standard: ~0.007 ml ink per 1% coverage on standard A4 per impression
+	// ISO Standard: ~0.007 ml ink per 1% coverage on standard A4 (623.7 cm²) per impression
 	mlPerImpression := decimal.NewFromFloat(0.007).Mul(covPct).Mul(areaScaleFactor)
 	totalInkVolumeMl := mlPerImpression.Mul(totalImpressionsDec)
 
@@ -160,7 +169,7 @@ func (s *PricingService) CalculatePricing(ctx context.Context, req domain.Pricin
 	unitPriceDec := totalPriceDec.Div(qtyDec).Ceil()
 
 	// Convert strictly to int64 for exact LAK integer precision
-	breakdown := domain.CostBreakdown{
+	breakdown := domain.InternalOrderPricing{
 		BaseMaterialCostLAK:    baseMaterialCostDec.IntPart(),
 		InkUsageCostLAK:        activeInkCostDec.IntPart(),
 		PlateCostLAK:           plateCostDec.IntPart(),

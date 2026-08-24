@@ -16,28 +16,40 @@ interface UsePricingCalculatorReturn {
 const DEFAULT_DEBOUNCE_MS = 300;
 const DEFAULT_API_BASE = 'http://localhost:8080/api/v1';
 
-// Local authoritative fallback formula matching Go backend PricingService
+// Local authoritative fallback formula matching Go backend PricingService (cm² area basis)
 function fallbackCalculate(input: PricingCalculationRequest): PricingResponse {
   const qty = Math.max(1, input.quantity || 1);
   const pages = Math.max(1, input.page_count || 1);
   const totalImpressions = qty * pages;
 
-  const widthM = (input.unfolded_width_mm || 0) / 1000;
-  const heightM = (input.unfolded_height_mm || 0) / 1000;
-  const areaM2 = widthM > 0 && heightM > 0 ? widthM * heightM : 0.06237;
-  const areaScale = areaM2 / 0.06237;
+  // 1. Calculate cm² Dimensions & Scale Factor
+  let widthCM = input.width_cm || 0;
+  let heightCM = input.height_cm || 0;
+  if ((!widthCM || !heightCM) && input.unfolded_width_mm && input.unfolded_height_mm) {
+    widthCM = input.unfolded_width_mm / 10;
+    heightCM = input.unfolded_height_mm / 10;
+  }
 
+  const areaCM2 = widthCM > 0 && heightCM > 0 ? widthCM * heightCM : 623.70;
+  const a4AreaCM2 = 623.70; // A4 standard 21.0cm x 29.7cm
+  const areaScale = areaCM2 / a4AreaCM2;
+
+  // 2. Base Paper Material Cost
   let rawPaperCost = (input.paper_cost_per_unit_lak || 1200) * qty;
   if (input.sheets_per_pack && input.cuts_per_sheet && input.sheets_per_pack > 0 && input.cuts_per_sheet > 0) {
     const costPerSheet = (input.paper_cost_per_unit_lak || 1200) / input.sheets_per_pack;
     const sheetsNeeded = Math.ceil(totalImpressions / input.cuts_per_sheet);
     rawPaperCost = costPerSheet * sheetsNeeded;
+  } else if (input.paper_format === 'roll' && areaCM2 > 0) {
+    const areaM2 = areaCM2 / 10000;
+    rawPaperCost = (input.paper_cost_per_unit_lak || 1200) * areaM2 * qty;
   }
 
-  const spoilage = (input.spoilage_rate_percent || 5) / 100;
+  const spoilage = Math.max(0, input.spoilage_rate_percent || 5) / 100;
   const wasteCost = Math.round(rawPaperCost * spoilage);
   const baseMaterialCost = Math.round(rawPaperCost + wasteCost);
 
+  // 3. Ink Usage Cost (Baseline Genuine vs Compatible)
   const covPct = input.ink_coverage_percent || 15;
   const volPerImpression = 0.007 * covPct * areaScale;
   const totalVolMl = volPerImpression * totalImpressions;
@@ -59,6 +71,7 @@ function fallbackCalculate(input: PricingCalculationRequest): PricingResponse {
     }
   }
 
+  // 4. Labor & Finishing Operations
   const lamination = (input.lamination_cost_lak || 0) * qty;
   const binding = (input.binding_cost_lak || 0) * qty;
   const grommets = (input.grommets_count || 0) * (input.grommet_cost_lak || 0) * qty;
@@ -66,18 +79,24 @@ function fallbackCalculate(input: PricingCalculationRequest): PricingResponse {
   const labor = Math.round((input.labor_hours || 0) * (input.labor_rate_per_hour_lak || 40000));
   const laborFinishing = lamination + binding + grommets + folding + labor;
 
+  // 5. Machine Depreciation & Plate Costs
   const plateCost = input.plate_cost_per_unit_lak || 0;
   const machineDepr = Math.round((input.machine_depreciation_rate_lak || 0) * totalImpressions);
 
+  // 6. Net Internal Cost
   const netInternal = baseMaterialCost + activeInkCost + laborFinishing + plateCost + machineDepr;
+
+  // 7. Markup & Subtotal
   const markupPct = (input.markup_margin_percent || 35) / 100;
   const markupAmount = Math.round(netInternal * markupPct);
   const subtotal = netInternal + markupAmount;
 
+  // 8. Tax Calculation
   const taxPct = (input.tax_rate_percent || 0) / 100;
   const taxAmount = Math.round(subtotal * taxPct);
   let totalPrice = subtotal + taxAmount;
 
+  // 9. Minimum Price Constraint
   if (input.min_total_price_lak && totalPrice < input.min_total_price_lak) {
     totalPrice = input.min_total_price_lak;
   }

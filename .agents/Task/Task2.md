@@ -1,7 +1,7 @@
-# Phase 2 - Task 2: Admin Order Creation & State Synchronization
+# Phase 2 - Task 2: Admin Order Creation, Debounced Calculation & Edit Sync
 
 ## Objective
-Implement optimized state synchronization and input handling for the Admin Order Creation form in `somsingphim`. Integrate backend calculation debouncing, optimistic state updates, and strict TypeScript types.
+Implement optimized state management and input handling for Admin Order Creation and Direct Edit in `somsingphim`. Integrate backend calculation debouncing, optimistic table updates, and typed contracts matching Go domain models.
 
 ## Target Files
 - `somsingphim/src/types/order.ts` (Modify / Create)
@@ -10,12 +10,12 @@ Implement optimized state synchronization and input handling for the Admin Order
 - `somsingphim/src/components/orders/OrderHistoryTable.tsx` (Modify)
 
 ## Technical Requirements
-- **TypeScript Contracts:** Define comprehensive interfaces (`Order`, `OrderItemInput`, `PrintSpecification`, `PricingResponse`) aligned strictly with Go backend domain models.
-- **Debounced Calculations:** Implement `usePricingCalculator` with a 300ms debounce to prevent API thrashing and race conditions when operators update paper dimensions, quantities, or finishing options.
-- **Optimistic State & Status Transitions:** Update local state optimistically upon order creation and status modifications (`Pending`, `Processing`, `Completed`, `Cancelled`) before refetching.
-- **Tracking Code Display:** Display generated tracking codes clearly with one-click copy functionality to facilitate dispatch to customers.
+- **TypeScript Contracts:** Define complete types (`Order`, `OrderItemInput`, `PrintSpecification`, `AdminPricingBreakdown`) synchronized 1:1 with Go domain structs.
+- **Debounced Calculation Hook (`usePricingCalculator`):** Implement a 300ms debounce on print dimension, paper grammage, finishing, and quantity changes before calling `/api/v1/pricing/calculate`.
+- **Form Validation & Tracking Assignment:** Validate print parameters client-side before submission; bind generated `TrackingCode` upon successful order creation.
+- **Optimistic State & Direct Edit Synchronization:** Apply optimistic UI updates on order creation and lifecycle transitions (`Pending`, `In Production`, `Completed`, `Cancelled`) in `OrderHistoryTable`. Trigger backend status reset and audit logging on edit.
 
 ## Constraints & Output Rules
-- Strict TypeScript: No `any` types; all props and state variables must be strictly typed.
-- Component performance: Memoize expensive breakdown computations and subcomponents using `React.useMemo` and `React.memo`.
-- Do not remove or alter existing layout styling unless directly required for state binding.
+- Strict TypeScript: No `any` types; all props, state, and form values must adhere to explicit interfaces.
+- Component Isolation: Use `React.useMemo` and `React.useCallback` to eliminate unnecessary re-renders during high-frequency input.
+- Maintain existing Admin design system tokens and styling.

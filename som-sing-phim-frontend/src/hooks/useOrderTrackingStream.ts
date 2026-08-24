@@ -105,7 +105,7 @@ export function useOrderTrackingStream(
       }
 
       try {
-        const es = new EventSource(`${apiBaseUrl}/orders/stream`);
+        const es = new EventSource(`${apiBaseUrl}/orders/stream?tracking=${encodeURIComponent(cleanCode)}`);
         eventSourceRef.current = es;
 
         es.addEventListener('connection', () => {
