@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "baseUrl": ".",
+    "typeRoots": [
+      "./customer-service/node_modules/@types",
+      "./admin-system/frontend/node_modules/@types",
+      "./node_modules/@types"
+    ]
+  },
+  "include": ["som-sing-phim-frontend/src", "somsingphim/src"]
+}
