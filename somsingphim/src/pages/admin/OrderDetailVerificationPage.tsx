@@ -1,141 +1,113 @@
 import React, { useState } from 'react';
 import {
   OrderDetailVerification,
+  OverrideHistoryLog,
   OverridePricingPayload,
 } from '../../types/adminVerification';
 import { PreFlightVerificationCard } from '../../components/admin/PreFlightVerificationCard';
 import { CoverageChannelBreakdown } from '../../components/admin/CoverageChannelBreakdown';
 import { ManualOverrideModal } from '../../components/admin/ManualOverrideModal';
+import { useOrderVerification, useOverridePricing } from '../../hooks/useOrders';
 
-const MOCK_ORDER_VERIFICATION: OrderDetailVerification = {
-  id: 'ord-item-8821',
-  orderNumber: 'ORD-2026-0882',
-  customerName: 'สำนักงานสถิติแห่งชาติ (National Statistics)',
-  productName: 'รายงานสถิติประจำปี 2026 (Annual Report)',
-  paperType: 'กระดาษปอนด์ 80 แกรม (Woodfree 80gsm)',
-  bindingType: 'เข้าเล่มไสกาว (Perfect Binding)',
-  quantity: 200,
-  pageCount: 64,
-  isDoubleSided: true,
-  driveUrl: 'https://drive.google.com/file/d/1X98yZaBcDeFgHiJkLmNoPqRsTuVwXyZ/view?usp=sharing',
-  fileSizeBytes: 48 * 1024 * 1024, // 48 MB
-  status: 'AUTO_VERIFIED',
-  coverage: {
-    c: 18.5,
-    m: 22.0,
-    y: 15.0,
-    k: 35.0,
-    tac: 90.5,
-    colorSum: 55.5,
-  },
-  costAudit: {
-    paperCost: 4800000,
-    inkCost: 3200000,
-    bindingCost: 700000,
-    finishingCost: 300000,
-    setupCost: 50000,
-    unitPrice: 45250,
-    totalPrice: 9050000,
-    rawC: 18.5,
-    rawM: 22.0,
-    rawY: 15.0,
-    rawK: 35.0,
-    rawTAC: 90.5,
-    appliedTAC: 90.5,
-    isManualOverride: false,
-    formulaAuditLog: [
-      'Model: BOOK_BOUND, Pages: 64, Duplex: true, Sheets: 32 per book',
-      'Ink Cost per Side: (K:35.00% * 50) + (Color:55.50% * 80) = 2,500 LAK',
-      'Unit Cost: Paper=24,000 + Ink=16,000 + Binding=3,500 + Finishing=1,500 = 45,000 LAK',
-      'Order Total: (45,000 * 200 qty) + Setup:50,000 = 9,050,000 LAK',
-    ],
-  },
-  overrideHistory: [
-    {
-      id: 'log-001',
-      orderId: 'ord-item-8821',
-      overriddenBy: 'Somchai (Pre-flight Admin)',
-      overriddenAt: '2026-08-24 16:30',
-      previousPageCount: 60,
-      newPageCount: 64,
-      previousTAC: 85.0,
-      newTAC: 90.5,
-      previousUnitPrice: 43000,
-      newUnitPrice: 45250,
-      reason: 'ลูกค้าแก้ไขเพิ่มหน้าสารบัญ 4 หน้า และอัปโหลดไฟล์ชุดสมบูรณ์',
-    },
-  ],
-  scanLogMessage: 'MuPDF rasterized 64 pages successfully. Average ink coverage calculated.',
-};
+interface OrderDetailVerificationPageProps {
+  orderId?: string;
+}
 
-export const OrderDetailVerificationPage: React.FC = () => {
-  const [order, setOrder] = useState<OrderDetailVerification>(MOCK_ORDER_VERIFICATION);
+export const OrderDetailVerificationPage: React.FC<OrderDetailVerificationPageProps> = ({
+  orderId: propOrderId,
+}) => {
+  // Extract order ID from prop, URL search params, or fallback
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const targetOrderId = propOrderId || urlParams?.get('id') || urlParams?.get('order_id') || 'ORD-2026-0882';
+
+  const { data: order, isLoading, error, refetch } = useOrderVerification(targetOrderId);
+  const overridePricingMutation = useOverridePricing();
+
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    setTimeout(() => setToastMessage(null), 3500);
   };
 
   const handleRequestDrivePermission = () => {
+    if (!order) return;
     const templateMsg = `เรียนลูกค้า ${order.customerName},\n\nทางโรงพิมพ์ Som Sing Phim ขอความกรุณาเปิดสิทธิ์การเข้าถึงไฟล์ Google Drive สำหรับออเดอร์ #${order.orderNumber} ให้เป็น "ทุกคนที่มีลิงก์ (Anyone with link)" เพื่อดำเนินการตรวจสอบไฟล์และเริ่มพิมพ์งานครับ\n\nลิงก์ไฟล์: ${order.driveUrl}`;
     navigator.clipboard.writeText(templateMsg);
     showToast('คัดลอกข้อความขอสิทธิ์ Drive ไปยังคลิปบอร์ดแล้ว!');
   };
 
   const handleSubmitOverride = async (payload: OverridePricingPayload) => {
-    // Simulate backend API POST /api/v1/admin/orders/:id/override-pricing
-    const sheetsPerUnit = order.isDoubleSided ? Math.ceil(payload.pageCount / 2) : payload.pageCount;
-    const paperCost = 150 * sheetsPerUnit * order.quantity;
-    const inkCost = ((payload.overrideTAC || order.coverage.tac) * 2) * payload.pageCount * order.quantity;
-    const newUnitPrice = payload.overrideUnitPrice || Math.round((paperCost + inkCost) / order.quantity);
-    const newTotalPrice = newUnitPrice * order.quantity + order.costAudit.setupCost;
+    if (!order) return;
 
-    const newLog = {
-      id: `log-${Date.now()}`,
-      orderId: order.id,
-      overriddenBy: payload.approvedBy,
-      overriddenAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      previousPageCount: order.pageCount,
-      newPageCount: payload.pageCount,
-      previousTAC: order.coverage.tac,
-      newTAC: payload.overrideTAC || order.coverage.tac,
-      previousUnitPrice: order.costAudit.unitPrice,
-      newUnitPrice,
-      reason: payload.reason,
-    };
+    try {
+      // Calculate new unit price or use direct override from admin
+      const unitPriceToApply = payload.overrideUnitPrice && payload.overrideUnitPrice > 0
+        ? payload.overrideUnitPrice
+        : order.costAudit.unitPrice;
 
-    setOrder((prev) => ({
-      ...prev,
-      pageCount: payload.pageCount,
-      status: 'ADMIN_OVERRIDDEN',
-      coverage: {
-        ...prev.coverage,
-        tac: payload.overrideTAC || prev.coverage.tac,
-      },
-      costAudit: {
-        ...prev.costAudit,
-        unitPrice: newUnitPrice,
-        totalPrice: newTotalPrice,
-        isManualOverride: true,
-        formulaAuditLog: [
-          ...prev.costAudit.formulaAuditLog,
-          `Admin Override: Pages=${payload.pageCount}, TAC=${payload.overrideTAC}%, Reason="${payload.reason}"`,
-        ],
-      },
-      overrideHistory: [newLog, ...prev.overrideHistory],
-    }));
+      await overridePricingMutation.mutateAsync({
+        orderId: targetOrderId,
+        orderItemId: order.id,
+        overrideUnitPrice: unitPriceToApply,
+        reason: payload.reason,
+        approvedBy: payload.approvedBy,
+      });
 
-    showToast('ปรับปรุงราคาและอนุมัติสั่งผลิตเรียบร้อยแล้ว!');
+      setIsOverrideModalOpen(false);
+      showToast('✓ ปรับปรุงราคาผ่านระบบและบันทึก Audit Log เรียบร้อยแล้ว!');
+      refetch();
+    } catch (err: any) {
+      showToast(`❌ เกิดข้อผิดพลาดในการ Override ราคา: ${err.message || 'Server Error'}`);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm animate-pulse space-y-3">
+          <div className="h-4 bg-slate-200 rounded w-1/4"></div>
+          <div className="h-8 bg-slate-200 rounded w-1/2"></div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 animate-pulse">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-20 bg-slate-200 rounded-xl"></div>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-pulse">
+          <div className="h-64 bg-slate-200 rounded-2xl"></div>
+          <div className="h-64 bg-slate-200 rounded-2xl"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !order) {
+    return (
+      <div className="max-w-4xl mx-auto p-8 my-12 bg-white rounded-2xl border border-rose-200 shadow-sm text-center space-y-4">
+        <div className="text-3xl">⚠️</div>
+        <h2 className="text-lg font-bold text-slate-800">ไม่สามารถโหลดข้อมูลการตรวจสอบคำสั่งซื้อได้</h2>
+        <p className="text-sm text-slate-600">
+          {error?.message || 'ไม่พบข้อมูลคำสั่งซื้อในระบบ'}
+        </p>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow transition"
+        >
+          ลองใหม่อีกครั้ง (Retry)
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-6 right-6 z-50 px-4 py-3 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-2xl border border-slate-800 animate-slideIn">
-          ✓ {toastMessage}
+          {toastMessage}
         </div>
       )}
 
@@ -247,7 +219,7 @@ export const OrderDetailVerificationPage: React.FC = () => {
             <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Verifiable</span>
           </div>
           <div className="space-y-2 font-mono text-[11px] text-slate-300">
-            {order.costAudit.formulaAuditLog.map((log, idx) => (
+            {order.costAudit.formulaAuditLog.map((log: string, idx: number) => (
               <div key={idx} className="p-2 bg-slate-800/60 rounded-lg border border-slate-700/50">
                 &gt; {log}
               </div>
@@ -263,8 +235,9 @@ export const OrderDetailVerificationPage: React.FC = () => {
             ประวัติการแก้ไขและปรับปรุงราคา (Override Audit Trails)
           </h3>
           <div className="space-y-3">
-            {order.overrideHistory.map((history) => (
+            {order.overrideHistory.map((history: OverrideHistoryLog) => (
               <div key={history.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1.5">
+
                 <div className="flex justify-between items-center text-slate-500">
                   <span className="font-semibold text-slate-800">{history.overriddenBy}</span>
                   <span>{history.overriddenAt}</span>
