@@ -7,6 +7,7 @@ interface AvailablePrinter {
   id: string;
   name: string;
   cost_per_page?: number;
+  ink_cost_per_page?: number;
   printerCategory?: string;
   colorSchemeType?: string;
 }
@@ -43,7 +44,8 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
   availablePrinters,
   onAllocationsChange,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const currentLang = i18n.language || 'lo';
 
   const totalAllocated = allocations.reduce((sum, a) => sum + (a.allocated_pages || 0), 0);
   const remainingPages = targetQuantity - totalAllocated;
@@ -67,6 +69,7 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
         printer_name: printer.name,
         allocated_pages: pages,
         cost_per_page: printer.cost_per_page || 0,
+        ink_cost_per_page: printer.ink_cost_per_page || 0,
         subtotal_cost: pages * (printer.cost_per_page || 0),
         is_double_sided: false,
         color_mode: initialMode,
@@ -237,8 +240,24 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
                           {pctShare}% ຂອງງານທັງໝົດ
                         </span>
                       </p>
-                      <p className="text-[11px] text-slate-500 font-medium">
-                        {item.cost_per_page ? `${item.cost_per_page.toLocaleString()} LAK / page (Depr + Electricity)` : 'Master Equipment Asset'}
+                      <p className="text-[11px] text-slate-500 font-medium flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        {item.ink_cost_per_page ? (
+                          <>
+                            <span className="font-bold text-sky-700">
+                              {currentLang === 'lo' ? 'ໝຶກ' : 'Ink'}: LAK {item.ink_cost_per_page.toLocaleString()} / {currentLang === 'lo' ? 'ແຜ່ນ' : 'page'} (@5%)
+                            </span>
+                            <span className="text-slate-300">•</span>
+                            <span>
+                              {currentLang === 'lo' ? 'ຄ່າເຄື່ອງ & ໄຟ' : 'Mach & Elec'}: LAK {(item.cost_per_page || 0).toLocaleString()} / {currentLang === 'lo' ? 'ແຜ່ນ' : 'page'}
+                            </span>
+                            <span className="text-slate-300">•</span>
+                            <span className="font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                              {currentLang === 'lo' ? 'ລວມ' : 'Total'}: LAK {((item.ink_cost_per_page || 0) + (item.cost_per_page || 0)).toLocaleString()} / {currentLang === 'lo' ? 'ແຜ່ນ' : 'page'}
+                            </span>
+                          </>
+                        ) : (
+                          <span>{item.cost_per_page ? `${item.cost_per_page.toLocaleString()} LAK / ${currentLang === 'lo' ? 'ແຜ່ນ' : 'page'} (${currentLang === 'lo' ? 'ຄ່າເສື່ອມ + ຄ່າໄຟ' : 'Depr + Electricity'})` : 'Master Equipment Asset'}</span>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -424,13 +443,21 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
           defaultValue=""
         >
           <option value="" disabled>
-            -- ເລືອກເຄື່ອງພິມຈາກ Master Equipment List ເພື່ອເພີ່ມເຂົ້າໃນງານ --
+            -- {currentLang === 'lo' ? 'ເລືອກເຄື່ອງພິມຈາກລາຍການຫຼັກເພື່ອເພີ່ມເຂົ້າໃນງານ' : 'Select Printer from Master Equipment List'} --
           </option>
-          {availablePrinters.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name} {p.printerCategory ? `[${p.printerCategory}]` : ''} ({p.cost_per_page ? `${p.cost_per_page.toLocaleString()} LAK/page` : 'Ready'})
-            </option>
-          ))}
+          {availablePrinters.map((p) => {
+            const inkRate = p.ink_cost_per_page || 0;
+            const machRate = p.cost_per_page || 0;
+            const totalRate = inkRate + machRate;
+            const detailText = inkRate > 0
+              ? `LAK ${totalRate.toLocaleString()}/${currentLang === 'lo' ? 'ແຜ່ນ' : 'page'} (ໝຶກ ${inkRate.toLocaleString()} + ເຄື່ອງ/ໄຟ ${machRate.toLocaleString()})`
+              : `${machRate.toLocaleString()} LAK/${currentLang === 'lo' ? 'ແຜ່ນ' : 'page'}`;
+            return (
+              <option key={p.id} value={p.id}>
+                {p.name} {p.printerCategory ? `[${p.printerCategory}]` : ''} - {detailText}
+              </option>
+            );
+          })}
         </select>
       </div>
 

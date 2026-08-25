@@ -98,7 +98,6 @@ func main() {
 
 	// Pricing engine route
 	router.POST("/api/pricing/calculate", pricing.HandleCalculatePrice)
-	router.POST("/api/v1/pricing/calculate", pricing.HandleCalculatePrice)
 
 	// Order management, Quotation & Shop Floor Tracker routes
 	router.GET("/api/orders", orders.HandleGetOrders)

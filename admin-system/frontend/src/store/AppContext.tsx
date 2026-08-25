@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { sampleInboundData } from '@features/inbound/data/sampleInboundData';
 import type { AppContextValue } from '../types';
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -649,41 +648,50 @@ export const AppProvider = ({ children }) => {
     } catch (e) {}
   };
 
+  const unrecordDeletedId = (id: string) => {
+    if (!id) return;
+    try {
+      const set = getDeletedIds();
+      set.delete(id);
+      set.delete(id.toLowerCase());
+      localStorage.setItem('som_sing_deleted_item_ids', JSON.stringify(Array.from(set)));
+    } catch (e) {}
+  };
+
   const [inventory, setInventory] = useState(() => {
     const deletedIds = getDeletedIds();
     const saved = localStorage.getItem('ss_print_inventory_v6');
-    if (saved) {
+    if (saved !== null) {
       try {
         const parsed = JSON.parse(saved);
-        const unique = [];
-        const seen = new Set();
-        for (const item of parsed) {
-          if (item && item.id && !seen.has(item.id) && !deletedIds.has(item.id) && !deletedIds.has(item.id.toLowerCase())) {
-            seen.add(item.id);
-            unique.push(sanitizeInventoryItem(item));
+        if (Array.isArray(parsed)) {
+          const unique = [];
+          const seen = new Set();
+          for (const item of parsed) {
+            if (item && item.id && !seen.has(item.id) && !deletedIds.has(item.id) && !deletedIds.has(item.id.toLowerCase())) {
+              seen.add(item.id);
+              unique.push(sanitizeInventoryItem(item));
+            }
           }
+          return unique;
         }
-        if (unique.length > 0) return unique;
-        return initialInventory.filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase()));
-      } catch (e) {
-        return initialInventory.filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase()));
-      }
+      } catch (e) {}
     }
-    return initialInventory.filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase()));
+    return [];
   });
 
   const [equipment, setEquipment] = useState(() => {
     const deletedIds = getDeletedIds();
     const saved = localStorage.getItem('ss_print_equipment_v6');
-    if (saved) {
+    if (saved !== null) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed.filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase()));
         }
       } catch (e) {}
     }
-    return initialEquipment.filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase()));
+    return [];
   });
 
   const refreshData = async () => {
@@ -793,7 +801,14 @@ export const AppProvider = ({ children }) => {
             origin: item.origin || 'TH',
             specs: item.specs || {}
           }));
-          setLinkedInboundEntries(mappedInbound);
+          setLinkedInboundEntries(prev => {
+            const mapById = new Map();
+            (prev || []).forEach(item => mapById.set(item.id, item));
+            mappedInbound.forEach((item: any) => mapById.set(item.id, item));
+            const merged = Array.from(mapById.values());
+            safeSetItem('ss_print_inbound_entries_v6', merged);
+            return merged;
+          });
         }
       }
     } catch (e) {}
@@ -993,20 +1008,20 @@ export const AppProvider = ({ children }) => {
   });
   const [linkedInboundEntries, setLinkedInboundEntries] = useState(() => {
     const saved = localStorage.getItem('ss_print_inbound_entries_v6');
-    if (saved) {
+    if (saved !== null) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       } catch (e) {}
     }
     const rawLocal = localStorage.getItem('som_sing_inbound_list');
-    if (rawLocal) {
+    if (rawLocal !== null) {
       try {
         const parsed = JSON.parse(rawLocal);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       } catch (e) {}
     }
-    return sampleInboundData;
+    return [];
   });
   const [printerColorLinks, setPrinterColorLinks] = useState(() => {
     const saved = localStorage.getItem('ss_print_color_links_v6');
@@ -1202,6 +1217,7 @@ export const AppProvider = ({ children }) => {
 
       // Find any inbound item not yet represented in inventory
       const newlyDiscoveredItems: any[] = [];
+      const deletedIds = getDeletedIds();
       allInboundEntries.forEach((e: any) => {
         if (!e) return;
         const isMachinery = e.category === 'PRINTER' || e.category === 'CUTTER' || e.category === 'MACHINERY';
@@ -1210,6 +1226,9 @@ export const AppProvider = ({ children }) => {
         const sku = (e.sku || e.skuCode || e.id || '').trim();
         const name = (e.name || e.itemName || sku).trim();
         if (!sku && !name) return;
+        if (deletedIds.has(sku) || deletedIds.has(sku.toLowerCase()) || deletedIds.has(name) || deletedIds.has(name.toLowerCase())) return;
+        if (e.id && (deletedIds.has(e.id) || deletedIds.has(e.id.toLowerCase()))) return;
+        if (e.poNumber && (deletedIds.has(e.poNumber) || deletedIds.has(e.poNumber.toLowerCase()))) return;
 
         const alreadyExists = (sku && existingIds.has(sku.toLowerCase())) || 
                               (name && existingNames.has(name.toLowerCase())) ||
@@ -1271,29 +1290,56 @@ export const AppProvider = ({ children }) => {
       setEquipment(prevEq => {
         let eqUpdated = false;
         const currentEqIds = new Set(prevEq.map(m => (m.id || '').toLowerCase()));
+        const currentEqNames = new Set(prevEq.map(m => (m.name || '').toLowerCase()));
+        const currentEqSerials = new Set(prevEq.map(m => (m.serialNumber || '').toLowerCase()));
+        const deletedIds = getDeletedIds();
         const toAdd: any[] = [];
 
         machineryEntries.forEach((m: any) => {
-          const id = (m.id || m.sku || `MAC-${Date.now()}`).trim();
-          if (!currentEqIds.has(id.toLowerCase())) {
-            currentEqIds.add(id.toLowerCase());
+          const skuCode = (m.sku || m.skuCode || '').trim();
+          const inboundId = (m.id || m.poNumber || '').trim();
+          const targetId = skuCode || inboundId || `MAC-${Date.now()}`;
+          const targetName = (m.name || m.itemName || '').trim();
+          const targetSn = (m.serialNumber || m.sn || '').trim();
+
+          if (deletedIds.has(targetId) || deletedIds.has(targetId.toLowerCase())) return;
+          if (inboundId && (deletedIds.has(inboundId) || deletedIds.has(inboundId.toLowerCase()))) return;
+          if (targetSn && (deletedIds.has(targetSn) || deletedIds.has(targetSn.toLowerCase()))) return;
+
+          // Check if this equipment already exists by SKU, Inbound ID, Serial Number, or exact Name
+          const alreadyExists = (targetId && currentEqIds.has(targetId.toLowerCase())) ||
+                                (skuCode && currentEqIds.has(skuCode.toLowerCase())) ||
+                                (inboundId && currentEqIds.has(inboundId.toLowerCase())) ||
+                                (targetSn && currentEqSerials.has(targetSn.toLowerCase())) ||
+                                (targetName && currentEqNames.has(targetName.toLowerCase())) ||
+                                toAdd.some(it => it.id.toLowerCase() === targetId.toLowerCase() || (targetName && it.name.toLowerCase() === targetName.toLowerCase()));
+
+          if (!alreadyExists) {
+            currentEqIds.add(targetId.toLowerCase());
+            if (skuCode) currentEqIds.add(skuCode.toLowerCase());
+            if (targetName) currentEqNames.add(targetName.toLowerCase());
+            if (targetSn) currentEqSerials.add(targetSn.toLowerCase());
             eqUpdated = true;
+
             const isPrn = m.category === 'PRINTER' || m.category === 'Printer';
+            const brand = m.brand || (targetName.split(' ')[0]) || 'Industrial';
+            const model = m.model || (targetName.split(' ').slice(1).join(' ')) || targetId;
+
             toAdd.push({
-              id,
-              name: m.name || m.itemName || `${m.brand || 'Equipment'} ${m.model || id}`,
-              brand: m.brand || 'Industrial',
-              model: m.model || id,
-              serialNumber: m.serialNumber || m.sn || id,
+              id: targetId,
+              name: targetName || `${brand} ${model}`,
+              brand: brand,
+              model: model,
+              serialNumber: targetSn || targetId,
               category: isPrn ? 'Printer' : (m.category === 'CUTTER' ? 'Cutter' : (m.category === 'LAMINATOR' ? 'Laminator' : 'Binder')),
-              printerCategory: isPrn ? (m.printerCategory || 'Digital Color Press') : undefined,
+              printerCategory: isPrn ? (m.printerCategory || 'Inkjet') : undefined,
               status: 'In Use',
-              location: m.location || 'Press Floor',
-              purchaseCost: Number(m.totalPrice || m.price || 50000000),
+              location: m.location || 'Main Dept',
+              purchaseCost: Number(m.totalPrice || m.price || 0),
               lifespanYears: Number(m.lifespanYears || 5),
               printedPagesCapacity: Number(m.printedPagesCapacity || 1000000),
               printedCount: 0,
-              calculatedCostPerPage: Number(m.calculatedCostPerPage || 50),
+              calculatedCostPerPage: Number(m.calculatedCostPerPage || 0),
               purchaseDate: m.receiptDate || m.importDate || new Date().toISOString().split('T')[0],
               warrantyExpiration: new Date(new Date().setFullYear(new Date().getFullYear() + 2)).toISOString().split('T')[0],
               lastMaintenanceDate: new Date().toISOString().split('T')[0],
@@ -1451,10 +1497,32 @@ export const AppProvider = ({ children }) => {
   const deleteInventoryFromBackend = (id: string) => {
     recordDeletedId(id);
     setInventory(prev => {
+      const target = prev.find(item => item.id === id || item.id.toLowerCase() === id.toLowerCase() || item.sku === id || (item.sku || '').toLowerCase() === id.toLowerCase());
+      if (target) {
+        recordDeletedId(target.id);
+        if (target.name) recordDeletedId(target.name);
+        if (target.sku) recordDeletedId(target.sku);
+        (target.batches || []).forEach(b => {
+          if (b.id) recordDeletedId(b.id);
+          if (b.poNumber) recordDeletedId(b.poNumber);
+        });
+      }
       const next = prev.filter(item => item.id !== id && item.id.toLowerCase() !== id.toLowerCase() && item.sku !== id && (item.sku || '').toLowerCase() !== id.toLowerCase());
       safeSetItem('ss_print_inventory_v6', next);
       return next;
     });
+
+    // Remove matching inbound records from local cache
+    setLinkedInboundEntries(prev => prev.filter(e => e.id !== id && e.sku !== id && e.skuCode !== id && e.poNumber !== id));
+    try {
+      const rawInbound = localStorage.getItem('som_sing_inbound_list');
+      if (rawInbound) {
+        const parsed = JSON.parse(rawInbound);
+        const filtered = parsed.filter((e: any) => e.id !== id && e.sku !== id && e.skuCode !== id && e.poNumber !== id);
+        localStorage.setItem('som_sing_inbound_list', JSON.stringify(filtered));
+      }
+    } catch (e) {}
+
     fetch(`http://localhost:8080/api/inventory/${id}`, {
       method: 'DELETE'
     }).catch(err => console.log('Inventory delete backend sync notice:', err));
@@ -1501,6 +1569,10 @@ export const AppProvider = ({ children }) => {
 
   // Add or Update a SKU/Material Definition with API persistence
   const addInventorySku = (itemData) => {
+    unrecordDeletedId(itemData.id);
+    if (itemData.sku) unrecordDeletedId(itemData.sku);
+    if (itemData.name) unrecordDeletedId(itemData.name);
+
     const newSku = {
       id: itemData.id || `${itemData.category?.toLowerCase() || 'sku'}-${Date.now().toString().slice(-4)}`,
       name: itemData.name,
@@ -1522,9 +1594,12 @@ export const AppProvider = ({ children }) => {
       if (idx >= 0) {
         const next = [...prev];
         next[idx] = { ...next[idx], ...newSku };
+        safeSetItem('ss_print_inventory_v6', next);
         return next;
       }
-      return [...prev, newSku];
+      const next = [...prev, newSku];
+      safeSetItem('ss_print_inventory_v6', next);
+      return next;
     });
 
     // Send JSON payload to Backend API
@@ -1549,6 +1624,21 @@ export const AppProvider = ({ children }) => {
   };
 
   const deleteInventoryBatch = (itemId: string, batchId: string) => {
+    recordDeletedId(batchId);
+    recordDeletedId(batchId.replace('LOT-', ''));
+
+    // Remove matching inbound records if any
+    const rawBatchKey = batchId.replace('LOT-', '');
+    setLinkedInboundEntries(prev => prev.filter(e => e.id !== batchId && e.id !== rawBatchKey && e.poNumber !== batchId && e.poNumber !== rawBatchKey));
+    try {
+      const rawInbound = localStorage.getItem('som_sing_inbound_list');
+      if (rawInbound) {
+        const parsed = JSON.parse(rawInbound);
+        const filtered = parsed.filter((e: any) => e.id !== batchId && e.id !== rawBatchKey && e.poNumber !== batchId && e.poNumber !== rawBatchKey);
+        localStorage.setItem('som_sing_inbound_list', JSON.stringify(filtered));
+      }
+    } catch (e) {}
+
     setInventory(prev => {
       const target = prev.find(item => item.id === itemId || item.id.toLowerCase() === itemId.toLowerCase());
       if (!target) return prev;
@@ -2150,14 +2240,21 @@ export const AppProvider = ({ children }) => {
       ...eqData
     };
 
+    unrecordDeletedId(newEq.id);
+    if (newEq.serialNumber) unrecordDeletedId(newEq.serialNumber);
+    if (newEq.name) unrecordDeletedId(newEq.name);
+
     setEquipment(prev => {
       const idx = prev.findIndex(e => e.id === newEq.id);
       if (idx >= 0) {
         const next = [...prev];
         next[idx] = { ...next[idx], ...newEq };
+        safeSetItem('ss_print_equipment_v6', next);
         return next;
       }
-      return [...prev, newEq];
+      const next = [...prev, newEq];
+      safeSetItem('ss_print_equipment_v6', next);
+      return next;
     });
 
     // Send JSON payload to Equipment Backend API
@@ -2328,13 +2425,119 @@ export const AppProvider = ({ children }) => {
     setLinkedInboundEntries(prev => prev.map(item => item.id === id ? { ...item, ...updatedFields } : item));
   };
 
-  const deleteInboundEntry = (id) => {
+  const deleteInboundEntry = (id: string) => {
+    if (!id) return;
     recordDeletedId(id);
+    recordDeletedId(`LOT-${id}`);
+    recordDeletedId(id.toLowerCase());
+    recordDeletedId(`LOT-${id}`.toLowerCase());
+
+    // Find the inbound entry to get SKU, category, and name
+    let targetEntry = (linkedInboundEntries || []).find(e => e.id === id || e.poNumber === id || e.id?.toLowerCase() === id.toLowerCase());
+    if (!targetEntry) {
+      try {
+        const raw = localStorage.getItem('som_sing_inbound_list');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          targetEntry = parsed.find((e: any) => e.id === id || e.poNumber === id || e.id?.toLowerCase() === id.toLowerCase());
+        }
+      } catch (e) {}
+    }
+
+    const targetSku = targetEntry?.sku || targetEntry?.skuCode || targetEntry?.id || id;
+    const targetName = targetEntry?.name || targetEntry?.itemName || '';
+    const cat = (targetEntry?.category || '').toUpperCase();
+    const isEquip = cat === 'PRINTER' || cat === 'MACHINERY' || cat === 'CUTTER' || cat === 'LAMINATOR' || cat === 'BINDER';
+
+    // 1. Update Inbound State & Storage
     setLinkedInboundEntries(prev => {
       const next = prev.filter(item => item.id !== id && item.poNumber !== id && item.id?.toLowerCase() !== id?.toLowerCase());
       safeSetItem('ss_print_inbound_entries_v6', next);
       return next;
     });
+
+    try {
+      const rawInbound = localStorage.getItem('som_sing_inbound_list');
+      if (rawInbound) {
+        const parsed = JSON.parse(rawInbound);
+        const filtered = parsed.filter((e: any) => e.id !== id && e.poNumber !== id && e.id?.toLowerCase() !== id?.toLowerCase());
+        localStorage.setItem('som_sing_inbound_list', JSON.stringify(filtered));
+      }
+    } catch (e) {}
+
+    // 2. Cascade Rollback / Delete in Inventory (Paper, Ink, Material, etc.)
+    setInventory(prev => {
+      let invUpdated = false;
+      const nextInv: any[] = [];
+
+      for (const item of prev) {
+        const isMatch = item.id === targetSku ||
+                        item.id === id ||
+                        item.sku === targetSku ||
+                        item.id?.toLowerCase() === targetSku?.toLowerCase() ||
+                        (targetName && item.name && item.name.toLowerCase() === targetName.toLowerCase());
+
+        if (isMatch) {
+          invUpdated = true;
+          // Filter out the batch matching this inbound ID
+          const remainingBatches = (item.batches || []).filter(b =>
+            b.id !== id &&
+            b.id !== `LOT-${id}` &&
+            b.poNumber !== id &&
+            b.id !== id.replace('LOT-', '') &&
+            b.poNumber !== targetEntry?.poNumber
+          );
+
+          // Case 1: No remaining batches -> Delete this inventory SKU completely
+          if (remainingBatches.length === 0 || (item.batches || []).length <= 1) {
+            recordDeletedId(item.id);
+            if (item.sku) recordDeletedId(item.sku);
+            if (item.name) recordDeletedId(item.name);
+            deleteInventoryFromBackend(item.id);
+            continue; // Do not add to nextInv
+          }
+
+          // Case 2: Other batches still exist -> Recalculate stock and update item
+          const newStockQty = remainingBatches.reduce((sum, b) => sum + Number(b.currentQty || 0), 0);
+          const updatedItem = {
+            ...item,
+            batches: remainingBatches,
+            stockQty: newStockQty
+          };
+          saveInventoryToBackend(updatedItem);
+          nextInv.push(updatedItem);
+        } else {
+          nextInv.push(item);
+        }
+      }
+
+      if (invUpdated) {
+        safeSetItem('ss_print_inventory_v6', nextInv);
+        return nextInv;
+      }
+      return prev;
+    });
+
+    // 3. Cascade Delete in Equipment (Printers & Machinery)
+    if (isEquip || targetSku.startsWith('PRN-') || targetSku.startsWith('MAC-')) {
+      setEquipment(prev => {
+        const matchingEq = prev.find(eq =>
+          eq.id === targetSku ||
+          eq.id === id ||
+          eq.serialNumber === targetSku ||
+          (targetName && eq.name && eq.name.toLowerCase() === targetName.toLowerCase())
+        );
+
+        if (matchingEq) {
+          recordDeletedId(matchingEq.id);
+          deleteEquipment(matchingEq.id);
+          return prev.filter(eq => eq.id !== matchingEq.id);
+        }
+        return prev;
+      });
+    }
+
+    // 4. Send API DELETE to Backend
     fetch(`http://localhost:8080/api/inbound/${id}`, {
       method: 'DELETE'
     }).catch(err => console.log('API inbound delete notice:', err));
@@ -2657,12 +2860,33 @@ export const AppProvider = ({ children }) => {
 
     setInventory(prev => {
       let matched = false;
+      const originalName = (updatedEntry.originalName || '').trim();
+      const originalSku = (updatedEntry.originalSku || '').trim();
+      const originalId = (updatedEntry.originalId || updatedEntry.id || '').trim();
+
       const next = prev.map(invItem => {
         const isMatch = invItem.id === targetSku || 
                         invItem.sku === targetSku || 
+                        invItem.id === updatedEntry.id || 
+                        invItem.sku === updatedEntry.id || 
+                        invItem.id === originalId || 
+                        invItem.sku === originalId || 
+                        (originalSku && (invItem.id === originalSku || invItem.sku === originalSku)) ||
                         invItem.id?.toLowerCase() === targetSku?.toLowerCase() || 
                         (invItem.sku && invItem.sku.toLowerCase() === targetSku?.toLowerCase()) || 
-                        (itemName && invItem.name && invItem.name.toLowerCase() === itemName.toLowerCase());
+                        (itemName && invItem.name && invItem.name.toLowerCase() === itemName.toLowerCase()) ||
+                        (originalName && invItem.name && invItem.name.toLowerCase() === originalName.toLowerCase()) ||
+                        (invItem.batches || []).some((b: any) =>
+                          b.id === updatedEntry.id ||
+                          b.id === `LOT-${updatedEntry.id}` ||
+                          b.id === originalId ||
+                          b.id === `LOT-${originalId}` ||
+                          b.poNumber === updatedEntry.poNumber ||
+                          b.poNumber === updatedEntry.id ||
+                          b.poNumber === originalId ||
+                          (targetSku && (b.id === targetSku || b.id === `LOT-${targetSku}` || b.poNumber === targetSku)) ||
+                          (originalSku && (b.id === originalSku || b.id === `LOT-${originalSku}` || b.poNumber === originalSku))
+                        );
 
         if (isMatch) {
           matched = true;
@@ -2672,8 +2896,11 @@ export const AppProvider = ({ children }) => {
           const batchIndex = existingBatches.findIndex((b: any) =>
             b.id === updatedEntry.id ||
             b.id === `LOT-${updatedEntry.id}` ||
+            b.id === originalId ||
+            b.id === `LOT-${originalId}` ||
             b.poNumber === updatedEntry.poNumber ||
             b.poNumber === updatedEntry.id ||
+            b.poNumber === originalId ||
             (existingBatches.length === 1)
           );
 
@@ -2705,16 +2932,24 @@ export const AppProvider = ({ children }) => {
           }
 
           const newStockQty = updatedBatches.reduce((sum: number, b: any) => sum + Number(b.currentQty || 0), 0);
+          const detectedColor = updatedEntry.specs?.colorName || (itemName.includes('Black') ? 'Black' : (itemName.includes('Cyan') ? 'Cyan' : (itemName.includes('Magenta') ? 'Magenta' : (itemName.includes('Yellow') ? 'Yellow' : invItem.colorName))));
 
           const newItem = {
             ...invItem,
+            id: targetSku || invItem.id,
+            sku: targetSku || invItem.sku || invItem.id,
             name: itemName || invItem.name,
+            colorName: detectedColor,
             stockQty: newStockQty,
             purchaseMultiplier: isPaper ? sheetsPerPack : (invItem.purchaseMultiplier || 1),
             costPerPurchaseUnit: costPerPurchase,
             costPerConsumptionUnit: costPerConsumption,
             supplier: updatedEntry.supplierName || updatedEntry.supplier || invItem.supplier,
-            specs: { ...(invItem.specs || {}), ...(updatedEntry.specs || {}) },
+            specs: { 
+              ...(invItem.specs || {}), 
+              ...(updatedEntry.specs || {}),
+              colorName: detectedColor
+            },
             batches: updatedBatches
           };
 
@@ -2725,10 +2960,12 @@ export const AppProvider = ({ children }) => {
       });
 
       if (!matched) {
+        const detectedColor = updatedEntry.specs?.colorName || (itemName.includes('Black') ? 'Black' : (itemName.includes('Cyan') ? 'Cyan' : (itemName.includes('Magenta') ? 'Magenta' : (itemName.includes('Yellow') ? 'Yellow' : undefined))));
         const newItem = {
           id: targetSku,
           sku: targetSku,
           name: itemName || targetSku,
+          colorName: detectedColor,
           category: isPaper ? 'Paper' : (cat === 'ink' ? 'Ink' : 'Finishing'),
           stockQty: totalSheets,
           consumptionUnit: isPaper ? 'แผ่น' : (updatedEntry.unit || 'Units'),
@@ -2737,7 +2974,10 @@ export const AppProvider = ({ children }) => {
           costPerPurchaseUnit: costPerPurchase,
           costPerConsumptionUnit: costPerConsumption,
           reorderThreshold: 50,
-          specs: updatedEntry.specs || {},
+          specs: {
+            ...(updatedEntry.specs || {}),
+            colorName: detectedColor
+          },
           batches: [
             {
               id: `LOT-${updatedEntry.id}`,
@@ -3008,6 +3248,7 @@ export const AppProvider = ({ children }) => {
       quickAdjustStock,
       editInboundEntry,
       deleteInboundEntry,
+      unrecordDeletedId,
       addPurchaseOrder,
       updateEquipmentComponentUsage,
       resetEquipmentComponent,

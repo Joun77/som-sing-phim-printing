@@ -26,7 +26,6 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import { FormModalTemplate } from '@components/common';
-import { sampleInboundData } from '../data/sampleInboundData';
 import ImportForm from './ImportForm';
 import DynamicSpecDetail from '@features/inventory/components/details/DynamicSpecDetail';
 import ProcurementDetailCard from '@features/inventory/components/details/ProcurementDetailCard';
@@ -77,7 +76,7 @@ export const resolveInboundItemName = (item: any): string => {
 };
 
 export default function InboundManagement() {
-   const { showToast, askConfirmation, formatCurrency, addEquipment, addInventorySku, addInventoryBatch, updateInboundEntry, saveInventoryToBackend, inventory, addStock, addPrinterColorLink, refreshData } = useApp();
+   const { showToast, askConfirmation, formatCurrency, addEquipment, addInventorySku, addInventoryBatch, updateInboundEntry, deleteInboundEntry, unrecordDeletedId, saveInventoryToBackend, inventory, addStock, addPrinterColorLink, refreshData } = useApp();
   const { i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
 
@@ -94,23 +93,23 @@ export default function InboundManagement() {
   const [editingItem, setEditingItem] = useState(null);
   const [lightboxImg, setLightboxImg] = useState(null);
 
-  // Initial Master Dataset imported from standalone JSON file
+  // Initial Master Dataset
   const [inboundList, setInboundList] = useState<InboundEntry[]>(() => {
     const savedLocal = localStorage.getItem('som_sing_inbound_list');
-    if (savedLocal) {
+    if (savedLocal !== null) {
       try {
         const parsed = JSON.parse(savedLocal);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       } catch (e) {}
     }
     const savedCtx = localStorage.getItem('ss_print_inbound_entries_v6');
-    if (savedCtx) {
+    if (savedCtx !== null) {
       try {
         const parsed = JSON.parse(savedCtx);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       } catch (e) {}
     }
-    return sampleInboundData;
+    return [];
   });
 
   const getDeletedIds = (): Set<string> => {
@@ -163,7 +162,6 @@ export default function InboundManagement() {
           }));
           setInboundList(prevList => {
             const mapById = new Map();
-            sampleInboundData.filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach(item => mapById.set(item.id, item));
             (prevList || []).filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach(item => mapById.set(item.id, item));
             mapped.filter((i: any) => !deletedIds.has(i.id) && !deletedIds.has(i.id?.toLowerCase())).forEach((item: any) => mapById.set(item.id, item));
             const merged = Array.from(mapById.values());
@@ -428,6 +426,11 @@ export default function InboundManagement() {
     const logId = `INB-${Date.now().toString().slice(-4)}`;
     const calcTotal = Number(data.price) || Number(data.unitPrice) || Number(data.rawImportCost) || ((data.importQty || 1) * Number(data.unitPrice || 0));
     const resolvedItemName = resolveInboundItemName(data);
+
+    unrecordDeletedId(logId);
+    if (data.id) unrecordDeletedId(data.id);
+    if (resolvedItemName) unrecordDeletedId(resolvedItemName);
+
     const newLog = {
       id: logId,
       poNumber: logId,
@@ -650,6 +653,7 @@ export default function InboundManagement() {
       currentLang === 'lo' ? 'ທ່ານຕ້ອງການລຶບລາຍການນຳເຂົ້ານີ້ ຫຼື ບໍ່?' : 'Are you sure you want to delete this inbound record?',
       () => {
         recordDeletedId(id);
+        deleteInboundEntry(id);
         setInboundList(prev => {
           const newList = prev.filter(i => i.id !== id && i.id?.toLowerCase() !== id?.toLowerCase() && i.poNumber !== id);
           localStorage.setItem('som_sing_inbound_list', JSON.stringify(newList));
@@ -657,7 +661,7 @@ export default function InboundManagement() {
         });
         deleteInboundFromBackend(id);
         if (selectedDrawerItem?.id === id) setSelectedDrawerItem(null);
-        showToast(currentLang === 'lo' ? 'ລຶບລາຍການຮຽບຮ້ອຍແລ້ວ' : 'Item deleted successfully', 'success');
+        showToast(currentLang === 'lo' ? 'ລຶບລາຍການ ແລະ ປັບປຸງສະຕັອກຮຽບຮ້ອຍແລ້ວ' : 'Item deleted and stock synchronized successfully', 'success');
       }
     );
   };
@@ -1172,12 +1176,18 @@ export default function InboundManagement() {
         <InboundEditModal
           item={editingItem}
           onSave={(updatedItem) => {
+            const payload = {
+              ...updatedItem,
+              originalId: editingItem.id,
+              originalSku: editingItem.sku || editingItem.skuCode,
+              originalName: editingItem.name || editingItem.itemName
+            };
             setInboundList(prev => {
               const newList = prev.map(item => item.id === updatedItem.id ? updatedItem : item);
               localStorage.setItem('som_sing_inbound_list', JSON.stringify(newList));
               return newList;
             });
-            updateInboundEntry(updatedItem);
+            updateInboundEntry(payload);
             saveInboundToBackend(updatedItem, true);
             setEditingItem(null);
             setSelectedDrawerItem(updatedItem);

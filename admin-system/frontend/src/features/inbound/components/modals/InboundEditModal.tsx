@@ -17,14 +17,14 @@ export default function InboundEditModal({ item, onSave, onClose }: InboundEditM
   const category = (item.category || '').toUpperCase();
   const [formData, setFormData] = useState({ ...item });
 
-  const [itemName, setItemName] = useState(item.name || item.itemName || '');
-  const [supplierName, setSupplierName] = useState(item.supplier || item.supplierName || '');
+  const [itemName, setItemName] = useState(item.name || item.itemName || `${item.specs?.brand || item.brand || ''} ${item.specs?.model || item.model || ''}`.trim() || '');
+  const [supplierName, setSupplierName] = useState(item.supplier || item.supplierName || item.vendor || item.specs?.supplier || item.specs?.vendor || '');
   const [receiptDate, setReceiptDate] = useState(item.receiptDate || item.inboundDate || new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState(item.paymentMethod || 'TRANSFER');
   const [totalPrice, setTotalPrice] = useState(item.totalPrice || 0);
   const [initialQty, setInitialQty] = useState(item.initialQty || item.currentQty || item.quantity || 1);
-  const [supplierPhone, setSupplierPhone] = useState(item.supplier_phone || item.specs?.supplier_phone || '');
-  const [purchaseLink, setPurchaseLink] = useState(item.purchase_link || item.specs?.purchase_link || '');
+  const [supplierPhone, setSupplierPhone] = useState(item.supplier_phone || item.specs?.supplier_phone || item.supplierPhone || '');
+  const [purchaseLink, setPurchaseLink] = useState(item.purchase_link || item.specs?.purchase_link || item.purchaseLink || '');
 
   const handleSpecChange = (updatedSpecs: any) => {
     setFormData(prev => ({
@@ -36,7 +36,13 @@ export default function InboundEditModal({ item, onSave, onClose }: InboundEditM
       }
     }));
 
-    if (updatedSpecs.colorName && (!itemName || itemName.includes('ໝຶກ') || itemName.includes('Ink'))) {
+    if (updatedSpecs.brand || updatedSpecs.model) {
+      const b = updatedSpecs.brand !== undefined ? updatedSpecs.brand : (formData.brand || formData.specs?.brand || '');
+      const m = updatedSpecs.model !== undefined ? updatedSpecs.model : (formData.model || formData.specs?.model || '');
+      if (b || m) {
+        setItemName(`${b} ${m}`.trim());
+      }
+    } else if (updatedSpecs.colorName && (!itemName || itemName.includes('ໝຶກ') || itemName.includes('Ink'))) {
       const brand = updatedSpecs.brand || formData.specs?.brand || '';
       const prefix = brand ? `${brand} ` : 'ໝຶກ ';
       setItemName(`${prefix}${updatedSpecs.colorName}`);

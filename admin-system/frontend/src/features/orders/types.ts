@@ -238,7 +238,8 @@ export interface PrinterAllocation {
   printer_id: string;
   printer_name: string;
   allocated_pages: number;
-  cost_per_page: number; // Depreciation + Ink + Electricity rate per page
+  cost_per_page: number; // Depreciation + Electricity rate per page
+  ink_cost_per_page?: number; // Base ink cost per page @ 5% ISO standard
   subtotal_cost: number;
   is_double_sided?: boolean;
   color_mode?: 'CMYK' | 'MONO_K' | 'SPOT_ONLY' | 'AVERAGE' | 'SEPARATE_CHANNEL';

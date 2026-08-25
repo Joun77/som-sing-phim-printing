@@ -106,7 +106,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     convertQuotationToOrder,
     currency,
     setCurrency,
-    formatCurrency
+    formatCurrency,
+    printerColorLinks
   } = useApp();
   
   const { t, i18n } = useTranslation();
@@ -138,6 +139,82 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     { min: 2001, max: 1000000, rate: 3 },
   ];
 
+  const getPrinterMachineRate = (p: any) => {
+    if (!p) return 43;
+    const prnPrice = Number(p.purchasePrice || p.purchaseCost || p.price || p.MachinePrice || 0);
+    const maintRate = Number(p.maintenanceRatePercent || p.maintenance_rate_percent || 20);
+    const lifePages = Number(p.expectedLifeA4Pages || p.printedPagesCapacity || p.TargetTotalPages || 3000000);
+    const machineCalc = calculateMachineUnitCost({
+      purchase_price_lak: prnPrice,
+      expected_life_pages: lifePages,
+      maintenance_rate_percent: maintRate
+    });
+    const deprRate = machineCalc.totalMachineCost > 0 ? Math.round(machineCalc.totalMachineCost) : Number(p.calculatedCostPerPage || p.costPerPage || 3);
+    return deprRate + 40; // Depr + 40 LAK Electricity per page
+  };
+
+  const getPrinterActualInkCostPerPage = (p: any) => {
+    if (!p) return 0;
+    const activePrnLinks = printerColorLinks.filter((l: any) => l.assetId === p.id);
+    const oemSlots = (p.printerColorLinks && p.printerColorLinks.length > 0)
+      ? p.printerColorLinks
+      : (p.oemBaselineInks && p.oemBaselineInks.length > 0)
+        ? p.oemBaselineInks
+        : (p.specs?.printerColorLinks && p.specs?.printerColorLinks.length > 0)
+          ? p.specs.printerColorLinks
+          : (p.specs?.oemBaselineInks && p.specs?.oemBaselineInks.length > 0)
+            ? p.specs.oemBaselineInks
+            : [];
+
+    if (oemSlots.length === 0) {
+      return Number(p.inkCostPerPage || p.calculatedCostPerPage || 0);
+    }
+
+    let totalInkCost = 0;
+    oemSlots.forEach((slot: any) => {
+      const oemVol = Number(slot.oemStandardVolumeMl || 70);
+      const oemYield = Number(slot.oemStandardIsoYieldA4 || 6000);
+      const isoRate = oemYield > 0 ? (oemVol / oemYield) : 0.012;
+
+      const activeLink = activePrnLinks.find((l: any) => 
+        l.slotPosition === slot.slotPosition || 
+        l.colorGroup === slot.colorGroup || 
+        (slot.colorGroup && l.colorGroup && l.colorGroup.toLowerCase() === slot.colorGroup.toLowerCase())
+      );
+      const linkedInkItem = activeLink ? inventory.find(i => i.id === activeLink.inkCode || i.skuCode === activeLink.inkCode || i.sku === activeLink.inkCode) : null;
+
+      let actualCostPerPage = 0;
+      if (linkedInkItem) {
+        const actualPrice = Number(linkedInkItem.unitPrice || linkedInkItem.costPerPurchaseUnit || 0);
+        const resolvedVol = Number(
+          linkedInkItem.volume || 
+          linkedInkItem.specs?.volume || 
+          linkedInkItem.specs?.volume_ml || 
+          linkedInkItem.specs?.oemStandardVolumeMl || 
+          linkedInkItem.specs?.oemVolumeMl || 
+          (linkedInkItem.purchaseMultiplier > 1 ? linkedInkItem.purchaseMultiplier : null) ||
+          140
+        );
+        const costPerMl = resolvedVol > 0 ? (actualPrice / resolvedVol) : 0;
+        const linkedYield = Number(
+          linkedInkItem.yield ||
+          linkedInkItem.standard_page_yield ||
+          linkedInkItem.standardPageYield ||
+          linkedInkItem.specs?.yield ||
+          linkedInkItem.specs?.isoYield ||
+          0
+        );
+        const actualRate = linkedYield > 0 ? (resolvedVol / linkedYield) : isoRate;
+        actualCostPerPage = costPerMl * actualRate;
+      } else {
+        actualCostPerPage = p.inkCostPerPage ? (Number(p.inkCostPerPage) / oemSlots.length) : 0;
+      }
+      totalInkCost += actualCostPerPage;
+    });
+
+    return Math.round(totalInkCost);
+  };
+
   const createNewItem = (name = 'ລາຍການສິນຄ້າ 1', specs?: any): QuotationItem => {
     const isMono = specs?.colorMode === 'MONO_K';
     const pages = Number(specs?.pageCount) || 100;
@@ -148,7 +225,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const defaultPrinter = printers[0] || { id: 'PRN-DEFAULT', name: 'Default Printer' };
     const defaultPaper = papers[0]?.id || '';
     const defaultPostPress = postPressEquipment.length > 0 ? [postPressEquipment[0].id] : [];
-    const rate = (defaultPrinter as any).cost_per_page || (defaultPrinter as any).costPerPage || 50;
+    const rate = getPrinterMachineRate(defaultPrinter);
+    const inkBaseRate = getPrinterActualInkCostPerPage(defaultPrinter);
 
     const channels = isMono ? [
       { channel_name: 'K', density_pct: covK, is_spot_color: false }
@@ -182,6 +260,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         printer_name: defaultPrinter.name || defaultPrinter.id,
         allocated_pages: pages,
         cost_per_page: rate,
+        ink_cost_per_page: inkBaseRate,
         subtotal_cost: pages * rate,
         color_mode: isMono ? 'MONO_K' : 'CMYK',
         average_density_pct: Math.round((covC + covM + covY + covK) / (isMono ? 1 : 4)),
@@ -435,6 +514,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     let magentaMl = 0;
     let yellowMl = 0;
     let blackMl = 0;
+    let totalInkCostAccum = 0;
     let machDepr = 0;
     let electricityCost = 0;
 
@@ -487,20 +567,101 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         kCov = avg;
       }
 
-      // Ink calculation per allocation (ISO 5% base coverage standard)
-      const cAllocMl = 0.05 * (cCov / 5) * areaFactor * allocPages * sideFactor;
-      const mAllocMl = 0.05 * (mCov / 5) * areaFactor * allocPages * sideFactor;
-      const yAllocMl = 0.05 * (yCov / 5) * areaFactor * allocPages * sideFactor;
-      const kAllocMl = 0.06 * (kCov / 5) * areaFactor * allocPages * sideFactor;
-
-      cyanMl += cAllocMl;
-      magentaMl += mAllocMl;
-      yellowMl += yAllocMl;
-      blackMl += kAllocMl;
-
-      // Machine depreciation and maintenance reserve calculation per allocation
+      // Find allocated printer
       const rawPrnId = (alloc.printer_id || '').split('__')[0];
       const prn = equipment.find(e => e.id === rawPrnId || e.id === alloc.printer_id || e.name === alloc.printer_name);
+
+      // Active linked inventory inks and OEM specs for this printer
+      const activePrnLinks = printerColorLinks.filter(l => l.assetId === prn?.id || l.assetId === rawPrnId);
+      const oemSlots = (prn?.printerColorLinks && prn?.printerColorLinks.length > 0)
+        ? prn.printerColorLinks
+        : (prn?.oemBaselineInks && prn?.oemBaselineInks.length > 0)
+          ? prn.oemBaselineInks
+          : (prn?.specs?.printerColorLinks && prn?.specs?.printerColorLinks.length > 0)
+            ? prn.specs.printerColorLinks
+            : (prn?.specs?.oemBaselineInks && prn?.specs?.oemBaselineInks.length > 0)
+              ? prn.specs.oemBaselineInks
+              : [];
+
+      const computeChannel = (channelCode: 'C' | 'M' | 'Y' | 'K', covPct: number) => {
+        if (covPct <= 0) return { ml: 0, cost: 0 };
+
+        const oemSlot = oemSlots.find((s: any) => {
+          const pos = (s.slotPosition || '').toUpperCase();
+          const grp = (s.colorGroup || '').toUpperCase();
+          const sku = (s.oemInkCode || '').toUpperCase();
+          if (channelCode === 'K') return pos.includes('BLACK') || pos.includes('(K') || pos.includes(' 1') || grp.includes('BLACK') || sku.endsWith('-BK') || sku.endsWith('-K');
+          if (channelCode === 'C') return pos.includes('CYAN') || pos.includes('(C') || pos.includes(' 2') || grp.includes('CYAN') || sku.endsWith('-C');
+          if (channelCode === 'M') return pos.includes('MAGENTA') || pos.includes('(M') || pos.includes(' 3') || grp.includes('MAGENTA') || sku.endsWith('-M');
+          if (channelCode === 'Y') return pos.includes('YELLOW') || pos.includes('(Y') || pos.includes(' 4') || grp.includes('YELLOW') || sku.endsWith('-Y');
+          return false;
+        });
+
+        const oemVol = Number(oemSlot?.oemStandardVolumeMl || (channelCode === 'K' ? 65 : 19));
+        const oemYield = Number(oemSlot?.oemStandardIsoYieldA4 || 1500);
+        const isoRateMlPerSheet = oemYield > 0 ? (oemVol / oemYield) : (channelCode === 'K' ? 0.04333 : 0.01267);
+
+        const link = activePrnLinks.find((l: any) => {
+          const pos = (l.slotPosition || '').toUpperCase();
+          const grp = (l.colorGroup || '').toUpperCase();
+          if (channelCode === 'K') return pos.includes('BLACK') || pos.includes('(K') || pos.includes(' 1') || grp.includes('BLACK');
+          if (channelCode === 'C') return pos.includes('CYAN') || pos.includes('(C') || pos.includes(' 2') || grp.includes('CYAN');
+          if (channelCode === 'M') return pos.includes('MAGENTA') || pos.includes('(M') || pos.includes(' 3') || grp.includes('MAGENTA');
+          if (channelCode === 'Y') return pos.includes('YELLOW') || pos.includes('(Y') || pos.includes(' 4') || grp.includes('YELLOW');
+          return false;
+        });
+
+        const linkedItem = link ? inventory.find(inv => inv.id === link.inkCode || inv.skuCode === link.inkCode || inv.sku === link.inkCode) : null;
+
+        let costPerMl = 2500;
+        let rateMlPerSheet = isoRateMlPerSheet;
+
+        if (linkedItem) {
+          const itemPrice = Number(linkedItem.unitPrice || linkedItem.costPerPurchaseUnit || 0);
+          const itemVol = Number(
+            linkedItem.volume || 
+            linkedItem.specs?.volume || 
+            linkedItem.specs?.volume_ml || 
+            linkedItem.specs?.oemStandardVolumeMl || 
+            linkedItem.specs?.oemVolumeMl || 
+            (linkedItem.purchaseMultiplier > 1 ? linkedItem.purchaseMultiplier : null) ||
+            100
+          );
+          if (itemPrice > 0 && itemVol > 0) {
+            costPerMl = itemPrice / itemVol;
+          }
+
+          const linkedYield = Number(
+            linkedItem.yield ||
+            linkedItem.standard_page_yield ||
+            linkedItem.standardPageYield ||
+            linkedItem.specs?.yield ||
+            linkedItem.specs?.isoYield ||
+            0
+          );
+          if (linkedYield > 0 && itemVol > 0) {
+            rateMlPerSheet = itemVol / linkedYield;
+          }
+        }
+
+        const ml = rateMlPerSheet * (covPct / 5) * areaFactor * allocPages * sideFactor;
+        const cost = ml * costPerMl;
+        return { ml, cost };
+      };
+
+      const cResult = computeChannel('C', cCov);
+      const mResult = computeChannel('M', mCov);
+      const yResult = computeChannel('Y', yCov);
+      const kResult = computeChannel('K', kCov);
+
+      cyanMl += cResult.ml;
+      magentaMl += mResult.ml;
+      yellowMl += yResult.ml;
+      blackMl += kResult.ml;
+
+      totalInkCostAccum += (cResult.cost + mResult.cost + yResult.cost + kResult.cost);
+
+      // Machine depreciation and maintenance reserve calculation per allocation
       const prnPrice = Number(prn?.purchasePrice || prn?.purchaseCost || prn?.price || prn?.MachinePrice || 0);
       const maintRate = Number((prn as any)?.maintenanceRatePercent || (prn as any)?.maintenance_rate_percent || 20);
       const lifePages = Number((prn as any)?.expectedLifeA4Pages || (prn as any)?.printedPagesCapacity || (prn as any)?.TargetTotalPages || 500000);
@@ -520,7 +681,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       electricityCost += Math.round(allocPages * sideFactor * 40);
     });
 
-    const inkCost = Math.round((cyanMl * 250) + (magentaMl * 250) + (yellowMl * 250) + (blackMl * 250));
+    const inkCost = Math.round(totalInkCostAccum);
     const machineOverhead = machDepr + electricityCost;
 
     const postPressCost = (item.selectedPostPressIds || []).reduce((sum, machId) => {
@@ -1381,7 +1542,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                       availablePrinters={printers.map(p => ({
                         id: p.id,
                         name: p.name || p.id,
-                        cost_per_page: (p as any).costPerPage || 50,
+                        cost_per_page: getPrinterMachineRate(p),
+                        ink_cost_per_page: getPrinterActualInkCostPerPage(p),
                         printerCategory: p.category,
                         colorSchemeType: 'CMYK'
                       }))}

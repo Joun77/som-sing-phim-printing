@@ -187,6 +187,7 @@ export interface AppContextValue {
   quickAdjustStock: (...args: any[]) => any;
   editInboundEntry: (...args: any[]) => any;
   deleteInboundEntry: (...args: any[]) => any;
+  unrecordDeletedId?: (id: string) => void;
   addPurchaseOrder: (...args: any[]) => any;
   updateEquipmentComponentUsage: (...args: any[]) => any;
   resetEquipmentComponent: (...args: any[]) => any;

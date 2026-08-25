@@ -148,7 +148,7 @@ export default function EquipmentTable({ machines, onViewDetails, onEdit, onDele
 
                     <td className="py-4 px-5">
                       {(() => {
-                        const curMeter = Number(eq.current_meter || eq.technical_specs?.current_meter || eq.specs?.current_meter || (eq.id === 'PRN-OFFSET-01' ? 102500 : 42000));
+                        const curMeter = Number(eq.current_meter || eq.technical_specs?.current_meter || eq.specs?.current_meter || eq.printedCount || (eq.id === 'PRN-OFFSET-01' ? 102500 : 0));
                         const lastMeter = Number(eq.last_serviced_meter || eq.technical_specs?.last_serviced_meter || eq.specs?.last_serviced_meter || (eq.id === 'PRN-OFFSET-01' ? 50000 : 0));
                         const interval = Number(eq.maintenance_interval_impressions || eq.technical_specs?.maintenance_interval_impressions || eq.specs?.maintenance_interval_impressions || 50000);
                         const delta = Math.max(0, curMeter - lastMeter);
