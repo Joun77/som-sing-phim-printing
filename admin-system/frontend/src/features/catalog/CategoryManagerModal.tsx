@@ -192,30 +192,30 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-sm animate-fadeIn">
+      <div className="bg-white border border-slate-100 rounded-3xl w-full max-w-4xl max-h-[90vh] shadow-2xl flex flex-col overflow-hidden">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800/60">
+            <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
               <Layers className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 ຈັດການໝວດໝູ່ສິນຄ້າໜ້າເວັບ (Web Categories)
-                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-medium">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
                   Bilingual (ລາວ / EN)
                 </span>
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-slate-500">
                 ຄວບຄຸມໝວດໝູ່ທີ່ຈະສະແດງໃນໜ້າເລືອກສິນຄ້າ ແລະ ເມນູຫຼັກຂອງເວັບໄຊບໍລິການລູກຄ້າ
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -226,13 +226,13 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
           
           {/* Top Actions */}
           <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            <div className="text-sm font-semibold text-slate-700">
               ລາຍການໝວດໝູ່ທັງໝົດ ({categories.length})
             </div>
             {!isFormOpen && (
               <button
                 onClick={handleOpenCreate}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium shadow-sm transition-all hover:shadow-indigo-500/25"
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium shadow-sm transition-all hover:shadow-indigo-500/25 cursor-pointer"
               >
                 <FolderPlus className="w-4 h-4" />
                 ເພີ່ມໝວດໝູ່ໃໝ່
@@ -242,16 +242,16 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
 
           {/* Form: Add/Edit Category */}
           {isFormOpen && (
-            <form onSubmit={handleSubmit} className="p-5 rounded-2xl bg-indigo-50/40 dark:bg-slate-800/40 border border-indigo-100 dark:border-indigo-900/50 space-y-4 animate-fadeIn">
-              <div className="flex items-center justify-between pb-2 border-b border-indigo-100/60 dark:border-slate-700/60">
-                <span className="text-sm font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-2">
+            <form onSubmit={handleSubmit} className="p-5 rounded-2xl bg-indigo-50/40 border border-indigo-100 space-y-4 animate-fadeIn">
+              <div className="flex items-center justify-between pb-2 border-b border-indigo-100/60">
+                <span className="text-sm font-bold text-indigo-900 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-indigo-500" />
                   {editingCategory ? `ແກ້ໄຂໝວດໝູ່: ${editingCategory.nameLo}` : 'ສ້າງໝວດໝູ່ໃໝ່'}
                 </span>
                 <button
                   type="button"
                   onClick={handleCloseForm}
-                  className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
                   ຍົກເລີກ
                 </button>
@@ -260,7 +260,7 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Name Lao */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     ຊື່ໝວດໝູ່ (ພາສາລາວ) <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -269,13 +269,13 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
                     value={nameLo}
                     onChange={(e) => setNameLo(e.target.value)}
                     placeholder="ຕົວຢ່າງ: ງານເອກະສານ & ປຶ້ມ"
-                    className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
+                    className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900"
                   />
                 </div>
 
                 {/* Name English */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Category Name (English) <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -284,13 +284,13 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
                     value={nameEn}
                     onChange={(e) => setNameEn(e.target.value)}
                     placeholder="e.g. Documents & Books"
-                    className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
+                    className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900"
                   />
                 </div>
 
                 {/* Slug */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     URL Slug (ລະບຸເອງ ຫຼື ປະວ່າງເພື່ອສ້າງອັດຕະໂນມັດ)
                   </label>
                   <input
@@ -298,19 +298,19 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
                     value={slug}
                     onChange={(e) => setSlug(e.target.value)}
                     placeholder="e.g. documents-books"
-                    className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-mono text-slate-900 dark:text-white"
+                    className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-mono text-slate-900"
                   />
                 </div>
 
                 {/* Icon Selection */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     ໄອຄອນໝວດໝູ່ (Category Icon)
                   </label>
                   <select
                     value={icon}
                     onChange={(e) => setIcon(e.target.value)}
-                    className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
+                    className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900"
                   >
                     {ICON_OPTIONS.map((opt) => (
                       <option key={opt.id} value={opt.id}>
@@ -322,7 +322,7 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
 
                 {/* Tagline Lao */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     ຄຳໂປຣໂມດສັ້ນ (Tagline ພາສາລາວ)
                   </label>
                   <input
@@ -330,13 +330,13 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
                     value={taglineLo}
                     onChange={(e) => setTaglineLo(e.target.value)}
                     placeholder="ຕົວຢ່າງ: ກັອບປີ້ເອກະສານ, ເຂົ້າເລັ້ມສັນກາວ, ປຶ້ມ & ລາຍງານ"
-                    className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
+                    className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900"
                   />
                 </div>
 
                 {/* Tagline English */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Tagline (English)
                   </label>
                   <input
@@ -344,13 +344,13 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
                     value={taglineEn}
                     onChange={(e) => setTaglineEn(e.target.value)}
                     placeholder="e.g. Document copying, glue binding, books & reports"
-                    className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
+                    className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900"
                   />
                 </div>
 
                 {/* Description Lao */}
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     ລາຍລະອຽດເຕັມ (ພາສາລາວ)
                   </label>
                   <textarea
@@ -358,13 +358,13 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
                     value={descriptionLo}
                     onChange={(e) => setDescriptionLo(e.target.value)}
                     placeholder="ອະທິບາຍລັກສະນະງານ ແລະ ຄຸນນະພາບສິນຄ້າໃນໝວດນີ້..."
-                    className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
+                    className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900"
                   />
                 </div>
 
                 {/* Description English */}
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Full Description (English)
                   </label>
                   <textarea
@@ -372,20 +372,20 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
                     value={descriptionEn}
                     onChange={(e) => setDescriptionEn(e.target.value)}
                     placeholder="Detailed category description for English-speaking clients..."
-                    className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
+                    className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900"
                   />
                 </div>
 
                 {/* Sort Order & Active */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     ລຳດັບສະແດງຜົນ (Sort Order)
                   </label>
                   <input
                     type="number"
                     value={sortOrder}
                     onChange={(e) => setSortOrder(parseInt(e.target.value) || 0)}
-                    className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
+                    className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900"
                   />
                 </div>
 
@@ -395,9 +395,9 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
                       type="checkbox"
                       checked={isActive}
                       onChange={(e) => setIsActive(e.target.checked)}
-                      className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 dark:bg-slate-900 dark:border-slate-700"
+                      className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
                     />
-                    <span className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                    <span className="text-xs font-medium text-slate-800">
                       ເປີດສະແດງຜົນໃນໜ້າເວັບ (Active on Web Shop)
                     </span>
                   </label>
@@ -405,18 +405,18 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
               </div>
 
               {/* Form Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-indigo-100/60 dark:border-slate-700/60">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-indigo-100/60">
                 <button
                   type="button"
                   onClick={handleCloseForm}
-                  className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
                 >
                   ຍົກເລີກ
                 </button>
                 <button
                   type="submit"
                   disabled={saveMutation.isPending}
-                  className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium shadow-sm transition-all disabled:opacity-50"
+                  className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium shadow-sm transition-all disabled:opacity-50 cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
                   {saveMutation.isPending ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກໝວດໝູ່'}
@@ -431,21 +431,21 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
               ກຳລັງໂຫຼດຂໍ້ມູນໝວດໝູ່...
             </div>
           ) : categories.length === 0 ? (
-            <div className="py-12 text-center rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 p-6">
-              <Layers className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+            <div className="py-12 text-center rounded-2xl border-2 border-dashed border-slate-200 p-6">
+              <Layers className="w-10 h-10 mx-auto text-slate-300 mb-2" />
               <p className="text-sm text-slate-500">ຍັງບໍ່ມີໝວດໝູ່ສິນຄ້າ</p>
               <button
                 onClick={handleOpenCreate}
-                className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-semibold hover:bg-indigo-100 transition-colors"
+                className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-semibold hover:bg-indigo-100 transition-colors cursor-pointer"
               >
                 <FolderPlus className="w-4 h-4" />
                 ສ້າງໝວດໝູ່ທຳອິດ
               </button>
             </div>
           ) : (
-            <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
+                <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
                   <tr>
                     <th className="px-4 py-3 w-12 text-center">ລຳດັບ</th>
                     <th className="px-4 py-3">ໄອຄອນ / ຊື່ໝວດໝູ່ (ລາວ - EN)</th>
@@ -454,15 +454,15 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
                     <th className="px-4 py-3 text-right">ຈັດການ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                <tbody className="divide-y divide-slate-100 bg-white">
                   {categories.map((cat, idx) => (
-                    <tr key={cat.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors">
+                    <tr key={cat.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="px-4 py-3.5 text-center text-xs font-mono text-slate-400">
                         {cat.sortOrder || idx + 1}
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs">
+                          <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs">
                             {cat.icon === 'photo' ? <Image className="w-4 h-4" /> :
                              cat.icon === 'sticker' ? <Tag className="w-4 h-4" /> :
                              cat.icon === 'card' ? <CreditCard className="w-4 h-4" /> :
@@ -473,7 +473,7 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
                              <Layers className="w-4 h-4" />}
                           </div>
                           <div>
-                            <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                            <div className="font-semibold text-slate-900 flex items-center gap-2">
                               {cat.nameLo}
                               <span className="text-xs font-normal text-slate-400">
                                 ({cat.nameEn})
@@ -486,18 +486,18 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
                         </div>
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-xs font-mono text-slate-600 dark:text-slate-300">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-xs font-mono text-slate-600">
                           {cat.slug}
                         </span>
                       </td>
                       <td className="px-4 py-3.5">
                         {cat.isActive ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-600 border border-emerald-200">
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             ເປີດໃຊ້ງານ
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-500">
                             ປິດການສະແດງ
                           </span>
                         )}
@@ -506,14 +506,14 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => handleOpenEdit(cat)}
-                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
                             title="ແກ້ໄຂ"
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDelete(cat)}
-                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                             title="ລຶບ"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -530,13 +530,13 @@ export function CategoryManagerModal({ isOpen, onClose }: CategoryManagerModalPr
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 flex items-center justify-between">
+        <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
           <span className="text-xs text-slate-400">
             ໝວດໝູ່ທີ່ສ້າງຈະຖືກສົ່ງໄປສະແດງຜົນທີ່ໜ້າຮ້ານ Customer Service ອັດຕະໂນມັດ
           </span>
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors"
+            className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
           >
             ປິດໜ້າຕ່າງ
           </button>

@@ -35,11 +35,17 @@ import {
   ListFilter,
   Image as ImageIcon,
   UploadCloud,
-  Star
+  Star,
+  Scissors,
+  Printer
 } from 'lucide-react';
 import { PublicProduct, CreateProductInput, PublicProductOption, ProductDiscountTier, PublicCategory, PricingModel, SpecGroup, FeaturesConfig, ProductInfoTab } from './types';
 import { CategoryManagerModal } from './CategoryManagerModal';
+import { ProductStudioPage } from './ProductStudioPage';
 import { useApp } from '@store/AppContext';
+import { fetchMaterials } from '@features/inventory/api/inventoryApi';
+import { MaterialMaster } from '@features/inventory/types';
+import { calculateMachineFullCost } from '@utils/machineCostCalculator';
 
 const API_BASE = '/api/v1';
 
@@ -83,6 +89,7 @@ export function WebCatalogPage() {
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [filterActiveStatus, setFilterActiveStatus] = useState<'all' | 'active' | 'hidden' | 'bestseller'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [activeFormTab, setActiveFormTab] = useState<'general' | 'groups' | 'discounts' | 'infotabs'>('general');
@@ -132,6 +139,174 @@ export function WebCatalogPage() {
     minQuantity: number;
     discountPercentage: number;
   }>>([]);
+
+  // Product Level Dynamic Profit Margin (%)
+  const [targetMarginPercent, setTargetMarginPercent] = useState<number>(35);
+
+  const { inventory, equipment, printerColorLinks = [] } = useApp();
+
+  // Dynamic machines pulled directly from actual Shop Equipment database with True Linked Inks & Depreciation
+  const shopMachines = React.useMemo(() => {
+    if (equipment && equipment.length > 0) {
+      return equipment.map((eq: any) => {
+        const costData = calculateMachineFullCost({
+          equipment: eq,
+          printerColorLinks,
+          inventory,
+          coveragePercent: 5,
+        });
+
+        const linkedInkNames = costData.linkedInks.map(i => `${i.slotName}: ${i.inkName}`);
+
+        return {
+          id: costData.id || eq.serialNumber || `MACH-${costData.name}`,
+          name: costData.name,
+          type: costData.type,
+          clickRate: costData.totalColorCost > 0 ? costData.totalColorCost : 300,
+          colorCostPerPage: costData.totalColorCost,
+          bwCostPerPage: costData.totalBwCost,
+          deprPerPage: costData.deprPerPage,
+          inkCostColor: costData.colorInkCost,
+          inkCostBw: costData.bwInkCost,
+          linkedInksCount: costData.linkedInks.filter(i => i.isLinked).length,
+          linkedInksSummary: linkedInkNames.length > 0 ? linkedInkNames.join(', ') : 'ໝຶກມາດຕະຖານ OEM',
+          desc: `${costData.brand} ${costData.model} • ຫ້ອງ: ${costData.location}`,
+          category: eq.category || 'Printer',
+        };
+      });
+    }
+    return [
+      {
+        id: 'PRN-FUJI-V180',
+        name: 'Fuji Xerox Versant 180 Press',
+        type: 'Digital Color Press',
+        clickRate: 780,
+        colorCostPerPage: 780,
+        bwCostPerPage: 420,
+        deprPerPage: 300,
+        inkCostColor: 480,
+        inkCostBw: 120,
+        linkedInksCount: 4,
+        linkedInksSummary: 'C, M, Y, K (Versant Inks)',
+        desc: 'Fuji Xerox Versant 180 • Main Press Floor (Room A)',
+        category: 'Printer'
+      },
+      {
+        id: 'PRN-EPSON-L1800',
+        name: 'Epson L1800 6-Color Photo',
+        type: 'Inkjet Photo',
+        clickRate: 240,
+        colorCostPerPage: 240,
+        bwCostPerPage: 130,
+        deprPerPage: 93,
+        inkCostColor: 147,
+        inkCostBw: 37,
+        linkedInksCount: 6,
+        linkedInksSummary: '6-Color T673 Photo Inks',
+        desc: 'Epson L1800 • Digital Finishing Room',
+        category: 'Printer'
+      }
+    ];
+  }, [equipment, printerColorLinks, inventory]);
+
+  // Default Standard Production Machine for Quotation & Costing Baseline
+  const [defaultMachineId, setDefaultMachineId] = useState<string>('PRN-FUJI-V180');
+  const [defaultMachineName, setDefaultMachineName] = useState<string>('Fuji Xerox Versant 180 Press');
+
+  // Fetch Inventory Materials from Backend
+  const { data: backendMaterials = [] } = useQuery<MaterialMaster[]>({
+    queryKey: ['materials'],
+    queryFn: fetchMaterials,
+  });
+
+  // Unified materials merging Backend DB + AppContext Warehouse Inventory
+  const materials: MaterialMaster[] = React.useMemo(() => {
+    const map = new Map<string, MaterialMaster>();
+
+    // 1. Load from AppContext warehouse inventory
+    (inventory || []).forEach((inv: any) => {
+      const sku = inv.sku || inv.id || '';
+      if (sku) {
+        map.set(sku, {
+          id: inv.id || sku,
+          sku: sku,
+          name: inv.name || sku,
+          category: inv.category || 'Paper',
+          stock_qty: Number(inv.stockQty) || 0,
+          consumption_unit: inv.consumptionUnit || 'ແຜ່ນ',
+          cost_per_consumption_unit: Number(inv.costPerConsumptionUnit) || 0,
+          stock_status: (inv.stockQty || 0) > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
+          is_active: true,
+        } as MaterialMaster);
+      }
+    });
+
+    // 2. Load from Backend DB (overrides with live DB records)
+    (backendMaterials || []).forEach((mat: any) => {
+      const sku = mat.sku || mat.id || '';
+      if (sku) {
+        map.set(sku, {
+          id: mat.id || sku,
+          sku: sku,
+          name: mat.name || sku,
+          category: mat.category || 'Paper',
+          stock_qty: Number(mat.stock_qty ?? mat.stockQty) || 0,
+          consumption_unit: mat.consumption_unit ?? mat.consumptionUnit ?? 'ແຜ່ນ',
+          cost_per_consumption_unit: Number(mat.cost_per_consumption_unit ?? mat.costPerConsumptionUnit) || 0,
+          stock_status: (mat.stock_qty || mat.stockQty || 0) > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
+          is_active: mat.is_active !== false,
+        } as MaterialMaster);
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.category.localeCompare(b.category) || a.sku.localeCompare(b.sku));
+  }, [backendMaterials, inventory]);
+
+  // Group materials for categorised dropdowns
+  const categorizedMaterials = React.useMemo(() => {
+    const groups: { [key: string]: MaterialMaster[] } = {
+      Paper: [],
+      Sticker: [],
+      Finishing: [],
+      Binding: [],
+      Ink: [],
+      Other: [],
+    };
+
+    materials.forEach((m) => {
+      const cat = (m.category || '').toLowerCase();
+      if (cat.includes('paper') || cat.includes('card') || cat.includes('sheet') || cat.includes('board')) {
+        groups.Paper.push(m);
+      } else if (cat.includes('sticker') || cat.includes('pp') || cat.includes('pvc') || cat.includes('label')) {
+        groups.Sticker.push(m);
+      } else if (cat.includes('film') || cat.includes('lamination') || cat.includes('finish') || cat.includes('foil')) {
+        groups.Finishing.push(m);
+      } else if (cat.includes('bind') || cat.includes('ring') || cat.includes('spine') || cat.includes('wire') || cat.includes('hardware') || cat.includes('glue')) {
+        groups.Binding.push(m);
+      } else if (cat.includes('ink') || cat.includes('toner')) {
+        groups.Ink.push(m);
+      } else {
+        groups.Other.push(m);
+      }
+    });
+
+    return groups;
+  }, [materials]);
+
+  // Material Picker Search Modal State
+  const [materialPickerTarget, setMaterialPickerTarget] = useState<{
+    isOpen: boolean;
+    groupIdx: number;
+    optIdx: number;
+    search: string;
+    categoryTab: string;
+  }>({
+    isOpen: false,
+    groupIdx: -1,
+    optIdx: -1,
+    search: '',
+    categoryTab: 'ALL',
+  });
 
   // Fetch Categories
   const { data: categories = [] } = useQuery<PublicCategory[]>({
@@ -405,6 +580,7 @@ export function WebCatalogPage() {
       hasPreflightCheck: true,
       hasCustomDim: false,
     });
+    setTargetMarginPercent(35);
     setSpecGroups([
       {
         id: 'group_card_stock',
@@ -432,6 +608,78 @@ export function WebCatalogPage() {
       }
     ]);
     showToast('ໂຫຼດເທມເພລດນາມບັດພຣີມ້ຽມສຳເລັດ', 'info');
+  };
+
+  const loadColorProcessPreset = () => {
+    const colorGroup: SpecGroup = {
+      id: `group_color_${Date.now() % 10000}`,
+      titleLo: 'ໂໝດສີພິມ (Color Mode)',
+      titleEn: 'Color Mode',
+      displayType: 'cards',
+      groupType: 'process',
+      options: [
+        { optionType: 'process', label: '🎨 ພິມ 4 ສີ (Full Color CMYK)', labelLo: '🎨 ພິມ 4 ສີ (Full Color CMYK)', labelEn: 'Full Color (CMYK)', value: 'cmyk', isDefault: true, extraCostRate: 0, addPrice: 0 },
+        { optionType: 'process', label: '📄 ພິມຂາວ-ດຳ (Black & White)', labelLo: '📄 ພິມຂາວ-ດຳ (Black & White)', labelEn: 'Black & White (Grayscale)', value: 'grayscale', isDefault: false, extraCostRate: 0, addPrice: 0 },
+      ]
+    };
+    setSpecGroups(prev => [...prev, colorGroup]);
+    showToast('ເພີ່ມກຸ່ມໂໝດສີ (ພິມສີ / ຂາວດຳ) ສຳເລັດ', 'success');
+  };
+
+  const loadFinishingPreset = () => {
+    const finishingGroup: SpecGroup = {
+      id: `group_finishing_${Date.now() % 10000}`,
+      titleLo: 'ງານຕັດ & ເຂົ້າເລັ້ມ / ຫຼັງພິມ (Post-Press Finishing)',
+      titleEn: 'Post-Press & Finishing',
+      displayType: 'cards',
+      groupType: 'process',
+      options: [
+        { 
+          optionType: 'process', 
+          machineId: 'MAC-CUTTER-920',
+          machineName: 'QZYK920 Hydraulic Paper Guillotine',
+          label: '✂️ ຕັດຊື່ມາດຕະຖານ (Guillotine Straight Cut)', 
+          labelLo: '✂️ ຕັດຊື່ມາດຕະຖານ (Straight Cut)', 
+          labelEn: 'Standard Straight Cut', 
+          value: 'straight_cut', 
+          isDefault: true, 
+          addPrice: 0 
+        },
+        { 
+          optionType: 'process', 
+          label: '✨ ຕັດໄດຄັດຕາມຮູບຊົງ (Kiss Cut / Die-cut)', 
+          labelLo: '✨ ຕັດໄດຄັດຕາມຮູບຊົງ (Die-cut Shape)', 
+          labelEn: 'Custom Shape Die-cut', 
+          value: 'die_cut', 
+          isDefault: false, 
+          addPrice: 500 
+        },
+        { 
+          optionType: 'process', 
+          machineId: 'MAC-BIND-WD50',
+          machineName: 'WD-50A Perfect Glue Thermal Binder',
+          label: '📖 ເຂົ້າເລັ້ມສັນກາວ / ເຈາະສັນຫ່ວງ (Binding / Punching)', 
+          labelLo: '📖 ເຂົ້າເລັ້ມສັນກາວ / ເຈາະສັນຫ່ວງ', 
+          labelEn: 'Binding & Punching', 
+          value: 'binding_punch', 
+          isDefault: false, 
+          addPrice: 2000 
+        },
+        { 
+          optionType: 'process', 
+          machineId: 'MAC-LAM-FM360',
+          machineName: 'FM-360 Roll Laminator Hot & Cold',
+          label: '🛡️ ເຄືອບຟິล์ມກັນຮອຍ ເງົາ/ດ້ານ (Lamination)', 
+          labelLo: '🛡️ ເຄືອບຟິล์ມກັນຮອຍ (Lamination)', 
+          labelEn: 'Film Lamination', 
+          value: 'lamination', 
+          isDefault: false, 
+          addPrice: 1000 
+        },
+      ]
+    };
+    setSpecGroups(prev => [...prev, finishingGroup]);
+    showToast('ເພີ່ມກຸ່ມງານຕັດ & ຫຼັງພິມ (Finishing) ສຳເລັດ', 'success');
   };
 
   const handleOpenCreateModal = () => {
@@ -465,6 +713,9 @@ export function WebCatalogPage() {
       hasPreflightCheck: true,
       hasCustomDim: false,
     });
+    setTargetMarginPercent(35);
+    setDefaultMachineId('MACH-FUJI-REVORIA');
+    setDefaultMachineName('Fuji Revoria Press PC1120');
     setSpecGroups([]);
     setDiscountTiers([]);
     setInfoTabs(DEFAULT_INFO_TABS);
@@ -496,6 +747,9 @@ export function WebCatalogPage() {
     setLeadTimeDays(p.leadTimeDays || 2);
     setIsActive(p.isActive);
     setSortOrder(p.sortOrder || 0);
+    setTargetMarginPercent((p as any).targetMarginPercent ?? 35);
+    setDefaultMachineId(p.defaultMachineId || 'MACH-FUJI-REVORIA');
+    setDefaultMachineName(p.defaultMachineName || 'Fuji Revoria Press PC1120');
     setFeaturesConfig(p.featuresConfig || {
       hasCoverUpload: p.pricingModel === 'BOOK_MULTIPART',
       hasInnerUpload: p.pricingModel === 'BOOK_MULTIPART',
@@ -507,7 +761,6 @@ export function WebCatalogPage() {
     if (p.specGroups && p.specGroups.length > 0) {
       setSpecGroups(p.specGroups);
     } else if (p.options && p.options.length > 0) {
-      // Group flat options into a single custom group
       setSpecGroups([
         {
           id: 'group_general',
@@ -611,6 +864,67 @@ export function WebCatalogPage() {
     setSpecGroups(next);
   };
 
+  // Connect SKU from inventory materials and auto compute recommended price
+  const handleSelectMaterialForOption = (groupIdx: number, optIdx: number, matSku: string) => {
+    const next = [...specGroups];
+    const targetOpt = next[groupIdx].options[optIdx];
+    const mat = materials.find(m => m.sku === matSku);
+
+    if (mat) {
+      targetOpt.materialSku = mat.sku;
+      (targetOpt as any).materialId = mat.id;
+      (targetOpt as any).costPerUnit = mat.cost_per_consumption_unit || 0;
+      (targetOpt as any).stockQty = mat.stock_qty || 0;
+
+      if (!targetOpt.labelLo || targetOpt.labelLo === 'ຕົວເລືອກໃໝ່' || targetOpt.labelLo === 'Option Item') {
+        targetOpt.labelLo = mat.name;
+        targetOpt.label = mat.name;
+      }
+
+      // Auto-calculate recommended addition price if it's not the default base and not custom price
+      if (!targetOpt.isDefault && !(targetOpt as any).isCustomPrice) {
+        const cost = mat.cost_per_consumption_unit || 0;
+        const marginMultiplier = 1 - (targetMarginPercent / 100);
+        if (marginMultiplier > 0.05 && cost > 0) {
+          targetOpt.addPrice = Math.round((cost / marginMultiplier) / 100) * 100;
+        }
+      }
+    } else {
+      targetOpt.materialSku = matSku;
+      (targetOpt as any).materialId = undefined;
+      (targetOpt as any).costPerUnit = 0;
+      (targetOpt as any).stockQty = 0;
+    }
+    setSpecGroups(next);
+  };
+
+  const handleSelectMachineForOption = (groupIdx: number, optIdx: number, machineId: string) => {
+    const next = [...specGroups];
+    const targetOpt = next[groupIdx].options[optIdx];
+    const mach = shopMachines.find(m => m.id === machineId);
+
+    if (mach) {
+      targetOpt.machineId = mach.id;
+      targetOpt.machineName = mach.name;
+      (targetOpt as any).clickRate = mach.clickRate;
+      targetOpt.materialSku = undefined;
+
+      // Auto-calculate recommended addition price if it's not the default base and not custom price
+      if (!targetOpt.isDefault && !(targetOpt as any).isCustomPrice) {
+        const cost = mach.clickRate || 0;
+        const marginMultiplier = 1 - (targetMarginPercent / 100);
+        if (marginMultiplier > 0.05 && cost > 0) {
+          targetOpt.addPrice = Math.round((cost / marginMultiplier) / 100) * 100;
+        }
+      }
+    } else {
+      targetOpt.machineId = undefined;
+      targetOpt.machineName = undefined;
+      (targetOpt as any).clickRate = 0;
+    }
+    setSpecGroups(next);
+  };
+
   const handleAddDiscountTier = () => {
     setDiscountTiers([
       ...discountTiers,
@@ -656,11 +970,15 @@ export function WebCatalogPage() {
           addPrice: Number(o.addPrice) || 0,
           isDefault: o.isDefault,
           extraCostRate: Number(o.extraCostRate) || 0,
+          materialId: (o as any).materialId,
+          costPerUnit: Number((o as any).costPerUnit) || 0,
+          stockQty: Number((o as any).stockQty) || 0,
+          isCustomPrice: (o as any).isCustomPrice || false,
         });
       });
     });
 
-    const payload: CreateProductInput & { id?: number } = {
+    const payload: CreateProductInput & { id?: number; targetMarginPercent?: number } = {
       id: editingProduct?.id,
       categoryId,
       name: `${nameLo.trim()} (${nameEn.trim()})`,
@@ -675,6 +993,9 @@ export function WebCatalogPage() {
       basePrice: Number(basePrice) || 0,
       unit: unit.trim() || 'ຊິ້ນ',
       bestseller,
+      targetMarginPercent: Number(targetMarginPercent) || 35,
+      defaultMachineId,
+      defaultMachineName,
       specGroups,
       featuresConfig,
       features,
@@ -714,237 +1035,485 @@ export function WebCatalogPage() {
       p.categorySlug === selectedCategory ||
       (p.categoryId && String(p.categoryId) === selectedCategory);
 
-    return matchesSearch && matchesCategory;
+    const matchesStatus = 
+      filterActiveStatus === 'all' ||
+      (filterActiveStatus === 'active' && p.isActive) ||
+      (filterActiveStatus === 'hidden' && !p.isActive) ||
+      (filterActiveStatus === 'bestseller' && p.bestseller);
+
+    return matchesSearch && matchesCategory && matchesStatus;
   });
 
+  if (isModalOpen) {
+    return (
+      <ProductStudioPage
+        key={editingProduct ? `edit_${editingProduct.id}_${editingProduct.updatedAt || ''}` : 'new_product'}
+        editingProduct={editingProduct}
+        categories={categories}
+        onBack={() => {
+          setIsModalOpen(false);
+          setEditingProduct(null);
+        }}
+        onSave={async (payload) => {
+          await saveProductMutation.mutateAsync({
+            ...payload,
+            id: editingProduct ? editingProduct.id : undefined,
+          });
+          setIsModalOpen(false);
+          setEditingProduct(null);
+        }}
+        isSaving={saveProductMutation.isPending}
+        showToast={showToast}
+      />
+    );
+  }
+
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-8 animate-fade-in text-slate-800 w-full">
       
-      {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 text-white p-6 rounded-3xl shadow-xl">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <Globe className="w-6 h-6 text-indigo-400" />
-            <h1 className="text-2xl font-bold tracking-tight">
-              ຈັດການສິນຄ້າໜ້າເວັບ & ສູດລາຄາ (Web Catalog & Form Builder)
-            </h1>
+      {/* Header Banner - Clean White Design matching other pages */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <Globe className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                ຈັດການສິນຄ້າໜ້າເວັບ & ສູດລາຄາ (Web Catalog)
+              </h1>
+            </div>
           </div>
-          <p className="text-indigo-200 text-xs md:text-sm max-w-2xl">
-            ຄວບຄຸມໝວດໝູ່ສິນຄ້າ 2 ພາສາ (ລາວ-EN), ສ້າງກຸ່ມສະເປັກ (Cards/Dropdown), ເລືອກຟັງຊັນອັບໂຫຼດປົກ/ເນື້ອໃນ ແລະ ຜູກ Material SKU ຄັງສະຕັອກ
+          <p className="text-xs sm:text-sm text-slate-500 font-semibold leading-relaxed">
+            ຄວບຄຸມໝວດໝູ່ສິນຄ້າ 2 ພາສາ (ລາວ-EN), ສ້າງກຸ່ມສະເປັກ (Cards/Dropdown), ເລືອກຟັງຊັນອັບໂຫຼດ ແລະ ຜູກ SKU ຄັງສະຕັອກ
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 shrink-0 flex-wrap">
+          <button
+            onClick={() => refetch()}
+            disabled={isRefetching}
+            className="flex items-center gap-2 px-4 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-2xl font-bold shadow-xs hover:border-slate-300 transition active:scale-98 cursor-pointer disabled:opacity-60 text-xs sm:text-sm"
+            title="ດຶງຂໍ້ມູນລ່າສຸດ"
+          >
+            <RefreshCw className={`w-4 h-4 text-indigo-600 ${isRefetching ? 'animate-spin' : ''}`} />
+            <span>ຣີເຟຣຊ</span>
+          </button>
+
           <button
             onClick={() => setIsCategoryModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-2xl text-sm font-semibold transition-all backdrop-blur-sm"
+            className="flex items-center gap-2 px-4 py-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-2xl text-xs sm:text-sm font-extrabold transition active:scale-98 cursor-pointer"
           >
-            <FolderCog className="w-4 h-4 text-indigo-300" />
-            ຈັດການໝວດໝູ່ ({categories.length})
+            <FolderCog className="w-4 h-4 text-slate-600" />
+            <span>ຈັດການໝວດໝູ່ ({categories.length})</span>
           </button>
+
           <button
             onClick={handleOpenCreateModal}
-            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-400 text-white rounded-2xl text-sm font-semibold shadow-lg shadow-indigo-500/30 transition-all transform hover:-translate-y-0.5"
+            className="flex items-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white rounded-2xl text-xs sm:text-sm font-extrabold shadow-lg shadow-indigo-600/20 transition cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            ເພີ່ມສິນຄ້າໃໝ່
+            <span>ເພີ່ມສິນຄ້າໃໝ່</span>
           </button>
         </div>
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      {/* Summary KPI Cards Grid (Clean White Cards matching Inbound & Employee pages) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* KPI 1: Total Products */}
+        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase">
+              ສິນຄ້າທັງໝົດ (Total Products)
+            </p>
+            <h3 className="text-2xl font-black text-slate-900 mt-1">
+              {products.length}
+            </h3>
+            <p className="text-xs text-slate-500 font-semibold mt-1">
+              ສະແດງຢູ່ {filteredProducts.length} ລາຍການ
+            </p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+            <Package className="w-6 h-6" />
+          </div>
+        </div>
+
+        {/* KPI 2: Active Products */}
+        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase">
+              ເປີດໃຊ້ງານ (Active Online)
+            </p>
+            <h3 className="text-2xl font-black text-slate-900 mt-1">
+              {products.filter(p => p.isActive).length}
+            </h3>
+            <p className="text-xs text-emerald-600 font-semibold mt-1">
+              ພ້ອມໃຫ້ລູກຄ້າສັ່ງຊື້
+            </p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+            <Eye className="w-6 h-6" />
+          </div>
+        </div>
+
+        {/* KPI 3: Total Categories */}
+        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase">
+              ໝວດໝູ່ທັງໝົດ (Categories)
+            </p>
+            <h3 className="text-2xl font-black text-slate-900 mt-1">
+              {categories.length}
+            </h3>
+            <p className="text-xs text-slate-500 font-semibold mt-1">
+              ໝວດໝູ່ສິນຄ້າຫຼັກ
+            </p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-sky-50 flex items-center justify-center text-sky-600">
+            <Layers className="w-6 h-6" />
+          </div>
+        </div>
+
+        {/* KPI 4: Bestsellers */}
+        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase">
+              ສິນຄ້າຍອດນິຍົມ (Bestsellers)
+            </p>
+            <h3 className="text-2xl font-black text-slate-900 mt-1">
+              {products.filter(p => p.bestseller).length}
+            </h3>
+            <p className="text-xs text-amber-600 font-semibold mt-1">
+              ຕິດປ້າຍແນະນຳ
+            </p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600">
+            <Star className="w-6 h-6" />
+          </div>
+        </div>
+      </div>
+
+      {/* 2-Column Main Section: Left Sidebar for Filters & Categories + Right Full-width Product Grid */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
         
-        {/* Search */}
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="ຄົ້ນຫາຕາມຊື່, Slug ຫຼື ພາສາ..."
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-900 dark:text-white"
-          />
-        </div>
+        {/* LEFT SIDEBAR: Search & Filters Panel */}
+        <div className="w-full lg:w-72 xl:w-80 shrink-0 space-y-4 lg:sticky lg:top-4">
+          <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xs space-y-5">
+            
+            {/* Search Box */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                <Search className="w-3.5 h-3.5 text-indigo-600" />
+                <span>ຄົ້ນຫາສິນຄ້າ (Search)</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="ຊື່, Slug ຫຼື ພາສາ..."
+                  className="w-full pl-9 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition"
+                />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200 transition"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
 
-        {/* Dynamic Category Badges */}
-        <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
-          <button
-            onClick={() => setSelectedCategory('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-              selectedCategory === 'all'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-            }`}
-          >
-            ທັງໝົດ ({products.length})
-          </button>
-          {categories.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setSelectedCategory(c.slug)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                selectedCategory === c.slug
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-              }`}
-            >
-              {c.nameLo} ({c.nameEn})
-            </button>
-          ))}
-        </div>
+            {/* Quick Status Filter */}
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                <ListFilter className="w-3.5 h-3.5 text-indigo-600" />
+                <span>ສະຖານະສິນຄ້າ (Status)</span>
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { id: 'all', label: 'ທັງໝົດ' },
+                  { id: 'active', label: 'ສະແດງ' },
+                  { id: 'hidden', label: 'ເຊື່ອງໄວ້' },
+                  { id: 'bestseller', label: 'ຍອດນິຍົມ' },
+                ].map((st) => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => setFilterActiveStatus(st.id as any)}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all text-center cursor-pointer ${
+                      filterActiveStatus === st.id
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        {/* Refresh button */}
-        <button
-          onClick={() => refetch()}
-          disabled={isRefetching}
-          className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
-          title="ໂຫຼດຂໍ້ມູນໃໝ່"
-        >
-          <RefreshCw className={`w-4 h-4 ${isRefetching ? 'animate-spin' : ''}`} />
-        </button>
-      </div>
+            {/* Category Navigation (Vertical List) */}
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                  <LayoutGrid className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>ໝວດໝູ່ສິນຄ້າ (Categories)</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsCategoryModalOpen(true)}
+                  className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <span>ຈັດການ</span>
+                </button>
+              </div>
 
-      {/* Product Grid */}
-      {isLoading ? (
-        <div className="py-20 text-center text-sm text-slate-400">
-          ກຳລັງໂຫຼດຂໍ້ມູນສິນຄ້າ...
-        </div>
-      ) : filteredProducts.length === 0 ? (
-        <div className="py-20 text-center rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 p-8 space-y-3">
-          <Layers className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-            ບໍ່ພົບສິນຄ້າໃນໝວດໝູ່ນີ້
-          </p>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
-            ທ່ານສາມາດເລີ່ມຕົ້ນເພີ່ມສິນຄ້າໃໝ່ ພ້ອມກຳນົດສະເປັກ ແລະ ຮູບແບບການຄິດໄລ່ລາຄາໄດ້ທັນທີ
-          </p>
-          <button
-            onClick={handleOpenCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            ເພີ່ມສິນຄ້າດຽວນີ້
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProducts.map((p) => {
-            const cat = categories.find(c => c.id === p.categoryId || c.slug === p.category);
-            return (
-              <div
-                key={p.id}
-                className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group"
-              >
-                {/* Thumbnail Header */}
-                <div className="relative h-44 bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                  {p.thumbnailUrl ? (
-                    <img
-                      src={p.thumbnailUrl}
-                      alt={p.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-400">
-                      <Layers className="w-10 h-10 mb-1 opacity-50" />
-                      <span className="text-xs">ບໍ່ມີຮູບພາບ</span>
-                    </div>
-                  )}
+              <div className="space-y-1 max-h-[420px] overflow-y-auto pr-1">
+                {/* All Option */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('all')}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+                    selectedCategory === 'all'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="truncate">ທັງໝົດ (All Categories)</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                    selectedCategory === 'all'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {products.length}
+                  </span>
+                </button>
 
-                  {/* Top Badges */}
-                  <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-600/90 text-white backdrop-blur-md shadow-sm">
-                      {cat ? cat.nameLo : p.category}
-                    </span>
-                    {p.bestseller && (
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500 text-white backdrop-blur-md shadow-sm">
-                        ★ Bestseller
-                      </span>
-                    )}
-                  </div>
+                {/* Dynamic Categories */}
+                {categories.map((c) => {
+                  const count = products.filter(
+                    (p) => p.category === c.slug || p.categorySlug === c.slug || (p.categoryId && String(p.categoryId) === String(c.id))
+                  ).length;
+                  const isSelected = selectedCategory === c.slug || selectedCategory === String(c.id);
 
-                  {/* Active Status Badge */}
-                  <div className="absolute top-3 right-3">
+                  return (
                     <button
-                      onClick={() => toggleMutation.mutate({ id: p.id, isActive: !p.isActive })}
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold backdrop-blur-md shadow-sm flex items-center gap-1 transition-all ${
-                        p.isActive 
-                          ? 'bg-emerald-500/90 text-white hover:bg-emerald-600'
-                          : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700'
+                      key={c.id}
+                      type="button"
+                      onClick={() => setSelectedCategory(c.slug)}
+                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-slate-700 hover:bg-slate-50'
                       }`}
                     >
-                      {p.isActive ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                      {p.isActive ? 'ສະແດງໜ້າເວັບ' : 'ເຊື່ອງໄວ້'}
+                      <span className="truncate text-left">{c.nameLo || c.nameEn}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 ml-2 ${
+                        isSelected
+                          ? 'bg-white/20 text-white'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}>
+                        {count}
+                      </span>
                     </button>
-                  </div>
-                </div>
-
-                {/* Content Body */}
-                <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-bold text-base text-slate-900 dark:text-white line-clamp-1">
-                        {p.nameLo || p.name}
-                      </h3>
-                    </div>
-                    {p.nameEn && (
-                      <p className="text-xs text-slate-400 font-medium line-clamp-1">
-                        {p.nameEn}
-                      </p>
-                    )}
-                    <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
-                      {p.descriptionLo || p.description || '—'}
-                    </p>
-                  </div>
-
-                  {/* Meta Specs & Pricing Model */}
-                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 space-y-2 text-xs text-slate-500">
-                    <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-semibold">
-                        <Calculator className="w-3.5 h-3.5" />
-                        {p.pricingModel === 'BOOK_MULTIPART' ? 'ງານປຶ້ມ / ເຂົ້າເລັ້ມ' :
-                         p.pricingModel === 'SQM_CUSTOM' ? 'ຄິດໄລ່ຕາມ ຕາລາງແມັດ' :
-                         p.pricingModel === 'FIXED_UNIT' ? 'ລາຄາຕໍ່ຊິ້ນຄົງທີ່' : 'ງານແຜ່ນມາດຕະຖານ'}
-                      </span>
-                      <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                        {p.basePrice > 0 ? `${p.basePrice.toLocaleString()} LAK / ${p.unit || 'ຊິ້ນ'}` : 'ຄິດໄລ່ຕາມສະເປັກ'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] text-slate-400">
-                      <span>ກຸ່ມສະເປັກ: {p.specGroups?.length || (p.options?.length ? 1 : 0)} ກຸ່ມ</span>
-                      <span>ຂັ້ນຕ່ຳ: {p.minQuantity || 1} {p.unit || 'ຊິ້ນ'}</span>
-                    </div>
-                  </div>
-
-                  {/* Footer Actions */}
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
-                    <span className="text-[10px] font-mono text-slate-400">
-                      /{p.slug}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleOpenEditModal(p)}
-                        className="p-2 text-slate-600 dark:text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded-xl transition-colors"
-                        title="ແກ້ໄຂສິນຄ້າ"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteProduct(p)}
-                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-xl transition-colors"
-                        title="ລຶບສິນຄ້າ"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          </div>
         </div>
-      )}
+
+        {/* RIGHT MAIN CONTENT: Product Grid taking full available width */}
+        <div className="flex-1 min-w-0 w-full space-y-4">
+          
+          {/* Header of product grid with count & active filter breadcrumbs */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-slate-500">
+                ສະແດງຜົນ:
+              </span>
+              <span className="px-2.5 py-1 bg-slate-100 text-slate-800 rounded-lg text-xs font-extrabold">
+                {filteredProducts.length} ລາຍການ
+              </span>
+              {selectedCategory !== 'all' && (
+                <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold flex items-center gap-1 border border-indigo-100">
+                  ໝວດ: {categories.find(c => c.slug === selectedCategory || String(c.id) === selectedCategory)?.nameLo || selectedCategory}
+                  <button onClick={() => setSelectedCategory('all')} className="hover:text-indigo-900 cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {filterActiveStatus !== 'all' && (
+                <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 border border-slate-200">
+                  ສະຖານະ: {filterActiveStatus === 'active' ? 'ສະແດງ' : filterActiveStatus === 'hidden' ? 'ເຊື່ອງ' : 'ຍອດນິຍົມ'}
+                  <button onClick={() => setFilterActiveStatus('all')} className="hover:text-slate-900 cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {search && (
+                <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold flex items-center gap-1 border border-slate-200">
+                  ຄຳຄົ້ນ: "{search}"
+                  <button onClick={() => setSearch('')} className="hover:text-slate-900 cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+            </div>
+
+            <button
+              onClick={handleOpenCreateModal}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl text-xs font-bold transition cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>ເພີ່ມສິນຄ້າໃໝ່</span>
+            </button>
+          </div>
+
+          {/* Product Grid */}
+          {isLoading ? (
+            <div className="py-20 text-center text-sm text-slate-400 bg-white rounded-3xl border border-slate-100">
+              ກຳລັງໂຫຼດຂໍ້ມູນສິນຄ້າ...
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="py-20 text-center rounded-3xl border-2 border-dashed border-slate-200 bg-white p-8 space-y-3">
+              <Layers className="w-12 h-12 mx-auto text-slate-300" />
+              <p className="text-sm font-semibold text-slate-700">
+                ບໍ່ພົບສິນຄ້າຕາມເງື່ອນໄຂທີ່ເລືອກ
+              </p>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
+                ທ່ານສາມາດລອງປ່ຽນໝວດໝູ່, ລຶບຄຳຄົ້ນຫາ ຫຼື ເລີ່ມຕົ້ນເພີ່ມສິນຄ້າໃໝ່ໄດ້ທັນທີ
+              </p>
+              <button
+                onClick={handleOpenCreateModal}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                ເພີ່ມສິນຄ້າດຽວນີ້
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5">
+              {filteredProducts.map((p) => {
+                const cat = categories.find(c => c.id === p.categoryId || c.slug === p.category);
+                return (
+                  <div
+                    key={p.id}
+                    className="bg-white rounded-2xl border border-slate-100 shadow-xs hover:shadow-md hover:border-slate-200 transition-all overflow-hidden flex flex-col group"
+                  >
+                    {/* Thumbnail — aspect-square เต็มกว้างการ์ด ไม่มีพื้นที่ว่าง */}
+                    <div className="relative aspect-square w-full overflow-hidden bg-slate-50">
+                      {p.thumbnailUrl ? (
+                        <img
+                          src={p.thumbnailUrl}
+                          alt={p.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
+                          <Layers className="w-12 h-12 mb-2 opacity-40" />
+                          <span className="text-xs text-slate-400">ບໍ່ມີຮູບພາບ</span>
+                        </div>
+                      )}
+
+                      {/* Top-left: Category badge */}
+                      <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-600/90 backdrop-blur-sm text-white shadow-sm">
+                          {cat ? cat.nameLo : p.category}
+                        </span>
+                        {p.bestseller && (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/90 backdrop-blur-sm text-white shadow-sm">
+                            ★ Bestseller
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Top-right: Active toggle badge */}
+                      <div className="absolute top-3 right-3">
+                        <button
+                          onClick={() => toggleMutation.mutate({ id: p.id, isActive: !p.isActive })}
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold shadow-sm flex items-center gap-1 transition-all cursor-pointer backdrop-blur-sm ${
+                            p.isActive
+                              ? 'bg-emerald-500/90 text-white hover:bg-emerald-600'
+                              : 'bg-slate-700/80 text-slate-200 hover:bg-slate-600'
+                          }`}
+                        >
+                          {p.isActive ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                          {p.isActive ? 'ສະແດງໜ້າເວັບ' : 'ເຊື່ອງໄວ້'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Content Body */}
+                    <div className="p-4 flex-1 flex flex-col gap-3">
+                      {/* Name & Description */}
+                      <div className="space-y-1">
+                        <h3 className="font-bold text-sm text-slate-900 line-clamp-2 leading-snug">
+                          {p.nameLo || p.name}
+                        </h3>
+                        {p.nameEn && (
+                          <p className="text-[11px] text-slate-400 font-medium line-clamp-1">
+                            {p.nameEn}
+                          </p>
+                        )}
+                        {(p.descriptionLo || p.description) && (
+                          <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                            {p.descriptionLo || p.description}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Pricing & Specs */}
+                      <div className="border-t border-slate-100 pt-3 space-y-1.5 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-1 text-indigo-600 font-semibold text-[11px]">
+                            <Calculator className="w-3.5 h-3.5" />
+                            {p.pricingModel === 'BOOK_MULTIPART' ? 'ງານປຶ້ມ / ເຂົ້າເລັ້ມ' :
+                             p.pricingModel === 'SQM_CUSTOM' ? 'ຕາລາງແມັດ' :
+                             p.pricingModel === 'FIXED_UNIT' ? 'ລາຄາຄົງທີ່' : 'ແຜ່ນມາດຕະຖານ'}
+                          </span>
+                          <span className="font-mono font-bold text-slate-800 text-[11px]">
+                            {p.basePrice > 0 ? `${p.basePrice.toLocaleString()} LAK / ${p.unit || 'ຊິ້ນ'}` : 'ຄິດຕາມສະເປັກ'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-slate-400">
+                          <span>ກຸ່ມສະເປັກ: {p.specGroups?.length || (p.options?.length ? 1 : 0)} ກຸ່ມ</span>
+                          <span>ຂັ້ນຕ່ຳ: {p.minQuantity || 1} {p.unit || 'ຊິ້ນ'}</span>
+                        </div>
+                      </div>
+
+                      {/* Footer: Slug + Actions */}
+                      <div className="flex items-center justify-between border-t border-slate-100 pt-2.5">
+                        <span className="text-[10px] font-mono text-slate-300">/{p.slug}</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleOpenEditModal(p)}
+                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                            title="ແກ້ໄຂສິນຄ້າ"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteProduct(p)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="ລຶບສິນຄ້າ"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Category Manager Modal */}
       <CategoryManagerModal
@@ -952,1240 +1521,174 @@ export function WebCatalogPage() {
         onClose={() => setIsCategoryModalOpen(false)}
       />
 
-      {/* Product Add / Edit Modal with Form Builder */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-5xl max-h-[94vh] flex flex-col overflow-hidden">
-            
+      {/* Material Finder & Category Filter Modal */}
+      {materialPickerTarget.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white border border-slate-100 rounded-3xl w-full max-w-3xl max-h-[85vh] shadow-2xl flex flex-col overflow-hidden">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800/60">
-                  <PackageCheck className="w-5 h-5" />
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Search className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                    {editingProduct ? `ແກ້ໄຂສິນຄ້າ: ${editingProduct.nameLo || editingProduct.name}` : 'ເພີ່ມສິນຄ້າໃໝ່ (Product Form Builder)'}
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    ກຳນົດຂໍ້ມູນ 2 ພາສາ, ຈັດການກຸ່ມສະເປັກ (Cards/Dropdown) ແລະ ຜູກສະຕັອກວັດສະດຸ
+                  <h3 className="font-bold text-base text-slate-900">
+                    ຄົ້ນຫາ & ເລືອກວັດສະດຸຈາກຄັງ (Material Finder)
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    ເລືອກ SKU ວັດສະດຸເພື່ອຜູກກັບຕົວເລືອກ ແລະ ຄຳນວອນຕົ້ນທຶນອັດຕະໂນມັດ
                   </p>
                 </div>
               </div>
-
-              {/* Tabs */}
-              <div className="flex items-center gap-1 bg-slate-200/70 dark:bg-slate-800 p-1 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => setActiveFormTab('general')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    activeFormTab === 'general'
-                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                  }`}
-                >
-                  1. ຂໍ້ມູນ & ຟັງຊັນ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveFormTab('groups')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    activeFormTab === 'groups'
-                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                  }`}
-                >
-                  2. ສ້າງກຸ່ມສະເປັກ ({specGroups.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveFormTab('discounts')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    activeFormTab === 'discounts'
-                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                  }`}
-                >
-                  3. ສ່ວນຫຼຸດ ({discountTiers.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveFormTab('infotabs')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    activeFormTab === 'infotabs'
-                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                  }`}
-                >
-                  4. ແຖບຂໍ້ມູນດ້ານລຸ່ມ ({infoTabs.length})
-                </button>
-              </div>
-
               <button
-                onClick={handleCloseModal}
-                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                type="button"
+                onClick={() => setMaterialPickerTarget({ ...materialPickerTarget, isOpen: false })}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Modal Body */}
-            <form onSubmit={handleSubmitProduct} className="flex-1 overflow-y-auto p-6 space-y-6">
-              
-              {/* Quick Template Presets Bar */}
-              <div className="p-3.5 bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 rounded-2xl flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-xs font-bold text-indigo-900 dark:text-indigo-300">
-                  <Wand2 className="w-4 h-4 text-indigo-500" />
-                  <span>ໂຫຼດເທມເພລດສຳເລັດຮູບ (Quick Presets):</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={loadBookPreset}
-                    className="px-3 py-1 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-medium transition-all shadow-sm flex items-center gap-1.5"
-                  >
-                    <BookOpen className="w-3.5 h-3.5" />
-                    📚 ງານປຶ້ມ & ເຂົ້າເລັ້ມ
-                  </button>
-                  <button
-                    type="button"
-                    onClick={loadStickerPreset}
-                    className="px-3 py-1 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-medium transition-all shadow-sm flex items-center gap-1.5"
-                  >
-                    <Tag className="w-3.5 h-3.5" />
-                    🏷️ ສະຕິກເກີ & ສະຫຼາກ
-                  </button>
-                  <button
-                    type="button"
-                    onClick={loadCardPreset}
-                    className="px-3 py-1 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-medium transition-all shadow-sm flex items-center gap-1.5"
-                  >
-                    <CreditCard className="w-3.5 h-3.5" />
-                    💳 ນາມບັດພຣີມ້ຽມ
-                  </button>
-                </div>
+            {/* Search & Category Filter Bar */}
+            <div className="p-4 bg-slate-50 border-b border-slate-100 space-y-3">
+              {/* Live Search Input */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={materialPickerTarget.search}
+                  onChange={(e) => setMaterialPickerTarget({ ...materialPickerTarget, search: e.target.value })}
+                  placeholder="ຄົ້ນຫາ SKU, ຊື່ເຈ້ຍ, ແກຣມ, ຍີ່ຫໍ້ (ເຊັ່ນ: 260g, Art, SCG, Sticker, Matt)..."
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  autoFocus
+                />
               </div>
 
-              {/* Tab 1: General Info & Feature Workflows */}
-              {activeFormTab === 'general' && (
-                <div className="space-y-4 animate-fadeIn">
-                  
-                  {/* Category & Pricing Model */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        ໝວດໝູ່ສິນຄ້າ (Category) <span className="text-rose-500">*</span>
-                      </label>
-                      <select
-                        value={category}
-                        onChange={(e) => {
-                          setCategory(e.target.value);
-                          const matched = categories.find(c => c.slug === e.target.value);
-                          if (matched) setCategoryId(matched.id);
-                        }}
-                        className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
-                      >
-                        {categories.map((c) => (
-                          <option key={c.id} value={c.slug}>
-                            {c.nameLo} ({c.nameEn})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+              {/* Category Filter Chips */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+                {[
+                  { id: 'ALL', label: 'ທັງໝົດ', count: materials.length },
+                  { id: 'Paper', label: '📄 ເຈ້ຍ (Paper)', count: categorizedMaterials.Paper.length },
+                  { id: 'Sticker', label: '🏷️ ສະຕິກເກີ (Sticker)', count: categorizedMaterials.Sticker.length },
+                  { id: 'Finishing', label: '✨ ຟິล์ມເຄືອບ (Finishing)', count: categorizedMaterials.Finishing.length },
+                  { id: 'Binding', label: '🪢 ເຂົ້າເລັ້ມ (Binding)', count: categorizedMaterials.Binding.length },
+                  { id: 'Ink', label: '💧 ໝຶກ (Ink)', count: categorizedMaterials.Ink.length },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setMaterialPickerTarget({ ...materialPickerTarget, categoryTab: tab.id })}
+                    className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                      materialPickerTarget.categoryTab === tab.id
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                      materialPickerTarget.categoryTab === tab.id
+                        ? 'bg-white/20 text-white'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        ຮູບແບບການຄິດໄລ່ລາຄາ (Pricing Engine Model) <span className="text-rose-500">*</span>
-                      </label>
-                      <select
-                        value={pricingModel}
-                        onChange={(e) => setPricingModel(e.target.value as PricingModel)}
-                        className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-semibold text-indigo-600 dark:text-indigo-400"
-                      >
-                        {PRICING_MODELS.map((pm) => (
-                          <option key={pm.id} value={pm.id}>
-                            {pm.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+            {/* Material List Results */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 divide-y divide-slate-100">
+              {(() => {
+                const searchQ = (materialPickerTarget.search || '').toLowerCase().trim();
+                const catTab = materialPickerTarget.categoryTab;
 
-                  {/* Feature Module Toggles & Dynamic File Upload Configuration */}
-                  <div className="p-5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700 pb-3">
-                      <span className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-1.5 uppercase tracking-wider">
-                        <Settings2 className="w-4 h-4 text-indigo-500" />
-                        ຮູບແບບການອັບໂຫຼດ & ຟັງຊັນຂອງສິນຄ້າ (Upload Workflow & Feature Engine)
-                      </span>
-                    </div>
+                const filtered = materials.filter((m) => {
+                  if (catTab !== 'ALL') {
+                    const matchGroup = (categorizedMaterials as any)[catTab] || [];
+                    if (!matchGroup.some((x: any) => x.sku === m.sku)) return false;
+                  }
+                  if (!searchQ) return true;
+                  return (
+                    m.sku.toLowerCase().includes(searchQ) ||
+                    (m.name || '').toLowerCase().includes(searchQ) ||
+                    (m.category || '').toLowerCase().includes(searchQ)
+                  );
+                });
 
-                    {/* 1. Upload Workflow Mode Presets */}
-                    <div className="space-y-2">
-                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                        ຮູບແບບການອັບໂຫຼດຂອງສິນຄ້ານີ້ (Upload Mode):
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div
-                          onClick={() => {
-                            setFeaturesConfig({
-                              ...featuresConfig,
-                              uploadWorkflow: 'artwork_preflight',
-                              hasPreflightCheck: true,
-                              allowedFileTypes: ['pdf', 'ai', 'psd', 'png', 'jpg'],
-                            });
-                          }}
-                          className={`p-3.5 rounded-xl border-2 cursor-pointer transition flex flex-col gap-1.5 ${
-                            featuresConfig.uploadWorkflow === 'artwork_preflight' || !featuresConfig.uploadWorkflow
-                              ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 shadow-sm'
-                              : 'border-slate-200 dark:border-slate-700 hover:border-indigo-300 bg-white dark:bg-slate-900'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                              🎨 Artwork Preflight
-                            </span>
-                            {(featuresConfig.uploadWorkflow === 'artwork_preflight' || !featuresConfig.uploadWorkflow) && (
-                              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                            )}
-                          </div>
-                          <span className="text-[11px] text-slate-500 leading-tight">
-                            ສຳລັບສະຕິກເກີ, ໂປສເຕີ, ນາມບັດ (PDF, AI, PSD, 300 DPI, Bleed)
-                          </span>
-                        </div>
-
-                        <div
-                          onClick={() => {
-                            setFeaturesConfig({
-                              ...featuresConfig,
-                              uploadWorkflow: 'general_document',
-                              hasPreflightCheck: false,
-                              allowedFileTypes: ['pdf', 'docx', 'xlsx', 'pptx', 'png', 'jpg'],
-                            });
-                          }}
-                          className={`p-3.5 rounded-xl border-2 cursor-pointer transition flex flex-col gap-1.5 ${
-                            featuresConfig.uploadWorkflow === 'general_document'
-                              ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 shadow-sm'
-                              : 'border-slate-200 dark:border-slate-700 hover:border-indigo-300 bg-white dark:bg-slate-900'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                              📁 ເອກະສານ & ກັອບປີ້
-                            </span>
-                            {featuresConfig.uploadWorkflow === 'general_document' && (
-                              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                            )}
-                          </div>
-                          <span className="text-[11px] text-slate-500 leading-tight">
-                            ສຳລັບກັອບປີ້ເອກະສານ, ລາຍງານ, ປຶ້ມ (PDF, Word, Excel, PPT, ຮູບ)
-                          </span>
-                        </div>
-
-                        <div
-                          onClick={() => {
-                            setFeaturesConfig({
-                              ...featuresConfig,
-                              uploadWorkflow: 'custom',
-                            });
-                          }}
-                          className={`p-3.5 rounded-xl border-2 cursor-pointer transition flex flex-col gap-1.5 ${
-                            featuresConfig.uploadWorkflow === 'custom'
-                              ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 shadow-sm'
-                              : 'border-slate-200 dark:border-slate-700 hover:border-indigo-300 bg-white dark:bg-slate-900'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                              ⚙️ ກຳນົດເອງ (Custom)
-                            </span>
-                            {featuresConfig.uploadWorkflow === 'custom' && (
-                              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                            )}
-                          </div>
-                          <span className="text-[11px] text-slate-500 leading-tight">
-                            ເລືອກປະເພດຟາຍ ແລະ ເປີດ/ປິດຟັງຊັນໄດ້ຕາມຕ້ອງການ
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 2. Allowed File Types Checklist */}
-                    <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-                      <div className="flex items-center justify-between">
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                          ປະເພດຟາຍທີ່ອະນຸຍາດໃຫ້ລູກຄ້າອັບໂຫຼດ (Allowed File Formats):
-                        </label>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {(featuresConfig.allowedFileTypes || ['pdf', 'ai', 'psd', 'png', 'jpg']).length} ປະເພດທີ່ເລືອກ
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                        {[
-                          { key: 'pdf', label: 'PDF (.pdf)', icon: '📄' },
-                          { key: 'ai', label: 'Illustrator (.ai)', icon: '🎨' },
-                          { key: 'psd', label: 'Photoshop (.psd)', icon: '🖼️' },
-                          { key: 'png', label: 'PNG Image (.png)', icon: '📷' },
-                          { key: 'jpg', label: 'JPEG / JPG (.jpg)', icon: '🌅' },
-                          { key: 'docx', label: 'Word (.docx, .doc)', icon: '📑' },
-                          { key: 'xlsx', label: 'Excel (.xlsx, .xls)', icon: '📊' },
-                          { key: 'pptx', label: 'PowerPoint (.pptx)', icon: '📽️' },
-                          { key: 'zip', label: 'ZIP / RAR (.zip)', icon: '📦' },
-                        ].map((fmt) => {
-                          const currentList = featuresConfig.allowedFileTypes || ['pdf', 'ai', 'psd', 'png', 'jpg'];
-                          const isChecked = currentList.includes(fmt.key);
-                          return (
-                            <label
-                              key={fmt.key}
-                              className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer text-xs transition ${
-                                isChecked
-                                  ? 'bg-white dark:bg-slate-900 border-indigo-500 font-bold text-slate-900 dark:text-white shadow-xs'
-                                  : 'bg-slate-100/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-500'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  let next = [...currentList];
-                                  if (e.target.checked) {
-                                    if (!next.includes(fmt.key)) next.push(fmt.key);
-                                  } else {
-                                    next = next.filter((k) => k !== fmt.key);
-                                  }
-                                  setFeaturesConfig({
-                                    ...featuresConfig,
-                                    allowedFileTypes: next,
-                                    uploadWorkflow: 'custom',
-                                  });
-                                }}
-                                className="w-3.5 h-3.5 text-indigo-600 rounded"
-                              />
-                              <span>{fmt.icon} {fmt.label}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* 3. Advanced Workflow Toggles */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-2 border-t border-slate-200 dark:border-slate-700">
-                      <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(featuresConfig.hasGeneralDocUpload || featuresConfig.uploadWorkflow === 'general_document')}
-                          onChange={(e) =>
-                            setFeaturesConfig({
-                              ...featuresConfig,
-                              hasGeneralDocUpload: e.target.checked,
-                              uploadWorkflow: e.target.checked ? 'general_document' : 'artwork_preflight',
-                              hasPreflightCheck: !e.target.checked,
-                            })
-                          }
-                          className="w-4 h-4 text-indigo-600 rounded"
-                        />
-                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                          📁 ອັບໂຫຼດເອກະສານທົ່ວໄປ (General Doc)
-                        </span>
-                      </label>
-
-                      <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={featuresConfig.hasCoverUpload}
-                          onChange={(e) => setFeaturesConfig({ ...featuresConfig, hasCoverUpload: e.target.checked })}
-                          className="w-4 h-4 text-indigo-600 rounded"
-                        />
-                        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                          ແຍກອັບໂຫຼດຟາຍປົກ (Cover)
-                        </span>
-                      </label>
-
-                      <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={featuresConfig.hasInnerUpload}
-                          onChange={(e) => setFeaturesConfig({ ...featuresConfig, hasInnerUpload: e.target.checked })}
-                          className="w-4 h-4 text-indigo-600 rounded"
-                        />
-                        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                          ອັບໂຫຼດຟາຍເນື້ອໃນ (Inner)
-                        </span>
-                      </label>
-
-                      <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={featuresConfig.hasSpineCalc}
-                          onChange={(e) => setFeaturesConfig({ ...featuresConfig, hasSpineCalc: e.target.checked })}
-                          className="w-4 h-4 text-indigo-600 rounded"
-                        />
-                        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                          ຄຳນວນສັນປົກ (Spine Calc)
-                        </span>
-                      </label>
-
-                      <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={featuresConfig.hasPreflightCheck}
-                          onChange={(e) => setFeaturesConfig({ ...featuresConfig, hasPreflightCheck: e.target.checked })}
-                          className="w-4 h-4 text-indigo-600 rounded"
-                        />
-                        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                          ກວດ Preflight 300 DPI/CMYK
-                        </span>
-                      </label>
-
-                      <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={featuresConfig.hasCustomDim}
-                          onChange={(e) => setFeaturesConfig({ ...featuresConfig, hasCustomDim: e.target.checked })}
-                          className="w-4 h-4 text-indigo-600 rounded"
-                        />
-                        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                          ລະບຸຂະໜາດ ກວ້າງ×ຍາວ ເອງ
-                        </span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Bilingual Names */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        ຊື່ສິນຄ້າ (ພາສາລາວ) <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={nameLo}
-                        onChange={(e) => setNameLo(e.target.value)}
-                        placeholder="ຕົວຢ່າງ: ປຶ້ມເຂົ້າເລັ້ມສັນກາວຮ້ອນ"
-                        className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Product Name (English) <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={nameEn}
-                        onChange={(e) => setNameEn(e.target.value)}
-                        placeholder="e.g. Perfect Glue Binding Book"
-                        className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Slug, Base Price & Unit */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        URL Slug
-                      </label>
-                      <input
-                        type="text"
-                        value={slug}
-                        onChange={(e) => setSlug(e.target.value)}
-                        placeholder="auto-generated-slug"
-                        className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-mono text-slate-900 dark:text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        ລາຄາເລີ່ມຕົ້ນ (Base Price LAK)
-                      </label>
-                      <input
-                        type="number"
-                        value={basePrice}
-                        onChange={(e) => setBasePrice(parseFloat(e.target.value) || 0)}
-                        placeholder="0"
-                        className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        ຫົວໜ່ວຍ (Unit)
-                      </label>
-                      <input
-                        type="text"
-                        value={unit}
-                        onChange={(e) => setUnit(e.target.value)}
-                        placeholder="ຊິ້ນ / ແຜ່ນ / ເຫຼັ້ມ"
-                        className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Bilingual Descriptions */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        ລາຍລະອຽດສິນຄ້າ (ພາສາລາວ)
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={descriptionLo}
-                        onChange={(e) => setDescriptionLo(e.target.value)}
-                        placeholder="ອະທິບາຍຄຸນສົມບັດສິນຄ້າ, ວັດສະດຸ, ການນຳໃຊ້..."
-                        className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Product Description (English)
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={descriptionEn}
-                        onChange={(e) => setDescriptionEn(e.target.value)}
-                        placeholder="Description for English-speaking clients..."
-                        className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Hidden File Inputs for Direct Local Uploads */}
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    accept="image/png, image/jpeg, image/jpg, image/webp, image/avif, image/gif"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files.length > 0) {
-                        handleUploadFiles(e.target.files, 'cover');
-                        e.target.value = '';
-                      }
-                    }}
-                  />
-                  <input
-                    type="file"
-                    ref={galleryInputRef}
-                    accept="image/png, image/jpeg, image/jpg, image/webp, image/avif, image/gif"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files.length > 0) {
-                        handleUploadFiles(e.target.files, 'gallery');
-                        e.target.value = '';
-                      }
-                    }}
-                  />
-
-                  {/* Dynamic Product Visuals & Multi-Image Gallery Studio */}
-                  <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
-                      <div className="flex items-center gap-2">
-                        <ImageIcon className="w-4 h-4 text-indigo-500" />
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                          ຮູບພາບສິນຄ້າ (Cover & Gallery Photos)
-                        </h4>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-                          {1 + galleryUrls.length} ຮູບທັງໝົດ
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          disabled={isUploadingImage}
-                          onClick={() => fileInputRef.current?.click()}
-                          className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-                        >
-                          <UploadCloud className="w-3.5 h-3.5" />
-                          <span>{isUploadingImage ? uploadProgress || 'ກຳລັງອັບໂຫຼດ...' : 'ອັບໂຫຼດຮູບປົກ (Cover)'}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          disabled={isUploadingImage}
-                          onClick={() => galleryInputRef.current?.click()}
-                          className="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>ເພີ່ມຫຼາຍຮູບ (Add Multiple)</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Image Cards Grid: Cover (Slot 1) + Dynamic Gallery Items */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
-                      {/* Primary Cover Image Box */}
-                      <div className="relative group aspect-square rounded-2xl border-2 border-indigo-500/50 bg-white dark:bg-slate-900 overflow-hidden shadow-md flex flex-col items-center justify-center">
-                        {thumbnailUrl ? (
-                          <>
-                            <img
-                              src={thumbnailUrl}
-                              alt="Cover Thumbnail"
-                              className="w-full h-full object-cover"
-                            />
-                            <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-2">
-                              <button
-                                type="button"
-                                onClick={() => fileInputRef.current?.click()}
-                                className="w-full py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold"
-                              >
-                                ປ່ຽນຮູບປົກ
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setThumbnailUrl('')}
-                                className="w-full py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold"
-                              >
-                                ລຶບ
-                              </button>
-                            </div>
-                          </>
-                        ) : (
-                          <div 
-                            onClick={() => fileInputRef.current?.click()}
-                            className="w-full h-full flex flex-col items-center justify-center p-3 text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/60 transition"
-                          >
-                            <UploadCloud className="w-6 h-6 text-indigo-400 mb-1" />
-                            <span className="text-[11px] font-black text-indigo-600 dark:text-indigo-400">
-                              + ອັບໂຫຼດຮູບປົກ
-                            </span>
-                            <span className="text-[9px] text-slate-400">
-                              (JPG, PNG, WebP)
-                            </span>
-                          </div>
-                        )}
-                        <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[9px] font-black uppercase tracking-wider flex items-center gap-1 shadow-md">
-                          <Star className="w-2.5 h-2.5 fill-current" />
-                          <span>ໜ້າປົກ (Cover)</span>
-                        </div>
-                      </div>
-
-                      {/* Dynamic Gallery List */}
-                      {galleryUrls.map((url, idx) => (
-                        <div
-                          key={idx}
-                          className="relative group aspect-square rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm flex flex-col items-center justify-center"
-                        >
-                          <img
-                            src={url}
-                            alt={`Gallery ${idx + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                // Swap this gallery image with Cover
-                                const oldCover = thumbnailUrl;
-                                setThumbnailUrl(url);
-                                setGalleryUrls((prev) => {
-                                  const next = [...prev];
-                                  if (oldCover) {
-                                    next[idx] = oldCover;
-                                  } else {
-                                    next.splice(idx, 1);
-                                  }
-                                  return next;
-                                });
-                                showToast('ຕັ້ງຮູບນີ້ເປັນໜ້າປົກແລ້ວ', 'success');
-                              }}
-                              className="w-full py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 text-[10px] font-black flex items-center justify-center gap-1 shadow"
-                            >
-                              <Star className="w-2.5 h-2.5 fill-current" />
-                              <span>ຕັ້ງເປັນປົກ</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setGalleryUrls((prev) => prev.filter((_, i) => i !== idx));
-                              }}
-                              className="w-full py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold flex items-center justify-center gap-1"
-                            >
-                              <Trash2 className="w-2.5 h-2.5" />
-                              <span>ລຶບຮູບນີ້</span>
-                            </button>
-                          </div>
-                          <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-slate-900/80 text-slate-200 text-[9px] font-bold">
-                            #{idx + 1}
-                          </div>
-                        </div>
-                      ))}
-
-                      {/* Add Extra Button Card */}
-                      <button
-                        type="button"
-                        onClick={() => galleryInputRef.current?.click()}
-                        className="aspect-square rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 bg-white/50 dark:bg-slate-900/50 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 transition flex flex-col items-center justify-center p-3 text-center cursor-pointer group"
-                      >
-                        <Plus className="w-6 h-6 text-slate-400 group-hover:text-indigo-500 mb-1 transition" />
-                        <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-                          + ເພີ່ມຮູບອີກ
-                        </span>
-                        <span className="text-[9px] text-slate-400">
-                          ເລືອກໄດ້ຫຼາຍຮູບ
-                        </span>
-                      </button>
-                    </div>
-
-                    {/* Quick URL Fallback Input */}
-                    <div className="pt-2 border-t border-slate-200 dark:border-slate-800/80">
-                      <div className="flex gap-2 items-center">
-                        <input
-                          type="text"
-                          value={customGalleryUrl}
-                          onChange={(e) => setCustomGalleryUrl(e.target.value)}
-                          placeholder="ຫຼື ວາງ URL ຮູບພາບໂດຍກົງ (https://... ຫຼື /images/...)"
-                          className="flex-1 px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!customGalleryUrl.trim()) return;
-                            if (!thumbnailUrl) {
-                              setThumbnailUrl(customGalleryUrl.trim());
-                            } else {
-                              setGalleryUrls((prev) => [...prev, customGalleryUrl.trim()]);
-                            }
-                            setCustomGalleryUrl('');
-                            showToast('ເພີ່ມ URL ຮູບພາບສຳເລັດ', 'success');
-                          }}
-                          className="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold"
-                        >
-                          ເພີ່ມ URL
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Bestseller & Active Status Switches */}
-                  <div className="flex flex-wrap items-center gap-6 py-2 px-1">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={bestseller}
-                        onChange={(e) => setBestseller(e.target.checked)}
-                        className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 dark:bg-slate-900 dark:border-slate-700"
-                      />
-                      <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-                        ★ ສິນຄ້າຍອດນິຍົມ (Bestseller)
-                      </span>
-                    </label>
-
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isActive}
-                        onChange={(e) => setIsActive(e.target.checked)}
-                        className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 dark:bg-slate-900 dark:border-slate-700"
-                      />
-                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                        ເປີດສະແດງໜ້າເວັບ (Active on Web)
-                      </span>
-                    </label>
-                  </div>
-
-                  {/* Features Tag Builder */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      ຈຸດເດັ່ນຂອງສິນຄ້າ (Key Highlights)
-                    </label>
-                    <div className="flex gap-2 mb-2">
-                      <input
-                        type="text"
-                        value={featureInput}
-                        onChange={(e) => setFeatureInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleAddFeature();
-                          }
-                        }}
-                        placeholder="ພິມຈຸດເດັ່ນ ແລ້ວກົດ Enter..."
-                        className="flex-1 px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-slate-900 dark:text-white"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddFeature}
-                        className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition-colors"
-                      >
-                        ເພີ່ມ
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {features.map((f, idx) => (
-                        <span
-                          key={idx}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/40 rounded-full text-xs font-medium"
-                        >
-                          {f}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveFeature(idx)}
-                            className="hover:text-rose-500"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                </div>
-              )}
-
-              {/* Tab 2: Dynamic Spec Groups Builder (Cards vs Dropdown) */}
-              {activeFormTab === 'groups' && (
-                <div className="space-y-6 animate-fadeIn">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <Sliders className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                        ກຸ່ມສະເປັກສິນຄ້າ & ຕົວເລືອກ (Dynamic Spec Groups Builder)
-                      </h4>
-                      <p className="text-xs text-slate-500">
-                        ສ້າງກຸ່ມສະເປັກເຊັ່ນ: ກະດາດປົກ, ການເຄືອບ, ເນື້ອໃນ, ເຂົ້າເລັ້ມ — ເລືອກຮູບແບບການສະແດງ (Cards / Dropdown) ໄດ້ອິດສະຫຼະ
+                if (filtered.length === 0) {
+                  return (
+                    <div className="py-12 text-center space-y-2">
+                      <Search className="w-8 h-8 mx-auto text-slate-300" />
+                      <p className="text-sm font-semibold text-slate-600">
+                        ບໍ່ພົບວັດສະດຸທີ່ກົງກັບ "{materialPickerTarget.search}"
                       </p>
+                      <p className="text-xs text-slate-400">ລອງປ່ຽນຄຳຄົ້ນຫາ ຫຼື ເລືອກໝວດໝູ່ອື່ນ</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleAddSpecGroup}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      ເພີ່ມກຸ່ມສະເປັກໃໝ່
-                    </button>
-                  </div>
+                  );
+                }
 
-                  {specGroups.length === 0 ? (
-                    <div className="py-12 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl p-6 space-y-2">
-                      <Sliders className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
-                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">ຍັງບໍ່ມີກຸ່ມສະເປັກໃນສິນຄ້ານີ້</p>
-                      <p className="text-xs text-slate-400">ກົດເລືອກໂຫຼດເທມເພລດດ້ານເທິງ ຫຼື ກົດປຸ່ມເພີ່ມກຸ່ມສະເປັກ</p>
+                return filtered.map((mat) => (
+                  <div
+                    key={mat.id || mat.sku}
+                    className="pt-2.5 flex items-center justify-between gap-3 hover:bg-slate-50/80 p-3 rounded-2xl transition group"
+                  >
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg">
+                          {mat.sku}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-900 truncate">
+                          {mat.name}
+                        </span>
+                        <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
+                          {mat.category}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-slate-500">
+                        <span className={`font-semibold text-[11px] ${
+                          mat.stock_qty > 0 ? 'text-emerald-600' : 'text-rose-600'
+                        }`}>
+                          ສະຕັອກ: {mat.stock_qty.toLocaleString()} {mat.consumption_unit}
+                        </span>
+                        <span>•</span>
+                        <span className="font-mono text-[11px]">
+                          ຕົ້ນທຶນ: {mat.cost_per_consumption_unit.toLocaleString()} ₭/{mat.consumption_unit}
+                        </span>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="space-y-6">
-                      {specGroups.map((group, gIdx) => (
-                        <div
-                          key={group.id || gIdx}
-                          className="p-5 bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-3xl space-y-4 shadow-sm"
-                        >
-                          {/* Group Header Info */}
-                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-700">
-                            <div className="flex items-center gap-3 flex-1">
-                              <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold font-mono">
-                                {gIdx + 1}
-                              </span>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-1">
-                                <input
-                                  type="text"
-                                  value={group.titleLo}
-                                  onChange={(e) => handleGroupFieldChange(gIdx, 'titleLo', e.target.value)}
-                                  placeholder="ຊື່ກຸ່ມ (ພາສາລາວ) ເຊັ່ນ: ກະດາດປົກ"
-                                  className="px-3 py-1.5 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
-                                />
-                                <input
-                                  type="text"
-                                  value={group.titleEn}
-                                  onChange={(e) => handleGroupFieldChange(gIdx, 'titleEn', e.target.value)}
-                                  placeholder="Group Title (EN) e.g. Cover Paper"
-                                  className="px-3 py-1.5 text-xs font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
-                                />
-                              </div>
-                            </div>
 
-                            {/* Display Type & Group Actions */}
-                            <div className="flex items-center gap-2">
-                              {/* Display Type: Cards vs Dropdown */}
-                              <div className="flex items-center bg-slate-200/80 dark:bg-slate-900 p-1 rounded-xl text-xs">
-                                <button
-                                  type="button"
-                                  onClick={() => handleGroupFieldChange(gIdx, 'displayType', 'cards')}
-                                  className={`px-2.5 py-1 rounded-lg flex items-center gap-1 font-medium transition-all ${
-                                    group.displayType === 'cards'
-                                      ? 'bg-indigo-600 text-white shadow-sm'
-                                      : 'text-slate-600 dark:text-slate-400'
-                                  }`}
-                                >
-                                  <LayoutGrid className="w-3.5 h-3.5" />
-                                  Cards
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleGroupFieldChange(gIdx, 'displayType', 'dropdown')}
-                                  className={`px-2.5 py-1 rounded-lg flex items-center gap-1 font-medium transition-all ${
-                                    group.displayType === 'dropdown'
-                                      ? 'bg-indigo-600 text-white shadow-sm'
-                                      : 'text-slate-600 dark:text-slate-400'
-                                  }`}
-                                >
-                                  <ListFilter className="w-3.5 h-3.5" />
-                                  Dropdown
-                                </button>
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveSpecGroup(gIdx)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-900 rounded-xl transition-colors"
-                                title="ລຶບກຸ່ມນີ້"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Options List inside Group */}
-                          <div className="space-y-2.5 pl-2">
-                            {group.options.map((opt, oIdx) => (
-                              <div
-                                key={oIdx}
-                                className="grid grid-cols-1 sm:grid-cols-6 gap-2 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl items-center"
-                              >
-                                <div className="sm:col-span-2">
-                                  <input
-                                    type="text"
-                                    value={opt.labelLo || ''}
-                                    onChange={(e) => handleGroupOptionChange(gIdx, oIdx, 'labelLo', e.target.value)}
-                                    placeholder="ຊື່ຕົວເລືອກ (ລາວ) ເຊັ່ນ: ອາດກາດ 260g"
-                                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
-                                  />
-                                </div>
-
-                                <div>
-                                  <input
-                                    type="text"
-                                    value={opt.labelEn || ''}
-                                    onChange={(e) => handleGroupOptionChange(gIdx, oIdx, 'labelEn', e.target.value)}
-                                    placeholder="Label (EN)"
-                                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
-                                  />
-                                </div>
-
-                                <div>
-                                  <input
-                                    type="text"
-                                    value={opt.materialSku || ''}
-                                    onChange={(e) => handleGroupOptionChange(gIdx, oIdx, 'materialSku', e.target.value)}
-                                    placeholder="Material SKU คัง"
-                                    className="w-full px-2.5 py-1.5 text-xs bg-indigo-50/50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl font-mono text-indigo-900 dark:text-indigo-300"
-                                  />
-                                </div>
-
-                                <div>
-                                  <input
-                                    type="number"
-                                    value={opt.addPrice || 0}
-                                    onChange={(e) => handleGroupOptionChange(gIdx, oIdx, 'addPrice', parseFloat(e.target.value) || 0)}
-                                    placeholder="+ LAK"
-                                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono"
-                                  />
-                                </div>
-
-                                <div className="flex items-center justify-between sm:justify-end gap-2">
-                                  <label className="flex items-center gap-1 cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      checked={opt.isDefault}
-                                      onChange={(e) => handleGroupOptionChange(gIdx, oIdx, 'isDefault', e.target.checked)}
-                                      className="w-3.5 h-3.5 text-indigo-600 rounded dark:bg-slate-800"
-                                    />
-                                    <span className="text-[10px] text-slate-500">Default</span>
-                                  </label>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveOptionFromGroup(gIdx, oIdx)}
-                                    className="p-1 text-slate-400 hover:text-rose-500 rounded-lg"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-
-                            <button
-                              type="button"
-                              onClick={() => handleAddOptionToGroup(gIdx)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-200/60 dark:bg-slate-700/60 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition-colors mt-2"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              ເພີ່ມລາຍການຕົວເລືອກໃນກຸ່ມນີ້
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Tab 3: Discount Tiers */}
-              {activeFormTab === 'discounts' && (
-                <div className="space-y-4 animate-fadeIn">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                        ສ່ວນຫຼຸດຕາມຈຳນວນສັ່ງຜະລິດ (Volume Discount Tiers)
-                      </h4>
-                      <p className="text-xs text-slate-500">
-                        ກຳນົດສ່ວນຫຼຸດ % ອັດຕະໂນມັດເມື່ອລູກຄ້າສັ່ງຜະລິດຮອດຈຳນວນທີ່ກຳນົດ
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleAddDiscountTier}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      ເພີ່ມຂັ້ນສ່ວນຫຼຸດ
-                    </button>
-                  </div>
-
-                  {discountTiers.length === 0 ? (
-                    <div className="py-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
-                      <p className="text-xs text-slate-400">ຍັງບໍ່ມີການຕັ້ງຄ່າສ່ວນຫຼຸດຕາມຈຳນວນ</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {discountTiers.map((tier, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-4 p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl"
-                        >
-                          <div className="flex-1">
-                            <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                              ຈຳນວນສັ່ງຂັ້ນຕ່ຳ (Min Qty)
-                            </label>
-                            <input
-                              type="number"
-                              value={tier.minQuantity}
-                              onChange={(e) => handleDiscountTierChange(idx, 'minQuantity', parseInt(e.target.value) || 1)}
-                              className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                            />
-                          </div>
-
-                          <div className="flex-1">
-                            <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                              ສ່ວນຫຼຸດ % (Discount Percentage)
-                            </label>
-                            <input
-                              type="number"
-                              value={tier.discountPercentage}
-                              onChange={(e) => handleDiscountTierChange(idx, 'discountPercentage', parseFloat(e.target.value) || 0)}
-                              className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-semibold text-emerald-600 dark:text-emerald-400"
-                            />
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveDiscountTier(idx)}
-                            className="mt-4 p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Tab 4: Dynamic Info Tabs & Guides Builder (Product Bottom Tabs) */}
-              {activeFormTab === 'infotabs' && (
-                <div className="space-y-6 animate-fadeIn">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                        ແຖບຂໍ້ມູນ & ຄູ່ມືເພີ່ມເຕີມດ້ານລຸ່ມ (Dynamic Product Info Tabs)
-                      </h4>
-                      <p className="text-xs text-slate-500">
-                        ກຳນົດຫົວຂໍ້, ໄອຄອນ, ຄູ່ມືເຈ້ຍ, ໄລຍະຕັດຕົກ, ການຮັບປະກັນ ຫຼື ຂໍ້ມູນອື່ນໆ ທີ່ຈະສະແດງໃນ 4 ແຖບລຸ່ມສຸດຂອງໜ້າສິນຄ້າ
-                      </p>
-                    </div>
                     <button
                       type="button"
                       onClick={() => {
-                        const newId = `tab_${Date.now()}`;
-                        setInfoTabs((prev) => [
-                          ...prev,
-                          {
-                            id: newId,
-                            titleLo: 'ຫົວຂໍ້ໃໝ່',
-                            titleEn: 'New Section',
-                            icon: '💡',
-                            contentLo: '',
-                            contentEn: '',
-                          },
-                        ]);
+                        handleSelectMaterialForOption(
+                          materialPickerTarget.groupIdx,
+                          materialPickerTarget.optIdx,
+                          mat.sku
+                        );
+                        setMaterialPickerTarget({ ...materialPickerTarget, isOpen: false });
+                        showToast(`ເລືອກ [${mat.sku}] ${mat.name} ສຳເລັດ`, 'success');
                       }}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm"
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all shadow-xs group-hover:scale-105 flex-shrink-0 cursor-pointer"
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      + ເພີ່ມແຖບຂໍ້ມູນໃໝ່
+                      ເລືອກ
                     </button>
                   </div>
+                ));
+              })()}
+            </div>
 
-                  {infoTabs.length === 0 ? (
-                    <div className="py-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
-                      <p className="text-xs text-slate-400">ຍັງບໍ່ມີແຖບຂໍ້ມູນເພີ່ມເຕີມ (ຄລິກປຸ່ມດ້ານເທິງເພື່ອເພີ່ມ)</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {infoTabs.map((tab, idx) => (
-                        <div
-                          key={tab.id || idx}
-                          className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-3"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs font-black">
-                                #{idx + 1}
-                              </span>
-                              <input
-                                type="text"
-                                value={tab.icon || '📝'}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setInfoTabs((prev) =>
-                                    prev.map((t, i) => (i === idx ? { ...t, icon: val } : t))
-                                  );
-                                }}
-                                placeholder="ໄອຄອນ (e.g. 📜, 📐, 🚚, 💡)"
-                                className="w-16 px-2 py-1 text-center text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold"
-                                title="Icon / Emoji"
-                              />
-                              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                                {tab.titleLo || `ແຖບທີ ${idx + 1}`}
-                              </span>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setInfoTabs((prev) => prev.filter((_, i) => i !== idx));
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                              title="ລຶບແຖບນີ້"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                                ຊື່ແຖບ (ພາສາລາວ) <span className="text-rose-500">*</span>
-                              </label>
-                              <input
-                                type="text"
-                                value={tab.titleLo}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setInfoTabs((prev) =>
-                                    prev.map((t, i) => (i === idx ? { ...t, titleLo: val } : t))
-                                  );
-                                }}
-                                placeholder="ຕົວຢ່າງ: ຄູ່ມືວັດສະດຸ & ເຈ້ຍ"
-                                className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                                Tab Title (English)
-                              </label>
-                              <input
-                                type="text"
-                                value={tab.titleEn}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setInfoTabs((prev) =>
-                                    prev.map((t, i) => (i === idx ? { ...t, titleEn: val } : t))
-                                  );
-                                }}
-                                placeholder="e.g. Materials & Paper Specs"
-                                className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                                ເນື້ອໃນລາຍລະອຽດ (ພາສາລາວ)
-                              </label>
-                              <textarea
-                                rows={3}
-                                value={tab.contentLo}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setInfoTabs((prev) =>
-                                    prev.map((t, i) => (i === idx ? { ...t, contentLo: val } : t))
-                                  );
-                                }}
-                                placeholder="ພິມລາຍລະອຽດ ຫຼື ຈຸດເດັ່ນຂອງແຖບນີ້..."
-                                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                                Content (English)
-                              </label>
-                              <textarea
-                                rows={3}
-                                value={tab.contentEn}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setInfoTabs((prev) =>
-                                    prev.map((t, i) => (i === idx ? { ...t, contentEn: val } : t))
-                                  );
-                                }}
-                                placeholder="Content description in English..."
-                                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Submit Buttons */}
-              <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
-                <span className="text-xs text-slate-400">
-                  {specGroups.length} ກຸ່ມສະເປັກພ້ອມສົ່ງຕໍ່ໄປຍັງໜ້າຮ້ານ Customer Service
-                </span>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={handleCloseModal}
-                    className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
-                  >
-                    ຍົກເລີກ
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saveProductMutation.isPending}
-                    className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-indigo-500/25 transition-all disabled:opacity-50"
-                  >
-                    <Check className="w-4 h-4" />
-                    {saveProductMutation.isPending ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກສິນຄ້າ'}
-                  </button>
-                </div>
-              </div>
-
-            </form>
-
+            {/* Modal Footer */}
+            <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 px-4">
+              <span>ກົດ "ເລືອກ" ເພື່ອດຶງ SKU, ຊື່ ແລະ ຕົ້ນທຶນເຂົ້າສູ່ຕົວເລືອກ</span>
+              <button
+                type="button"
+                onClick={() => setMaterialPickerTarget({ ...materialPickerTarget, isOpen: false })}
+                className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-medium cursor-pointer"
+              >
+                ປິດ
+              </button>
+            </div>
           </div>
         </div>
       )}

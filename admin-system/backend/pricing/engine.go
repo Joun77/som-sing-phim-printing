@@ -855,7 +855,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		SetupCost:        roundToTwoDecimals(dSetupCost.Div(dQuantity).InexactFloat64()),
 		FinishingCost:    roundToTwoDecimals(dFinishingCost.Add(dCustomFinishingCost).Div(dQuantity).InexactFloat64()),
 		LaborCost:        roundToTwoDecimals(dLaborCost.Div(dQuantity).InexactFloat64()),
-		DirectSubtotal:   math.Round(dDirectCost.Div(dQuantity).InexactFloat64()),
+		DirectSubtotal:   roundToTwoDecimals(dDirectCost.Div(dQuantity).InexactFloat64()),
 		OverheadCost:     roundToTwoDecimals(dOverheadCost.Div(dQuantity).InexactFloat64()),
 		TotalCost:        roundToTwoDecimals(dNetInternalCost.Div(dQuantity).InexactFloat64()),
 	}

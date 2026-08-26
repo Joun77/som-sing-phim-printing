@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS public_products (
     category VARCHAR(100) NOT NULL, -- sticker, brochure, business_card, banner, box, book, general
     description TEXT,
     features TEXT[] DEFAULT '{}',
-    thumbnail_url VARCHAR(500),
+    thumbnail_url TEXT,
     gallery_urls TEXT[] DEFAULT '{}',
     min_quantity INT DEFAULT 1,
     lead_time_days INT DEFAULT 2,

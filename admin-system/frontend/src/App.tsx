@@ -56,6 +56,27 @@ function AppContent() {
   const isTrackerRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/track');
   const trackerOrderNo = isTrackerRoute ? window.location.pathname.replace(/^\/track\/?/, '') : null;
 
+  // Real-time SSE Query Invalidation for Multi-tab & Multi-device synchronization
+  React.useEffect(() => {
+    const sseUrl = '/api/v1/orders/stream';
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource(sseUrl);
+      eventSource.addEventListener('order_update', () => {
+        queryClient.invalidateQueries({ queryKey: ['orders'] });
+        queryClient.invalidateQueries({ queryKey: ['inventory'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      });
+    } catch {
+      // Ignore in non-browser or disconnected environments
+    }
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, []);
+
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-slate-bg font-sans antialiased text-slate-800 flex flex-col">
@@ -110,16 +131,6 @@ function AppContent() {
             )}
           </div>
         </main>
-
-        {/* FLOATING EXCHANGE RATE ACTION PILL BUTTON */}
-        <button
-          onClick={() => setIsRatesOpen(true)}
-          className="fixed bottom-6 right-6 z-40 px-4.5 py-3.5 bg-gradient-to-r from-slate-900 via-primary-navy to-slate-900 text-emerald-400 hover:text-white font-black text-xs rounded-full shadow-2xl border-2 border-emerald-500/40 flex items-center gap-2 cursor-pointer hover:scale-105 active:scale-95 transition-all group"
-          title="ຕັ້ງຄ່າອັດຕາແລກປ່ຽນ"
-        >
-          <Coins className="w-5 h-5 text-emerald-400 group-hover:rotate-12 transition-transform" />
-          <span>ອັດຕາແລກປ່ຽນ: {currency} 1={currentRate ? `${currentRate.toLocaleString()}₭` : '—'}</span>
-        </button>
 
         {/* ACCESSIBLE ELDERLY-FRIENDLY TOAST NOTIFICATIONS */}
         {toast && (

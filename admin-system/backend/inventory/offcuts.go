@@ -50,13 +50,14 @@ var (
 	offcutSeq  int
 )
 
-// GetMatchingOffcut searches for available offcut scrap matching size and quantity
+// GetMatchingOffcut searches for available offcut scrap matching material, size and quantity
 func GetMatchingOffcut(paperSku, paperName string, jobW, jobH float64, requiredQty int) *Offcut {
 	if db.DB != nil {
 		offcuts, err := getOffcutsFromDB()
 		if err == nil && len(offcuts) > 0 {
 			for _, o := range offcuts {
-				if o.Quantity >= float64(requiredQty) {
+				skuMatch := paperSku == "" || o.ParentMaterialID == paperSku || o.ParentMaterialID == ""
+				if skuMatch && o.Quantity >= float64(requiredQty) {
 					// Check dimensions with or without rotation
 					if (o.WidthMm >= jobW && o.LengthMm >= jobH) || (o.WidthMm >= jobH && o.LengthMm >= jobW) {
 						return &o
@@ -69,7 +70,8 @@ func GetMatchingOffcut(paperSku, paperName string, jobW, jobH float64, requiredQ
 	storeMutex.RLock()
 	defer storeMutex.RUnlock()
 	for _, o := range offcutsStore {
-		if o.Quantity >= float64(requiredQty) {
+		skuMatch := paperSku == "" || o.ParentMaterialID == paperSku
+		if skuMatch && o.Quantity >= float64(requiredQty) {
 			if (o.WidthMm >= jobW && o.LengthMm >= jobH) || (o.WidthMm >= jobH && o.LengthMm >= jobW) {
 				match := o
 				return &match

@@ -125,8 +125,8 @@ func TestCalculateJobPricingA4Baseline(t *testing.T) {
 	if res.TotalBreakdown.DirectSubtotal != 82750.0 {
 		t.Errorf("Expected TotalBreakdown.DirectSubtotal 82750.0, got %v", res.TotalBreakdown.DirectSubtotal)
 	}
-	if res.UnitBreakdown.DirectSubtotal != 828.0 {
-		t.Errorf("Expected UnitBreakdown.DirectSubtotal 828.0, got %v", res.UnitBreakdown.DirectSubtotal)
+	if res.UnitBreakdown.DirectSubtotal != 827.5 {
+		t.Errorf("Expected UnitBreakdown.DirectSubtotal 827.5, got %v", res.UnitBreakdown.DirectSubtotal)
 	}
 
 	// Grand Total (no discount, no tax) = SalePrice

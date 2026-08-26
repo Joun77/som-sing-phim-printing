@@ -48,17 +48,17 @@ export default function Navbar() {
   };
 
   const navItems = [
-    { id: 'dashboard', labelLao: 'ແຜງຄວບຄຸມ', labelEn: 'Dashboard', icon: LayoutDashboard },
-    { id: 'quotation', labelLao: 'ໃບສະເໜີລາຄາ', labelEn: 'Quotations', icon: Calculator },
-    { id: 'orders', labelLao: 'ອໍເດີ', labelEn: 'Orders', icon: ShoppingCart },
-    { id: 'catalog', labelLao: 'ສິນຄ້າໜ້າເວັບ', labelEn: 'Web Catalog', icon: Globe },
-    { id: 'preflight', labelLao: 'ກວດໄຟລ໌ CMYK', labelEn: 'Preflight', icon: Cpu },
-    { id: 'finance', labelLao: 'ການເງິນ & ບັນຊີ', labelEn: 'Finance', icon: Coins },
-    { id: 'inbound', labelLao: 'ນຳເຂົ້າ', labelEn: 'Inbound', icon: Truck },
-    { id: 'inventory', labelLao: 'ຄັງສິນຄ້າ', labelEn: 'Inventory', icon: Boxes },
-    { id: 'equipment', labelLao: 'ເຄື່ອງຈັກ', labelEn: 'Equipment', icon: Printer },
-    { id: 'crm', labelLao: 'ລູກຄ້າ', labelEn: 'Customers', icon: User },
-    { id: 'hr', labelLao: 'ພະນັກງານ', labelEn: 'HR / Staff', icon: Users },
+    { id: 'dashboard',  labelLao: 'ແຜງຄວບຄຸມ',       labelEn: 'Dashboard',   icon: LayoutDashboard },
+    { id: 'preflight',  labelLao: 'ກວດໄຟລ໌ CMYK',     labelEn: 'Preflight',   icon: Cpu },
+    { id: 'quotation',  labelLao: 'ໃບສະເໜີລາຄາ',      labelEn: 'Quotations',  icon: Calculator },
+    { id: 'orders',     labelLao: 'ອໍເດີ',             labelEn: 'Orders',      icon: ShoppingCart },
+    { id: 'crm',        labelLao: 'ລູກຄ້າ',            labelEn: 'Customers',   icon: User },
+    { id: 'inbound',    labelLao: 'ນຳເຂົ້າ',           labelEn: 'Inbound',     icon: Truck },
+    { id: 'inventory',  labelLao: 'ຄັງສິນຄ້າ',        labelEn: 'Inventory',   icon: Boxes },
+    { id: 'equipment',  labelLao: 'ເຄື່ອງຈັກ',         labelEn: 'Equipment',   icon: Printer },
+    { id: 'finance',    labelLao: 'ການເງິນ & ບັນຊີ',  labelEn: 'Finance',     icon: Coins },
+    { id: 'hr',         labelLao: 'ພະນັກງານ',          labelEn: 'HR / Staff',  icon: Users },
+    { id: 'catalog',    labelLao: 'ສິນຄ້າໜ້າເວັບ',     labelEn: 'Web Catalog', icon: Globe },
   ];
 
   const getNavLabel = (item: typeof navItems[0]) => {
@@ -109,6 +109,16 @@ export default function Navbar() {
 
           {/* Right: Actions & User Profile */}
           <div className="hidden lg:flex items-center gap-2.5 shrink-0">
+            {/* Currency Exchange Rate Pill */}
+            <button
+              onClick={() => setIsRatesOpen(true)}
+              className="px-3 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 hover:text-emerald-300 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer select-none shadow-sm"
+              title="ຕັ້ງຄ່າອັດຕາແລກປ່ຽນ"
+            >
+              <Coins className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{currency} 1={currentRate ? `${currentRate.toLocaleString()}₭` : '1₭'}</span>
+            </button>
+
             {/* View Customer Storefront Link */}
             <a
               href="https://som-sing-phim-service.web.app"

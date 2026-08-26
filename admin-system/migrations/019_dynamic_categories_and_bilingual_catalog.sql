@@ -119,8 +119,14 @@ ALTER TABLE public_products ADD COLUMN IF NOT EXISTS pricing_model VARCHAR(50) D
 ALTER TABLE public_products ADD COLUMN IF NOT EXISTS base_price NUMERIC(15, 2) DEFAULT 0.00;
 ALTER TABLE public_products ADD COLUMN IF NOT EXISTS unit VARCHAR(50) DEFAULT 'ຊິ້ນ';
 ALTER TABLE public_products ADD COLUMN IF NOT EXISTS bestseller BOOLEAN DEFAULT false;
+ALTER TABLE public_products ADD COLUMN IF NOT EXISTS is_on_demand BOOLEAN DEFAULT false;
+ALTER TABLE public_products ADD COLUMN IF NOT EXISTS target_margin_percent NUMERIC(5, 2) DEFAULT 35.00;
+ALTER TABLE public_products ADD COLUMN IF NOT EXISTS default_machine_id VARCHAR(100);
+ALTER TABLE public_products ADD COLUMN IF NOT EXISTS default_machine_name VARCHAR(255);
+ALTER TABLE public_products ADD COLUMN IF NOT EXISTS info_tabs JSONB DEFAULT '[]';
 ALTER TABLE public_products ADD COLUMN IF NOT EXISTS spec_groups JSONB DEFAULT '[]';
 ALTER TABLE public_products ADD COLUMN IF NOT EXISTS features_config JSONB DEFAULT '{}';
+ALTER TABLE public_products ALTER COLUMN thumbnail_url TYPE TEXT;
 
 -- Extend public_product_options table
 ALTER TABLE public_product_options ADD COLUMN IF NOT EXISTS label_lo VARCHAR(150);
@@ -129,6 +135,8 @@ ALTER TABLE public_product_options ADD COLUMN IF NOT EXISTS hint_lo VARCHAR(255)
 ALTER TABLE public_product_options ADD COLUMN IF NOT EXISTS hint_en VARCHAR(255);
 ALTER TABLE public_product_options ADD COLUMN IF NOT EXISTS material_sku VARCHAR(100);
 ALTER TABLE public_product_options ADD COLUMN IF NOT EXISTS paper_code VARCHAR(100);
+ALTER TABLE public_product_options ADD COLUMN IF NOT EXISTS machine_id VARCHAR(100);
+ALTER TABLE public_product_options ADD COLUMN IF NOT EXISTS machine_name VARCHAR(255);
 ALTER TABLE public_product_options ADD COLUMN IF NOT EXISTS add_price NUMERIC(15, 2) DEFAULT 0.00;
 
 -- Update existing category links if category_id is null

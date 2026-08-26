@@ -7,9 +7,7 @@ import {
   DeductInkBottlePayload 
 } from '../types';
 
-const API_BASE = (typeof window !== 'undefined' && window.location.hostname === 'localhost')
-  ? 'http://localhost:8080'
-  : '';
+const API_BASE = '';
 
 /**
  * Fetch all master inventory materials

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { calculateMachineUnitCost, calculateTotalJobMachineCost } from './machineCostCalculator';
+import { calculateMachineUnitCost, calculateTotalJobMachineCost } from './machineCostCalculator.ts';
 
 describe('machineCostCalculator Unit Tests', () => {
   it('correctly calculates depreciation and maintenance per sheet for printer', () => {

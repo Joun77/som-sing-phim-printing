@@ -383,15 +383,17 @@ export async function calculatePrice(payload: PricingPayload): Promise<PricingRe
 }
 
 export async function submitOrder(order: Order): Promise<Order> {
+  const idempotencyKey = (order as any).idempotency_key || `idem-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+  const orderWithKey = { ...order, idempotency_key: idempotencyKey }
   try {
-    const data = await request<Partial<Order>>('/orders', { method: 'POST', body: order })
+    const data = await request<Partial<Order>>('/orders', { method: 'POST', body: orderWithKey })
     setDemo(false)
-    return { ...order, ...data, _live: true } as Order
+    return { ...orderWithKey, ...data, _live: true } as Order
   } catch {
     setDemo(true)
     const orderId = order.order_id || generateOrderId()
     const saved: Order = {
-      ...order,
+      ...orderWithKey,
       order_id: orderId,
       status: 'PENDING_SLIP_CHECK',
       created_at: new Date().toISOString(),

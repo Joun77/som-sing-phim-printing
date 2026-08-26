@@ -39,6 +39,8 @@ export interface PublicProductOption {
   value: string;
   materialSku?: string;
   paperCode?: string;
+  machineId?: string;
+  machineName?: string;
   addPrice?: number;
   isDefault?: boolean;
   extraCostRate?: number;
@@ -54,6 +56,17 @@ export interface SpecGroup {
   options: PublicProductOption[];
 }
 
+export interface CustomBreakdownRow {
+  id: string;
+  titleLo: string;
+  titleEn?: string;
+  includePrintCost: boolean;
+  includeMaterialCost: boolean;
+  includeFinishingCost: boolean;
+  extraFixedCost?: number;
+  useTargetMargin?: boolean;
+}
+
 export interface FeaturesConfig {
   hasGeneralDocUpload?: boolean;
   hasCoverUpload: boolean;
@@ -61,8 +74,12 @@ export interface FeaturesConfig {
   hasSpineCalc: boolean;
   hasPreflightCheck: boolean;
   hasCustomDim: boolean;
+  baselineCoveragePercent?: number;
   uploadWorkflow?: 'general_document' | 'artwork_preflight' | 'custom';
   allowedFileTypes?: string[];
+  breakdownMode?: 'auto' | 'custom';
+  customBreakdownRows?: CustomBreakdownRow[];
+  [key: string]: any;
 }
 
 export interface ProductDiscountTier {
@@ -115,6 +132,9 @@ export interface PublicProduct {
   sortOrder: number;
   createdAt?: string;
   updatedAt?: string;
+  targetMarginPercent?: number;
+  defaultMachineId?: string;
+  defaultMachineName?: string;
   options?: PublicProductOption[];
   discountTiers?: ProductDiscountTier[];
 }
@@ -133,6 +153,9 @@ export interface CreateProductInput {
   basePrice: number;
   unit: string;
   bestseller: boolean;
+  targetMarginPercent?: number;
+  defaultMachineId?: string;
+  defaultMachineName?: string;
   specGroups?: SpecGroup[];
   featuresConfig?: FeaturesConfig;
   features: string[];
@@ -154,6 +177,8 @@ export interface CreateProductInput {
     value: string;
     materialSku?: string;
     paperCode?: string;
+    machineId?: string;
+    machineName?: string;
     addPrice?: number;
     isDefault: boolean;
     extraCostRate: number;

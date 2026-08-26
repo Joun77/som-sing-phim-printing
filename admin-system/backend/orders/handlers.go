@@ -62,6 +62,18 @@ func HandleCreateOrder(c *gin.Context) {
 		return
 	}
 
+	if req.IdempotencyKey != "" {
+		storeMutex.RLock()
+		for _, existing := range ordersStore {
+			if existing.IdempotencyKey != "" && existing.IdempotencyKey == req.IdempotencyKey {
+				storeMutex.RUnlock()
+				c.JSON(http.StatusOK, existing)
+				return
+			}
+		}
+		storeMutex.RUnlock()
+	}
+
 	storeMutex.Lock()
 	orderSeq++
 	orderID := fmt.Sprintf("order-%03d", orderSeq)
@@ -265,6 +277,7 @@ func HandleCreateOrder(c *gin.Context) {
 		TotalPrice:      totalPrice,
 		TotalCost:       totalCost,
 		GoogleDriveLink: req.GoogleDriveLink,
+		IdempotencyKey:  req.IdempotencyKey,
 		Items:           itemsList,
 		CreatedAt:       time.Now(),
 		UpdatedAt:       time.Now(),
@@ -436,6 +449,20 @@ func dischargeFIFOStockForOrder(o Order) error {
 	}
 	defer tx.Rollback()
 
+	// Concurrency Lock: Lock order record in DB to prevent concurrent duplicate deductions
+	var currentStatus string
+	var alreadyDeductedAt *time.Time
+	err = tx.QueryRow(`
+		SELECT status, stock_deducted_at 
+		FROM orders 
+		WHERE id = $1 OR order_no = $1 OR order_number = $1 
+		FOR UPDATE
+	`, o.ID).Scan(&currentStatus, &alreadyDeductedAt)
+	if err == nil && alreadyDeductedAt != nil {
+		log.Printf("[FIFO STOCK INFO] Order %s was already deducted concurrently at %v. Skipping.", o.ID, *alreadyDeductedAt)
+		return nil
+	}
+
 	for _, item := range o.Items {
 		paperSku, _ := item.Specs["paper_sku"].(string)
 		if paperSku == "" {
@@ -453,6 +480,11 @@ func dischargeFIFOStockForOrder(o Order) error {
 			inkCov, _ = item.Specs["inkCoveragePercent"].(float64)
 		}
 
+		colorMode, _ := item.Specs["color_mode"].(string)
+		if colorMode == "" {
+			colorMode, _ = item.Specs["colorMode"].(string)
+		}
+
 		// Deduct Paper and Ink using inventory.DeductInventoryForJob inside DB transaction
 		err := inventory.DeductInventoryForJob(tx, inventory.JobDeductionSpec{
 			OrderID:        o.ID,
@@ -462,6 +494,8 @@ func dischargeFIFOStockForOrder(o Order) error {
 			PageCount:      item.PageCount,
 			CoverPaperID:   item.CoverPaperID,
 			InnerPaperID:   item.InnerPaperID,
+			ColorMode:      colorMode,
+			MachineID:      item.MachineID,
 			AvgCovC:        item.AvgCovC,
 			AvgCovM:        item.AvgCovM,
 			AvgCovY:        item.AvgCovY,

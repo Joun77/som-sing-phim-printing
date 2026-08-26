@@ -1010,92 +1010,85 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   };
 
   return (
-    <div className="space-y-8 animate-fade-in text-slate-800 print:bg-white print:p-0 print:text-black">
+    <div className="space-y-3 animate-fade-in text-slate-800 print:bg-white print:p-0 print:text-black">
       
-      {/* Header Card (Hide on print) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm print:hidden">
-        <div className="flex items-center gap-3">
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl transition shrink-0 active:scale-95 cursor-pointer flex items-center justify-center"
-              title="Back"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-          )}
-          <div className="space-y-1">
-            <h2 className="text-3xl font-black text-primary-navy tracking-tight">
-              {currentLang === 'lo' ? 'ອອກໃບສະເໜີລາຄາ (Quotation Desk)' : 'Quotation Desk'}
-            </h2>
-            <p className="text-base text-slate-500 font-semibold leading-relaxed">
-              {currentLang === 'lo' ? `ຮອງຮັບຫຼາຍລາຍການສິນຄ້າ (${items.length} ລາຍການ), ຕັ້ງສະເປກແຕ່ລະລາຍການອິດສະຫຼະ, ຄຳນວນຕົ້ນທຶນ ແລະ ກຳໄລລວມ` : `Multi-item quotation desk (${items.length} items) with independent specs and unified profit analysis.`}
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          {/* Multi-Currency Selector */}
-          <div className="flex items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-2xl">
-            <Coins className="w-4 h-4 text-slate-400 ml-2" />
-            {['LAK', 'THB', 'USD'].map(code => (
-              <button
-                key={code}
-                type="button"
-                onClick={() => setCurrency(code)}
-                className={`px-3 py-2 rounded-xl text-xs font-black transition ${
-                  currency === code
-                    ? 'bg-white text-primary-navy shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                {code === 'LAK' ? '₭ LAK' : code === 'THB' ? '฿ THB' : '$ USD'}
-              </button>
-            ))}
-          </div>
-
+      {/* Unified Top Bar: Steps + Currency + Saved Quotations (Hide on print) */}
+      <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-2xl border border-slate-100 shadow-sm print:hidden flex-wrap">
+        {/* Back button (if available) */}
+        {onBack && (
           <button
-            onClick={() => setIsQuotationListOpen(true)}
-            className="flex items-center gap-2 px-4 py-3.5 bg-white border-2 border-slate-200 text-slate-700 rounded-2xl text-xs font-extrabold hover:bg-slate-50 transition min-h-[48px]"
+            onClick={onBack}
+            className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition shrink-0 active:scale-95 cursor-pointer"
+            title="Back"
           >
-            <Layers3 className="w-5 h-5 shrink-0 text-accent-sky" />
-            <span>{currentLang === 'lo' ? `ໃບສະເໜີ (${quotations.length})` : `Quotations (${quotations.length})`}</span>
+            <ArrowLeft className="w-3.5 h-3.5" />
           </button>
-        </div>
-      </div>
+        )}
 
-      {/* Step Navigation Wizard Bar (Hide on print) */}
-      <div className="flex items-center justify-between bg-white p-2.5 rounded-3xl border border-slate-100 shadow-sm print:hidden">
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        {/* Step Tabs */}
+        <div className="flex items-center gap-1 flex-1">
           <button
             type="button"
             onClick={() => setCurrentStep('calc')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2.5 px-6 py-3 rounded-2xl text-xs sm:text-sm font-black transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black transition-all cursor-pointer ${
               currentStep === 'calc'
                 ? 'bg-primary-navy text-white shadow-md'
                 : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
-            <Calculator className="w-4 h-4" />
-            <span>1. {currentLang === 'lo' ? 'ກຳນົດສະເປກ & ຄຳນວນຕົ້ນທຶນ' : 'Specs & Cost Calculation'}</span>
+            <Calculator className="w-4 h-4 shrink-0" />
+            <span>1. {currentLang === 'lo' ? 'ກຳນົດສະເປກ & ຄຳນວນ' : 'Specs & Cost'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setCurrentStep('quote')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2.5 px-6 py-3 rounded-2xl text-xs sm:text-sm font-black transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black transition-all cursor-pointer ${
               currentStep === 'quote'
                 ? 'bg-primary-navy text-white shadow-md'
                 : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
-            <Layers className="w-4 h-4" />
-            <span>2. {currentLang === 'lo' ? 'ໃບສະເໜີລາຄາລູກຄ້າ (Quotation)' : 'Client Quotation Sheet'}</span>
-            <span className="px-2 py-0.5 rounded-lg text-[10px] bg-emerald-500/20 text-emerald-600 font-sans">
+            <Layers className="w-4 h-4 shrink-0" />
+            <span>2. {currentLang === 'lo' ? 'ໃບສະເໜີລູກຄ້າ' : 'Client Quotation'}</span>
+            <span className="px-2 py-0.5 rounded-md text-[11px] bg-emerald-500/20 text-emerald-600 font-sans font-black">
               {formatCurrency(finalGrandTotal)}
             </span>
           </button>
         </div>
 
+        {/* Divider */}
+        <div className="w-px h-5 bg-slate-200 hidden sm:block shrink-0" />
+
+        {/* Currency Selector */}
+        <div className="flex items-center gap-0.5 p-0.5 bg-slate-100 border border-slate-200 rounded-lg shrink-0">
+          {['LAK', 'THB', 'USD'].map(code => (
+            <button
+              key={code}
+              type="button"
+              onClick={() => setCurrency(code)}
+              className={`px-2 py-1 rounded-md text-[10px] font-black transition ${
+                currency === code
+                  ? 'bg-white text-primary-navy shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              {code === 'LAK' ? '₭' : code === 'THB' ? '฿' : '$'} {code}
+            </button>
+          ))}
+        </div>
+
+        {/* Saved Quotations */}
+        <button
+          onClick={() => setIsQuotationListOpen(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-[10px] font-extrabold hover:bg-slate-50 transition shrink-0"
+        >
+          <Layers3 className="w-3 h-3 shrink-0 text-accent-sky" />
+          <span className="hidden sm:inline">{currentLang === 'lo' ? `ໃບສະເໜີ (${quotations.length})` : `Saved (${quotations.length})`}</span>
+          <span className="sm:hidden">{quotations.length}</span>
+        </button>
+
+        {/* CTA Button */}
         {currentStep === 'calc' ? (
           <button
             type="button"
@@ -1103,21 +1096,22 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
               setCurrentStep('quote');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className="hidden sm:flex items-center gap-2 px-5 py-3 bg-accent-sky hover:bg-sky-500 text-white rounded-2xl text-xs font-black transition cursor-pointer shadow-md shadow-accent-sky/20 active:scale-95"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-accent-sky hover:bg-sky-500 text-white rounded-lg text-xs font-black transition cursor-pointer shadow-sm active:scale-95 shrink-0"
           >
-            <span>{currentLang === 'lo' ? 'ອອກໃບສະເໜີລາຄາ →' : 'Generate Quote →'}</span>
+            <span>{currentLang === 'lo' ? 'ອອກໃບສະເໜີ →' : 'Generate →'}</span>
           </button>
         ) : (
           <button
             type="button"
             onClick={() => setCurrentStep('calc')}
-            className="hidden sm:flex items-center gap-2 px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-black transition cursor-pointer"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-black transition cursor-pointer shrink-0"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>{currentLang === 'lo' ? 'ແກ້ໄຂສະເປກ/ຕົ້ນທຶນ' : 'Edit Specs & Cost'}</span>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>{currentLang === 'lo' ? 'ແກ້ໄຂ' : 'Edit'}</span>
           </button>
         )}
       </div>
+
 
       {/* Credit warning banner (Hide on print) */}
       {creditStatus.exceeded && (
@@ -1141,8 +1135,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       {currentStep === 'calc' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start print:hidden animate-fade-in">
           
-          {/* Left Column: Job Specifications Panel (Fluid Scrollable Content) */}
-          <div className="lg:col-span-7 bg-white p-5 sm:p-7 lg:p-6 xl:p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6 min-w-0">
+          {/* Left Column: Job Specifications Panel - Independent Scroll */}
+          <div className="lg:col-span-7 bg-white p-5 sm:p-7 lg:p-6 xl:p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6 min-w-0 lg:sticky lg:top-[5.5rem] lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto scrollbar-thin">
             <div className="flex items-center justify-between border-b pb-4">
               <div>
                 <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2">
@@ -1150,7 +1144,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                   <span>{currentLang === 'lo' ? 'ກຳນົດລາຍລະອຽດງານພິມ (Specs)' : 'Job Specifications'}</span>
                 </h3>
                 <p className="text-[11px] font-bold text-slate-400 mt-1 flex items-center gap-1.5">
-                  <span className="text-slate-600 font-semibold">🔖 {quotationTitle || (currentLang === 'lo' ? 'ໃບສະເໜີລາຄາງານພິມ' : 'Quotation')}</span>
+                  <FileText className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="text-slate-600 font-semibold">{quotationTitle || (currentLang === 'lo' ? 'ໃບສະເໜີລາຄາງານພິມ' : 'Quotation')}</span>
                   <button 
                     type="button" 
                     onClick={() => setIsSaveModalOpen(true)}
@@ -1167,11 +1162,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
             <div className="space-y-6">
 
-              {/* 🌟 ITEM TABS & MULTI-ITEM MANAGER (ແຖບລາຍການສິນຄ້າໃນໃບສະເໜີ) */}
-              <div className="p-4 bg-slate-900 text-white rounded-3xl space-y-3 shadow-lg">
+              {/* ITEM TABS & MULTI-ITEM MANAGER (ແຖບລາຍການສິນຄ້າໃນໃບສະເໜີ) */}
+              <div className="p-4 bg-white border border-slate-200 rounded-3xl space-y-3 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-emerald-600" />
                     <span>ລາຍການສິນຄ້າ ({items.length} ລາຍການ)</span>
                   </span>
                   <button
@@ -1193,12 +1188,13 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                         onClick={() => setActiveItemIndex(idx)}
                         className={`flex items-center gap-2 px-3 py-2 rounded-2xl cursor-pointer transition border text-xs font-bold shrink-0 select-none ${
                           isActive
-                            ? 'bg-white text-slate-900 border-white shadow-md'
-                            : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                            ? 'bg-primary-navy text-white border-primary-navy shadow-md'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
                         }`}
                       >
-                        <span>📄 {idx + 1}. {item.name || `ລາຍການ ${idx + 1}`}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-sans font-bold ${isActive ? 'bg-indigo-100 text-indigo-900' : 'bg-slate-900 text-slate-400'}`}>
+                        <FileText className="w-3.5 h-3.5 shrink-0" />
+                        <span>{idx + 1}. {item.name || `ລາຍການ ${idx + 1}`}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-sans font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'}`}>
                           {item.printVolume} ຫົວ
                         </span>
                         {items.length > 1 && (
@@ -1208,7 +1204,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                               e.stopPropagation();
                               handleRemoveItem(idx);
                             }}
-                            className="hover:text-red-500 transition p-0.5"
+                            className={`hover:text-red-500 transition p-0.5 ${isActive ? 'text-white/70' : 'text-slate-400'}`}
                             title="Remove item"
                           >
                             <X className="w-3.5 h-3.5" />
@@ -1220,14 +1216,14 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 </div>
 
                 {/* Active Item Name Field */}
-                <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
-                  <span className="text-[11px] font-bold text-slate-400 shrink-0">ຊື່ສິນຄ້ານີ້:</span>
+                <div className="pt-2 border-t border-slate-200 flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-slate-500 shrink-0">ຊື່ສິນຄ້ານີ້:</span>
                   <input
                     type="text"
                     value={activeItem.name}
                     onChange={(e) => updateActiveItem({ name: e.target.value })}
                     placeholder="ລະບຸຊື່ສິນຄ້າ ເຊັ່ນ: ປຶ້ມພາສາລາວ A4..."
-                    className="w-full px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-500"
                   />
                   <button
                     type="button"
@@ -1338,8 +1334,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                     <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
                       {currentLang === 'lo' ? 'ຈຳນວນທີ່ຕ້ອງການຜະລິດ (Quantity)' : 'Quantity Required'}
                     </span>
-                    <span className="text-[11px] font-black px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200 font-sans">
-                      📦 {activeItem.printVolume.toLocaleString()} ຫົວ
+                    <span className="text-[11px] font-black px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200 font-sans flex items-center gap-1">
+                      <Layers3 className="w-3 h-3" />
+                      {activeItem.printVolume.toLocaleString()} ຫົວ
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-400">
@@ -1400,8 +1397,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                     <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
                       {currentLang === 'lo' ? 'ເລືອກເຈ້ຍ & ຂະໜາດຕັດ (Paper & Cut)' : 'Paper & Cut Specs'}
                     </span>
-                    <span className="text-[11px] font-bold px-2 py-0.5 bg-sky-50 text-sky-700 rounded-lg border border-sky-200 font-sans">
-                      📄 {activeCalc.cutsPerSheet} ຕັດ • {formatCurrency(activeCalc.paperCost)}
+                    <span className="text-[11px] font-bold px-2 py-0.5 bg-sky-50 text-sky-700 rounded-lg border border-sky-200 font-sans flex items-center gap-1">
+                      <Scissors className="w-3 h-3" />
+                      {activeCalc.cutsPerSheet} ຕັດ • {formatCurrency(activeCalc.paperCost)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-400">
@@ -1524,8 +1522,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                     <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
                       {currentLang === 'lo' ? 'ເຄື່ອງພິມ & ລະບົບສີ (Printers & Ink)' : 'Printing Process & Ink'}
                     </span>
-                    <span className="text-[11px] font-bold px-2 py-0.5 bg-purple-50 text-purple-700 rounded-lg border border-purple-200 font-sans">
-                      🖨️ {activeItem.printerAllocations.length || 1} ເຄື່ອງ • {activeItem.colorPrintMode === 'MONO_K' ? 'Mono K' : 'CMYK'} • {activeItem.isDoubleSided ? '2 ໜ້າ (Duplex)' : '1 ໜ້າ'}
+                    <span className="text-[11px] font-bold px-2 py-0.5 bg-purple-50 text-purple-700 rounded-lg border border-purple-200 font-sans flex items-center gap-1">
+                      <Printer className="w-3 h-3" />
+                      {activeItem.printerAllocations.length || 1} ເຄື່ອງ • {activeItem.colorPrintMode === 'MONO_K' ? 'Mono K' : 'CMYK'} • {activeItem.isDoubleSided ? '2 ໜ້າ' : '1 ໜ້າ'}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-400">
@@ -1603,8 +1602,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                     <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
                       {currentLang === 'lo' ? 'ວຽກຫຼັງພິມ & ເຄື່ອງຈັກ (Post-Press)' : 'Post-Press Machinery'}
                     </span>
-                    <span className="text-[11px] font-bold px-2 py-0.5 bg-amber-50 text-amber-800 rounded-lg border border-amber-200 font-sans">
-                      ⚙️ {activeItem.selectedPostPressIds?.length || 0} ວຽກ • {formatCurrency(activeCalc.postPressCost)}
+                    <span className="text-[11px] font-bold px-2 py-0.5 bg-amber-50 text-amber-800 rounded-lg border border-amber-200 font-sans flex items-center gap-1">
+                      <Wrench className="w-3 h-3" />
+                      {activeItem.selectedPostPressIds?.length || 0} ວຽກ • {formatCurrency(activeCalc.postPressCost)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-400">
@@ -1683,8 +1683,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                     <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
                       {currentLang === 'lo' ? 'ຄ່າແຮງງານ & ຕັ້ງເຄື່ອງ (Labor)' : 'Labor & Overhead'}
                     </span>
-                    <span className="text-[11px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-lg border border-blue-200 font-sans">
-                      ⚡ {activeItem.laborMode === 'percent' ? `${activeItem.laborPercent}%` : formatCurrency(activeItem.laborCostManual)} • {formatCurrency(activeCalc.laborCost)}
+                    <span className="text-[11px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-lg border border-blue-200 font-sans flex items-center gap-1">
+                      <Zap className="w-3 h-3" />
+                      {activeItem.laborMode === 'percent' ? `${activeItem.laborPercent}%` : formatCurrency(activeItem.laborCostManual)} • {formatCurrency(activeCalc.laborCost)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-400">
@@ -1699,24 +1700,26 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                       <button
                         type="button"
                         onClick={() => updateActiveItem({ laborMode: 'percent' })}
-                        className={`flex-1 py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                        className={`flex-1 py-2 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                           activeItem.laborMode === 'percent'
                             ? 'bg-white text-primary-navy shadow-xs'
                             : 'text-slate-500 hover:text-slate-800'
                         }`}
                       >
-                        📊 ຄິດໄລ່ເປັນເປີເຊັນ (% ຈາກຕົ້ນທຶນ)
+                        <PercentSquare className="w-3.5 h-3.5" />
+                        ຄິດໄລ່ເປັນ % ຕົ້ນທຶນ
                       </button>
                       <button
                         type="button"
                         onClick={() => updateActiveItem({ laborMode: 'manual' })}
-                        className={`flex-1 py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                        className={`flex-1 py-2 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                           activeItem.laborMode === 'manual'
                             ? 'bg-white text-primary-navy shadow-xs'
                             : 'text-slate-500 hover:text-slate-800'
                         }`}
                       >
-                        💵 ກຳນົດລາຄາເງິນສົດ (Fixed Cash LAK)
+                        <Coins className="w-3.5 h-3.5" />
+                        ກຳນົດລາຄາ LAK
                       </button>
                     </div>
 
@@ -1817,29 +1820,30 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
           </div>
 
           {/* Right Column: Sticky Internal Cost Studio, Profit Margin & Pricing Dashboard */}
-          <div className="lg:col-span-5 lg:sticky lg:top-4 xl:top-6 space-y-5 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto scrollbar-thin min-w-0 pr-0.5">
+          <div className="lg:col-span-5 lg:sticky lg:top-[5.5rem] space-y-5 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto scrollbar-thin min-w-0 pr-0.5">
             
-            {/* 🔒 Executive Cost & Profit Studio */}
-            <div className="bg-slate-900 text-white p-5 sm:p-7 rounded-3xl border border-slate-800 shadow-2xl space-y-5">
+            {/* Executive Cost & Profit Studio */}
+            <div className="bg-white border border-slate-200 p-5 sm:p-7 rounded-3xl shadow-sm space-y-5">
               
               {/* Studio Header */}
-              <div className="flex justify-between items-center border-b border-white/10 pb-3.5">
+              <div className="flex justify-between items-center border-b border-slate-200 pb-3.5">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <h3 className="font-black text-sm text-white uppercase tracking-wider">
-                    🔒 สรุปราคา & ກຳໄລ ({items.length} ລາຍການ)
+                  <h3 className="font-black text-sm text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-primary-navy" />
+                    ສະຫຼຸບລາຄາ & ກຳໄລ ({items.length} ລາຍການ)
                   </h3>
                 </div>
-                <span className="text-[10px] font-black text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-1 rounded-lg uppercase tracking-wider">
+                <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg uppercase tracking-wider">
                   Live Financials
                 </span>
               </div>
 
-              {/* 🌟 Big Price Hero Box */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-800/90 via-slate-800/40 to-slate-900 border border-white/10 shadow-inner space-y-3">
+              {/* Big Price Hero Box */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-primary-navy via-slate-800 to-slate-900 border border-slate-200 shadow-sm space-y-3">
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">
+                    <span className="text-[11px] font-bold text-slate-300 block uppercase tracking-wider">
                       ລາຄາສະເໜີຂາຍລວມສຸດທິ (Grand Total):
                     </span>
                     <div className="text-2xl sm:text-3xl font-black text-white font-sans tracking-tight mt-0.5">
@@ -1847,10 +1851,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block">
                       ລາຄາສະເລ່ຍ/ຫົວ:
                     </span>
-                    <span className="text-sm sm:text-base font-black text-emerald-400 font-sans">
+                    <span className="text-sm sm:text-base font-black text-emerald-300 font-sans">
                       {formatCurrency(calculatedItems[activeItemIndex]?.unitPrice || 0)}
                     </span>
                   </div>
@@ -1918,12 +1922,12 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
               {/* All Items Cost Summary Table */}
               <div className="space-y-2">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
                   ຕາຕະລາງຕົ້ນທຶນທຸກລາຍການສິນຄ້າ:
                 </span>
-                <div className="overflow-x-auto rounded-2xl border border-slate-800">
+                <div className="overflow-x-auto rounded-2xl border border-slate-200">
                   <table className="w-full text-xs text-left">
-                    <thead className="bg-slate-800/80 text-slate-300 font-bold border-b border-slate-700">
+                    <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                       <tr>
                         <th className="p-2.5 sm:p-3">ລາຍການ</th>
                         <th className="p-2.5 sm:p-3 text-right">ຈຳນວນ</th>
@@ -1932,7 +1936,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                         <th className="p-2.5 sm:p-3 text-right">ລາຄາຂາຍລວມ</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800 font-sans">
+                    <tbody className="divide-y divide-slate-100 font-sans">
                       {items.map((item, idx) => {
                         const calc = calculatedItems[idx];
                         const isAct = idx === activeItemIndex;
@@ -1940,15 +1944,15 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                           <tr 
                             key={item.id} 
                             onClick={() => setActiveItemIndex(idx)}
-                            className={`cursor-pointer transition ${isAct ? 'bg-indigo-950/70 font-black text-white' : 'text-slate-400 hover:bg-slate-800/50'}`}
+                            className={`cursor-pointer transition ${isAct ? 'bg-primary-navy/8 font-black text-slate-900' : 'text-slate-600 hover:bg-slate-50'}`}
                           >
                             <td className="p-2.5 sm:p-3 truncate max-w-[85px] sm:max-w-[120px] lg:max-w-[100px] xl:max-w-[130px] 2xl:max-w-[180px]">
                               {idx + 1}. {item.name}
                             </td>
                             <td className="p-2.5 sm:p-3 text-right">{item.printVolume}</td>
                             <td className="p-2.5 sm:p-3 text-right">{formatCurrency(calc.unitCost)}</td>
-                            <td className="p-2.5 sm:p-3 text-right text-orange-400 font-bold">{formatCurrency(calc.netCost)}</td>
-                            <td className="p-2.5 sm:p-3 text-right text-emerald-400 font-bold">{formatCurrency(calc.sellingPrice)}</td>
+                            <td className="p-2.5 sm:p-3 text-right text-orange-600 font-bold">{formatCurrency(calc.netCost)}</td>
+                            <td className="p-2.5 sm:p-3 text-right text-emerald-600 font-bold">{formatCurrency(calc.sellingPrice)}</td>
                           </tr>
                         );
                       })}
@@ -1957,21 +1961,21 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 </div>
               </div>
 
-              {/* 🔍 Detailed Cost Inspector (ລາຍລະອຽດຕົ້ນທຶນແຍກໝວດແບບລະອຽດ) */}
-              <div className="bg-slate-800/60 rounded-2xl border border-slate-700/80 overflow-hidden shadow-sm">
+              {/* Detailed Cost Inspector */}
+              <div className="rounded-2xl border border-slate-200 overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setIsCostDetailsOpen(!isCostDetailsOpen)}
-                  className="w-full p-3 flex items-center justify-between hover:bg-slate-800 transition cursor-pointer text-left select-none"
+                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition cursor-pointer text-left select-none bg-white"
                 >
                   <div className="flex items-center gap-2">
-                    <Coins className="w-4 h-4 text-sky-400" />
-                    <span className="text-xs font-black text-white">
-                      🔍 ລາຍລະອຽດຕົ້ນທຶນແຍກໝວດ (Cost Breakdown)
+                    <Layers className="w-4 h-4 text-slate-500" />
+                    <span className="text-xs font-bold text-slate-700">
+                      ລາຍລະອຽດຕົ້ນທຶນແຍກໝວດ
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-mono font-black text-sky-300">
+                    <span className="text-xs font-black text-slate-800 font-sans">
                       {formatCurrency(grandNetCost)}
                     </span>
                     {isCostDetailsOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
@@ -1979,63 +1983,43 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 </button>
 
                 {isCostDetailsOpen && (
-                  <div className="p-3.5 pt-1 space-y-2 text-xs border-t border-slate-700/50 animate-fade-in font-medium">
-                    <div className="flex justify-between items-center py-1 border-b border-slate-700/40">
-                      <span className="text-slate-300 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-sky-400"></span>
-                        <span>1. ຕົ້ນທຶນເຈ້ຍ (Paper FIFO):</span>
-                      </span>
-                      <span className="font-sans font-bold text-white">{formatCurrency(grandPaperCost)}</span>
-                    </div>
-
-                    <div className="flex justify-between items-center py-1 border-b border-slate-700/40">
-                      <span className="text-slate-300 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-purple-400"></span>
-                        <span>2. ຕົ້ນທຶນໝຶກພິມ (Ink Consumed):</span>
-                      </span>
-                      <span className="font-sans font-bold text-white">{formatCurrency(grandInkCost)}</span>
-                    </div>
-
-                    <div className="flex justify-between items-center py-1 border-b border-slate-700/40">
-                      <span className="text-slate-300 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                        <span>3. ຄ່າເສື່ອມເຄື່ອງ & ໄຟຟ້າ (Machine & Utility):</span>
-                      </span>
-                      <span className="font-sans font-bold text-white">{formatCurrency(grandMachCost)}</span>
-                    </div>
-
-                    <div className="flex justify-between items-center py-1 border-b border-slate-700/40">
-                      <span className="text-slate-300 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-orange-400"></span>
-                        <span>4. ຄ່າເຄື່ອງຈັກຫຼັງພິມ (Post-Press Machinery):</span>
-                      </span>
-                      <span className="font-sans font-bold text-white">{formatCurrency(grandPostPressCost)}</span>
-                    </div>
-
-                    <div className="flex justify-between items-center py-1 border-b border-slate-700/40">
-                      <span className="text-slate-300 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-                        <span>5. ຄ່າແຮງງານ & ຕັ້ງເຄື່ອງ (Labor & Setup):</span>
-                      </span>
-                      <span className="font-sans font-bold text-white">{formatCurrency(grandLaborCost)}</span>
-                    </div>
-
-                    <div className="flex justify-between items-center pt-1 text-sky-400 font-black text-xs">
-                      <span>ລວມຕົ້ນທຶນພາຍໃນສຸດທິ (Grand Net Cost):</span>
-                      <span className="font-sans text-sm text-sky-300">{formatCurrency(grandNetCost)}</span>
+                  <div className="bg-slate-50 border-t border-slate-200 divide-y divide-slate-100 animate-fade-in">
+                    {[
+                      { label: 'ຕົ້ນທຶນເຈ້ຍ', sublabel: 'Paper FIFO', value: grandPaperCost, color: 'bg-sky-500' },
+                      { label: 'ຕົ້ນທຶນໝຶກພິມ', sublabel: 'Ink Consumed', value: grandInkCost, color: 'bg-purple-500' },
+                      { label: 'ຄ່າເສື່ອມເຄື່ອງ & ໄຟຟ້າ', sublabel: 'Machine & Utility', value: grandMachCost, color: 'bg-amber-500' },
+                      { label: 'ຄ່າເຄື່ອງຈັກຫຼັງພິມ', sublabel: 'Post-Press', value: grandPostPressCost, color: 'bg-orange-500' },
+                      { label: 'ຄ່າແຮງງານ & ຕັ້ງເຄື່ອງ', sublabel: 'Labor & Setup', value: grandLaborCost, color: 'bg-blue-500' },
+                    ].map((row) => (
+                      <div key={row.sublabel} className="flex items-center justify-between px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${row.color}`}></span>
+                          <div>
+                            <div className="text-xs font-semibold text-slate-700">{row.label}</div>
+                            <div className="text-[10px] text-slate-400 font-sans">{row.sublabel}</div>
+                          </div>
+                        </div>
+                        <span className="text-xs font-black text-slate-800 font-sans">{formatCurrency(row.value)}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between items-center px-4 py-3 bg-slate-100">
+                      <span className="text-xs font-black text-slate-800">ລວມຕົ້ນທຶນສຸດທິ</span>
+                      <span className="text-sm font-black text-primary-navy font-sans">{formatCurrency(grandNetCost)}</span>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Profit Margin slider with Quick Chips */}
-              <div className="space-y-3 bg-black/40 p-4 rounded-2xl border border-white/10">
-                <div className="flex justify-between text-xs font-bold text-white/80">
-                  <span className="flex items-center gap-1.5">
-                    <Sliders className="w-4 h-4 text-sky-400" />
-                    <span>ອັດຕາກຳໄລ "{activeItem.name}":</span>
+              {/* Profit Margin Slider */}
+              <div className="space-y-3 bg-white border border-slate-200 p-4 rounded-2xl">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Sliders className="w-3.5 h-3.5 text-slate-500" />
+                    ອັດຕາກຳໄລ
                   </span>
-                  <span className="font-sans font-black text-sm text-sky-400">{activeItem.profitMargin || 40}%</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-lg font-black text-primary-navy font-sans leading-none">{activeItem.profitMargin || 40}%</span>
+                  </div>
                 </div>
 
                 <input
@@ -2045,42 +2029,42 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                   step="5"
                   value={activeItem.profitMargin || 40}
                   onChange={(e) => updateActiveItem({ profitMargin: Number(e.target.value) })}
-                  className="w-full accent-sky-500 cursor-pointer"
+                  className="w-full accent-primary-navy cursor-pointer h-1.5"
                 />
 
-                {/* Quick Margin Chips */}
-                <div className="flex flex-wrap gap-1.5 justify-between pt-1">
+                <div className="flex flex-wrap gap-1.5">
                   {[
-                    { label: '25% (Min)', val: 25 },
-                    { label: '35% (Std)', val: 35 },
-                    { label: '⭐ 45%', val: 45 },
-                    { label: '55% (High)', val: 55 },
-                    { label: '65% (Prem)', val: 65 },
+                    { label: '25%', sub: 'Min', val: 25 },
+                    { label: '35%', sub: 'Std', val: 35 },
+                    { label: '45%', sub: 'Rec', val: 45, recommended: true },
+                    { label: '55%', sub: 'High', val: 55 },
+                    { label: '65%', sub: 'Prem', val: 65 },
                   ].map(chip => (
                     <button
                       key={chip.val}
                       type="button"
                       onClick={() => updateActiveItem({ profitMargin: chip.val })}
-                      className={`px-2 py-1 rounded-lg text-[10px] font-black transition cursor-pointer ${
+                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-black transition cursor-pointer text-center ${
                         activeItem.profitMargin === chip.val
-                          ? 'bg-sky-500 text-white shadow-xs'
-                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          ? 'bg-primary-navy text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
-                      {chip.label}
+                      <div>{chip.label}</div>
+                      <div className={`text-[9px] font-bold ${activeItem.profitMargin === chip.val ? 'text-white/70' : 'text-slate-400'}`}>{chip.sub}</div>
                     </button>
                   ))}
                 </div>
 
                 {grandProfitMargin < 25.0 && (
-                  <div className="mt-2.5 p-2.5 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[11px] font-bold flex items-start gap-2 animate-pulse">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-bold flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                     <div>
-                      <div className="font-black text-amber-300">⚠️ Margin Guard Alert (&lt; 25%)</div>
-                      <div className="text-[10px] text-amber-200/80 font-normal">
+                      <div className="font-black">Margin Guard Alert (&lt; 25%)</div>
+                      <div className="text-[10px] text-amber-700 font-normal mt-0.5">
                         {currentLang === 'lo' 
-                          ? 'ກຳໄລຕ່ຳກວ່າ 25% ລະບົບຈະກຳນົດສະຖານະເປັນ REQUIRES_MANAGER_APPROVAL'
-                          : 'Margin is under 25%. Requires Manager Approval before order confirmation.'}
+                          ? 'ກຳໄລຕ່ຳກວ່າ 25% ລະບົບຈະກຳນົດສະຖານະ REQUIRES_MANAGER_APPROVAL'
+                          : 'Margin under 25% — requires Manager Approval.'}
                       </div>
                     </div>
                   </div>
@@ -2088,17 +2072,17 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
               </div>
 
               {/* Tax & Logistics Settings */}
-              <div className="space-y-3 pt-2 border-t border-white/10 text-xs">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-300 font-bold flex items-center gap-1.5">
-                    <PercentSquare className="w-4 h-4 text-sky-400" />
-                    <span>ພາສີ (Tax / VAT):</span>
+              <div className="space-y-2.5 pt-2 border-t border-slate-200 text-xs">
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-slate-600 font-bold flex items-center gap-1.5">
+                    <PercentSquare className="w-3.5 h-3.5 text-slate-500" />
+                    <span>ພາສີ (Tax / VAT)</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <select
                       value={taxMode}
                       onChange={(e) => setTaxMode(e.target.value as any)}
-                      className="bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1 text-xs text-white font-bold"
+                      className="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 font-bold focus:outline-none"
                     >
                       <option value="none">ບໍ່ມີພາສີ (0%)</option>
                       <option value="percent">ເປີເຊັນ (%)</option>
@@ -2111,32 +2095,31 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                           max="50"
                           value={taxRate}
                           onChange={(e) => setTaxRate(Number(e.target.value))}
-                          className="w-14 bg-slate-800 border border-slate-700 rounded-xl px-2 py-1 text-right text-xs font-bold text-white font-sans"
+                          className="w-14 bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-right text-xs font-bold text-slate-800 font-sans focus:outline-none"
                         />
-                        <span className="text-slate-400">%</span>
+                        <span className="text-slate-500">%</span>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Shipping Configuration */}
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-300 font-bold flex items-center gap-1.5">
-                    <Truck className="w-4 h-4 text-amber-400" />
-                    <span>ຄ່າຂົນສົ່ງ (Shipping):</span>
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-slate-600 font-bold flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 text-slate-500" />
+                    <span>ຄ່າຂົນສົ່ງ (Shipping)</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <select
                       value={shippingMethod}
                       onChange={(e) => setShippingMethod(e.target.value)}
-                      className="bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1 text-[11px] text-white font-bold max-w-[130px]"
+                      className="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-[11px] text-slate-800 font-bold max-w-[140px] focus:outline-none"
                     >
-                      <option value="In-Store Pickup">🏪 ຮັບເອງທີ່ຮ້ານ</option>
-                      <option value="Anousith Express">🚚 Anousith</option>
-                      <option value="HAL Logistics">🚛 HAL</option>
-                      <option value="Mixay Express">📦 Mixay</option>
-                      <option value="Direct Delivery">🛵 ສົ່ງຕົງ</option>
-                      <option value="Custom">✨ ອື່ນໆ</option>
+                      <option value="In-Store Pickup">ຮັບເອງທີ່ຮ້ານ</option>
+                      <option value="Anousith Express">Anousith Express</option>
+                      <option value="HAL Logistics">HAL Logistics</option>
+                      <option value="Mixay Express">Mixay Express</option>
+                      <option value="Direct Delivery">ສົ່ງຕົງ</option>
+                      <option value="Custom">ອື່ນໆ (Custom)</option>
                     </select>
                     <input
                       type="number"
@@ -2144,8 +2127,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                       min="0"
                       value={shippingFee}
                       onChange={(e) => setShippingFee(Math.max(0, Number(e.target.value)))}
-                      placeholder="0 ₭"
-                      className="w-20 bg-slate-800 border border-slate-700 rounded-xl px-2 py-1 text-right text-xs font-bold text-white font-sans"
+                      placeholder="0"
+                      className="w-20 bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-right text-xs font-bold text-slate-800 font-sans focus:outline-none"
                     />
                   </div>
                 </div>

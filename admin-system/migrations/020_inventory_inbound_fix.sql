@@ -20,6 +20,9 @@ BEGIN
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'materials' AND column_name = 'technical_specs') THEN
             ALTER TABLE materials ADD COLUMN technical_specs JSONB DEFAULT '{}'::jsonb;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'materials' AND column_name = 'specification_meta') THEN
+            ALTER TABLE materials ADD COLUMN specification_meta JSONB DEFAULT '{}'::jsonb;
+        END IF;
     END IF;
 END $$;
 

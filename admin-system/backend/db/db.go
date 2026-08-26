@@ -68,8 +68,36 @@ func RunMigrations(db *sql.DB) error {
 		"migrations/001_master_printer_ink_paper_quotation_spec.sql",
 		"../migrations/002_employees_offcuts_inbound.sql",
 		"migrations/002_employees_offcuts_inbound.sql",
+		"../migrations/003_add_equipment_specs_labor_modes.sql",
+		"migrations/003_add_equipment_specs_labor_modes.sql",
+		"../migrations/003_genuine_and_compatible_inks.sql",
+		"migrations/003_genuine_and_compatible_inks.sql",
+		"../migrations/004_audit_logs_and_timestamptz.sql",
+		"migrations/004_audit_logs_and_timestamptz.sql",
+		"../migrations/005_inventory_lots_fifo.sql",
+		"migrations/005_inventory_lots_fifo.sql",
+		"../migrations/006_convert_floats_to_decimal.sql",
+		"migrations/006_convert_floats_to_decimal.sql",
+		"../migrations/007_deposit_and_tax_options.sql",
+		"migrations/007_deposit_and_tax_options.sql",
+		"../migrations/008_internal_shipping_tracking.sql",
+		"migrations/008_internal_shipping_tracking.sql",
+		"../migrations/009_order_printer_channel_and_finishing_linking.sql",
+		"migrations/009_order_printer_channel_and_finishing_linking.sql",
 		"../migrations/010_bilingual_books_preflight_and_shop_tracker.sql",
 		"migrations/010_bilingual_books_preflight_and_shop_tracker.sql",
+		"../migrations/012_public_catalog_and_discount_tiers.sql",
+		"migrations/012_public_catalog_and_discount_tiers.sql",
+		"../migrations/013_slip_verification.sql",
+		"migrations/013_slip_verification.sql",
+		"../migrations/014_paper_price_versioning.sql",
+		"migrations/014_paper_price_versioning.sql",
+		"../migrations/015_order_preflight_reports.sql",
+		"migrations/015_order_preflight_reports.sql",
+		"../migrations/016_predictive_maintenance.sql",
+		"migrations/016_predictive_maintenance.sql",
+		"../migrations/017_couriers_and_payment_methods.sql",
+		"migrations/017_couriers_and_payment_methods.sql",
 		"../migrations/018_lao_provinces_and_districts.sql",
 		"migrations/018_lao_provinces_and_districts.sql",
 		"../migrations/019_dynamic_categories_and_bilingual_catalog.sql",
@@ -91,7 +119,7 @@ func RunMigrations(db *sql.DB) error {
 			log.Printf("[DB MIGRATION] Executing migration script from %s...", absPath)
 			_, execErr := db.Exec(string(sqlBytes))
 			if execErr != nil {
-				log.Printf("[DB MIGRATION] Migration warning for %s: %v", absPath, execErr)
+				log.Printf("[DB MIGRATION] Migration info for %s: %v", absPath, execErr)
 			} else {
 				log.Printf("[DB MIGRATION] Successfully executed migration %s", absPath)
 			}

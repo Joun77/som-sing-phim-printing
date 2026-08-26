@@ -10,6 +10,7 @@ export interface SpecOption {
   hint: string
   hintEn?: string
   add: number
+  extraCostRate?: number
   materialSku?: string
   paperCode?: string
 }
@@ -38,6 +39,16 @@ export interface SpecGroup {
   options: SpecOption[]
 }
 
+export interface CustomBreakdownRow {
+  id: string
+  titleLo: string
+  titleEn?: string
+  includePrintCost: boolean
+  includeMaterialCost: boolean
+  includeFinishingCost: boolean
+  extraFixedCost?: number
+}
+
 export interface FeaturesConfig {
   hasGeneralDocUpload?: boolean
   hasCoverUpload?: boolean
@@ -47,6 +58,8 @@ export interface FeaturesConfig {
   hasCustomDim?: boolean
   uploadWorkflow?: 'general_document' | 'artwork_preflight' | 'custom'
   allowedFileTypes?: string[]
+  breakdownMode?: 'auto' | 'custom'
+  customBreakdownRows?: CustomBreakdownRow[]
 }
 
 export interface ProductInfoTab {

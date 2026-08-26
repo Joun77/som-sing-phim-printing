@@ -2,20 +2,30 @@ import React from 'react'
 import { formatMoney } from '../utils/currency'
 import { SparkleIcon, CheckIcon } from './icons'
 
+export interface SpecBreakdownItem {
+  id: string
+  title: string
+  label: string
+  ratePerUnit: number
+  hint?: string
+  badge?: string
+}
+
 interface PriceBreakdownTableProps {
   quantity: number
   pageCount?: number
   isColor?: boolean
   coveragePercent?: number
-  baseUnit: number
-  sizeLabel: string
-  sizeAdd: number
-  materialLabel: string
-  materialAdd: number
-  finishingLabel: string
-  finishingAdd: number
+  specItems?: SpecBreakdownItem[]
+  baseUnit?: number
+  sizeLabel?: string
+  sizeAdd?: number
+  materialLabel?: string
+  materialAdd?: number
+  finishingLabel?: string
+  finishingAdd?: number
   discountPercent: number
-  totalAmountTHB: number
+  totalAmountTHB?: number
   currency: any
   convertTo: (thb: number) => number
   language: string
@@ -26,14 +36,16 @@ export const PriceBreakdownTable: React.FC<PriceBreakdownTableProps> = ({
   pageCount = 1,
   isColor = true,
   coveragePercent = 20,
-  baseUnit,
-  sizeLabel,
-  sizeAdd,
-  materialLabel,
-  materialAdd,
-  finishingLabel,
-  finishingAdd,
+  specItems,
+  baseUnit = 0,
+  sizeLabel = '',
+  sizeAdd = 0,
+  materialLabel = '',
+  materialAdd = 0,
+  finishingLabel = '',
+  finishingAdd = 0,
   discountPercent,
+  totalAmountTHB,
   currency,
   convertTo,
   language
@@ -41,25 +53,28 @@ export const PriceBreakdownTable: React.FC<PriceBreakdownTableProps> = ({
   const pagesPerItem = Math.max(1, pageCount)
   const totalPrintedPages = pagesPerItem * quantity
 
-  // 1. Calculate combined rate per page/sheet (Base print + Ink coverage + Size + Paper Material)
+  // Format helper that handles LAK vs other currencies cleanly
+  const formatAmount = (amt: number) => {
+    if (currency === 'LAK' || !currency) {
+      return formatMoney(amt, 'LAK')
+    }
+    const inTHB = amt / 630.5
+    return formatMoney(convertTo(inTHB), currency)
+  }
+
+  // Calculate Unit Selling Price
+  let unitSellingPrice = 0
+  if (specItems && specItems.length > 0) {
+    unitSellingPrice = specItems.reduce((sum, it) => sum + (it.ratePerUnit || 0), 0)
+  } else {
+    const optionsAddPerUnit = (sizeAdd || 0) + (materialAdd || 0) + (finishingAdd || 0)
+    unitSellingPrice = (baseUnit || 0) + optionsAddPerUnit
+  }
+
+  const grossSubtotal = unitSellingPrice * quantity
+  const discountSavings = Math.round(grossSubtotal * ((discountPercent || 0) / 100))
+  const netTotal = totalAmountTHB !== undefined && totalAmountTHB > 0 ? totalAmountTHB : Math.max(0, grossSubtotal - discountSavings)
   const effectiveCoverage = Math.max(5, Math.min(100, coveragePercent))
-  const inkRatePerSheetTHB = isColor
-    ? Math.max(0.4, Number(((effectiveCoverage / 100) * 2.8).toFixed(2)))
-    : 0.25
-  const paperAndPrintBasePerSheetTHB = (baseUnit * 0.3) + sizeAdd + materialAdd
-  const combinedRatePerSheetTHB = paperAndPrintBasePerSheetTHB + inkRatePerSheetTHB
-  const totalPrintAndPaperTHB = combinedRatePerSheetTHB * totalPrintedPages
-
-  // 2. Finishing & Binding Service Fee per unit
-  const finishingServiceRateTHB = finishingAdd + (baseUnit * 0.2)
-  const totalFinishingServiceTHB = finishingServiceRateTHB * quantity
-
-  // 3. Gross before discount
-  const grossCalculatedTHB = totalPrintAndPaperTHB + totalFinishingServiceTHB
-
-  // 4. Discount calculation
-  const discountSavingsTHB = (grossCalculatedTHB * discountPercent) / 100
-  const finalTotalTHB = Math.max(0, grossCalculatedTHB - discountSavingsTHB)
 
   return (
     <div className="border border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 shadow-sm overflow-hidden text-slate-800 dark:text-slate-200 my-4 transition-all">
@@ -87,80 +102,97 @@ export const PriceBreakdownTable: React.FC<PriceBreakdownTableProps> = ({
               <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 uppercase text-[10.5px]">
                 <th className="pb-3 font-bold">{language === 'en' ? 'Service Item' : 'ລາຍການບໍລິການ'}</th>
                 <th className="pb-3 font-bold text-center">{language === 'en' ? 'Specification' : 'ສເປັກທີ່ເລືອກ'}</th>
-                <th className="pb-3 font-bold text-right">{language === 'en' ? 'Rate / Page' : 'ອັດຕາຕໍ່ໜ້າ'}</th>
-                <th className="pb-3 font-bold text-right">{language === 'en' ? 'Page Count' : 'ຈຳນວນໜ້າ'}</th>
+                <th className="pb-3 font-bold text-right">{language === 'en' ? 'Rate / Unit' : 'ອັດຕາຕໍ່ໜ່ວຍ'}</th>
+                <th className="pb-3 font-bold text-right">{language === 'en' ? 'Quantity' : 'ຈຳນວນ'}</th>
                 <th className="pb-3 font-bold text-right">{language === 'en' ? 'Subtotal' : 'ລວມມູນຄ່າ'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-850">
-              {/* 1. Combined Print & Paper Rate per Page */}
-              <tr>
-                <td className="py-3.5 font-bold text-slate-900 dark:text-slate-100">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-black">
-                      {language === 'en' ? 'Printing & Paper Material Rate' : 'ຄ່າພິມ + ເນື້ອເຈ້ຍຕໍ່ໜ້າ (Print & Paper Rate)'}
+              {/* Render dynamic spec rows if specItems provided */}
+              {specItems && specItems.length > 0 ? (
+                specItems.map((item, idx) => (
+                  <tr key={item.id || idx}>
+                    <td className="py-3.5 font-bold text-slate-900 dark:text-slate-100">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-black">{item.title}</span>
+                        {item.hint && <span className="text-[10.5px] text-slate-500">({item.hint})</span>}
+                      </div>
+                    </td>
+                    <td className="py-3.5 text-center">
+                      <span className="inline-block px-3 py-1 rounded-full font-mono text-[11px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                        {item.label}
+                      </span>
+                    </td>
+                    <td className="py-3.5 text-right font-mono font-bold text-amber-600 dark:text-amber-400">
+                      {item.ratePerUnit > 0 ? (
+                        formatAmount(item.ratePerUnit)
+                      ) : (
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-sans">
+                          {language === 'en' ? 'Included' : '✓ ລວມໃນຊຸດ'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3.5 text-right font-mono text-slate-600 dark:text-slate-300">
+                      {quantity} ຊິ້ນ
+                    </td>
+                    <td className="py-3.5 text-right font-bold font-mono text-slate-900 dark:text-slate-100">
+                      {item.ratePerUnit > 0 ? (
+                        formatAmount(item.ratePerUnit * quantity)
+                      ) : (
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-sans">
+                          {language === 'en' ? 'Free' : '✓ ຟຣີ'}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                /* Fallback legacy rendering */
+                <tr>
+                  <td className="py-3.5 font-bold text-slate-900 dark:text-slate-100">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-black">
+                        {language === 'en' ? 'Base Printing & Production Rate' : 'ຄ່າພິມ ແລະ ການຜະລິດພື້ນຖານ (Base Print Service)'}
+                      </span>
+                      <span className="text-[10.5px] text-slate-500">
+                        (Coverage {effectiveCoverage}% · {isColor ? 'CMYK Full Color' : 'Monochrome Grayscale'})
+                      </span>
+                    </div>
+                  </td>
+                  <td className="py-3.5 text-center">
+                    <span className={`inline-block px-3 py-1 rounded-full font-mono text-[11px] font-bold ${
+                      isColor
+                        ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                        : 'bg-slate-500/10 text-slate-600 dark:text-slate-300 border border-slate-500/20'
+                    }`}>
+                      {isColor ? '🌈 ພິມ 4 ສີ (CMYK)' : '⚫ ພິມຂາວ-ດຳ'}
                     </span>
-                    <span className="text-[10.5px] text-slate-500">
-                      (ລວມຄ່ານ້ຳໝຶກຕາມ Coverage {effectiveCoverage}% + ເນື້ອເຈ້ຍ {materialLabel})
-                    </span>
-                  </div>
-                </td>
-                <td className="py-3.5 text-center">
-                  <span className={`inline-block px-3 py-1 rounded-full font-mono text-[11px] font-bold ${
-                    isColor
-                      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                      : 'bg-slate-500/10 text-slate-600 dark:text-slate-300 border border-slate-500/20'
-                  }`}>
-                    {isColor ? '🌈 ພິມ 4 ສີ (CMYK)' : '⚫ ພິມຂາວ-ດຳ'} · {sizeLabel} · {materialLabel}
-                  </span>
-                </td>
-                <td className="py-3.5 text-right font-mono font-bold text-amber-600 dark:text-amber-400">
-                  {formatMoney(convertTo(combinedRatePerSheetTHB), currency)} / ໜ້າ
-                </td>
-                <td className="py-3.5 text-right font-mono text-slate-600 dark:text-slate-300">
-                  {quantity > 1 ? (
-                    <span>{totalPrintedPages} ໜ້າ ({pagesPerItem} ໜ້າໃນຟາຍ × {quantity} ຊຸດ)</span>
-                  ) : (
-                    <span>{pagesPerItem} ໜ້າ (ຕາມຟາຍ PDF)</span>
-                  )}
-                </td>
-                <td className="py-3.5 text-right font-bold font-mono text-slate-900 dark:text-slate-100">
-                  {formatMoney(convertTo(totalPrintAndPaperTHB), currency)}
-                </td>
-              </tr>
+                  </td>
+                  <td className="py-3.5 text-right font-mono font-bold text-amber-600 dark:text-amber-400">
+                    {formatAmount(baseUnit)}
+                  </td>
+                  <td className="py-3.5 text-right font-mono text-slate-600 dark:text-slate-300">
+                    {quantity} ຊິ້ນ
+                  </td>
+                  <td className="py-3.5 text-right font-bold font-mono text-slate-900 dark:text-slate-100">
+                    {formatAmount(baseUnit * quantity)}
+                  </td>
+                </tr>
+              )}
 
-              {/* 2. Finishing & Binding */}
-              <tr>
-                <td className="py-3.5 font-bold text-slate-900 dark:text-slate-100">
-                  {language === 'en' ? 'Finishing & Binding Craft' : 'ຄ່າເຂົ້າເລັ້ມ & ຕັດແຕ່ງພິເສດ (Binding & Finishing)'}
-                </td>
-                <td className="py-3.5 text-center text-slate-600 dark:text-slate-300 font-bold">
-                  {finishingLabel}
-                </td>
-                <td className="py-3.5 text-right font-mono text-slate-600 dark:text-slate-300">
-                  {formatMoney(convertTo(finishingServiceRateTHB), currency)} / ເຫຼັ້ມ
-                </td>
-                <td className="py-3.5 text-right font-mono text-slate-500">
-                  {quantity} ເຫຼັ້ມ (Units)
-                </td>
-                <td className="py-3.5 text-right font-bold font-mono text-slate-900 dark:text-slate-100">
-                  {formatMoney(convertTo(totalFinishingServiceTHB), currency)}
-                </td>
-              </tr>
-
-              {/* 3. Volume Discount */}
+              {/* Volume Discount */}
               {discountPercent > 0 && (
                 <tr className="bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 font-bold">
                   <td className="py-3.5">
                     {language === 'en' ? `Tier Volume Discount (${discountPercent}%)` : `ສ່ວນຫຼຸດພິເສດຕາມຈຳນວນ (${discountPercent}%)`}
                   </td>
-                  <td className="py-3.5 text-center">≥ {quantity} ເຫຼັ້ມ</td>
+                  <td className="py-3.5 text-center">≥ {quantity} ຊິ້ນ</td>
                   <td className="py-3.5 text-right font-mono text-emerald-600 dark:text-emerald-400">
                     -{discountPercent}%
                   </td>
-                  <td className="py-3.5 text-right font-mono text-emerald-600 dark:text-emerald-400">{quantity} ເຫຼັ້ມ</td>
+                  <td className="py-3.5 text-right font-mono text-emerald-600 dark:text-emerald-400">{quantity} ຊິ້ນ</td>
                   <td className="py-3.5 text-right font-mono text-emerald-600 dark:text-emerald-400">
-                    -{formatMoney(convertTo(discountSavingsTHB), currency)}
+                    -{formatAmount(discountSavings)}
                   </td>
                 </tr>
               )}
@@ -175,14 +207,14 @@ export const PriceBreakdownTable: React.FC<PriceBreakdownTableProps> = ({
               <CheckIcon size={16} color="#10B981" />
               <span className="font-bold text-slate-700 dark:text-slate-300">
                 {language === 'en'
-                  ? `Unit Rate: ${formatMoney(convertTo(grossCalculatedTHB / quantity), currency)} / Set`
-                  : `ລາຄາສະເລ່ຍ: ${formatMoney(convertTo(grossCalculatedTHB / quantity), currency)} / ເຫຼັ້ມ (ຊຸດ)`}
+                  ? `Unit Rate: ${formatAmount(netTotal / Math.max(1, quantity))} / Unit`
+                  : `ລາຄາສະເລ່ຍ: ${formatAmount(netTotal / Math.max(1, quantity))} / ຊິ້ນ`}
               </span>
             </div>
             <p className="m-0 text-[11px] text-slate-400">
               {language === 'en'
-                ? `Total ${totalPrintedPages} pages across ${quantity} set(s)`
-                : `ລວມທັງໝົດ ${totalPrintedPages} ໜ້າ (ຄິດໄລ່ຈາກຟາຍ ${pagesPerItem} ໜ້າ × ${quantity} ຊຸດ/ເຫຼັ້ມ)`}
+                ? `Total ${totalPrintedPages} pages across ${quantity} piece(s)`
+                : `ລວມທັງໝົດ ${totalPrintedPages} ໜ້າ (ຄິດໄລ່ຈາກຟາຍ ${pagesPerItem} ໜ້າ × ${quantity} ຊິ້ນ)`}
             </p>
           </div>
 
@@ -191,7 +223,7 @@ export const PriceBreakdownTable: React.FC<PriceBreakdownTableProps> = ({
               {language === 'en' ? 'Net Quotation Total:' : 'ຍອດລວມສຸດທິ:'}
             </span>
             <span className="text-2xl sm:text-3xl font-black text-amber-600 dark:text-amber-400 font-mono">
-              {formatMoney(convertTo(finalTotalTHB), currency)}
+              {formatAmount(netTotal)}
             </span>
           </div>
         </div>

@@ -128,7 +128,7 @@ export default function InventoryManagement() {
             className="flex items-center gap-1.5 px-4.5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-2xl transition shadow-lg shadow-blue-500/20 cursor-pointer"
           >
             <PackagePlus className="w-4 h-4" />
-            <span>+ รับเข้าสินค้า (Stock Inbound)</span>
+            <span>+ ຮັບເຂົ້າສິນຄ້າ (Stock Inbound)</span>
           </button>
           <button
             onClick={() => setIsPriceUploaderOpen(true)}
@@ -142,21 +142,21 @@ export default function InventoryManagement() {
             className="flex items-center gap-1.5 px-4.5 py-2.5 bg-rose-50 border border-rose-100 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-2xl transition cursor-pointer"
           >
             <Scissors className="w-4 h-4" />
-            <span>{currentLang === 'lo' ? '- ເບີກใช้งาน / ຕັດສະຕ໋ອກ' : '- Stock Discharge'}</span>
+            <span>- ເບີກໃຊ້ງານ / ຕັດສະຕ໋ອກ</span>
           </button>
           <button
             onClick={() => setIsOffcutOpen(true)}
             className="flex items-center gap-1.5 px-4.5 py-2.5 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-2xl transition cursor-pointer"
           >
             <Scissors className="w-4 h-4" />
-            <span>+ Add Offcut Remnant</span>
+            <span>+ ເພີ່ມເສດເຈ້ຍ (Offcut)</span>
           </button>
           <button
             onClick={() => setIsAddMaterialOpen(true)}
             className="flex items-center gap-1.5 px-4.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-2xl transition shadow-sm cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>+ New Master SKU</span>
+            <span>+ ເພີ່ມ SKU ໃໝ່</span>
           </button>
         </div>
       </div>
@@ -173,7 +173,7 @@ export default function InventoryManagement() {
             }`}
           >
             <Boxes className="w-4 h-4" />
-            ตารางสต็อก Master (Stock Ledger)
+            ຕາຕະລາງສະຕ໋ອກ Master (Stock Ledger)
           </button>
           <button
             onClick={() => setMainView('inbound_history')}
@@ -184,7 +184,7 @@ export default function InventoryManagement() {
             }`}
           >
             <History className="w-4 h-4" />
-            ประวัติการรับเข้า & ยกเลิกบิล ({inboundHistory.length})
+            ປະຫວັດການຮັບເຂົ້າ & ຍົກເລີກບິນ ({inboundHistory.length})
           </button>
         </div>
 
@@ -192,10 +192,10 @@ export default function InventoryManagement() {
           onClick={loadBackendData}
           disabled={loadingBackendData}
           className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
-          title="รีเฟรชข้อมูล"
+          title="ໂຫຼດຂໍ້ມູນໃໝ່"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loadingBackendData ? 'animate-spin text-blue-600' : ''}`} />
-          <span>รีเฟรช</span>
+          <span>ໂຫຼດໃໝ່</span>
         </button>
       </div>
 
@@ -208,6 +208,7 @@ export default function InventoryManagement() {
               materials={backendMaterials}
               loading={loadingBackendData}
               onRefresh={loadBackendData}
+              onViewDetails={(mat) => setSelectedDetailLot(mat)}
               onOpenInbound={(mat) => {
                 setIsInboundModalOpen(true);
               }}
@@ -235,7 +236,7 @@ export default function InventoryManagement() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search materials by name or SKU..."
+                  placeholder="ຄົ້ນຫາ SKU, ຊື່ສິນຄ້າ, ໝວດໝູ່..."
                   className="w-full md:w-80 min-h-[40px] px-3.5 border rounded-2xl focus:outline-none font-semibold text-sm bg-white"
                 />
               </div>
@@ -268,17 +269,17 @@ export default function InventoryManagement() {
         <div className="bg-slate-50 border border-slate-200/50 p-6 rounded-3xl space-y-4">
           <span className="text-[10px] font-black uppercase tracking-wider text-indigo-500 flex items-center gap-1.5">
             <Scissors className="w-4 h-4" />
-            <span>Cataloged Offcut Remnants ({offcuts.length})</span>
+            <span>ເສດເຈ້ຍທີ່ຈັດໄວ້ (Offcut Remnants) ({offcuts.length})</span>
           </span>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {offcuts.map(off => (
               <div key={off.id} className="bg-white border rounded-2xl p-4 text-xs font-semibold space-y-1.5 shadow-sm">
                 <div className="flex justify-between items-center border-b pb-1.5 mb-1.5">
                   <span className="font-extrabold text-slate-800">{off.name}</span>
-                  <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded font-black font-sans">{off.qty} sheets</span>
+                  <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded font-black font-sans">{off.qty} ແຜ່ນ</span>
                 </div>
                 <div className="text-slate-500 leading-normal">
-                  <p>Origin SKU: <span className="font-mono text-[10px] text-slate-400 font-bold uppercase">{off.paperId}</span></p>
+                  <p>SKU ຕົ້ນທາງ: <span className="font-mono text-[10px] text-slate-400 font-bold uppercase">{off.paperId}</span></p>
                   {off.notes && <p className="italic mt-1">"{off.notes}"</p>}
                 </div>
               </div>
@@ -292,7 +293,7 @@ export default function InventoryManagement() {
         isOpen={isInboundModalOpen}
         onClose={() => setIsInboundModalOpen(false)}
         onSuccess={() => {
-          showToast('บันทึกการรับเข้าสินค้าและคำนวณต้นทุนเฉลี่ยสำเร็จ!', 'success');
+          showToast('ບັນທຶກການຮັບເຂົ້າສິນຄ້າ ແລະ ຄຳນວນຕົ້ນທຶນສຳເລັດ!', 'success');
           loadBackendData();
         }}
         materials={backendMaterials}

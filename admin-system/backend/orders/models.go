@@ -70,6 +70,8 @@ type OrderItem struct {
 	TotalPriceLAK     float64                `json:"total_price_lak"`
 	UnitPriceSnapshot float64                `json:"unit_price_snapshot"`
 	CostPriceSnapshot float64                `json:"cost_price_snapshot"`
+	MachineID         string                 `json:"machine_id,omitempty"`
+	ColorMode         string                 `json:"color_mode,omitempty"`
 	Specs             map[string]interface{} `json:"specs"`
 	CreatedAt         time.Time              `json:"created_at"`
 	UpdatedAt         time.Time              `json:"updated_at"`
@@ -103,6 +105,7 @@ type Order struct {
 	InternalTrackingCode string      `json:"internal_tracking_code,omitempty"`
 	CourierName          string      `json:"courier_name,omitempty"`
 	PODImageUrl          string      `json:"pod_image_url,omitempty"`
+	IdempotencyKey       string      `json:"idempotency_key,omitempty"`
 	CreatedAt            time.Time   `json:"created_at"`
 	UpdatedAt            time.Time   `json:"updated_at"`
 }
@@ -155,6 +158,7 @@ type CreateOrderRequest struct {
 	DepositLAK      float64                `json:"deposit_lak"`
 	DeliveryDate    string                 `json:"delivery_date"`
 	GoogleDriveLink string                 `json:"google_drive_link"`
+	IdempotencyKey  string                 `json:"idempotency_key,omitempty"`
 	Items           []CreateItemRequest    `json:"items" binding:"required,dive,required"`
 }
 
