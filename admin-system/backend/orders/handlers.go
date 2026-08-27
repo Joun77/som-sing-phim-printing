@@ -1,6 +1,7 @@
 package orders
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -17,6 +18,7 @@ import (
 	"backend/pricing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 // In-memory mock database store for orders fallback
@@ -201,9 +203,15 @@ func HandleCreateOrder(c *gin.Context) {
 			spineWidth = pricing.CalculateSpineWidthMM(pageCount, 80)
 		}
 
-		unitCost := pricingRes.TotalCost / float64(qty)
-		unitPrice := pricingRes.UnitPrice
-		itemTotalPrice := pricingRes.SalePrice
+		dTotalCostItem := decimal.NewFromFloat(pricingRes.TotalCost)
+		dSalePriceItem := decimal.NewFromFloat(pricingRes.SalePrice)
+		dQty := decimal.NewFromInt(int64(qty))
+		dUnitCost := dTotalCostItem.Div(dQty).Round(2)
+		dUnitPrice := decimal.NewFromFloat(pricingRes.UnitPrice)
+
+		unitCost, _ := dUnitCost.Float64()
+		unitPrice, _ := dUnitPrice.Float64()
+		itemTotalPrice, _ := dSalePriceItem.Float64()
 
 		orderItem := OrderItem{
 			ID:                fmt.Sprintf("item-%s-%d", orderID, idx+1),
@@ -235,7 +243,7 @@ func HandleCreateOrder(c *gin.Context) {
 		}
 
 		itemsList = append(itemsList, orderItem)
-		totalPrice += pricingRes.SalePrice
+		totalPrice += itemTotalPrice
 		totalCost += pricingRes.TotalCost
 	}
 
@@ -244,20 +252,27 @@ func HandleCreateOrder(c *gin.Context) {
 		orderNo = fmt.Sprintf("ORD-%s-%03d", time.Now().Format("200601"), orderSeq)
 	}
 
-	depositLAK := req.DepositLAK
-	remainingLAK := totalPrice - depositLAK
-	if remainingLAK < 0 {
-		remainingLAK = 0
+	dTotalPrice := decimal.NewFromFloat(totalPrice).Round(2)
+	dTotalCost := decimal.NewFromFloat(totalCost).Round(2)
+	dDeposit := decimal.NewFromFloat(req.DepositLAK).Round(2)
+	dRemaining := dTotalPrice.Sub(dDeposit)
+	if dRemaining.LessThan(decimal.Zero) {
+		dRemaining = decimal.Zero
 	}
 
+	totalPriceFloat, _ := dTotalPrice.Float64()
+	totalCostFloat, _ := dTotalCost.Float64()
+	depositFloat, _ := dDeposit.Float64()
+	remainingFloat, _ := dRemaining.Float64()
+
 	initialStatus := StatusWaitingDeposit
-	grossMarginPercent := 0.0
-	if totalPrice > 0 {
-		grossMarginPercent = ((totalPrice - totalCost) / totalPrice) * 100.0
+	dGrossMarginPercent := decimal.Zero
+	if dTotalPrice.GreaterThan(decimal.Zero) {
+		dGrossMarginPercent = dTotalPrice.Sub(dTotalCost).Div(dTotalPrice).Mul(decimal.NewFromInt(100)).Round(2)
 	}
-	if grossMarginPercent < 25.0 {
+	if dGrossMarginPercent.LessThan(decimal.NewFromFloat(25.0)) {
 		initialStatus = StatusRequiresManagerApproval
-		log.Printf("[MARGIN GUARD] Order %s margin %.2f%% < 25%%. Status set to REQUIRES_MANAGER_APPROVAL", orderID, grossMarginPercent)
+		log.Printf("[MARGIN GUARD] Order %s margin %s%% < 25%%. Status set to REQUIRES_MANAGER_APPROVAL", orderID, dGrossMarginPercent.String())
 	}
 
 	newOrder := Order{
@@ -267,15 +282,15 @@ func HandleCreateOrder(c *gin.Context) {
 		CustomerID:      req.CustomerID,
 		CustomerName:    req.CustomerName,
 		CustomerPhone:   req.CustomerPhone,
-		TotalAmountLAK:  totalPrice,
-		DepositLAK:      depositLAK,
-		RemainingLAK:    remainingLAK,
+		TotalAmountLAK:  totalPriceFloat,
+		DepositLAK:      depositFloat,
+		RemainingLAK:    remainingFloat,
 		OverallStatus:   initialStatus,
 		Status:          initialStatus,
 		DeliveryDate:    req.DeliveryDate,
-		DepositAmount:   depositLAK,
-		TotalPrice:      totalPrice,
-		TotalCost:       totalCost,
+		DepositAmount:   depositFloat,
+		TotalPrice:      totalPriceFloat,
+		TotalCost:       totalCostFloat,
 		GoogleDriveLink: req.GoogleDriveLink,
 		IdempotencyKey:  req.IdempotencyKey,
 		Items:           itemsList,
@@ -287,9 +302,10 @@ func HandleCreateOrder(c *gin.Context) {
 		err := saveOrderToDB(newOrder)
 		if err != nil {
 			log.Printf("[DB ERROR] Failed to save order to DB: %v", err)
-		} else {
-			log.Printf("[DB SUCCESS] Order %s saved to PostgreSQL!", orderID)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to persist order to database", "details": err.Error()})
+			return
 		}
+		log.Printf("[DB SUCCESS] Order %s saved to PostgreSQL!", orderID)
 	}
 
 	storeMutex.Lock()
@@ -327,13 +343,23 @@ func HandleRecordDeposit(c *gin.Context) {
 	}
 
 	order.DepositAmount = req.DepositAmount
-	if order.Status == StatusWaitingDeposit {
+	order.DepositLAK = req.DepositAmount
+	order.RemainingLAK = order.TotalAmountLAK - req.DepositAmount
+	if order.RemainingLAK < 0 {
+		order.RemainingLAK = 0
+	}
+	if order.Status == StatusWaitingDeposit || order.Status == StatusPendingPayment {
 		order.Status = StatusPrepressCheck
+		order.OverallStatus = StatusPrepressCheck
 	}
 	order.UpdatedAt = time.Now()
 
 	if db.DB != nil {
-		_ = updateOrderDepositAndStatusInDB(order.ID, order.DepositAmount, string(order.Status))
+		if err := updateOrderDepositAndStatusInDB(order.ID, order.DepositAmount, string(order.Status)); err != nil {
+			log.Printf("[DB ERROR] Failed to update deposit in DB: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update deposit in database", "details": err.Error()})
+			return
+		}
 	}
 
 	storeMutex.Lock()
@@ -347,7 +373,71 @@ type UpdateStatusRequest struct {
 	Status OrderStatus `json:"status" binding:"required"`
 }
 
-// HandleUpdateOrderStatus transitions statuses
+// ValidateOrderStatusTransition validates that status transitions adhere to strict workflow rules.
+func ValidateOrderStatusTransition(current Order, target OrderStatus) error {
+	// 1. Same status transition is allowed (no-op)
+	if current.Status == target || current.OverallStatus == target {
+		return nil
+	}
+
+	// 2. Cannot transition an already cancelled order
+	if current.Status == StatusCancelled || current.OverallStatus == StatusCancelled {
+		return fmt.Errorf("order is already CANCELLED and cannot be modified")
+	}
+
+	// 3. Cancelling is allowed at any state prior to completed/delivered
+	if target == StatusCancelled {
+		return nil
+	}
+
+	// 4. Moving to IN_PRODUCTION (Point of Stock Deduction)
+	if target == StatusInProduction {
+		// a) Must have deposit paid
+		if current.DepositAmount <= 0 && current.DepositLAK <= 0 {
+			return fmt.Errorf("cannot transition to IN_PRODUCTION: deposit payment has not been recorded")
+		}
+
+		// b) Must have proof / file confirmed
+		proofConfirmed := current.ProofApprovedAt != nil ||
+			current.Status == StatusReadyToPrint ||
+			current.Status == StatusFileConfirmed ||
+			current.OverallStatus == StatusReadyToPrint ||
+			current.OverallStatus == StatusFileConfirmed
+		if !proofConfirmed {
+			return fmt.Errorf("cannot transition to IN_PRODUCTION: design proof/artwork must be confirmed before production")
+		}
+
+		// c) Must not be pending manager approval
+		if current.Status == StatusRequiresManagerApproval || current.OverallStatus == StatusRequiresManagerApproval {
+			return fmt.Errorf("cannot transition to IN_PRODUCTION: order requires manager approval for low margin")
+		}
+
+		return nil
+	}
+
+	// 5. Pre-production skipping to terminal statuses (COMPLETED / DELIVERED) is forbidden
+	if target == StatusCompleted || target == StatusDelivered {
+		preProductionStates := map[OrderStatus]bool{
+			StatusDraft:                   true,
+			StatusRequiresManagerApproval: true,
+			StatusRejected:                true,
+			StatusWaitingDeposit:          true,
+			StatusPendingPayment:          true,
+			StatusPrepressCheck:           true,
+			StatusWaitingApproval:         true,
+			StatusProofRejected:           true,
+			StatusFileConfirmed:           true,
+			StatusReadyToPrint:            true,
+		}
+		if preProductionStates[current.Status] || preProductionStates[current.OverallStatus] {
+			return fmt.Errorf("cannot transition directly from pre-production (%s) to %s: order must undergo IN_PRODUCTION", current.Status, target)
+		}
+	}
+
+	return nil
+}
+
+// HandleUpdateOrderStatus transitions statuses with strict state machine validation
 func HandleUpdateOrderStatus(c *gin.Context) {
 	orderID := c.Param("id")
 
@@ -374,8 +464,18 @@ func HandleUpdateOrderStatus(c *gin.Context) {
 		return
 	}
 
+	// State Machine Validation
+	if err := ValidateOrderStatusTransition(order, req.Status); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid state transition",
+			"details": err.Error(),
+		})
+		return
+	}
+
 	oldStatus := order.Status
 	order.Status = req.Status
+	order.OverallStatus = req.Status
 	order.UpdatedAt = time.Now()
 
 	if req.Status == StatusInProduction && oldStatus != StatusInProduction {
@@ -388,10 +488,16 @@ func HandleUpdateOrderStatus(c *gin.Context) {
 			})
 			return
 		}
+		now := time.Now()
+		order.StockDeductedAt = &now
 	}
 
 	if db.DB != nil {
-		_ = updateOrderDepositAndStatusInDB(order.ID, order.DepositAmount, string(order.Status))
+		if err := updateOrderDepositAndStatusInDB(order.ID, order.DepositAmount, string(order.Status)); err != nil {
+			log.Printf("[DB ERROR] Failed to update status in DB: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order status in database", "details": err.Error()})
+			return
+		}
 	}
 
 	storeMutex.Lock()
@@ -443,106 +549,102 @@ func dischargeFIFOStockForOrder(o Order) error {
 	if db.DB == nil {
 		return nil
 	}
-	tx, err := db.DB.Begin()
-	if err != nil {
+
+	return db.RunInTransaction(func(tx *sql.Tx) error {
+		// Concurrency Lock: Lock order record in DB to prevent concurrent duplicate deductions
+		var currentStatus string
+		var alreadyDeductedAt *time.Time
+		err := tx.QueryRow(`
+			SELECT status, stock_deducted_at 
+			FROM orders 
+			WHERE id = $1 OR order_no = $1 OR order_number = $1 
+			FOR UPDATE
+		`, o.ID).Scan(&currentStatus, &alreadyDeductedAt)
+		if err == nil && alreadyDeductedAt != nil {
+			log.Printf("[FIFO STOCK INFO] Order %s was already deducted concurrently at %v. Skipping.", o.ID, *alreadyDeductedAt)
+			return nil
+		}
+
+		for _, item := range o.Items {
+			paperSku, _ := item.Specs["paper_sku"].(string)
+			if paperSku == "" {
+				paperSku, _ = item.Specs["paperSku"].(string)
+			}
+			if paperSku == "" {
+				paperSku = item.InnerPaperID
+			}
+			if paperSku == "" {
+				paperSku = item.CoverPaperID
+			}
+
+			inkCov, _ := item.Specs["ink_coverage_percent"].(float64)
+			if inkCov == 0 {
+				inkCov, _ = item.Specs["inkCoveragePercent"].(float64)
+			}
+
+			colorMode, _ := item.Specs["color_mode"].(string)
+			if colorMode == "" {
+				colorMode, _ = item.Specs["colorMode"].(string)
+			}
+
+			// Deduct Paper and Ink using inventory.DeductInventoryForJob inside DB transaction
+			err := inventory.DeductInventoryForJob(tx, inventory.JobDeductionSpec{
+				OrderID:        o.ID,
+				OrderItemID:    item.ID,
+				PaperSKU:       paperSku,
+				Quantity:       item.Quantity,
+				PageCount:      item.PageCount,
+				CoverPaperID:   item.CoverPaperID,
+				InnerPaperID:   item.InnerPaperID,
+				ColorMode:      colorMode,
+				MachineID:      item.MachineID,
+				AvgCovC:        item.AvgCovC,
+				AvgCovM:        item.AvgCovM,
+				AvgCovY:        item.AvgCovY,
+				AvgCovK:        item.AvgCovK,
+				InkCoveragePct: inkCov,
+			})
+			if err != nil {
+				log.Printf("[INVENTORY DEDUCTION ERROR] %v", err)
+				return err
+			}
+
+			// Create Job Ticket for shop floor routing if not exists
+			jobNumber := fmt.Sprintf("JOB-%s-%s", o.OrderNo, item.ID)
+			ticketNo := fmt.Sprintf("JT-%s-%s", o.OrderNo, item.ID)
+			if len(ticketNo) > 30 {
+				ticketNo = ticketNo[:30]
+			}
+			if len(jobNumber) > 30 {
+				jobNumber = jobNumber[:30]
+			}
+
+			routingSteps := "1. Prepress File Check -> 2. Digital/Offset Printing -> 3. Lamination -> 4. Die-cut/Trimming -> 5. Binding -> 6. QC Packaging"
+			assignedMachine := "Offset Press Heidelberg / Digital Indigo 7900"
+
+			_, err = tx.Exec(`
+				INSERT INTO job_tickets (
+					order_id, order_item_id, job_number, ticket_number, 
+					routing_steps, assigned_machine, status, priority, created_at, updated_at
+				) VALUES (
+					$1, $2, $3, $4, $5, $6, 'IN_PRODUCTION', 1, NOW(), NOW()
+				)
+				ON CONFLICT (ticket_number) DO UPDATE SET
+					job_number = EXCLUDED.job_number,
+					routing_steps = EXCLUDED.routing_steps,
+					assigned_machine = EXCLUDED.assigned_machine,
+					status = 'IN_PRODUCTION',
+					updated_at = NOW()
+			`, o.ID, item.ID, jobNumber, ticketNo, routingSteps, assignedMachine)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Stamp stock_deducted_at in DB
+		_, err = tx.Exec(`UPDATE orders SET stock_deducted_at = NOW() WHERE id = $1 OR order_no = $1 OR order_number = $1`, o.ID)
 		return err
-	}
-	defer tx.Rollback()
-
-	// Concurrency Lock: Lock order record in DB to prevent concurrent duplicate deductions
-	var currentStatus string
-	var alreadyDeductedAt *time.Time
-	err = tx.QueryRow(`
-		SELECT status, stock_deducted_at 
-		FROM orders 
-		WHERE id = $1 OR order_no = $1 OR order_number = $1 
-		FOR UPDATE
-	`, o.ID).Scan(&currentStatus, &alreadyDeductedAt)
-	if err == nil && alreadyDeductedAt != nil {
-		log.Printf("[FIFO STOCK INFO] Order %s was already deducted concurrently at %v. Skipping.", o.ID, *alreadyDeductedAt)
-		return nil
-	}
-
-	for _, item := range o.Items {
-		paperSku, _ := item.Specs["paper_sku"].(string)
-		if paperSku == "" {
-			paperSku, _ = item.Specs["paperSku"].(string)
-		}
-		if paperSku == "" {
-			paperSku = item.InnerPaperID
-		}
-		if paperSku == "" {
-			paperSku = item.CoverPaperID
-		}
-
-		inkCov, _ := item.Specs["ink_coverage_percent"].(float64)
-		if inkCov == 0 {
-			inkCov, _ = item.Specs["inkCoveragePercent"].(float64)
-		}
-
-		colorMode, _ := item.Specs["color_mode"].(string)
-		if colorMode == "" {
-			colorMode, _ = item.Specs["colorMode"].(string)
-		}
-
-		// Deduct Paper and Ink using inventory.DeductInventoryForJob inside DB transaction
-		err := inventory.DeductInventoryForJob(tx, inventory.JobDeductionSpec{
-			OrderID:        o.ID,
-			OrderItemID:    item.ID,
-			PaperSKU:       paperSku,
-			Quantity:       item.Quantity,
-			PageCount:      item.PageCount,
-			CoverPaperID:   item.CoverPaperID,
-			InnerPaperID:   item.InnerPaperID,
-			ColorMode:      colorMode,
-			MachineID:      item.MachineID,
-			AvgCovC:        item.AvgCovC,
-			AvgCovM:        item.AvgCovM,
-			AvgCovY:        item.AvgCovY,
-			AvgCovK:        item.AvgCovK,
-			InkCoveragePct: inkCov,
-		})
-		if err != nil {
-			log.Printf("[INVENTORY DEDUCTION ERROR] %v", err)
-			return err
-		}
-
-		// Create Job Ticket for shop floor routing if not exists
-		jobNumber := fmt.Sprintf("JOB-%s-%s", o.OrderNo, item.ID)
-		ticketNo := fmt.Sprintf("JT-%s-%s", o.OrderNo, item.ID)
-		if len(ticketNo) > 30 {
-			ticketNo = ticketNo[:30]
-		}
-		if len(jobNumber) > 30 {
-			jobNumber = jobNumber[:30]
-		}
-
-		routingSteps := "1. Prepress File Check -> 2. Digital/Offset Printing -> 3. Lamination -> 4. Die-cut/Trimming -> 5. Binding -> 6. QC Packaging"
-		assignedMachine := "Offset Press Heidelberg / Digital Indigo 7900"
-
-		_, _ = tx.Exec(`
-			INSERT INTO job_tickets (
-				order_id, order_item_id, job_number, ticket_number, 
-				routing_steps, assigned_machine, status, priority, created_at, updated_at
-			) VALUES (
-				$1, $2, $3, $4, $5, $6, 'IN_PRODUCTION', 1, NOW(), NOW()
-			)
-			ON CONFLICT (ticket_number) DO UPDATE SET
-				job_number = EXCLUDED.job_number,
-				routing_steps = EXCLUDED.routing_steps,
-				assigned_machine = EXCLUDED.assigned_machine,
-				status = 'IN_PRODUCTION',
-				updated_at = NOW()
-		`, o.ID, item.ID, jobNumber, ticketNo, routingSteps, assignedMachine)
-	}
-
-	// Stamp stock_deducted_at in DB
-	_, err = tx.Exec(`UPDATE orders SET stock_deducted_at = NOW() WHERE id = $1 OR order_no = $1 OR order_number = $1`, o.ID)
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit()
+	})
 }
 
 
@@ -694,72 +796,79 @@ func getOrderItemsFromDB(orderID string) ([]OrderItem, error) {
 }
 
 func saveOrderToDB(o Order) error {
-	orderQuery := `
-		INSERT INTO orders (id, order_no, order_number, customer_id, customer_name, customer_phone, 
-		                    status, overall_status, deposit_amount, deposit_lak, remaining_lak,
-		                    total_price, total_amount_lak, total_cost, delivery_date, google_drive_link, 
-		                    stock_deducted_at, proof_url, proof_approved_at, proof_rejected_at,
-		                    proof_signature_ip, proof_rejection_reason,
-		                    created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, NOW(), NOW())
-		ON CONFLICT (id) DO UPDATE SET
-			status = EXCLUDED.status,
-			overall_status = EXCLUDED.overall_status,
-			deposit_amount = EXCLUDED.deposit_amount,
-			deposit_lak = EXCLUDED.deposit_lak,
-			remaining_lak = EXCLUDED.remaining_lak,
-			stock_deducted_at = EXCLUDED.stock_deducted_at,
-			proof_url = EXCLUDED.proof_url,
-			proof_approved_at = EXCLUDED.proof_approved_at,
-			proof_rejected_at = EXCLUDED.proof_rejected_at,
-			proof_signature_ip = EXCLUDED.proof_signature_ip,
-			proof_rejection_reason = EXCLUDED.proof_rejection_reason,
-			updated_at = NOW()
-	`
-	_, err := db.DB.Exec(orderQuery,
-		o.ID, o.OrderNo, o.OrderNumber, o.CustomerID, o.CustomerName, o.CustomerPhone,
-		string(o.Status), string(o.OverallStatus), o.DepositAmount, o.DepositLAK, o.RemainingLAK,
-		o.TotalPrice, o.TotalAmountLAK, o.TotalCost, o.DeliveryDate, o.GoogleDriveLink,
-		o.StockDeductedAt, o.ProofURL, o.ProofApprovedAt, o.ProofRejectedAt,
-		o.ProofSignatureIP, o.ProofRejectionReason,
-	)
-	if err != nil {
-		return err
-	}
-
-	for _, item := range o.Items {
-		specsBytes, _ := json.Marshal(item.Specs)
-		itemQuery := `
-			INSERT INTO order_items (id, order_id, job_name, item_name, quantity, page_count, paper_size,
-			                         cover_paper_id, inner_paper_id, cover_file_url, inner_file_url,
-			                         binding_type, spine_width_mm, current_step, avg_cov_c, avg_cov_m, avg_cov_y, avg_cov_k,
-			                         unit_cost_lak, unit_price_lak, total_price_lak,
-			                         unit_price_snapshot, cost_price_snapshot, specs, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24::jsonb, NOW(), NOW())
+	return db.RunInTransaction(func(tx *sql.Tx) error {
+		orderQuery := `
+			INSERT INTO orders (id, order_no, order_number, customer_id, customer_name, customer_phone, 
+			                    status, overall_status, deposit_amount, deposit_lak, remaining_lak,
+			                    total_price, total_amount_lak, total_cost, delivery_date, google_drive_link, 
+			                    stock_deducted_at, proof_url, proof_approved_at, proof_rejected_at,
+			                    proof_signature_ip, proof_rejection_reason,
+			                    created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, NOW(), NOW())
 			ON CONFLICT (id) DO UPDATE SET
-				current_step = EXCLUDED.current_step,
-				cover_file_url = EXCLUDED.cover_file_url,
-				inner_file_url = EXCLUDED.inner_file_url,
+				status = EXCLUDED.status,
+				overall_status = EXCLUDED.overall_status,
+				deposit_amount = EXCLUDED.deposit_amount,
+				deposit_lak = EXCLUDED.deposit_lak,
+				remaining_lak = EXCLUDED.remaining_lak,
+				stock_deducted_at = EXCLUDED.stock_deducted_at,
+				proof_url = EXCLUDED.proof_url,
+				proof_approved_at = EXCLUDED.proof_approved_at,
+				proof_rejected_at = EXCLUDED.proof_rejected_at,
+				proof_signature_ip = EXCLUDED.proof_signature_ip,
+				proof_rejection_reason = EXCLUDED.proof_rejection_reason,
 				updated_at = NOW()
 		`
-		_, _ = db.DB.Exec(itemQuery,
-			item.ID, o.ID, item.JobName, item.ItemName, item.Quantity, item.PageCount, item.PaperSize,
-			item.CoverPaperID, item.InnerPaperID, item.CoverFileURL, item.InnerFileURL,
-			string(item.BindingType), item.SpineWidthMM, string(item.CurrentStep), item.AvgCovC, item.AvgCovM, item.AvgCovY, item.AvgCovK,
-			item.UnitCostLAK, item.UnitPriceLAK, item.TotalPriceLAK,
-			item.UnitPriceSnapshot, item.CostPriceSnapshot, string(specsBytes),
+		_, err := tx.Exec(orderQuery,
+			o.ID, o.OrderNo, o.OrderNumber, o.CustomerID, o.CustomerName, o.CustomerPhone,
+			string(o.Status), string(o.OverallStatus), o.DepositAmount, o.DepositLAK, o.RemainingLAK,
+			o.TotalPrice, o.TotalAmountLAK, o.TotalCost, o.DeliveryDate, o.GoogleDriveLink,
+			o.StockDeductedAt, o.ProofURL, o.ProofApprovedAt, o.ProofRejectedAt,
+			o.ProofSignatureIP, o.ProofRejectionReason,
 		)
-	}
-	return nil
+		if err != nil {
+			return err
+		}
+
+		for _, item := range o.Items {
+			specsBytes, _ := json.Marshal(item.Specs)
+			itemQuery := `
+				INSERT INTO order_items (id, order_id, job_name, item_name, quantity, page_count, paper_size,
+				                         cover_paper_id, inner_paper_id, cover_file_url, inner_file_url,
+				                         binding_type, spine_width_mm, current_step, avg_cov_c, avg_cov_m, avg_cov_y, avg_cov_k,
+				                         unit_cost_lak, unit_price_lak, total_price_lak,
+				                         unit_price_snapshot, cost_price_snapshot, specs, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24::jsonb, NOW(), NOW())
+				ON CONFLICT (id) DO UPDATE SET
+					current_step = EXCLUDED.current_step,
+					cover_file_url = EXCLUDED.cover_file_url,
+					inner_file_url = EXCLUDED.inner_file_url,
+					updated_at = NOW()
+			`
+			_, err = tx.Exec(itemQuery,
+				item.ID, o.ID, item.JobName, item.ItemName, item.Quantity, item.PageCount, item.PaperSize,
+				item.CoverPaperID, item.InnerPaperID, item.CoverFileURL, item.InnerFileURL,
+				string(item.BindingType), item.SpineWidthMM, string(item.CurrentStep), item.AvgCovC, item.AvgCovM, item.AvgCovY, item.AvgCovK,
+				item.UnitCostLAK, item.UnitPriceLAK, item.TotalPriceLAK,
+				item.UnitPriceSnapshot, item.CostPriceSnapshot, string(specsBytes),
+			)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func updateOrderDepositAndStatusInDB(orderID string, deposit float64, status string) error {
-	query := `
-		UPDATE orders SET deposit_amount = $1, deposit_lak = $1, status = $2, overall_status = $2, updated_at = NOW()
-		WHERE id = $3
-	`
-	_, err := db.DB.Exec(query, deposit, status, orderID)
-	return err
+	return db.RunInTransaction(func(tx *sql.Tx) error {
+		query := `
+			UPDATE orders SET deposit_amount = $1, deposit_lak = $1, status = $2, overall_status = $2, updated_at = NOW()
+			WHERE id = $3
+		`
+		_, err := tx.Exec(query, deposit, status, orderID)
+		return err
+	})
 }
 
 // HandleUploadOrderFile saves uploaded PDF files in ./uploads/orders/{order_no}/
@@ -863,16 +972,35 @@ func HandleUpdateOrderItemStep(c *gin.Context) {
 	}
 
 	if db.DB != nil {
-		itemUpdateQuery := `UPDATE order_items SET current_step = $1, updated_at = NOW() WHERE id = $2`
-		_, _ = db.DB.Exec(itemUpdateQuery, string(req.CurrentStep), itemID)
+		err := db.RunInTransaction(func(tx *sql.Tx) error {
+			itemUpdateQuery := `UPDATE order_items SET current_step = $1, updated_at = NOW() WHERE id = $2`
+			if _, err := tx.Exec(itemUpdateQuery, string(req.CurrentStep), itemID); err != nil {
+				return err
+			}
 
-		if req.SpoilageCount > 0 {
-			spoilageLogQuery := `
-				INSERT INTO inventory_transactions (id, qty_adjusted, type, notes, created_at)
-				VALUES (uuid_generate_v4(), $1, 'wastage', $2, NOW())
-			`
-			notes := fmt.Sprintf("Actual Spoilage logged for item %s: %s", itemID, req.Notes)
-			_, _ = db.DB.Exec(spoilageLogQuery, -float64(req.SpoilageCount), notes)
+			if targetOrder != nil {
+				orderStatusQuery := `UPDATE orders SET status = $1, overall_status = $1, updated_at = NOW() WHERE id = $2`
+				if _, err := tx.Exec(orderStatusQuery, string(targetOrder.Status), targetOrder.ID); err != nil {
+					return err
+				}
+			}
+
+			if req.SpoilageCount > 0 {
+				spoilageLogQuery := `
+					INSERT INTO inventory_transactions (id, qty_adjusted, type, notes, created_at)
+					VALUES (uuid_generate_v4(), $1, 'wastage', $2, NOW())
+				`
+				notes := fmt.Sprintf("Actual Spoilage logged for item %s: %s", itemID, req.Notes)
+				if _, err := tx.Exec(spoilageLogQuery, -float64(req.SpoilageCount), notes); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to update item step in DB: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update item step in database", "details": err.Error()})
+			return
 		}
 	}
 
@@ -929,17 +1057,14 @@ func HandleGetOrderByOrderNo(c *gin.Context) {
 }
 
 type QuotationDecisionRequest struct {
-	Reason    string `json:"reason"`
 	ManagerID string `json:"manager_id"`
+	Reason    string `json:"reason"`
 }
 
 func checkManagerRole(c *gin.Context) bool {
-	role := strings.ToUpper(strings.TrimSpace(c.GetHeader("X-User-Role")))
+	role := c.GetHeader("X-User-Role")
 	if role == "" {
-		role = strings.ToUpper(strings.TrimSpace(c.Query("role")))
-	}
-	if role == "" {
-		if r, exists := c.Get("role"); exists {
+		if r, exists := c.Get("user_role"); exists {
 			role = strings.ToUpper(fmt.Sprintf("%v", r))
 		}
 	}
@@ -975,13 +1100,16 @@ func HandleApproveQuotation(c *gin.Context) {
 	storeMutex.Unlock()
 
 	if db.DB != nil {
-		updateQuery := `
-			UPDATE orders 
-			SET status = 'WAITING_DEPOSIT', 
-			    updated_at = NOW() 
-			WHERE id = $1 OR order_no = $1 OR order_number = $1
-		`
-		_, _ = db.DB.Exec(updateQuery, id)
+		_ = db.RunInTransaction(func(tx *sql.Tx) error {
+			updateQuery := `
+				UPDATE orders 
+				SET status = 'WAITING_DEPOSIT', 
+				    updated_at = NOW() 
+				WHERE id = $1 OR order_no = $1 OR order_number = $1
+			`
+			_, err := tx.Exec(updateQuery, id)
+			return err
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1018,14 +1146,17 @@ func HandleRejectQuotation(c *gin.Context) {
 	storeMutex.Unlock()
 
 	if db.DB != nil {
-		updateQuery := `
-			UPDATE orders 
-			SET status = 'REJECTED', 
-			    notes = COALESCE(notes, '') || ' [Rejected: ' || $2 || ']', 
-			    updated_at = NOW() 
-			WHERE id = $1 OR order_no = $1 OR order_number = $1
-		`
-		_, _ = db.DB.Exec(updateQuery, id, req.Reason)
+		_ = db.RunInTransaction(func(tx *sql.Tx) error {
+			updateQuery := `
+				UPDATE orders 
+				SET status = 'REJECTED', 
+				    notes = COALESCE(notes, '') || ' [Rejected: ' || $2 || ']', 
+				    updated_at = NOW() 
+				WHERE id = $1 OR order_no = $1 OR order_number = $1
+			`
+			_, err := tx.Exec(updateQuery, id, req.Reason)
+			return err
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1058,12 +1189,15 @@ func HandleUploadDigitalProof(c *gin.Context) {
 	storeMutex.Unlock()
 
 	if db.DB != nil {
-		updateQuery := `
-			UPDATE orders 
-			SET proof_url = $1, status = 'WAITING_APPROVAL', overall_status = 'WAITING_APPROVAL', updated_at = NOW()
-			WHERE id = $2 OR order_no = $2 OR order_number = $2
-		`
-		_, _ = db.DB.Exec(updateQuery, req.ProofURL, id)
+		_ = db.RunInTransaction(func(tx *sql.Tx) error {
+			updateQuery := `
+				UPDATE orders 
+				SET proof_url = $1, status = 'WAITING_APPROVAL', overall_status = 'WAITING_APPROVAL', updated_at = NOW()
+				WHERE id = $2 OR order_no = $2 OR order_number = $2
+			`
+			_, err := tx.Exec(updateQuery, req.ProofURL, id)
+			return err
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1099,13 +1233,16 @@ func HandleApproveDigitalProof(c *gin.Context) {
 	storeMutex.Unlock()
 
 	if db.DB != nil {
-		updateQuery := `
-			UPDATE orders 
-			SET proof_approved_at = NOW(), proof_signature_ip = $1, 
-			    status = 'READY_TO_PRINT', overall_status = 'READY_TO_PRINT', updated_at = NOW()
-			WHERE id = $2 OR order_no = $2 OR order_number = $2
-		`
-		_, _ = db.DB.Exec(updateQuery, clientIP, id)
+		_ = db.RunInTransaction(func(tx *sql.Tx) error {
+			updateQuery := `
+				UPDATE orders 
+				SET proof_approved_at = NOW(), proof_signature_ip = $1, 
+				    status = 'READY_TO_PRINT', overall_status = 'READY_TO_PRINT', updated_at = NOW()
+				WHERE id = $2 OR order_no = $2 OR order_number = $2
+			`
+			_, err := tx.Exec(updateQuery, clientIP, id)
+			return err
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1144,13 +1281,16 @@ func HandleRejectDigitalProof(c *gin.Context) {
 	storeMutex.Unlock()
 
 	if db.DB != nil {
-		updateQuery := `
-			UPDATE orders 
-			SET proof_rejected_at = NOW(), proof_rejection_reason = $1, proof_signature_ip = $2,
-			    status = 'PREPRESS_CHECK', overall_status = 'PREPRESS_CHECK', updated_at = NOW()
-			WHERE id = $3 OR order_no = $3 OR order_number = $3
-		`
-		_, _ = db.DB.Exec(updateQuery, req.Reason, clientIP, id)
+		_ = db.RunInTransaction(func(tx *sql.Tx) error {
+			updateQuery := `
+				UPDATE orders 
+				SET proof_rejected_at = NOW(), proof_rejection_reason = $1, proof_signature_ip = $2,
+				    status = 'PREPRESS_CHECK', overall_status = 'PREPRESS_CHECK', updated_at = NOW()
+				WHERE id = $3 OR order_no = $3 OR order_number = $3
+			`
+			_, err := tx.Exec(updateQuery, req.Reason, clientIP, id)
+			return err
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1163,7 +1303,7 @@ func HandleRejectDigitalProof(c *gin.Context) {
 	})
 }
 
-// HandleGetDigitalProof gets digital proof details for an order
+// HandleGetDigitalProof gets digital proof details for an order (Admin / Internal)
 func HandleGetDigitalProof(c *gin.Context) {
 	id := c.Param("id")
 
@@ -1179,9 +1319,16 @@ func HandleGetDigitalProof(c *gin.Context) {
 		order = o
 	}
 
+	token, _ := GenerateProofToken(order.ID)
+	publicURL := fmt.Sprintf("/proof/%s/%s", order.ID, token)
+
 	c.JSON(http.StatusOK, ProofStatusResponse{
 		OrderID:         order.ID,
+		OrderNo:         order.OrderNo,
+		CustomerName:    order.CustomerName,
 		ProofURL:        order.ProofURL,
+		ProofToken:      token,
+		PublicProofURL:  publicURL,
 		IsApproved:      order.ProofApprovedAt != nil,
 		ApprovedAt:      order.ProofApprovedAt,
 		RejectedAt:      order.ProofRejectedAt,
@@ -1189,4 +1336,7 @@ func HandleGetDigitalProof(c *gin.Context) {
 		SignatureIP:     order.ProofSignatureIP,
 	})
 }
+
+
+
 

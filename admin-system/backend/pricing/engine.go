@@ -169,6 +169,7 @@ type CostBreakdownItem struct {
 	PlateCost        float64 `json:"plate_cost"`
 	DepreciationCost float64 `json:"depreciation_cost"`
 	MaintenanceCost  float64 `json:"maintenance_cost"`
+	MachineCost      float64 `json:"machine_cost"`
 	SetupCost        float64 `json:"setup_cost"`
 	FinishingCost    float64 `json:"finishing_cost"`
 	LaborCost        float64 `json:"labor_cost"`
@@ -194,6 +195,7 @@ type CalculationResponse struct {
 	PlateCost           float64 `json:"plate_cost"`
 	DepreciationCost    float64 `json:"depreciation_cost"`
 	MaintenanceCost     float64 `json:"maintenance_cost"`
+	MachineCost         float64 `json:"machine_cost"`
 	CustomFinishingCost float64 `json:"custom_finishing_cost"`
 	LaminationCost      float64 `json:"lamination_cost"`
 	BindingCost         float64 `json:"binding_cost"`
@@ -235,22 +237,28 @@ type CalculationResponse struct {
 	OffcutLotName         string                  `json:"offcut_lot_name,omitempty"`
 }
 
+func init() {
+	decimal.MarshalJSONWithoutQuotes = true
+}
+
 // a4BaselineArea is the reference area (mm²) used for Paper Area Factor S (210 x 297 mm = 62370)
 const a4BaselineArea = 62370.0
 
-// CalculateSpineWidthMM calculates spine thickness for booklets/books
+// CalculateSpineWidthMM calculates spine thickness for booklets/books using Decimal precision
 // Formula: (pageCount / 2.0) * sheetThickness + coverAndGlueOffset
 func CalculateSpineWidthMM(pageCount int, paperGSM float64) float64 {
 	if pageCount <= 0 {
 		return 0.0
 	}
-	sheetThickness := 0.105 // Default 80g Green Read sheet thickness ~0.105mm
+	dPages := decimal.NewFromInt(int64(pageCount))
+	dThickness := decimal.NewFromFloat(0.105) // Default 80g Green Read sheet thickness ~0.105mm
 	if paperGSM > 0 {
-		sheetThickness = (paperGSM / 80.0) * 0.105
+		dThickness = decimal.NewFromFloat(paperGSM).Div(decimal.NewFromFloat(80.0)).Mul(decimal.NewFromFloat(0.105))
 	}
-	offset := 0.80 // Art card 260g cover + hot glue offset ~0.80mm
-	spine := (float64(pageCount)/2.0)*sheetThickness + offset
-	return math.Round(spine*10.0) / 10.0
+	dOffset := decimal.NewFromFloat(0.80) // Art card 260g cover + hot glue offset ~0.80mm
+	dSpine := dPages.Div(decimal.NewFromFloat(2.0)).Mul(dThickness).Add(dOffset)
+	res, _ := dSpine.Round(1).Float64()
+	return res
 }
 
 // GetBindingConsumableCostLAK returns standard consumable cost in LAK for 5 binding types
@@ -273,15 +281,43 @@ func GetBindingConsumableCostLAK(bType string) float64 {
 
 // CalculateBindingCostLAK calculates per-book binding cost including machine depreciation & consumables
 func CalculateBindingCostLAK(bType string, machinePriceLAK float64, lifetimeCycles float64) float64 {
-	consumable := GetBindingConsumableCostLAK(bType)
-	if consumable == 0 && (bType == "" || bType == "none" || bType == "NONE") {
+	dConsumable := decimal.NewFromFloat(GetBindingConsumableCostLAK(bType))
+	if dConsumable.IsZero() && (bType == "" || bType == "none" || bType == "NONE") {
 		return 0.0
 	}
-	depreciation := 0.0
+	dDepreciation := decimal.Zero
 	if machinePriceLAK > 0 && lifetimeCycles > 0 {
-		depreciation = (machinePriceLAK * 1.10) / lifetimeCycles
+		dPrice := decimal.NewFromFloat(machinePriceLAK)
+		dCycles := decimal.NewFromFloat(lifetimeCycles)
+		dDepreciation = dPrice.Mul(decimal.NewFromFloat(1.10)).Div(dCycles)
 	}
-	return roundToTwoDecimals(depreciation + consumable)
+	total := dDepreciation.Add(dConsumable).Round(2)
+	res, _ := total.Float64()
+	return res
+}
+
+// CalculateMachineOverhead calculates machine depreciation and maintenance cost per A4 sheet using Decimal precision
+func CalculateMachineOverhead(priceCost float64, expectedLifeA4Pages int, maintenanceRatePercent float64) (depreciationPerSheet, maintenancePerSheet, totalMachineCostPerSheet float64) {
+	if expectedLifeA4Pages <= 0 || priceCost <= 0 {
+		return 0, 0, 0
+	}
+
+	dPrice := decimal.NewFromFloat(priceCost)
+	dLife := decimal.NewFromInt(int64(expectedLifeA4Pages))
+	dDeprec := dPrice.Div(dLife)
+
+	mRate := maintenanceRatePercent
+	if mRate < 0 {
+		mRate = 0
+	}
+	dMaintRate := decimal.NewFromFloat(mRate).Div(decimal.NewFromFloat(100.0))
+	dMaint := dDeprec.Mul(dMaintRate)
+	dTotal := dDeprec.Add(dMaint)
+
+	dDeprecRes, _ := dDeprec.Round(2).Float64()
+	dMaintRes, _ := dMaint.Round(2).Float64()
+	dTotalRes, _ := dTotal.Round(2).Float64()
+	return dDeprecRes, dMaintRes, dTotalRes
 }
 
 // CalculateCutLayout determines the maximum number of pieces that can fit on a parent sheet using 2D imposition
@@ -621,22 +657,15 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 			dDepreciationCost = dDepreciationCost.Add(dAllocPages.Mul(dCostPerPage))
 		}
 	} else if req.MachinePrice > 0 && req.TargetTotalPages > 0 {
-		dMachinePrice := decimal.NewFromFloat(req.MachinePrice)
-		dTargetPages := decimal.NewFromFloat(req.TargetTotalPages)
-		dDeprecPerPage := dMachinePrice.Div(dTargetPages)
-
-		maintRate := req.MaintenanceRatePercent
-		if maintRate <= 0 {
-			maintRate = 20.0
-		}
-		dMaintRate := decimal.NewFromFloat(maintRate).Div(decimal.NewFromFloat(100.0))
-
-		// DepreciationCost includes MaintenanceRatePercent: (MachinePrice * (1 + MaintRate) / TargetTotalPages) * JobPages
-		dDepreciationCost = dDeprecPerPage.Mul(decimal.NewFromFloat(1.0).Add(dMaintRate)).Mul(dJobPages)
+		deprecPerSheet, maintPerSheet, _ := CalculateMachineOverhead(req.MachinePrice, int(req.TargetTotalPages), req.MaintenanceRatePercent)
+		dDeprec := decimal.NewFromFloat(deprecPerSheet)
+		dMaint := decimal.NewFromFloat(maintPerSheet)
+		dDepreciationCost = dDeprec.Mul(dJobPages)
+		dMaintenanceCost = dMaintenanceCost.Add(dMaint.Mul(dJobPages))
 	}
 
 	if req.MaintenanceCostPerPage > 0 {
-		dMaintenanceCost = decimal.NewFromFloat(req.MaintenanceCostPerPage).Mul(dJobPages)
+		dMaintenanceCost = dMaintenanceCost.Add(decimal.NewFromFloat(req.MaintenanceCostPerPage).Mul(dJobPages))
 	}
 
 	// ── Step 5: Finishing & Custom Options ────────────────────────────────────
@@ -798,38 +827,39 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		dGrandTotal = dTaxableSubtotal
 	}
 
-	// Non-LAK two decimal place rounding helper
-	salePriceFloat := roundToTwoDecimals(dSalePrice.InexactFloat64())
-	discountFloat := roundToTwoDecimals(dDiscountAmount.InexactFloat64())
-	taxFloat := roundToTwoDecimals(dTaxAmount.InexactFloat64())
-	grandTotalFloat := roundToTwoDecimals(dGrandTotal.InexactFloat64())
-	netCostFloat := roundToTwoDecimals(dNetInternalCost.InexactFloat64())
-
-	// LAK integer rounding if requested
+	// Currency rounding via Decimal
 	if req.TargetCurrency == "LAK" {
-		salePriceFloat = math.Round(salePriceFloat)
-		discountFloat = math.Round(discountFloat)
-		taxFloat = math.Round(taxFloat)
-		grandTotalFloat = math.Round(grandTotalFloat)
+		dSalePrice = dSalePrice.Round(0)
+		dDiscountAmount = dDiscountAmount.Round(0)
+		dTaxAmount = dTaxAmount.Round(0)
+		dGrandTotal = dGrandTotal.Round(0)
+	} else {
+		dSalePrice = dSalePrice.Round(2)
+		dDiscountAmount = dDiscountAmount.Round(2)
+		dTaxAmount = dTaxAmount.Round(2)
+		dGrandTotal = dGrandTotal.Round(2)
 	}
 
 	depositPct := req.DepositPercent
-	if depositPct <= 0 {
+	if depositPct < 0 {
 		depositPct = 0
 	}
-	depositAmountFloat := roundToTwoDecimals(grandTotalFloat * (depositPct / 100.0))
-	balanceDueFloat := roundToTwoDecimals(grandTotalFloat - depositAmountFloat)
-	unitPriceFloat := roundToTwoDecimals(grandTotalFloat / float64(req.Quantity))
+	dDepositPct := decimal.NewFromFloat(depositPct)
+	dDepositAmount := dGrandTotal.Mul(dDepositPct.Div(decimal.NewFromInt(100))).Round(2)
+	dBalanceDue := dGrandTotal.Sub(dDepositAmount).Round(2)
+	dUnitPrice := dGrandTotal.Div(dQuantity).Round(2)
 
 	// Calculate Gross Profit Margin %: ((TotalAmount - TotalCost) / TotalAmount) * 100
-	grossMarginPercent := 0.0
-	if grandTotalFloat > 0 {
-		grossMarginPercent = roundToTwoDecimals(((grandTotalFloat - netCostFloat) / grandTotalFloat) * 100.0)
-	} else if salePriceFloat > 0 {
-		grossMarginPercent = roundToTwoDecimals(((salePriceFloat - netCostFloat) / salePriceFloat) * 100.0)
+	dGrossMarginPercent := decimal.Zero
+	if dGrandTotal.GreaterThan(decimal.Zero) {
+		dGrossMarginPercent = dGrandTotal.Sub(dNetInternalCost).Div(dGrandTotal).Mul(decimal.NewFromInt(100)).Round(2)
+	} else if dSalePrice.GreaterThan(decimal.Zero) {
+		dGrossMarginPercent = dSalePrice.Sub(dNetInternalCost).Div(dSalePrice).Mul(decimal.NewFromInt(100)).Round(2)
 	}
 
 	// Populate TotalBreakdown and UnitBreakdown
+	dMachineCost := dDepreciationCost.Add(dMaintenanceCost)
+
 	totalBreakdown := CostBreakdownItem{
 		PaperCost:        roundToTwoDecimals(dPaperCost.InexactFloat64()),
 		BlackInkCost:     roundToTwoDecimals(dInkCostK.InexactFloat64()),
@@ -837,6 +867,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		PlateCost:        roundToTwoDecimals(dPlateCost.InexactFloat64()),
 		DepreciationCost: roundToTwoDecimals(dDepreciationCost.InexactFloat64()),
 		MaintenanceCost:  roundToTwoDecimals(dMaintenanceCost.InexactFloat64()),
+		MachineCost:      roundToTwoDecimals(dMachineCost.InexactFloat64()),
 		SetupCost:        roundToTwoDecimals(dSetupCost.InexactFloat64()),
 		FinishingCost:    roundToTwoDecimals(dFinishingCost.Add(dCustomFinishingCost).InexactFloat64()),
 		LaborCost:        roundToTwoDecimals(dLaborCost.InexactFloat64()),
@@ -852,6 +883,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		PlateCost:        roundToTwoDecimals(dPlateCost.Div(dQuantity).InexactFloat64()),
 		DepreciationCost: roundToTwoDecimals(dDepreciationCost.Div(dQuantity).InexactFloat64()),
 		MaintenanceCost:  roundToTwoDecimals(dMaintenanceCost.Div(dQuantity).InexactFloat64()),
+		MachineCost:      roundToTwoDecimals(dMachineCost.Div(dQuantity).InexactFloat64()),
 		SetupCost:        roundToTwoDecimals(dSetupCost.Div(dQuantity).InexactFloat64()),
 		FinishingCost:    roundToTwoDecimals(dFinishingCost.Add(dCustomFinishingCost).Div(dQuantity).InexactFloat64()),
 		LaborCost:        roundToTwoDecimals(dLaborCost.Div(dQuantity).InexactFloat64()),
@@ -859,6 +891,18 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		OverheadCost:     roundToTwoDecimals(dOverheadCost.Div(dQuantity).InexactFloat64()),
 		TotalCost:        roundToTwoDecimals(dNetInternalCost.Div(dQuantity).InexactFloat64()),
 	}
+
+	salePriceFloat, _ := dSalePrice.Round(2).Float64()
+	discountFloat, _ := dDiscountAmount.Round(2).Float64()
+	taxFloat, _ := dTaxAmount.Round(2).Float64()
+	grandTotalFloat, _ := dGrandTotal.Round(2).Float64()
+	netCostFloat, _ := dNetInternalCost.Round(2).Float64()
+	depositAmountFloat, _ := dDepositAmount.Round(2).Float64()
+	balanceDueFloat, _ := dBalanceDue.Round(2).Float64()
+	unitPriceFloat, _ := dUnitPrice.Round(2).Float64()
+	grossMarginPercent, _ := dGrossMarginPercent.Round(2).Float64()
+	effectiveMarginFloat, _ := dEffectiveMargin.Round(4).Float64()
+	volumeDiscountFloat, _ := dVolumeDiscountPct.Round(2).Float64()
 
 	response := CalculationResponse{
 		JobName:               req.JobName,
@@ -874,6 +918,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		PlateCost:             roundToTwoDecimals(dPlateCost.InexactFloat64()),
 		DepreciationCost:      roundToTwoDecimals(dDepreciationCost.InexactFloat64()),
 		MaintenanceCost:       roundToTwoDecimals(dMaintenanceCost.InexactFloat64()),
+		MachineCost:           roundToTwoDecimals(dMachineCost.InexactFloat64()),
 		CustomFinishingCost:   roundToTwoDecimals(dCustomFinishingCost.InexactFloat64()),
 		LaminationCost:        roundToTwoDecimals(dLaminationCost.InexactFloat64()),
 		BindingCost:           roundToTwoDecimals(dBindingCost.InexactFloat64()),
@@ -896,8 +941,8 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		BalanceDue:            balanceDueFloat,
 		UnitPrice:             unitPriceFloat,
 		GrossMarginPercent:    grossMarginPercent,
-		ProfitMargin:          roundToTwoDecimals(dEffectiveMargin.InexactFloat64()),
-		VolumeDiscountPercent: roundToTwoDecimals(dVolumeDiscountPct.InexactFloat64()),
+		ProfitMargin:          effectiveMarginFloat,
+		VolumeDiscountPercent: volumeDiscountFloat,
 		Currency:              req.TargetCurrency,
 		ExchangeRate:          1.0,
 		CustomOptions:         req.CustomFinishingOptions,
@@ -915,9 +960,11 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	return response, nil
 }
 
-// roundToTwoDecimals rounds a float64 value to 2 decimal places
+// roundToTwoDecimals rounds a float64 value to 2 decimal places using Decimal precision
 func roundToTwoDecimals(val float64) float64 {
-	return math.Round(val*100.0) / 100.0
+	d := decimal.NewFromFloat(val).Round(2)
+	res, _ := d.Float64()
+	return res
 }
 
 // ValidateAndCalculateAllocations verifies page allocations sum to target job quantity
@@ -926,13 +973,14 @@ func ValidateAndCalculateAllocations(targetQty int, allocations []PrinterAllocat
 		return 0, nil
 	}
 	totalAllocated := 0
-	totalCost := 0.0
+	dTotalCost := decimal.Zero
 	for _, alloc := range allocations {
 		totalAllocated += alloc.AllocatedPages
-		totalCost += alloc.SubtotalCost
+		dTotalCost = dTotalCost.Add(decimal.NewFromFloat(alloc.SubtotalCost))
 	}
 	if totalAllocated != targetQty {
 		return 0, fmt.Errorf("allocated pages (%d) do not match target job quantity (%d)", totalAllocated, targetQty)
 	}
-	return totalCost, nil
+	res, _ := dTotalCost.Round(2).Float64()
+	return res, nil
 }

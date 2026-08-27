@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Phone, MapPin, Check, Plus, Search, ChevronDown, UserCheck } from 'lucide-react';
+import { User, Phone, MapPin, Check, Plus, Search, ChevronDown, UserCheck, Home, Building2, Globe } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 export interface CustomerOption {
@@ -8,6 +8,9 @@ export interface CustomerOption {
   phone?: string;
   address?: string;
   company?: string;
+  village?: string;
+  district?: string;
+  province?: string;
 }
 
 export interface CustomerComboboxProps {
@@ -19,12 +22,88 @@ export interface CustomerComboboxProps {
     name: string;
     phone: string;
     address: string;
+    village?: string;
+    district?: string;
+    province?: string;
     isNew: boolean;
     saveToCrm: boolean;
     customerId?: string;
   }) => void;
   currentLang?: string;
 }
+
+const LAO_PROVINCES = [
+  'ນະຄອນຫຼວງວຽງຈັນ',
+  'ວຽງຈັນ',
+  'ຫຼວງພະບາງ',
+  'ຈຳປາສັກ',
+  'ສະຫວັນນະເຂດ',
+  'ຄຳມ່ວນ',
+  'ບໍລິຄຳໄຊ',
+  'ໄຊຍະບູລີ',
+  'ຊຽງຂວາງ',
+  'ຫົວພັນ',
+  'ອຸດົມໄຊ',
+  'ຫຼວງນ້ຳທາ',
+  'ບໍ່ແກ້ວ',
+  'ຜົ້ງສາລີ',
+  'ສາລະວັນ',
+  'ເຊກອງ',
+  'ອັດຕະປື',
+  'ໄຊສົມບູນ',
+];
+
+const parseAddressParts = (addr: string) => {
+  if (!addr || !addr.trim()) {
+    return { village: '', district: '', province: 'ນະຄອນຫຼວງວຽງຈັນ', detail: '' };
+  }
+
+  let village = '';
+  let district = '';
+  let province = '';
+  let detail = '';
+
+  const parts = addr.split(/[,/|]/).map((p) => p.trim()).filter(Boolean);
+
+  parts.forEach((p) => {
+    if (p.startsWith('ບ້ານ') || p.toLowerCase().startsWith('ban') || p.toLowerCase().startsWith('village')) {
+      village = p.replace(/^(ບ້ານ|ban|village)\s*/i, '').trim();
+    } else if (p.startsWith('ເມືອງ') || p.toLowerCase().startsWith('muang') || p.toLowerCase().startsWith('district')) {
+      district = p.replace(/^(ເມືອງ|muang|district)\s*/i, '').trim();
+    } else if (
+      p.startsWith('ແຂວງ') ||
+      p.includes('ວຽງຈັນ') ||
+      p.includes('ຫຼວງພະບາງ') ||
+      p.includes('ຈຳປາສັກ') ||
+      p.includes('ສະຫວັນນະເຂດ')
+    ) {
+      province = p.replace(/^ແຂວງ\s*/, '').trim();
+    } else {
+      if (!detail) detail = p;
+      else detail += `, ${p}`;
+    }
+  });
+
+  if (!village && !district && !province) {
+    if (parts.length >= 3) {
+      village = parts[0];
+      district = parts[1];
+      province = parts[2];
+    } else if (parts.length === 2) {
+      village = parts[0];
+      district = parts[1];
+    } else {
+      village = addr;
+    }
+  }
+
+  return {
+    village: village.trim(),
+    district: district.trim(),
+    province: province.trim() || 'ນະຄອນຫຼວງວຽງຈັນ',
+    detail: detail.trim(),
+  };
+};
 
 export default function CustomerCombobox({
   customers = [],
@@ -40,11 +119,28 @@ export default function CustomerCombobox({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState(valueName);
   const [phone, setPhone] = useState(valuePhone);
-  const [address, setAddress] = useState(valueAddress);
+
+  const initialParts = parseAddressParts(valueAddress);
+  const [village, setVillage] = useState(initialParts.village);
+  const [district, setDistrict] = useState(initialParts.district);
+  const [province, setProvince] = useState(initialParts.province);
+  const [addressDetail, setAddressDetail] = useState(initialParts.detail);
+
   const [saveToCrm, setSaveToCrm] = useState(true);
   const [selectedCustId, setSelectedCustId] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const buildFullAddress = (v = village, d = district, p = province, det = addressDetail) => {
+    const segments = [
+      v.trim() ? (v.trim().startsWith('ບ້ານ') ? v.trim() : `ບ້ານ ${v.trim()}`) : '',
+      d.trim() ? (d.trim().startsWith('ເມືອງ') ? d.trim() : `ເມືອງ ${d.trim()}`) : '',
+      p.trim() ? (p.trim().startsWith('ແຂວງ') || p.trim().includes('ນະຄອນຫຼວງ') ? p.trim() : `ແຂວງ ${p.trim()}`) : '',
+      det.trim(),
+    ].filter(Boolean);
+
+    return segments.join(', ');
+  };
 
   // Sync state if external props change
   useEffect(() => {
@@ -56,7 +152,13 @@ export default function CustomerCombobox({
   }, [valuePhone]);
 
   useEffect(() => {
-    setAddress(valueAddress || '');
+    if (valueAddress !== undefined) {
+      const parsed = parseAddressParts(valueAddress);
+      setVillage(parsed.village);
+      setDistrict(parsed.district);
+      setProvince(parsed.province);
+      setAddressDetail(parsed.detail);
+    }
   }, [valueAddress]);
 
   // Handle click outside to close dropdown
@@ -77,16 +179,25 @@ export default function CustomerCombobox({
   );
 
   const handleSelectCustomer = (c: CustomerOption) => {
+    const parsed = parseAddressParts(c.address || '');
     setSelectedCustId(c.id || c.name);
     setSearchTerm(c.name);
     setPhone(c.phone || '');
-    setAddress(c.address || '');
+    setVillage(c.village || parsed.village);
+    setDistrict(c.district || parsed.district);
+    setProvince(c.province || parsed.province);
+    setAddressDetail(parsed.detail);
     setIsOpen(false);
+
+    const fullAddr = c.address || buildFullAddress(c.village || parsed.village, c.district || parsed.district, c.province || parsed.province, parsed.detail);
 
     onChange({
       name: c.name,
       phone: c.phone || '',
-      address: c.address || '',
+      address: fullAddr,
+      village: c.village || parsed.village,
+      district: c.district || parsed.district,
+      province: c.province || parsed.province,
       isNew: false,
       saveToCrm: false,
       customerId: c.id || c.name,
@@ -97,10 +208,15 @@ export default function CustomerCombobox({
     setSelectedCustId(null);
     setIsOpen(false);
 
+    const fullAddr = buildFullAddress();
+
     onChange({
       name: searchTerm.trim(),
       phone: phone,
-      address: address,
+      address: fullAddr,
+      village,
+      district,
+      province,
       isNew: true,
       saveToCrm: saveToCrm,
     });
@@ -112,10 +228,15 @@ export default function CustomerCombobox({
     setSelectedCustId(null);
     setIsOpen(true);
 
+    const fullAddr = buildFullAddress();
+
     onChange({
       name: val,
       phone: phone,
-      address: address,
+      address: fullAddr,
+      village,
+      district,
+      province,
       isNew: true,
       saveToCrm: saveToCrm,
     });
@@ -123,22 +244,78 @@ export default function CustomerCombobox({
 
   const handlePhoneChange = (val: string) => {
     setPhone(val);
+    const fullAddr = buildFullAddress();
     onChange({
       name: searchTerm,
       phone: val,
-      address: address,
+      address: fullAddr,
+      village,
+      district,
+      province,
       isNew: !selectedCustId,
       saveToCrm: saveToCrm,
       customerId: selectedCustId || undefined,
     });
   };
 
-  const handleAddressChange = (val: string) => {
-    setAddress(val);
+  const handleVillageChange = (val: string) => {
+    setVillage(val);
+    const fullAddr = buildFullAddress(val, district, province, addressDetail);
     onChange({
       name: searchTerm,
       phone: phone,
-      address: val,
+      address: fullAddr,
+      village: val,
+      district,
+      province,
+      isNew: !selectedCustId,
+      saveToCrm: saveToCrm,
+      customerId: selectedCustId || undefined,
+    });
+  };
+
+  const handleDistrictChange = (val: string) => {
+    setDistrict(val);
+    const fullAddr = buildFullAddress(village, val, province, addressDetail);
+    onChange({
+      name: searchTerm,
+      phone: phone,
+      address: fullAddr,
+      village,
+      district: val,
+      province,
+      isNew: !selectedCustId,
+      saveToCrm: saveToCrm,
+      customerId: selectedCustId || undefined,
+    });
+  };
+
+  const handleProvinceChange = (val: string) => {
+    setProvince(val);
+    const fullAddr = buildFullAddress(village, district, val, addressDetail);
+    onChange({
+      name: searchTerm,
+      phone: phone,
+      address: fullAddr,
+      village,
+      district,
+      province: val,
+      isNew: !selectedCustId,
+      saveToCrm: saveToCrm,
+      customerId: selectedCustId || undefined,
+    });
+  };
+
+  const handleDetailChange = (val: string) => {
+    setAddressDetail(val);
+    const fullAddr = buildFullAddress(village, district, province, val);
+    onChange({
+      name: searchTerm,
+      phone: phone,
+      address: fullAddr,
+      village,
+      district,
+      province,
       isNew: !selectedCustId,
       saveToCrm: saveToCrm,
       customerId: selectedCustId || undefined,
@@ -147,10 +324,14 @@ export default function CustomerCombobox({
 
   const handleToggleSaveToCrm = (checked: boolean) => {
     setSaveToCrm(checked);
+    const fullAddr = buildFullAddress();
     onChange({
       name: searchTerm,
       phone: phone,
-      address: address,
+      address: fullAddr,
+      village,
+      district,
+      province,
       isNew: !selectedCustId,
       saveToCrm: checked,
       customerId: selectedCustId || undefined,
@@ -215,12 +396,20 @@ export default function CustomerCombobox({
                   >
                     <div>
                       <span className="font-bold text-slate-900 block">{cust.name}</span>
-                      {cust.phone && (
-                        <span className="text-[10px] text-slate-500 flex items-center gap-1 font-mono">
-                          <Phone className="w-3 h-3 text-slate-400" />
-                          {cust.phone}
-                        </span>
-                      )}
+                      <div className="flex flex-wrap gap-2 text-[10px] text-slate-500 font-mono mt-0.5">
+                        {cust.phone && (
+                          <span className="flex items-center gap-1">
+                            <Phone className="w-3 h-3 text-slate-400" />
+                            {cust.phone}
+                          </span>
+                        )}
+                        {cust.address && (
+                          <span className="flex items-center gap-1 text-slate-400">
+                            <MapPin className="w-3 h-3" />
+                            {cust.address}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {selectedCustId === (cust.id || cust.name) && (
                       <Check className="w-4 h-4 text-sky-600 shrink-0" />
@@ -247,33 +436,92 @@ export default function CustomerCombobox({
         )}
       </div>
 
-      {/* Phone & Address Fields */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-slate-600 font-bold mb-1 flex items-center gap-1">
-            <Phone className="w-3.5 h-3.5 text-slate-400" />
-            <span>{isLao ? 'ເບີໂທຕິດຕໍ່ (Phone Number):' : 'Phone Number:'}</span>
+      {/* Phone Number Field */}
+      <div>
+        <label className="block text-slate-600 font-bold mb-1 flex items-center gap-1">
+          <Phone className="w-3.5 h-3.5 text-slate-400" />
+          <span>{isLao ? 'ເບີໂທຕິດຕໍ່ (Phone Number):' : 'Phone Number:'}</span>
+        </label>
+        <input
+          type="text"
+          placeholder="e.g. 020 5555 1234"
+          value={phone}
+          onChange={(e) => handlePhoneChange(e.target.value)}
+          className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white font-mono font-bold text-slate-800 focus:outline-none focus:border-sky-500"
+        />
+      </div>
+
+      {/* Structured Address Breakdown: ບ້ານ (Village), ເມືອງ (District), ແຂວງ (Province) */}
+      <div className="space-y-2 p-3 bg-slate-50/80 rounded-2xl border border-slate-200/80">
+        <div className="flex items-center justify-between">
+          <label className="text-slate-700 font-bold text-xs flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5 text-accent-sky" />
+            <span>{isLao ? 'ສະຖານທີ່ຈັດສົ່ງ (Delivery Address):' : 'Delivery Address:'}</span>
           </label>
-          <input
-            type="text"
-            placeholder="e.g. 020 5555 1234"
-            value={phone}
-            onChange={(e) => handlePhoneChange(e.target.value)}
-            className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white font-mono font-bold text-slate-800 focus:outline-none focus:border-sky-500"
-          />
+          <span className="text-[10px] text-slate-400 font-medium">
+            {isLao ? 'ແຍກເກັບ: ບ້ານ, ເມືອງ, ແຂວງ' : 'Separated by Village, District, Province'}
+          </span>
         </div>
 
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {/* 1. ບ້ານ (Village) */}
+          <div>
+            <label className="block text-[11px] text-slate-500 font-bold mb-1 flex items-center gap-1">
+              <Home className="w-3 h-3 text-slate-400" />
+              <span>{isLao ? 'ບ້ານ (Village):' : 'Village (Ban):'}</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. ດົງປ່າລານ, ໂພນສະຫວັນ"
+              value={village}
+              onChange={(e) => handleVillageChange(e.target.value)}
+              className="w-full px-3 py-1.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-800 text-xs focus:outline-none focus:border-sky-500"
+            />
+          </div>
+
+          {/* 2. ເມືອງ (District) */}
+          <div>
+            <label className="block text-[11px] text-slate-500 font-bold mb-1 flex items-center gap-1">
+              <Building2 className="w-3 h-3 text-slate-400" />
+              <span>{isLao ? 'ເມືອງ (District):' : 'District (Muang):'}</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. ສີສັດຕະນາກ, ໄຊເສດຖາ"
+              value={district}
+              onChange={(e) => handleDistrictChange(e.target.value)}
+              className="w-full px-3 py-1.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-800 text-xs focus:outline-none focus:border-sky-500"
+            />
+          </div>
+
+          {/* 3. ແຂວງ (Province) */}
+          <div>
+            <label className="block text-[11px] text-slate-500 font-bold mb-1 flex items-center gap-1">
+              <Globe className="w-3 h-3 text-slate-400" />
+              <span>{isLao ? 'ແຂວງ (Province):' : 'Province (Khoueng):'}</span>
+            </label>
+            <select
+              value={province}
+              onChange={(e) => handleProvinceChange(e.target.value)}
+              className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-800 text-xs focus:outline-none focus:border-sky-500"
+            >
+              {LAO_PROVINCES.map((prov) => (
+                <option key={prov} value={prov}>
+                  {prov}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* 4. ລາຍລະອຽດເພີ່ມເຕີມ / ຖະໜົນ / ຮ່ອມ (Optional) */}
         <div>
-          <label className="block text-slate-600 font-bold mb-1 flex items-center gap-1">
-            <MapPin className="w-3.5 h-3.5 text-slate-400" />
-            <span>{isLao ? 'ທີ່ຢູ່ / ສາຂາ (Address):' : 'Address / Branch:'}</span>
-          </label>
           <input
             type="text"
-            placeholder="e.g. Vientiane, Laos"
-            value={address}
-            onChange={(e) => handleAddressChange(e.target.value)}
-            className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white font-bold text-slate-800 focus:outline-none focus:border-sky-500"
+            placeholder={isLao ? 'ລາຍລະອຽດເພີ່ມເຕີມ (ເຊັ່ນ: ຮ່ອມ 5, ຕິດກັບວັດ, ຖະໜົນ 23 ສິງຫາ...)' : 'Street / Alley / Extra directions...'}
+            value={addressDetail}
+            onChange={(e) => handleDetailChange(e.target.value)}
+            className="w-full px-3 py-1.5 rounded-xl border border-slate-200/80 bg-white text-[11px] font-medium text-slate-700 focus:outline-none focus:border-sky-500"
           />
         </div>
       </div>

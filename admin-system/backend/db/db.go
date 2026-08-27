@@ -134,3 +134,32 @@ func getEnv(key, fallback string) string {
 	}
 	return fallback
 }
+
+// RunInTransaction executes a callback within a database transaction.
+// It automatically handles Begin, Commit, and Rollback on error or panic.
+func RunInTransaction(fn func(tx *sql.Tx) error) error {
+	if DB == nil {
+		return fmt.Errorf("database connection is not initialized")
+	}
+	tx, err := DB.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		}
+	}()
+	if err := fn(tx); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("[DB TX ROLLBACK ERROR] %v", rbErr)
+		}
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return nil
+}
+

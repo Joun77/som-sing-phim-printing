@@ -290,16 +290,15 @@ func saveInboundWithTx(item InboundTransaction) error {
 			}
 		}
 
+		stockQtyToAdd := item.Quantity * multiplier
 		costPerPurchase := item.TotalPrice
 		if item.Quantity > 0 {
 			costPerPurchase = item.TotalPrice / item.Quantity
 		}
 		costPerConsumption := costPerPurchase
-		if multiplier > 0 {
-			costPerConsumption = costPerPurchase / multiplier
+		if stockQtyToAdd > 0 {
+			costPerConsumption = item.TotalPrice / stockQtyToAdd
 		}
-
-		stockQtyToAdd := item.Quantity * multiplier
 
 		_, err = tx.Exec(`
 			INSERT INTO materials (

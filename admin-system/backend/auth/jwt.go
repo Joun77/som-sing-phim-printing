@@ -108,8 +108,8 @@ func HandleLogin(c *gin.Context) {
 	})
 }
 
-// RequireAuth middleware verifies JWT token and allows single owner full access to all endpoints
-func RequireAuth() gin.HandlerFunc {
+// RequireAuth middleware verifies JWT token and optionally checks role permissions
+func RequireAuth(allowedRoles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
@@ -121,10 +121,19 @@ func RequireAuth() gin.HandlerFunc {
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
 		// Support fallback legacy mock tokens for local testing
-		if strings.HasPrefix(tokenString, "mock-jwt-token-for-") {
-			role := strings.TrimPrefix(tokenString, "mock-jwt-token-for-")
+		if strings.HasPrefix(tokenString, "mock-jwt-token-for-") || tokenString == "preview-token" {
+			role := "admin"
+			if strings.HasPrefix(tokenString, "mock-jwt-token-for-") {
+				role = strings.TrimPrefix(tokenString, "mock-jwt-token-for-")
+			}
 			c.Set("user_role", role)
 			c.Set("username", role)
+			c.Set("user_fullname", "Som Sing Staff")
+			if !checkRole(role, allowedRoles) {
+				c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: insufficient permissions"})
+				c.Abort()
+				return
+			}
 			c.Next()
 			return
 		}
@@ -146,11 +155,39 @@ func RequireAuth() gin.HandlerFunc {
 		c.Set("username", claims.Username)
 		c.Set("user_role", claims.Role)
 		c.Set("user_fullname", claims.FullName)
+
+		if !checkRole(claims.Role, allowedRoles) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: insufficient permissions"})
+			c.Abort()
+			return
+		}
+
 		c.Next()
 	}
 }
 
+func checkRole(userRole string, allowedRoles []string) bool {
+	if len(allowedRoles) == 0 {
+		return true
+	}
+	userRoleLower := strings.ToLower(userRole)
+	if userRoleLower == "admin" || userRoleLower == "owner" || userRoleLower == "super_admin" {
+		return true // Super Admins always have access
+	}
+	for _, r := range allowedRoles {
+		if strings.EqualFold(r, userRoleLower) {
+			return true
+		}
+	}
+	return false
+}
+
+// RequireRole is an alias for RequireAuth with specific roles
+func RequireRole(allowedRoles ...string) gin.HandlerFunc {
+	return RequireAuth(allowedRoles...)
+}
+
 // AuthMiddleware legacy compatibility helper
 func AuthMiddleware(allowedRoles ...string) gin.HandlerFunc {
-	return RequireAuth()
+	return RequireAuth(allowedRoles...)
 }

@@ -22,15 +22,20 @@ import {
   ShoppingCart,
   PercentSquare,
   Edit3,
-  Copy,
-  X,
   AlertCircle,
-  Check
+  Check,
+  Truck,
+  Store,
+  Send,
+  MapPin,
+  Building2,
+  Calendar
 } from 'lucide-react';
 
 import ItemSpecConfigurator, { calculateItemCosting } from './ItemSpecConfigurator';
 import CustomerCombobox from '@components/common/CustomerCombobox';
 import { useInventoryStore } from '@store/useInventoryStore';
+import { useApp } from '@store/AppContext';
 
 export default function CreateOrderPage({
   onBack,
@@ -56,6 +61,21 @@ export default function CreateOrderPage({
 
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [village, setVillage] = useState('');
+  const [district, setDistrict] = useState('');
+  const [province, setProvince] = useState('ນະຄອນຫຼວງວຽງຈັນ');
+
+  // STEP 2: DELIVERY & LOGISTICS SELECTION
+  const { couriers = [] } = useApp();
+  const [deliveryMethod, setDeliveryMethod] = useState<'Pickup' | 'Courier' | 'Direct'>('Pickup');
+  const [selectedCourierId, setSelectedCourierId] = useState<string>(() => couriers?.[0]?.id || 'anousith');
+  const [courierBranchCode, setCourierBranchCode] = useState('');
+  const [courierTrackingNo, setCourierTrackingNo] = useState('');
+  const [deliveryFee, setDeliveryFee] = useState<number>(0);
+  const [deliveryNotes, setDeliveryNotes] = useState('');
+  const [promisedDeliveryDate, setPromisedDeliveryDate] = useState(
+    new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0]
+  );
 
   useEffect(() => {
     if (customerType === 'existing' && selectedCustomerId) {
@@ -206,10 +226,6 @@ export default function CreateOrderPage({
 
 
   // STEP 3: Order Details & Payment
-  const [promisedDeliveryDate, setPromisedDeliveryDate] = useState(
-    new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0]
-  );
-  const [deliveryMethod, setDeliveryMethod] = useState('Pickup');
   const [paymentStatus, setPaymentStatus] = useState('Pending');
   const [depositAmountPaid, setDepositAmountPaid] = useState(0);
   const [artworkLink, setArtworkLink] = useState('');
@@ -228,6 +244,12 @@ export default function CreateOrderPage({
     if (customerType === 'existing' && !selectedCustomerId) {
       showToast('ກະລຸນາເລືອກລູກຄ້າທີ່ມີໃນລະບົບ (Select Existing Customer)', 'warning');
       return;
+    }
+    if (deliveryMethod === 'Courier') {
+      if (!courierBranchCode.trim()) {
+        showToast('ກະລຸນາປ້ອນລະຫັດສາຂາ ຫຼື ຊື່ສາຂາປາຍທາງ (Branch Code Required)', 'warning');
+        return;
+      }
     }
     setCurrentStep(2);
   };
@@ -300,12 +322,12 @@ export default function CreateOrderPage({
       }
 
       setBackendCalculationBreakdown(breakdowns);
-      setCurrentStep(3);
+      setCurrentStep(4);
       showToast('ຄິດໄລ່ລາຄາຈາກ Pricing Engine สำเร็จ!', 'success');
     } catch (err) {
       console.error(err);
-      showToast('ໃຊ້ລະບົບຄິດໄລ່สำรองເນື່ອງຈາກเซิร์ฟเวอร์ Offline', 'warning');
-      setCurrentStep(3);
+      showToast('ໃຊ້ລະບົບຄິດໄລ່สำรองເນື່ອງຈາກเซิร์ฟເວີ Offline', 'warning');
+      setCurrentStep(4);
     } finally {
       setIsCalculating(false);
     }
@@ -517,20 +539,38 @@ export default function CreateOrderPage({
         unitCost: 15000,
         specs: `${it.jobWidth}x${it.jobHeight}mm`
       }));
+      const selectedCourierObj = couriers?.find(c => c.id === selectedCourierId);
+      const deliveryMethodLabel = deliveryMethod === 'Pickup' 
+        ? 'Pickup (ຮັບເອງທີ່ຮ້ານ)' 
+        : (deliveryMethod === 'Courier' 
+            ? `${selectedCourierObj?.name || 'Courier'}${courierBranchCode ? ` [ສາຂາ: ${courierBranchCode}]` : ''}` 
+            : 'Direct (ຈັດສົ່ງດ່ວນ)');
+
+      const totalWithDelivery = grandTotalBill + (deliveryMethod === 'Courier' ? Number(deliveryFee || 0) : 0);
+
       addOrder({
         customerName: finalCustomerName,
         phone: finalPhone,
         address: finalAddress,
+        village: village,
+        district: district,
+        province: province,
         items: fallbackItems,
-        totalPriceCharged: grandTotalBill,
+        totalPriceCharged: totalWithDelivery,
         depositAmountPaid: Number(depositAmountPaid),
-        remainingUnpaidBalance: Math.max(0, grandTotalBill - Number(depositAmountPaid)),
+        remainingUnpaidBalance: Math.max(0, totalWithDelivery - Number(depositAmountPaid)),
         paymentMethod: 'BCEL One',
         bankName: 'BCEL',
         paymentStatus: paymentStatus,
         artworkLink: artworkLink,
         promisedDeliveryDate: promisedDeliveryDate || new Date().toISOString().split('T')[0],
-        deliveryMethod: deliveryMethod,
+        deliveryMethod: deliveryMethodLabel,
+        delivery_type: deliveryMethod,
+        courier_id: deliveryMethod === 'Courier' ? selectedCourierId : undefined,
+        courier_name: deliveryMethod === 'Courier' ? (selectedCourierObj?.name || selectedCourierId) : undefined,
+        courier_branch_code: deliveryMethod === 'Courier' ? courierBranchCode : undefined,
+        tracking_number: deliveryMethod === 'Courier' ? courierTrackingNo : undefined,
+        delivery_fee: deliveryMethod === 'Courier' ? Number(deliveryFee || 0) : 0,
         status: 'Received'
       });
       onBack();
@@ -575,15 +615,15 @@ export default function CreateOrderPage({
       </div>
 
       {/* Stepper Header */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex gap-3">
+      <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
-          { step: 1, label: '1. ເລືອກລູກຄ້າ (Customer Info)' },
+          { step: 1, label: '1. ຂໍ້ມູນລູກຄ້າ & ການຈັດສົ່ງ (Customer & Delivery)' },
           { step: 2, label: '2. ລາຍການສິນຄ້າ & ສເປກ (Items & Specs)' },
-          { step: 3, label: '3. ສະຫຼຸບຍອດ & ຕັດສະຕ໋ອກ (Summary & Stock)' }
+          { step: 3, label: '3. ສະຫຼຸບຍອດ & ເປີດອໍເດີ (Summary & Confirm)' }
         ].map(s => (
           <div 
             key={s.step}
-            className={`flex-1 text-center py-3 px-3 rounded-xl font-black text-xs transition-all ${
+            className={`text-center py-3 px-3 rounded-xl font-black text-xs transition-all ${
               currentStep === s.step 
                 ? 'bg-accent-sky text-white shadow-md shadow-accent-sky/20' 
                 : currentStep > s.step
@@ -596,47 +636,255 @@ export default function CreateOrderPage({
         ))}
       </div>
 
-      {/* STEP 1: CUSTOMER SELECTION */}
+      {/* STEP 1: CUSTOMER SELECTION & DELIVERY OPTIONS (COMBINED) */}
       {currentStep === 1 && (
-        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6 animate-fade-in">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-4">
-            <User className="w-6 h-6 text-accent-sky" />
-            <h4 className="font-black text-slate-800 text-base">
-              ຂັ້ນຕອນ 1: ເລືອກຂໍ້ມູນລູກຄ້າ (Customer Selection)
-            </h4>
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-100 shadow-sm space-y-8 animate-fade-in">
+          {/* Section 1: Customer Selection */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <User className="w-5 h-5 text-accent-sky" />
+              <h4 className="font-black text-slate-800 text-base">
+                1. ຂໍ້ມູນລູກຄ້າ (Customer Information)
+              </h4>
+            </div>
+
+            <div className="max-w-3xl">
+              <CustomerCombobox
+                customers={customers}
+                valueName={customerType === 'existing' ? selectedCustomerId : newCustName}
+                valuePhone={customerType === 'existing' ? phone : newCustPhone}
+                valueAddress={customerType === 'existing' ? address : newCustAddress}
+                onChange={(data) => {
+                  if (data.isNew) {
+                    setCustomerType('new');
+                    setNewCustName(data.name);
+                    setNewCustPhone(data.phone);
+                    setNewCustAddress(data.address);
+                    setVillage(data.village || '');
+                    setDistrict(data.district || '');
+                    setProvince(data.province || 'ນະຄອນຫຼວງວຽງຈັນ');
+                    setSelectedCustomerId('');
+                  } else {
+                    setCustomerType('existing');
+                    setSelectedCustomerId(data.customerId || data.name);
+                    setPhone(data.phone);
+                    setAddress(data.address);
+                    setVillage(data.village || '');
+                    setDistrict(data.district || '');
+                    setProvince(data.province || 'ນະຄອນຫຼວງວຽງຈັນ');
+                  }
+                }}
+                currentLang={currentLang}
+              />
+            </div>
           </div>
 
-          <div className="max-w-2xl">
-            <CustomerCombobox
-              customers={customers}
-              valueName={customerType === 'existing' ? selectedCustomerId : newCustName}
-              valuePhone={customerType === 'existing' ? phone : newCustPhone}
-              valueAddress={customerType === 'existing' ? address : newCustAddress}
-              onChange={(data) => {
-                if (data.isNew) {
-                  setCustomerType('new');
-                  setNewCustName(data.name);
-                  setNewCustPhone(data.phone);
-                  setNewCustAddress(data.address);
-                  setSelectedCustomerId('');
-                } else {
-                  setCustomerType('existing');
-                  setSelectedCustomerId(data.customerId || data.name);
-                  setPhone(data.phone);
-                  setAddress(data.address);
+          {/* Section 2: Delivery & Logistics */}
+          <div className="space-y-4 pt-4 border-t border-slate-100">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <Truck className="w-5 h-5 text-accent-sky" />
+              <div>
+                <h4 className="font-black text-slate-800 text-base">
+                  2. ຮູບແບບ & ຂໍ້ມູນການຈັດສົ່ງ (Delivery & Logistics Options)
+                </h4>
+                <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                  ເລືອກຮັບເອງທີ່ຮ້ານ ຫຼື ຈັດສົ່ງຜ່ານບໍລິສັດຂົນສົ່ງທີ່ບັນທຶກໃນລະບົບ (ດຶງຂໍ້ມູນຈາກ Database)
+                </p>
+              </div>
+            </div>
+
+            {/* Delivery Method Selection Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                {
+                  id: 'Pickup',
+                  title: 'ຮັບເອງທີ່ຮ້ານ',
+                  sub: 'Pickup at Store',
+                  icon: Store,
+                  color: 'sky'
+                },
+                {
+                  id: 'Courier',
+                  title: 'ຈັດສົ່ງຜ່ານຂົນສົ່ງ',
+                  sub: 'Courier Logistics',
+                  icon: Truck,
+                  color: 'emerald'
+                },
+                {
+                  id: 'Direct',
+                  title: 'ຈັດສົ່ງດ່ວນ / ຕົງ',
+                  sub: 'Direct Express',
+                  icon: Send,
+                  color: 'indigo'
                 }
-              }}
-              currentLang={currentLang}
-            />
+              ].map((m) => {
+                const Icon = m.icon;
+                const isSelected = deliveryMethod === m.id;
+                return (
+                  <div
+                    key={m.id}
+                    onClick={() => {
+                      setDeliveryMethod(m.id as any);
+                      if (m.id === 'Courier' && couriers?.length > 0) {
+                        const cur = couriers.find(c => c.id === selectedCourierId) || couriers[0];
+                        setDeliveryFee(cur?.fee || 15000);
+                      } else if (m.id === 'Pickup') {
+                        setDeliveryFee(0);
+                      }
+                    }}
+                    className={`p-4 rounded-2xl border-2 transition cursor-pointer flex items-center gap-3.5 ${
+                      isSelected
+                        ? 'border-sky-600 bg-sky-50/60 shadow-sm'
+                        : 'border-slate-100 bg-slate-50/50 hover:bg-slate-100/70 hover:border-slate-200'
+                    }`}
+                  >
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                      isSelected ? 'bg-sky-600 text-white shadow-md shadow-sky-500/20' : 'bg-white text-slate-500 border border-slate-200'
+                    }`}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-black text-slate-900">{m.title}</h5>
+                      <p className="text-[11px] text-slate-400 font-semibold">{m.sub}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Conditional Courier Details */}
+            {deliveryMethod === 'Courier' && (
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-4 animate-fade-in">
+                <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5">
+                  <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                    <Building2 className="w-4 h-4 text-emerald-600" />
+                    <span>ເລືອກບໍລິສັດຂົນສົ່ງ (Select Logistics Provider from Database)</span>
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    ດຶງຂໍ້ມູນຈາກຖານຂໍ້ມູນອັດຕະໂນມັດ
+                  </span>
+                </div>
+
+                {/* Logistics Provider Dropdown / Selector */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-black text-slate-600 mb-1">
+                      ບໍລິສັດຂົນສົ່ງ (Courier Company) *
+                    </label>
+                    <select
+                      value={selectedCourierId}
+                      onChange={(e) => {
+                        setSelectedCourierId(e.target.value);
+                        const cur = couriers.find(c => c.id === e.target.value);
+                        if (cur) setDeliveryFee(cur.fee || 15000);
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-800 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition"
+                    >
+                      {couriers && couriers.length > 0 ? (
+                        couriers.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} {c.shortName ? `(${c.shortName})` : ''} - ຄ່າສົ່ງເລີ່ມຕົ້ນ {c.fee?.toLocaleString()} LAK
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="anousith">Anousith Express (ອານຸສິດ)</option>
+                          <option value="hal">HAL Logistics (ຮຸ່ງອາລຸນ)</option>
+                          <option value="mixay">Mixay Express (ມີໄຊ)</option>
+                          <option value="laopost">Lao Post (ໄປສະນີລາວ)</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Branch Code Input (User fills in manually) */}
+                  <div>
+                    <label className="block text-[11px] font-black text-slate-600 mb-1 flex items-center justify-between">
+                      <span>ລະຫັດສາຂາ / ຊື່ສາຂາປາຍທາງ (Branch Code / Name) *</span>
+                      <span className="text-[10px] text-rose-500 font-bold">ປ້ອນເອງ</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. AN-VTE-01, ສາຂາດົງໂດກ, ສາຂາປາກເຊ..."
+                      value={courierBranchCode}
+                      onChange={(e) => setCourierBranchCode(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition"
+                    />
+                  </div>
+                </div>
+
+                {/* Tracking Number & Delivery Fee */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-black text-slate-600 mb-1">
+                      ເລກຕິດຕາມພັດສະດຸ (Tracking Number - ຖ້າມີ)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. ANO-8899231"
+                      value={courierTrackingNo}
+                      onChange={(e) => setCourierTrackingNo(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white font-mono font-bold text-xs text-slate-800 focus:outline-none focus:border-sky-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-black text-slate-600 mb-1">
+                      ຄ່າຈັດສົ່ງ (Delivery Fee - LAK)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1000"
+                      value={deliveryFee}
+                      onChange={(e) => setDeliveryFee(Number(e.target.value))}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white font-mono font-bold text-xs text-slate-800 focus:outline-none focus:border-sky-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Destination Address Summary */}
+                <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 flex items-start gap-2">
+                  <MapPin className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-slate-800 block text-xs">
+                      ທີ່ຢູ່ປາຍທາງຜູ້ຮັບ (Destination Summary):
+                    </span>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
+                      {address || `${village ? `ບ້ານ ${village}, ` : ''}${district ? `ເມືອງ ${district}, ` : ''}${province || 'ນະຄອນຫຼວງວຽງຈັນ'}` || 'ບໍ່ໄດ້ລະບຸທີ່ຢູ່ລະອຽດ'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Schedule Date */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+              <div>
+                <label className="block text-xs font-black text-slate-600 mb-1 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <span>ກຳນົດສົ່ງສິນຄ້າ (Promised Delivery Date) *</span>
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={promisedDeliveryDate}
+                  onChange={(e) => setPromisedDeliveryDate(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-200 font-bold text-xs bg-white"
+                />
+              </div>
+            </div>
           </div>
 
+          {/* Step 1 Actions */}
           <div className="flex justify-end pt-6 border-t border-slate-100">
             <button
               type="button"
               onClick={handleNextToStep2}
               className="flex items-center gap-2 px-6 py-3 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black shadow-md transition active:scale-95"
             >
-              <span>ຕໍ່ໄປ: ເພີ່ມລາຍການສິນຄ້າ (Next: Customer Items)</span>
+              <span>ຕໍ່ໄປ: ເພີ່ມລາຍການສິນຄ້າ & ສເປກ (Next: Items & Specs)</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -655,7 +903,7 @@ export default function CreateOrderPage({
                   <span>ຮາຍການສິນຄ້າທີ່ລູກຄ້າສັ່ງ (Master Order Item List)</span>
                 </h4>
                 <p className="text-xs font-semibold text-slate-400 mt-0.5">
-                  ເພີ່ມຮາຍການສິນຄ້າ, ກຳນົດຈຳນວນ ແລະ ກົດປຸ່ມ "[ກຳນົດສະເປັກ]" ເພື່ອຕັ້ງຄ່າສະເປັກການພິມ ແລະ ຄຳນວນຕົ້ນທຶນ
+                  ເພີ່ມຮາຍການສິນຄ້າ, ກຳນົດຈຳນວນ ແລະ ກົດປຸ່ມ "ກຳນົດສະເປັກ" ເພື່ອຕັ້ງຄ່າສະເປັກການພິມ ແລະ ຄຳນວນຕົ້ນທຶນ
                 </p>
               </div>
               <button
@@ -746,14 +994,14 @@ export default function CreateOrderPage({
                         <button
                           type="button"
                           onClick={() => handleOpenSpecModal(idx)}
-                          className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-sm ${
+                          className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer ${
                             it.isConfigured
                               ? 'bg-primary-navy hover:bg-slate-800 text-white'
                               : 'bg-accent-sky hover:bg-sky-600 text-white'
                           }`}
                         >
-                          <Settings className="w-3.5 h-3.5" />
-                          <span>[ກຳນົດສະເປັກ]</span>
+                          <Sliders className="w-3.5 h-3.5" />
+                          <span>ກຳນົດສະເປັກ</span>
                         </button>
 
                         {items.length > 1 && (
@@ -915,7 +1163,7 @@ export default function CreateOrderPage({
                       : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
                   }`}
                 >
-                  <span>ຖັດໄປ: ສະຫຼຸບຍອດ & ຕັດສະຕ໋ອກ (Step 3)</span>
+                  <span>ຖັດໄປ: ສະຫຼຸບຍອດ & ເປີດອໍເດີ (Step 3)</span>
                   <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
@@ -981,29 +1229,45 @@ export default function CreateOrderPage({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-slate-50/60 p-6 rounded-2xl border border-slate-100">
             <div className="space-y-4">
               <h4 className="font-black text-slate-800 uppercase tracking-wider text-xs border-b border-slate-200 pb-2">
-                ຂັ້ນຕອນ 3: ກຳນົດສົ່ງ & ລາຍລະອຽດ (Scheduling & Details)
+                ຂໍ້ມູນການຈັດສົ່ງ & ກຳນົດສົ່ງ (Delivery Summary)
               </h4>
-              <div className="space-y-1">
-                <label className="block text-xs font-black text-slate-500">ກຳນົດສົ່ງ (Promised Delivery Date) *</label>
-                <input
-                  type="date"
-                  required
-                  value={promisedDeliveryDate}
-                  onChange={(e) => setPromisedDeliveryDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold font-sans text-xs bg-white transition"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-xs font-black text-slate-500">ວິທີການຈັດສົ່ງ (Delivery Method)</label>
-                <select
-                  value={deliveryMethod}
-                  onChange={(e) => setDeliveryMethod(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold text-xs transition"
-                >
-                  <option value="Pickup">ມາຮັບທີ່ຮ້ານ (Pickup at Shop)</option>
-                  <option value="Kerry Lao">Kerry Lao</option>
-                  <option value="HAL Logistics">HAL Logistics</option>
-                </select>
+              <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-2 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">ຮູບແບບການຈັດສົ່ງ:</span>
+                  <span className="font-bold text-sky-900">
+                    {deliveryMethod === 'Pickup' ? '🏪 ຮັບເອງທີ່ຮ້ານ' : (deliveryMethod === 'Courier' ? '🚚 ຈັດສົ່ງຜ່ານຂົນສົ່ງ' : '⚡ ຈັດສົ່ງດ່ວນ')}
+                  </span>
+                </div>
+                {deliveryMethod === 'Courier' && (
+                  <>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">ບໍລິສັດຂົນສົ່ງ:</span>
+                      <span className="font-bold text-emerald-700">
+                        {couriers.find(c => c.id === selectedCourierId)?.name || selectedCourierId}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">ລະຫັດສາຂາປາຍທາງ:</span>
+                      <span className="font-mono font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded">
+                        {courierBranchCode || '-'}
+                      </span>
+                    </div>
+                    {courierTrackingNo && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">Tracking No:</span>
+                        <span className="font-mono font-bold text-slate-800">{courierTrackingNo}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">ຄ່າຂົນສົ່ງ:</span>
+                      <span className="font-mono font-bold text-slate-800">{formatLAK(deliveryFee)}</span>
+                    </div>
+                  </>
+                )}
+                <div className="flex justify-between items-center pt-1 border-t border-slate-100">
+                  <span className="text-slate-500">ກຳນົດສົ່ງ:</span>
+                  <span className="font-bold text-slate-800">{promisedDeliveryDate}</span>
+                </div>
               </div>
             </div>
 

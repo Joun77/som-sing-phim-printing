@@ -213,9 +213,9 @@ export async function analyzeImageClient(file: File): Promise<PreflightResult> {
           dpi: lowDpiError ? 'ERROR' : 'PASS',
         };
 
-        let statusBadge = '⚠️ ພົບຈຸດທີ່ຕ້ອງກວດສອບ (RGB / Bleed / DPI)';
+        let statusBadge = 'ພົບຈຸດທີ່ຕ້ອງກວດສອບ (RGB / Bleed / DPI)';
         if (!hasRGB && hasSufficientBleed && !lowDpiError && !tacWarning) {
-          statusBadge = '✅ ຜ່ານມາດຕະຖານພິມ 100%';
+          statusBadge = 'ຜ່ານມາດຕະຖານພິມ 100%';
         }
 
         const warningMsg = [
@@ -370,9 +370,9 @@ export async function analyzePDFClient(file: File): Promise<PreflightResult> {
       dpi: lowDpiError ? 'ERROR' : 'PASS',
     };
 
-    let statusBadge = '✅ ໄຟລ໌ CMYK ມາດຕະຖານພ້ອມພິມ';
+    let statusBadge = 'ໄຟລ໌ CMYK ມາດຕະຖານພ້ອມພິມ';
     if (hasRGBObjects || !hasSufficientBleed || tacWarning || lowDpiError) {
-      statusBadge = '⚠️ ພົບຈຸດແຈ້ງເຕືອນ (ກວດສອບລາຍລະອຽດ)';
+      statusBadge = 'ພົບຈຸດແຈ້ງເຕືອນ (ກວດສອບລາຍລະອຽດ)';
     }
 
     const warningMsg = [
@@ -447,7 +447,7 @@ export async function analyzePDFClient(file: File): Promise<PreflightResult> {
       color_space: hasRGBObjects ? 'RGB / CMYK Mix' : 'CMYK',
       has_rgb: hasRGBObjects,
       is_standard_cmyk: !hasRGBObjects,
-      status_badge_lao: hasRGBObjects ? '⚠️ ພົບ RGB Object' : '✅ ໄຟລ໌ CMYK ມາດຕະຖານ',
+      status_badge_lao: hasRGBObjects ? 'ພົບ RGB Object' : 'ໄຟລ໌ CMYK ມາດຕະຖານ',
       warning_message_lao: hasRGBObjects ? 'ໄຟລ໌ມີ RGB Objects' : '',
       suggested_paper: 'A5',
       is_simulated: false,

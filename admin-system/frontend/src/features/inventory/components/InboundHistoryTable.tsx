@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, AlertTriangle, CheckCircle, XCircle, Search, Calendar } from 'lucide-react';
 import { StockInboundRecord, CancelInboundPayload } from '../types';
 import { cancelInbound } from '../api/inventoryApi';
@@ -10,6 +11,7 @@ interface InboundHistoryTableProps {
 }
 
 export default function InboundHistoryTable({ records, loading, onRefresh }: InboundHistoryTableProps) {
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'COMPLETED' | 'CANCELLED'>('ALL');
   
@@ -53,6 +55,10 @@ export default function InboundHistoryTable({ records, loading, onRefresh }: Inb
       };
 
       await cancelInbound(payload);
+      queryClient.invalidateQueries({ queryKey: ['inbound'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-items'] });
+      queryClient.invalidateQueries({ queryKey: ['materials'] });
       setSelectedRecordToCancel(null);
       onRefresh();
     } catch (err: any) {

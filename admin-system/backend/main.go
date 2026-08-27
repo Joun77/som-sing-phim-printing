@@ -16,11 +16,13 @@ import (
 	"backend/internal/handler"
 	"backend/inventory"
 	"backend/middleware"
+	"backend/notifications"
 	"backend/orders"
 	"backend/preflight"
 	"backend/pricing"
 	"backend/settings"
 	"backend/spoilage"
+	"backend/suppliers"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,6 +32,9 @@ func main() {
 	if _, err := db.InitDB(); err != nil {
 		log.Printf("Starting with fallback mode (DB connection error: %v)", err)
 	}
+
+	// Initialize Notification Dispatcher
+	notifications.InitGlobalDispatcher(db.DB)
 
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -85,10 +90,21 @@ func main() {
 
 	// Owner Finance & Slip Verification routes
 	router.GET("/api/v1/finance/summary", finance.HandleGetFinanceSummary)
+	router.GET("/api/finance/summary", finance.HandleGetFinanceSummary)
 	router.POST("/api/v1/finance/verify-slip", finance.HandleVerifyPaymentSlip)
 	router.POST("/api/v1/checkout/verify-slip", finance.HandleVerifySlip)
 	router.POST("/api/checkout/verify-slip", finance.HandleVerifySlip)
 	router.GET("/api/v1/finance/ar-aging", finance.HandleGetARAging)
+	router.GET("/api/v1/finance/pl-report", finance.HandleGetPLReport)
+	router.GET("/api/v1/finance/cash-flow", finance.HandleGetCashFlow)
+	router.POST("/api/v1/finance/expenses", finance.HandleCreateExpense)
+	router.GET("/api/v1/finance/expenses", finance.HandleGetExpenses)
+	router.GET("/api/v1/finance/job-profitability", finance.HandleGetJobProfitability)
+	router.GET("/api/v1/finance/ar", finance.HandleGetAR)
+	router.POST("/api/v1/finance/ar/:id/payment", finance.HandleRecordARPayment)
+	router.GET("/api/v1/finance/ap", finance.HandleGetAP)
+	router.POST("/api/v1/finance/ap/:id/payment", finance.HandleRecordAPPayment)
+	router.GET("/api/v1/finance/chart-of-accounts", finance.HandleGetChartOfAccounts)
 
 	// Daily rates & Currency proxy routes
 	router.GET("/api/rates", pricing.HandleGetRates)
@@ -129,6 +145,19 @@ func main() {
 	router.GET("/api/v1/orders/:id/proof", orders.HandleGetDigitalProof)
 	router.GET("/api/orders/:id/proof", orders.HandleGetDigitalProof)
 
+	// Public Digital Proof Review routes (Secure token-verified)
+	router.GET("/api/v1/public/proof/:order_id/:token", orders.HandleGetProofDetails)
+	router.POST("/api/v1/public/proof/:order_id/:token/approve", orders.HandleApproveProof)
+	router.POST("/api/v1/public/proof/:order_id/:token/reject", orders.HandleRejectProof)
+	router.GET("/api/v1/proof/:order_id/:token", orders.HandleGetProofDetails)
+	router.POST("/api/v1/proof/:order_id/:token/approve", orders.HandleApproveProof)
+	router.POST("/api/v1/proof/:order_id/:token/reject", orders.HandleRejectProof)
+
+	// Admin Notification Settings routes
+	router.GET("/api/v1/admin/notification-config", settings.HandleGetNotificationConfig)
+	router.PUT("/api/v1/admin/notification-config", settings.HandleUpdateNotificationConfig)
+	router.POST("/api/v1/admin/notification-test", settings.HandleTestNotification)
+
 	// Production Scheduling & Machine Queue routes
 	router.GET("/api/v1/production/machines/schedule", spoilage.HandleGetMachineSchedule)
 	router.GET("/api/production/machines/schedule", spoilage.HandleGetMachineSchedule)
@@ -160,6 +189,20 @@ func main() {
 	router.POST("/api/employees", hr.HandleCreateEmployee)
 	router.PUT("/api/employees/:id", hr.HandleUpdateEmployee)
 	router.DELETE("/api/employees/:id", hr.HandleDeleteEmployee)
+
+	// Supplier Master routes
+	router.GET("/api/v1/suppliers", suppliers.HandleGetSuppliers)
+	router.POST("/api/v1/suppliers", suppliers.HandleCreateSupplier)
+	router.PUT("/api/v1/suppliers/:id", suppliers.HandleUpdateSupplier)
+	router.DELETE("/api/v1/suppliers/:id", suppliers.HandleDeleteSupplier)
+
+	// Purchase Order (PO) & Goods Receipt routes
+	router.GET("/api/v1/purchase-orders", suppliers.HandleGetPOs)
+	router.POST("/api/v1/purchase-orders", suppliers.HandleCreatePO)
+	router.PUT("/api/v1/purchase-orders/:id", suppliers.HandleUpdatePO)
+	router.POST("/api/v1/purchase-orders/:id/send", suppliers.HandleSendPO)
+	router.GET("/api/v1/purchase-orders/:id/pdf", suppliers.HandleGeneratePOPDF)
+	router.POST("/api/v1/purchase-orders/:id/receive", suppliers.HandleReceiveGoods)
 
 	// Inbound Procurement routes
 	invHandler := handler.NewInventoryHandler()
@@ -248,6 +291,14 @@ func main() {
 	router.GET("/api/v1/public/locations/districts", settings.HandleGetLaoDistricts)
 	router.GET("/api/v1/locations/districts", settings.HandleGetLaoDistricts)
 	router.GET("/api/locations/districts", settings.HandleGetLaoDistricts)
+
+	// Shop Contact Profile & WhatsApp / Phone Settings routes (Public & Admin)
+	router.GET("/api/v1/public/shop-info", settings.HandleGetShopInfo)
+	router.GET("/api/v1/shop-info", settings.HandleGetShopInfo)
+	router.GET("/api/shop-info", settings.HandleGetShopInfo)
+	router.GET("/api/v1/admin/shop-info", settings.HandleGetShopInfo)
+	router.PUT("/api/v1/admin/shop-info", settings.HandleUpdateShopInfo)
+	router.POST("/api/v1/admin/shop-info", settings.HandleUpdateShopInfo)
 
 	// Start Daily Predictive Maintenance Background Cron
 	inventory.StartPPMDailyCron()

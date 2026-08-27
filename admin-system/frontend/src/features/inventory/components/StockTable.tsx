@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Edit3, Plus, CheckCircle2, AlertTriangle, XCircle, Search, X, Eye } from 'lucide-react';
 import { MaterialMaster } from '../types';
 import { updateMaterialDirect } from '../api/inventoryApi';
@@ -12,6 +13,7 @@ interface StockTableProps {
 }
 
 export default function StockTable({ materials, loading, onRefresh, onOpenInbound, onViewDetails }: StockTableProps) {
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   
@@ -66,6 +68,9 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
         min_stock_alert: Number(editMinAlert),
       });
 
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-items'] });
+      queryClient.invalidateQueries({ queryKey: ['materials'] });
       setEditingMaterial(null);
       onRefresh();
     } catch (err: any) {

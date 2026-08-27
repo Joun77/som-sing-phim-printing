@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { X, Settings, Printer, Scissors, Layers, BookOpen, Camera, Link as LinkIcon, Cpu } from 'lucide-react';
 import { useApp } from '@store/AppContext';
 import { FormModalTemplate } from '@components/common';
 
 export default function AddEquipmentModal({ isOpen, onClose }) {
+  const queryClient = useQueryClient();
   const { inventory, addEquipment, showToast } = useApp();
   
   const [name, setName] = useState('Epson EcoTank L15150');
@@ -123,6 +125,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
       ...categoryParams
     });
 
+    queryClient.invalidateQueries({ queryKey: ['equipment'] });
     showToast(`ລົງທະບຽນໂປຣໄຟລ໌ເຄື່ອງຈັກ "${name}" ສຳເລັດ!`, 'success');
     onClose();
   };

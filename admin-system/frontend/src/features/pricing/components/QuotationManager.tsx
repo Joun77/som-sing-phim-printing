@@ -6,6 +6,22 @@ import ItemSpecConfigurator from '@features/orders/components/ItemSpecConfigurat
 import ManualPrinterAllocator from '@features/orders/components/ManualPrinterAllocator';
 import { PrinterAllocation } from '@features/orders/types';
 import { calculateMachineUnitCost } from '@utils/machineCostCalculator';
+import { QuotationCustomerView } from './QuotationCustomerView';
+import { QuotationMarginApprovalModal } from './QuotationMarginApprovalModal';
+import { QuotationSaveTemplateModal } from './QuotationSaveTemplateModal';
+import { QuotationCostSummarySidebar } from './QuotationCostSummarySidebar';
+import { QuotationSaveModal } from './QuotationSaveModal';
+import { QuotationShareModal } from './QuotationShareModal';
+import { PricingTemplatesModal } from './PricingTemplatesModal';
+import { QuotationHistoryModal } from './QuotationHistoryModal';
+import { 
+  FinishingMaterialItem, 
+  PricingTemplatePreset, 
+  DEFAULT_PRICING_TEMPLATES 
+} from '../data/defaultTemplates';
+
+export type { FinishingMaterialItem, PricingTemplatePreset };
+export { DEFAULT_PRICING_TEMPLATES };
 import { 
   Calculator, 
   ShieldAlert, 
@@ -42,8 +58,34 @@ import {
   CheckSquare,
   Square,
   FileText,
-  Printer
+  Printer,
+  Save,
+  BookOpen,
+  Calendar,
+  CreditCard,
+  Plus,
+  Trash2,
+  Box,
+  PackageCheck,
+  Bookmark,
+  Package,
+  Tag,
+  ToggleLeft,
+  ToggleRight,
+  Search,
+  Phone,
+  Edit3
 } from 'lucide-react';
+import { FormModalTemplate, FormSection } from '@components/common/FormModalTemplate';
+
+export interface ItemModuleToggles {
+  paper: boolean;               // 1. Paper / Substrate & Cut
+  printEngine: boolean;         // 2. Printing Process & Ink
+  postPressMachinery: boolean;  // 3. Post-Press Machinery
+  finishingMaterials: boolean;  // 4. Finishing Materials & Consumables (NEW)
+  laborAndSetup: boolean;       // 5. Labor & Setup
+  packagingDelivery: boolean;   // 6. Packaging & Delivery
+}
 
 const DEFAULT_CMYK_CHANNELS = [
   { channel_name: 'C', density_pct: 15, is_spot_color: false },
@@ -74,8 +116,15 @@ export interface QuotationItem {
   kCoverage: number;
   selectedPrinterId: string;
   selectedInkSet: string;
+  finishingCutOption?: string;
+  bindingOption?: string;
   printerAllocations: PrinterAllocation[];
   selectedPostPressIds: string[];
+  finishingMaterials: FinishingMaterialItem[];
+  activeModules: ItemModuleToggles;
+  packagingCost: number;
+  deliveryCost: number;
+  selectedTemplateId?: string;
   laborMode: 'manual' | 'percent';
   laborPercent: number;
   laborCostManual: number;
@@ -103,12 +152,15 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     quotations,
     addQuotation,
     reviseQuotation,
+    deleteQuotation,
     convertQuotationToOrder,
     currency,
     setCurrency,
     formatCurrency,
     printerColorLinks
   } = useApp();
+  
+  const [quotationSearchQuery, setQuotationSearchQuery] = useState('');
   
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
@@ -267,6 +319,30 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         color_channels: channels,
       }],
       selectedPostPressIds: defaultPostPress,
+      finishingMaterials: [
+        { 
+          id: `mat-${Date.now()}-1`, 
+          name: 'ລວດເຢັບແມັກມຸງຫຼັງຄາ (Staple Wire)', 
+          calcMode: 'box',
+          packagePrice: 50000,
+          unitsPerPackage: 1000,
+          unitCost: 50, 
+          qtyPerItem: 2, 
+          unitName: 'ໂຕ',
+          category: 'staple' 
+        }
+      ],
+      activeModules: {
+        paper: true,
+        printEngine: true,
+        postPressMachinery: true,
+        finishingMaterials: true,
+        laborAndSetup: true,
+        packagingDelivery: false,
+      },
+      packagingCost: 0,
+      deliveryCost: 0,
+      selectedTemplateId: 'TPL_BOOKLET_STAPLE',
       laborMode: 'percent',
       laborPercent: 15,
       laborCostManual: 50000,
@@ -337,13 +413,193 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   };
 
   const [openPhases, setOpenPhases] = useState<Record<string, boolean>>({
-    phase1: true,
-    phase2: true,
-    phase3: true,
-    phase4: true,
-    phase5: true,
-    phase6: true,
+    phase1: false,
+    phase2: false,
+    phase3: false,
+    phase4: false,
+    phase5: false,
+    phase6: false,
+    phase7: false,
+    phase8: false,
   });
+
+  // User-created custom templates saved to LocalStorage
+  const [customTemplates, setCustomTemplates] = useState<PricingTemplatePreset[]>(() => {
+    try {
+      const saved = localStorage.getItem('som_sing_custom_pricing_templates');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Deleted preset template IDs saved to LocalStorage
+  const [deletedPresetIds, setDeletedPresetIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('som_sing_deleted_preset_templates');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [isNewTemplateModalOpen, setIsNewTemplateModalOpen] = useState(false);
+  const [newTemplateForm, setNewTemplateForm] = useState({
+    nameLao: '',
+    nameEn: '',
+    category: 'book',
+    description: '',
+  });
+
+  const allAvailableTemplates = [
+    ...DEFAULT_PRICING_TEMPLATES.filter(t => !deletedPresetIds.includes(t.id)),
+    ...customTemplates,
+  ];
+
+  const handleApplyTemplate = (tpl: PricingTemplatePreset) => {
+    updateActiveItem({
+      selectedTemplateId: tpl.id,
+      activeModules: { ...tpl.activeModules },
+      finishingMaterials: tpl.defaultMaterials ? [...tpl.defaultMaterials] : [],
+      laborPercent: tpl.defaultLaborPercent !== undefined ? tpl.defaultLaborPercent : activeItem.laborPercent,
+    });
+    if (showToast) {
+      showToast(
+        currentLang === 'lo' 
+          ? `ນຳໃຊ້ແມ່ແບບ "${tpl.nameLao}" ຮຽບຮ້ອຍ!` 
+          : `Applied template "${tpl.nameEn}"!`,
+        'success'
+      );
+    }
+  };
+
+  const handleToggleModule = (key: keyof ItemModuleToggles) => {
+    const current = activeItem.activeModules || {
+      paper: true,
+      printEngine: true,
+      postPressMachinery: true,
+      finishingMaterials: true,
+      laborAndSetup: true,
+      packagingDelivery: false,
+    };
+    updateActiveItem({
+      activeModules: {
+        ...current,
+        [key]: !current[key],
+      },
+    });
+  };
+
+  const handleAddFinishingMaterial = (customItem?: Partial<FinishingMaterialItem>) => {
+    const currentList = activeItem.finishingMaterials || [];
+    const pkgPrice = customItem?.packagePrice !== undefined ? customItem.packagePrice : 50000;
+    const unitsPkg = customItem?.unitsPerPackage !== undefined ? customItem.unitsPerPackage : 1000;
+    const isBox = customItem?.calcMode === 'box' || (customItem?.packagePrice !== undefined && customItem?.unitsPerPackage !== undefined);
+    const resolvedUnitCost = customItem?.unitCost !== undefined 
+      ? customItem.unitCost 
+      : (isBox && unitsPkg > 0 ? Math.round(pkgPrice / unitsPkg) : 500);
+
+    const newMat: FinishingMaterialItem = {
+      id: `mat-${Date.now()}-${Math.random().toString().slice(-3)}`,
+      name: customItem?.name || 'ວັດຖຸດິບຫຼັງພິມໃໝ່',
+      calcMode: isBox ? 'box' : 'unit',
+      packagePrice: pkgPrice,
+      unitsPerPackage: unitsPkg,
+      unitCost: resolvedUnitCost,
+      qtyPerItem: customItem?.qtyPerItem !== undefined ? customItem.qtyPerItem : 1,
+      unitName: customItem?.unitName || 'ອັນ',
+      category: customItem?.category || 'other',
+      materialId: customItem?.materialId,
+    };
+    updateActiveItem({
+      finishingMaterials: [...currentList, newMat],
+    });
+  };
+
+  const handleRemoveFinishingMaterial = (matId: string) => {
+    const currentList = activeItem.finishingMaterials || [];
+    updateActiveItem({
+      finishingMaterials: currentList.filter(m => m.id !== matId),
+    });
+  };
+
+  const handleSaveCustomTemplate = () => {
+    if (!newTemplateForm.nameLao.trim()) {
+      if (showToast) showToast('ກະລຸນາລະບຸຊື່ແມ່ແບບ!', 'warning');
+      return;
+    }
+
+    const newTpl: PricingTemplatePreset = {
+      id: `CUST_TPL_${Date.now()}`,
+      nameLao: newTemplateForm.nameLao.trim(),
+      nameEn: newTemplateForm.nameEn.trim() || newTemplateForm.nameLao.trim(),
+      category: newTemplateForm.category,
+      description: newTemplateForm.description || 'Custom Saved Template',
+      iconName: 'Bookmark',
+      activeModules: activeItem.activeModules || {
+        paper: true,
+        printEngine: true,
+        postPressMachinery: true,
+        finishingMaterials: true,
+        laborAndSetup: true,
+        packagingDelivery: false,
+      },
+      defaultMaterials: activeItem.finishingMaterials ? [...activeItem.finishingMaterials] : [],
+      defaultLaborPercent: activeItem.laborPercent || 15,
+    };
+
+    const updated = [...customTemplates, newTpl];
+    setCustomTemplates(updated);
+    try {
+      localStorage.setItem('som_sing_custom_pricing_templates', JSON.stringify(updated));
+    } catch {}
+
+    updateActiveItem({ selectedTemplateId: newTpl.id });
+    setIsNewTemplateModalOpen(false);
+    setNewTemplateForm({ nameLao: '', nameEn: '', category: 'book', description: '' });
+
+    if (showToast) {
+      showToast(
+        currentLang === 'lo' 
+          ? `ບັນທຶກແມ່ແບບ "${newTpl.nameLao}" ສຳເລັດ!` 
+          : `Saved template "${newTpl.nameEn}" successfully!`,
+        'success'
+      );
+    }
+  };
+
+  const handleDeleteCustomTemplate = (templateId: string, templateName: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const msg = currentLang === 'lo'
+      ? `ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບແມ່ແບບ "${templateName}"?`
+      : `Are you sure you want to delete template "${templateName}"?`;
+    askConfirmation(msg, () => {
+      const updatedCustom = customTemplates.filter(t => t.id !== templateId);
+      setCustomTemplates(updatedCustom);
+      try {
+        localStorage.setItem('som_sing_custom_pricing_templates', JSON.stringify(updatedCustom));
+      } catch {}
+
+      if (DEFAULT_PRICING_TEMPLATES.some(t => t.id === templateId)) {
+        const updatedDeleted = [...deletedPresetIds, templateId];
+        setDeletedPresetIds(updatedDeleted);
+        try {
+          localStorage.setItem('som_sing_deleted_preset_templates', JSON.stringify(updatedDeleted));
+        } catch {}
+      }
+
+      if (activeItem.selectedTemplateId === templateId) {
+        updateActiveItem({ selectedTemplateId: 'TPL_CUSTOM' });
+      }
+      if (showToast) {
+        showToast(
+          currentLang === 'lo' ? 'ລົບແມ່ແບບຮຽບຮ້ອຍແລ້ວ' : 'Template deleted successfully',
+          'success'
+        );
+      }
+    });
+  };
 
   const togglePhase = (phaseKey: string) => {
     setOpenPhases(prev => ({ ...prev, [phaseKey]: !prev[phaseKey] }));
@@ -482,8 +738,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     );
     let parentW = 297;
     let parentH = 420;
-    if (paperItem?.name.includes('A4') || paperItem?.specs?.standardSize === 'A4') { parentW = 210; parentH = 297; }
-    else if (paperItem?.name.includes('A3') || paperItem?.specs?.standardSize === 'A3') { parentW = 297; parentH = 420; }
+    if (paperItem?.name?.includes('A4') || paperItem?.specs?.standardSize === 'A4') { parentW = 210; parentH = 297; }
+    else if (paperItem?.name?.includes('A3') || paperItem?.specs?.standardSize === 'A3') { parentW = 297; parentH = 420; }
     
     const curW = Number(jobW) + (Number(bleedMargin) * 2);
     const curH = Number(jobH) + (Number(bleedMargin) * 2);
@@ -505,7 +761,6 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       : (paperItem 
           ? (Number(paperItem.costPerConsumptionUnit) || Number(paperItem.costPerSheet) || (Number(paperItem.costPerPurchaseUnit) && Number(paperItem.purchaseMultiplier) ? Number(paperItem.costPerPurchaseUnit) / Number(paperItem.purchaseMultiplier) : 0) || Number(paperItem.unitCost) || 184)
           : 184);
-    const paperCost = Math.round(paperUnitCost * totalParentSheets);
 
     const A4_AREA = 210 * 297;
     const areaFactor = (Number(jobW) * Number(jobH)) / A4_AREA;
@@ -681,26 +936,51 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       electricityCost += Math.round(allocPages * sideFactor * 40);
     });
 
-    const inkCost = Math.round(totalInkCostAccum);
-    const machineOverhead = machDepr + electricityCost;
+    const hasPaperModule = item.activeModules ? item.activeModules.paper : true;
+    const hasPrintEngineModule = item.activeModules ? item.activeModules.printEngine : true;
+    const hasPostPressModule = item.activeModules ? item.activeModules.postPressMachinery : true;
+    const hasFinishingMaterialsModule = item.activeModules ? item.activeModules.finishingMaterials : true;
+    const hasLaborModule = item.activeModules ? item.activeModules.laborAndSetup : true;
+    const hasPackagingModule = item.activeModules ? item.activeModules.packagingDelivery : true;
 
-    const postPressCost = (item.selectedPostPressIds || []).reduce((sum, machId) => {
+    const rawPaperCost = Math.round(paperUnitCost * totalParentSheets);
+    const rawInkCost = Math.round(totalInkCostAccum);
+    const rawMachineOverhead = machDepr + electricityCost;
+
+    const rawPostPressCost = (item.selectedPostPressIds || []).reduce((sum, machId) => {
       const mach = equipment.find(e => e.id === machId);
       if (!mach) return sum;
       const rate = Number((mach as any).costPerPage) || Number((mach as any).calculatedCostPerPage) || 300;
       return sum + Math.round(rate * item.printVolume);
     }, 0);
 
-    const directMatMach = paperCost + inkCost + machineOverhead + postPressCost;
+    const rawFinishingMaterialsCost = (item.finishingMaterials || []).reduce((sum, mat) => {
+      const uCost = Number(mat.unitCost) || 0;
+      const q = Number(mat.qtyPerItem) || 1;
+      return sum + Math.round(uCost * q * item.printVolume);
+    }, 0);
+
+    const paperCost = hasPaperModule ? rawPaperCost : 0;
+    const inkCost = hasPrintEngineModule ? rawInkCost : 0;
+    const machineOverhead = hasPrintEngineModule ? rawMachineOverhead : 0;
+    const postPressCost = hasPostPressModule ? rawPostPressCost : 0;
+    const finishingMaterialsCost = hasFinishingMaterialsModule ? rawFinishingMaterialsCost : 0;
+
+    const directMatMach = paperCost + inkCost + machineOverhead + postPressCost + finishingMaterialsCost;
+    
     let laborCost = 0;
-    if (item.laborMode === 'manual') {
-      laborCost = Number(item.laborCostManual || 0);
-    } else {
-      const pct = Number(item.laborPercent || 15);
-      laborCost = Math.round(directMatMach * (pct / 100));
+    if (hasLaborModule) {
+      if (item.laborMode === 'manual') {
+        laborCost = Number(item.laborCostManual || 0);
+      } else {
+        const pct = Number(item.laborPercent || 15);
+        laborCost = Math.round(directMatMach * (pct / 100));
+      }
     }
 
-    const netCost = paperCost + inkCost + machineOverhead + postPressCost + laborCost;
+    const packagingDeliveryCost = hasPackagingModule ? (Number(item.packagingCost || 0) + Number(item.deliveryCost || 0)) : 0;
+
+    const netCost = paperCost + inkCost + machineOverhead + postPressCost + finishingMaterialsCost + laborCost + packagingDeliveryCost;
     const marginDec = Math.min(0.99, Math.max(0, Number(item.profitMargin || 40) / 100));
     const baseSellingPrice = Math.round(netCost / (1.0 - marginDec));
     const discountAmt = Math.round(baseSellingPrice * (Number(item.discountPercent || 0) / 100));
@@ -726,6 +1006,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       machDepr,
       electricityCost,
       postPressCost,
+      finishingMaterialsCost,
+      packagingDeliveryCost,
       laborCost,
       directMatMach,
       netCost,
@@ -746,7 +1028,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   const grandInkCost = calculatedItems.reduce((sum, c) => sum + c.inkCost, 0);
   const grandMachCost = calculatedItems.reduce((sum, c) => sum + c.machineOverhead, 0);
   const grandPostPressCost = calculatedItems.reduce((sum, c) => sum + c.postPressCost, 0);
+  const grandFinishingCost = calculatedItems.reduce((sum, c) => sum + c.finishingMaterialsCost, 0);
   const grandLaborCost = calculatedItems.reduce((sum, c) => sum + c.laborCost, 0);
+  const grandPackagingCost = calculatedItems.reduce((sum, c) => sum + c.packagingDeliveryCost, 0);
   const grandNetCost = calculatedItems.reduce((sum, c) => sum + c.netCost, 0);
   const grandSubtotal = calculatedItems.reduce((sum, c) => sum + c.sellingPrice, 0);
   const grandTotalUnits = items.reduce((sum, it) => sum + Number(it.printVolume || 0), 0);
@@ -793,7 +1077,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
             const rate = Number((mach as any).costPerPage) || Number((mach as any).calculatedCostPerPage) || 300;
             orderItems.push({
               id: mach.id,
-              name: `[${item.name}] ⚙️ ${mach.name}`,
+              name: `[${item.name}] ${mach.name}`,
               quantity: item.printVolume,
               unitCost: rate
             });
@@ -845,12 +1129,15 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       };
     });
 
+    const resolvedPhone = customerPhone || customers.find(c => c.name === selectedCustomerId)?.phone || '';
+
     const quoteData = {
       title: quotationTitle.trim() || 'ໃບສະເໜີລາຄາງານພິມ',
       isPricingTemplate: isTemplateOption,
       templateCategory: isTemplateOption ? templateCategory : undefined,
-      customerName: selectedCustomerId,
-      phone: customerPhone || customers.find(c => c.name === selectedCustomerId)?.phone || '',
+      customerName: selectedCustomerId || 'General Customer',
+      phone: resolvedPhone,
+      rawItems: JSON.parse(JSON.stringify(items)),
       items: quoteItems,
       subtotal: grandSubtotal,
       discountPercent: Number(activeItem.discountPercent || 0),
@@ -977,10 +1264,144 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     });
   };
 
-  // Load a saved quotation's financial settings back into the calculator
+  // 🌟 Quick Save as Draft with Customer & Specs Snapshot
+  const handleSaveDraft = () => {
+    const quoteItems = items.map((item, idx) => {
+      const calc = calculatedItems[idx];
+      const paperObj = inventory.find(p => p.id === item.paperId);
+      const postPressNames = (item.selectedPostPressIds || [])
+        .map(mId => equipment.find(e => e.id === mId)?.name)
+        .filter(Boolean)
+        .join(', ');
+      const consumablesNames = (item.finishingMaterials || [])
+        .map(m => `${m.name} (${m.qtyPerItem}${m.unitName || 'ອັນ'})`)
+        .join(', ');
+
+      return {
+        id: item.id,
+        name: item.name,
+        quantity: item.printVolume,
+        unitPrice: calc.unitPrice,
+        subtotal: calc.sellingPrice,
+        specSummary: `${item.jobSizePreset} (${item.jobWidth}x${item.jobHeight}mm) | ${paperObj?.name || 'Paper'} | ${item.colorPrintMode === 'MONO_K' ? 'Mono K' : 'CMYK'}${postPressNames ? ` | ${postPressNames}` : ''}${consumablesNames ? ` | ${consumablesNames}` : ''}`
+      };
+    });
+
+    const resolvedPhone = customerPhone || customers.find(c => c.name === selectedCustomerId)?.phone || '';
+
+    const draftData = {
+      title: quotationTitle.trim() || 'ສະບັບຮ່າງໃບສະເໜີລາຄາ',
+      customerName: selectedCustomerId || 'General Customer',
+      phone: resolvedPhone,
+      rawItems: JSON.parse(JSON.stringify(items)),
+      items: quoteItems,
+      subtotal: grandSubtotal,
+      discountPercent: Number(activeItem.discountPercent || 0),
+      grossProfitMargin: grandProfitMargin,
+      taxEnabled,
+      taxRate: Number(taxRate),
+      taxMode,
+      taxOverrideAmount: Number(taxOverrideAmount),
+      taxAmount,
+      shippingFee: Number(shippingFee || 0),
+      shippingMethod,
+      grandTotal: finalGrandTotal,
+      expiresAt: quotationExpiry,
+      paymentTerms,
+      notes: quotationNote,
+      status: 'Draft',
+      version: 1
+    };
+
+    addQuotation(draftData);
+    showToast(
+      currentLang === 'lo'
+        ? `ບັນທຶກສະບັບຮ່າງ "${draftData.title}" ສຳເລັດ! ເຂົ້າສູ່ປະຫວັດໃບສະເໜີແລ້ວ.`
+        : `Draft "${draftData.title}" saved successfully!`,
+      'success'
+    );
+  };
+
+  // Delete a quotation with confirmation
+  const handleDeleteQuotation = (quote: any) => {
+    const msg = currentLang === 'lo'
+      ? `ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບໃບສະເໜີ "${quote.quotationNumber}" (${quote.customerName})?`
+      : `Are you sure you want to delete quotation "${quote.quotationNumber}" (${quote.customerName})?`;
+
+    askConfirmation(msg, () => {
+      deleteQuotation(quote.id);
+      showToast(
+        currentLang === 'lo' ? 'ລົບໃບສະເໜີລາຄາຮຽບຮ້ອຍແລ້ວ' : 'Quotation deleted successfully',
+        'success'
+      );
+    });
+  };
+
+  // Safe Sanitizer for Quotation Items (prevents white-screen crashes on old/partial items)
+  const sanitizeQuotationItem = (raw: any, idx: number): QuotationItem => {
+    const defPaper = inventory[0]?.id || '';
+    const defPrn = equipment[0]?.id || '';
+    return {
+      id: raw?.id || `item-${Date.now()}-${idx}`,
+      name: raw?.name || `ລາຍການ ${idx + 1}`,
+      paperId: raw?.paperId || defPaper,
+      jobSizePreset: raw?.jobSizePreset || 'A4',
+      jobWidth: Number(raw?.jobWidth) || 210,
+      jobHeight: Number(raw?.jobHeight) || 297,
+      isDoubleSided: Boolean(raw?.isDoubleSided),
+      printVolume: Math.max(1, Number(raw?.printVolume ?? raw?.quantity) || 100),
+      colorPrintMode: raw?.colorPrintMode === 'MONO_K' ? 'MONO_K' : 'CMYK',
+      coverageMode: raw?.coverageMode === 'advanced' ? 'advanced' : 'default',
+      avgCoverage: Number(raw?.avgCoverage) || 15,
+      cCoverage: Number(raw?.cCoverage) || 15,
+      mCoverage: Number(raw?.mCoverage) || 15,
+      yCoverage: Number(raw?.yCoverage) || 15,
+      kCoverage: Number(raw?.kCoverage) || 15,
+      selectedPrinterId: raw?.selectedPrinterId || raw?.machineId || defPrn,
+      selectedInkSet: raw?.selectedInkSet || 'OEM',
+      finishingCutOption: raw?.finishingCutOption || 'straight',
+      bindingOption: raw?.bindingOption || 'none',
+      selectedPostPressIds: Array.isArray(raw?.selectedPostPressIds) ? raw.selectedPostPressIds : [],
+      finishingMaterials: Array.isArray(raw?.finishingMaterials) 
+        ? raw.finishingMaterials.map((m: any, mI: number) => ({
+            id: m.id || `mat-${Date.now()}-${mI}`,
+            name: m.name || 'ວັດຖຸດິບ',
+            unitCost: Number(m.unitCost) || 50,
+            qtyPerItem: Number(m.qtyPerItem) || 1,
+            calcMode: m.calcMode === 'box' ? 'box' : 'unit',
+            packagePrice: Number(m.packagePrice) || 50000,
+            unitsPerPackage: Number(m.unitsPerPackage) || 1000,
+            unitName: m.unitName || 'ອັນ',
+            category: m.category || 'other',
+            materialId: m.materialId,
+          }))
+        : [],
+      activeModules: {
+        paper: raw?.activeModules?.paper !== false,
+        printEngine: raw?.activeModules?.printEngine !== false,
+        postPressMachinery: Boolean(raw?.activeModules?.postPressMachinery),
+        finishingMaterials: Boolean(raw?.activeModules?.finishingMaterials),
+        laborAndSetup: raw?.activeModules?.laborAndSetup !== false,
+        packagingDelivery: Boolean(raw?.activeModules?.packagingDelivery),
+      },
+      selectedTemplateId: raw?.selectedTemplateId || 'TPL_CUSTOM',
+      laborMode: raw?.laborMode === 'manual' ? 'manual' : 'percent',
+      laborPercent: Number(raw?.laborPercent) || 15,
+      laborCostManual: Number(raw?.laborCostManual) || 0,
+      packagingCost: Number(raw?.packagingCost) || 0,
+      deliveryCost: Number(raw?.deliveryCost) || 0,
+      profitMargin: Number(raw?.profitMargin) || 40,
+      discountPercent: Number(raw?.discountPercent) || 0,
+      printerAllocations: Array.isArray(raw?.printerAllocations) ? raw.printerAllocations : undefined,
+    };
+  };
+
+  // Load a saved quotation's financial settings back into the calculator (Lossless & Robust)
   const handleLoadQuotation = (quotation: any) => {
+    if (!quotation) return;
     if (quotation.title) setQuotationTitle(quotation.title);
     if (quotation.customerName) setSelectedCustomerId(quotation.customerName);
+    if (quotation.phone) setCustomerPhone(quotation.phone);
     setTaxEnabled(Boolean(quotation.taxEnabled));
     setTaxRate(Number(quotation.taxRate) || 0);
     setTaxMode(quotation.taxMode || 'percent');
@@ -988,11 +1409,23 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     setQuotationExpiry(quotation.expiresAt || '2026-08-31');
     setPaymentTerms(quotation.paymentTerms || 'Immediate / Cash');
     setQuotationNote(quotation.notes || '');
-    if (Array.isArray(quotation.items) && quotation.items.length > 0) {
-      setItems(quotation.items);
+    if (quotation.shippingFee !== undefined) setShippingFee(Number(quotation.shippingFee));
+    if (quotation.shippingMethod) setShippingMethod(quotation.shippingMethod);
+
+    const rawList = Array.isArray(quotation.rawItems) && quotation.rawItems.length > 0
+      ? quotation.rawItems
+      : Array.isArray(quotation.items) && quotation.items.length > 0
+        ? quotation.items
+        : [];
+
+    if (rawList.length > 0) {
+      const sanitized = rawList.map((it: any, i: number) => sanitizeQuotationItem(it, i));
+      setItems(sanitized);
       setActiveItemIndex(0);
     }
+
     setIsQuotationListOpen(false);
+    setCurrentStep('calc');
     showToast(
       currentLang === 'lo' 
         ? `ໂຫຼດໃບສະເໜີ "${quotation.title || quotation.quotationNumber}" ສຳເລັດ!` 
@@ -1012,104 +1445,107 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   return (
     <div className="space-y-3 animate-fade-in text-slate-800 print:bg-white print:p-0 print:text-black">
       
-      {/* Unified Top Bar: Steps + Currency + Saved Quotations (Hide on print) */}
-      <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-2xl border border-slate-100 shadow-sm print:hidden flex-wrap">
+      {/* Unified Top Bar: Large Step Tabs + Currency + Saved Quotations */}
+      <div className="flex items-center justify-between gap-3 bg-white px-3.5 py-2.5 rounded-2xl border border-slate-200/90 shadow-xs print:hidden flex-wrap">
         {/* Back button (if available) */}
         {onBack && (
           <button
             onClick={onBack}
-            className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition shrink-0 active:scale-95 cursor-pointer"
+            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition shrink-0 active:scale-95 cursor-pointer"
             title="Back"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
+            <ArrowLeft className="w-4 h-4" />
           </button>
         )}
 
-        {/* Step Tabs */}
-        <div className="flex items-center gap-1 flex-1">
+        {/* Large Easy-to-Read Step Tabs */}
+        <div className="flex items-center gap-2 flex-1 min-w-[320px]">
           <button
             type="button"
             onClick={() => setCurrentStep('calc')}
-            className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl text-sm sm:text-base font-black transition-all cursor-pointer shadow-xs ${
               currentStep === 'calc'
                 ? 'bg-primary-navy text-white shadow-md'
-                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                : 'text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200/70'
             }`}
           >
-            <Calculator className="w-4 h-4 shrink-0" />
+            <Calculator className="w-5 h-5 shrink-0 text-emerald-400" />
             <span>1. {currentLang === 'lo' ? 'ກຳນົດສະເປກ & ຄຳນວນ' : 'Specs & Cost'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setCurrentStep('quote')}
-            className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl text-sm sm:text-base font-black transition-all cursor-pointer shadow-xs ${
               currentStep === 'quote'
                 ? 'bg-primary-navy text-white shadow-md'
-                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                : 'text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200/70'
             }`}
           >
-            <Layers className="w-4 h-4 shrink-0" />
+            <Layers className="w-5 h-5 shrink-0 text-accent-sky" />
             <span>2. {currentLang === 'lo' ? 'ໃບສະເໜີລູກຄ້າ' : 'Client Quotation'}</span>
-            <span className="px-2 py-0.5 rounded-md text-[11px] bg-emerald-500/20 text-emerald-600 font-sans font-black">
+            <span className="px-2.5 py-0.5 rounded-lg text-xs bg-emerald-500/20 text-emerald-700 font-sans font-black">
               {formatCurrency(finalGrandTotal)}
             </span>
           </button>
         </div>
 
-        {/* Divider */}
-        <div className="w-px h-5 bg-slate-200 hidden sm:block shrink-0" />
+        {/* Right Section: Currency Selector + History Button */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Currency Selector */}
+          <div className="flex items-center gap-0.5 p-1 bg-slate-100 border border-slate-200 rounded-xl">
+            {['LAK', 'THB', 'USD'].map(code => (
+              <button
+                key={code}
+                type="button"
+                onClick={() => setCurrency(code)}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition ${
+                  currency === code
+                    ? 'bg-white text-primary-navy shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                {code === 'LAK' ? '₭' : code === 'THB' ? '฿' : '$'} {code}
+              </button>
+            ))}
+          </div>
 
-        {/* Currency Selector */}
-        <div className="flex items-center gap-0.5 p-0.5 bg-slate-100 border border-slate-200 rounded-lg shrink-0">
-          {['LAK', 'THB', 'USD'].map(code => (
+          <button
+            type="button"
+            onClick={() => setIsQuotationListOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-extrabold transition cursor-pointer shadow-2xs active:scale-95"
+            title="ປະຫວັດໃບສະເໜີ"
+          >
+            <Layers3 className="w-4 h-4 shrink-0 text-accent-sky" />
+            <span className="hidden sm:inline">{currentLang === 'lo' ? 'ປະຫວັດໃບສະເໜີ' : 'History'}</span>
+            <span className="bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded-md text-[10px] font-mono font-bold">
+              {quotations.length}
+            </span>
+          </button>
+
+          {currentStep === 'calc' ? (
             <button
-              key={code}
               type="button"
-              onClick={() => setCurrency(code)}
-              className={`px-2 py-1 rounded-md text-[10px] font-black transition ${
-                currency === code
-                  ? 'bg-white text-primary-navy shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
+              onClick={() => {
+                setCurrentStep('quote');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-sm active:scale-95"
             >
-              {code === 'LAK' ? '₭' : code === 'THB' ? '฿' : '$'} {code}
+              <span>{currentLang === 'lo' ? 'ອອກໃບສະເໜີ' : 'Generate'}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
-          ))}
+          ) : (
+            <button
+              type="button"
+              onClick={() => setCurrentStep('calc')}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition cursor-pointer shrink-0"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>{currentLang === 'lo' ? 'ແກ້ໄຂ' : 'Edit'}</span>
+            </button>
+          )}
         </div>
-
-        {/* Saved Quotations */}
-        <button
-          onClick={() => setIsQuotationListOpen(true)}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-[10px] font-extrabold hover:bg-slate-50 transition shrink-0"
-        >
-          <Layers3 className="w-3 h-3 shrink-0 text-accent-sky" />
-          <span className="hidden sm:inline">{currentLang === 'lo' ? `ໃບສະເໜີ (${quotations.length})` : `Saved (${quotations.length})`}</span>
-          <span className="sm:hidden">{quotations.length}</span>
-        </button>
-
-        {/* CTA Button */}
-        {currentStep === 'calc' ? (
-          <button
-            type="button"
-            onClick={() => {
-              setCurrentStep('quote');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-accent-sky hover:bg-sky-500 text-white rounded-lg text-xs font-black transition cursor-pointer shadow-sm active:scale-95 shrink-0"
-          >
-            <span>{currentLang === 'lo' ? 'ອອກໃບສະເໜີ →' : 'Generate →'}</span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setCurrentStep('calc')}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-black transition cursor-pointer shrink-0"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>{currentLang === 'lo' ? 'ແກ້ໄຂ' : 'Edit'}</span>
-          </button>
-        )}
       </div>
 
 
@@ -1236,16 +1672,145 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 </div>
               </div>
 
+              {/* ========================================================= */}
+              {/* 🌟 DYNAMIC PRICING TEMPLATES & MODULAR CONTROL STUDIO     */}
+              {/* ========================================================= */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 space-y-4 shadow-xs">
+                
+                {/* Top Row: Template Presets Selector + Open Full Modal & Save as Template */}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-accent-sky/10 text-accent-sky flex items-center justify-center font-bold">
+                      <Bookmark className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                        {currentLang === 'lo' ? 'ແມ່ແບບສູດຄຳນວນ (Pricing Templates)' : 'Pricing Preset Templates'}
+                      </h4>
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        {currentLang === 'lo' ? 'ເລືອກແມ່ແບບສຳເລັດຮູບ ຫຼື ປັບແຕ່ງໂມດູນເອງ' : 'Select quick presets or customize dynamic modules.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsTemplateModalOpen(true)}
+                      className="px-3.5 py-2 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+                    >
+                      <Bookmark className="w-3.5 h-3.5" />
+                      <span>{currentLang === 'lo' ? `ເລືອກ & ຈັດການແມ່ແບບ (${allAvailableTemplates.length})` : `Manage Templates (${allAvailableTemplates.length})`}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsNewTemplateModalOpen(true)}
+                      className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{currentLang === 'lo' ? 'ບັນທຶກເປັນແມ່ແບບໃໝ່' : 'Save As Template'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Active Selected Template Badge Bar */}
+                <div className="flex items-center justify-between bg-slate-50 border border-slate-200/80 px-4 py-2.5 rounded-2xl text-xs">
+                  <div className="flex items-center gap-2">
+                    <Bookmark className="w-4 h-4 text-accent-sky shrink-0" />
+                    <span className="text-slate-500 font-bold">{currentLang === 'lo' ? 'ແມ່ແບບທີ່ກຳລັງໃຊ້:' : 'Active Template:'}</span>
+                    <span className="font-black text-primary-navy">
+                      {allAvailableTemplates.find(t => t.id === activeItem.selectedTemplateId)?.nameLao || 
+                       allAvailableTemplates.find(t => t.id === activeItem.selectedTemplateId)?.nameEn || 
+                       (currentLang === 'lo' ? 'ກຳນົດເອງ (Custom Spec)' : 'Custom Spec')}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsTemplateModalOpen(true)}
+                    className="text-xs font-black text-accent-sky hover:text-sky-700 transition cursor-pointer flex items-center gap-1"
+                  >
+                    <span>{currentLang === 'lo' ? 'ປ່ຽນແມ່ແບບ →' : 'Change Template →'}</span>
+                  </button>
+                </div>
+
+                {/* 8 Full Dynamic & Fixed Cost Modules Grid */}
+                <div className="pt-2 border-t border-slate-100 space-y-2">
+                  <div className="flex justify-between items-center text-[11px] font-bold text-slate-500">
+                    <span>{currentLang === 'lo' ? 'ໂມດູນຕົ້ນທຶນທັງໝົດ 1-8 (Active Cost Modules):' : 'All 8 Cost & Spec Modules:'}</span>
+                    <span className="text-[10px] text-slate-400">1-2 ບັງຄັບໃຊ້ (Fixed), 3-8 ເປີດ/ປິດ ຕາມຕ້ອງການ</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {/* Fixed Module 1: Customer */}
+                    <div className="p-2.5 rounded-xl border border-indigo-200 bg-indigo-50/40 text-slate-900 flex items-center justify-between text-xs font-bold shadow-2xs">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <User className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span className="truncate text-[11px] font-black text-slate-900">
+                          {currentLang === 'lo' ? '1. ຂໍ້ມູນລູກຄ້າ' : '1. Customer'}
+                        </span>
+                      </div>
+                      <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded text-[9px] font-black shrink-0">FIXED</span>
+                    </div>
+
+                    {/* Fixed Module 2: Production Quantity */}
+                    <div className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/40 text-slate-900 flex items-center justify-between text-xs font-bold shadow-2xs">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <Hash className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span className="truncate text-[11px] font-black text-slate-900">
+                          {currentLang === 'lo' ? '2. ຈຳນວນຜະລິດ' : '2. Quantity'}
+                        </span>
+                      </div>
+                      <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[9px] font-black shrink-0">FIXED</span>
+                    </div>
+
+                    {/* Dynamic Modules 3 to 8 */}
+                    {[
+                      { key: 'paper' as const, label: currentLang === 'lo' ? '3. ເຈ້ຍ (Paper)' : '3. Paper', icon: FileText, color: 'sky' },
+                      { key: 'printEngine' as const, label: currentLang === 'lo' ? '4. ເຄື່ອງພິມ & ໝຶກ' : '4. Print & Ink', icon: Printer, color: 'purple' },
+                      { key: 'postPressMachinery' as const, label: currentLang === 'lo' ? '5. ເຄື່ອງຈັກຫຼັງພິມ' : '5. Post-Press Mach.', icon: Wrench, color: 'amber' },
+                      { key: 'finishingMaterials' as const, label: currentLang === 'lo' ? '6. ວັດຖຸດິບຫຼັງພິມ' : '6. Consumables', icon: Package, color: 'emerald' },
+                      { key: 'laborAndSetup' as const, label: currentLang === 'lo' ? '7. ຄ່າແຮງ & ຕັ້ງເຄື່ອງ' : '7. Labor & Setup', icon: Zap, color: 'blue' },
+                      { key: 'packagingDelivery' as const, label: currentLang === 'lo' ? '8. ບັນຈຸພັນ & ຂົນສົ່ງ' : '8. Packaging & Delivery', icon: Truck, color: 'slate' },
+                    ].map((mod) => {
+                      const isActive = activeItem.activeModules ? activeItem.activeModules[mod.key] : true;
+                      return (
+                        <button
+                          key={mod.key}
+                          type="button"
+                          onClick={() => handleToggleModule(mod.key)}
+                          className={`p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-between ${
+                            isActive
+                              ? 'bg-white border-slate-300 text-slate-900 shadow-2xs'
+                              : 'bg-slate-100/70 border-slate-200 text-slate-400 opacity-60'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 truncate">
+                            <mod.icon className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate text-[11px] font-black">{mod.label}</span>
+                          </div>
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${isActive ? 'bg-emerald-500 shadow-xs' : 'bg-slate-300'}`} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+              </div>
+
               {/* Quick Phase Jump Navigation & Expand/Collapse All */}
               <div className="flex items-center justify-between gap-2 p-2 bg-slate-50 border border-slate-200/80 rounded-2xl">
                 <div className="flex items-center gap-1 overflow-x-auto scrollbar-none py-0.5">
                   {[
                     { key: 'phase1', label: '1. ລູກຄ້າ', icon: User },
                     { key: 'phase2', label: '2. ຈຳນວນ', icon: Hash },
-                    { key: 'phase3', label: '3. ເຈ້ຍ FIFO', icon: FileText },
-                    { key: 'phase4', label: '4. ເຄື່ອງພິມ', icon: Printer },
-                    { key: 'phase5', label: '5. ຫຼັງພິມ', icon: Wrench },
-                    { key: 'phase6', label: '6. ຄ່າແຮງ', icon: Zap },
+                    { key: 'phase3', label: '3. ເຈ້ຍ', icon: FileText },
+                    { key: 'phase4', label: '4. ພິມ', icon: Printer },
+                    { key: 'phase5', label: '5. ເຄື່ອງຈັກ', icon: Wrench },
+                    { key: 'phase6', label: '6. ວັດຖຸດິບຫຼັງພິມ', icon: Package },
+                    { key: 'phase7', label: '7. ຄ່າແຮງ', icon: Zap },
+                    { key: 'phase8', label: '8. ຂົນສົ່ງ', icon: Truck },
                   ].map(p => (
                     <button
                       key={p.key}
@@ -1671,21 +2236,23 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 )}
               </div>
 
-              {/* PHASE 6: Dynamic Labor (ຄ່າແຮງງານ & ຕັ້ງເຄື່ອງ) */}
-              <div id="sec-phase6" className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition">
+              {/* PHASE 6: Finishing Materials & Consumables (ວັດຖຸດິບຫຼັງການພິມ: ລວດເຢັບ/ກາວ/ຟິມ/ຫ່ວງ) */}
+              <div id="sec-phase6" className={`border rounded-2xl overflow-hidden bg-white shadow-xs transition ${
+                activeItem.activeModules?.finishingMaterials ? 'border-emerald-200/80' : 'border-slate-200 opacity-60'
+              }`}>
                 <button
                   type="button"
                   onClick={() => togglePhase('phase6')}
                   className="w-full p-3.5 bg-slate-50/80 hover:bg-slate-100/80 flex items-center justify-between transition cursor-pointer"
                 >
                   <div className="flex items-center gap-2.5">
-                    <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">6</span>
+                    <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">6</span>
                     <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                      {currentLang === 'lo' ? 'ຄ່າແຮງງານ & ຕັ້ງເຄື່ອງ (Labor)' : 'Labor & Overhead'}
+                      {currentLang === 'lo' ? 'ວັດຖຸດິບຫຼັງພິມ & ອຸປະກອນສິ້ນເປືອງ (Consumables)' : 'Finishing Materials & Consumables'}
                     </span>
-                    <span className="text-[11px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-lg border border-blue-200 font-sans flex items-center gap-1">
-                      <Zap className="w-3 h-3" />
-                      {activeItem.laborMode === 'percent' ? `${activeItem.laborPercent}%` : formatCurrency(activeItem.laborCostManual)} • {formatCurrency(activeCalc.laborCost)}
+                    <span className="text-[11px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200 font-sans flex items-center gap-1">
+                      <Package className="w-3 h-3" />
+                      {(activeItem.finishingMaterials || []).length} ລາຍການ • {formatCurrency(activeCalc.finishingMaterialsCost)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-400">
@@ -1695,6 +2262,249 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 </button>
 
                 {openPhases.phase6 && (
+                  <div className="p-4 sm:p-5 border-t border-slate-100 space-y-4 animate-fade-in">
+                    
+                    {/* Quick Preset Materials Pills */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-slate-500 block">
+                        {currentLang === 'lo' ? 'ກົດເພີ່ມວັດຖຸດິບສຳເລັດຮູບດ່ວນ (ມີສູດຄິດໄລ່ຍົກກ່ອງ):' : 'Quick Add Consumables:'}
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { name: 'ລວດເຢັບແມັກ (#10)', calcMode: 'box' as const, packagePrice: 50000, unitsPerPackage: 1000, unitCost: 50, qtyPerItem: 2, unitName: 'ໂຕ', category: 'staple' },
+                          { name: 'ຫ່ວງກະດູກງູ Wire-O', calcMode: 'box' as const, packagePrice: 180000, unitsPerPackage: 100, unitCost: 1800, qtyPerItem: 1, unitName: 'ຂໍ້', category: 'wire' },
+                          { name: 'ກາວຮ້ອນສັນປຶ້ມ (Hot Melt)', calcMode: 'box' as const, packagePrice: 125000, unitsPerPackage: 250, unitCost: 500, qtyPerItem: 1, unitName: 'ກຣາມ', category: 'glue' },
+                          { name: 'ຟິມເຄືອບ BOPP Thermal', calcMode: 'box' as const, packagePrice: 400000, unitsPerPackage: 500, unitCost: 800, qtyPerItem: 1, unitName: 'ແຜ່ນ', category: 'film' },
+                          { name: 'ກ່ອງໃສ່ນາມບັດອະຄຣິລິກໃສ', calcMode: 'box' as const, packagePrice: 350000, unitsPerPackage: 100, unitCost: 3500, qtyPerItem: 1, unitName: 'ກ່ອງ', category: 'box' },
+                          { name: 'ຂາຕັ້ງປະຕິທິນແຂງ', calcMode: 'unit' as const, unitCost: 4500, qtyPerItem: 1, unitName: 'ອັນ', category: 'other' },
+                        ].map((matPreset) => (
+                          <button
+                            key={matPreset.name}
+                            type="button"
+                            onClick={() => handleAddFinishingMaterial(matPreset)}
+                            className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 rounded-xl text-[11px] font-bold transition cursor-pointer flex items-center gap-1 active:scale-95"
+                          >
+                            <Plus className="w-3 h-3 text-emerald-600" />
+                            <span>{matPreset.name} {matPreset.calcMode === 'box' ? `(${formatCurrency(matPreset.packagePrice)}/ກ່ອງ)` : `(${formatCurrency(matPreset.unitCost)})`}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Material Items Table / List with Box Breakdown Calculator */}
+                    <div className="space-y-3">
+                      {(activeItem.finishingMaterials || []).length === 0 ? (
+                        <div className="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center text-xs text-slate-400 font-medium">
+                          -- ບໍ່ມີວັດຖຸດິບຫຼັງການພິມສຳລັບລາຍການນີ້ --
+                        </div>
+                      ) : (
+                        (activeItem.finishingMaterials || []).map((mat, mIdx) => {
+                          const isBoxMode = mat.calcMode === 'box';
+                          const unitPrice = isBoxMode && (mat.unitsPerPackage || 0) > 0
+                            ? Math.round(Number(mat.packagePrice || 0) / Number(mat.unitsPerPackage || 1))
+                            : Number(mat.unitCost || 0);
+                          const costPerFinishedJob = Math.round(unitPrice * Number(mat.qtyPerItem || 1));
+                          const totalMatCost = Math.round(costPerFinishedJob * activeItem.printVolume);
+
+                          return (
+                            <div key={mat.id || mIdx} className="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2.5 shadow-xs">
+                              
+                              {/* Row Header: Name & Calculation Mode Switch */}
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                                <div className="flex-1 min-w-[200px] flex items-center gap-2">
+                                  <span className="w-5 h-5 rounded-md bg-emerald-100 text-emerald-800 text-[11px] font-black flex items-center justify-center shrink-0">
+                                    {mIdx + 1}
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={mat.name}
+                                    onChange={(e) => {
+                                      const updated = [...(activeItem.finishingMaterials || [])];
+                                      updated[mIdx] = { ...updated[mIdx], name: e.target.value };
+                                      updateActiveItem({ finishingMaterials: updated });
+                                    }}
+                                    placeholder="ຊື່ວັດຖຸດິບ ເຊັ່ນ: ລວດເຢັບແມັກ..."
+                                    className="w-full px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                                  />
+                                </div>
+
+                                <div className="flex items-center gap-1.5">
+                                  <div className="flex bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = [...(activeItem.finishingMaterials || [])];
+                                        updated[mIdx] = { ...updated[mIdx], calcMode: 'box' };
+                                        updateActiveItem({ finishingMaterials: updated });
+                                      }}
+                                      className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                                        isBoxMode ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                                      }`}
+                                    >
+                                      ຄິດໄລ່ຍົກກ່ອງ (Box/Pack)
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = [...(activeItem.finishingMaterials || [])];
+                                        updated[mIdx] = { ...updated[mIdx], calcMode: 'unit' };
+                                        updateActiveItem({ finishingMaterials: updated });
+                                      }}
+                                      className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                                        !isBoxMode ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                                      }`}
+                                    >
+                                      ລາຄາຕໍ່ໜ່ວຍ (Per Unit)
+                                    </button>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveFinishingMaterial(mat.id)}
+                                    className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                    title="Remove material"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Calculation Fields Grid */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                                
+                                {isBoxMode ? (
+                                  <>
+                                    <div className="space-y-0.5">
+                                      <label className="text-[10px] font-bold text-slate-500 block">ລາຄາຕໍ່ກ່ອງ/ແພັກ (LAK):</label>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="1000"
+                                        value={mat.packagePrice || 50000}
+                                        onChange={(e) => {
+                                          const pPrice = Math.max(0, Number(e.target.value));
+                                          const uPkg = Number(mat.unitsPerPackage || 1000);
+                                          const calculatedUnitCost = uPkg > 0 ? Math.round(pPrice / uPkg) : 0;
+                                          const updated = [...(activeItem.finishingMaterials || [])];
+                                          updated[mIdx] = { 
+                                            ...updated[mIdx], 
+                                            packagePrice: pPrice,
+                                            unitCost: calculatedUnitCost
+                                          };
+                                          updateActiveItem({ finishingMaterials: updated });
+                                        }}
+                                        className="w-full px-2 py-1 border border-slate-200 rounded-lg text-right font-mono font-bold text-xs bg-slate-50"
+                                      />
+                                    </div>
+
+                                    <div className="space-y-0.5">
+                                      <label className="text-[10px] font-bold text-slate-500 block">ຈຳນວນໃນ 1 ກ່ອງ:</label>
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={mat.unitsPerPackage || 1000}
+                                        onChange={(e) => {
+                                          const uPkg = Math.max(1, Number(e.target.value));
+                                          const pPrice = Number(mat.packagePrice || 50000);
+                                          const calculatedUnitCost = Math.round(pPrice / uPkg);
+                                          const updated = [...(activeItem.finishingMaterials || [])];
+                                          updated[mIdx] = { 
+                                            ...updated[mIdx], 
+                                            unitsPerPackage: uPkg,
+                                            unitCost: calculatedUnitCost
+                                          };
+                                          updateActiveItem({ finishingMaterials: updated });
+                                        }}
+                                        className="w-full px-2 py-1 border border-slate-200 rounded-lg text-center font-mono font-bold text-xs bg-slate-50"
+                                      />
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="col-span-2 space-y-0.5">
+                                    <label className="text-[10px] font-bold text-slate-500 block">ຕົ້ນທຶນຕໍ່ໜ່ວຍ (LAK/Unit):</label>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={mat.unitCost}
+                                      onChange={(e) => {
+                                        const updated = [...(activeItem.finishingMaterials || [])];
+                                        updated[mIdx] = { ...updated[mIdx], unitCost: Math.max(0, Number(e.target.value)) };
+                                        updateActiveItem({ finishingMaterials: updated });
+                                      }}
+                                      className="w-full px-2 py-1 border border-slate-200 rounded-lg text-right font-mono font-bold text-xs bg-slate-50"
+                                    />
+                                  </div>
+                                )}
+
+                                <div className="space-y-0.5">
+                                  <label className="text-[10px] font-bold text-slate-500 block">ໃຊ້ຕໍ່ 1 ຫົວ/ຊິ້ນ:</label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={mat.qtyPerItem}
+                                    onChange={(e) => {
+                                      const updated = [...(activeItem.finishingMaterials || [])];
+                                      updated[mIdx] = { ...updated[mIdx], qtyPerItem: Math.max(1, Number(e.target.value)) };
+                                      updateActiveItem({ finishingMaterials: updated });
+                                    }}
+                                    className="w-full px-2 py-1 border border-emerald-300 bg-emerald-50/50 rounded-lg text-center font-mono font-black text-xs text-emerald-950"
+                                  />
+                                </div>
+
+                                <div className="space-y-0.5 bg-slate-50 p-1.5 rounded-lg border border-slate-100 flex flex-col justify-center text-right">
+                                  <span className="text-[9px] text-slate-400 block">
+                                    {isBoxMode ? `(${formatCurrency(unitPrice)}/ອັນ × ${mat.qtyPerItem})` : 'ຕົ້ນທຶນລວມ:'}
+                                  </span>
+                                  <span className="text-xs font-black text-emerald-700 font-mono">
+                                    {formatCurrency(totalMatCost)}
+                                  </span>
+                                </div>
+
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleAddFinishingMaterial()}
+                      className="px-3 py-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>{currentLang === 'lo' ? '+ ເພີ່ມວັດຖຸດິບໃໝ່' : '+ Add Custom Material'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* PHASE 7: Dynamic Labor (ຄ່າແຮງງານ & ຕັ້ງເຄື່ອງ) */}
+              <div id="sec-phase7" className={`border rounded-2xl overflow-hidden bg-white shadow-xs transition ${
+                activeItem.activeModules?.laborAndSetup ? 'border-blue-200/80' : 'border-slate-200 opacity-60'
+              }`}>
+                <button
+                  type="button"
+                  onClick={() => togglePhase('phase7')}
+                  className="w-full p-3.5 bg-slate-50/80 hover:bg-slate-100/80 flex items-center justify-between transition cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">7</span>
+                    <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                      {currentLang === 'lo' ? 'ຄ່າແຮງງານ & ຕັ້ງເຄື່ອງ (Labor)' : 'Labor & Overhead'}
+                    </span>
+                    <span className="text-[11px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-lg border border-blue-200 font-sans flex items-center gap-1">
+                      <Zap className="w-3 h-3" />
+                      {activeItem.laborMode === 'percent' ? `${activeItem.laborPercent}%` : formatCurrency(activeItem.laborCostManual)} • {formatCurrency(activeCalc.laborCost)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <span className="text-[11px] font-medium hidden sm:inline">{openPhases.phase7 ? 'ພັບເກັບ' : 'ເປີດເບິ່ງ'}</span>
+                    {openPhases.phase7 ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </div>
+                </button>
+
+                {openPhases.phase7 && (
                   <div className="p-4 sm:p-5 border-t border-slate-100 space-y-3 animate-fade-in">
                     <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
                       <button
@@ -1750,7 +2560,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                             {[
                               { label: '5% (ເບົາໆ)', val: 5 },
                               { label: '10% (ມາດຕະຖານ)', val: 10 },
-                              { label: '⭐ 15% (ແນະນຳ)', val: 15 },
+                              { label: '15% (ແນະນຳ)', val: 15 },
                               { label: '20% (ງານລະອຽດ)', val: 20 },
                               { label: '25% (ພຣີມຽມ)', val: 25 },
                             ].map((preset) => (
@@ -1816,340 +2626,104 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 )}
               </div>
 
+              {/* PHASE 8: Packaging & Delivery (ຄ່າບັນຈຸພັນ & ຂົນສົ່ງ) */}
+              <div id="sec-phase8" className={`border rounded-2xl overflow-hidden bg-white shadow-xs transition ${
+                activeItem.activeModules?.packagingDelivery ? 'border-slate-300' : 'border-slate-200 opacity-60'
+              }`}>
+                <button
+                  type="button"
+                  onClick={() => togglePhase('phase8')}
+                  className="w-full p-3.5 bg-slate-50/80 hover:bg-slate-100/80 flex items-center justify-between transition cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-6 h-6 rounded-lg bg-slate-800 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">8</span>
+                    <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                      {currentLang === 'lo' ? 'ຄ່າບັນຈຸພັນ & ຂົນສົ່ງ (Packaging & Delivery)' : 'Packaging & Delivery'}
+                    </span>
+                    <span className="text-[11px] font-bold px-2 py-0.5 bg-slate-100 text-slate-700 rounded-lg border border-slate-200 font-sans flex items-center gap-1">
+                      <Truck className="w-3 h-3" />
+                      {formatCurrency(activeCalc.packagingDeliveryCost)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <span className="text-[11px] font-medium hidden sm:inline">{openPhases.phase8 ? 'ພັບເກັບ' : 'ເປີດເບິ່ງ'}</span>
+                    {openPhases.phase8 ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </div>
+                </button>
+
+                {openPhases.phase8 && (
+                  <div className="p-4 sm:p-5 border-t border-slate-100 space-y-3 animate-fade-in">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                        <label className="font-bold text-slate-700 block">ຄ່າກ່ອງ / ບັນຈຸພັນ (Packaging):</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1000"
+                          value={activeItem.packagingCost || 0}
+                          onChange={(e) => updateActiveItem({ packagingCost: Math.max(0, Number(e.target.value)) })}
+                          placeholder="0 ₭"
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono font-bold text-slate-900"
+                        />
+                      </div>
+                      <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                        <label className="font-bold text-slate-700 block">ຄ່າຂົນສົ່ງ (Delivery Fee):</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1000"
+                          value={activeItem.deliveryCost || 0}
+                          onChange={(e) => updateActiveItem({ deliveryCost: Math.max(0, Number(e.target.value)) })}
+                          placeholder="0 ₭"
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono font-bold text-slate-900"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
             </div>
           </div>
 
           {/* Right Column: Sticky Internal Cost Studio, Profit Margin & Pricing Dashboard */}
           <div className="lg:col-span-5 lg:sticky lg:top-[5.5rem] space-y-5 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto scrollbar-thin min-w-0 pr-0.5">
-            
-            {/* Executive Cost & Profit Studio */}
-            <div className="bg-white border border-slate-200 p-5 sm:p-7 rounded-3xl shadow-sm space-y-5">
-              
-              {/* Studio Header */}
-              <div className="flex justify-between items-center border-b border-slate-200 pb-3.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <h3 className="font-black text-sm text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <ShieldCheck className="w-4 h-4 text-primary-navy" />
-                    ສະຫຼຸບລາຄາ & ກຳໄລ ({items.length} ລາຍການ)
-                  </h3>
-                </div>
-                <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg uppercase tracking-wider">
-                  Live Financials
-                </span>
-              </div>
-
-              {/* Big Price Hero Box */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-primary-navy via-slate-800 to-slate-900 border border-slate-200 shadow-sm space-y-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-300 block uppercase tracking-wider">
-                      ລາຄາສະເໜີຂາຍລວມສຸດທິ (Grand Total):
-                    </span>
-                    <div className="text-2xl sm:text-3xl font-black text-white font-sans tracking-tight mt-0.5">
-                      {formatCurrency(finalGrandTotal)}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block">
-                      ລາຄາສະເລ່ຍ/ຫົວ:
-                    </span>
-                    <span className="text-sm sm:text-base font-black text-emerald-300 font-sans">
-                      {formatCurrency(calculatedItems[activeItemIndex]?.unitPrice || 0)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Net Profit Badge */}
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/70 border border-emerald-800/80">
-                  <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>ກຳໄລສຸດທິ (Net Profit):</span>
-                  </span>
-                  <span className="text-sm font-black text-emerald-300 font-sans">
-                    +{formatCurrency(grandNetProfit)} ({grandProfitMargin.toFixed(1)}%)
-                  </span>
-                </div>
-
-                {/* Visual Segmented Cost Bar */}
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex justify-between text-[10px] font-bold text-slate-400">
-                    <span>ຕົ້ນທຶນ ({((grandNetCost / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)</span>
-                    <span>ກຳໄລ ({grandProfitMargin.toFixed(0)}%)</span>
-                  </div>
-                  <div className="w-full h-2.5 rounded-full bg-slate-700 overflow-hidden flex shadow-inner">
-                    <div 
-                      style={{ width: `${Math.min(100, (grandPaperCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                      className="bg-sky-500 h-full" 
-                      title={`Paper: ${formatCurrency(grandPaperCost)}`} 
-                    />
-                    <div 
-                      style={{ width: `${Math.min(100, (grandInkCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                      className="bg-purple-500 h-full" 
-                      title={`Ink: ${formatCurrency(grandInkCost)}`} 
-                    />
-                    <div 
-                      style={{ width: `${Math.min(100, (grandMachCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                      className="bg-amber-500 h-full" 
-                      title={`Machine: ${formatCurrency(grandMachCost)}`} 
-                    />
-                    <div 
-                      style={{ width: `${Math.min(100, (grandPostPressCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                      className="bg-orange-500 h-full" 
-                      title={`Post-Press: ${formatCurrency(grandPostPressCost)}`} 
-                    />
-                    <div 
-                      style={{ width: `${Math.min(100, (grandLaborCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                      className="bg-blue-500 h-full" 
-                      title={`Labor: ${formatCurrency(grandLaborCost)}`} 
-                    />
-                    <div 
-                      style={{ width: `${Math.min(100, (grandNetProfit / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                      className="bg-emerald-500 h-full" 
-                      title={`Profit: ${formatCurrency(grandNetProfit)}`} 
-                    />
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-[9px] text-slate-400 font-bold justify-between pt-0.5">
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>ເຈ້ຍ</span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>ໝຶກ</span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>ເຄື່ອງ</span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>ຫຼັງພິມ</span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>ຄ່າແຮງ</span>
-                    <span className="flex items-center gap-1 text-emerald-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>ກຳໄລ</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* All Items Cost Summary Table */}
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                  ຕາຕະລາງຕົ້ນທຶນທຸກລາຍການສິນຄ້າ:
-                </span>
-                <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                  <table className="w-full text-xs text-left">
-                    <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
-                      <tr>
-                        <th className="p-2.5 sm:p-3">ລາຍການ</th>
-                        <th className="p-2.5 sm:p-3 text-right">ຈຳນວນ</th>
-                        <th className="p-2.5 sm:p-3 text-right">ຕົ້ນທຶນ/ຫົວ</th>
-                        <th className="p-2.5 sm:p-3 text-right">ຕົ້ນທຶນລວມ</th>
-                        <th className="p-2.5 sm:p-3 text-right">ລາຄາຂາຍລວມ</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-sans">
-                      {items.map((item, idx) => {
-                        const calc = calculatedItems[idx];
-                        const isAct = idx === activeItemIndex;
-                        return (
-                          <tr 
-                            key={item.id} 
-                            onClick={() => setActiveItemIndex(idx)}
-                            className={`cursor-pointer transition ${isAct ? 'bg-primary-navy/8 font-black text-slate-900' : 'text-slate-600 hover:bg-slate-50'}`}
-                          >
-                            <td className="p-2.5 sm:p-3 truncate max-w-[85px] sm:max-w-[120px] lg:max-w-[100px] xl:max-w-[130px] 2xl:max-w-[180px]">
-                              {idx + 1}. {item.name}
-                            </td>
-                            <td className="p-2.5 sm:p-3 text-right">{item.printVolume}</td>
-                            <td className="p-2.5 sm:p-3 text-right">{formatCurrency(calc.unitCost)}</td>
-                            <td className="p-2.5 sm:p-3 text-right text-orange-600 font-bold">{formatCurrency(calc.netCost)}</td>
-                            <td className="p-2.5 sm:p-3 text-right text-emerald-600 font-bold">{formatCurrency(calc.sellingPrice)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Detailed Cost Inspector */}
-              <div className="rounded-2xl border border-slate-200 overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setIsCostDetailsOpen(!isCostDetailsOpen)}
-                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition cursor-pointer text-left select-none bg-white"
-                >
-                  <div className="flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-slate-500" />
-                    <span className="text-xs font-bold text-slate-700">
-                      ລາຍລະອຽດຕົ້ນທຶນແຍກໝວດ
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-black text-slate-800 font-sans">
-                      {formatCurrency(grandNetCost)}
-                    </span>
-                    {isCostDetailsOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                  </div>
-                </button>
-
-                {isCostDetailsOpen && (
-                  <div className="bg-slate-50 border-t border-slate-200 divide-y divide-slate-100 animate-fade-in">
-                    {[
-                      { label: 'ຕົ້ນທຶນເຈ້ຍ', sublabel: 'Paper FIFO', value: grandPaperCost, color: 'bg-sky-500' },
-                      { label: 'ຕົ້ນທຶນໝຶກພິມ', sublabel: 'Ink Consumed', value: grandInkCost, color: 'bg-purple-500' },
-                      { label: 'ຄ່າເສື່ອມເຄື່ອງ & ໄຟຟ້າ', sublabel: 'Machine & Utility', value: grandMachCost, color: 'bg-amber-500' },
-                      { label: 'ຄ່າເຄື່ອງຈັກຫຼັງພິມ', sublabel: 'Post-Press', value: grandPostPressCost, color: 'bg-orange-500' },
-                      { label: 'ຄ່າແຮງງານ & ຕັ້ງເຄື່ອງ', sublabel: 'Labor & Setup', value: grandLaborCost, color: 'bg-blue-500' },
-                    ].map((row) => (
-                      <div key={row.sublabel} className="flex items-center justify-between px-4 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${row.color}`}></span>
-                          <div>
-                            <div className="text-xs font-semibold text-slate-700">{row.label}</div>
-                            <div className="text-[10px] text-slate-400 font-sans">{row.sublabel}</div>
-                          </div>
-                        </div>
-                        <span className="text-xs font-black text-slate-800 font-sans">{formatCurrency(row.value)}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between items-center px-4 py-3 bg-slate-100">
-                      <span className="text-xs font-black text-slate-800">ລວມຕົ້ນທຶນສຸດທິ</span>
-                      <span className="text-sm font-black text-primary-navy font-sans">{formatCurrency(grandNetCost)}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Profit Margin Slider */}
-              <div className="space-y-3 bg-white border border-slate-200 p-4 rounded-2xl">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                    <Sliders className="w-3.5 h-3.5 text-slate-500" />
-                    ອັດຕາກຳໄລ
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-lg font-black text-primary-navy font-sans leading-none">{activeItem.profitMargin || 40}%</span>
-                  </div>
-                </div>
-
-                <input
-                  type="range"
-                  min="0"
-                  max="200"
-                  step="5"
-                  value={activeItem.profitMargin || 40}
-                  onChange={(e) => updateActiveItem({ profitMargin: Number(e.target.value) })}
-                  className="w-full accent-primary-navy cursor-pointer h-1.5"
-                />
-
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    { label: '25%', sub: 'Min', val: 25 },
-                    { label: '35%', sub: 'Std', val: 35 },
-                    { label: '45%', sub: 'Rec', val: 45, recommended: true },
-                    { label: '55%', sub: 'High', val: 55 },
-                    { label: '65%', sub: 'Prem', val: 65 },
-                  ].map(chip => (
-                    <button
-                      key={chip.val}
-                      type="button"
-                      onClick={() => updateActiveItem({ profitMargin: chip.val })}
-                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-black transition cursor-pointer text-center ${
-                        activeItem.profitMargin === chip.val
-                          ? 'bg-primary-navy text-white shadow-sm'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      <div>{chip.label}</div>
-                      <div className={`text-[9px] font-bold ${activeItem.profitMargin === chip.val ? 'text-white/70' : 'text-slate-400'}`}>{chip.sub}</div>
-                    </button>
-                  ))}
-                </div>
-
-                {grandProfitMargin < 25.0 && (
-                  <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-bold flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                    <div>
-                      <div className="font-black">Margin Guard Alert (&lt; 25%)</div>
-                      <div className="text-[10px] text-amber-700 font-normal mt-0.5">
-                        {currentLang === 'lo' 
-                          ? 'ກຳໄລຕ່ຳກວ່າ 25% ລະບົບຈະກຳນົດສະຖານະ REQUIRES_MANAGER_APPROVAL'
-                          : 'Margin under 25% — requires Manager Approval.'}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Tax & Logistics Settings */}
-              <div className="space-y-2.5 pt-2 border-t border-slate-200 text-xs">
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-slate-600 font-bold flex items-center gap-1.5">
-                    <PercentSquare className="w-3.5 h-3.5 text-slate-500" />
-                    <span>ພາສີ (Tax / VAT)</span>
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={taxMode}
-                      onChange={(e) => setTaxMode(e.target.value as any)}
-                      className="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 font-bold focus:outline-none"
-                    >
-                      <option value="none">ບໍ່ມີພາສີ (0%)</option>
-                      <option value="percent">ເປີເຊັນ (%)</option>
-                    </select>
-                    {taxMode === 'percent' && (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          min="0"
-                          max="50"
-                          value={taxRate}
-                          onChange={(e) => setTaxRate(Number(e.target.value))}
-                          className="w-14 bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-right text-xs font-bold text-slate-800 font-sans focus:outline-none"
-                        />
-                        <span className="text-slate-500">%</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-slate-600 font-bold flex items-center gap-1.5">
-                    <Truck className="w-3.5 h-3.5 text-slate-500" />
-                    <span>ຄ່າຂົນສົ່ງ (Shipping)</span>
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={shippingMethod}
-                      onChange={(e) => setShippingMethod(e.target.value)}
-                      className="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-[11px] text-slate-800 font-bold max-w-[140px] focus:outline-none"
-                    >
-                      <option value="In-Store Pickup">ຮັບເອງທີ່ຮ້ານ</option>
-                      <option value="Anousith Express">Anousith Express</option>
-                      <option value="HAL Logistics">HAL Logistics</option>
-                      <option value="Mixay Express">Mixay Express</option>
-                      <option value="Direct Delivery">ສົ່ງຕົງ</option>
-                      <option value="Custom">ອື່ນໆ (Custom)</option>
-                    </select>
-                    <input
-                      type="number"
-                      step="1000"
-                      min="0"
-                      value={shippingFee}
-                      onChange={(e) => setShippingFee(Math.max(0, Number(e.target.value)))}
-                      placeholder="0"
-                      className="w-20 bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-right text-xs font-bold text-slate-800 font-sans focus:outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Big High-Impact Call to Action Button */}
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCurrentStep('quote');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                  className="w-full py-4 px-6 bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 hover:from-emerald-400 hover:to-sky-400 text-white rounded-2xl font-black text-sm sm:text-base shadow-xl shadow-emerald-500/25 flex items-center justify-center gap-3 transition-all transform active:scale-98 cursor-pointer"
-                >
-                  <span>{currentLang === 'lo' ? 'ກວດສອບ & ອອກໃບສະເໜີລາຄາ' : 'Review & Generate Quotation'}</span>
-                  <ArrowRight className="w-5 h-5" />
-                </button>
-              </div>
-
-            </div>
+            <QuotationCostSummarySidebar
+              items={items}
+              calculatedItems={calculatedItems}
+              activeItemIndex={activeItemIndex}
+              setActiveItemIndex={setActiveItemIndex}
+              activeItem={activeItem}
+              updateActiveItem={updateActiveItem}
+              selectedCustomerId={selectedCustomerId}
+              grandTotalUnits={grandTotalUnits}
+              grandNetCost={grandNetCost}
+              grandNetProfit={grandNetProfit}
+              grandProfitMargin={grandProfitMargin}
+              grandPaperCost={grandPaperCost}
+              grandInkCost={grandInkCost}
+              grandMachCost={grandMachCost}
+              grandPostPressCost={grandPostPressCost}
+              grandFinishingCost={grandFinishingCost}
+              grandLaborCost={grandLaborCost}
+              grandPackagingCost={grandPackagingCost}
+              finalGrandTotal={finalGrandTotal}
+              taxMode={taxMode}
+              setTaxMode={setTaxMode}
+              taxRate={taxRate}
+              setTaxRate={setTaxRate}
+              shippingMethod={shippingMethod}
+              setShippingMethod={setShippingMethod}
+              shippingFee={shippingFee}
+              setShippingFee={setShippingFee}
+              currentLang={currentLang}
+              formatCurrency={formatCurrency}
+              onSaveDraft={handleSaveDraft}
+              onProceedToQuote={() => {
+                setCurrentStep('quote');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
           </div>
 
         </div>
@@ -2159,658 +2733,125 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       {/* 🌟 STEP 2: OFFICIAL CUSTOMER QUOTATION DOCUMENT & ACTIONS                 */}
       {/* ========================================================================= */}
       {currentStep === 'quote' && (
-        <div className="space-y-6 animate-fade-in">
-          
-          {/* Top Actions Floating Bar (Hide on print) */}
-          <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm print:hidden">
-            <button
-              type="button"
-              onClick={() => setCurrentStep('calc')}
-              className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-black transition cursor-pointer"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>{currentLang === 'lo' ? '← ແກ້ໄຂຕົ້ນທຶນ & ສະເປກ' : '← Back to Edit Specs'}</span>
-            </button>
-
-            <div className="flex flex-wrap items-center gap-2.5">
-              <button
-                type="button"
-                onClick={handleSaveQuotation}
-                className="flex items-center gap-1.5 px-4 py-2.5 border-2 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-2xl text-xs font-extrabold transition active:scale-95 cursor-pointer"
-              >
-                <Layers className="w-4 h-4 shrink-0" />
-                <span>{currentLang === 'lo' ? 'ບັນທຶກ' : 'Save'}</span>
-              </button>
-              
-              <button
-                type="button"
-                onClick={() => setIsShareModalOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-2.5 border-2 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-2xl text-xs font-extrabold transition active:scale-95 cursor-pointer"
-              >
-                <Share2 className="w-4 h-4 shrink-0" />
-                <span>{currentLang === 'lo' ? 'ລິ້ງອອນລາຍ' : 'Share Link'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleExportPDF}
-                className="flex items-center gap-1.5 px-4 py-2.5 border-2 border-slate-200 text-slate-700 hover:bg-slate-50 rounded-2xl text-xs font-extrabold transition active:scale-95 cursor-pointer"
-              >
-                <Download className="w-4 h-4 shrink-0" />
-                <span>{currentLang === 'lo' ? 'ພິມ PDF' : 'Export PDF'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleConfirmOrder}
-                className="flex items-center gap-1.5 px-5 py-2.5 bg-primary-navy hover:bg-slate-900 text-white rounded-2xl text-xs font-extrabold shadow-lg shadow-primary-navy/20 transition active:scale-95 cursor-pointer"
-              >
-                <ShoppingCart className="w-4 h-4 shrink-0" />
-                <span>{currentLang === 'lo' ? 'ສ້າງອໍເດີ' : 'Create Order'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Centered High-Resolution Official Quotation Document */}
-          <div className="max-w-4xl mx-auto bg-white text-slate-800 p-8 sm:p-12 rounded-3xl border border-slate-200 shadow-xl space-y-8 print:border-none print:shadow-none print:p-0 print:m-0">
-            
-            {/* Invoice Letterhead */}
-            <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6">
-              <div>
-                <h4 className="text-3xl font-black text-primary-navy tracking-tight">{t('common.app_name')}</h4>
-                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-1">Printing & Packaging Solutions</p>
-                <p className="text-xs text-slate-400 font-medium font-sans mt-1">Tel: +856 20 5566 7788 | Vientiane Capital, Lao PDR</p>
-              </div>
-              <div className="text-right space-y-1">
-                <span className="inline-block text-xs bg-slate-900 text-white font-black px-3 py-1 rounded-lg uppercase tracking-wider">
-                  QUOTATION
-                </span>
-                <p className="text-xs font-sans font-bold text-slate-600 mt-2">REF: QT-{Math.floor(Date.now()/1000).toString().slice(-6)}</p>
-                <p className="text-xs text-slate-400 font-sans font-semibold">Date: {new Date().toISOString().split('T')[0]}</p>
-                <p className="text-xs text-amber-700 font-sans font-bold">Valid Until: {quotationExpiry}</p>
-              </div>
-            </div>
-
-            {/* Bill To & Terms Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs font-semibold text-slate-600 bg-slate-50 p-5 rounded-2xl border border-slate-100 print:bg-white print:border-slate-300">
-              <div className="space-y-1">
-                <span className="text-[10px] font-bold uppercase text-slate-400 block">{currentLang === 'lo' ? 'ສະເໜີເຖິງ (Customer):' : 'Quotation To:'}</span>
-                <p className="text-slate-900 font-black text-base">{selectedCustomerId || (currentLang === 'lo' ? 'ລູກຄ້າທົ່ວໄປ' : 'General Customer')}</p>
-                <p className="font-sans text-slate-600">Mobile: {customerPhone || customers.find(c => c.name === selectedCustomerId)?.phone || '-'}</p>
-                <p className="text-slate-500">{customerAddress || 'Vientiane, Laos'}</p>
-              </div>
-              <div className="space-y-1 sm:border-l sm:pl-6 border-slate-200">
-                <span className="text-[10px] font-bold uppercase text-slate-400 block">{currentLang === 'lo' ? 'ເງື່ອນໄຂການຊຳຣະ (Payment Terms):' : 'Payment Terms:'}</span>
-                <p className="text-slate-900 font-black text-sm">{paymentTerms}</p>
-                <p className="text-slate-500">{currentLang === 'lo' ? 'ມັດຈຳ 50% ເມື່ອຢືນຢັນສັ່ງຜະລິດ' : '50% Deposit / 50% on Delivery'}</p>
-                <p className="text-slate-500 font-sans">Shipping: {shippingMethod} {shippingFee > 0 ? `(${formatCurrency(shippingFee)})` : '(Free/Pickup)'}</p>
-              </div>
-            </div>
-
-            {/* Itemized Quotation Table */}
-            <div className="space-y-3">
-              <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-100 text-slate-700 font-black uppercase text-[10px] tracking-wider border-b border-slate-200">
-                    <tr>
-                      <th className="p-3.5 w-12 text-center">#</th>
-                      <th className="p-3.5">ລາຍລະອຽດສິນຄ້າ (Item Description)</th>
-                      <th className="p-3.5 text-center">ຂະໜາດ / ວັດສະດຸ</th>
-                      <th className="p-3.5 text-right">ຈຳນວນ</th>
-                      <th className="p-3.5 text-right">ລາຄາ/ຫົວ</th>
-                      <th className="p-3.5 text-right">ລວມເງິນ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-sans">
-                    {items.map((item, idx) => {
-                      const calc = calculatedItems[idx];
-                      const paper = inventory.find(p => p.id === item.paperId);
-                      return (
-                        <tr key={item.id} className="hover:bg-slate-50/50">
-                          <td className="p-3.5 text-center font-bold text-slate-400">{idx + 1}</td>
-                          <td className="p-3.5">
-                            <div className="font-black text-slate-900 text-sm">{item.name}</div>
-                            <div className="text-[11px] text-slate-500 mt-0.5">
-                              {item.colorPrintMode === 'MONO_K' ? 'Black & White (Mono K)' : 'Full Color (CMYK)'}
-                              {item.selectedPostPressIds && item.selectedPostPressIds.length > 0 && ` • ${item.selectedPostPressIds.length} finishing processes`}
-                            </div>
-                          </td>
-                          <td className="p-3.5 text-center text-slate-600 font-medium">
-                            <div>{item.jobSizePreset} ({item.jobWidth}x{item.jobHeight}mm)</div>
-                            <div className="text-[10px] text-slate-400">{paper?.name || 'Standard Paper'}</div>
-                          </td>
-                          <td className="p-3.5 text-right font-bold text-slate-900">{item.printVolume.toLocaleString()}</td>
-                          <td className="p-3.5 text-right font-semibold text-slate-700">{formatCurrency(calc.unitPrice)}</td>
-                          <td className="p-3.5 text-right font-black text-slate-950 text-sm">{formatCurrency(calc.sellingPrice)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Financial Summary & Total */}
-            <div className="flex flex-col sm:flex-row justify-between items-start gap-6 border-t-2 border-slate-100 pt-6">
-              <div className="w-full sm:w-1/2 space-y-3">
-                {quotationNote && (
-                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
-                    <span className="font-bold text-slate-700 block">ໝາຍເຫດ (Notes):</span>
-                    <p className="text-slate-600 font-medium">{quotationNote}</p>
-                  </div>
-                )}
-                <div className="text-[11px] text-slate-400 space-y-0.5 font-sans">
-                  <p>• ໃບສະເໜີລາຄານີ້ມີຜົນບັງຄັບໃຊ້ຮອດວັນທີ: {quotationExpiry}</p>
-                  <p>• ລາຄານີ້ລວມການກວດສອບຟາຍພິມ Preflight ແລະ ປັບແຕ່ງສີມາດຕະຖານ</p>
-                </div>
-              </div>
-
-              <div className="w-full sm:w-1/2 space-y-2 text-xs font-semibold text-slate-600 font-sans">
-                <div className="flex justify-between border-b pb-1.5">
-                  <span>Subtotal ({items.length} items):</span>
-                  <span className="font-bold text-slate-900">{formatCurrency(grandSubtotal)}</span>
-                </div>
-                
-                {taxEnabled && (
-                  <div className="flex justify-between border-b pb-1.5">
-                    <span>Tax / VAT ({taxMode === 'override' ? 'Fixed' : `${taxRate}%`}):</span>
-                    <span className="font-bold text-slate-900">{formatCurrency(taxAmount)}</span>
-                  </div>
-                )}
-
-                {shippingFee > 0 && (
-                  <div className="flex justify-between border-b pb-1.5">
-                    <span>Shipping ({shippingMethod}):</span>
-                    <span className="font-bold text-slate-900">{formatCurrency(shippingFee)}</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between items-center pt-2 text-base font-black text-slate-900 border-t-2 border-slate-900">
-                  <span>Grand Total:</span>
-                  <span className="text-2xl font-black text-primary-navy">{formatCurrency(finalGrandTotal)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Official Signatures Blocks */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 pt-10 border-t border-slate-200 text-center text-xs">
-              <div className="space-y-8">
-                <div className="border-b border-slate-300 pb-1 text-slate-400">................................................</div>
-                <p className="font-bold text-slate-700">ຜູ້ຈັດທຳ (Prepared by)</p>
-              </div>
-              <div className="space-y-8">
-                <div className="border-b border-slate-300 pb-1 text-slate-400">................................................</div>
-                <p className="font-bold text-slate-700">ຜູ້ອະນຸມັດ (Authorized by)</p>
-              </div>
-              <div className="space-y-8 col-span-2 sm:col-span-1">
-                <div className="border-b border-slate-300 pb-1 text-slate-400">................................................</div>
-                <p className="font-bold text-slate-700">ລູກຄ້າຍອມຮັບ (Client Accepted)</p>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Bottom Floating Action bar for Step 2 */}
-          <div className="max-w-4xl mx-auto flex justify-between items-center pt-4 print:hidden">
-            <button
-              type="button"
-              onClick={() => {
-                setCurrentStep('calc');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>{currentLang === 'lo' ? 'ຍ້ອນກັບໄປແກ້ໄຂ' : 'Back to Edit'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleConfirmOrder}
-              className="px-8 py-3.5 bg-primary-navy hover:bg-slate-900 text-white rounded-2xl text-sm font-black shadow-xl shadow-primary-navy/20 transition active:scale-95 cursor-pointer flex items-center gap-2"
-            >
-              <ShoppingCart className="w-5 h-5" />
-              <span>{currentLang === 'lo' ? 'ສ້າງອໍເດີຈາກໃບສະເໜີນີ້' : 'Create Order from Quote'}</span>
-            </button>
-          </div>
-
-        </div>
+        <QuotationCustomerView
+          items={items}
+          calculatedItems={calculatedItems}
+          selectedCustomerId={selectedCustomerId}
+          customerPhone={customerPhone}
+          customerAddress={customerAddress}
+          customers={customers}
+          quotationExpiry={quotationExpiry}
+          paymentTerms={paymentTerms}
+          shippingMethod={shippingMethod}
+          shippingFee={shippingFee}
+          quotationNote={quotationNote}
+          grandSubtotal={grandSubtotal}
+          taxEnabled={taxEnabled}
+          taxMode={taxMode}
+          taxRate={taxRate}
+          taxAmount={taxAmount}
+          finalGrandTotal={finalGrandTotal}
+          currentLang={currentLang}
+          formatCurrency={formatCurrency}
+          onBackToCalc={() => setCurrentStep('calc')}
+          onSaveQuotation={handleSaveQuotation}
+          onShareQuotation={() => setIsShareModalOpen(true)}
+          onExportPDF={handleExportPDF}
+          onConfirmOrder={handleConfirmOrder}
+        />
       )}
 
-      {/* QUOTATION HISTORY / VERSIONING DIALOG */}
-      {isQuotationListOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/50 backdrop-blur-md animate-fade-in print:hidden">
-          <div className="bg-white max-w-3xl w-full rounded-3xl shadow-2xl p-6 border border-slate-100 flex flex-col justify-between min-h-[400px] max-h-[80vh]">
-            <div className="flex justify-between items-center border-b pb-4">
-              <div className="flex items-center gap-2.5">
-                <Layers3 className="w-6 h-6 text-accent-sky" />
-                <h3 className="text-xl font-black text-slate-900 tracking-wide">
-                  {currentLang === 'lo' ? 'ປະຫວັດໃບສະເໜີລາຄາ & ເວີຊັນ' : 'Quotation History & Versions'}
-                </h3>
-              </div>
-              <button
-                onClick={() => setIsQuotationListOpen(false)}
-                className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* QUOTATION HISTORY & SAVED TEMPLATES MODAL */}
+      <QuotationHistoryModal
+        isOpen={isQuotationListOpen}
+        onClose={() => setIsQuotationListOpen(false)}
+        quotations={quotations}
+        onLoad={handleLoadQuotation}
+        onRevise={handleReviseQuotation}
+        onDelete={handleDeleteQuotation}
+        onConvertToOrder={handleConvertToOrder}
+        onOpenApproval={setApprovalModalQuote}
+        onSaveDraft={handleSaveDraft}
+        currentLang={currentLang}
+        formatCurrency={formatCurrency}
+      />
 
-            <div className="flex-1 overflow-y-auto py-4 space-y-3">
-              {quotations.length === 0 ? (
-                <p className="text-center text-slate-400 font-bold py-10">{currentLang === 'lo' ? 'ຍັງບໍ່ມີໃບສະເໜີ' : 'No quotations saved yet'}</p>
-              ) : quotations.map(quote => (
-                <div key={quote.id} className="p-4 rounded-2xl border border-slate-200 hover:border-accent-sky/40 transition space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-black text-slate-900">{quote.quotationNumber}</span>
-                      <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase border ${
-                        quote.status === 'Accepted' || quote.status === 'Approved'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : quote.status === 'REQUIRES_MANAGER_APPROVAL'
-                          ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40 animate-pulse'
-                          : quote.status === 'Rejected'
-                          ? 'bg-rose-50 text-rose-700 border-rose-200'
-                          : quote.status === 'Expired'
-                          ? 'bg-slate-100 text-slate-500 border-slate-200'
-                          : 'bg-amber-50 text-amber-700 border-amber-200'
-                      }`}>
-                        {quote.status === 'REQUIRES_MANAGER_APPROVAL' ? '⚠️ Margin < 25% (Needs Approval)' : quote.status}
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-400">{quote.customerName}</span>
-                    </div>
-                    <span className="text-sm font-black text-primary-navy font-sans">{formatCurrency(quote.grandTotal)}</span>
-                  </div>
-
-                  <div className="space-y-1">
-                    {(quote.versions || []).map((v: any) => (
-                      <div key={v.version} className="flex justify-between items-center text-[11px] bg-slate-50 rounded-lg px-3 py-1.5">
-                        <span className="font-bold text-slate-600">
-                          v{v.version} · {v.date} — {v.note}
-                        </span>
-                        <span className="font-black text-slate-800 font-sans">{formatCurrency(v.total)}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => handleLoadQuotation(quote)}
-                      className="px-3 py-1.5 text-[11px] font-black bg-slate-900 text-white rounded-xl hover:bg-slate-700 transition cursor-pointer"
-                    >
-                      {currentLang === 'lo' ? 'ໂຫຼດໃສ່ເຄື່ອງຄິດເລກ' : 'Load into Calculator'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleReviseQuotation(quote.id)}
-                      className="px-3 py-1.5 text-[11px] font-black bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-xl hover:bg-indigo-100 transition cursor-pointer"
-                    >
-                      {currentLang === 'lo' ? `ສ້າງເວີຊັນ v${(quote.version || 0) + 1}` : `Revise → v${(quote.version || 0) + 1}`}
-                    </button>
-                    {quote.status === 'REQUIRES_MANAGER_APPROVAL' && (
-                      <button
-                        type="button"
-                        onClick={() => setApprovalModalQuote(quote)}
-                        className="px-3 py-1.5 text-[11px] font-black bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl transition cursor-pointer flex items-center gap-1 shadow-sm"
-                      >
-                        <ShieldAlert className="w-3.5 h-3.5" />
-                        {currentLang === 'lo' ? 'ອະນຸມັດສ່ວນຫຼຸດ' : 'Review Approval'}
-                      </button>
-                    )}
-                    {(quote.status === 'Pending' || quote.status === 'Approved') && (
-                      <button
-                        type="button"
-                        onClick={() => handleConvertToOrder(quote)}
-                        className="px-3 py-1.5 text-[11px] font-black bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition cursor-pointer"
-                      >
-                        {currentLang === 'lo' ? 'ປ່ຽນເປັນອໍເດີ →' : 'Convert to Order →'}
-                      </button>
-                    )}
-                    {quote.convertedOrderId && (
-                      <span className="px-2 py-1.5 text-[10px] font-black text-emerald-600">
-                        ✓ {currentLang === 'lo' ? 'ປ່ຽນເປັນອໍເດີແລ້ວ' : 'Converted'} ({quote.convertedOrderId})
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="border-t pt-4 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setIsQuotationListOpen(false)}
-                className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition cursor-pointer"
-              >
-                {currentLang === 'lo' ? 'ປິດ' : 'Close'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* FULL PRICING TEMPLATES MANAGER MODAL */}
+      <PricingTemplatesModal
+        isOpen={isTemplateModalOpen}
+        onClose={() => setIsTemplateModalOpen(false)}
+        allTemplates={allAvailableTemplates}
+        customTemplates={customTemplates}
+        selectedTemplateId={activeItem.selectedTemplateId}
+        onApplyTemplate={handleApplyTemplate}
+        onDeleteCustomTemplate={handleDeleteCustomTemplate}
+        onOpenSaveNewModal={() => setIsNewTemplateModalOpen(true)}
+        currentLang={currentLang}
+      />
 
       {/* MANAGER APPROVAL MODAL */}
-      {approvalModalQuote && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-slate-950/60 backdrop-blur-md animate-fade-in print:hidden">
-          <div className="bg-white max-w-lg w-full rounded-3xl shadow-2xl p-6 border border-slate-100 space-y-5">
-            <div className="flex justify-between items-center border-b pb-4">
-              <div className="flex items-center gap-2.5">
-                <ShieldAlert className="w-6 h-6 text-amber-500" />
-                <h3 className="text-xl font-black text-slate-900 tracking-wide">
-                  {currentLang === 'lo' ? 'ການອະນຸມັດສ່ວນຫຼຸດ (Sales Manager)' : 'Quotation Discount Approval'}
-                </h3>
-              </div>
-              <button
-                onClick={() => { setApprovalModalQuote(null); setApprovalReason(''); }}
-                className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-              <div className="flex justify-between items-center text-xs font-bold">
-                <span className="text-slate-500">ເລກທີໃບສະເໜີ (Quote No):</span>
-                <span className="font-mono font-black text-slate-900">{approvalModalQuote.quotationNumber}</span>
-              </div>
-              <div className="flex justify-between items-center text-xs font-bold">
-                <span className="text-slate-500">ລູກຄ້າ (Customer):</span>
-                <span className="text-slate-800">{approvalModalQuote.customerName}</span>
-              </div>
-              <div className="flex justify-between items-center text-xs font-bold">
-                <span className="text-slate-500">ຍອດລວມຂາຍ (Grand Total):</span>
-                <span className="font-mono text-primary-navy font-black">{formatCurrency(approvalModalQuote.grandTotal)}</span>
-              </div>
-              <div className="flex justify-between items-center text-xs font-bold border-t border-slate-200 pt-2">
-                <span className="text-amber-700 font-black">⚠️ ອັດຕາກຳໄລ (Gross Margin):</span>
-                <span className="font-mono font-black text-amber-600 px-2 py-0.5 bg-amber-100 rounded-md">
-                  {approvalModalQuote.grossProfitMargin !== undefined ? `${Number(approvalModalQuote.grossProfitMargin).toFixed(1)}%` : '< 25.0%'}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 block">
-                {currentLang === 'lo' ? 'ເຫດຜົນ / ໝາຍເຫດການອະນຸມັດ (Reason / Approval Note):' : 'Reason / Note:'}
-              </label>
-              <textarea
-                rows={3}
-                value={approvalReason}
-                onChange={(e) => setApprovalReason(e.target.value)}
-                placeholder={currentLang === 'lo' ? 'ເຊັ່ນ: ລູກຄ້າ VIP ໂຄງການໃຫຍ່, ອະນຸມັດສ່ວນຫຼຸດພິເສດ...' : 'e.g., VIP wholesale customer, special project discount...'}
-                className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-amber-500 bg-white"
-              />
-            </div>
-
-            <div className="flex justify-end gap-3 pt-2 border-t">
-              <button
-                type="button"
-                disabled={isProcessingApproval}
-                onClick={() => handleRejectDiscount(approvalModalQuote)}
-                className="px-4 py-2.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-xl text-xs font-black transition cursor-pointer"
-              >
-                {currentLang === 'lo' ? '❌ ປະຕິເສດສ່ວນຫຼຸດ (Reject)' : '❌ Reject Discount'}
-              </button>
-              <button
-                type="button"
-                disabled={isProcessingApproval}
-                onClick={() => handleApproveDiscount(approvalModalQuote)}
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-md"
-              >
-                {currentLang === 'lo' ? '✓ ອະນຸມັດສ່ວນຫຼຸດ (Approve Discount)' : '✓ Approve Discount'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <QuotationMarginApprovalModal
+        quote={approvalModalQuote}
+        isOpen={!!approvalModalQuote}
+        isProcessing={isProcessingApproval}
+        approvalReason={approvalReason}
+        currentLang={currentLang}
+        formatCurrency={formatCurrency}
+        onReasonChange={setApprovalReason}
+        onApprove={handleApproveDiscount}
+        onReject={handleRejectDiscount}
+        onClose={() => { setApprovalModalQuote(null); setApprovalReason(''); }}
+      />
 
       {/* 🌟 SAVE QUOTATION & PRICING SCHEME POPUP MODAL */}
-      {isSaveModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in print:hidden">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 animate-scale-up">
-            
-            {/* Modal Header */}
-            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div className="space-y-1">
-                <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <Layers className="w-5 h-5 text-accent-sky" />
-                  <span>{currentLang === 'lo' ? 'ບັນທຶກໃບສະເໜີລາຄາ / ເທມເພລດ' : 'Save Quotation & Scheme'}</span>
-                </h3>
-                <p className="text-xs text-slate-500 font-medium">
-                  {currentLang === 'lo' 
-                    ? 'ກຳນົດຊື່ໃບສະເໜີລາຄາ ຫຼື ບັນທຶກເປັນເທມເພລດສຳລັບຈັດສູດລາຄາສິນຄ້າ' 
-                    : 'Name this quotation or save as a reusable pricing formula template.'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsSaveModalOpen(false)}
-                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Form Content */}
-            <div className="space-y-4">
-              
-              {/* Field 1: Quotation / Scheme Title */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-black text-slate-700 dark:text-slate-300 block">
-                  {currentLang === 'lo' ? 'ຊື່ໃບສະເໜີລາຄາ / ເທມເພລດສູດລາຄາ *' : 'Quotation / Scheme Title *'}
-                </label>
-                <input
-                  type="text"
-                  value={quotationTitle}
-                  onChange={(e) => setQuotationTitle(e.target.value)}
-                  placeholder={currentLang === 'lo' ? 'ເຊັ່ນ: ໃບສະເໜີລາຄາປຶ້ມ A4 ບໍລິສັດ ABC, ສູດລາຄາສະຕິກເກີ PP...' : 'e.g., PP Sticker A3+ Scheme, A4 Book Quote...'}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-black text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-accent-sky/30 focus:border-accent-sky"
-                  autoFocus
-                />
-              </div>
-
-              {/* Field 2: Target Customer Summary */}
-              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/60 text-xs space-y-1.5">
-                <div className="flex justify-between items-center text-slate-600 dark:text-slate-400">
-                  <span>{currentLang === 'lo' ? 'ລູກຄ້າ:' : 'Customer:'}</span>
-                  <span className="font-black text-slate-900 dark:text-white">{selectedCustomerId || '-'}</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-600 dark:text-slate-400">
-                  <span>{currentLang === 'lo' ? 'ຈຳນວນລາຍການ:' : 'Items Count:'}</span>
-                  <span className="font-black text-slate-900 dark:text-white">{items.length} ລາຍການ</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700 pt-1.5">
-                  <span>{currentLang === 'lo' ? 'ຍອດລວມທັງໝົດ:' : 'Grand Total:'}</span>
-                  <span className="font-black text-emerald-600 dark:text-emerald-400 font-mono text-sm">
-                    {formatCurrency(finalGrandTotal)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Checkbox: Save as Pricing Scheme Template for Web Catalog */}
-              <div className="p-4 bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 rounded-2xl space-y-3">
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isTemplateOption}
-                    onChange={(e) => setIsTemplateOption(e.target.checked)}
-                    className="w-4 h-4 rounded text-accent-sky focus:ring-accent-sky cursor-pointer"
-                  />
-                  <span className="text-xs font-black text-indigo-950 dark:text-indigo-200">
-                    {currentLang === 'lo' 
-                      ? 'ບັນທຶກເປັນເທມເພລດສູດລາຄາສຳລັບສິນຄ້າໜ້າເວັບ (Web Catalog)' 
-                      : 'Save as Web Catalog Pricing Template'}
-                  </span>
-                </label>
-
-                {isTemplateOption && (
-                  <div className="pl-6 space-y-1.5 animate-fade-in">
-                    <label className="text-[11px] font-bold text-indigo-900 dark:text-indigo-300 block">
-                      {currentLang === 'lo' ? 'ໝວດໝູ່ສິນຄ້າທີ່ຈະນຳສູດນີ້ໄປໃຊ້:' : 'Assign to Product Category:'}
-                    </label>
-                    <select
-                      value={templateCategory}
-                      onChange={(e) => setTemplateCategory(e.target.value)}
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none"
-                    >
-                      <option value="sticker">ສະຕິກເກີ / Sticker & Label</option>
-                      <option value="book">ປຶ້ມ & ວາລະສານ / Book & Magazine</option>
-                      <option value="marketing">ໃບປິວ & ໂປສເຕີ / Flyer & Poster</option>
-                      <option value="stationery">ນາມບັດ & ເອກະສານ / Card & Stationery</option>
-                      <option value="package">ກ່ອງ & ບັນຈຸພັນ / Packaging</option>
-                      <option value="large-format">ປ້າຍໂຄສະນາ / Vinyl & Signage</option>
-                    </select>
-                  </div>
-                )}
-              </div>
-
-            </div>
-
-            {/* Modal Actions */}
-            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => setIsSaveModalOpen(false)}
-                className="px-5 py-2.5 rounded-2xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-              >
-                {currentLang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmSaveQuotation}
-                className="px-6 py-2.5 bg-accent-sky hover:bg-sky-500 text-white rounded-2xl text-xs font-black transition cursor-pointer shadow-lg shadow-accent-sky/30 active:scale-95 flex items-center gap-2"
-              >
-                <Layers className="w-4 h-4" />
-                <span>{currentLang === 'lo' ? '💾 ຢືນຢັນການບັນທຶກ' : '💾 Confirm Save'}</span>
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
+      <QuotationSaveModal
+        isOpen={isSaveModalOpen}
+        onClose={() => setIsSaveModalOpen(false)}
+        onConfirm={handleConfirmSaveQuotation}
+        quotationTitle={quotationTitle}
+        onTitleChange={setQuotationTitle}
+        selectedCustomerId={selectedCustomerId}
+        itemsCount={items.length}
+        finalGrandTotal={finalGrandTotal}
+        isTemplateOption={isTemplateOption}
+        onTemplateOptionChange={setIsTemplateOption}
+        templateCategory={templateCategory}
+        onCategoryChange={setTemplateCategory}
+        currentLang={currentLang}
+        formatCurrency={formatCurrency}
+      />
 
       {/* 🌟 DIGITAL CUSTOMER SHAREABLE QUOTATION MODAL */}
-      {isShareModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in print:hidden">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 animate-scale-up">
-            
-            {/* Modal Header */}
-            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div className="space-y-1">
-                <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <Share2 className="w-5 h-5 text-accent-sky" />
-                  <span>{currentLang === 'lo' ? 'ແບ່ງປັນໃບສະເໜີລາຄາອອນລາຍ' : 'Share Online Quotation'}</span>
-                </h3>
-                <p className="text-xs text-slate-500 font-medium">
-                  {currentLang === 'lo'
-                    ? 'ລູກຄ້າສາມາດເປີດກວດສອບສະເປກ, ຍອດລວມ ແລະ ກົດຢືນຢັນສັ່ງງານຜ່ານມືຖືໄດ້ທັນທີ'
-                    : 'Customer can inspect specs, pricing, and confirm orders directly on their mobile device.'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => { setIsShareModalOpen(false); setIsCopiedLink(false); }}
-                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <QuotationShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => { setIsShareModalOpen(false); setIsCopiedLink(false); }}
+        quotationTitle={quotationTitle}
+        selectedCustomerId={selectedCustomerId}
+        itemsLength={items.length}
+        grandTotalUnits={grandTotalUnits}
+        finalGrandTotal={finalGrandTotal}
+        isCopiedLink={isCopiedLink}
+        onCopyLink={() => {
+          const link = `${typeof window !== 'undefined' ? window.location.origin : ''}/quote/view?ref=${encodeURIComponent(selectedCustomerId || 'customer')}&total=${finalGrandTotal}`;
+          navigator.clipboard.writeText(link);
+          setIsCopiedLink(true);
+          if (showToast) showToast('ຄັດລອກລິ້ງໃບສະເໜີລາຄາຮຽບຮ້ອຍ!', 'success');
+          setTimeout(() => setIsCopiedLink(false), 3000);
+        }}
+        currentLang={currentLang}
+        formatCurrency={formatCurrency}
+      />
 
-            {/* Modal Content: QR Preview & Link */}
-            <div className="space-y-5">
-              
-              {/* Quotation Brief */}
-              <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/60 text-xs space-y-2">
-                <div className="flex justify-between items-center text-slate-600 dark:text-slate-300">
-                  <span className="font-bold">{currentLang === 'lo' ? 'ຊື່ໃບສະເໜີ:' : 'Quotation:'}</span>
-                  <span className="font-black text-slate-900 dark:text-white">{quotationTitle}</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-600 dark:text-slate-300">
-                  <span className="font-bold">{currentLang === 'lo' ? 'ລູກຄ້າ:' : 'Customer:'}</span>
-                  <span className="font-black text-slate-900 dark:text-white">{selectedCustomerId || 'Customer'}</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-600 dark:text-slate-300">
-                  <span className="font-bold">{currentLang === 'lo' ? 'ຈຳນວນລາຍການ:' : 'Total Items:'}</span>
-                  <span className="font-sans font-bold text-slate-900 dark:text-white">{items.length} รายการ ({grandTotalUnits.toLocaleString()} units)</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-600 dark:text-slate-300 border-t border-slate-200 dark:border-slate-700 pt-2">
-                  <span className="font-black text-slate-900 dark:text-white">{currentLang === 'lo' ? 'ຍອດລວມສຸດທິ:' : 'Grand Total:'}</span>
-                  <span className="font-black text-primary-navy dark:text-sky-400 font-mono text-base">
-                    {formatCurrency(finalGrandTotal)}
-                  </span>
-                </div>
-              </div>
-
-              {/* QR Code Graphic Mockup */}
-              <div className="flex flex-col items-center justify-center p-6 bg-slate-900 text-white rounded-3xl space-y-3 shadow-inner">
-                <div className="p-3 bg-white rounded-2xl shadow-lg">
-                  <QrCode className="w-28 h-28 text-slate-900" />
-                </div>
-                <p className="text-[11px] font-bold text-slate-300 tracking-wide text-center">
-                  📱 {currentLang === 'lo' ? 'ສະແກນ QR Code ເພື່ອເປີດໃບສະເໜີໃນໂທລະສັບ' : 'Scan QR Code to open quotation on mobile'}
-                </p>
-              </div>
-
-              {/* Shareable Link Input & Copy */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-black text-slate-700 dark:text-slate-300 block">
-                  {currentLang === 'lo' ? 'ລິ້ງໃບສະເໜີລາຄາ (Customer Web Link)' : 'Customer Web Link'}
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/quote/view?ref=${encodeURIComponent(selectedCustomerId || 'customer')}&total=${finalGrandTotal}`}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-slate-600 dark:text-slate-300 select-all"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const link = `${typeof window !== 'undefined' ? window.location.origin : ''}/quote/view?ref=${encodeURIComponent(selectedCustomerId || 'customer')}&total=${finalGrandTotal}`;
-                      navigator.clipboard.writeText(link);
-                      setIsCopiedLink(true);
-                      if (showToast) showToast('ຄັດລອກລິ້ງໃບສະເໜີລາຄາຮຽບຮ້ອຍ!', 'success');
-                      setTimeout(() => setIsCopiedLink(false), 3000);
-                    }}
-                    className={`px-4 py-2.5 rounded-xl text-xs font-black transition cursor-pointer shrink-0 flex items-center gap-1.5 shadow-sm active:scale-95 ${
-                      isCopiedLink
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-accent-sky hover:bg-sky-500 text-white'
-                    }`}
-                  >
-                    {isCopiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    <span>{isCopiedLink ? (currentLang === 'lo' ? 'ຄັດລອກແລ້ວ' : 'Copied') : (currentLang === 'lo' ? 'ຄັດລອກ' : 'Copy')}</span>
-                  </button>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex justify-between items-center pt-4 border-t border-slate-100 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => {
-                  window.open(`/quote/view?ref=${encodeURIComponent(selectedCustomerId || 'customer')}&total=${finalGrandTotal}`, '_blank');
-                }}
-                className="text-xs font-bold text-accent-sky hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>{currentLang === 'lo' ? 'ທົດລອງເປີດມຸມມອງລູກຄ້າ' : 'Open Client View'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => { setIsShareModalOpen(false); setIsCopiedLink(false); }}
-                className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
-              >
-                {currentLang === 'lo' ? 'ປິດ' : 'Close'}
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
+      {/* 🌟 SAVE AS NEW PRICING TEMPLATE MODAL */}
+      <QuotationSaveTemplateModal
+        isOpen={isNewTemplateModalOpen}
+        onClose={() => setIsNewTemplateModalOpen(false)}
+        onSave={handleSaveCustomTemplate}
+        templateForm={newTemplateForm}
+        onFormChange={setNewTemplateForm}
+        activeItem={activeItem}
+        currentLang={currentLang}
+      />
 
       {/* PRINT-ONLY CSS HELPER TO ISOLATE PREVIEW DOCUMENT */}
       <style>{`

@@ -1,14 +1,28 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useShop } from '../context/ShopContext.tsx'
 import { WhatsAppIcon, SparkleIcon } from './icons.tsx'
 
 export default function ConciergeDock() {
   const [isOpen, setIsOpen] = useState(false)
+  const [shopPhone, setShopPhone] = useState('+856 20 5555 8888')
+  const [whatsappNum, setWhatsappNum] = useState('8562055558888')
   const { language } = useShop()
   const location = useLocation()
 
   const isLao = language === 'lo'
+
+  useEffect(() => {
+    fetch('/api/v1/public/shop-info')
+      .then(res => res.json())
+      .then(resData => {
+        if (resData && resData.data) {
+          if (resData.data.phone) setShopPhone(resData.data.phone)
+          if (resData.data.whatsapp_number) setWhatsappNum(resData.data.whatsapp_number)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   // Extract potential order ID / tracking from path
   const isTracking = location.pathname.startsWith('/track')
@@ -27,8 +41,9 @@ export default function ConciergeDock() {
     return encodeURIComponent(base)
   }
 
-  const whatsappUrl = `https://wa.me/8562088888888?text=${getContextMessage()}`
-  const lineUrl = `https://line.me/ti/p/~@somsingphim`
+  const cleanWhatsapp = whatsappNum.replace(/[^0-9]/g, '')
+  const whatsappUrl = `https://wa.me/${cleanWhatsapp || '8562055558888'}?text=${getContextMessage()}`
+  const phoneUrl = `tel:${shopPhone.replace(/\s+/g, '')}`
 
   return (
     <aside className={`luxury-concierge-dock ${isOpen ? 'is-open' : ''}`} aria-label="VIP Concierge">
@@ -66,15 +81,14 @@ export default function ConciergeDock() {
                 <span>WhatsApp VIP Concierge</span>
               </a>
               <a
-                href={lineUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="concierge-btn line"
+                href={phoneUrl}
+                className="concierge-btn phone"
+                style={{ background: 'linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderRadius: '12px', fontWeight: 'bold', textDecoration: 'none' }}
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C6.48 2 2 5.82 2 10.53c0 2.96 1.8 5.57 4.54 7.02-.2.74-.72 2.7-0.83 3.12-.13.52.19.51.4.38.16-.1 2.22-1.52 3.12-2.14.9.15 1.83.23 2.77.23 5.52 0 10-3.82 10-8.53S17.52 2 12 2z" />
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                 </svg>
-                <span>LINE Official (@somsingphim)</span>
+                <span>{isLao ? `ໂທສາຍດ່ວນ: ${shopPhone}` : `Call: ${shopPhone}`}</span>
               </a>
             </div>
           </div>
@@ -102,9 +116,7 @@ export default function ConciergeDock() {
             </svg>
           )}
         </span>
-        <span className="concierge-trigger-label">
-          {isLao ? 'VIP Concierge' : 'VIP Concierge'}
-        </span>
+        <span className="luxury-concierge-badge">VIP</span>
       </button>
     </aside>
   )

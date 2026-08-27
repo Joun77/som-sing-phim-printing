@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { X, PackagePlus, RefreshCw, AlertCircle, CheckCircle2, DollarSign, Layers, Search } from 'lucide-react';
 import { MaterialMaster, CreateInboundPayload } from '../types';
 import { createInbound } from '../api/inventoryApi';
@@ -11,6 +12,7 @@ interface InboundFormModalProps {
 }
 
 export default function InboundFormModal({ isOpen, onClose, onSuccess, materials }: InboundFormModalProps) {
+  const queryClient = useQueryClient();
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +146,10 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
       };
 
       await createInbound(payload);
+      queryClient.invalidateQueries({ queryKey: ['inbound'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-items'] });
+      queryClient.invalidateQueries({ queryKey: ['materials'] });
       onSuccess();
       onClose();
     } catch (err: any) {

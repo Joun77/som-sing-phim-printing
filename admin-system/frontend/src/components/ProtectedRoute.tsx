@@ -7,7 +7,16 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  // Authentication bypass enabled for preview / front-end testing mode.
-  // Original login flow is preserved in LoginPage.tsx when needed.
+  const { isAuthenticated, token } = useAuthStore();
+
+  // Allow public order tracking page without login
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/track')) {
+    return <>{children}</>;
+  }
+
+  if (!isAuthenticated || !token) {
+    return <LoginPage />;
+  }
+
   return <>{children}</>;
 };

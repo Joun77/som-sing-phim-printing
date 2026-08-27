@@ -699,7 +699,7 @@ export const AppProvider = ({ children }) => {
 
     // 1. Assets / Equipment
     try {
-      const res = await fetch('http://localhost:8080/api/v1/assets');
+      const res = await fetch('/api/v1/assets');
       if (res && res.ok) {
         const resData = await res.json();
         if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
@@ -723,7 +723,7 @@ export const AppProvider = ({ children }) => {
 
     // 2. Inventory Items
     try {
-      const res = await fetch('http://localhost:8080/api/inventory/items');
+      const res = await fetch('/api/inventory/items');
       if (res && res.ok) {
         const resData = await res.json();
         if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
@@ -748,7 +748,8 @@ export const AppProvider = ({ children }) => {
 
     // 3. Orders
     try {
-      const res = await fetch('http://localhost:8080/api/orders');
+      let res = await fetch('/api/v1/orders');
+      if (!res.ok) res = await fetch('/api/orders');
       if (res && res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) setOrders(data);
@@ -757,7 +758,7 @@ export const AppProvider = ({ children }) => {
 
     // 4. Customers
     try {
-      const res = await fetch('http://localhost:8080/api/customers');
+      const res = await fetch('/api/customers');
       if (res && res.ok) {
         const resData = await res.json();
         if (resData && resData.status === 'success' && Array.isArray(resData.data)) {
@@ -768,7 +769,7 @@ export const AppProvider = ({ children }) => {
 
     // 5. Spoilage
     try {
-      const res = await fetch('http://localhost:8080/api/spoilage');
+      const res = await fetch('/api/spoilage');
       if (res && res.ok) {
         const resData = await res.json();
         if (resData && resData.status === 'success' && Array.isArray(resData.data)) {
@@ -779,7 +780,7 @@ export const AppProvider = ({ children }) => {
 
     // 6. Inbound Transactions
     try {
-      const res = await fetch('http://localhost:8080/api/inbound');
+      const res = await fetch('/api/inbound');
       if (res && res.ok) {
         const resData = await res.json();
         if (resData && resData.status === 'success' && Array.isArray(resData.data)) {

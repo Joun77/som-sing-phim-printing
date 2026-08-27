@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { X, Settings, Save, Calculator, Image as ImageIcon, Cpu, DollarSign, Info } from 'lucide-react';
 import { useApp } from '@store/AppContext';
 import { useTranslation } from 'react-i18next';
@@ -11,6 +12,7 @@ interface EditEquipmentModalProps {
 }
 
 export default function EditEquipmentModal({ isOpen, onClose, equipmentItem }: EditEquipmentModalProps) {
+  const queryClient = useQueryClient();
   const { updateEquipment, showToast, formatCurrency } = useApp();
   const { i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
@@ -127,6 +129,7 @@ export default function EditEquipmentModal({ isOpen, onClose, equipmentItem }: E
     };
 
     updateEquipment(equipmentItem.id, updated);
+    queryClient.invalidateQueries({ queryKey: ['equipment'] });
     showToast(
       currentLang === 'lo'
         ? `ອັບເດັດຂໍ້ມູນເຄື່ອງຈັກ "${formData.name}" ສຳເລັດ!`

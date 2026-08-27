@@ -70,14 +70,19 @@ func TestCalculateJobPricingA4Baseline(t *testing.T) {
 		t.Errorf("Expected InkCost 18750.0, got %v", res.InkCost)
 	}
 
-	// Depreciation: (50M * 1.20 / 1M) × 1.0 × 100 = 6,000 LAK
-	if res.DepreciationCost != 6000.0 {
-		t.Errorf("Expected DepreciationCost 6000.0, got %v", res.DepreciationCost)
+	// Depreciation: (50M / 1M) × 1.0 × 100 = 5,000 LAK
+	if res.DepreciationCost != 5000.0 {
+		t.Errorf("Expected DepreciationCost 5000.0, got %v", res.DepreciationCost)
 	}
 
-	// Maintenance: 10 × 1.0 × 100 = 1,000 LAK
-	if res.MaintenanceCost != 1000.0 {
-		t.Errorf("Expected MaintenanceCost 1000.0, got %v", res.MaintenanceCost)
+	// Maintenance: (50 * 0.20 + 10) × 1.0 × 100 = 2,000 LAK
+	if res.MaintenanceCost != 2000.0 {
+		t.Errorf("Expected MaintenanceCost 2000.0, got %v", res.MaintenanceCost)
+	}
+
+	// MachineCost: 5000 + 2000 = 7,000 LAK
+	if res.MachineCost != 7000.0 {
+		t.Errorf("Expected MachineCost 7000.0, got %v", res.MachineCost)
 	}
 
 	// Custom Finishing: 150×100 + 2000 = 17,000 LAK
@@ -655,6 +660,43 @@ func TestSmallItemOffcutRecommendation(t *testing.T) {
 		t.Errorf("Expected 35%% savings, got %f", res.OffcutSavingsPercent)
 	}
 }
+
+func TestCalculateMachineOverhead(t *testing.T) {
+	// Standard Test: 50M LAK machine, 500K life pages, 20% maintenance -> 120 LAK/sheet
+	// Depreciation = 50,000,000 / 500,000 = 100 LAK/sheet
+	// Maintenance  = 100 * (20 / 100) = 20 LAK/sheet
+	// Total        = 100 + 20 = 120 LAK/sheet
+	deprec, maint, total := CalculateMachineOverhead(50000000.0, 500000, 20.0)
+
+	if deprec != 100.0 {
+		t.Errorf("Expected depreciation 100.0, got %f", deprec)
+	}
+	if maint != 20.0 {
+		t.Errorf("Expected maintenance 20.0, got %f", maint)
+	}
+	if total != 120.0 {
+		t.Errorf("Expected total machine cost 120.0, got %f", total)
+	}
+
+	// Boundary Test: life_pages = 0 (Guard against division by zero, no panic)
+	deprec0, maint0, total0 := CalculateMachineOverhead(50000000.0, 0, 20.0)
+	if deprec0 != 0 || maint0 != 0 || total0 != 0 {
+		t.Errorf("Expected 0 for 0 lifetime pages, got deprec=%f, maint=%f, total=%f", deprec0, maint0, total0)
+	}
+
+	// Boundary Test: negative lifetime pages
+	deprecNeg, maintNeg, totalNeg := CalculateMachineOverhead(50000000.0, -100, 20.0)
+	if deprecNeg != 0 || maintNeg != 0 || totalNeg != 0 {
+		t.Errorf("Expected 0 for negative lifetime pages, got deprec=%f, maint=%f, total=%f", deprecNeg, maintNeg, totalNeg)
+	}
+
+	// Boundary Test: zero price
+	deprecZeroPrice, maintZeroPrice, totalZeroPrice := CalculateMachineOverhead(0.0, 500000, 20.0)
+	if deprecZeroPrice != 0 || maintZeroPrice != 0 || totalZeroPrice != 0 {
+		t.Errorf("Expected 0 for zero price, got deprec=%f, maint=%f, total=%f", deprecZeroPrice, maintZeroPrice, totalZeroPrice)
+	}
+}
+
 
 
 

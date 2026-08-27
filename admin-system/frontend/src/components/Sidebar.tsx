@@ -7,323 +7,403 @@ import {
   Boxes, 
   Cpu, 
   ShoppingCart, 
-  Calculator, 
-  RotateCcw,
-  Menu,
-  X,
-  Printer,
-  BarChart3,
-  ChevronLeft,
+  Menu, 
+  X, 
+  Printer, 
+  Truck, 
+  User, 
+  Users, 
+  Coins, 
+  LogOut, 
+  Globe, 
+  ExternalLink, 
+  Calculator,
+  ChevronDown,
+  Activity,
+  PackageCheck,
+  Store,
+  Settings,
   ChevronRight,
-  Truck,
-  User,
-  Users,
-  Coins
+  ShieldCheck
 } from 'lucide-react';
 
+interface NavSubItem {
+  id: string;
+  labelLao: string;
+  labelEn: string;
+  icon: any;
+  roles: string[];
+}
 
-export default function Sidebar() {
-  const { activeTab, setActiveTab, resetToDefaultData, setIsRatesOpen, currency, exchangeRates, rateMode, askConfirmation, showToast } = useApp();
+interface NavGroup {
+  id: string;
+  labelLao: string;
+  labelEn: string;
+  icon: any;
+  roles: string[];
+  isDirectLink?: boolean;
+  items?: NavSubItem[];
+}
 
-  const currentRate = currency === 'LAK' ? 1 : ((exchangeRates[currency] && exchangeRates[currency][rateMode]) || 0);
-  const [isOpen, setIsOpen] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(
-    localStorage.getItem('somsing_sidebar_collapsed') === 'true'
-  );
-  
-  const { t, i18n } = useTranslation();
+interface SidebarProps {
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
+  collapsed: boolean;
+  setCollapsed: (collapsed: boolean) => void;
+}
+
+export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, setCollapsed }: SidebarProps) {
+  const { activeTab, setActiveTab } = useApp();
+  const { i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
+  const user = useAuthStore((state) => state.user);
+  const userRole = (user?.role || 'admin').toLowerCase();
 
-  const toggleLanguage = () => {
-    const nextLang = currentLang === 'lo' ? 'en' : 'lo';
-    i18n.changeLanguage(nextLang);
-    localStorage.setItem('somsing_lang', nextLang);
+  // Collapsible state for accordion groups
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    sales_group: true,
+    production_group: true,
+    supply_chain_group: true,
+    finance_admin_group: true,
+  });
+
+  const toggleGroup = (groupId: string) => {
+    setOpenGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }));
   };
 
-  const toggleCollapse = () => {
-    const nextVal = !isCollapsed;
-    setIsCollapsed(nextVal);
-    localStorage.setItem('somsing_sidebar_collapsed', String(nextVal));
-  };
-
-  const handleOpenOrderSystem = (item) => {
-    if (item.isExternal) {
-      window.open(item.externalUrl || '/orders.html', '_blank');
-      return;
-    }
-    setActiveTab(item.id);
-    setIsOpen(false);
-  };
-
-  const menuItems = [
+  const navGroups: NavGroup[] = [
     {
       id: 'dashboard',
-      labelKey: 'sidebar.dashboard',
-      subText: 'Dashboard Overview',
+      labelLao: 'ແຜງຄວບຄຸມ',
+      labelEn: 'Dashboard',
       icon: LayoutDashboard,
+      isDirectLink: true,
+      roles: ['admin', 'owner', 'super_admin', 'sales', 'production'],
     },
     {
-      id: 'preflight',
-      labelKey: 'sidebar.preflight',
-      subText: 'PDF CMYK Preflight',
-      icon: Cpu,
-    },
-    {
-      id: 'finance',
-      labelKey: 'sidebar.finance',
-      subText: 'Finance & Accounting',
-      icon: Coins,
-    },
-    {
-      id: 'orders',
-      labelKey: 'sidebar.orders',
-      subText: 'Order Management',
+      id: 'sales_group',
+      labelLao: 'ງານຂາຍ & ລູກຄ້າ',
+      labelEn: 'Sales & CRM',
       icon: ShoppingCart,
+      roles: ['admin', 'owner', 'super_admin', 'sales', 'production'],
+      items: [
+        {
+          id: 'preflight',
+          labelLao: '1. ກວດໄຟລ໌ & ປະເມີນຄ່າສີ',
+          labelEn: '1. Preflight & Color Cost',
+          icon: Cpu,
+          roles: ['admin', 'owner', 'super_admin', 'sales', 'production'],
+        },
+        {
+          id: 'quotation',
+          labelLao: '2. ໃບສະເໜີລາຄາ',
+          labelEn: '2. Quotations & Pricing',
+          icon: Calculator,
+          roles: ['admin', 'owner', 'super_admin', 'sales'],
+        },
+        {
+          id: 'orders',
+          labelLao: '3. ອໍເດີ & ລາຍການສັ່ງພິມ',
+          labelEn: '3. Customer Orders',
+          icon: ShoppingCart,
+          roles: ['admin', 'owner', 'super_admin', 'sales', 'production'],
+        },
+        {
+          id: 'crm',
+          labelLao: '4. ຖານຂໍ້ມູນລູກຄ້າ',
+          labelEn: '4. Customer CRM',
+          icon: User,
+          roles: ['admin', 'owner', 'super_admin', 'sales'],
+        },
+        {
+          id: 'catalog',
+          labelLao: '5. ສິນຄ້າໜ້າເວັບ',
+          labelEn: '5. Web Catalog',
+          icon: Globe,
+          roles: ['admin', 'owner', 'super_admin', 'sales'],
+        },
+      ],
     },
     {
-      id: 'inbound',
-      labelKey: 'sidebar.inbound',
-      subText: 'Inbound Procurement',
-      icon: Truck,
+      id: 'production_group',
+      labelLao: 'ການຜະລິດ',
+      labelEn: 'Production Floor',
+      icon: Printer,
+      roles: ['admin', 'owner', 'super_admin', 'production'],
+      items: [
+        {
+          id: 'tracker',
+          labelLao: 'ຕິດຕາມງານພິມ (Shop Floor)',
+          labelEn: 'Shop Floor Tracker',
+          icon: Activity,
+          roles: ['admin', 'owner', 'super_admin', 'production'],
+        },
+        {
+          id: 'equipment',
+          labelLao: 'ເຄື່ອງຈັກ & ຊ່າງພິມ',
+          labelEn: 'Printers & Equipment',
+          icon: Printer,
+          roles: ['admin', 'owner', 'super_admin', 'production'],
+        },
+      ],
     },
     {
-      id: 'inventory',
-      labelKey: 'sidebar.inventory',
-      subText: 'Inventory & Supplies',
+      id: 'supply_chain_group',
+      labelLao: 'ຄັງສິນຄ້າ & ຈັດຊື້',
+      labelEn: 'Stock & Supply',
       icon: Boxes,
+      roles: ['admin', 'owner', 'super_admin', 'production'],
+      items: [
+        {
+          id: 'inventory',
+          labelLao: 'ຄັງສິນຄ້າ & ເສດເຈ້ຍ',
+          labelEn: 'Warehouse Inventory',
+          icon: Boxes,
+          roles: ['admin', 'owner', 'super_admin', 'sales', 'production'],
+        },
+        {
+          id: 'inbound',
+          labelLao: 'ນຳເຂົ້າສິນຄ້າ',
+          labelEn: 'Inbound Procurement',
+          icon: PackageCheck,
+          roles: ['admin', 'owner', 'super_admin', 'production'],
+        },
+        {
+          id: 'suppliers',
+          labelLao: 'ຜູ້ສະໜອງ & ໃບສັ່ງຊື້ (PO)',
+          labelEn: 'Suppliers & Purchase Orders',
+          icon: Truck,
+          roles: ['admin', 'owner', 'super_admin', 'production'],
+        },
+      ],
     },
     {
-      id: 'equipment',
-      labelKey: 'sidebar.equipment',
-      subText: 'Equipment & Overhead',
-      icon: Cpu,
-    },
-    {
-      id: 'crm',
-      labelKey: 'sidebar.crm',
-      subText: 'Client Directory (CRM)',
-      icon: User,
-    },
-    {
-      id: 'hr',
-      labelKey: 'sidebar.hr',
-      subText: 'HR & Staff Management',
-      icon: Users,
+      id: 'finance_admin_group',
+      labelLao: 'ການເງິນ & ບໍລິຫານ',
+      labelEn: 'Finance & Admin',
+      icon: Coins,
+      roles: ['admin', 'owner', 'super_admin'],
+      items: [
+        {
+          id: 'finance',
+          labelLao: 'ການເງິນ, ບັນຊີ & P/L',
+          labelEn: 'Finance & Ledger',
+          icon: Coins,
+          roles: ['admin', 'owner', 'super_admin'],
+        },
+        {
+          id: 'hr',
+          labelLao: 'ພະນັກງານ (HR / Staff)',
+          labelEn: 'Employee & HR',
+          icon: Users,
+          roles: ['admin', 'owner', 'super_admin'],
+        },
+        {
+          id: 'settings',
+          labelLao: 'ຕັ້ງຄ່າລະບົບ & ຮ້ານ',
+          labelEn: 'Settings & Profile',
+          icon: Settings,
+          roles: ['admin', 'owner', 'super_admin'],
+        },
+      ],
     },
   ];
 
-  const handleReset = () => {
-    const msg = currentLang === 'lo' 
-      ? 'ທ່ານຕ້ອງການຣີເຊັດຂໍ້ມູນທັງໝົດເປັນຄ່າເລີ່ມຕົ້ນ ຫຼື ບໍ່?'
-      : 'Do you want to reset all data to default?';
-      
-    askConfirmation(msg, () => {
-      resetToDefaultData();
-      showToast(
-        currentLang === 'lo' ? 'ຣີເຊັດຂໍ້ມູນສຳເລັດ!' : 'Reset successful!',
-        'success'
-      );
-    });
+  const filteredNavGroups = navGroups
+    .filter((group) => {
+      if (userRole === 'admin' || userRole === 'owner' || userRole === 'super_admin') return true;
+      return group.roles.includes(userRole);
+    })
+    .map((group) => {
+      if (group.isDirectLink || !group.items) return group;
+      const filteredItems = group.items.filter((item) => {
+        if (userRole === 'admin' || userRole === 'owner' || userRole === 'super_admin') return true;
+        return item.roles.includes(userRole);
+      });
+      return { ...group, items: filteredItems };
+    })
+    .filter((group) => group.isDirectLink || (group.items && group.items.length > 0));
+
+  const isGroupActive = (group: NavGroup) => {
+    if (group.isDirectLink) return activeTab === group.id;
+    return group.items?.some((item) => item.id === activeTab);
   };
 
-  return (
-    <>
-      {/* Mobile Header Nav */}
-      <div className="lg:hidden flex items-center justify-between p-4 bg-primary-navy text-white shadow-md sticky top-0 z-40">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-accent-sky rounded-lg flex items-center justify-center shrink-0"><Printer className="w-5 h-5 text-white" /></div>
-          <span className="font-bold text-lg tracking-wider">{t('common.app_name')}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={toggleLanguage}
-            className="px-2 py-1 text-xs bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg font-bold transition flex items-center gap-1 select-none"
+  const sidebarContent = (
+    <aside className="h-full flex flex-col justify-between bg-gradient-to-b from-slate-950 via-primary-navy to-slate-950 text-white border-r border-slate-800/80 select-none shadow-2xl">
+      {/* Brand Header */}
+      <div>
+        <div className="h-20 px-5 flex items-center justify-between border-b border-white/10">
+          <div 
+            className="flex items-center gap-3 cursor-pointer overflow-hidden" 
+            onClick={() => {
+              setActiveTab('dashboard');
+              setSidebarOpen(false);
+            }}
           >
-            <span className={currentLang === 'lo' ? 'text-accent-sky' : 'text-white/60'}>LA</span>
-            <span className="text-white/25">|</span>
-            <span className={currentLang === 'en' ? 'text-accent-sky' : 'text-white/60'}>EN</span>
-          </button>
+            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center p-1 shadow-lg shadow-amber-500/20 border-2 border-[#D4AF37] shrink-0 overflow-hidden">
+              <img src="/logo.png" alt="Som Sing Phim Logo" className="w-full h-full object-contain" />
+            </div>
+            {!collapsed && (
+              <div className="min-w-0">
+                <h1 className="font-black text-base tracking-tight text-white leading-tight font-sans truncate">
+                  ສົມສິ່ງພິມ
+                </h1>
+                <p className="text-[10px] font-bold text-amber-400 truncate">SOM SING PHIM · ERP</p>
+              </div>
+            )}
+          </div>
+
+          {/* Close button on mobile */}
           <button 
-            onClick={() => setIsOpen(!isOpen)}
-            className="p-2 hover:bg-white/10 rounded-lg transition"
-            aria-label="Toggle Menu"
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
           >
-            {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            <X className="w-5 h-5" />
           </button>
         </div>
-      </div>
 
-      {/* Sidebar Overlay for Mobile */}
-      {isOpen && (
-        <div 
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden"
-          onClick={() => setIsOpen(false)}
-        />
-      )}
+        {/* Navigation Item Groups */}
+        <nav className="p-3.5 space-y-3 overflow-y-auto max-h-[calc(100vh-160px)]">
+          {filteredNavGroups.map((group) => {
+            const GroupIcon = group.icon;
+            const active = isGroupActive(group);
+            const isOpen = openGroups[group.id] !== false;
 
-      {/* Sidebar Core Component */}
-      <aside className={`
-        fixed inset-y-0 left-0 z-50 flex flex-col bg-primary-navy text-white shadow-2xl transition-all duration-300 ease-in-out
-        lg:translate-x-0 lg:static lg:h-screen lg:z-30 w-72
-        ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-        ${isCollapsed ? 'lg:w-20' : 'lg:w-72'}
-      `}>
-        {/* Brand Header */}
-        <div className={`flex ${isCollapsed ? 'flex-col items-center gap-4 py-6' : 'items-center justify-between px-6 py-8'} border-b border-white/10`}>
-          {isCollapsed ? (
-            <>
-              <div 
-                className="cursor-pointer hover:opacity-80 transition"
-                onClick={toggleCollapse}
-                title="Expand Sidebar"
-              >
-                <img
-                  src="/logo.png"
-                  alt="Som-Sing Phim"
-                  className="w-10 h-10 rounded-full object-cover shadow-md border border-white/20 shrink-0"
-                  onError={(e) => {
-                    (e.target as HTMLElement).style.display = 'none';
+            if (group.isDirectLink) {
+              const isDirectActive = activeTab === group.id;
+              return (
+                <button
+                  key={group.id}
+                  onClick={() => {
+                    setActiveTab(group.id);
+                    setSidebarOpen(false);
                   }}
-                />
-              </div>
-              <button 
-                onClick={toggleLanguage}
-                className="px-1.5 py-1 text-[10px] bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg font-bold transition flex flex-col items-center gap-0.5 select-none"
-              >
-                <span className={currentLang === 'lo' ? 'text-accent-sky' : 'text-white/60'}>LA</span>
-                <span className={currentLang === 'en' ? 'text-accent-sky' : 'text-white/60'}>EN</span>
-              </button>
-              <button 
-                onClick={toggleCollapse}
-                className="p-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition"
-                title="Expand Sidebar"
-              >
-                <ChevronRight className="w-4 h-4 text-white/70" />
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-3">
-                <img
-                  src="/logo.png"
-                  alt="Som-Sing Phim"
-                  className="w-11 h-11 rounded-full object-cover shadow-md border border-white/20 shrink-0"
-                  onError={(e) => {
-                    (e.target as HTMLElement).style.display = 'none';
-                  }}
-                />
-                <div>
-                  <h1 className="font-bold text-lg tracking-wide font-sans">{t('common.app_name')}</h1>
-                  <p className="text-[10px] text-white/50 font-medium">Som Sing Printing</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={toggleLanguage}
-                  className="px-2 py-1.5 text-xs bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl font-bold transition flex items-center gap-1 select-none"
+                  className={`
+                    w-full px-3.5 py-3 rounded-2xl text-xs font-black transition-all flex items-center gap-3 cursor-pointer
+                    ${isDirectActive 
+                      ? 'bg-accent-sky text-white shadow-lg shadow-accent-sky/30' 
+                      : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                    }
+                  `}
                 >
-                  <span className={currentLang === 'lo' ? 'text-accent-sky' : 'text-white/60'}>LA</span>
-                  <span className="text-white/20">|</span>
-                  <span className={currentLang === 'en' ? 'text-accent-sky' : 'text-white/60'}>EN</span>
+                  <GroupIcon className="w-4 h-4 shrink-0" />
+                  {!collapsed && <span>{currentLang === 'en' ? group.labelEn : group.labelLao}</span>}
                 </button>
-                <button 
-                  onClick={toggleCollapse}
-                  className="p-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition hidden lg:block"
-                  title="Collapse Sidebar"
-                >
-                  <ChevronLeft className="w-4 h-4 text-white/70" />
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+              );
+            }
 
-        {/* Navigation Tabs */}
-        <nav className="flex-1 px-3 py-6 space-y-2 overflow-y-auto">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
             return (
-              <button
-                key={item.id}
-                onClick={() => handleOpenOrderSystem(item)}
-                title={isCollapsed ? t(item.labelKey) : undefined}
-                className={`
-                  w-full flex items-center rounded-xl transition-all duration-200 group
-                  ${isCollapsed ? 'justify-center p-3.5' : 'gap-4 px-4 py-3.5 text-left'}
-                  ${isActive 
-                    ? 'bg-accent-sky text-white shadow-lg shadow-accent-sky/25 font-semibold' 
-                    : 'text-white/70 hover:bg-white/5 hover:text-white'
-                  }
-                `}
-              >
-                <Icon className={`w-5 h-5 transition-transform group-hover:scale-110 ${isActive ? 'text-white' : 'text-white/50 group-hover:text-white'}`} />
-                {!isCollapsed && (
-                  <div className="animate-fade-in">
-                    <div className="text-sm font-semibold">{t(item.labelKey)}</div>
-                    <div className="text-[10px] opacity-60 font-sans tracking-wide mt-0.5">{item.subText}</div>
+              <div key={group.id} className="space-y-1">
+                {/* Group Accordion Header */}
+                <button
+                  onClick={() => toggleGroup(group.id)}
+                  className={`
+                    w-full px-3 py-2 rounded-xl text-left transition flex items-center justify-between text-[11px] font-extrabold uppercase tracking-wider
+                    ${active ? 'text-sky-300' : 'text-slate-400 hover:text-slate-200'}
+                  `}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <GroupIcon className={`w-3.5 h-3.5 ${active ? 'text-sky-400' : 'text-slate-400'}`} />
+                    {!collapsed && <span>{currentLang === 'en' ? group.labelEn : group.labelLao}</span>}
+                  </div>
+                  {!collapsed && (
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isOpen ? 'rotate-0' : '-rotate-90'}`} />
+                  )}
+                </button>
+
+                {/* Sub-items */}
+                {isOpen && (
+                  <div className="space-y-1 pl-2">
+                    {group.items?.map((item) => {
+                      const ItemIcon = item.icon;
+                      const isSubActive = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setSidebarOpen(false);
+                          }}
+                          className={`
+                            w-full px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 text-left cursor-pointer
+                            ${isSubActive 
+                              ? 'bg-accent-sky text-white font-black shadow-md shadow-accent-sky/25' 
+                              : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                            }
+                          `}
+                        >
+                          <ItemIcon className={`w-4 h-4 shrink-0 ${isSubActive ? 'text-white' : 'text-sky-400'}`} />
+                          {!collapsed && (
+                            <span className="truncate">{currentLang === 'en' ? item.labelEn : item.labelLao}</span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
-              </button>
+              </div>
             );
           })}
         </nav>
+      </div>
 
-        {/* Footer Actions */}
-        <div className={`p-4 border-t border-white/10 bg-black/10 flex flex-col ${isCollapsed ? 'items-center gap-3' : 'space-y-3'}`}>
-          <button
-            onClick={() => setIsRatesOpen(true)}
-            title={isCollapsed ? (currentLang === 'lo' ? 'ອັດຕາແລກປ່ຽນ' : 'Exchange Rates') : undefined}
-            className={`
-              flex items-center justify-center bg-white/5 border border-white/10 text-emerald-300 rounded-xl hover:bg-white/10 transition-all font-medium
-              ${isCollapsed ? 'p-3.5 w-11 h-11' : 'w-full gap-2.5 px-4 py-3 text-xs'}
-            `}
-          >
-            <Coins className="w-4 h-4 shrink-0" />
-            {!isCollapsed && (
-              <span className="font-sans">
-                {currentLang === 'lo' ? 'ອັດຕາແລກປ່ຽນ' : 'Exchange Rates'} · {currency} 1={currentRate ? `${currentRate.toLocaleString()}₭` : '—'}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={handleReset}
-            title={isCollapsed ? (currentLang === 'lo' ? 'ຣີເຊັດຂໍ້ມູນສາທິດ' : 'Reset Demo Data') : undefined}
-            className={`
-              flex items-center justify-center bg-red-500/10 border border-red-500/20 text-red-300 rounded-xl hover:bg-red-500/20 transition-all font-medium
-              ${isCollapsed ? 'p-3.5 w-11 h-11' : 'w-full gap-2.5 px-4 py-3 text-xs'}
-            `}
-          >
-            <RotateCcw className="w-4 h-4 shrink-0" />
-            {!isCollapsed && <span>{currentLang === 'lo' ? 'ຣີເຊັດຂໍ້ມູນສາທິດ' : 'Reset Demo Data'}</span>}
-          </button>
-          
-          <button
-            onClick={() => useAuthStore.getState().logout()}
-            title={isCollapsed ? 'ออกจากระบบ' : undefined}
-            className={`
-              flex items-center justify-center bg-slate-800 border border-slate-700 text-slate-300 rounded-xl hover:bg-slate-700 hover:text-white transition-all font-medium cursor-pointer
-              ${isCollapsed ? 'p-3.5 w-11 h-11' : 'w-full gap-2.5 px-4 py-3 text-xs'}
-            `}
-          >
-            <RotateCcw className="w-4 h-4 shrink-0 hidden" />
-            {!isCollapsed ? (
-              <span>ออกจากระบบ (Logout Owner)</span>
-            ) : (
-              <span className="text-[10px]">Exit</span>
-            )}
-          </button>
-
-          {!isCollapsed ? (
-            <div className="text-[10px] text-white/40 text-center font-sans animate-fade-in">
-              Som Sing Printing Admin v1.0.0
+      {/* Footer User Profile Card */}
+      <div className="p-3.5 border-t border-white/10 bg-black/20">
+        <div className="flex items-center justify-between gap-3 p-2 rounded-2xl bg-white/5 border border-white/10">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-md">
+              {user?.username ? user.username.substring(0, 2).toUpperCase() : 'SP'}
             </div>
-          ) : (
-            <span className="text-[9px] text-white/30 font-sans">v1.0</span>
+            {!collapsed && (
+              <div className="min-w-0">
+                <div className="text-xs font-black text-white truncate">{user?.fullName || 'ສົມສິ່ງພິມ (Owner)'}</div>
+                <div className="text-[10px] font-bold text-emerald-400 flex items-center gap-1 truncate">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  {user?.role ? user.role.toUpperCase() : 'SUPER ADMIN'}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {!collapsed && (
+            <button
+              onClick={() => useAuthStore.getState().logout()}
+              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
+              title={currentLang === 'en' ? 'Log Out' : 'ອອກຈາກລະບົບ'}
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           )}
         </div>
-      </aside>
+      </div>
+    </aside>
+  );
+
+  return (
+    <>
+      {/* Desktop Persistent Sidebar */}
+      <div className={`hidden lg:block shrink-0 transition-all duration-300 ${collapsed ? 'w-20' : 'w-72'}`}>
+        <div className={`fixed top-0 left-0 h-screen z-40 transition-all duration-300 ${collapsed ? 'w-20' : 'w-72'}`}>
+          {sidebarContent}
+        </div>
+      </div>
+
+      {/* Mobile Drawer Backdrop */}
+      {sidebarOpen && (
+        <div 
+          className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 animate-fade-in"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Mobile Slide-in Drawer */}
+      <div className={`lg:hidden fixed top-0 left-0 h-screen w-72 z-50 transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        {sidebarContent}
+      </div>
     </>
   );
 }

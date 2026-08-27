@@ -12,12 +12,16 @@ const (
 	StatusApproved                OrderStatus = "APPROVED"
 	StatusRejected                OrderStatus = "REJECTED"
 	StatusWaitingDeposit          OrderStatus = "WAITING_DEPOSIT"
+	StatusPendingPayment          OrderStatus = "PENDING_PAYMENT"
 	StatusPrepressCheck           OrderStatus = "PREPRESS_CHECK"
 	StatusWaitingApproval         OrderStatus = "WAITING_APPROVAL"
+	StatusProofRejected           OrderStatus = "PROOF_REJECTED"
+	StatusFileConfirmed           OrderStatus = "FILE_CONFIRMED"
 	StatusReadyToPrint            OrderStatus = "READY_TO_PRINT"
 	StatusInProduction            OrderStatus = "IN_PRODUCTION"
 	StatusCompleted               OrderStatus = "COMPLETED"
 	StatusDelivered               OrderStatus = "DELIVERED"
+	StatusCancelled               OrderStatus = "CANCELLED"
 )
 
 // BindingType Enum
@@ -65,14 +69,15 @@ type OrderItem struct {
 	AvgCovM           float64                `json:"avg_cov_m"`
 	AvgCovY           float64                `json:"avg_cov_y"`
 	AvgCovK           float64                `json:"avg_cov_k"`
-	UnitCostLAK       float64                `json:"unit_cost_lak"`
-	UnitPriceLAK      float64                `json:"unit_price_lak"`
-	TotalPriceLAK     float64                `json:"total_price_lak"`
-	UnitPriceSnapshot float64                `json:"unit_price_snapshot"`
-	CostPriceSnapshot float64                `json:"cost_price_snapshot"`
-	MachineID         string                 `json:"machine_id,omitempty"`
-	ColorMode         string                 `json:"color_mode,omitempty"`
-	Specs             map[string]interface{} `json:"specs"`
+	UnitCostLAK        float64                `json:"unit_cost_lak"`
+	UnitPriceLAK       float64                `json:"unit_price_lak"`
+	TotalPriceLAK      float64                `json:"total_price_lak"`
+	UnitPriceSnapshot  float64                `json:"unit_price_snapshot"`
+	CostPriceSnapshot  float64                `json:"cost_price_snapshot"`
+	MachineOverheadLAK float64                `json:"machine_overhead_lak"`
+	MachineID          string                 `json:"machine_id,omitempty"`
+	ColorMode          string                 `json:"color_mode,omitempty"`
+	Specs              map[string]interface{} `json:"specs"`
 	CreatedAt         time.Time              `json:"created_at"`
 	UpdatedAt         time.Time              `json:"updated_at"`
 }
@@ -281,7 +286,11 @@ type RejectProofRequest struct {
 
 type ProofStatusResponse struct {
 	OrderID         string     `json:"order_id"`
+	OrderNo         string     `json:"order_no,omitempty"`
+	CustomerName    string     `json:"customer_name,omitempty"`
 	ProofURL        string     `json:"proof_url"`
+	ProofToken      string     `json:"proof_token,omitempty"`
+	PublicProofURL  string     `json:"public_proof_url,omitempty"`
 	IsApproved      bool       `json:"is_approved"`
 	ApprovedAt      *time.Time `json:"approved_at,omitempty"`
 	RejectedAt      *time.Time `json:"rejected_at,omitempty"`

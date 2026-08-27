@@ -8,8 +8,6 @@ import {
   FileText, 
   AlertTriangle, 
   Plus, 
-  User, 
-  Phone,
   Activity,
   AlertCircle,
   Sparkles,
@@ -17,14 +15,18 @@ import {
   Layers,
   CheckCircle2,
   Calendar,
-  X,
-  CreditCard,
   ChevronRight,
   ChevronLeft,
-  FileQuestion,
-  HelpCircle
+  Printer,
+  PackageCheck,
+  Calculator,
+  Truck,
+  Clock,
+  Boxes,
+  ArrowUpRight
 } from 'lucide-react';
 import { HistoryAnalytics } from '@features/analytics';
+import { FormModalTemplate, FormSection } from '@components/common/FormModalTemplate';
 
 export default function DashboardOverview() {
   const { 
@@ -32,11 +34,8 @@ export default function DashboardOverview() {
     orders, 
     spoilageLogs, 
     getDashboardStats, 
-    addOrder, 
     addSpoilageLog,
-    customers,
     showToast,
-    askConfirmation,
     formatCurrency,
     setActiveTab
   } = useApp();
@@ -45,165 +44,59 @@ export default function DashboardOverview() {
   const currentLang = i18n.language || 'lo';
   const stats = getDashboardStats();
 
-  // Modals state
-  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  // Spoilage Modal state
   const [isSpoilageModalOpen, setIsSpoilageModalOpen] = useState(false);
-
-  // Wizards Step States
-  const [orderStep, setOrderStep] = useState(1); // 1 to 4
-  const [spoilageStep, setSpoilageStep] = useState(1); // 1 to 2
-
-  // Order form state
-  const [orderCustomer, setOrderCustomer] = useState('');
-  const [orderPhone, setOrderPhone] = useState('');
-  const [orderItems, setOrderItems] = useState([{ id: '', quantity: 100, unitCost: 0 }]);
-  const [orderDeposit, setOrderDeposit] = useState(0);
-  const [orderPaymentMethod, setOrderPaymentMethod] = useState('BCEL One');
-  const [orderArtwork, setOrderArtwork] = useState('');
-  const [orderNotes, setOrderNotes] = useState('');
-  
-  // Default promised date = tomorrow
-  const getTomorrowStr = () => {
-    const d = new Date('2026-08-04T09:00:00');
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split('T')[0];
-  };
-  const [orderPromisedDate, setOrderPromisedDate] = useState(getTomorrowStr());
-  const [orderInstallSchedule, setOrderInstallSchedule] = useState('');
-  const [autoDeductStock, setAutoDeductStock] = useState(true);
-
-  // Spoilage form state
+  const [spoilageStep, setSpoilageStep] = useState(1);
   const [spoilageItem, setSpoilageItem] = useState('');
   const [spoilageQty, setSpoilageQty] = useState(10);
   const [spoilageCause, setSpoilageCause] = useState('');
 
-  const orderTotal = orderItems.reduce((sum, item) => {
-    return sum + (Number(item.quantity) * Number(item.unitCost));
-  }, 0);
-
   const formatLAK = formatCurrency;
 
-  const lowStockItems = inventory.filter(item => item.stockQty <= item.reorderThreshold);
+  const lowStockItems = inventory.filter(item => item.stockQty <= (item.minStockThreshold || item.reorderThreshold || 500));
 
   // Find urgent deadlines
+  const getTomorrowStr = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  };
   const tomorrowStr = getTomorrowStr();
   const urgentOrders = orders.filter(ord => 
-    ord.status !== 'Delivered' && 
-    (ord.promisedDeliveryDate <= tomorrowStr || ord.paymentStatus === 'Overdue')
+    ord.status !== 'Delivered' && ord.status !== 'Completed' &&
+    ((ord.promisedDeliveryDate && ord.promisedDeliveryDate <= tomorrowStr) || ord.paymentStatus === 'Overdue')
   );
 
-  // Credit limit checkers
-  const targetCustProfile = customers.find(c => c.name === orderCustomer);
-  const targetCustLimit = targetCustProfile ? targetCustProfile.creditLimit : 1000000;
-  const targetCustUnpaid = orders
-    .filter(o => o.customerName === orderCustomer && o.status !== 'Delivered')
-    .reduce((sum, o) => sum + o.remainingUnpaidBalance, 0);
-  
-  const isCreditExceeded = (targetCustUnpaid + (orderTotal - orderDeposit)) > targetCustLimit;
-
-  const handleAddOrderItem = () => {
-    setOrderItems([...orderItems, { id: '', quantity: 100, unitCost: 0 }]);
+  // Production Pipeline Queue Counts
+  const pipelineCounts = {
+    prepress: orders.filter(o => 
+      o.status === 'Prepress Check' || 
+      o.overall_status === 'Prepress Check' || 
+      o.status === 'File Confirmed' || 
+      o.status === 'Ready To Print' ||
+      o.status === 'Waiting Deposit'
+    ).length,
+    printing: orders.filter(o => 
+      o.status === 'In Production' || 
+      o.overall_status === 'In Production' || 
+      o.status === 'Printing'
+    ).length,
+    finishing: orders.filter(o => 
+      o.status === 'Finishing' || 
+      o.overall_status === 'Finishing' || 
+      o.status === 'Binding' || 
+      o.status === 'Cutting'
+    ).length,
+    ready: orders.filter(o => 
+      o.status === 'Ready For Pickup' || 
+      o.overall_status === 'Ready For Pickup' || 
+      o.status === 'Out For Delivery' || 
+      o.status === 'Pending Delivery'
+    ).length,
   };
 
-  const handleRemoveOrderItem = (index) => {
-    if (orderItems.length > 1) {
-      setOrderItems(orderItems.filter((_, i) => i !== index));
-    }
-  };
-
-  const handleItemChange = (index, field, value) => {
-    const newItems = [...orderItems];
-    newItems[index][field] = value;
-
-    if (field === 'id') {
-      const invItem = inventory.find(i => i.id === value);
-      if (invItem) {
-        let defaultCharge = invItem.costPerConsumptionUnit * 5;
-        if (invItem.category === 'Ink') defaultCharge = invItem.costPerConsumptionUnit * 10;
-        newItems[index].unitCost = Math.round(defaultCharge);
-      }
-    }
-    setOrderItems(newItems);
-  };
-
-  // Quick preset chips for Deposit
-  const applyDepositPreset = (pct) => {
-    if (pct === 100) setOrderDeposit(orderTotal);
-    else if (pct === 50) setOrderDeposit(Math.round(orderTotal / 2));
-    else setOrderDeposit(0);
-  };
-
-  const triggerOrderSubmit = () => {
-    const filteredItems = orderItems.filter(item => item.id !== '');
-    
-    const orderData = {
-      customerName: orderCustomer,
-      phone: orderPhone,
-      items: filteredItems.map(item => {
-        const invItem = inventory.find(i => i.id === item.id);
-        return {
-          id: item.id,
-          name: invItem ? invItem.name : '',
-          quantity: Number(item.quantity),
-          unitCost: Number(item.unitCost)
-        };
-      }),
-      totalPriceCharged: orderTotal,
-      depositAmountPaid: Number(orderDeposit),
-      remainingUnpaidBalance: Math.max(0, orderTotal - Number(orderDeposit)),
-      paymentMethod: orderPaymentMethod,
-      paymentStatus: Number(orderDeposit) >= orderTotal 
-        ? 'Fully Paid' 
-        : Number(orderDeposit) > 0 
-        ? 'Deposit Paid' 
-        : 'Pending',
-      paidDateTime: Number(orderDeposit) > 0 ? '2026-08-04 09:30' : null,
-      artworkLink: orderArtwork,
-      notes: orderNotes,
-      promisedDeliveryDate: orderPromisedDate,
-      installationSchedule: orderInstallSchedule || null
-    };
-
-    addOrder(orderData, autoDeductStock);
-    setIsOrderModalOpen(false);
-    showToast(currentLang === 'lo' ? 'ເພີ່ມອໍເດີໃໝ່ສຳເລັດ!' : 'Order created successfully!', 'success');
-
-    // Reset Form
-    setOrderCustomer('');
-    setOrderPhone('');
-    setOrderItems([{ id: '', quantity: 100, unitCost: 0 }]);
-    setOrderDeposit(0);
-    setOrderArtwork('');
-    setOrderNotes('');
-    setOrderInstallSchedule('');
-    setOrderStep(1);
-  };
-
-  const handleOrderSubmit = (e) => {
-    e.preventDefault();
-    if (!orderCustomer || !orderPhone) {
-      showToast(currentLang === 'lo' ? 'ກະລຸນາເລືອກລູກຄ້າ ແລະ ໃສ່ເບີໂທ!' : 'Select customer & phone!', 'warning');
-      return;
-    }
-    const filteredItems = orderItems.filter(item => item.id !== '');
-    if (filteredItems.length === 0) {
-      showToast(currentLang === 'lo' ? 'ກະລຸນາເລືອກວັດສະດຸພິມຢ່າງໜ້ອຍ 1 ລາຍການ!' : 'Select at least 1 item!', 'warning');
-      return;
-    }
-
-    if (isCreditExceeded) {
-      const msg = currentLang === 'lo'
-        ? `ວົງເງິນສິນເຊື່ອຂອງລູກຄ້າກາຍກຳນົດແລ້ວ! (ຍອດຄ້າງທັງໝົດ: ${formatLAK(targetCustUnpaid + (orderTotal - orderDeposit))}, ວົງເງິນ: ${formatLAK(targetCustLimit)}). ທ່ານຕ້ອງການດຳເນີນການຕໍ່ ຫຼື ບໍ່?`
-        : `Credit limit exceeded! (Total: ${formatLAK(targetCustUnpaid + (orderTotal - orderDeposit))}, Limit: ${formatLAK(targetCustLimit)}). Do you want to proceed?`;
-      
-      askConfirmation(msg, triggerOrderSubmit);
-    } else {
-      triggerOrderSubmit();
-    }
-  };
-
-  const handleSpoilageSubmit = (e) => {
-    e.preventDefault();
+  const handleSpoilageSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!spoilageItem || spoilageQty <= 0) {
       showToast(currentLang === 'lo' ? 'ກະລຸນາເລືອກວັດສະດຸ ແລະ ປ້ອນຈຳນວນເສຍ!' : 'Select material and enter quantity!', 'warning');
       return;
@@ -212,7 +105,7 @@ export default function DashboardOverview() {
     addSpoilageLog({
       materialId: spoilageItem,
       quantity: Number(spoilageQty),
-      cause: spoilageCause || 'Not specified'
+      cause: spoilageCause || (currentLang === 'lo' ? 'ບໍ່ລະບຸສາເຫດ' : 'Not specified')
     });
 
     setIsSpoilageModalOpen(false);
@@ -228,58 +121,181 @@ export default function DashboardOverview() {
   const realizedPercent = Math.round((stats.totalRevenue / (stats.totalRevenue + stats.outstandingPayments || 1)) * 100);
 
   return (
-    <div className="space-y-8 animate-fade-in text-slate-800">
+    <div className="space-y-8 animate-fade-in text-slate-800 pb-12 font-sans">
       
-      {/* Welcome & Quick actions header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-        <div className="space-y-1">
-          <h2 className="text-3xl font-black text-primary-navy tracking-tight">
-            {t('dashboard.title')}
-          </h2>
-          <p className="text-base text-slate-500 font-semibold leading-relaxed">
-            {t('dashboard.subtitle')}
+      {/* 1. HERO HEADER & QUICK ACTION SHORTCUTS */}
+      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight">
+              {currentLang === 'lo' ? 'ແຜງຄວບຄຸມໂຮງພິມ' : 'Printing Management Dashboard'}
+            </h1>
+            <span className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-black flex items-center gap-1.5 shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              Live ERP
+            </span>
+          </div>
+          <p className="text-sm sm:text-base text-slate-500 font-semibold leading-relaxed">
+            {currentLang === 'lo' 
+              ? 'ຕິດຕາມຍອດຂາຍ, ສະຖານະການຜະລິດ, ຕົ້ນທຶນ ແລະ ຄັງວັດສະດຸແບບ Real-time' 
+              : 'Real-time overview of revenue, production queues, job tickets and material inventory.'
+            }
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
+
+        {/* Quick Action Navigation Buttons (Single Icons, Clean Text) */}
+        <div className="flex flex-wrap gap-2.5">
+          <button 
+            onClick={() => setActiveTab('preflight')}
+            className="flex items-center gap-2 px-4 py-3 bg-sky-50 text-sky-700 hover:bg-sky-100/80 border border-sky-200 rounded-2xl text-xs sm:text-sm font-black transition active:scale-95 cursor-pointer shadow-xs"
+          >
+            <Cpu className="w-4 h-4 text-sky-600" />
+            <span>{currentLang === 'lo' ? 'ກວດໄຟລ໌ CMYK' : 'Preflight PDF'}</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('quotation')}
+            className="flex items-center gap-2 px-4 py-3 bg-indigo-50 text-indigo-700 hover:bg-indigo-100/80 border border-indigo-200 rounded-2xl text-xs sm:text-sm font-black transition active:scale-95 cursor-pointer shadow-xs"
+          >
+            <Calculator className="w-4 h-4 text-indigo-600" />
+            <span>{currentLang === 'lo' ? 'ໃບສະເໜີລາຄາ' : 'Quotations'}</span>
+          </button>
+
           <button 
             onClick={() => setActiveTab('create_order')}
-            className="flex items-center justify-center gap-2.5 px-6 py-4 bg-accent-sky text-white rounded-2xl text-lg font-extrabold shadow-lg shadow-accent-sky/25 hover:bg-accent-sky/95 transition active:scale-95 min-h-[52px] cursor-pointer"
+            className="flex items-center gap-2 px-5 py-3 bg-accent-sky text-white hover:bg-sky-600 rounded-2xl text-xs sm:text-sm font-black shadow-md shadow-sky-500/20 transition active:scale-95 cursor-pointer"
           >
-            <Plus className="w-6 h-6 shrink-0" />
-            <span>{t('dashboard.btn_new_order')}</span>
+            <Plus className="w-4 h-4" />
+            <span>{currentLang === 'lo' ? 'ສ້າງອໍເດີໃໝ່' : 'Create Order'}</span>
           </button>
+
           <button 
             onClick={() => {
               setSpoilageStep(1);
               setIsSpoilageModalOpen(true);
             }}
-            className="flex items-center justify-center gap-2.5 px-6 py-4 bg-red-50 border-2 border-red-200 text-red-700 rounded-2xl text-lg font-extrabold hover:bg-red-100/55 transition active:scale-95 min-h-[52px]"
+            className="flex items-center gap-2 px-4 py-3 bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100/60 rounded-2xl text-xs sm:text-sm font-black transition active:scale-95 cursor-pointer"
           >
-            <AlertTriangle className="w-6 h-6 shrink-0 text-red-600" />
-            <span>{t('dashboard.btn_spoilage')}</span>
+            <AlertTriangle className="w-4 h-4 text-rose-600" />
+            <span>{currentLang === 'lo' ? 'ບັນທຶກຂອງເສຍ' : 'Log Spoilage'}</span>
           </button>
         </div>
       </div>
 
-      {/* Urgent alerts box (No emojis) */}
-      {urgentOrders.length > 0 && (
-        <div className="bg-red-50/50 border-2 border-red-200 p-6 rounded-3xl shadow-sm space-y-4">
-          <div className="flex items-center gap-3 text-red-800 font-extrabold text-lg">
-            <AlertCircle className="w-6 h-6 shrink-0 text-red-600 animate-pulse" />
-            <span>{t('dashboard.alert_urgent')} ({urgentOrders.length})</span>
+      {/* 2. LIVE PRODUCTION PIPELINE MINI-BAR */}
+      <div className="bg-gradient-to-r from-slate-900 via-primary-navy to-slate-900 text-white p-6 sm:p-7 rounded-3xl shadow-xl border border-slate-800 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <Printer className="w-5 h-5 text-amber-400" />
+            <h2 className="text-sm sm:text-base font-black uppercase tracking-wider text-slate-200">
+              {currentLang === 'lo' ? 'ຄິວງານຜະລິດປັດຈຸບັນ (Live Production Queue)' : 'Live Shop Floor Production Pipeline'}
+            </h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <button 
+            onClick={() => setActiveTab('orders')}
+            className="text-xs sm:text-sm font-bold text-sky-400 hover:text-sky-300 flex items-center gap-1 transition cursor-pointer"
+          >
+            <span>{currentLang === 'lo' ? 'ເບິ່ງລາຍການທັງໝົດ' : 'View All Orders'}</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+          {/* Step 1: Prepress */}
+          <div 
+            onClick={() => setActiveTab('orders')}
+            className="p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition cursor-pointer flex flex-col justify-between space-y-2 group"
+          >
+            <div className="flex items-center justify-between text-xs sm:text-sm text-sky-300 font-bold">
+              <span className="flex items-center gap-1.5">
+                <Cpu className="w-4 h-4 text-sky-400" />
+                {currentLang === 'lo' ? '1. ກວດໄຟລ໌ & ແບບ' : '1. Prepress'}
+              </span>
+              <span className="px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-300 font-mono font-bold text-xs">
+                {pipelineCounts.prepress}
+              </span>
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-white font-sans">{pipelineCounts.prepress} {currentLang === 'lo' ? 'ງານ' : 'Jobs'}</div>
+          </div>
+
+          {/* Step 2: In Production */}
+          <div 
+            onClick={() => setActiveTab('orders')}
+            className="p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition cursor-pointer flex flex-col justify-between space-y-2 group"
+          >
+            <div className="flex items-center justify-between text-xs sm:text-sm text-amber-300 font-bold">
+              <span className="flex items-center gap-1.5">
+                <Printer className="w-4 h-4 text-amber-400" />
+                {currentLang === 'lo' ? '2. ກຳລັງພິມ' : '2. Printing'}
+              </span>
+              <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-mono font-bold text-xs">
+                {pipelineCounts.printing}
+              </span>
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-white font-sans">{pipelineCounts.printing} {currentLang === 'lo' ? 'ງານ' : 'Jobs'}</div>
+          </div>
+
+          {/* Step 3: Finishing */}
+          <div 
+            onClick={() => setActiveTab('orders')}
+            className="p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition cursor-pointer flex flex-col justify-between space-y-2 group"
+          >
+            <div className="flex items-center justify-between text-xs sm:text-sm text-indigo-300 font-bold">
+              <span className="flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-indigo-400" />
+                {currentLang === 'lo' ? '3. ເຂົ້າເລັ້ມ / ຕັດ' : '3. Finishing'}
+              </span>
+              <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 font-mono font-bold text-xs">
+                {pipelineCounts.finishing}
+              </span>
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-white font-sans">{pipelineCounts.finishing} {currentLang === 'lo' ? 'ງານ' : 'Jobs'}</div>
+          </div>
+
+          {/* Step 4: Ready For Pickup */}
+          <div 
+            onClick={() => setActiveTab('orders')}
+            className="p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition cursor-pointer flex flex-col justify-between space-y-2 group"
+          >
+            <div className="flex items-center justify-between text-xs sm:text-sm text-emerald-300 font-bold">
+              <span className="flex items-center gap-1.5">
+                <PackageCheck className="w-4 h-4 text-emerald-400" />
+                {currentLang === 'lo' ? '4. ພ້ອມສົ່ງ / ຮັບ' : '4. Ready'}
+              </span>
+              <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-mono font-bold text-xs">
+                {pipelineCounts.ready}
+              </span>
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-white font-sans">{pipelineCounts.ready} {currentLang === 'lo' ? 'ງານ' : 'Jobs'}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. URGENT DEADLINES & OVERDUE PAYMENTS */}
+      {urgentOrders.length > 0 && (
+        <div className="bg-rose-50/70 border-2 border-rose-200/80 p-6 rounded-3xl shadow-sm space-y-4">
+          <div className="flex items-center justify-between text-rose-900 font-extrabold text-sm sm:text-base">
+            <div className="flex items-center gap-2.5">
+              <AlertCircle className="w-5 h-5 text-rose-600 animate-pulse" />
+              <span>{currentLang === 'lo' ? 'ອໍເດີດ່ວນທີ່ຕ້ອງສົ່ງ ຫຼື ຄ້າງຊຳຣະ' : 'Urgent Deadlines & Overdue Orders'} ({urgentOrders.length})</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
             {urgentOrders.map(ord => (
-              <div key={ord.id} className="bg-white p-4 rounded-2xl border border-red-100 flex justify-between items-center text-sm shadow-sm">
-                <div className="space-y-1">
-                  <span className="font-extrabold text-slate-800 block truncate max-w-[150px]">{ord.customerName}</span>
-                  <span className="text-xs text-slate-500 font-semibold flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    {t('dashboard.due_date')}: {ord.promisedDeliveryDate}
+              <div 
+                key={ord.id} 
+                onClick={() => setActiveTab('orders')}
+                className="bg-white p-4 sm:p-5 rounded-2xl border border-rose-200/80 flex justify-between items-center shadow-xs cursor-pointer hover:border-rose-300 transition"
+              >
+                <div className="space-y-1 min-w-0 pr-2">
+                  <span className="font-black text-slate-900 text-sm sm:text-base block truncate">{ord.customerName}</span>
+                  <span className="text-xs sm:text-sm text-slate-500 font-semibold flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-slate-400" />
+                    {currentLang === 'lo' ? 'ກຳນົດສົ່ງ:' : 'Due:'} {ord.promisedDeliveryDate || 'Tomorrow'}
                   </span>
                 </div>
-                <span className="text-xs bg-red-100 text-red-800 font-black px-3 py-1 rounded-lg border border-red-200 uppercase">
-                  {t(`payment.${ord.paymentStatus}`) || ord.paymentStatus}
+                <span className="text-xs bg-rose-100 text-rose-800 font-black px-3 py-1.5 rounded-xl border border-rose-200 uppercase shrink-0">
+                  {ord.paymentStatus || ord.status}
                 </span>
               </div>
             ))}
@@ -287,174 +303,235 @@ export default function DashboardOverview() {
         </div>
       )}
 
-      {/* BI KPI Cards with accessible sizes */}
+      {/* 4. FINANCIAL & OPERATIONAL KPI STAT CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         
-        {/* Realized Cashflow (Healthy Status) */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between min-h-[160px]">
+        {/* Realized Revenue */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[160px]">
           <div className="flex items-center justify-between">
-            <span className="text-base text-slate-500 font-bold">{t('dashboard.kpi_cashflow')}</span>
+            <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+              {currentLang === 'lo' ? 'ຍອດເງິນຮັບແລ້ວ (Cashflow)' : 'Realized Revenue'}
+            </span>
             <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
-              <TrendingUp className="w-6 h-6" />
+              <TrendingUp className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-4 space-y-1">
-            <h3 className="text-3xl font-black text-slate-900 tracking-wide font-sans">
+            <h3 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight font-sans">
               {formatLAK(stats.totalRevenue)}
             </h3>
-            <p className="text-sm text-slate-400 font-bold">
-              {t('dashboard.kpi_cashflow_sub')}
+            <p className="text-xs sm:text-sm text-emerald-600 font-bold flex items-center gap-1">
+              <CheckCircle2 className="w-4 h-4" />
+              {currentLang === 'lo' ? 'ເງິນສົດ & ໂອນຜ່ານ BCEL' : 'Realized cash & bank transfers'}
             </p>
           </div>
         </div>
 
-        {/* Pending Receivables (Warning/Clock status) */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between min-h-[160px]">
+        {/* Outstanding Receivables */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[160px]">
           <div className="flex items-center justify-between">
-            <span className="text-base text-slate-500 font-bold">{t('dashboard.kpi_receivables')}</span>
-            <div className="p-2.5 bg-red-50 text-red-600 rounded-2xl border border-red-100">
-              <TrendingDown className="w-6 h-6" />
+            <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+              {currentLang === 'lo' ? 'ລູກໜີ້ຄົງຄ້າງ (AR)' : 'Outstanding Receivables'}
+            </span>
+            <div className="p-2.5 bg-rose-50 text-rose-600 rounded-2xl border border-rose-100">
+              <TrendingDown className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-4 space-y-1">
-            <h3 className="text-3xl font-black text-red-600 tracking-wide font-sans">
+            <h3 className="text-2xl sm:text-3xl font-black text-rose-600 tracking-tight font-sans">
               {formatLAK(stats.outstandingPayments)}
             </h3>
-            <p className="text-sm text-red-500/80 font-bold">
-              {t('dashboard.kpi_receivables_sub')}
+            <p className="text-xs sm:text-sm text-rose-500 font-bold flex items-center gap-1">
+              <Clock className="w-4 h-4" />
+              {currentLang === 'lo' ? 'ລໍຖ້າຊຳຣະສ່ວນທີ່ເຫຼືອ' : 'Pending balance settlements'}
             </p>
           </div>
         </div>
 
-        {/* nominal Profit */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between min-h-[160px]">
+        {/* Nominal Net Profit */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[160px]">
           <div className="flex items-center justify-between">
-            <span className="text-base text-slate-500 font-bold">{t('dashboard.kpi_profit')}</span>
-            <div className="p-2.5 bg-accent-sky/10 text-accent-sky rounded-2xl border border-accent-sky/20">
-              <DollarSign className="w-6 h-6" />
+            <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+              {currentLang === 'lo' ? 'ກຳໄລສຸດທິ (Net Profit)' : 'Net Profit Margin'}
+            </span>
+            <div className="p-2.5 bg-sky-50 text-accent-sky rounded-2xl border border-sky-100">
+              <DollarSign className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-4 space-y-1">
-            <h3 className="text-3xl font-black text-accent-sky tracking-wide font-sans">
+            <h3 className="text-2xl sm:text-3xl font-black text-accent-sky tracking-tight font-sans">
               {formatLAK(stats.netProfit)}
             </h3>
-            <p className="text-sm text-slate-400 font-bold">
-              {t('dashboard.kpi_profit_sub')}
+            <p className="text-xs sm:text-sm text-slate-400 font-bold">
+              {currentLang === 'lo' ? 'ຫຼັງຫັກຕົ້ນທຶນເຈ້ຍ, ໝຶກ & ແຮງງານ' : 'After paper, ink & machine cost'}
             </p>
           </div>
         </div>
 
-        {/* Active Jobs (Activity layout) */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between min-h-[160px]">
+        {/* Active Orders Count */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[160px]">
           <div className="flex items-center justify-between">
-            <span className="text-base text-slate-500 font-bold">{t('dashboard.kpi_active_orders')}</span>
-            <div className="p-2.5 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100">
-              <FileText className="w-6 h-6" />
+            <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+              {currentLang === 'lo' ? 'ອໍເດີກຳລັງດຳເນີນງານ' : 'Active Orders'}
+            </span>
+            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100">
+              <FileText className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-4 space-y-1">
-            <h3 className="text-3xl font-black text-slate-900 tracking-wide">
-              {stats.activeOrdersCount} {currentLang === 'lo' ? 'ງານ' : 'Jobs'}
+            <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-sans">
+              {stats.activeOrdersCount} <span className="text-sm font-bold text-slate-400">{currentLang === 'lo' ? 'ລາຍການ' : 'Active Jobs'}</span>
             </h3>
+            <p className="text-xs sm:text-sm text-indigo-600 font-bold">
+              {currentLang === 'lo' ? 'ຢູ່ໃນສາຍການຜະລິດ' : 'In production pipeline'}
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Low Stock Alerts Widget */}
-      <div className="bg-amber-50/60 border-2 border-amber-200 p-6 rounded-3xl shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 text-amber-900 font-black text-xl">
-            <AlertTriangle className="w-6 h-6 shrink-0 text-amber-600 animate-bounce" />
-            <span>{currentLang === 'lo' ? 'ແຈ້ງເຕືອນສິນຄ້າໃກ້ໝົດ (Low Stock Alerts)' : 'Low Stock Alerts (แจ้งเตือนสินค้าใกล้หมด)'}</span>
-            <span className="bg-amber-500 text-white text-xs font-black px-2.5 py-1 rounded-full">
-              {lowStockItems.length}
-            </span>
+      {/* 5. REDESIGNED HIGH-END CRITICAL LOW STOCK WIDGET */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-500/20 shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-black text-slate-900">
+                  {currentLang === 'lo' ? 'ແຈ້ງເຕືອນວັດສະດຸໃກ້ໝົດສາງ (Low Stock Reorder Alerts)' : 'Critical Inventory Reorder Alerts'}
+                </h2>
+                <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 text-xs font-black rounded-full">
+                  {lowStockItems.length}
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-400 font-semibold mt-0.5">
+                {currentLang === 'lo' ? 'ລາຍການວັດສະດຸທີ່ມີຈຳນວນຕ່ຳກວ່າເກນເຕືອນໄພ ຄວນສັ່ງຊື້ເພີ່ມ' : 'Materials below safe reorder thresholds requiring procurement.'}
+              </p>
+            </div>
           </div>
-          <span className="text-xs font-bold text-amber-800">
-            {currentLang === 'lo' ? 'เกณฑ์แจ้งเตือน: สต็อก <= Reorder Threshold' : 'Threshold: stockQty <= reorderThreshold'}
-          </span>
+          
+          <button
+            onClick={() => setActiveTab('suppliers')}
+            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs sm:text-sm font-black flex items-center gap-2 transition self-start sm:self-auto cursor-pointer shadow-xs active:scale-95"
+          >
+            <Truck className="w-4 h-4 text-amber-400" />
+            <span>{currentLang === 'lo' ? 'ອອກໃບສັ່ງຊື້ (Create PO)' : 'Create Purchase Order'}</span>
+          </button>
         </div>
 
         {lowStockItems.length === 0 ? (
-          <div className="bg-white p-4 rounded-2xl border border-amber-100 text-center text-sm font-semibold text-emerald-700 flex items-center justify-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{currentLang === 'lo' ? 'ວັດສະດຸ ແລະ ໝຶກທຸກຢ່າງໃນສາງຍັງຄົງພໍພຽງ' : 'All inks and paper materials are above reorder thresholds.'}</span>
+          <div className="p-8 rounded-2xl bg-emerald-50/50 border border-emerald-100 text-center text-sm font-bold text-emerald-800 flex flex-col items-center justify-center gap-2">
+            <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+            <span className="text-base">{currentLang === 'lo' ? 'ວັດສະດຸ ແລະ ໝຶກທຸກຢ່າງໃນສາງຍັງຄົງພໍພຽງ' : 'All materials and inks are safely stocked.'}</span>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {lowStockItems.map(item => (
-              <div key={item.id} className="bg-white p-4 rounded-2xl border border-amber-200 shadow-xs flex flex-col justify-between space-y-2">
-                <div>
-                  <div className="flex justify-between items-start">
-                    <span className="text-[11px] font-black text-amber-700 uppercase tracking-wider bg-amber-100 px-2 py-0.5 rounded-md">
-                      {item.category}
-                    </span>
-                    <span className="text-xs font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
-                      {item.stockQty === 0 ? 'Out of Stock' : 'Low Stock'}
-                    </span>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {lowStockItems.slice(0, 4).map(item => {
+              const isOut = item.stockQty === 0;
+
+              return (
+                <div 
+                  key={item.id} 
+                  className={`p-5 rounded-2xl border-2 flex flex-col justify-between space-y-4 transition ${
+                    isOut 
+                      ? 'bg-rose-50/40 border-rose-200' 
+                      : 'bg-amber-50/30 border-amber-200'
+                  }`}
+                >
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-start gap-2">
+                      <span className="text-[11px] font-black text-slate-600 uppercase tracking-wider bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs">
+                        {item.category}
+                      </span>
+                      <span className={`text-xs font-black px-2.5 py-1 rounded-lg border ${
+                        isOut ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-amber-100 text-amber-900 border-amber-300'
+                      }`}>
+                        {isOut ? (currentLang === 'lo' ? 'ໝົດສາງ' : 'Out of Stock') : (currentLang === 'lo' ? 'ໃກ້ໝົດ' : 'Low Stock')}
+                      </span>
+                    </div>
+
+                    <h4 className="font-black text-slate-900 text-sm sm:text-base line-clamp-2 leading-snug">
+                      {item.name}
+                    </h4>
+                    <p className="text-xs text-slate-400 font-mono">SKU: {item.sku || item.id}</p>
                   </div>
-                  <h4 className="font-extrabold text-slate-900 text-sm mt-2 line-clamp-1">{item.name}</h4>
-                  <p className="text-xs text-slate-500 font-mono mt-0.5">SKU: {item.id}</p>
+
+                  <div className="pt-3 border-t border-slate-200/80 flex items-center justify-between">
+                    <div>
+                      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        {currentLang === 'lo' ? 'ຈຳນວນຄົງເຫຼືອ' : 'Remaining Qty'}
+                      </div>
+                      <div className={`text-xl sm:text-2xl font-black font-sans ${isOut ? 'text-rose-600' : 'text-amber-600'}`}>
+                        {item.stockQty.toLocaleString()} <span className="text-xs font-bold text-slate-500">{item.consumptionUnit || 'units'}</span>
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={() => setActiveTab('suppliers')}
+                      className="px-3.5 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-800 rounded-xl text-xs font-black transition flex items-center gap-1 cursor-pointer shadow-2xs active:scale-95"
+                      title={currentLang === 'lo' ? 'ສັ່ງຊື້ເພີ່ມ' : 'Reorder'}
+                    >
+                      <span>{currentLang === 'lo' ? 'ສັ່ງຊື້' : 'Reorder'}</span>
+                      <ArrowUpRight className="w-3.5 h-3.5 text-slate-500" />
+                    </button>
+                  </div>
                 </div>
-                <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
-                  <span className="text-slate-500 font-semibold">{currentLang === 'lo' ? 'คงเหลือ:' : 'Remaining:'}</span>
-                  <span className="font-black text-red-600 text-sm">{item.stockQty} {item.consumptionUnit || 'units'}</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Realized Cashflow bar */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
-        <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2">
-          <Activity className="w-6 h-6 text-accent-sky" />
-          <span>{t('dashboard.realized_cashflow')}</span>
+      {/* 6. REALIZED CASHFLOW PROGRESS BAR */}
+      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+        <h3 className="font-black text-slate-900 text-base sm:text-lg flex items-center gap-2.5">
+          <Activity className="w-5 h-5 text-accent-sky" />
+          <span>{currentLang === 'lo' ? 'ສັດສ່ວນການຮັບເງິນຕົວຈິງ (Cash Realization Ratio)' : 'Cashflow Realization Ratio'}</span>
         </h3>
         
         <div className="space-y-3">
-          <div className="flex justify-between text-sm font-extrabold text-slate-600">
-            <span className="flex items-center gap-1.5">
+          <div className="flex justify-between text-xs sm:text-sm font-extrabold text-slate-600">
+            <span className="flex items-center gap-1.5 text-emerald-600">
               <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-              {t('dashboard.cash_collected')} ({realizedPercent}%)
+              {currentLang === 'lo' ? 'ຮັບເງິນແລ້ວ' : 'Collected'}: {realizedPercent}%
             </span>
-            <span className="flex items-center gap-1.5 text-red-600">
-              <AlertTriangle className="w-4 h-4 text-red-500" />
-              {t('dashboard.cash_unpaid')} ({100 - realizedPercent}%)
+            <span className="flex items-center gap-1.5 text-rose-600">
+              <AlertTriangle className="w-4 h-4 text-rose-500" />
+              {currentLang === 'lo' ? 'ຍອດຄ້າງຊຳຣະ' : 'Pending'}: {100 - realizedPercent}%
             </span>
           </div>
-          <div className="w-full bg-slate-100 h-6 rounded-full overflow-hidden flex border p-0.5">
+          <div className="w-full bg-slate-100 h-5 rounded-full overflow-hidden flex border p-0.5">
             <div className="bg-emerald-500 h-full rounded-l-full transition-all duration-500" style={{ width: `${realizedPercent}%` }} />
-            <div className="bg-red-500 h-full rounded-r-full transition-all duration-500" style={{ width: `${100 - realizedPercent}%` }} />
+            <div className="bg-rose-500 h-full rounded-r-full transition-all duration-500" style={{ width: `${100 - realizedPercent}%` }} />
           </div>
-          <div className="flex justify-between text-xs text-slate-400 font-extrabold font-sans pt-1">
+          <div className="flex justify-between text-xs sm:text-sm text-slate-400 font-bold font-sans pt-1">
             <span>Collected: {formatLAK(stats.totalRevenue)}</span>
             <span>Outstanding: {formatLAK(stats.outstandingPayments)}</span>
           </div>
         </div>
       </div>
 
-      {/* Main Grid: Machine efficiency & warnings */}
+      {/* 7. MACHINE EFFICIENCY & ADVANCED ANALYTICS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Machine Efficiencies */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-5">
-          <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2">
-            <Cpu className="w-6 h-6 text-indigo-600" />
-            <span>{t('dashboard.efficiency')}</span>
+        <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-sm space-y-5">
+          <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+            <Cpu className="w-5 h-5 text-indigo-600" />
+            <span>{currentLang === 'lo' ? 'ປະສິດທິພາບເຄື່ອງຈັກ (Machine OEE)' : 'Machine Efficiency'}</span>
           </h3>
 
           <div className="space-y-4">
-            {stats.machineEfficiencies.map(eq => (
-              <div key={eq.id} className="space-y-2 text-sm font-semibold">
+            {(stats.machineEfficiencies || []).map((eq: any) => (
+              <div key={eq.id} className="space-y-2 text-xs sm:text-sm font-semibold">
                 <div className="flex justify-between">
                   <span className="text-slate-700 font-extrabold truncate max-w-[180px]">{eq.name}</span>
                   <span className="font-black text-slate-900 font-sans">{eq.efficiency}%</span>
                 </div>
-                <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                   <div 
-                    className={`h-full rounded-full transition-all ${eq.efficiency > 85 ? 'bg-emerald-500' : eq.efficiency > 60 ? 'bg-amber-500' : 'bg-red-500'}`} 
+                    className={`h-full rounded-full transition-all ${eq.efficiency > 85 ? 'bg-emerald-500' : eq.efficiency > 60 ? 'bg-amber-500' : 'bg-rose-500'}`} 
                     style={{ width: `${eq.efficiency}%` }} 
                   />
                 </div>
@@ -464,621 +541,204 @@ export default function DashboardOverview() {
         </div>
 
         {/* Deadstock Warnings */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-5">
-          <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2">
-            <AlertCircle className="w-6 h-6 text-amber-500" />
-            <span>{t('dashboard.deadstock')}</span>
+        <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-sm space-y-5">
+          <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+            <Boxes className="w-5 h-5 text-amber-500" />
+            <span>{currentLang === 'lo' ? 'ວັດສະດຸຄົງສາງດົນ (Deadstock)' : 'Deadstock Inventory'}</span>
           </h3>
 
-          {stats.deadstockItems.length === 0 ? (
-            <div className="bg-emerald-50/50 p-5 rounded-2xl border border-emerald-100 text-sm text-emerald-800 font-semibold flex items-start gap-2.5">
+          {(stats.deadstockItems || []).length === 0 ? (
+            <div className="bg-emerald-50/50 p-5 rounded-2xl border border-emerald-100 text-xs sm:text-sm text-emerald-800 font-semibold flex items-start gap-2.5">
               <Sparkles className="w-5 h-5 text-emerald-600 shrink-0" />
-              <span>{t('dashboard.deadstock_ok')}</span>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <span className="text-xs text-slate-400 font-extrabold block mb-1">{t('dashboard.deadstock_subtitle')}</span>
-              <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
-                {stats.deadstockItems.map(item => (
-                  <div key={item.id} className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl flex items-center justify-between text-sm font-semibold text-slate-700">
-                    <span className="truncate max-w-[150px]">{item.name}</span>
-                    <span className="text-xs bg-amber-100 text-amber-800 px-3 py-1 rounded-lg font-black font-sans uppercase">
-                      {item.stockQty} {item.consumptionUnit}s
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Low Stock Alerts */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-5">
-          <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2">
-            <AlertTriangle className="w-6 h-6 text-red-500" />
-            <span>{t('dashboard.low_stock')}</span>
-          </h3>
-
-          {lowStockItems.length === 0 ? (
-            <div className="bg-emerald-50/50 p-5 rounded-2xl border border-emerald-100 text-sm text-emerald-800 font-semibold flex items-start gap-2.5">
-              <Sparkles className="w-5 h-5 text-emerald-600 shrink-0" />
-              <span>{t('dashboard.low_stock_ok')}</span>
+              <span>{currentLang === 'lo' ? 'ບໍ່ມີວັດສະດຸຕົກຄ້າງເກີນ 60 ວັນ' : 'No deadstock items found.'}</span>
             </div>
           ) : (
             <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
-              {lowStockItems.map(item => (
-                <div key={item.id} className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-center justify-between text-sm font-semibold">
-                  <span className="text-slate-800 font-extrabold truncate max-w-[150px]">{item.name}</span>
-                  <span className="font-black text-red-600 font-sans">{item.stockQty} {item.consumptionUnit}s</span>
+              {(stats.deadstockItems || []).map((item: any) => (
+                <div key={item.id} className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl flex items-center justify-between text-xs sm:text-sm font-semibold text-slate-700">
+                  <span className="truncate max-w-[150px]">{item.name}</span>
+                  <span className="text-xs bg-amber-100 text-amber-800 px-2.5 py-1 rounded-lg font-black font-sans">
+                    {item.stockQty} {item.consumptionUnit}s
+                  </span>
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {/* Spoilage Loss Overview */}
+        <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-sm space-y-5">
+          <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-rose-500" />
+            <span>{currentLang === 'lo' ? 'ອັດຕາຂອງເສຍ (Spoilage Rate)' : 'Spoilage & Waste'}</span>
+          </h3>
+
+          <div className="space-y-3">
+            <div className="p-4 bg-rose-50/50 border border-rose-100 rounded-2xl space-y-1">
+              <div className="text-xs text-rose-700 font-bold uppercase tracking-wider">
+                {currentLang === 'lo' ? 'ລວມຂອງເສຍທັງໝົດ' : 'Total Logged Spoilage'}
+              </div>
+              <div className="text-2xl font-black text-rose-600 font-sans">
+                {spoilageLogs.length} <span className="text-xs text-slate-500 font-medium">{currentLang === 'lo' ? 'ລາຍການ' : 'Logs'}</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setSpoilageStep(1);
+                setIsSpoilageModalOpen(true);
+              }}
+              className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs sm:text-sm font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{currentLang === 'lo' ? 'ບັນທຶກຂອງເສຍ' : 'Log Spoilage'}</span>
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Reports & BI Analytics integrated at the bottom of Dashboard */}
+      {/* 8. BI ANALYTICS & FINANCIAL AUDIT CHARTS */}
       <HistoryAnalytics hideHeader={true} />
 
-      {/* ACCESSIBLE STEP-BY-STEP ORDER WIZARD MODAL */}
-      {isOrderModalOpen && (
-        <dialog 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent outline-none border-none w-full h-full"
-          open
-        >
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsOrderModalOpen(false)} />
-          
-          <div className="relative bg-white w-full max-w-2xl rounded-3xl shadow-2xl p-8 overflow-y-auto max-h-[90vh] z-10 border border-slate-100 animate-fade-in flex flex-col justify-between">
+      {/* UNIFIED DESIGN SYSTEM: SPOILAGE FORM MODAL (ENLARGED & HIGH READABILITY) */}
+      <FormModalTemplate
+        isOpen={isSpoilageModalOpen}
+        onClose={() => setIsSpoilageModalOpen(false)}
+        icon={<AlertTriangle className="w-6 h-6 text-white" />}
+        title={currentLang === 'lo' ? 'ບັນທຶກວັດສະດຸເສຍຫາຍ (Spoilage Log)' : 'Log Material Spoilage'}
+        subtitle={currentLang === 'lo' ? 'ບັນທຶກຈຳນວນເຈ້ຍ, ໝຶກ ຫຼື ວັດສະດຸທີ່ເສຍຫາຍໃນການຜະລິດ' : 'Record scrap paper, wasted ink, or damaged print jobs for audit.'}
+        badgeText={currentLang === 'lo' ? `ຂັ້ນຕອນ ${spoilageStep}/2` : `Step ${spoilageStep}/2`}
+        maxWidthClass="max-w-3xl"
+        footerActions={
+          <div className="flex items-center justify-between w-full">
             <div>
-              {/* Header with Wizard indicators */}
-              <div className="flex justify-between items-center border-b pb-4 mb-6">
-                <div>
-                  <span className="text-xs uppercase font-extrabold text-accent-sky tracking-wider font-sans">
-                    {t('orders.step')} {orderStep} {t('orders.of')} 4
-                  </span>
-                  <h3 className="text-2xl font-black text-primary-navy mt-1">
-                    {t('dashboard.btn_new_order')}
-                  </h3>
-                </div>
-                <button 
-                  onClick={() => setIsOrderModalOpen(false)}
-                  className="p-2 hover:bg-slate-100 rounded-xl text-slate-400"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              {/* Step indicator bar */}
-              <div className="flex gap-2 mb-6">
-                {[1, 2, 3, 4].map(st => (
-                  <div 
-                    key={st} 
-                    className={`h-2 flex-1 rounded-full transition-all duration-300 ${st <= orderStep ? 'bg-accent-sky' : 'bg-slate-100'}`}
-                  />
-                ))}
-              </div>
-
-              {/* Form contents based on Step */}
-              <form onSubmit={handleOrderSubmit} className="space-y-6">
-                
-                {/* STEP 1: CUSTOMER SELECTION */}
-                {orderStep === 1 && (
-                  <div className="space-y-4 animate-fade-in">
-                    <label className="text-lg font-extrabold text-slate-900 block">
-                      {t('orders.step_title_1')}
-                    </label>
-
-                    {/* Customer Selection Visual Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {customers.map((c, idx) => {
-                        const selected = orderCustomer === c.name;
-                        return (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => {
-                              setOrderCustomer(c.name);
-                              if (c.name === 'ສົມພອນ ສີວິໄລ') setOrderPhone('020 55667788');
-                              else if (c.name === 'ນາງ ແສງດາວ') setOrderPhone('020 22334455');
-                              else if (c.name === 'ຮ້ານອາຫານ ທ່າທາງ') setOrderPhone('020 99887766');
-                              else if (c.name === 'ໂຮງແຮມ ລ້ານຊ້າງ') setOrderPhone('020 77889900');
-                            }}
-                            className={`p-5 rounded-2xl border-2 text-left transition-all duration-200 flex flex-col justify-between min-h-[100px] ${
-                              selected 
-                                ? 'border-accent-sky bg-blue-50/50 text-primary-navy shadow-sm' 
-                                : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-white'
-                            }`}
-                          >
-                            <div className="flex justify-between items-center w-full">
-                              <span className="font-extrabold text-base">{c.name}</span>
-                              <div className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${selected ? 'bg-accent-sky border-accent-sky' : 'border-slate-300'}`}>
-                                {selected && <span className="w-2 h-2 rounded-full bg-white"></span>}
-                              </div>
-                            </div>
-                            <span className="text-xs text-slate-400 font-bold mt-2">
-                              {t('common.limit')}: {formatLAK(c.creditLimit)}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {orderCustomer && (
-                      <div className="space-y-2 pt-4 animate-fade-in">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                          {t('orders.verify_phone')}
-                        </label>
-                        <input 
-                          type="text" 
-                          required
-                          value={orderPhone}
-                          onChange={(e) => setOrderPhone(e.target.value)}
-                          className="w-full min-h-[50px] px-4 py-3 border-2 rounded-2xl focus:outline-none focus:ring-2 focus:ring-accent-sky text-base font-bold font-sans"
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* STEP 2: CONFIGURE PRINT MATERIALS */}
-                {orderStep === 2 && (
-                  <div className="space-y-4 animate-fade-in">
-                    <div className="flex justify-between items-center">
-                      <label className="text-lg font-extrabold text-slate-900">
-                        {t('orders.step_title_2')}
-                      </label>
-                      <button 
-                        type="button"
-                        onClick={handleAddOrderItem}
-                        className="text-sm text-accent-sky font-extrabold hover:underline flex items-center gap-1.5"
-                      >
-                        <Plus className="w-5 h-5" /> {t('orders.add_item')}
-                      </button>
-                    </div>
-
-                    <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-1">
-                      {orderItems.map((item, idx) => (
-                        <div key={idx} className="flex flex-col sm:flex-row gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 relative group">
-                          {/* Selection dropdown */}
-                          <div className="flex-1 space-y-1">
-                            <label className="text-[10px] font-bold text-slate-400 block uppercase">{t('inventory.material_name')} *</label>
-                            <select
-                              required
-                              value={item.id}
-                              onChange={(e) => handleItemChange(idx, 'id', e.target.value)}
-                              className="w-full min-h-[48px] p-3 bg-white border-2 rounded-xl focus:outline-none text-sm font-semibold"
-                            >
-                              <option value="">{t('orders.choose_material')}</option>
-                              {inventory.map(inv => (
-                                <option key={inv.id} value={inv.id}>
-                                  {inv.name} ({inv.stockQty} {t('common.left')})
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* Qty and price details */}
-                          <div className="w-full sm:w-28 space-y-1">
-                            <label className="text-[10px] font-bold text-slate-400 block uppercase">{t('orders.qty_title')} *</label>
-                            <input 
-                              type="number" 
-                              min="1" 
-                              required
-                              value={item.quantity}
-                              onChange={(e) => handleItemChange(idx, 'quantity', Number(e.target.value))}
-                              className="w-full min-h-[48px] p-3 bg-white border-2 rounded-xl text-center text-sm font-extrabold font-sans"
-                            />
-                          </div>
-
-                          <div className="w-full sm:w-36 space-y-1">
-                            <label className="text-[10px] font-bold text-slate-400 block uppercase">{t('orders.price_unit_title')} *</label>
-                            <input 
-                              type="number" 
-                              required
-                              value={item.unitCost}
-                              onChange={(e) => handleItemChange(idx, 'unitCost', Number(e.target.value))}
-                              className="w-full min-h-[48px] p-3 bg-white border-2 rounded-xl text-right text-sm font-extrabold font-sans text-slate-900"
-                            />
-                          </div>
-
-                          {/* Delete Item Button */}
-                          <button 
-                            type="button" 
-                            onClick={() => handleRemoveOrderItem(idx)}
-                            disabled={orderItems.length === 1}
-                            className="absolute -top-2.5 -right-2.5 sm:static sm:mt-6 p-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl disabled:opacity-30 border"
-                            title={t('orders.remove_item')}
-                          >
-                            <X className="w-5 h-5 text-red-600" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="bg-slate-900 p-5 rounded-2xl flex justify-between items-center text-base font-extrabold text-white mt-4">
-                      <span className="text-white/60">{t('orders.estimated_total')}:</span>
-                      <span className="text-xl text-accent-sky font-sans font-black">{formatLAK(orderTotal)}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* STEP 3: PAYMENT & FINANCIALS */}
-                {orderStep === 3 && (
-                  <div className="space-y-5 animate-fade-in">
-                    <label className="text-lg font-extrabold text-slate-900 block">
-                      {t('orders.step_title_3')}
-                    </label>
-
-                    {/* Show Total */}
-                    <div className="bg-slate-50 p-4 rounded-xl flex justify-between items-center border">
-                      <span className="text-slate-500 font-bold">{t('orders.total_price_charged')}:</span>
-                      <span className="text-lg font-black font-sans text-slate-950">{formatLAK(orderTotal)}</span>
-                    </div>
-
-                    {/* Deposit form field with quick chips */}
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                        {t('orders.deposit')}
-                      </label>
-                      <input 
-                        type="number" 
-                        value={orderDeposit}
-                        onChange={(e) => setOrderDeposit(Number(e.target.value))}
-                        className="w-full min-h-[50px] px-4 py-3 border-2 rounded-2xl focus:outline-none focus:ring-2 focus:ring-accent-sky text-base font-bold font-sans text-slate-950"
-                      />
-
-                      {/* Deposit quick action chips */}
-                      <div className="flex gap-2 pt-1.5">
-                        <button
-                          type="button"
-                          onClick={() => applyDepositPreset(0)}
-                          className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 border rounded-xl text-xs font-black transition active:scale-95"
-                        >
-                          {t('orders.unpaid_0')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => applyDepositPreset(50)}
-                          className="px-4 py-2.5 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-black transition active:scale-95"
-                        >
-                          {t('orders.pay_50')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => applyDepositPreset(100)}
-                          className="px-4 py-2.5 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-black transition active:scale-95"
-                        >
-                          {t('orders.pay_100')}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Payment methods choices (visual cards) */}
-                    <div className="space-y-2.5 pt-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                        {t('orders.payment_method')}
-                      </label>
-                      <div className="grid grid-cols-3 gap-3">
-                        {['BCEL One', 'Cash', 'Transfer'].map(method => {
-                          const active = orderPaymentMethod === method;
-                          return (
-                            <button
-                              key={method}
-                              type="button"
-                              onClick={() => setOrderPaymentMethod(method)}
-                              className={`p-4 border-2 rounded-2xl font-extrabold text-sm transition flex flex-col items-center justify-center gap-2 ${
-                                active 
-                                  ? 'border-accent-sky bg-blue-50/50 text-primary-navy shadow-sm' 
-                                  : 'border-slate-200 hover:border-slate-300 text-slate-500 bg-white'
-                              }`}
-                            >
-                              <CreditCard className={`w-5 h-5 ${active ? 'text-accent-sky' : 'text-slate-400'}`} />
-                              <span>{method}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* STEP 4: DETAILS, SCHEDULE & ARTWORKS */}
-                {orderStep === 4 && (
-                  <div className="space-y-4 animate-fade-in">
-                    <label className="text-lg font-extrabold text-slate-900 block">
-                      {t('orders.step_title_4')}
-                    </label>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Promised Delivery Date */}
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                          {t('orders.promised_due_date')} *
-                        </label>
-                        <input 
-                          type="date" 
-                          required
-                          value={orderPromisedDate}
-                          onChange={(e) => setOrderPromisedDate(e.target.value)}
-                          className="w-full min-h-[48px] px-4 py-2 border-2 rounded-xl focus:outline-none text-sm bg-white font-sans font-bold"
-                        />
-                      </div>
-
-                      {/* On-site installation schedule */}
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                          {t('orders.installation_schedule')}
-                        </label>
-                        <input 
-                          type="datetime-local" 
-                          value={orderInstallSchedule}
-                          onChange={(e) => setOrderInstallSchedule(e.target.value)}
-                          className="w-full min-h-[48px] px-4 py-2 border-2 rounded-xl focus:outline-none text-sm bg-white font-sans"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Link artwork */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                        {t('orders.artwork_file_link')}
-                      </label>
-                      <input 
-                        type="text" 
-                        placeholder={t('orders.artwork_placeholder')}
-                        value={orderArtwork}
-                        onChange={(e) => setOrderArtwork(e.target.value)}
-                        className="w-full min-h-[48px] px-4 py-2 border-2 rounded-xl focus:outline-none text-sm font-semibold"
-                      />
-                    </div>
-
-                    {/* Notes */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                        {t('orders.internal_notes')}
-                      </label>
-                      <textarea 
-                        placeholder={t('orders.notes_placeholder')}
-                        value={orderNotes}
-                        onChange={(e) => setOrderNotes(e.target.value)}
-                        rows={2}
-                        className="w-full p-3 border-2 rounded-xl focus:outline-none text-sm font-semibold"
-                      />
-                    </div>
-
-                    {/* Auto deduction checkbox */}
-                    <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border-2 cursor-pointer hover:bg-slate-100 select-none">
-                      <input 
-                        type="checkbox" 
-                        checked={autoDeductStock}
-                        onChange={(e) => setAutoDeductStock(e.target.checked)}
-                        className="w-5 h-5 text-accent-sky focus:ring-accent-sky border-slate-300 rounded cursor-pointer"
-                      />
-                      <span className="text-xs font-extrabold text-slate-700">
-                        {t('orders.auto_deduct')}
-                      </span>
-                    </label>
-                  </div>
-                )}
-              </form>
-            </div>
-
-            {/* Wizard Navigation Footer */}
-            <div className="flex justify-between items-center border-t pt-5 mt-6 gap-3">
-              <div>
-                {orderStep > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setOrderStep(orderStep - 1)}
-                    className="flex items-center gap-1.5 px-5 py-3 border-2 hover:bg-slate-50 text-slate-700 rounded-2xl text-sm font-extrabold transition min-h-[48px]"
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                    <span>{t('common.back')}</span>
-                  </button>
-                )}
-              </div>
-
-              <div className="flex gap-2">
+              {spoilageStep > 1 && (
                 <button
                   type="button"
-                  onClick={() => setIsOrderModalOpen(false)}
-                  className="px-5 py-3 border hover:bg-slate-50 text-slate-500 rounded-2xl text-sm font-bold transition min-h-[48px]"
+                  onClick={() => setSpoilageStep(spoilageStep - 1)}
+                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-bold transition flex items-center gap-1.5 cursor-pointer"
                 >
-                  {t('common.cancel')}
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>{currentLang === 'lo' ? 'ຍ້ອນກັບ' : 'Back'}</span>
                 </button>
-                
-                {orderStep < 4 ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (orderStep === 1 && !orderCustomer) {
-                        showToast(currentLang === 'lo' ? 'ກະລຸນາເລືອກລູກຄ້າກ່ອນ!' : 'Please select a customer first!', 'warning');
-                        return;
-                      }
-                      if (orderStep === 2) {
-                        const hasItems = orderItems.some(i => i.id !== '');
-                        if (!hasItems) {
-                          showToast(currentLang === 'lo' ? 'ກະລຸນາເລືອກວັດສະດຸພິມກ່ອນ!' : 'Please select a material first!', 'warning');
-                          return;
-                        }
-                      }
-                      setOrderStep(orderStep + 1);
-                    }}
-                    className="flex items-center gap-1 px-6 py-3 bg-accent-sky text-white rounded-2xl text-sm font-extrabold shadow-md shadow-accent-sky/15 hover:bg-accent-sky/95 transition min-h-[48px]"
-                  >
-                    <span>{t('common.next')}</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleOrderSubmit}
-                    className="px-7 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-sm font-extrabold shadow-lg shadow-emerald-500/20 transition min-h-[48px] animate-pulse"
-                  >
-                    {t('common.confirm')}
-                  </button>
-                )}
-              </div>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsSpoilageModalOpen(false)}
+                className="px-5 py-2.5 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-sm font-bold transition cursor-pointer"
+              >
+                {currentLang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
+              </button>
+
+              {spoilageStep < 2 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!spoilageItem) {
+                      showToast(currentLang === 'lo' ? 'ກະລຸນາເລືອກວັດສະດຸກ່ອນ!' : 'Please select a material first!', 'warning');
+                      return;
+                    }
+                    setSpoilageStep(2);
+                  }}
+                  className="px-6 py-2.5 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-sm font-black shadow-md shadow-sky-500/20 transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>{currentLang === 'lo' ? 'ຕໍ່ໄປ' : 'Next'}</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleSpoilageSubmit()}
+                  className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-black shadow-md shadow-rose-500/20 transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{currentLang === 'lo' ? 'ຢືນຢັນບັນທຶກ' : 'Confirm & Save'}</span>
+                </button>
+              )}
             </div>
           </div>
-        </dialog>
-      )}
-
-      {/* ACCESSIBLE STEP-BY-STEP SPOILAGE WIZARD MODAL */}
-      {isSpoilageModalOpen && (
-        <dialog 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent outline-none border-none w-full h-full"
-          open
-        >
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsSpoilageModalOpen(false)} />
-
-          <div className="relative bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 z-10 border border-slate-100 flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-center border-b pb-4 mb-5">
-                <div>
-                  <span className="text-xs uppercase font-extrabold text-red-500 tracking-wider font-sans">
-                    {t('orders.step')} {spoilageStep} {t('orders.of')} 2
-                  </span>
-                  <h3 className="text-xl font-black text-red-600 mt-1">
-                    {t('inventory.modal_spoilage_title')}
-                  </h3>
-                </div>
-                <button 
-                  onClick={() => setIsSpoilageModalOpen(false)}
-                  className="p-2 hover:bg-slate-100 rounded-xl text-slate-400"
-                >
-                  <X className="w-6 h-6" />
-                </button>
+        }
+      >
+        <div className="space-y-4">
+          {/* STEP 1: MATERIAL SELECTION (2-COLUMN GRID) */}
+          {spoilageStep === 1 && (
+            <FormSection
+              icon={<Boxes className="w-4 h-4 text-rose-500" />}
+              title={currentLang === 'lo' ? '1. ເລືອກວັດສະດຸທີ່ເສຍຫາຍ' : '1. Select Damaged Material'}
+              subtitle={currentLang === 'lo' ? 'ເລືອກລາຍການກະດາດ ຫຼື ໝຶກພິມຈາກຄັງສິນຄ້າ' : 'Choose warehouse paper stock or ink item.'}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[360px] overflow-y-auto pr-1">
+                {inventory.map((item) => {
+                  const selected = spoilageItem === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setSpoilageItem(item.id)}
+                      className={`p-4 rounded-2xl border-2 transition-all flex items-center justify-between cursor-pointer ${
+                        selected
+                          ? 'border-rose-500 bg-rose-50/60 text-rose-950 shadow-xs'
+                          : 'border-slate-200/80 hover:border-slate-300 bg-white text-slate-700'
+                      }`}
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="text-xs font-black text-slate-400 uppercase tracking-wider">{item.category}</div>
+                        <span className="text-sm font-black block text-slate-900 truncate mt-0.5">{item.name}</span>
+                        <span className="text-xs text-slate-500 font-mono mt-0.5 block">
+                          {item.stockQty} {currentLang === 'lo' ? 'ຍັງເຫຼືອ' : 'in stock'} · SKU: {item.sku || item.id}
+                        </span>
+                      </div>
+                      <div className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${selected ? 'bg-rose-600 border-rose-600 text-white' : 'border-slate-300'}`}>
+                        {selected && <span className="w-2 h-2 rounded-full bg-white"></span>}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
+            </FormSection>
+          )}
 
-              {/* Wizard Steps indicator */}
-              <div className="flex gap-2 mb-5">
-                {[1, 2].map(st => (
-                  <div 
-                    key={st} 
-                    className={`h-2 flex-1 rounded-full transition-all duration-300 ${st <= spoilageStep ? 'bg-red-500' : 'bg-slate-100'}`}
+          {/* STEP 2: QUANTITY & ROOT CAUSE */}
+          {spoilageStep === 2 && (
+            <FormSection
+              icon={<AlertTriangle className="w-4 h-4 text-rose-500" />}
+              title={currentLang === 'lo' ? '2. ລະບຸຈຳນວນ ແລະ ສາເຫດ' : '2. Wasted Quantity & Reason'}
+              subtitle={currentLang === 'lo' ? 'ກະລຸນາໃສ່ຈຳນວນທີ່ເສຍຫາຍຕົວຈິງ ແລະ ບັນທຶກສາເຫດ' : 'Specify exact scrapped units and failure cause.'}
+            >
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs sm:text-sm font-black uppercase text-slate-700 tracking-wider">
+                    {currentLang === 'lo' ? 'ຈຳນວນທີ່ເສຍຫາຍ (Units) *' : 'Scrapped Quantity (Units) *'}
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={spoilageQty}
+                    onChange={(e) => setSpoilageQty(Number(e.target.value))}
+                    className="w-full px-4 py-3.5 bg-white border-2 border-slate-200/80 rounded-xl text-base font-black font-sans text-slate-900 focus:outline-none focus:border-rose-500"
                   />
-                ))}
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs sm:text-sm font-black uppercase text-slate-700 tracking-wider">
+                    {currentLang === 'lo' ? 'ສາເຫດຂອງເສຍ / ໝາຍເຫດ (Root Cause)' : 'Root Cause & Notes'}
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder={currentLang === 'lo' ? 'ລະບຸສາເຫດ ເຊັ່ນ: ສີເພ້ຽນ, ໃບມີດຕັດກິນຂອບ, ເຈ້ຍຕິດ...' : 'e.g. Color alignment error, blade miscut, paper jam...'}
+                    value={spoilageCause}
+                    onChange={(e) => setSpoilageCause(e.target.value)}
+                    className="w-full p-3.5 bg-white border-2 border-slate-200/80 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
               </div>
-
-              <form onSubmit={handleSpoilageSubmit} className="space-y-5">
-                {/* STEP 1: CHOOSE MATERIAL (Visual cards) */}
-                {spoilageStep === 1 && (
-                  <div className="space-y-3.5 animate-fade-in">
-                    <label className="text-sm font-extrabold text-slate-800 block">
-                      {t('orders.choose_wasted_material')}:
-                    </label>
-                    <div className="grid grid-cols-1 gap-2.5 max-h-[250px] overflow-y-auto pr-1">
-                      {inventory.map(item => {
-                        const selected = spoilageItem === item.id;
-                        return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => setSpoilageItem(item.id)}
-                            className={`p-3.5 border-2 rounded-2xl text-left transition flex items-center justify-between ${
-                              selected 
-                                ? 'border-red-500 bg-red-50/30 text-red-950 font-bold shadow-sm' 
-                                : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-white'
-                            }`}
-                          >
-                            <div>
-                              <span className="text-sm font-bold block">{item.name}</span>
-                              <span className="text-[10px] text-slate-400 font-sans mt-0.5">{item.stockQty} {t('common.left')}</span>
-                            </div>
-                            <div className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${selected ? 'bg-red-500 border-red-500' : 'border-slate-300'}`}>
-                              {selected && <span className="w-2 h-2 rounded-full bg-white"></span>}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* STEP 2: QUANTITY & REASON */}
-                {spoilageStep === 2 && (
-                  <div className="space-y-4 animate-fade-in">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 block">{t('orders.qty_wasted')} *</label>
-                      <input 
-                        type="number" 
-                        min="1" 
-                        required
-                        value={spoilageQty}
-                        onChange={(e) => setSpoilageQty(Number(e.target.value))}
-                        className="w-full min-h-[48px] px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-400 text-base font-extrabold font-sans text-slate-900"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 block">{t('orders.reason_cause')}</label>
-                      <textarea 
-                        placeholder={t('orders.reason_placeholder')}
-                        value={spoilageCause}
-                        onChange={(e) => setSpoilageCause(e.target.value)}
-                        rows={3}
-                        className="w-full p-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-400 text-sm font-semibold"
-                      />
-                    </div>
-                  </div>
-                )}
-              </form>
-            </div>
-
-            {/* Spoilage Navigation Footer */}
-            <div className="flex justify-between items-center border-t pt-4 mt-5 gap-3">
-              <div>
-                {spoilageStep > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setSpoilageStep(spoilageStep - 1)}
-                    className="flex items-center gap-1 px-4 py-2 border-2 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition min-h-[40px]"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    <span>{t('common.back')}</span>
-                  </button>
-                )}
-              </div>
-
-              <div className="flex gap-2">
-                <button 
-                  type="button" 
-                  onClick={() => setIsSpoilageModalOpen(false)}
-                  className="px-4 py-2 border hover:bg-slate-50 text-slate-500 rounded-xl text-xs font-semibold transition"
-                >
-                  {t('common.cancel')}
-                </button>
-                
-                {spoilageStep < 2 ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!spoilageItem) {
-                        showToast(currentLang === 'lo' ? 'ກະລຸນາເລືອກວັດສະດຸກ່ອນ!' : 'Please select a material first!', 'warning');
-                        return;
-                      }
-                      setSpoilageStep(2);
-                    }}
-                    className="flex items-center gap-1 px-5 py-2 bg-red-600 text-white rounded-xl text-xs font-bold hover:bg-red-700 transition min-h-[40px]"
-                  >
-                    <span>{t('common.next')}</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleSpoilageSubmit}
-                    className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition min-h-[40px]"
-                  >
-                    {t('common.confirm')}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </dialog>
-      )}
+            </FormSection>
+          )}
+        </div>
+      </FormModalTemplate>
     </div>
   );
 }
