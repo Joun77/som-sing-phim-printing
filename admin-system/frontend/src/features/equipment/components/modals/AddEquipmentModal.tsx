@@ -328,12 +328,12 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
             <div className="p-4 bg-sky-50/60 border border-sky-100 rounded-2xl space-y-4 animate-fade-in">
               <span className="text-[10px] font-black uppercase tracking-wider text-sky-800 block border-b border-sky-200 pb-1.5 flex items-center gap-1.5">
                 <Scissors className="w-4 h-4 text-sky-600" />
-                <span>ຂໍ້ມູນເຄື່ອງຈັກແປຮູບกระดาษ (Post-Press & Paper Machinery Specs)</span>
+                <span>ຂໍ້ມູນເຄື່ອງຈັກແປຮູບເຈ້ຍ (Post-Press & Paper Machinery Specs)</span>
               </span>
 
               {/* Subtype selector */}
               <div className="space-y-1">
-                <label className="text-slate-600 uppercase block text-[10px]">ประเภทเครื่องแปรรูปกระดาษ (Subtype Selection)</label>
+                <label className="text-slate-600 uppercase block text-[10px]">ປະເພດເຄື່ອງແປຮູບເຈ້ຍ (Subtype Selection)</label>
                 <select
                   value={postPressSubtype}
                   onChange={(e) => setPostPressSubtype(e.target.value)}
@@ -342,7 +342,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
                   <option value="guillotine">Guillotine Cutter (ເຄື່ອງຕັດເຈ້ຍ)</option>
                   <option value="sticker_plotter">Sticker Plotter / Cutter (ເຄື່ອງຕັດສະຕິກເກີ)</option>
                   <option value="hole_drill">Paper Hole Drill (ເຄື່ອງເຈາະຮູເຈ້ຍ)</option>
-                  <option value="binder">Binder (ເຄື່ອງເຂົ້າເລົ່ມ)</option>
+                  <option value="binder">Binder (ເຄື່ອງເຂົ້າເລັ້ມ)</option>
                   <option value="folder">Folder / Creaser (ເຄື່ອງພັບເຈ້ຍ)</option>
                   <option value="laminator">Laminator / Coater (ເຄື່ອງເຄືອບ)</option>
                 </select>
@@ -351,7 +351,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
               {/* 4 Core Input Parameters Grid */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[10px]">1. ราคาซื้อเครื่องจักร (Purchase Price LAK) *</label>
+                  <label className="text-slate-600 uppercase block text-[10px]">1. ລາຄາຊື້ເຄື່ອງຈັກ (Purchase Price LAK) *</label>
                   <input
                     type="number"
                     min="0"
@@ -363,7 +363,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[10px]">2. อายุการใช้งานเป้าหมาย (Lifespan Years) *</label>
+                  <label className="text-slate-600 uppercase block text-[10px]">2. ອາຍຸການໃຊ້ງານເປົ້າໝາຍ (Lifespan Years) *</label>
                   <input
                     type="number"
                     min="1"
@@ -375,7 +375,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[10px]">3. ประมาณการผลิต (Est. Monthly Volume) *</label>
+                  <label className="text-slate-600 uppercase block text-[10px]">3. ປະມານການຜະລິດ (Est. Monthly Volume) *</label>
                   <input
                     type="number"
                     min="1"
@@ -387,7 +387,7 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-slate-600 uppercase block text-[10px]">4. ค่าบำรุงรักษา & ใบมีด (% Maint. Rate) *</label>
+                  <label className="text-slate-600 uppercase block text-[10px]">4. ຄ່າບຳລຸງຮັກສາ & ໃບມີດ (% Maint. Rate) *</label>
                   <input
                     type="number"
                     min="0"
@@ -402,14 +402,14 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
               {/* Real-time Calculation Summary Card */}
               <div className="p-3.5 bg-sky-100/70 border border-sky-200 rounded-xl space-y-1 text-xs">
                 <div className="flex justify-between items-center text-sky-900 font-extrabold">
-                  <span>สรุปต้นทุนต่อแผ่น/ครั้ง (Amortized Cost Breakdown):</span>
+                  <span>ສະຫຼຸບຕົ້ນທຶນຕໍ່ແຜ່ນ/ຄັ້ງ (Amortized Cost Breakdown):</span>
                   <span className="text-sm font-black text-sky-700 font-sans">
                     {(Math.round(netCostPerUnit * 100) / 100).toLocaleString()} LAK / Unit
                   </span>
                 </div>
                 <div className="text-[11px] text-sky-800 space-y-0.5 font-medium">
-                  <p>• ค่าเสื่อมฐาน: {(Math.round(baseCostPerUnit * 100) / 100).toLocaleString()} LAK / แผ่น</p>
-                  <p>• ค่าบำรุงรักษา & เปลี่ยนใบมีด (+{maintenanceRatePercent}%): +{(Math.round((netCostPerUnit - baseCostPerUnit) * 100) / 100).toLocaleString()} LAK / แผ่น</p>
+                  <p>• ຄ່າຫຼຸ້ຍຫ້ຽນພື້ນຖານ: {(Math.round(baseCostPerUnit * 100) / 100).toLocaleString()} LAK / ແຜ່ນ</p>
+                  <p>• ຄ່າບຳລຸງຮັກສາ & ປ່ຽນໃບມີດ (+{maintenanceRatePercent}%): +{(Math.round((netCostPerUnit - baseCostPerUnit) * 100) / 100).toLocaleString()} LAK / ແຜ່ນ</p>
                 </div>
               </div>
             </div>

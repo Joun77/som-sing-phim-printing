@@ -110,6 +110,161 @@ const initialInventory: any[] = [
         currentQty: 4
       }
     ]
+  },
+  {
+    id: 'PKG-BOX-01',
+    sku: 'PKG-BOX-01',
+    name: 'ກ່ອງພັດສະດຸເບີ 00 (Box Size 00 9.7x14x6cm)',
+    category: 'Packaging',
+    supplier: 'Lao Packaging Solution',
+    stockQty: 250,
+    minStockThreshold: 50,
+    costPerPurchaseUnit: 1500,
+    costPerConsumptionUnit: 1500,
+    purchaseMultiplier: 1,
+    purchaseUnit: 'ກ່ອງ',
+    consumptionUnit: 'ກ່ອງ',
+    specs: {
+      brand: 'Standard Carton',
+      size: 'Size 00 (9.7 x 14 x 6 cm)'
+    },
+    batches: [
+      {
+        id: 'LOT-BOX-01',
+        purchaseDate: '2026-08-01',
+        supplierName: 'Lao Packaging Solution',
+        purchasePricePerReam: 1500,
+        costPerSheet: 1500,
+        initialQty: 250,
+        currentQty: 250
+      }
+    ]
+  },
+  {
+    id: 'PKG-BOX-02',
+    sku: 'PKG-BOX-02',
+    name: 'ກ່ອງພັດສະດຸເບີ A (Box Size A 14x20x6cm)',
+    category: 'Packaging',
+    supplier: 'Lao Packaging Solution',
+    stockQty: 180,
+    minStockThreshold: 40,
+    costPerPurchaseUnit: 2500,
+    costPerConsumptionUnit: 2500,
+    purchaseMultiplier: 1,
+    purchaseUnit: 'ກ່ອງ',
+    consumptionUnit: 'ກ່ອງ',
+    specs: {
+      brand: 'Standard Carton',
+      size: 'Size A (14 x 20 x 6 cm)'
+    },
+    batches: [
+      {
+        id: 'LOT-BOX-02',
+        purchaseDate: '2026-08-01',
+        supplierName: 'Lao Packaging Solution',
+        purchasePricePerReam: 2500,
+        costPerSheet: 2500,
+        initialQty: 180,
+        currentQty: 180
+      }
+    ]
+  },
+  {
+    id: 'PKG-ENV-01',
+    sku: 'PKG-ENV-01',
+    name: 'ຊອງກັນກະແທກ Bubble Envelope (A5 18x23cm)',
+    category: 'Packaging',
+    supplier: 'Lao Packaging Solution',
+    stockQty: 120,
+    minStockThreshold: 30,
+    costPerPurchaseUnit: 2000,
+    costPerConsumptionUnit: 2000,
+    purchaseMultiplier: 1,
+    purchaseUnit: 'ຊອງ',
+    consumptionUnit: 'ຊອງ',
+    specs: {
+      brand: 'Bubble Safe',
+      size: 'A5 (18 x 23 cm)'
+    },
+    batches: [
+      {
+        id: 'LOT-ENV-01',
+        purchaseDate: '2026-08-01',
+        supplierName: 'Lao Packaging Solution',
+        purchasePricePerReam: 2000,
+        costPerSheet: 2000,
+        initialQty: 120,
+        currentQty: 120
+      }
+    ]
+  },
+  {
+    id: 'OFF-ART-260-A5',
+    sku: 'OFF-ART-260-A5',
+    name: 'ເສດເຈ້ຍ Art Card 260gsm (A5 148×210mm)',
+    category: 'Offcut',
+    supplier: 'Production Scrap Reclaim',
+    stockQty: 120,
+    minStockThreshold: 20,
+    costPerPurchaseUnit: 450,
+    costPerConsumptionUnit: 450,
+    purchaseMultiplier: 1,
+    purchaseUnit: 'ແຜ່ນ',
+    consumptionUnit: 'ແຜ່ນ',
+    isOffcut: true,
+    specs: {
+      widthMm: 148,
+      heightMm: 210,
+      dimensionFormatted: '148 × 210 mm (A5)',
+      grammageGsm: 260,
+      paperType: 'Art Card',
+      usableFor: ['Namecards', 'Hangtags', 'Small Prints']
+    },
+    batches: [
+      {
+        id: 'LOT-OFF-01',
+        purchaseDate: '2026-08-15',
+        supplierName: 'Production Scrap Reclaim',
+        purchasePricePerReam: 450,
+        costPerSheet: 450,
+        initialQty: 120,
+        currentQty: 120
+      }
+    ]
+  },
+  {
+    id: 'OFF-KRAFT-150-A6',
+    sku: 'OFF-KRAFT-150-A6',
+    name: 'ເສດເຈ້ຍ Kraft 150gsm (A6 105×148mm)',
+    category: 'Offcut',
+    supplier: 'Production Scrap Reclaim',
+    stockQty: 80,
+    minStockThreshold: 15,
+    costPerPurchaseUnit: 250,
+    costPerConsumptionUnit: 250,
+    purchaseMultiplier: 1,
+    purchaseUnit: 'ແຜ່ນ',
+    consumptionUnit: 'ແຜ່ນ',
+    isOffcut: true,
+    specs: {
+      widthMm: 105,
+      heightMm: 148,
+      dimensionFormatted: '105 × 148 mm (A6)',
+      grammageGsm: 150,
+      paperType: 'Kraft Paper',
+      usableFor: ['Tags', 'Mini Envelopes']
+    },
+    batches: [
+      {
+        id: 'LOT-OFF-02',
+        purchaseDate: '2026-08-18',
+        supplierName: 'Production Scrap Reclaim',
+        purchasePricePerReam: 250,
+        costPerSheet: 250,
+        initialQty: 80,
+        currentQty: 80
+      }
+    ]
   }
 ];
 const initialEquipment: any[] = [
@@ -234,7 +389,34 @@ const initialEquipment: any[] = [
   }
 ];
 const initialCustomers: any[] = [];
-const initialOffcuts: any[] = [];
+const initialOffcuts: any[] = [
+  {
+    id: 'OFF-ART-260-A5',
+    name: 'ເສດເຈ້ຍ Art Card 260gsm (A5 148×210mm)',
+    qty: 120,
+    paperId: 'PAP-ART-260',
+    costPerSheet: 450,
+    widthMm: 148,
+    heightMm: 210,
+    dimensionFormatted: '148 × 210 mm (A5)',
+    grammageGsm: 260,
+    paperType: 'Art Card',
+    notes: 'ຊັ້ນວາງເສດເຈ້ຍ A-01'
+  },
+  {
+    id: 'OFF-KRAFT-150-A6',
+    name: 'ເສດເຈ້ຍ Kraft 150gsm (A6 105×148mm)',
+    qty: 80,
+    paperId: 'PAP-KRAFT-150',
+    costPerSheet: 250,
+    widthMm: 105,
+    heightMm: 148,
+    dimensionFormatted: '105 × 148 mm (A6)',
+    grammageGsm: 150,
+    paperType: 'Kraft Paper',
+    notes: 'ຊັ້ນວາງເສດເຈ້ຍ B-02'
+  }
+];
 const initialPurchaseOrders: any[] = [];
 const initialOrders: any[] = [];
 const initialSpoilageLogs: any[] = [];
@@ -408,15 +590,16 @@ export const AppProvider = ({ children }) => {
     const options: Intl.NumberFormatOptions = {
       style: 'currency',
       currency: meta.currency,
-      maximumFractionDigits: meta.currency === 'USD' ? 2 : 0,
-      minimumFractionDigits: 0
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 2
     };
     try {
       return new Intl.NumberFormat(meta.locale, options).format(converted);
     } catch (e) {
-      return `${meta.symbol}${converted.toLocaleString()}`;
+      return `${meta.symbol}${converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
   };
+
 
   const convertToCurrency = (num) => {
     return (Number(num) || 0) / getRate(currency);
@@ -568,18 +751,25 @@ export const AppProvider = ({ children }) => {
   const sanitizeInventoryItem = (item: any) => {
     if (!item) return item;
     const cat = (item.category || '').toLowerCase();
-    const isPaper = cat === 'paper' || cat === 'material';
-    const multiplier = Number(item.purchaseMultiplier || item.specs?.sheetsPerPack || 500);
+    const nameLower = (item.name || '').toLowerCase();
+    const isPaper = cat === 'paper' || cat === 'material' || nameLower.includes('paper') || nameLower.includes('ເຈ້ຍ') || nameLower.includes('double a') || nameLower.includes('green read') || nameLower.includes('idea');
+    let multiplier = Number(item.purchaseMultiplier || item.purchase_multiplier || item.specs?.sheetsPerPack || item.specs?.sheets_per_pack || item.specs?.sheets_per_ream || 500);
+    if (isPaper && (!multiplier || multiplier <= 1)) {
+      multiplier = 500;
+    }
     
     let currentStockSheets = Number(item.stockQty) || Number(item.currentStock) || 0;
-    if (isPaper && currentStockSheets > 0 && currentStockSheets <= 10) {
+    if (isPaper && currentStockSheets > 0 && currentStockSheets <= 100) {
       currentStockSheets = currentStockSheets * multiplier;
     } else if (isPaper && currentStockSheets === 0) {
       currentStockSheets = multiplier;
     }
 
-    const costPerPurchase = Number(item.costPerPurchaseUnit || item.price || 95000);
-    const costPerConsumption = isPaper ? Math.round(costPerPurchase / multiplier) : Number(item.costPerConsumptionUnit || costPerPurchase);
+    const costPerPurchase = Number(item.costPerPurchaseUnit || item.cost_per_purchase_unit || item.price || 95000);
+    const rawCostPerCons = Number(item.costPerConsumptionUnit || item.cost_per_consumption_unit || 0);
+    const costPerConsumption = isPaper 
+      ? ((rawCostPerCons > 0 && rawCostPerCons < (costPerPurchase / 2)) ? rawCostPerCons : (multiplier > 0 ? (costPerPurchase / multiplier) : costPerPurchase))
+      : (rawCostPerCons > 0 ? rawCostPerCons : costPerPurchase);
 
     let rawBatches = (item.batches || []).filter((b: any) => b.id && !b.id.includes('-EMPTY'));
     let realBatches: any[] = [];
@@ -590,13 +780,24 @@ export const AppProvider = ({ children }) => {
       if (key && !seenBatchKeys.has(key)) {
         seenBatchKeys.add(key);
         let bQty = Number(b.currentQty || b.initialQty || 0);
-        if (isPaper && bQty > 0 && bQty <= 10) {
+        if (isPaper && bQty > 0 && bQty <= 100) {
           bQty = bQty * multiplier;
         }
+        let bInit = Number(b.initialQty || bQty);
+        if (isPaper && bInit > 0 && bInit <= 100) {
+          bInit = bInit * multiplier;
+        }
+        const bPurchasePrice = Number(b.purchasePricePerReam || b.purchasePrice || costPerPurchase);
+        const bCostPerSheet = isPaper
+          ? (Number(b.costPerSheet) > 0 && Number(b.costPerSheet) < (bPurchasePrice / 2) ? Number(b.costPerSheet) : (multiplier > 0 ? bPurchasePrice / multiplier : costPerConsumption))
+          : Number(b.costPerSheet || costPerConsumption);
+
         realBatches.push({
           ...b,
-          initialQty: b.initialQty <= 10 && isPaper ? b.initialQty * multiplier : b.initialQty,
-          currentQty: bQty
+          initialQty: bInit,
+          currentQty: bQty,
+          purchasePricePerReam: bPurchasePrice,
+          costPerSheet: bCostPerSheet
         });
       }
     }
@@ -629,6 +830,7 @@ export const AppProvider = ({ children }) => {
       batches: realBatches
     };
   };
+
 
   const getDeletedIds = (): Set<string> => {
     try {
@@ -696,67 +898,155 @@ export const AppProvider = ({ children }) => {
 
   const refreshData = async () => {
     const deletedIds = getDeletedIds();
+    let inbItems: any[] = [];
 
-    // 1. Assets / Equipment (Database Fetch)
+    // Pre-fetch inbound transactions for assets & inventory merging
+    try {
+      const inbRes = await fetch('/api/inbound');
+      if (inbRes && inbRes.ok) {
+        const inbData = await inbRes.json();
+        inbItems = Array.isArray(inbData) ? inbData : (inbData?.data || []);
+      }
+    } catch (e) {}
+
+    // 1. Assets / Equipment & Inbound Printers (Database Fetch)
     try {
       let res = await fetch('/api/equipment');
       if (!res.ok) {
         res = await fetch('/api/v1/assets');
       }
-      if (res && res.ok) {
-        const resData = await res.json();
-        const rawItems = Array.isArray(resData) ? resData : (resData?.data || []);
-        if (Array.isArray(rawItems) && rawItems.length > 0) {
-          setEquipment(prevEq => {
-            const mapById = new Map();
-            (prevEq || []).filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach(item => mapById.set(item.id, item));
-            rawItems.filter((i: any) => !deletedIds.has(i.id) && !deletedIds.has(i.id?.toLowerCase())).forEach((item: any) => {
-              const formattedItem = {
-                ...item,
-                name: item.name || `${item.brand || ''} ${item.model || ''}`.trim() || item.id,
-                purchaseCost: Number(item.price || item.purchaseCost || item.purchasePrice || item.priceCost || 0),
-                printedPagesCapacity: Number(item.expectedLifeA4Pages || item.printedPagesCapacity || 500000),
-                maintenanceRatePercent: Number(item.maintenanceRatePercent || 20),
-                colorSchemeType: item.colorSchemeType || item.specs?.colorScheme || 'CMYK'
-              };
-              if (mapById.has(item.id)) {
-                mapById.set(item.id, { ...mapById.get(item.id), ...formattedItem });
-              } else {
-                mapById.set(item.id, formattedItem);
-              }
-            });
-            const merged = Array.from(mapById.values());
-            safeSetItem('ss_print_equipment_v6', merged);
-            return merged;
+      const resData = (res && res.ok) ? await res.json() : null;
+      const rawItems = Array.isArray(resData) ? resData : (resData?.data || []);
+
+      const printerInbounds = inbItems.filter((i: any) => {
+        const c = (i.category || '').toUpperCase();
+        const sku = (i.skuCode || i.id || '').toUpperCase();
+        return c === 'PRINTER' || c === 'MACHINERY' || c === 'EQUIPMENT' || sku.startsWith('PRN');
+      }).map((p: any) => ({
+        id: p.id || p.skuCode,
+        name: p.itemName || p.name || `${p.specs?.brand || ''} ${p.specs?.model || ''}`.trim() || p.id,
+        brand: p.specs?.brand || p.brand || '',
+        model: p.specs?.model || p.model || '',
+        serialNumber: p.specs?.serialNumber || p.serialNumber || p.skuCode || '',
+        category: 'Printer',
+        printerCategory: p.specs?.printerCategory || p.printerCategory || 'Digital Press',
+        colorSchemeType: p.specs?.colorSchemeType || p.colorSchemeType || 'CMYK',
+        totalColorSlots: Number(p.specs?.totalColorSlots || p.totalColorSlots || 4),
+        purchaseCost: Number(p.totalPrice || p.price || p.purchaseCost || 0),
+        expectedLifeA4Pages: Number(p.specs?.expectedLifeA4Pages || p.expectedLifeA4Pages || 3000000),
+        TargetTotalPages: Number(p.specs?.expectedLifeA4Pages || p.TargetTotalPages || 3000000),
+        printedPagesCapacity: Number(p.specs?.expectedLifeA4Pages || p.printedPagesCapacity || 3000000),
+        lifespanYears: Number(p.specs?.lifespanYears || p.lifespanYears || 5),
+        maintenanceRatePercent: Number(p.specs?.maintenanceRatePercent || p.maintenanceRatePercent || 15),
+        costPerConsumptionUnit: Number(p.specs?.costPerConsumptionUnit || p.calculatedCostPerPage || 0),
+        calculatedCostPerPage: Number(p.specs?.calculatedCostPerPage || p.calculatedCostPerPage || 0),
+        status: 'In Use',
+        location: p.specs?.location || p.location || 'Main Press Floor',
+        specs: p.specs || {}
+      }));
+
+      const combinedAssets = [...rawItems, ...printerInbounds];
+
+      if (combinedAssets.length > 0) {
+        setEquipment(prevEq => {
+          const mapById = new Map();
+          (prevEq || []).filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach(item => mapById.set(item.id, item));
+          combinedAssets.filter((i: any) => !deletedIds.has(i.id) && !deletedIds.has(i.id?.toLowerCase())).forEach((item: any) => {
+            const formattedItem = {
+              ...item,
+              name: item.name || `${item.brand || ''} ${item.model || ''}`.trim() || item.id,
+              purchaseCost: Number(item.price || item.purchaseCost || item.purchasePrice || item.priceCost || 0),
+              printedPagesCapacity: Number(item.expectedLifeA4Pages || item.printedPagesCapacity || item.TargetTotalPages || 3000000),
+              maintenanceRatePercent: Number(item.maintenanceRatePercent || 15),
+              colorSchemeType: item.colorSchemeType || item.specs?.colorScheme || 'CMYK'
+            };
+            if (mapById.has(item.id)) {
+              mapById.set(item.id, { ...mapById.get(item.id), ...formattedItem });
+            } else {
+              mapById.set(item.id, formattedItem);
+            }
           });
-        }
+          const merged = Array.from(mapById.values());
+          safeSetItem('ss_print_equipment_v6', merged);
+          return merged;
+        });
       }
     } catch (e) {}
 
     // 2. Inventory Items
     try {
       const res = await fetch('/api/inventory/items');
+      let dbInventory: any[] = [];
       if (res && res.ok) {
         const resData = await res.json();
         if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
-          const mapped = resData.data.map(sanitizeInventoryItem);
-          setInventory(prevInv => {
-            const mapById = new Map();
-            (prevInv || []).filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach(item => mapById.set(item.id, item));
-            mapped.filter((i: any) => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach((item: any) => {
-              if (mapById.has(item.id)) {
-                mapById.set(item.id, { ...mapById.get(item.id), ...item });
-              } else {
-                mapById.set(item.id, item);
-              }
-            });
-            const merged = Array.from(mapById.values());
-            safeSetItem('ss_print_inventory_v6', merged);
-            return merged;
-          });
+          dbInventory = resData.data.map(sanitizeInventoryItem);
         }
       }
+
+      // Merge Inbound items (Inks, Consumables, Raw Materials, Paper) directly from PostgreSQL inbound transactions
+      const inboundMaterials = inbItems.filter((i: any) => {
+        const c = (i.category || '').toUpperCase();
+        const sku = (i.skuCode || i.id || '').toUpperCase();
+        const name = (i.itemName || i.name || '').toUpperCase();
+        return c.includes('INK') || c.includes('PAPER') || c.includes('CONSUMABLE') || c.includes('MATERIAL') || 
+               name.includes('INK') || name.includes('TONER') || sku.startsWith('INK') || sku.startsWith('PAP') || sku.startsWith('MAT');
+      }).map((m: any) => {
+        const c = (m.category || '').toUpperCase();
+        const isPaper = c.includes('PAPER') || c.includes('MATERIAL') || (m.itemName || m.name || '').toLowerCase().includes('paper');
+        let multiplier = Number(m.specs?.sheets_per_pack || m.specs?.sheets_per_ream || m.specs?.sheetsPerPack || m.purchaseMultiplier || m.purchase_multiplier);
+        if (isPaper && (!multiplier || multiplier <= 1)) {
+          multiplier = 500;
+        }
+        const qty = Number(m.quantity || m.importQty || 1);
+        const totalSheets = isPaper ? (qty > 0 && qty <= 100 ? qty * multiplier : qty) : qty;
+        const pPrice = m.totalPrice && qty ? (Number(m.totalPrice) / qty) : Number(m.unitPrice || m.totalPrice || 95000);
+        const cPrice = isPaper ? (pPrice / multiplier) : pPrice;
+
+        return sanitizeInventoryItem({
+          id: m.skuCode || m.id,
+          sku: m.skuCode || m.id,
+          skuCode: m.skuCode || m.id,
+          name: m.itemName || m.name || m.skuCode || m.id,
+          category: isPaper ? 'Paper' : (m.category || 'Consumable'),
+          supplier: m.supplierName || m.supplier || 'Supplier',
+          supplierName: m.supplierName || m.supplier || 'Supplier',
+          stockQty: totalSheets,
+          unitPrice: pPrice,
+          costPerPurchaseUnit: pPrice,
+          costPerConsumptionUnit: cPrice,
+          consumptionUnit: isPaper ? 'ແຜ່ນ' : (m.unit || 'ຕຸກ'),
+          purchaseUnit: isPaper ? 'ແພັກ' : (m.unit || 'ຕຸກ'),
+          purchaseMultiplier: multiplier,
+          imageUrl: m.specs?.productImage || m.imageUrl || m.productImage || (m.actual_images && m.actual_images[0]) || null,
+          productImage: m.specs?.productImage || m.imageUrl || m.productImage || (m.actual_images && m.actual_images[0]) || null,
+          brand: m.specs?.brand || m.brand || '',
+          volume: Number(m.specs?.volume || m.specs?.volume_ml || 140),
+          specs: m.specs || {}
+        });
+      });
+
+
+      const combinedInventory = [...dbInventory, ...inboundMaterials];
+
+      if (combinedInventory.length > 0) {
+        setInventory(prevInv => {
+          const mapById = new Map();
+          (prevInv || []).filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach(item => mapById.set(item.id, item));
+          combinedInventory.filter((i: any) => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach((item: any) => {
+            if (mapById.has(item.id)) {
+              mapById.set(item.id, { ...mapById.get(item.id), ...item });
+            } else {
+              mapById.set(item.id, item);
+            }
+          });
+          const merged = Array.from(mapById.values());
+          safeSetItem('ss_print_inventory_v6', merged);
+          return merged;
+        });
+      }
     } catch (e) {}
+
 
     // 3. Orders
     try {
@@ -1404,7 +1694,14 @@ export const AppProvider = ({ children }) => {
       i.name === itemId
     );
     if (!item) return 0;
-    const baseCost = Number(item.costPerConsumptionUnit) || Number(item.costPerSheet) || (Number(item.costPerPurchaseUnit) && Number(item.purchaseMultiplier) ? Number(item.costPerPurchaseUnit) / Number(item.purchaseMultiplier) : 0) || Number(item.unitCost) || 0;
+
+    const mult = Number(item.purchaseMultiplier || item.purchase_multiplier || 500);
+    const pCost = Number(item.costPerPurchaseUnit || item.cost_per_purchase_unit || 95000);
+    const rawCostPerCons = Number(item.costPerConsumptionUnit || item.cost_per_consumption_unit || 0);
+    const baseCost = (rawCostPerCons > 0 && (mult <= 1 || rawCostPerCons < (pCost / 2)))
+      ? rawCostPerCons
+      : (mult > 0 && pCost > 0 ? (pCost / mult) : rawCostPerCons);
+
     if (!item.batches || item.batches.length === 0) {
       return baseCost;
     }
@@ -1422,7 +1719,12 @@ export const AppProvider = ({ children }) => {
 
     for (let batch of sortedBatches) {
       const bQty = Number(batch.currentQty) || 0;
-      const bCost = Number(batch.costPerSheet) || baseCost;
+      const bReamPrice = Number(batch.purchasePricePerReam || batch.purchasePrice || pCost);
+      const rawBatchCost = Number(batch.costPerSheet || batch.cost_per_sheet || 0);
+      const bCost = (rawBatchCost > 0 && (mult <= 1 || rawBatchCost < (bReamPrice / 2)))
+        ? rawBatchCost
+        : (mult > 0 && bReamPrice > 0 ? (bReamPrice / mult) : baseCost);
+
       const take = Math.min(remainingNeeded, bQty);
       accumulatedCost += take * bCost;
       remainingNeeded -= take;
@@ -1435,6 +1737,7 @@ export const AppProvider = ({ children }) => {
 
     return (Number(sheetsNeeded) || 1) > 0 ? (accumulatedCost / (Number(sheetsNeeded) || 1)) : baseCost;
   };
+
 
   const deductStockFIFO = (itemId, sheetsNeeded) => {
     setInventory(prev => {
@@ -1488,13 +1791,35 @@ export const AppProvider = ({ children }) => {
     if (!orderData) return;
     const itemsArr = orderData.items || orderData.orderItems || [orderData];
     itemsArr.forEach((ordItem: any) => {
-      const paperSku = ordItem.paperCode || ordItem.paperId || ordItem.sku || ordItem.materialId;
-      const pagesCount = Number(ordItem.pages) || Number(ordItem.pagesPerItem) || 1;
+      const paperSkus = [
+        ordItem.paperCode,
+        ordItem.paperId,
+        ordItem.cover_paper_id,
+        ordItem.inner_paper_id,
+        ordItem.sku,
+        ordItem.materialId,
+        ordItem.specs?.paper_id,
+        ordItem.specs?.inventory_material_id
+      ].filter(Boolean);
+
+      const pagesCount = Number(ordItem.pages) || Number(ordItem.page_count) || Number(ordItem.pagesPerItem) || 1;
       const printQty = Number(ordItem.quantity) || Number(ordItem.qty) || 1;
       const totalSheets = printQty * pagesCount;
 
-      if (paperSku) {
-        dischargeInventoryStock(paperSku, totalSheets, 'PRINT_PRODUCTION', `Order #${orderData.id || orderData.orderNo || 'Job'}`);
+      if (paperSkus.length > 0) {
+        const uniqueSkus = Array.from(new Set(paperSkus));
+        uniqueSkus.forEach((sku: any) => {
+          dischargeInventoryStock(sku, totalSheets, 'PRINT_PRODUCTION', `Order #${orderData.id || orderData.orderNo || 'Job'}`);
+        });
+      }
+
+      if (ordItem.ink_bottle_id || ordItem.inkSku || ordItem.specs?.ink_sku) {
+        const inkSku = ordItem.ink_bottle_id || ordItem.inkSku || ordItem.specs?.ink_sku;
+        const avgCoverage = ((Number(ordItem.avg_cov_c || 0) + Number(ordItem.avg_cov_m || 0) + Number(ordItem.avg_cov_y || 0) + Number(ordItem.avg_cov_k || 0)) / 100) || 0.15;
+        const inkMlNeeded = Math.ceil(totalSheets * avgCoverage * 0.05);
+        if (inkMlNeeded > 0) {
+          dischargeInventoryStock(inkSku, inkMlNeeded, 'PRINT_PRODUCTION', `Ink deduction for Order #${orderData.id || orderData.orderNo || 'Job'}`);
+        }
       }
     });
   };
@@ -1750,18 +2075,67 @@ export const AppProvider = ({ children }) => {
   };
 
   // Offcut management
-  const addOffcut = (offcutData) => {
+  const addOffcut = (offcutData: any) => {
+    const offcutId = offcutData.id || `OFF-${Date.now().toString().slice(-6)}`;
+    const costPerSheet = Number(offcutData.costPerSheet || offcutData.costPerConsumptionUnit || 0);
+    const qty = Number(offcutData.qty || offcutData.stockQty || 0);
+
     const newOffcut = {
-      id: `off-${Date.now().toString().slice(-4)}`,
+      id: offcutId,
+      sku: offcutId,
       name: offcutData.name,
-      qty: Number(offcutData.qty),
-      paperId: offcutData.paperId,
-      notes: offcutData.notes || ''
+      category: 'Offcut',
+      stockQty: qty,
+      consumptionUnit: 'ແຜ່ນ',
+      purchaseUnit: 'ແຜ່ນ',
+      purchaseMultiplier: 1,
+      costPerPurchaseUnit: costPerSheet,
+      costPerConsumptionUnit: costPerSheet,
+      reorderThreshold: 10,
+      paperId: offcutData.paperId || '',
+      isOffcut: true,
+      notes: offcutData.notes || '',
+      specs: {
+        widthMm: offcutData.widthMm || 148,
+        heightMm: offcutData.heightMm || 210,
+        dimensionFormatted: offcutData.dimensionFormatted || `${offcutData.widthMm || 148} x ${offcutData.heightMm || 210} mm`,
+        grammageGsm: offcutData.grammageGsm || offcutData.grammage || 0,
+        paperType: offcutData.paperType || 'Standard',
+        paperSurface: offcutData.paperSurface || '',
+        parentMaterialId: offcutData.paperId || '',
+        usableFor: offcutData.usableFor || ['Namecards', 'Hangtags', 'Small Prints']
+      },
+      batches: [
+        {
+          id: `LOT-${offcutId}`,
+          purchaseDate: new Date().toISOString().split('T')[0],
+          supplierName: 'Internal Production Offcut',
+          purchasePricePerReam: costPerSheet,
+          costPerSheet: costPerSheet,
+          initialQty: qty,
+          currentQty: qty
+        }
+      ]
     };
+
     setOffcuts(prev => [newOffcut, ...prev]);
+
+    // Also add/sync to inventory
+    setInventory(prev => {
+      const idx = prev.findIndex(i => i.id === offcutId);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...newOffcut, stockQty: next[idx].stockQty + qty };
+        safeSetItem('ss_print_inventory_v6', next);
+        return next;
+      }
+      const next = [newOffcut, ...prev];
+      safeSetItem('ss_print_inventory_v6', next);
+      return next;
+    });
   };
 
-  const consumeOffcut = (offcutId, qtyToUse) => {
+  const consumeOffcut = (offcutId: string, qtyToUse: number) => {
     setOffcuts(prev => {
       return prev.map(off => {
         if (off.id === offcutId) {
@@ -1771,8 +2145,11 @@ export const AppProvider = ({ children }) => {
           };
         }
         return off;
-      }).filter(off => off.qty > 0); // remove if exhausted
+      }).filter(off => off.qty > 0);
     });
+
+    // Also deduct from inventory stock
+    dischargeInventoryStock(offcutId, qtyToUse, 'OFFCUT_CONSUMPTION', 'Used for small job print');
   };
 
   // Pre-flight checkers
@@ -1809,15 +2186,14 @@ export const AppProvider = ({ children }) => {
     setOrders(prev => prev.map(ord => {
       if (ord.id === orderId) {
         const steps = ord.productionStepsCompleted || {};
-        const stepNames = {
+        const stepNames: Record<string, string> = {
           preflight: 'ກວດສອບໄຟລ໌ (File Validation)',
           printing: 'ພິມແຜ່ນງານ (Press Printing)',
           cutting: 'ຕັດແລະເຄືອບ (Cutting & Binding)',
           qc: 'ກວດສອບ QC (Final QC)'
         };
-        const statusText = isDone ? 'ສໍາເລັດ (Completed)' : 'ຍົກເລີก (Cancelled)';
+        const statusText = isDone ? 'ສໍາເລັດ (Completed)' : 'ຍົກເລີກ (Cancelled)';
         const logDesc = `ຂັ້ນຕອນການຜະລິດ: ${stepNames[stepKey] || stepKey} ແມ່ນ ${statusText}`;
-        
         const logs = ord.activityLog || [];
         const newLog = {
           timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16),
@@ -1863,7 +2239,8 @@ export const AppProvider = ({ children }) => {
   const updateEquipmentComponentUsage = (eqId, componentName, newUsage) => {
     setEquipment(prev => prev.map(eq => {
       if (eq.id === eqId) {
-        const updatedComponents = eq.components.map(c => {
+        const comps = Array.isArray(eq.components) ? eq.components : [];
+        const updatedComponents = comps.map(c => {
           if (c.name === componentName) {
             return { ...c, usage: Number(newUsage) };
           }
@@ -1878,7 +2255,8 @@ export const AppProvider = ({ children }) => {
   const resetEquipmentComponent = (eqId, componentName) => {
     setEquipment(prev => prev.map(eq => {
       if (eq.id === eqId) {
-        const updatedComponents = eq.components.map(c => {
+        const comps = Array.isArray(eq.components) ? eq.components : [];
+        const updatedComponents = comps.map(c => {
           if (c.name === componentName) {
             return { ...c, usage: 0 };
           }
@@ -1892,6 +2270,82 @@ export const AppProvider = ({ children }) => {
       }
       return eq;
     }));
+  };
+
+  const swapEquipmentInk = (equipmentId: string, slotPosition: string, inkSku: string, qty: number = 1, remarks?: string): boolean => {
+    const targetItem = inventory.find(i => i.id === inkSku || i.skuCode === inkSku || i.sku === inkSku);
+    const availableStock = targetItem ? Number(targetItem.stockQty || 0) : 0;
+
+    if (!targetItem || availableStock < qty) {
+      showToast(
+        `ໝຶກໃນສາງບໍ່ພຽງພໍ! (ມີເຫຼືອ: ${availableStock} ຕຸກ, ຕ້ອງການ: ${qty} ຕຸກ)`,
+        'warning'
+      );
+      return false;
+    }
+
+    dischargeInventoryStock(inkSku, qty, 'INK_SWAP', remarks || `ປ່ຽນໝຶກໃໝ່ Slot ${slotPosition} ເຄື່ອງຈັກ #${equipmentId}`);
+
+    const eq = equipment.find(e => e.id === equipmentId);
+    const eqName = eq?.name || equipmentId;
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const timeNow = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+    addDowntimeLog({
+      equipmentId,
+      equipmentName: eqName,
+      startTime: timeNow,
+      endTime: timeNow,
+      downtimeMinutes: 5,
+      reason: `ປ່ຽນໝຶກຕຸກໃໝ່ (${slotPosition})`,
+      description: `ປ່ຽນຕຸກໝຶກໃໝ່ລະຫັດ ${inkSku} (${targetItem.name}) ຈຳນວນ ${qty} ຕຸກ`,
+      actionTaken: `ຕັດສະຕັອກ ${qty} ຕຸກ ແລະ ຕື່ມໝຶກໃສ່ Slot ${slotPosition}`,
+      status: 'Completed'
+    });
+
+    showToast(`ປ່ຽນໝຶກໃໝ່ສຳເລັດ! ຕັດສະຕັອກ ${qty} ຕຸກຮຽບຮ້ອຍ`, 'success');
+    return true;
+  };
+
+  const replaceEquipmentComponent = (equipmentId: string, componentName: string, deductSparePartSku?: string, qty: number = 1, remarks?: string): boolean => {
+    if (deductSparePartSku) {
+      const targetItem = inventory.find(i => i.id === deductSparePartSku || i.skuCode === deductSparePartSku || i.sku === deductSparePartSku);
+      const availableStock = targetItem ? Number(targetItem.stockQty || 0) : 0;
+
+      if (!targetItem || availableStock < qty) {
+        showToast(
+          `ອະໄຫຼ່ໃນສາງບໍ່ພຽງພໍ! (ມີເຫຼືອ: ${availableStock} ອັນ, ຕ້ອງການ: ${qty} ອັນ)`,
+          'warning'
+        );
+        return false;
+      }
+
+      dischargeInventoryStock(deductSparePartSku, qty, 'SPARE_PART_REPLACE', remarks || `ປ່ຽນອະໄຫຼ່ ${componentName} ເຄື່ອງຈັກ #${equipmentId}`);
+    }
+
+    resetEquipmentComponent(equipmentId, componentName);
+
+    const eq = equipment.find(e => e.id === equipmentId);
+    const eqName = eq?.name || equipmentId;
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const timeNow = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+    addDowntimeLog({
+      equipmentId,
+      equipmentName: eqName,
+      startTime: timeNow,
+      endTime: timeNow,
+      downtimeMinutes: 15,
+      reason: `ປ່ຽນອະໄຫຼ່ ${componentName}`,
+      description: deductSparePartSku ? `ປ່ຽນອະໄຫຼ່ ${componentName} ແລະ ຕັດສະຕັອກ ${deductSparePartSku} (${qty} ອັນ)` : `ປ່ຽນອະໄຫຼ່ ${componentName}`,
+      actionTaken: `ຣີເຊັດອາຍຸການໃຊ້ງານຂອງ ${componentName} ເປັນ 0%`,
+      status: 'Completed'
+    });
+
+    showToast(`ປ່ຽນອະໄຫຼ່ ${componentName} ສຳເລັດ ແລະ ຣີເຊັດອາຍຸການໃຊ້ງານ 0%`, 'success');
+    return true;
   };
 
   // Calculations for dashboard
@@ -1939,7 +2393,8 @@ export const AppProvider = ({ children }) => {
     // Machine production efficiencies: calculated from print count vs limit ratio or mock index
     const machineEfficiencies = equipment.map(eq => {
       // simulate weekly efficiency based on component logs
-      const avgWear = eq.components.reduce((sum, c) => sum + c.usage, 0) / (eq.components.length || 1);
+      const comps = Array.isArray(eq.components) ? eq.components : [];
+      const avgWear = comps.length > 0 ? comps.reduce((sum, c) => sum + (Number(c?.usage) || 0), 0) / comps.length : 0;
       const efficiency = Math.round(100 - (avgWear * 0.25)); // wear decreases efficiency slightly
       return { id: eq.id, name: eq.name, efficiency };
     });
@@ -2020,11 +2475,12 @@ export const AppProvider = ({ children }) => {
       // Update equipment pages printed count
       setEquipment(prev => {
         return prev.map(eq => {
+          const comps = Array.isArray(eq.components) ? eq.components : [];
           if (eq.category === 'Printer') {
             const paperOrdered = orderData.items.find(i => i.id.startsWith('paper'));
             const pagesCount = paperOrdered ? paperOrdered.quantity : 0;
             
-            const updatedComponents = eq.components.map(c => {
+            const updatedComponents = comps.map(c => {
               const increment = Math.round((pagesCount / 1000) * 10) / 10;
               return {
                 ...c,
@@ -2034,20 +2490,20 @@ export const AppProvider = ({ children }) => {
 
             return {
               ...eq,
-              printedCount: eq.printedCount + pagesCount,
+              printedCount: (eq.printedCount || 0) + pagesCount,
               components: updatedComponents
             };
           }
           if (eq.category === 'Cutter') {
-            const updatedComponents = eq.components.map(c => {
-              if (c.name.includes('Blade')) {
+            const updatedComponents = comps.map(c => {
+              if (c.name?.includes('Blade')) {
                 return { ...c, usage: Math.min(100, c.usage + 1) };
               }
               return c;
             });
             return {
               ...eq,
-              printedCount: eq.printedCount + 1,
+              printedCount: (eq.printedCount || 0) + 1,
               components: updatedComponents
             };
           }
@@ -2110,6 +2566,89 @@ export const AppProvider = ({ children }) => {
       }
       return ord;
     }));
+  };
+
+  const startOrderProduction = (orderId: string): boolean => {
+    let orderToDeduct: any = null;
+    let alreadyDeducted = false;
+
+    setOrders(prev => prev.map(ord => {
+      if (ord.id === orderId) {
+        if (ord.stockDeducted || ord.status === 'Printing' || ord.status === 'IN_PRODUCTION') {
+          alreadyDeducted = true;
+          return ord;
+        }
+        orderToDeduct = ord;
+        const now = new Date();
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        const timeNow = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        const logs = ord.activityLog || [];
+        const newLog = {
+          timestamp: timeNow,
+          description: 'ສັ່ງພິມ ແລະ ຕັດສະຕັອກວັດຖຸດິບ (Order sent to press & stock deducted)'
+        };
+        return {
+          ...ord,
+          status: 'Printing',
+          stockDeducted: true,
+          stockDeductedAt: timeNow,
+          productionStartTime: timeNow,
+          activityLog: [newLog, ...logs]
+        };
+      }
+      return ord;
+    }));
+
+    if (alreadyDeducted) {
+      showToast('ອໍເດີນີ້ໄດ້ຕັດສະຕັອກໄປແລ້ວ', 'info');
+      return false;
+    }
+
+    if (orderToDeduct) {
+      deductStockForOrder(orderToDeduct);
+      showToast('ສັ່ງພິມ ແລະ ຕັດສະຕັອກກະດາດ/ນ້ຳມຶກຮຽບຮ້ອຍແລ້ວ!', 'success');
+
+      fetch(`http://localhost:8080/api/orders/${orderId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'IN_PRODUCTION' })
+      }).catch(err => console.log('Order status sync notice:', err));
+
+      return true;
+    }
+    return false;
+  };
+
+  const updateOrderTracking = (orderId: string, courierName: string, trackingNo: string, shippingFee?: number) => {
+    setOrders(prev => prev.map(ord => {
+      if (ord.id === orderId) {
+        const now = new Date();
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        const timeNow = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        const logs = ord.activityLog || [];
+        const newLog = {
+          timestamp: timeNow,
+          description: `ອັບເດດຂໍ້ມູນການຈັດສົ່ງ: ${courierName} (ເລກພັດສະດຸ: ${trackingNo || 'ບໍ່ມີ'})`
+        };
+        return {
+          ...ord,
+          deliveryMethod: courierName,
+          courier: courierName,
+          trackingNumber: trackingNo,
+          shippingFee: shippingFee !== undefined ? shippingFee : (ord.shippingFee || 0),
+          activityLog: [newLog, ...logs]
+        };
+      }
+      return ord;
+    }));
+
+    showToast(`ບັນທຶກເລກພັດສະດຸ ${trackingNo || ''} ສຳເລັດແລ້ວ!`, 'success');
+
+    fetch(`http://localhost:8080/api/orders/${orderId}/tracking`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ courier: courierName, tracking_number: trackingNo, shipping_fee: shippingFee })
+    }).catch(err => console.log('Order tracking sync notice:', err));
   };
 
   const settleOrderBalance = (orderId, amountPaid, method, slipNote) => {
@@ -2231,8 +2770,8 @@ export const AppProvider = ({ children }) => {
       ];
     } else if (eqData.category === 'Laminator') {
       defaultComponents = [
-        { name: 'Printhead Status (ຫົວພิມ)', usage: 0, threshold: 90 },
-        { name: 'Maintenance Box (ກ່ອງຊັບໝຶກ)', usage: 0, threshold: 90 }
+        { name: 'Lamination Roller (ລູກກິ້ງເຄືອບ)', usage: 0, threshold: 90 },
+        { name: 'Heating Element (ຊຸດຄວາມຮ້ອນ)', usage: 0, threshold: 90 }
       ];
     } else if (eqData.category === 'Binder') {
       defaultComponents = [
@@ -2566,7 +3105,8 @@ export const AppProvider = ({ children }) => {
   const updateEquipmentMaintenance = (eqId) => {
     setEquipment(prev => prev.map(eq => {
       if (eq.id === eqId) {
-        const resetComps = eq.components.map(c => ({ ...c, usage: 0 }));
+        const comps = Array.isArray(eq.components) ? eq.components : [];
+        const resetComps = comps.map(c => ({ ...c, usage: 0 }));
         return {
           ...eq,
           components: resetComps,
@@ -3249,6 +3789,8 @@ export const AppProvider = ({ children }) => {
       addOrderVersion,
       addOrder,
       updateOrderStatus,
+      startOrderProduction,
+      updateOrderTracking,
       updateOrderPaymentStatus,
       settleOrderBalance,
       deleteOrder,
@@ -3273,6 +3815,8 @@ export const AppProvider = ({ children }) => {
       addPurchaseOrder,
       updateEquipmentComponentUsage,
       resetEquipmentComponent,
+      swapEquipmentInk,
+      replaceEquipmentComponent,
       updateEquipmentMaintenance,
       resetToDefaultData,
       refreshData

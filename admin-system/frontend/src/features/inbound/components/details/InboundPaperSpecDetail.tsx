@@ -3,6 +3,10 @@ import React from 'react';
 export default function InboundPaperSpecDetail({ item, currentLang }: { item: any; currentLang: string }) {
   const specs = item.specs || item.technical_specs || item || {};
   const isSheet = (specs.paperFormat || specs.paper_format || 'sheet').toLowerCase() === 'sheet';
+  let sheetsPerPack = Number(specs.sheets_per_pack || specs.sheets_per_ream || specs.sheetsPerPack || item.purchaseMultiplier || item.purchase_multiplier);
+  if (isSheet && (!sheetsPerPack || sheetsPerPack <= 1)) {
+    sheetsPerPack = 500;
+  }
 
   return (
     <div className="grid grid-cols-2 gap-4 text-xs font-medium">
@@ -23,18 +27,17 @@ export default function InboundPaperSpecDetail({ item, currentLang }: { item: an
               <span className="text-slate-800 font-bold">{specs.standardSize}</span>
             </div>
           )}
-          {(specs.sheets_per_pack || specs.sheets_per_ream || specs.sheetsPerPack) && (
-            <div>
-              <span className="text-slate-400 block text-[11px] font-semibold">
-                {currentLang === 'lo' ? 'ຈຳນວນແຜ່ນຕໍ່ 1 ແພັກ (Sheets/Pack):' : 'Sheets per Pack:'}
-              </span>
-              <span className="text-sky-700 font-black">
-                {specs.sheets_per_pack || specs.sheets_per_ream || specs.sheetsPerPack} {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'}
-              </span>
-            </div>
-          )}
+          <div>
+            <span className="text-slate-400 block text-[11px] font-semibold">
+              {currentLang === 'lo' ? 'ຈຳນວນແຜ່ນຕໍ່ 1 ແພັກ (Sheets/Pack):' : 'Sheets per Pack:'}
+            </span>
+            <span className="text-sky-700 font-black">
+              {sheetsPerPack} {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'}
+            </span>
+          </div>
         </>
       ) : (
+
         <>
           {specs.rollWidthM && (
             <div>

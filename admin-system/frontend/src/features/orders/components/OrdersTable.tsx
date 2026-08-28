@@ -14,6 +14,11 @@ interface OrdersTableProps {
   getPaymentStatusIcon: (status: string) => React.ReactNode;
   onViewDetails: (ord: any) => void;
   onOpenQuoteModal?: (ord: any) => void;
+  onStartProduction?: (orderId: string) => void;
+  onReadyToShip?: (orderId: string) => void;
+  onOpenTrackingModal?: (ord: any) => void;
+  onPrintShippingLabel?: (ord: any) => void;
+  showToast?: (msg: string, type?: string) => void;
 }
 
 export default function OrdersTable({
@@ -28,7 +33,12 @@ export default function OrdersTable({
   getPaymentStatusBadge,
   getPaymentStatusIcon,
   onViewDetails,
-  onOpenQuoteModal
+  onOpenQuoteModal,
+  onStartProduction,
+  onReadyToShip,
+  onOpenTrackingModal,
+  onPrintShippingLabel,
+  showToast
 }: OrdersTableProps) {
   return (
     <div className="w-full overflow-x-auto rounded-3xl border border-slate-100 bg-white shadow-sm">
@@ -41,7 +51,7 @@ export default function OrdersTable({
             <th className="px-6 py-4">ສະຖານະການຊຳຣະ</th>
             <th className="px-6 py-4">ສະຖານະການຜະລິດ</th>
             <th className="px-6 py-4 text-right">ຍອດລວມ (LAK)</th>
-            <th className="px-6 py-4 text-center">ຈັດການ</th>
+            <th className="px-6 py-4 text-center">ຈັດການດ່ວນ (Quick Actions)</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -57,6 +67,11 @@ export default function OrdersTable({
               getPaymentStatusBadge={getPaymentStatusBadge}
               getPaymentStatusIcon={getPaymentStatusIcon}
               onViewDetails={onViewDetails}
+              onStartProduction={onStartProduction}
+              onReadyToShip={onReadyToShip}
+              onOpenTrackingModal={onOpenTrackingModal}
+              onPrintShippingLabel={onPrintShippingLabel}
+              showToast={showToast}
               isSelected={selectedOrder?.id === ord.id}
               focusRef={selectedOrder?.id === ord.id ? focusRef : null}
             />

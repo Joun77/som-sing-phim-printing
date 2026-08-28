@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
 
 // InventoryItem represents an inventory SKU with dynamic technical specs
 type InventoryItem struct {
@@ -573,6 +575,26 @@ func getInventoryItemsFromDB() ([]InventoryItem, error) {
 			continue
 		}
 
+		catLower := strings.ToLower(item.Category)
+		isPaper := strings.Contains(catLower, "paper") || strings.Contains(catLower, "material") || strings.Contains(strings.ToLower(item.Name), "paper") || strings.Contains(strings.ToLower(item.Name), "double a") || strings.Contains(strings.ToLower(item.Name), "green read") || strings.Contains(strings.ToLower(item.Name), "idea")
+		if isPaper {
+			if multiplier <= 1 {
+				multiplier = 500
+			}
+			if stockQty > 0 && stockQty <= 100 {
+				stockQty = stockQty * multiplier
+			}
+			if costCon <= 0 || (multiplier > 1 && costCon >= (costPur/2) && costPur > 0) {
+				costCon = costPur / multiplier
+			}
+			if item.ConsumptionUnit == "" || item.ConsumptionUnit == "Unit" {
+				item.ConsumptionUnit = "ແຜ່ນ"
+			}
+			if item.PurchaseUnit == "" || item.PurchaseUnit == "Unit" {
+				item.PurchaseUnit = "ແພັກ"
+			}
+		}
+
 		item.StockQty = int(stockQty)
 		item.PurchaseMultiplier = int(multiplier)
 		item.CostPerPurchaseUnit = costPur
@@ -584,6 +606,7 @@ func getInventoryItemsFromDB() ([]InventoryItem, error) {
 			json.Unmarshal(techJSON, &item.TechnicalSpecs)
 			item.Specs = item.TechnicalSpecs
 		}
+
 
 		items = append(items, item)
 	}

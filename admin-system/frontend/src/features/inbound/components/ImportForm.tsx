@@ -108,6 +108,18 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
     };
 
     if (item.importType === 'PRINTER') {
+      const pLifespanYears = Number(item.printerLifespanYears || 5);
+      const pEstMonthlyVol = Number(item.printerEstMonthlyVolume || 50000);
+      const pTotalMonths = pLifespanYears * 12;
+      const pTargetPages = Number(item.expectedLifeA4 || (pLifespanYears * 12 * pEstMonthlyVol) || 3000000);
+      const pMaintRatePct = Number(item.maintenanceRatePct || 15);
+      const pFixedMaintCost = Number(item.printerMaintenanceCostPerPage || 0);
+
+      const mMonthlyDepr = pTotalMonths > 0 ? (unitPriceLak / pTotalMonths) : 0;
+      const mBaseRate = pEstMonthlyVol > 0 ? (mMonthlyDepr / pEstMonthlyVol) : (pTargetPages > 0 ? (unitPriceLak / pTargetPages) : 0);
+      const mWearRate = Math.round(mBaseRate * (pMaintRatePct / 100) * 100) / 100 + pFixedMaintCost;
+      const pNetRate = Math.round((mBaseRate + mWearRate) * 100) / 100;
+
       const printerSpecsObj = {
         brand: item.printerBrand,
         model: item.printerModel,
@@ -118,8 +130,17 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
         },
         colorSchemeType: item.colorSchemeType,
         totalColorSlots: Number(item.totalColorSlots),
-        expectedLifeA4Pages: Number(item.expectedLifeA4),
-        maintenanceRatePercent: Number(item.maintenanceRatePct),
+        expectedLifeA4Pages: pTargetPages,
+        lifespanYears: pLifespanYears,
+        estMonthlyVolume: pEstMonthlyVol,
+        maintenanceRatePercent: pMaintRatePct,
+        maintenanceCostPerPage: pFixedMaintCost,
+        speedPpm: item.printerSpeedPpm || '25 ppm (A4)',
+        maxWidth: item.printerMaxWidth || 'A3+ (329 x 483 mm)',
+        inkType: item.printerInkType || 'Pigment Ink (DURABrite Pro)',
+        printTech: item.printerPrintTech || 'PrecisionCore Heat-Free',
+        blackYieldPages: Number(item.printerBlackYield || 7500),
+        colorYieldPages: Number(item.printerColorYield || 6000),
         oemBaselineInks: item.printerInkSlots,
         actual_images: item.actualImages,
         payment_slip: item.paymentSlip,
@@ -144,8 +165,22 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
         },
         colorSchemeType: item.colorSchemeType,
         totalColorSlots: Number(item.totalColorSlots),
-        expectedLifeA4Pages: Number(item.expectedLifeA4),
-        maintenanceRatePercent: Number(item.maintenanceRatePct),
+        expectedLifeA4Pages: pTargetPages,
+        TargetTotalPages: pTargetPages,
+        printedPagesCapacity: pTargetPages,
+        lifespanYears: pLifespanYears,
+        estMonthlyVolume: pEstMonthlyVol,
+        maintenanceRatePercent: pMaintRatePct,
+        MaintenanceCostPerPage: pFixedMaintCost,
+        maintenanceCostPerPage: pFixedMaintCost,
+        costPerConsumptionUnit: pNetRate,
+        calculatedCostPerPage: pNetRate,
+        speedPpm: item.printerSpeedPpm || '25 ppm (A4)',
+        maxWidth: item.printerMaxWidth || 'A3+ (329 x 483 mm)',
+        inkType: item.printerInkType || 'Pigment Ink (DURABrite Pro)',
+        printTech: item.printerPrintTech || 'PrecisionCore Heat-Free',
+        blackYieldPages: Number(item.printerBlackYield || 7500),
+        colorYieldPages: Number(item.printerColorYield || 6000),
         printerColorLinks: item.printerInkSlots,
         oemBaselineInks: item.printerInkSlots,
         actual_images: item.actualImages,
@@ -158,6 +193,9 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
         purchaseDate: item.importDate,
         price: unitPriceLak,
         unitPrice: unitPriceLak,
+        purchaseCost: unitPriceLak,
+        purchasePrice: unitPriceLak,
+        MachinePrice: unitPriceLak,
         vendor: item.importVendor,
         location: item.printerLocation,
         warrantyExpirationYear: item.printerWarrantyYear,

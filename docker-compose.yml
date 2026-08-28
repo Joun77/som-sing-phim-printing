@@ -64,6 +64,29 @@ services:
     depends_on:
       - backend
 
+  # Web-based PostgreSQL Database Manager (Adminer)
+  db-web:
+    image: adminer:latest
+    container_name: somsing_adminer
+    restart: always
+    ports:
+      - "8088:8080"
+    depends_on:
+      - db
+
+  # pgAdmin 4 (Web UI Equivalent to phpMyAdmin for PostgreSQL)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: somsing_pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@somsing.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+
 volumes:
   postgres_data:
   backend_uploads:

@@ -68,7 +68,7 @@ export default function CreateOrderPage({
   const [province, setProvince] = useState('ນະຄອນຫຼວງວຽງຈັນ');
 
   // STEP 2: DELIVERY & LOGISTICS SELECTION
-  const { couriers = [] } = useApp();
+  const { couriers = [], printerColorLinks = [] } = useApp();
   const [deliveryMethod, setDeliveryMethod] = useState<'Pickup' | 'Courier' | 'Direct'>('Pickup');
   const [selectedCourierId, setSelectedCourierId] = useState<string>(() => couriers?.[0]?.id || 'anousith');
   const [courierBranchCode, setCourierBranchCode] = useState('');
@@ -318,9 +318,37 @@ export default function CreateOrderPage({
       const breakdowns = [];
       for (const it of items) {
         const paperItem = inventory ? inventory.find(p => p.id === it.paperId) : null;
-        const paperCost = paperItem ? (paperItem.costPerConsumptionUnit || 90) : 100;
+        const paperCost = paperItem ? (paperItem.costPerConsumptionUnit || paperItem.unitPrice || 90) : 100;
         const printerItem = equipment ? equipment.find(e => e.id === it.printerId) : null;
-        const inkCostPerMl = printerItem ? (printerItem.inkUnitCostMl || 500) : 500;
+
+        const prnPrice = Number(printerItem?.MachinePrice ?? printerItem?.purchasePrice ?? printerItem?.purchaseCost ?? printerItem?.price ?? 0);
+        const prnTargetPages = Number(printerItem?.TargetTotalPages || printerItem?.printedPagesCapacity || printerItem?.expectedLifeA4Pages || (Number(printerItem?.lifespanYears || 5) * 12 * Number(printerItem?.estMonthlyVolume || 50000)) || 3000000);
+        const prnMaintRatePct = Number(printerItem?.maintenanceRatePercent || 15);
+        const prnMaintCostPerPage = Number(printerItem?.MaintenanceCostPerPage || printerItem?.maintenanceCostPerPage || (prnTargetPages > 0 && prnPrice > 0 ? (prnPrice / prnTargetPages) * (prnMaintRatePct / 100) : 0));
+
+        let inkCostKPerMl = 3500;
+        let inkCostCMYPerMl = 4500;
+
+        if (printerItem) {
+          const links = (printerColorLinks || []).filter((l: any) => l.assetId === printerItem.id);
+          const kLink = links.find((l: any) => l.colorGroup === 'Black' || l.slotPosition?.toLowerCase().includes('black') || l.slotPosition?.includes('(k)'));
+          if (kLink) {
+            const kInk = (inventory || []).find((i: any) => i.id === kLink.inkCode || i.skuCode === kLink.inkCode || i.sku === kLink.inkCode);
+            if (kInk && Number(kInk.unitPrice) > 0 && Number(kInk.volume || 100) > 0) {
+              inkCostKPerMl = Number(kInk.unitPrice) / Number(kInk.volume || 100);
+            }
+          }
+          const cmyLinks = links.filter((l: any) => l.colorGroup !== 'Black' && !l.slotPosition?.toLowerCase().includes('black') && !l.slotPosition?.includes('(k)'));
+          if (cmyLinks.length > 0) {
+            const cmyPrices = cmyLinks.map((l: any) => {
+              const cmyInk = (inventory || []).find((i: any) => i.id === l.inkCode || i.skuCode === l.inkCode || i.sku === l.inkCode);
+              return (cmyInk && Number(cmyInk.unitPrice) > 0 && Number(cmyInk.volume || 100) > 0)
+                ? Number(cmyInk.unitPrice) / Number(cmyInk.volume || 100)
+                : 4500;
+            });
+            inkCostCMYPerMl = cmyPrices.reduce((a: number, b: number) => a + b, 0) / cmyPrices.length;
+          }
+        }
 
         const payload = {
           job_name: it.name,
@@ -330,11 +358,11 @@ export default function CreateOrderPage({
           paper_format: it.mediaType === 'Roll-fed' ? 'roll' : 'sheet',
           ink_coverage_k_percent: Number(it.avgCoverageK !== undefined ? it.avgCoverageK : (it.avgCoverage || 5)),
           ink_coverage_cmy_percent: it.colorMode === 'Monochrome' ? 0.0 : Number(it.avgCoverageCMY !== undefined ? it.avgCoverageCMY : 10),
-          ink_cost_k_per_ml: Number(printerItem?.inkUnitCostMl || inkCostPerMl),
-          ink_cost_cmy_per_ml: Number(printerItem?.inkUnitCostCMY || printerItem?.inkUnitCostMl || 600),
-          machine_price: Number(printerItem?.price || printerItem?.machinePrice || 0),
-          target_total_pages: Number(printerItem?.targetTotalPages || printerItem?.targetPages || 1000000),
-          maintenance_cost_per_page: Number(printerItem?.maintenanceCostPerPage || printerItem?.maintenanceCost || 0),
+          ink_cost_k_per_ml: inkCostKPerMl,
+          ink_cost_cmy_per_ml: inkCostCMYPerMl,
+          machine_price: prnPrice,
+          target_total_pages: prnTargetPages,
+          maintenance_cost_per_page: prnMaintCostPerPage,
           job_width: Number(it.jobWidth || 210),
           job_height: Number(it.jobHeight || 297),
           custom_finishing_options: it.customFinishingOptions || [],
@@ -361,10 +389,10 @@ export default function CreateOrderPage({
 
       setBackendCalculationBreakdown(breakdowns);
       setCurrentStep(4);
-      showToast('ຄິດໄລ່ລາຄາຈາກ Pricing Engine สำเร็จ!', 'success');
+      showToast('ຄິດໄລ່ລາຄາຈາກ Pricing Engine ສຳເລັດ!', 'success');
     } catch (err) {
       console.error(err);
-      showToast('ໃຊ້ລະບົບຄິດໄລ່สำรองເນື່ອງຈາກเซิร์ฟເວີ Offline', 'warning');
+      showToast('ໃຊ້ລະບົບຄິດໄລ່ສຳຮອງເນື່ອງຈາກເຊີບເວີ Offline', 'warning');
       setCurrentStep(4);
     } finally {
       setIsCalculating(false);
@@ -413,7 +441,35 @@ export default function CreateOrderPage({
         const paperItem = inventory ? inventory.find(p => p.id === it.paperId) : null;
         const paperCost = paperItem ? (paperItem.costPerConsumptionUnit || paperItem.costPerSheet || 90) : 100;
         const printerItem = equipment ? equipment.find(e => e.id === it.printerId) : null;
-        const inkCostPerMl = printerItem ? (printerItem.inkUnitCostMl || 500) : 500;
+
+        const prnPrice = Number(printerItem?.MachinePrice ?? printerItem?.purchasePrice ?? printerItem?.purchaseCost ?? printerItem?.price ?? 0);
+        const prnTargetPages = Number(printerItem?.TargetTotalPages || printerItem?.printedPagesCapacity || printerItem?.expectedLifeA4Pages || (Number(printerItem?.lifespanYears || 5) * 12 * Number(printerItem?.estMonthlyVolume || 50000)) || 3000000);
+        const prnMaintRatePct = Number(printerItem?.maintenanceRatePercent || 15);
+        const prnMaintCostPerPage = Number(printerItem?.MaintenanceCostPerPage || printerItem?.maintenanceCostPerPage || (prnTargetPages > 0 && prnPrice > 0 ? (prnPrice / prnTargetPages) * (prnMaintRatePct / 100) : 0));
+
+        let inkCostKPerMl = 3500;
+        let inkCostCMYPerMl = 4500;
+
+        if (printerItem) {
+          const links = (printerColorLinks || []).filter((l: any) => l.assetId === printerItem.id);
+          const kLink = links.find((l: any) => l.colorGroup === 'Black' || l.slotPosition?.toLowerCase().includes('black') || l.slotPosition?.includes('(k)'));
+          if (kLink) {
+            const kInk = (inventory || []).find((i: any) => i.id === kLink.inkCode || i.skuCode === kLink.inkCode || i.sku === kLink.inkCode);
+            if (kInk && Number(kInk.unitPrice) > 0 && Number(kInk.volume || 100) > 0) {
+              inkCostKPerMl = Number(kInk.unitPrice) / Number(kInk.volume || 100);
+            }
+          }
+          const cmyLinks = links.filter((l: any) => l.colorGroup !== 'Black' && !l.slotPosition?.toLowerCase().includes('black') && !l.slotPosition?.includes('(k)'));
+          if (cmyLinks.length > 0) {
+            const cmyPrices = cmyLinks.map((l: any) => {
+              const cmyInk = (inventory || []).find((i: any) => i.id === l.inkCode || i.skuCode === l.inkCode || i.sku === l.inkCode);
+              return (cmyInk && Number(cmyInk.unitPrice) > 0 && Number(cmyInk.volume || 100) > 0)
+                ? Number(cmyInk.unitPrice) / Number(cmyInk.volume || 100)
+                : 4500;
+            });
+            inkCostCMYPerMl = cmyPrices.reduce((a: number, b: number) => a + b, 0) / cmyPrices.length;
+          }
+        }
 
         const paperSetup = {
           category_id: paperItem?.category || 'Paper',
@@ -472,11 +528,11 @@ export default function CreateOrderPage({
           paper_format: it.mediaType === 'Roll-fed' ? 'roll' : 'sheet',
           ink_coverage_k_percent: Number(it.avgCoverageK !== undefined ? it.avgCoverageK : (it.avgCoverage || 5)),
           ink_coverage_cmy_percent: it.colorMode === 'Monochrome' ? 0.0 : Number(it.avgCoverageCMY !== undefined ? it.avgCoverageCMY : 10),
-          ink_cost_k_per_ml: Number(printerItem?.inkUnitCostMl || inkCostPerMl),
-          ink_cost_cmy_per_ml: Number(printerItem?.inkUnitCostCMY || printerItem?.inkUnitCostMl || 600),
-          machine_price: Number(printerItem?.price || printerItem?.machinePrice || 0),
-          target_total_pages: Number(printerItem?.targetTotalPages || printerItem?.targetPages || 1000000),
-          maintenance_cost_per_page: Number(printerItem?.maintenanceCostPerPage || printerItem?.maintenanceCost || 0),
+          ink_cost_k_per_ml: inkCostKPerMl,
+          ink_cost_cmy_per_ml: inkCostCMYPerMl,
+          machine_price: prnPrice,
+          target_total_pages: prnTargetPages,
+          maintenance_cost_per_page: prnMaintCostPerPage,
           job_width: Number(it.jobWidth || 210),
           job_height: Number(it.jobHeight || 297),
           custom_finishing_options: it.customFinishingOptions || [],
@@ -1070,9 +1126,7 @@ export default function CreateOrderPage({
                           <div className="flex items-center gap-2 text-xs font-black text-emerald-800">
                             <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
                             <span>
-                              {currentLang === 'la'
-                                ? `💡 ແນະນຳ: ໃຊ້ເສດເຈ້ຍລັອດ #${rec.id} ໃນຄັງ (ປະຢັດຕົ້ນທຶນເຈ້ຍ 35%)`
-                                : `แนะนำ: ใช้เศษกระดาษล็อต #${rec.id} ในคลัง (ประหยัดต้นทุนกระดาษ 35%)`}
+                              ແນະນຳ: ໃຊ້ເສດເຈ້ຍລັອດ #{rec.id} ໃນຄັງ (ປະຢັດຕົ້ນທຶນເຈ້ຍ 35%)
                             </span>
                           </div>
                           <span className="px-2 py-0.5 rounded bg-emerald-600 text-white font-mono text-[10px] font-black uppercase tracking-wider">
@@ -1242,7 +1296,7 @@ export default function CreateOrderPage({
                   <thead>
                     <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase">
                       <th className="py-2 text-left">ລາຍການ (Job)</th>
-                      <th className="py-2 text-right">ເຈ້ย (Paper)</th>
+                      <th className="py-2 text-right">ເຈ້ຍ (Paper)</th>
                       <th className="py-2 text-right">ໝຶກ (Ink)</th>
                       <th className="py-2 text-right">ເຄືອບ (Lam)</th>
                       <th className="py-2 text-right">ເຂົ້າເລັ້ມ (Bind)</th>

@@ -137,39 +137,90 @@ export default function InboundManagement() {
       if (res.ok) {
         const data = await res.json();
         const deletedIds = getDeletedIds();
-        if (data.status === 'success' && Array.isArray(data.data) && data.data.length > 0) {
-          const mapped = data.data.map((item: any) => ({
-            id: item.id,
-            poNumber: item.poNumber || item.id,
-            receiptDate: item.inboundDate || new Date().toISOString().split('T')[0],
-            category: item.category,
-            categoryPill: item.category,
-            name: resolveInboundItemName(item),
-            itemName: resolveInboundItemName(item),
-            sku: item.skuCode,
-            currentQty: item.quantity || 1,
-            initialQty: item.quantity || 1,
-            unit: (item.category === 'PRINTER' || item.category === 'MACHINERY') ? 'ເຄື່ອງ' : item.category === 'INK' ? 'ຂວດ' : (item.unit || 'ແຜ່ນ'),
-            subUnit: `(${item.quantity} ${item.unit || 'Unit'})`,
-            supplier: item.supplierName || 'Supplier',
-            totalPrice: item.totalPrice || 0,
-            paymentMethod: item.paymentMethod || 'TRANSFER',
-            origin: item.origin || 'TH',
-            specs: item.specs || {},
-            docs: {
-              productPhoto: item.productImage || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='100%25' height='100%25' fill='%23f1f5f9'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%2364748b'%3EProduct Photo%3C/text%3E%3C/svg%3E",
-              paymentSlip: item.receiptSlip || ''
-            },
-            receiptUrl: item.receiptSlip || ''
-          }));
-          setInboundList(prevList => {
-            const mapById = new Map();
-            (prevList || []).filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach(item => mapById.set(item.id, item));
-            mapped.filter((i: any) => !deletedIds.has(i.id) && !deletedIds.has(i.id?.toLowerCase())).forEach((item: any) => mapById.set(item.id, item));
-            const merged = Array.from(mapById.values());
-            localStorage.setItem('som_sing_inbound_list', JSON.stringify(merged));
-            return merged;
-          });
+        let dbRows = (data.status === 'success' && Array.isArray(data.data)) ? data.data : [];
+        const dbIdSet = new Set(dbRows.map((d: any) => d.id?.toLowerCase()));
+
+        // 1. Auto-sync any local items that are missing from PostgreSQL database
+        const localCachedRaw = localStorage.getItem('som_sing_inbound_list');
+        let localCached: any[] = [];
+        if (localCachedRaw) {
+          try { localCached = JSON.parse(localCachedRaw); } catch (e) {}
+        }
+        
+        const missingFromDb = (localCached || []).filter((item: any) => 
+          item && item.id && !dbIdSet.has(item.id.toLowerCase()) && !deletedIds.has(item.id) && !deletedIds.has(item.id.toLowerCase())
+        );
+
+        if (missingFromDb.length > 0) {
+          for (const item of missingFromDb) {
+            try {
+              await fetch('http://localhost:8080/api/inbound', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: item.id,
+                  poNumber: item.poNumber || item.id,
+                  inboundDate: item.receiptDate || item.inboundDate || new Date().toISOString().split('T')[0],
+                  skuCode: item.sku || item.skuCode || item.id,
+                  itemName: item.name || item.itemName || item.id,
+                  supplierName: item.supplier || item.supplierName || 'Supplier',
+                  category: item.category || 'PAPER',
+                  quantity: Number(item.currentQty || item.initialQty || item.quantity || 1),
+                  unit: item.unit || 'Unit',
+                  totalPrice: Number(item.totalPrice || 0),
+                  paymentMethod: item.paymentMethod || 'TRANSFER',
+                  origin: item.origin || 'TH',
+                  specs: item.specs || {},
+                  productImage: item.docs?.productPhoto || item.productImage || '',
+                  receiptSlip: item.docs?.paymentSlip || item.receiptSlip || ''
+                })
+              });
+            } catch (syncErr) {
+              console.warn('Auto-sync item to PostgreSQL error:', syncErr);
+            }
+          }
+
+          // Re-fetch after syncing all missing records to get full DB state
+          const reRes = await fetch('http://localhost:8080/api/inbound');
+          if (reRes.ok) {
+            const reData = await reRes.json();
+            if (reData.status === 'success' && Array.isArray(reData.data)) {
+              dbRows = reData.data;
+            }
+          }
+        }
+
+        // 2. Map directly from PostgreSQL (Database as Single Source of Truth)
+        if (dbRows.length > 0) {
+          const mapped = dbRows
+            .filter((item: any) => !deletedIds.has(item.id) && !deletedIds.has(item.id?.toLowerCase()))
+            .map((item: any) => ({
+              id: item.id,
+              poNumber: item.poNumber || item.id,
+              receiptDate: item.inboundDate || new Date().toISOString().split('T')[0],
+              category: item.category,
+              categoryPill: item.category,
+              name: resolveInboundItemName(item),
+              itemName: resolveInboundItemName(item),
+              sku: item.skuCode,
+              currentQty: item.quantity || 1,
+              initialQty: item.quantity || 1,
+              unit: (item.category === 'PRINTER' || item.category === 'MACHINERY') ? 'ເຄື່ອງ' : item.category === 'INK' ? 'ຂວດ' : (item.unit || 'ແຜ່ນ'),
+              subUnit: `(${item.quantity} ${item.unit || 'Unit'})`,
+              supplier: item.supplierName || 'Supplier',
+              totalPrice: item.totalPrice || 0,
+              paymentMethod: item.paymentMethod || 'TRANSFER',
+              origin: item.origin || 'TH',
+              specs: item.specs || {},
+              docs: {
+                productPhoto: item.productImage || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='100%25' height='100%25' fill='%23f1f5f9'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%2364748b'%3EProduct Photo%3C/text%3E%3C/svg%3E",
+                paymentSlip: item.receiptSlip || ''
+              },
+              receiptUrl: item.receiptSlip || ''
+            }));
+
+          setInboundList(mapped);
+          localStorage.setItem('som_sing_inbound_list', JSON.stringify(mapped));
         }
       }
     } catch (err) {
@@ -497,7 +548,8 @@ export default function InboundManagement() {
       const packQty = Number(data.importQty || 1);
       const totalSheets = isSheetPaper ? packQty * sheetsPerPack : packQty;
       const unitPrice = Number(data.unitPrice || data.price || calcTotal || 95000);
-      const perSheetPrice = isSheetPaper ? Math.round(unitPrice / sheetsPerPack) : unitPrice;
+      const perSheetPrice = isSheetPaper && sheetsPerPack > 0 ? (unitPrice / sheetsPerPack) : unitPrice;
+
 
       const existingItem = inventory.find(item => 
         (item.id && (item.id === data.id || item.id === data.sku || item.id === logId)) ||
@@ -1070,10 +1122,23 @@ export default function InboundManagement() {
                         if (cat === 'INK') {
                           return `${rawQty} ${currentLang === 'lo' ? 'ຂວດ' : 'Bottle'}`;
                         }
-                        if (cat === 'PAPER' || cat === 'MATERIAL') {
+                        const isPaper = cat === 'PAPER' || cat === 'MATERIAL' || (selectedDrawerItem.name || '').toLowerCase().includes('paper');
+                        if (isPaper) {
                           const isSheet = (selectedDrawerItem.specs?.paperFormat || selectedDrawerItem.paperFormat || 'sheet').toLowerCase() === 'sheet';
                           if (isSheet) {
-                            const sheetsPerPack = Number(selectedDrawerItem.specs?.sheetsPerPack || selectedDrawerItem.specs?.sheets_per_ream || selectedDrawerItem.sheetsPerPack || selectedDrawerItem.sheets_per_ream) || 500;
+                            let sheetsPerPack = Number(
+                              selectedDrawerItem.specs?.sheetsPerPack || 
+                              selectedDrawerItem.specs?.sheets_per_ream || 
+                              selectedDrawerItem.specs?.sheets_per_pack || 
+                              selectedDrawerItem.sheetsPerPack || 
+                              selectedDrawerItem.sheets_per_ream ||
+                              selectedDrawerItem.purchaseMultiplier
+                            );
+                            if (!sheetsPerPack || sheetsPerPack <= 1) {
+                              const invItem = inventory.find(i => i.id === selectedDrawerItem.specs?.materialId || i.sku === selectedDrawerItem.sku || i.id === selectedDrawerItem.id || (i.name && selectedDrawerItem.name && i.name.toLowerCase().trim() === selectedDrawerItem.name.toLowerCase().trim()));
+                              sheetsPerPack = Number(invItem?.purchaseMultiplier || invItem?.purchase_multiplier || invItem?.specs?.sheetsPerPack || 500);
+                            }
+                            if (sheetsPerPack <= 1) sheetsPerPack = 500;
                             const totalSheets = rawQty * sheetsPerPack;
                             return (
                               <div>
@@ -1093,7 +1158,8 @@ export default function InboundManagement() {
                     <span className="text-[11px] text-blue-900 font-extrabold block mb-1">
                       {(() => {
                         const cat = (selectedDrawerItem.category || '').toUpperCase();
-                        if (cat === 'PAPER' || cat === 'MATERIAL') {
+                        const isPaper = cat === 'PAPER' || cat === 'MATERIAL' || (selectedDrawerItem.name || '').toLowerCase().includes('paper');
+                        if (isPaper) {
                           return currentLang === 'lo' ? 'ຕົ້ນທຶນຕໍ່ແຜ່ນ (Cost/Sheet)' : 'Cost Per Sheet';
                         }
                         return currentLang === 'lo' ? 'ຕົ້ນທຶນຕໍ່ໜ່ວຍ (Unit Cost)' : 'Unit Cost';
@@ -1104,13 +1170,26 @@ export default function InboundManagement() {
                         const cat = (selectedDrawerItem.category || '').toUpperCase();
                         const rawQty = Number(selectedDrawerItem.initialQty || selectedDrawerItem.currentQty) || 1;
                         const totalPrice = Number(selectedDrawerItem.totalPrice) || 0;
-                        if (cat === 'PAPER' || cat === 'MATERIAL') {
+                        const isPaper = cat === 'PAPER' || cat === 'MATERIAL' || (selectedDrawerItem.name || '').toLowerCase().includes('paper');
+                        if (isPaper) {
                           const isSheet = (selectedDrawerItem.specs?.paperFormat || selectedDrawerItem.paperFormat || 'sheet').toLowerCase() === 'sheet';
                           if (isSheet) {
-                            const sheetsPerPack = Number(selectedDrawerItem.specs?.sheetsPerPack || selectedDrawerItem.specs?.sheets_per_ream || selectedDrawerItem.sheetsPerPack || selectedDrawerItem.sheets_per_ream) || 500;
+                            let sheetsPerPack = Number(
+                              selectedDrawerItem.specs?.sheetsPerPack || 
+                              selectedDrawerItem.specs?.sheets_per_ream || 
+                              selectedDrawerItem.specs?.sheets_per_pack || 
+                              selectedDrawerItem.sheetsPerPack || 
+                              selectedDrawerItem.sheets_per_ream ||
+                              selectedDrawerItem.purchaseMultiplier
+                            );
+                            if (!sheetsPerPack || sheetsPerPack <= 1) {
+                              const invItem = inventory.find(i => i.id === selectedDrawerItem.specs?.materialId || i.sku === selectedDrawerItem.sku || i.id === selectedDrawerItem.id || (i.name && selectedDrawerItem.name && i.name.toLowerCase().trim() === selectedDrawerItem.name.toLowerCase().trim()));
+                              sheetsPerPack = Number(invItem?.purchaseMultiplier || invItem?.purchase_multiplier || invItem?.specs?.sheetsPerPack || 500);
+                            }
+                            if (sheetsPerPack <= 1) sheetsPerPack = 500;
                             const totalSheets = rawQty * sheetsPerPack;
-                            const costPerSheet = Math.round(totalPrice / Math.max(1, totalSheets));
-                            const costPerPack = Math.round(totalPrice / Math.max(1, rawQty));
+                            const costPerSheet = totalPrice / Math.max(1, totalSheets);
+                            const costPerPack = totalPrice / Math.max(1, rawQty);
                             return (
                               <div>
                                 <span className="block text-emerald-700">{formatLAK(costPerSheet)} <span className="text-xs font-bold text-slate-500">/ {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheet'}</span></span>
@@ -1119,8 +1198,9 @@ export default function InboundManagement() {
                             );
                           }
                         }
-                        return `${formatLAK(Math.round(totalPrice / Math.max(1, rawQty)))} / ${selectedDrawerItem.unit || 'Unit'}`;
+                        return `${formatLAK(totalPrice / Math.max(1, rawQty))} / ${selectedDrawerItem.unit || 'Unit'}`;
                       })()}
+
                     </div>
                   </div>
                 </div>

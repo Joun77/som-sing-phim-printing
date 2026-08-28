@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Eye, Layers, Maximize2, ShieldCheck, Ruler } from 'lucide-react';
+import { Eye, Layers, Maximize2, ShieldCheck, Ruler, Disc, Scissors } from 'lucide-react';
 
 export type GrommetMode = 'NONE' | 'FOUR_CORNERS' | 'EVERY_50CM';
 
@@ -201,7 +201,7 @@ export const PrintArtworkVisualizer: React.FC<PrintArtworkVisualizerProps> = ({
                 ? 'bg-cyan-950 text-cyan-300 border border-cyan-700 shadow-sm'
                 : 'bg-slate-800 text-slate-400 hover:text-slate-200'
             }`}
-            title="สลับการแสดงเส้น Safe Zone / Bleed Line"
+            title="ສະແດງເສັ້ນ Safe Zone / Bleed Line"
           >
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>Safe Zone</span>
@@ -215,10 +215,10 @@ export const PrintArtworkVisualizer: React.FC<PrintArtworkVisualizerProps> = ({
                 ? 'bg-emerald-950 text-emerald-300 border border-emerald-700 shadow-sm'
                 : 'bg-slate-800 text-slate-400 hover:text-slate-200'
             }`}
-            title="สลับการแสดงขนาดมิติ"
+            title="ສະແດງຂະໜາດມິຕິ"
           >
             <Ruler className="w-3.5 h-3.5" />
-            <span>มิติสัดส่วน</span>
+            <span>ມິຕິສັດສ່ວນ</span>
           </button>
         </div>
       </div>
@@ -230,13 +230,15 @@ export const PrintArtworkVisualizer: React.FC<PrintArtworkVisualizerProps> = ({
         {/* Overlay Badges */}
         <div className="absolute bottom-4 left-4 flex flex-wrap items-center gap-2 pointer-events-none text-[11px]">
           {grommetPositions !== 'NONE' && (
-            <span className="px-2 py-1 rounded-md bg-slate-900/90 text-amber-300 border border-amber-500/40 shadow-sm backdrop-blur-sm">
-              ⚙️ ตาไก่: {grommetPositions === 'FOUR_CORNERS' ? '4 มุม' : 'ทุกๆ 50 cm'}
+            <span className="px-2 py-1 rounded-md bg-slate-900/90 text-amber-300 border border-amber-500/40 shadow-sm backdrop-blur-sm flex items-center gap-1.5">
+              <Disc className="w-3.5 h-3.5 text-amber-400" />
+              <span>ຕອກຕາໄກ່: {grommetPositions === 'FOUR_CORNERS' ? '4 ມຸມ' : 'ທຸກໆ 50 cm'}</span>
             </span>
           )}
           {hasHemming && (
-            <span className="px-2 py-1 rounded-md bg-slate-900/90 text-rose-300 border border-rose-500/40 shadow-sm backdrop-blur-sm">
-              🧵 พับขอบรอบด้าน
+            <span className="px-2 py-1 rounded-md bg-slate-900/90 text-rose-300 border border-rose-500/40 shadow-sm backdrop-blur-sm flex items-center gap-1.5">
+              <Scissors className="w-3.5 h-3.5 text-rose-400" />
+              <span>ພັບຂອບຮອບດ້ານ</span>
             </span>
           )}
         </div>
@@ -261,7 +263,7 @@ export const PrintArtworkVisualizer: React.FC<PrintArtworkVisualizerProps> = ({
           )}
         </div>
         <div className="text-slate-500 italic">
-          อัตราส่วนจำลองแบบ Real-time ตามสเกลจริง
+          ອັດຕາສ່ວນຈຳລອງແບບ Real-time ຕາມສະເກວຈິງ
         </div>
       </div>
     </div>

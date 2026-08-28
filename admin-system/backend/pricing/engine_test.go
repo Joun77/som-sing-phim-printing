@@ -115,9 +115,9 @@ func TestCalculateJobPricingA4Baseline(t *testing.T) {
 		t.Errorf("Expected NetInternalCost 91025.0 (no spoilage), got %v", res.NetInternalCost)
 	}
 
-	// SalePrice = 91025 / (1 - 0.35) = 91025 / 0.65 = 140,038.46 LAK -> LAK integer 140,038
-	if res.SalePrice != 140038.0 {
-		t.Errorf("Expected SalePrice 140038, got %v", res.SalePrice)
+	// SalePrice = 91025 / (1 - 0.35) = 91025 / 0.65 = 140,038.46 LAK (Standard 2 decimal places)
+	if res.SalePrice != 140038.46 {
+		t.Errorf("Expected SalePrice 140038.46, got %v", res.SalePrice)
 	}
 
 	// TotalBreakdown and UnitBreakdown checks
@@ -135,9 +135,10 @@ func TestCalculateJobPricingA4Baseline(t *testing.T) {
 	}
 
 	// Grand Total (no discount, no tax) = SalePrice
-	if res.GrandTotal != 140038.0 {
-		t.Errorf("Expected GrandTotal 140038 (no discount/tax), got %v", res.GrandTotal)
+	if res.GrandTotal != 140038.46 {
+		t.Errorf("Expected GrandTotal 140038.46 (no discount/tax), got %v", res.GrandTotal)
 	}
+
 
 	t.Run("Custom_Finishing_PER_SQM", func(t *testing.T) {
 		reqSqM := baseReq()
@@ -445,7 +446,7 @@ func TestValidateAndCalculateAllocations(t *testing.T) {
 	}
 }
 
-func TestLAKCurrencyIntegerRounding(t *testing.T) {
+func TestLAKCurrencyDecimalPrecision(t *testing.T) {
 	req := baseReq()
 	req.TargetCurrency = "LAK"
 	res, err := CalculateJobPricing(req)
@@ -453,13 +454,14 @@ func TestLAKCurrencyIntegerRounding(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	if res.SalePrice != math.Round(res.SalePrice) {
-		t.Errorf("Expected integer SalePrice for LAK currency, got %v", res.SalePrice)
+	if res.SalePrice != 140038.46 {
+		t.Errorf("Expected 2 decimal precision SalePrice 140038.46 for LAK currency, got %v", res.SalePrice)
 	}
-	if res.GrandTotal != math.Round(res.GrandTotal) {
-		t.Errorf("Expected integer GrandTotal for LAK currency, got %v", res.GrandTotal)
+	if res.GrandTotal != 140038.46 {
+		t.Errorf("Expected 2 decimal precision GrandTotal 140038.46 for LAK currency, got %v", res.GrandTotal)
 	}
 }
+
 
 func TestCalculateCutLayout(t *testing.T) {
 	// A4 (210x297) cut into 90x54 business cards on parent sheet 330x480

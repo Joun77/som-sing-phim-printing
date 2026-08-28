@@ -195,6 +195,11 @@ export interface Order {
   activityLog?: ActivityLogEntry[];
   productionStepsCompleted?: Record<string, boolean>;
   sourceQuotationId?: string;
+  stockDeducted?: boolean;
+  stockDeductedAt?: string | null;
+  trackingNumber?: string;
+  courier?: string;
+  shippingFee?: number;
 }
 
 export interface Delivery {
@@ -323,6 +328,6 @@ export const WORKFLOW_7_STEPS: WorkflowStep[] = [
   { id: 'Printing', stepNumber: 4, labelLao: 'ກຳລັງພິມ (Printing)', labelEn: 'Printing', description: 'ຊ່າງພິມກດເລີ່ມງານພິມ ເຄື່ອງພິມກຳລັງດຳເນີນການ' },
   { id: 'Post-Press', stepNumber: 5, labelLao: 'ຂັ້ນຕອນຫຼັງການພິມ (Post-Press)', labelEn: 'Post-Press & Finishing', description: 'ຕັດ, ພັບ, ເຄືອບ, ໄດຄັດ ຫຼື ເຂົ້າເລົ່ມ' },
   { id: 'Ready for Delivery', stepNumber: 6, labelLao: 'ພິມສໍາເລັດ / ຮໍານໍາສົ່ງ (Ready)', labelEn: 'Ready for Delivery', description: 'ຜ່ານ QC ແພັກສິນຄ້າຮຽບຮ້ອຍ ພ້ອມມອບໃຫ້ຂົນສົ່ງ' },
-  { id: 'Delivered', stepNumber: 7, labelLao: 'ກຳລັງນໍາສົ່ງ / ສົ່ງສໍາເລັດ (Delivered)', labelEn: 'In Transit / Delivered', description: 'ອອກເລກ Tracking ขนส่ง Anousith Express ຫຼື HAL Logistics' },
+  { id: 'Delivered', stepNumber: 7, labelLao: 'ກຳລັງນໍາສົ່ງ / ສົ່ງສໍາເລັດ (Delivered)', labelEn: 'In Transit / Delivered', description: 'ອອກເລກ Tracking ຂົນສົ່ງ Anousith Express ຫຼື HAL Logistics' },
 ];
 

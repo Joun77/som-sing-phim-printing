@@ -167,6 +167,8 @@ export interface AppContextValue {
   addOrderVersion: (...args: any[]) => any;
   addOrder: (...args: any[]) => any;
   updateOrderStatus: (...args: any[]) => any;
+  startOrderProduction?: (orderId: string) => boolean;
+  updateOrderTracking?: (orderId: string, courierName: string, trackingNumber: string, shippingFee?: number) => void;
   settleOrderBalance: (...args: any[]) => any;
   deleteOrder: (...args: any[]) => any;
   addSpoilageLog: (...args: any[]) => any;
@@ -191,6 +193,8 @@ export interface AppContextValue {
   addPurchaseOrder: (...args: any[]) => any;
   updateEquipmentComponentUsage: (...args: any[]) => any;
   resetEquipmentComponent: (...args: any[]) => any;
+  swapEquipmentInk?: (equipmentId: string, slotPosition: string, inkSku: string, qty?: number, remarks?: string) => boolean;
+  replaceEquipmentComponent?: (equipmentId: string, componentName: string, deductSparePartSku?: string, qty?: number, remarks?: string) => boolean;
   updateEquipmentMaintenance: (...args: any[]) => any;
   resetToDefaultData: (...args: any[]) => any;
   refreshData: () => Promise<void>;

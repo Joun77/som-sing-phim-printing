@@ -827,18 +827,12 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		dGrandTotal = dTaxableSubtotal
 	}
 
-	// Currency rounding via Decimal
-	if req.TargetCurrency == "LAK" {
-		dSalePrice = dSalePrice.Round(0)
-		dDiscountAmount = dDiscountAmount.Round(0)
-		dTaxAmount = dTaxAmount.Round(0)
-		dGrandTotal = dGrandTotal.Round(0)
-	} else {
-		dSalePrice = dSalePrice.Round(2)
-		dDiscountAmount = dDiscountAmount.Round(2)
-		dTaxAmount = dTaxAmount.Round(2)
-		dGrandTotal = dGrandTotal.Round(2)
-	}
+	// Currency rounding via Decimal (Standard 2 decimal places for all currencies)
+	dSalePrice = dSalePrice.Round(2)
+	dDiscountAmount = dDiscountAmount.Round(2)
+	dTaxAmount = dTaxAmount.Round(2)
+	dGrandTotal = dGrandTotal.Round(2)
+
 
 	depositPct := req.DepositPercent
 	if depositPct < 0 {

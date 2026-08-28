@@ -107,7 +107,7 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
           const defaults: ProductPricingTemplateItem[] = [
             {
               id: 'tpl_vinyl_outdoor',
-              name: 'ไวนิล Outdoor Hi-Res 440g',
+              name: 'ໄວນິວ Outdoor Hi-Res 440g',
               material_id: 'mat_vinyl_440',
               baseline_coverage_percent: 15,
               coverage_surcharge_multiplier: 1.25,
@@ -117,7 +117,7 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
             },
             {
               id: 'tpl_canvas_cotton',
-              name: 'ผ้าใบแคนวาส Premium Cotton 380g',
+              name: 'ຜ້າໃບແຄນວາສ Premium Cotton 380g',
               material_id: 'mat_canvas_380',
               baseline_coverage_percent: 20,
               coverage_surcharge_multiplier: 1.5,
@@ -209,7 +209,7 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
       if (computedGrommetsCount > 0) {
         const gCost = computedGrommetsCount * qty * 500;
         addons.push({
-          name: `ตอกตาไก่ (${computedGrommetsCount} จุด)`,
+          name: `ຕອກຕາໄກ່ (${computedGrommetsCount} ຈຸດ)`,
           type: 'grommets',
           quantity: computedGrommetsCount * qty,
           unit_price: 500,
@@ -220,7 +220,7 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
       if (laminationType !== 'NONE') {
         const lCost = Math.round(areaM2 * qty * 15000);
         addons.push({
-          name: `เคลือบผิว (${laminationType})`,
+          name: `ເຄືອບຜິວ (${laminationType})`,
           type: 'lamination',
           quantity: areaM2 * qty,
           unit_price: 15000,
@@ -231,7 +231,7 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
       if (hasHemming) {
         const fCost = Math.round(perimeterM * qty * 3000);
         addons.push({
-          name: 'พับขอบรอบด้าน',
+          name: 'ພັບຂອບຮອບດ້ານ',
           type: 'folding',
           quantity: perimeterM * qty,
           unit_price: 3000,
@@ -246,9 +246,9 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
 
       setPriceBreakdown({
         template_id: selectedTemplateId,
-        template_name: activeTemplate?.name || 'ไวนิล Outdoor Hi-Res',
+        template_name: activeTemplate?.name || 'ໄວນິວ Outdoor Hi-Res',
         material_id: 'mat_default',
-        material_name: 'ไวนิล 440g',
+        material_name: 'ໄວນິວ 440g',
         quantity: qty,
         min_order_quantity: activeTemplate?.min_order_quantity || 1,
         area_m2: areaM2,
@@ -334,7 +334,7 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
       {isAddedToast && (
         <div className="fixed top-20 right-6 z-50 flex items-center gap-3 px-4 py-3 bg-emerald-600 text-white rounded-xl shadow-2xl animate-bounce">
           <CheckCircle2 className="w-5 h-5" />
-          <span className="text-sm font-medium">เพิ่มสินค้าสั่งพิมพ์เรียบร้อยแล้ว!</span>
+          <span className="text-sm font-medium">ເພີ່ມສິນຄ້າສັ່ງພິມຮຽບຮ້ອຍແລ້ວ!</span>
         </div>
       )}
 
@@ -353,7 +353,7 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
           <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
               <Ruler className="w-3.5 h-3.5 text-emerald-400" />
-              <span>ขนาดมาตรฐานยอดนิยม</span>
+              <span>ຂະໜາດມາດຕະຖານຍອດນິຍົມ</span>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <button
@@ -399,17 +399,17 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
             <div>
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <Sliders className="w-5 h-5 text-emerald-400" />
-                <span>กำหนดสเปกงานพิมพ์ (Print-on-Demand)</span>
+                <span>ກຳນົດສະເປັກງານພິມ (Print-on-Demand)</span>
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                ระบบคำนวณราคาแบบ Real-time พร้อมชดเชยค่าหมึกตามค่า Coverage จริงและตัวเลือกเสริม
+                ລະບົບຄຳນວນລາຄາແບບ Real-time ພ້ອມຊົດເຊີຍຄ່າໝຶກຕາມຄ່າ Coverage ຈິງ ແລະ ຕົວເລືອກເສີມ
               </p>
             </div>
 
             {/* Template Selection */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                1. เลือกวัสดุและเทมเพลตราคา
+                1. ເລືອກວັດສະດຸ ແລະ ເທັມເພລດລາຄາ
               </label>
               {loadingTemplates ? (
                 <div className="h-12 rounded-xl bg-slate-800 animate-pulse" />
@@ -436,7 +436,7 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
                         </div>
                         {tpl.min_order_quantity > 1 && (
                           <div className="mt-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/60 inline-block self-start">
-                            MOQ: {tpl.min_order_quantity} ชิ้น
+                            MOQ: {tpl.min_order_quantity} ອັນ
                           </div>
                         )}
                       </button>
@@ -450,7 +450,7 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  ความกว้าง (Width - cm)
+                  ຄວາມກວ້າງ (Width - cm)
                 </label>
                 <input
                   type="number"
@@ -464,7 +464,7 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  ความสูง (Height - cm)
+                  ຄວາມສູງ (Height - cm)
                 </label>
                 <input
                   type="number"
@@ -478,7 +478,7 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  จำนวนพิมพ์ (Quantity)
+                  ຈຳນວນພິມ (Quantity)
                 </label>
                 <input
                   type="number"
@@ -538,41 +538,66 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
             {/* Add-ons */}
             <div className="pt-2 border-t border-slate-800/80">
               <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3">
-                4. ออปชันเสริม (Add-on Services)
+                2. ອັບໂຫຼດໄຟລ໌ອາດເວີກ (Artwork File)
+              </label>
+              <div className="p-4 rounded-2xl bg-slate-800/40 border border-slate-700 text-center text-xs text-slate-400">
+                {artworkFileName ? artworkFileName : 'ຄລິກ ຫຼື ລາກໄຟລ໌ຮູບ/PDF ມາວາງທີ່ນີ້'}
+              </div>
+            </div>
+
+            {/* Coverage % */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                3. ຄວາມໜາແໜ້ນຂອງໝຶກ (Ink Coverage %): {coveragePercent}%
+              </label>
+              <input
+                type="range"
+                min={5}
+                max={100}
+                value={coveragePercent}
+                onChange={(e) => setCoveragePercent(Number(e.target.value))}
+                className="w-full accent-emerald-500"
+              />
+            </div>
+
+            {/* Add-ons */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3">
+                4. ອອບຊັນເສີມ (Add-on Services)
               </label>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1.5">การตอกตาไก่ (Eyelets)</label>
+                  <label className="block text-xs text-slate-400 mb-1.5">ການຕອກຕາໄກ່ (Eyelets)</label>
                   <select
                     value={grommetMode}
                     onChange={(e) => setGrommetMode(e.target.value as GrommetMode)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-emerald-500"
                   >
-                    <option value="NONE">ไม่ตอกตาไก่ (None)</option>
-                    <option value="FOUR_CORNERS">ตอกตาไก่ 4 มุม (4 Corners)</option>
-                    <option value="EVERY_50CM">ตอกตาไก่ทุกๆ 50 cm (Every 50cm)</option>
+                    <option value="NONE">ບໍ່ຕອກຕາໄກ່ (None)</option>
+                    <option value="FOUR_CORNERS">ຕອກຕາໄກ່ 4 ມຸມ (4 Corners)</option>
+                    <option value="EVERY_50CM">ຕອກຕາໄກ່ທຸກໆ 50 cm (Every 50cm)</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1.5">การเคลือบผิว (Lamination)</label>
+                  <label className="block text-xs text-slate-400 mb-1.5">ການເຄືອບຜິວ (Lamination)</label>
                   <select
                     value={laminationType}
                     onChange={(e) => setLaminationType(e.target.value as any)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-emerald-500"
                   >
-                    <option value="NONE">ไม่เคลือบ (None)</option>
-                    <option value="GLOSS">เคลือบเงา (Glossy)</option>
-                    <option value="MATTE">เคลือบด้าน (Matte)</option>
+                    <option value="NONE">ບໍ່ເຄືອບ (None)</option>
+                    <option value="GLOSS">ເຄືອບເງົາ (Glossy)</option>
+                    <option value="MATTE">ເຄືອບດ້ານ (Matte)</option>
                   </select>
                 </div>
               </div>
 
               <div className="mt-4 flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/40 border border-slate-700/60">
                 <div>
-                  <div className="text-sm font-medium text-white">พับขอบเย็บเสริมความแข็งแรง</div>
-                  <div className="text-xs text-slate-400">ป้องกันขอบรุ่ย เพิ่มความทนทานกลางแจ้ง</div>
+                  <div className="text-sm font-medium text-white">ພັບຂອບຫຍິບເສີມຄວາມແຂງແຮງ</div>
+                  <div className="text-xs text-slate-400">ປ້ອງກັນຂອບຫຼຸ້ຍ ເພີ່ມຄວາມທົນທານກາງແຈ້ງ</div>
                 </div>
                 <input
                   type="checkbox"
@@ -589,10 +614,10 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-amber-400" />
-                <span>สรุปราคาและค่าบริการ (Price Breakdown)</span>
+                <span>ສະຫຼຸບລາຄາ ແລະ ຄ່າບໍລິການ (Price Breakdown)</span>
               </h3>
               {isCalculating && (
-                <span className="text-xs text-slate-400 animate-pulse">กำลังคำนวณราคา...</span>
+                <span className="text-xs text-slate-400 animate-pulse">ກຳລັງຄຳນວນລາຄາ...</span>
               )}
             </div>
 
@@ -600,7 +625,7 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
               <div className="flex flex-col gap-2.5 text-xs text-slate-300">
                 <div className="flex justify-between py-1 border-b border-slate-800/80">
                   <span className="text-slate-400">
-                    ค่าวัสดุและพิมพ์พื้นฐาน ({priceBreakdown.area_m2} m² × {quantity} ชิ้น)
+                    ຄ່າວັດສະດຸ ແລະ ພິມພື້ນຖານ ({priceBreakdown.area_m2} m² × {quantity} ອັນ)
                   </span>
                   <span className="font-semibold text-white">
                     ₭ {Math.round(priceBreakdown.base_material_cost).toLocaleString()}
@@ -610,7 +635,7 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
                 {priceBreakdown.coverage_surcharge > 0 && (
                   <div className="flex justify-between py-1 border-b border-slate-800/80 text-amber-300">
                     <span>
-                      ค่าชดเชยหมึกส่วนเกิน (+{priceBreakdown.coverage_delta_percent}% Coverage)
+                      ຄ່າຊົດເຊີຍໝຶກສ່ວນເກີນ (+{priceBreakdown.coverage_delta_percent}% Coverage)
                     </span>
                     <span className="font-semibold">
                       +₭ {Math.round(priceBreakdown.coverage_surcharge).toLocaleString()}
@@ -633,16 +658,16 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
                   <div className="p-2.5 rounded-xl bg-amber-950/60 border border-amber-800/60 text-amber-300 text-[11px] flex items-center gap-2">
                     <ShieldAlert className="w-4 h-4 shrink-0" />
                     <span>
-                      ปรับใช้ยอดสั่งพิมพ์ขั้นต่ำ (Min Price Floor): ₭ {Math.round(priceBreakdown.min_total_price).toLocaleString()}
+                      ປັບໃຊ້ຍອດສັ່ງພິມຂັ້ນຕ່ຳ (Min Price Floor): ₭ {Math.round(priceBreakdown.min_total_price).toLocaleString()}
                     </span>
                   </div>
                 )}
 
                 <div className="pt-3 flex items-baseline justify-between">
                   <div>
-                    <div className="text-sm font-semibold text-slate-400">ยอดรวมทั้งสิ้น</div>
+                    <div className="text-sm font-semibold text-slate-400">ຍອດລວມທັງໝົດ</div>
                     <div className="text-xs text-slate-500">
-                      เฉลี่ยชิ้นละ ₭ {Math.round(priceBreakdown.final_unit_price).toLocaleString()}
+                      ສະເລ່ຍອັນລະ ₭ {Math.round(priceBreakdown.final_unit_price).toLocaleString()}
                     </div>
                   </div>
                   <div className="text-right">
@@ -661,7 +686,7 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
               className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-base flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
             >
               <ShoppingBag className="w-5 h-5" />
-              <span>สั่งพิมพ์และใส่ในตะกร้า</span>
+              <span>ສັ່ງພິມ ແລະ ໃສ່ໃນກະຕ່າ</span>
             </button>
           </div>
         </div>

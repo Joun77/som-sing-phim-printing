@@ -90,9 +90,21 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
       if (!originalItem) return;
 
       const packQty = Number(data.qty) || 1;
-      const multiplier = Number(originalItem.purchaseMultiplier) || 1;
+      const isPaper = (originalItem.category || '').toLowerCase() === 'paper' || (originalItem.category || '').toLowerCase() === 'material';
+      let sheetsPerPack = Number(
+        originalItem.purchaseMultiplier || 
+        originalItem.purchase_multiplier || 
+        originalItem.specs?.sheets_per_pack || 
+        originalItem.specs?.sheets_per_ream || 
+        originalItem.specs?.sheetsPerPack || 
+        originalItem.specs?.sheetsPerReam
+      );
+      if (isPaper && (!sheetsPerPack || sheetsPerPack <= 1)) {
+        sheetsPerPack = 500;
+      }
+      const multiplier = isPaper ? sheetsPerPack : (Number(originalItem.purchaseMultiplier || originalItem.purchase_multiplier) || 1);
       const totalUnitsAdded = packQty * multiplier;
-      const unitPrice = Number(data.unitPrice) || 0;
+      const unitPrice = Number(data.unitPrice) || Number(originalItem.cost_per_purchase_unit || originalItem.costPerPurchaseUnit || 0);
       const perUnitCost = multiplier > 0 ? unitPrice / multiplier : unitPrice;
 
       const logId = `INB-RESTOCK-${Date.now().toString().slice(-4)}-${Math.floor(100 + Math.random() * 900)}`;
@@ -117,7 +129,7 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
         poNumber: logId,
         inboundDate: fullDateTime,
         receiptDate: fullDateTime,
-        category: originalItem.category?.toUpperCase() || 'MATERIAL',
+        category: isPaper ? 'PAPER' : (originalItem.category?.toUpperCase() || 'MATERIAL'),
         categoryPill: 'RESTOCK',
         name: originalItem.name,
         itemName: originalItem.name,
@@ -126,8 +138,8 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
         currentQty: packQty,
         initialQty: packQty,
         quantity: packQty,
-        unit: originalItem.purchaseUnit || originalItem.consumptionUnit || 'Unit',
-        subUnit: `(${packQty} ${originalItem.purchaseUnit || 'Unit'})`,
+        unit: originalItem.purchaseUnit || (isPaper ? 'ແພັກ' : 'Unit'),
+        subUnit: `(${packQty} ${originalItem.purchaseUnit || (isPaper ? 'ແພັກ' : 'Unit')} x ${multiplier} ${originalItem.consumptionUnit || (isPaper ? 'ແຜ່ນ' : 'Unit')})`,
         supplier: data.supplier || 'Restock Supplier',
         supplierName: data.supplier || 'Restock Supplier',
         totalPrice: unitPrice * packQty,
@@ -139,8 +151,11 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
           skuCode: originalSku,
           restockQty: packQty,
           unitPrice: unitPrice,
-          sheets_per_pack: multiplier,
-          sheets_per_ream: multiplier
+          sheetsPerPack: isPaper ? multiplier : null,
+          sheets_per_pack: isPaper ? multiplier : null,
+          sheets_per_ream: isPaper ? multiplier : null,
+          purchaseMultiplier: multiplier,
+          paperFormat: isPaper ? 'Sheet' : null
         }
       };
 
@@ -149,7 +164,8 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
         ...originalItem,
         stockQty: (Number(originalItem.stockQty) || 0) + totalUnitsAdded,
         costPerPurchaseUnit: unitPrice,
-        costPerConsumptionUnit: perUnitCost
+        costPerConsumptionUnit: perUnitCost,
+        purchaseMultiplier: multiplier
       });
 
       fetch('http://localhost:8080/api/inbound', {
@@ -160,6 +176,7 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
 
       restockEntries.push(inboundLog);
     });
+
 
     if (onSuccess) {
       onSuccess(restockEntries);

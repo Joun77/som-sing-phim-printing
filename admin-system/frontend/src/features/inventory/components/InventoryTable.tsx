@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, Edit3, Plus, Minus, ExternalLink, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { Eye, Edit3, Plus, Minus, ExternalLink, Image as ImageIcon, Trash2, Scissors } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import InventoryDetailsModal from './modals/InventoryDetailsModal';
@@ -270,8 +270,13 @@ export default function InventoryTable({ items, activeTab, onRestockItem, onView
                       </div>
                     </td>
                     <td className="py-4.5 px-6">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border bg-slate-100 text-slate-700`}>
-                        {parent.category}
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${
+                        (parent.category || '').toLowerCase() === 'offcut' || parent.isOffcut
+                          ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                          : 'bg-slate-100 text-slate-700 border-slate-200'
+                      }`}>
+                        {((parent.category || '').toLowerCase() === 'offcut' || parent.isOffcut) && <Scissors className="w-3 h-3 text-indigo-600" />}
+                        {((parent.category || '').toLowerCase() === 'offcut' || parent.isOffcut) ? 'ເສດເຈ້ຍ' : parent.category}
                       </span>
                     </td>
                     <td className="py-4.5 px-6">

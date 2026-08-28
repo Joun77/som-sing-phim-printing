@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Check, Filter, Layers, FileText, AlertCircle, ChevronDown } from 'lucide-react';
+import { Search, Check, Filter, Layers, FileText, AlertCircle, ChevronDown, Package } from 'lucide-react';
 import { FormModalTemplate } from '@components/common/FormModalTemplate';
 import type { InventoryItem } from '../../../types';
 
@@ -228,14 +228,21 @@ export const PaperMaterialSelectorModal: React.FC<PaperMaterialSelectorModalProp
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[52vh] overflow-y-auto pr-1">
               {filteredPapers.map((paper) => {
                 const isSelected = selectedPaperId === paper.id;
+                const mult = Number(paper.purchaseMultiplier || (paper as any).purchase_multiplier || 500);
+                const rawStock = paper.stockQty !== undefined ? paper.stockQty : (paper.stock_qty || 0);
+                const stock = (rawStock > 0 && rawStock <= 100) ? rawStock * mult : rawStock;
+                const pCost = Number(paper.costPerPurchaseUnit || (paper as any).cost_per_purchase_unit || 95000);
+                const rawCons = Number(paper.costPerConsumptionUnit || (paper as any).cost_per_consumption_unit || paper.costPerSheet || 0);
+                const fallbackPrice = (rawCons > 0 && (mult <= 1 || rawCons < (pCost / 2)))
+                  ? rawCons
+                  : (mult > 0 && pCost > 0 ? (pCost / mult) : rawCons);
+
                 const fifoCost = getFIFOCostPerSheet ? getFIFOCostPerSheet(paper.id, 1) : 0;
-                const price = fifoCost > 0 
-                  ? fifoCost 
-                  : (Number(paper.costPerConsumptionUnit) || Number(paper.costPerSheet) || (Number(paper.costPerPurchaseUnit) && Number(paper.purchaseMultiplier) ? Number(paper.costPerPurchaseUnit) / Number(paper.purchaseMultiplier) : 0) || Number(paper.unitCost) || 184);
-                const stock = paper.stockQty !== undefined ? paper.stockQty : (paper.stock_qty || 0);
+                const price = (fifoCost > 0 && (mult <= 1 || fifoCost < (pCost / 2))) ? fifoCost : fallbackPrice;
                 const gsm = paper.gsm || paper.specs?.grammageGsm || paper.specs?.grammage;
                 const size = paper.specs?.size || paper.specs?.standardSize || 'A4';
                 const isLowStock = stock <= (paper.minStockThreshold || 100);
+
 
                 return (
                   <div
@@ -280,7 +287,8 @@ export const PaperMaterialSelectorModal: React.FC<PaperMaterialSelectorModalProp
                         <span className={`px-2 py-0.5 rounded-md flex items-center gap-1 ${
                           isLowStock ? 'bg-amber-100 text-amber-800' : 'bg-emerald-50 text-emerald-700'
                         }`}>
-                          📦 ຄັງເຫຼືອ: {Number(stock).toLocaleString()} ແຜ່ນ
+                          <Package className="w-3 h-3 shrink-0" />
+                          <span>ຄັງເຫຼືອ: {Number(stock).toLocaleString()} ແຜ່ນ</span>
                         </span>
                         {paper.category && (
                           <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">

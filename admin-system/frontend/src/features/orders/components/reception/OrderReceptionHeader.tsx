@@ -35,7 +35,7 @@ export const OrderReceptionHeader: React.FC<OrderReceptionHeaderProps> = ({
       const daysOverdue = Math.abs(Math.floor(diffMs / (1000 * 60 * 60 * 24)));
       return (
         <span className="px-3 py-1.5 rounded-2xl bg-red-50 text-red-700 border border-red-200 text-xs font-black flex items-center gap-1.5 animate-pulse">
-          <AlertTriangle className="w-3.5 h-3.5 text-red-600" /> กายกำหนด {daysOverdue} วัน
+          <AlertTriangle className="w-3.5 h-3.5 text-red-600" /> ກາຍກຳນົດ {daysOverdue} ວັນ
         </span>
       );
     }

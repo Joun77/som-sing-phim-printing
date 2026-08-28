@@ -1,6 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Check, Printer, AlertCircle, ShieldCheck, Palette, Layers, RefreshCw, Database } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Search, Check, Printer, AlertCircle, ShieldCheck, Database, Layers, Palette } from 'lucide-react';
 import { FormModalTemplate } from '@components/common/FormModalTemplate';
+import { useApp } from '@store/AppContext';
 import type { Equipment } from '../../../types';
 
 interface PrinterSelectorModalProps {
@@ -22,96 +23,33 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
   formatCurrency,
   getPrinterMachineRate
 }) => {
+  const { equipment: appEquipment = [] } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTech, setSelectedTech] = useState('ALL');
   const [selectedColorCount, setSelectedColorCount] = useState('ALL');
-  const [livePrinters, setLivePrinters] = useState<Equipment[]>([]);
-  const [isLoadingDB, setIsLoadingDB] = useState(false);
 
-  // Fetch live printers from real Go Backend / PostgreSQL DB when modal opens
-  const fetchLivePrinters = async () => {
-    setIsLoadingDB(true);
-    try {
-      let res = await fetch('/api/equipment');
-      if (!res.ok) {
-        res = await fetch('/api/v1/assets');
-      }
-      if (res && res.ok) {
-        const json = await res.json();
-        const rawItems = Array.isArray(json) ? json : (json?.data || []);
-        if (Array.isArray(rawItems) && rawItems.length > 0) {
-          const parsedList: Equipment[] = rawItems.map((item: any) => ({
-            id: item.asset_id || item.id,
-            assetId: item.asset_id || item.id,
-            name: item.name || `${item.brand || ''} ${item.model || ''}`.trim() || item.asset_id || item.id,
-            brand: item.brand || '',
-            model: item.model || '',
-            serialNumber: item.serial_number || item.serialNumber || '',
-            category: item.category || 'Printer',
-            printerCategory: item.category || item.printerCategory || 'Digital Press',
-            colorSchemeType: item.color_scheme_type || item.colorSchemeType || item.specs?.colorScheme || 'CMYK',
-            totalColorSlots: item.total_color_slots || item.totalColorSlots || 4,
-            status: item.status || 'In Use',
-            location: item.location_dept || item.location || 'Press Floor',
-            purchaseCost: Number(item.price_cost || item.price || item.purchaseCost || item.purchasePrice || 0),
-            lifespanYears: Number(item.lifespanYears || 5),
-            printedPagesCapacity: Number(item.expected_life_a4_pages || item.expectedLifeA4Pages || item.printedPagesCapacity || 500000),
-            printedCount: Number(item.printedCount || 0),
-            calculatedCostPerPage: Number(item.calculatedCostPerPage || item.costPerPage || 50),
-            maintenanceRatePercent: Number(item.maintenance_rate_percent || item.maintenanceRatePercent || 20),
-            purchaseDate: item.purchase_date || item.purchaseDate || '2024-01-01',
-            warrantyExpiration: item.warranty_expiry_year ? `${item.warranty_expiry_year}-01-01` : (item.warrantyExpiration || '2026-01-01'),
-            lastMaintenanceDate: item.lastMaintenanceDate || '2026-01-01',
-            components: item.components || [],
-            specs: {
-              ...(item.technical_specs || {}),
-              colorScheme: item.color_scheme_type || item.colorSchemeType || item.specs?.colorScheme || 'CMYK',
-              totalColorSlots: item.total_color_slots || item.totalColorSlots || 4,
-              oemBaselineSpecs: item.oem_baseline_specs || item.specs?.oemBaselineSpecs,
-              printerColorLinks: item.printerColorLinks || item.specs?.printerColorLinks,
-            }
-          }));
-
-          // Filter only printers
-          const onlyPrinters = parsedList.filter(eq => {
-            const cat = (eq.category || '').toLowerCase();
-            const type = (eq.printerCategory || '').toLowerCase();
-            const isPrintCat = cat.includes('printer') || cat.includes('press') || type.includes('digital') || type.includes('offset') || type.includes('inkjet') || type.includes('photo');
-            const isExplicitNonPrinter = cat.includes('cut') || cat.includes('trim') || cat.includes('post') || cat.includes('finish') || cat.includes('bind') || cat.includes('laminat');
-            return (isPrintCat || eq.id?.startsWith('PRN-')) && !isExplicitNonPrinter;
-          });
-
-          if (onlyPrinters.length > 0) {
-            setLivePrinters(onlyPrinters);
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('[PrinterSelectorModal] Live fetch fallback to props:', err);
-    } finally {
-      setIsLoadingDB(false);
-    }
-  };
-
-  useEffect(() => {
-    if (isOpen) {
-      fetchLivePrinters();
-    }
-  }, [isOpen]);
-
-  // Merge live database printers with prop printers
+  // Single source of truth: Merge real equipment fleet from AppContext and props
   const allPrinters = useMemo(() => {
+    const pool = [...(appEquipment || []), ...(propPrinters || [])];
     const map = new Map<string, Equipment>();
-    (propPrinters || []).forEach(p => map.set(p.id, p));
-    (livePrinters || []).forEach(p => {
-      if (map.has(p.id)) {
-        map.set(p.id, { ...map.get(p.id)!, ...p });
-      } else {
-        map.set(p.id, p);
+    pool.forEach((eq: any) => {
+      if (!eq || !eq.id) return;
+      const cat = (eq.category || '').toLowerCase();
+      const type = (eq.printerCategory || eq.printerType || eq.specs?.type || '').toLowerCase();
+      const name = (eq.name || '').toLowerCase();
+      const isExplicitNonPrinter = cat.includes('cut') || cat.includes('trim') || cat.includes('post') || cat.includes('finish') || cat.includes('bind') || cat.includes('laminat') || name.includes('cutter') || name.includes('guillotine') || name.includes('binder');
+      const isPrinter = cat.includes('printer') || cat.includes('press') || type.includes('digital') || type.includes('offset') || type.includes('inkjet') || type.includes('photo') || eq.id.startsWith('PRN-') || name.includes('printer') || name.includes('ecotank') || name.includes('versant') || name.includes('l1800') || name.includes('l15160');
+      
+      if (isPrinter && !isExplicitNonPrinter) {
+        if (!map.has(eq.id)) {
+          map.set(eq.id, eq);
+        } else {
+          map.set(eq.id, { ...map.get(eq.id), ...eq });
+        }
       }
     });
     return Array.from(map.values());
-  }, [propPrinters, livePrinters]);
+  }, [appEquipment, propPrinters]);
 
   const filteredPrinters = useMemo(() => {
     return allPrinters.filter(p => {
@@ -119,9 +57,10 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
       const brand = (p.brand || '').toLowerCase();
       const model = (p.model || '').toLowerCase();
       const assetId = (p.assetId || p.id || '').toLowerCase();
+      const serialNumber = (p.serialNumber || (p as any).sn || '').toLowerCase();
       const techType = (p.type || p.printerCategory || p.specs?.type || '').toLowerCase();
       const colorScheme = (p.specs?.colorScheme || p.specs?.colorSchemeType || (p as any).colorSchemeType || (p as any).color_scheme_type || '').toLowerCase();
-      const combined = `${name} ${brand} ${model} ${assetId} ${techType} ${colorScheme}`.toLowerCase();
+      const combined = `${name} ${brand} ${model} ${assetId} ${serialNumber} ${techType} ${colorScheme}`.toLowerCase();
 
       // 1. Text search
       if (searchQuery.trim()) {
@@ -135,7 +74,7 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
         if (selectedTech === 'LASER') {
           if (!combined.includes('laser') && !combined.includes('digital') && !combined.includes('c6085') && !combined.includes('c1085') && !combined.includes('press') && !combined.includes('toner') && !combined.includes('versant')) return false;
         } else if (selectedTech === 'INKJET') {
-          if (!combined.includes('inkjet') && !combined.includes('large') && !combined.includes('plotter') && !combined.includes('epson') && !combined.includes('canon') && !combined.includes('l4260') && !combined.includes('l1800')) return false;
+          if (!combined.includes('inkjet') && !combined.includes('large') && !combined.includes('plotter') && !combined.includes('epson') && !combined.includes('canon') && !combined.includes('l4260') && !combined.includes('l1800') && !combined.includes('l15160') && !combined.includes('ecotank')) return false;
         } else if (selectedTech === 'OFFSET') {
           if (!combined.includes('offset') && !combined.includes('heidelberg') && !combined.includes('komori') && !combined.includes('ryobi')) return false;
         }
@@ -231,17 +170,6 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
                 </button>
               )}
             </div>
-
-            <button
-              type="button"
-              onClick={fetchLivePrinters}
-              disabled={isLoadingDB}
-              className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shrink-0"
-              title="ດຶງຂໍ້ມູນຫຼ້າສຸດຈາກຖານຂໍ້ມູນ"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-accent-sky ${isLoadingDB ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">ຣີເຟຣຊ DB</span>
-            </button>
           </div>
 
           {/* Filter Rows: 1. Technology, 2. Color System */}

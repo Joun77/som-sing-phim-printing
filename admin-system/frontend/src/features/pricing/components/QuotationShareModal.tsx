@@ -72,7 +72,7 @@ export const QuotationShareModal: React.FC<QuotationShareModalProps> = ({
           </div>
           <div className="flex justify-between items-center text-slate-600">
             <span className="font-bold">{currentLang === 'lo' ? 'ຈຳນວນລາຍການ:' : 'Total Items:'}</span>
-            <span className="font-sans font-bold text-slate-900">{itemsLength} รายการ ({grandTotalUnits.toLocaleString()} units)</span>
+            <span className="font-sans font-bold text-slate-900">{itemsLength} {currentLang === 'lo' ? 'ລາຍການ' : 'Items'} ({grandTotalUnits.toLocaleString()} units)</span>
           </div>
           <div className="flex justify-between items-center text-slate-600 border-t border-slate-100 pt-2.5">
             <span className="font-black text-slate-900">{currentLang === 'lo' ? 'ຍອດລວມສຸດທິ:' : 'Grand Total:'}</span>

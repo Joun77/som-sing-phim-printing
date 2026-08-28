@@ -182,7 +182,7 @@ export const BankAccountConfigModal: React.FC<BankAccountConfigModalProps> = ({ 
       onClose={onClose}
       icon={<Building2 />}
       title="ຕາຕະລາງຈັດການບັນຊີທະນາຄານຮັບເງິນ (Bank Accounts Directory)"
-      subtitle="ຈັດການບັນຊີທະນາຄານຫຼາຍຮູບແບບ (BCEL, LDB, ฯลฯ) ສຳລັບຮັບຊຳລະເງິນ"
+      subtitle="ຈັດການບັນຊີທະນາຄານຫຼາຍຮູບແບບ (BCEL, LDB, ອື່ນໆ) ສຳລັບຮັບຊຳລະເງິນ"
       badgeText="Multi-Bank Setup"
       maxWidthClass="max-w-4xl"
       footerActions={footerButtons}
@@ -357,7 +357,7 @@ export const BankAccountConfigModal: React.FC<BankAccountConfigModalProps> = ({ 
                 {/* QR Code Upload */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-extrabold text-slate-700 uppercase">
-                    รูป QR Code ชำระเงิน (อัปโหลดรูปภาพ)
+                    ຮູບ QR Code ຊຳລະເງິນ (ອັບໂຫຼດຮູບພາບ)
                   </label>
                   <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border-2 border-slate-200">
                     {editingAccount.bcelOnePayQr ? (

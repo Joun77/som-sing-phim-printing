@@ -37,6 +37,17 @@ export interface InboundItemFormData {
   totalColorSlots: number;
   expectedLifeA4: number;
   maintenanceRatePct: number;
+  printerLifespanYears: number;
+  printerEstMonthlyVolume: number;
+  printerMaintenanceCostPerPage: number;
+  printerSpeedPpm: string;
+  printerMaxWidth: string;
+  printerInkType: string;
+  printerPrintTech: string;
+  printerBlackYield: number;
+  printerColorYield: number;
+  printerClickRateColor: number;
+  printerClickRateBW: number;
   selectedFunctions: string[];
   selectedConnectivity: string[];
   selectedOS: string[];
@@ -142,7 +153,7 @@ export const CATEGORY_MENU_OPTIONS: CategoryMenuOption[] = [
   { id: 'PRINTER', label: 'ເຄື່ອງພິມ (Printer)', desc: 'ຕັ້ງຄ່າ Slot ໝຶກ, ອາຍຸງານ, ຄ່າເສື່ອມ', icon: Printer, color: 'text-indigo-600 bg-indigo-50' },
   { id: 'MACHINERY', label: 'ເຄື່ອງຈັກຫຼັງພິມ (Machinery)', desc: 'ເຄື່ອງຕັດ, ເຄື່ອງພັບ, ຄ່າບຳລຸງຮັກສາ', icon: Cog, color: 'text-amber-600 bg-amber-50' },
   { id: 'LAMINATION', label: 'ຟີມເຄືອບ (Lamination)', desc: 'ຟີມເງົາ, ຟີມດ້ານ, ຄວາມໜາ', icon: Film, color: 'text-purple-600 bg-purple-50' },
-  { id: 'BINDING', label: 'ອຸປະກອນເຂົ້າເລົ່ມ (Binding)', desc: 'ສັນຫ່ວງ Wire-O, ກະດູກງູ', icon: BookOpen, color: 'text-rose-600 bg-rose-50' },
+  { id: 'BINDING', label: 'ອຸປະກອນເຂົ້າເລັ້ມ (Binding)', desc: 'ສັນຫ່ວງ Wire-O, ກະດູກງູ', icon: BookOpen, color: 'text-rose-600 bg-rose-50' },
   { id: 'SPARE_PARTS', label: 'ອະໄຫຼ່ (Spare Parts)', desc: 'ໃບມີດ, ຊຸດດຣຳ, ອຸປະກອນສ້ອມແປງ', icon: Wrench, color: 'text-slate-600 bg-slate-100' },
   { id: 'OFFCUT', label: 'ເຈ້ຍເສດ (Offcuts)', desc: 'ຈັດການຂະໜາດ ແລະ ສະຕັອກເຈ້ຍເສດ', icon: Scissors, color: 'text-emerald-600 bg-emerald-50' }
 ];
@@ -170,14 +181,25 @@ export const createDefaultItem = (type: string = 'PAPER'): InboundItemFormData =
     printerSn: '',
     printerBrand: '',
     printerModel: '',
-    printerCategory: 'Laser',
+    printerCategory: 'Inkjet',
     colorSchemeType: 'CMYK',
     colorSlots: STANDARD_PRESETS['CMYK'],
     totalColorSlots: 4,
-    expectedLifeA4: 500000,
-    maintenanceRatePct: 20,
+    expectedLifeA4: 3000000,
+    maintenanceRatePct: 15,
+    printerLifespanYears: 5,
+    printerEstMonthlyVolume: 50000,
+    printerMaintenanceCostPerPage: 0,
+    printerSpeedPpm: '25 ppm (A4)',
+    printerMaxWidth: 'A3+ (329 x 483 mm)',
+    printerInkType: 'Pigment Ink (DURABrite Pro)',
+    printerPrintTech: 'PrecisionCore Heat-Free',
+    printerBlackYield: 7500,
+    printerColorYield: 6000,
+    printerClickRateColor: 0,
+    printerClickRateBW: 0,
     selectedFunctions: ['Print'],
-    selectedConnectivity: ['USB', 'Wi-Fi'],
+    selectedConnectivity: ['USB', 'Wi-Fi', 'Ethernet'],
     selectedOS: ['Windows', 'macOS'],
     printerLocation: 'Main Dept',
     printerWarrantyYear: new Date().getFullYear() + 2,
@@ -218,28 +240,28 @@ export const createDefaultItem = (type: string = 'PAPER'): InboundItemFormData =
     coatingTech: '',
     surfaceFinish: '',
     printableSides: '',
-    grammage: '80',
-    compatibilities: ['dye', 'pigment'],
+    grammage: '230',
+    compatibilities: ['Inkjet', 'Laser'],
 
-    // Calculator Preview
+    // Live Calculator Preview
     previewJobWidthMm: 210,
     previewJobLengthMm: 297,
     previewCoverageK: 5,
     previewCoverageC: 5,
     previewCoverageM: 5,
     previewCoverageY: 5,
-    previewLaborCost: 1000,
-    previewFinishingCost: 500,
+    previewLaborCost: 0,
+    previewFinishingCost: 0,
     previewWastePct: 5,
     previewProfitPct: 30,
 
     // Lamination
     laminationName: '',
-    laminationFormat: 'Sheet',
+    laminationFormat: 'Roll',
     laminationSize: 'A4',
-    laminationThickness: '125 Micron',
-    laminationMethod: '',
-    laminationFinish: '',
+    laminationThickness: '100mic',
+    laminationMethod: 'Thermal (Heat)',
+    laminationFinish: 'Glossy',
 
     // Machinery
     machineryName: '',
@@ -252,23 +274,23 @@ export const createDefaultItem = (type: string = 'PAPER'): InboundItemFormData =
 
     // Binding
     bindingName: '',
-    bindingType: 'Wire-O',
-    bindingDiameter: '',
-    bindingPitch: '',
-    bindingPageCapacity: '',
+    bindingType: 'Spiral / Wire-O',
+    bindingDiameter: '10mm',
+    bindingPitch: '3:1',
+    bindingPageCapacity: '80',
 
     // Spare Parts
     sparePartName: '',
-    partSubCategory: 'Spare Parts',
+    partSubCategory: 'Blade',
     partModelRef: '',
-    partYield: '',
+    partYield: '10000',
 
     // Offcut
     offcutName: '',
     offcutParentSku: '',
     offcutWidthMm: 100,
     offcutLengthMm: 150,
-    offcutQty: 100,
-    offcutLocation: 'Shelf A-1 (Offcuts)'
+    offcutQty: 50,
+    offcutLocation: 'B-01'
   };
 };

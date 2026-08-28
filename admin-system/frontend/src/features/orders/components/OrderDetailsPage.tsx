@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   ArrowLeft,
   CheckCircle2, 
@@ -27,6 +27,7 @@ import {
   Ruler,
   ExternalLink
 } from 'lucide-react';
+import ShippingLabelModal from './modals/ShippingLabelModal';
 
 export default function OrderDetailsPage({
   order,
@@ -76,6 +77,8 @@ export default function OrderDetailsPage({
   inventory?: any[];
 }) {
   if (!order) return null;
+
+  const [isShippingLabelOpen, setIsShippingLabelOpen] = useState(false);
 
   const getSpecDetails = (itemName: string) => {
     const name = (itemName || '').toLowerCase();
@@ -580,7 +583,7 @@ export default function OrderDetailsPage({
               <div className="space-y-5">
                 <h3 className="text-sm font-black text-slate-900 border-b pb-3 flex items-center gap-2">
                   <Activity className="w-5 h-5 text-purple-600 animate-pulse" />
-                  <span>{currentLang === 'lo' ? 'ຕິດຕາມຂັ້ນຕອນการຜະລິດ' : 'Production Progress'}</span>
+                  <span>{currentLang === 'lo' ? 'ຕິດຕາມຂັ້ນຕອນການຜະລິດ' : 'Production Progress'}</span>
                 </h3>
 
                 <div className="space-y-3.5">
@@ -740,7 +743,7 @@ export default function OrderDetailsPage({
                   type="submit"
                   className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-black transition active:scale-95 cursor-pointer shadow-sm shadow-amber-600/10 text-center"
                 >
-                  {currentLang === 'lo' ? 'ບັນທຶກລາຍງານງານເສย' : 'Submit Spoilage Log'}
+                  {currentLang === 'lo' ? 'ບັນທຶກລາຍງານງານເສຍ' : 'Submit Spoilage Log'}
                 </button>
               </form>
             </div>
@@ -822,7 +825,7 @@ export default function OrderDetailsPage({
                 <div className="space-y-1 bg-slate-50 p-4 border border-slate-200 rounded-2xl">
                   <span className="text-[10px] uppercase font-black text-slate-400 block">{currentLang === 'lo' ? 'ທີ່ຢູ່ສົ່ງເຄື່ອງຢ່າງລະອຽດ' : 'Full Delivery Address'}</span>
                   <p className="font-semibold text-slate-700 mt-1.5 italic leading-relaxed">
-                    {order.address || (currentLang === 'lo' ? 'ບໍ່ມີຂໍ້ມູນທີ່ຢູ່ (ຮັບເອງທີ່ຮ້าน)' : 'No address provided (Self-pickup)')}
+                    {order.address || (currentLang === 'lo' ? 'ບໍ່ມີຂໍ້ມູນທີ່ຢູ່ (ຮັບເອງທີ່ຮ້ານ)' : 'No address provided (Self-pickup)')}
                   </p>
                 </div>
               </div>
@@ -947,7 +950,7 @@ export default function OrderDetailsPage({
               className="px-4 py-2 bg-white text-emerald-800 rounded-xl text-xs font-black hover:bg-slate-50 transition cursor-pointer flex items-center gap-1.5"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>{currentLang === 'lo' ? 'ພิມໃບບິນ' : 'Print Invoice'}</span>
+              <span>{currentLang === 'lo' ? 'ພິມໃບບິນ' : 'Print Invoice'}</span>
             </button>
           </div>
         </div>
@@ -1116,6 +1119,14 @@ export default function OrderDetailsPage({
             <FileText className="w-4 h-4" />
             <span>{currentLang === 'lo' ? 'ໃບສົ່ງເຄື່ອງ (PDF)' : 'Delivery Note (PDF)'}</span>
           </a>
+          <button
+            type="button"
+            onClick={() => setIsShippingLabelOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer"
+          >
+            <Printer className="w-4 h-4" />
+            <span>{currentLang === 'lo' ? 'ພິມໃບປະໜ້າພັດສະດຸ' : 'Shipping Label'}</span>
+          </button>
           <span className={`px-3 py-1.5 rounded-xl text-xs font-black border uppercase flex items-center gap-1.5 ${getStatusBadgeClass(order.status)}`}>
             {getStatusIcon(order.status)}
             <span>{t(`status.${order.status}`)}</span>
@@ -1450,7 +1461,7 @@ export default function OrderDetailsPage({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* BLOCK 1: PRODUCTION PROCESS (ຂະບວນການຜະລິດ/ພิມ) */}
+          {/* BLOCK 1: PRODUCTION PROCESS (ຂະບວນການຜະລິດ/ພິມ) */}
           <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-5 shadow-sm flex flex-col justify-between">
             <div>
               <div className="flex justify-between items-center border-b border-slate-100 pb-4">
@@ -1915,6 +1926,15 @@ export default function OrderDetailsPage({
           </div>
         </div>
       </div>
+
+      {/* Shipping Label Modal */}
+      {isShippingLabelOpen && (
+        <ShippingLabelModal
+          isOpen={isShippingLabelOpen}
+          onClose={() => setIsShippingLabelOpen(false)}
+          order={order}
+        />
+      )}
     </div>
   );
 }

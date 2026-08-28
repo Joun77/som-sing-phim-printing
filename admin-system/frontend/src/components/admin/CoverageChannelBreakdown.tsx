@@ -24,12 +24,12 @@ export const CoverageChannelBreakdown: React.FC<CoverageChannelBreakdownProps> =
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-base font-bold text-slate-900">
-            สัดส่วนการใช้หมึกแยกสี (CMYK & TAC Density)
+            ສັດສ່ວນການໃຊ້ໝຶກແຍກສີ (CMYK & TAC Density)
           </h3>
           <p className="text-xs text-slate-500">
             {isFallback
-              ? '⚠️ ค่ามาตรฐาน (Fallback TAC) เนื่องจากไฟล์จำกัดสิทธิ์หรือขนาดเกิน 100MB'
-              : 'ผลวิเคราะห์ความหนาแน่นหมึกต่อหน้าจากการ Rasterize ด้วย MuPDF/Ghostscript'}
+              ? 'ຄ່າເລີ່ມຕົ້ນ (Fallback TAC) ເນື່ອງຈາກໄຟລ໌ຈຳກັດສິດ ຫຼື ຂະໜາດເກີນ 100MB'
+              : 'ຜົນວິເຄາະຄວາມໜາແໜ້ນໝຶກຕໍ່ໜ້າຈາກການ Rasterize ດ້ວຍ MuPDF/Ghostscript'}
           </p>
         </div>
         <div className="text-right">
@@ -51,9 +51,9 @@ export const CoverageChannelBreakdown: React.FC<CoverageChannelBreakdownProps> =
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           <div>
-            <p className="font-bold">เตือน: ความหนาแน่นหมึกสูงผิดปกติ (Heavy TAC &gt; 240%)</p>
+            <p className="font-bold">ເຕືອນ: ຄວາມໜາແໜ້ນໝຶກສູງຜິດປົກກະຕິ (Heavy TAC &gt; 240%)</p>
             <p className="text-rose-700/90 mt-0.5">
-              ไฟล์นี้ใช้ปริมาณหมึกสูง อาจทำให้หมึกแห้งช้าหรือซึมเลอะหลังพิมพ์ ควรพิจารณาปรับรอบพิมพ์หรือแจ้งช่างพิมพ์เพื่อคุมความร้อน
+              ໄຟລ໌ນີ້ໃຊ້ປະລິມານໝຶກສູງ ອາດເຮັດໃຫ້ໝຶກແຫ້ງຊ້າ ຫຼື ເປິເປື້ອນຫຼັງພິມ ຄວນພິຈາລະນາປັບຮອບພິມ ຫຼື ແຈ້ງຊ່າງພິມເພື່ອຄວບຄຸມຄວາມຮ້ອນ
             </p>
           </div>
         </div>
@@ -80,7 +80,7 @@ export const CoverageChannelBreakdown: React.FC<CoverageChannelBreakdownProps> =
       {/* TAC Multi-color Progress Overview */}
       <div className="pt-2 border-t border-slate-100 space-y-1.5">
         <div className="flex justify-between text-xs font-semibold text-slate-700">
-          <span>รวม 4 สี (Total Area Coverage: C+M+Y+K)</span>
+          <span>ລວມ 4 ສີ (Total Area Coverage: C+M+Y+K)</span>
           <span className={isHeavyTAC ? 'text-rose-600 font-bold' : 'text-slate-800 font-bold'}>
             {coverage.tac.toFixed(2)}% / 400%
           </span>

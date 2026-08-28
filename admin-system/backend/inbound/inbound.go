@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
 
 type InboundTransaction struct {
 	ID            string                 `json:"id"`
@@ -341,6 +343,66 @@ func saveBatchInboundWithTx(items []InboundTransaction) error {
 			catLower := strings.ToLower(cat)
 			isPaper := strings.Contains(catLower, "paper") || strings.Contains(catLower, "material") || strings.Contains(catLower, "ເຈ້ຍ")
 			isInk := strings.Contains(catLower, "ink") || strings.Contains(catLower, "ໝຶກ")
+			isPrinter := strings.Contains(catLower, "printer") || strings.Contains(catLower, "machine") || strings.Contains(catLower, "press") || strings.Contains(catLower, "equipment") || strings.HasPrefix(strings.ToLower(sku), "prn") || strings.HasPrefix(strings.ToLower(item.ID), "prn")
+
+			if isPrinter {
+				serial := "SN-" + item.ID
+				brand := "Generic"
+				model := name
+				pCat := "Digital Press"
+				cScheme := "CMYK"
+				var expLife float64 = 3000000
+				var maintRate float64 = 15
+				var priceCost float64 = item.TotalPrice
+				if item.Specs != nil {
+					if v, ok := item.Specs["serialNumber"].(string); ok && v != "" {
+						serial = v
+					}
+					if v, ok := item.Specs["brand"].(string); ok && v != "" {
+						brand = v
+					}
+					if v, ok := item.Specs["model"].(string); ok && v != "" {
+						model = v
+					}
+					if v, ok := item.Specs["printerCategory"].(string); ok && v != "" {
+						pCat = v
+					}
+					if v, ok := item.Specs["colorSchemeType"].(string); ok && v != "" {
+						cScheme = v
+					}
+					if v, ok := item.Specs["expectedLifeA4Pages"].(float64); ok && v > 0 {
+						expLife = v
+					}
+					if v, ok := item.Specs["maintenanceRatePercent"].(float64); ok && v > 0 {
+						maintRate = v
+					}
+				}
+
+				_, _ = tx.Exec(`
+					INSERT INTO printers (
+						asset_id, serial_number, brand, model, category,
+						color_scheme_type, total_color_slots, expected_life_a4_pages,
+						maintenance_rate_percent, purchase_date, price_cost, vendor_supplier,
+						warranty_expiry_year, status, location_dept, technical_specs,
+						product_image_url, receipt_invoice_url, updated_at
+					) VALUES (
+						$1, $2, $3, $4, $5,
+						$6, 4, $7,
+						$8, CURRENT_DATE, $9, $10,
+						EXTRACT(YEAR FROM CURRENT_DATE)::int + 2, 'In Use', 'Main Press Floor', $11,
+						$12, $13, NOW()
+					)
+					ON CONFLICT (asset_id) DO UPDATE SET
+						serial_number = EXCLUDED.serial_number,
+						brand = EXCLUDED.brand,
+						model = EXCLUDED.model,
+						category = EXCLUDED.category,
+						color_scheme_type = EXCLUDED.color_scheme_type,
+						price_cost = EXCLUDED.price_cost,
+						technical_specs = EXCLUDED.technical_specs,
+						updated_at = NOW()
+				`, item.ID, serial, brand, model, pCat, cScheme, expLife, maintRate, priceCost, item.SupplierName, string(specsJSON), item.ProductImage, item.ReceiptSlip)
+			}
 
 			unit := strings.TrimSpace(item.Unit)
 			if unit == "" {
@@ -356,14 +418,16 @@ func saveBatchInboundWithTx(items []InboundTransaction) error {
 			consumptionUnit := "Unit"
 			multiplier := 1.0
 			if isPaper {
-				consumptionUnit = "แผ่น"
+				consumptionUnit = "ແຜ່ນ"
 				multiplier = 500.0
 				if item.Specs != nil {
-					if v, ok := item.Specs["sheets_per_pack"].(float64); ok && v > 0 {
+					if v := parseNumeric(item.Specs["sheets_per_pack"]); v > 0 {
 						multiplier = v
-					} else if v, ok := item.Specs["sheets_per_ream"].(float64); ok && v > 0 {
+					} else if v := parseNumeric(item.Specs["sheets_per_ream"]); v > 0 {
 						multiplier = v
-					} else if v, ok := item.Specs["sheetsPerPack"].(float64); ok && v > 0 {
+					} else if v := parseNumeric(item.Specs["sheetsPerPack"]); v > 0 {
+						multiplier = v
+					} else if v := parseNumeric(item.Specs["purchaseMultiplier"]); v > 0 {
 						multiplier = v
 					}
 				}
@@ -371,9 +435,11 @@ func saveBatchInboundWithTx(items []InboundTransaction) error {
 				consumptionUnit = "ml"
 				multiplier = 100.0
 				if item.Specs != nil {
-					if v, ok := item.Specs["volume"].(float64); ok && v > 0 {
+					if v := parseNumeric(item.Specs["volume"]); v > 0 {
 						multiplier = v
-					} else if v, ok := item.Specs["volumePerBottle"].(float64); ok && v > 0 {
+					} else if v := parseNumeric(item.Specs["volumePerBottle"]); v > 0 {
+						multiplier = v
+					} else if v := parseNumeric(item.Specs["volume_ml"]); v > 0 {
 						multiplier = v
 					}
 				}
@@ -388,6 +454,7 @@ func saveBatchInboundWithTx(items []InboundTransaction) error {
 			if stockQtyToAdd > 0 {
 				costPerConsumption = item.TotalPrice / stockQtyToAdd
 			}
+
 
 			// Check if material already exists by SKU, ID, or (Name & Category)
 			var existingID string
@@ -445,3 +512,26 @@ func saveBatchInboundWithTx(items []InboundTransaction) error {
 func saveInboundWithTx(item InboundTransaction) error {
 	return saveBatchInboundWithTx([]InboundTransaction{item})
 }
+
+func parseNumeric(val interface{}) float64 {
+	if val == nil {
+		return 0
+	}
+	switch v := val.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case string:
+		v = strings.TrimSpace(v)
+		f, _ := strconv.ParseFloat(v, 64)
+		return f
+	default:
+		return 0
+	}
+}
+

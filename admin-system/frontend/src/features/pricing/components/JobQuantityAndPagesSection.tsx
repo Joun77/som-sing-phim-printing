@@ -49,18 +49,19 @@ export const JobQuantityAndPagesSection: React.FC<JobQuantityAndPagesSectionProp
             
             {/* Box 1: Order Quantity (ຈຳນວນທີ່ສັ່ງຜະລິດ) */}
             <div className="space-y-2.5 p-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl shadow-xs">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-black text-emerald-950 uppercase tracking-wider block">
-                  {currentLang === 'lo' ? '1. ຈຳນວນທີ່ສັ່ງຜະລິດ (Order Quantity) *' : 'Order Quantity *'}
+              <div className="flex justify-between items-center gap-2">
+                <label className="text-xs font-black text-emerald-950 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
+                  <span>{currentLang === 'lo' ? '1. ຈຳນວນທີ່ສັ່ງຜະລິດ (ORDER QUANTITY)' : 'ORDER QUANTITY'}</span>
+                  <span className="text-emerald-700 font-black">*</span>
                 </label>
-                <div className="flex gap-1">
-                  {['ຊຸດ', 'ຫົວ', 'ແຜ່ນ'].map(u => (
+                <div className="flex gap-1 shrink-0">
+                  {['ຊຸດ', 'ຫົວ'].map(u => (
                     <button
                       key={u}
                       type="button"
                       onClick={() => updateActiveItem({ unitName: u })}
                       className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
-                        (activeItem.unitName || 'ຊຸດ') === u
+                        (activeItem.unitName === u || (!activeItem.unitName && u === 'ຊຸດ') || (activeItem.unitName === 'ແຜ່ນ' && u === 'ຊຸດ'))
                           ? 'bg-emerald-600 text-white shadow-2xs'
                           : 'bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
                       }`}
@@ -80,7 +81,7 @@ export const JobQuantityAndPagesSection: React.FC<JobQuantityAndPagesSectionProp
                   className="w-full min-h-[46px] pl-4 pr-16 py-2 border-2 border-emerald-400 rounded-xl focus:outline-none text-xl font-black font-sans bg-white text-emerald-950 text-center shadow-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none px-2 py-0.5 bg-emerald-100 text-emerald-900 rounded-lg text-xs font-black shadow-2xs font-sans">
-                  {activeItem.unitName || 'ຊຸດ'}
+                  {activeItem.unitName === 'ແຜ່ນ' ? 'ຊຸດ' : (activeItem.unitName || 'ຊຸດ')}
                 </div>
               </div>
 
@@ -105,12 +106,14 @@ export const JobQuantityAndPagesSection: React.FC<JobQuantityAndPagesSectionProp
 
             {/* Box 2: Pages per Book / Unit (ຈຳນວນໜ້າຕໍ່ 1 ຊຸດ) */}
             <div className="space-y-2.5 p-4 bg-sky-50/60 border border-sky-200 rounded-2xl shadow-xs">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-black text-sky-950 uppercase tracking-wider block">
-                  {currentLang === 'lo' ? '2. ຈຳນວນໜ້າຕໍ່ 1 ຊຸດ (Pages / Book) *' : 'Pages per Book *'}
+              <div className="flex justify-between items-center gap-2">
+                <label className="text-xs font-black text-sky-950 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
+                  <span>{currentLang === 'lo' ? '2. ຈຳນວນໜ້າຕໍ່ 1 ຊຸດ (PAGES / BOOK)' : 'PAGES PER BOOK'}</span>
+                  <span className="text-sky-700 font-black">*</span>
                 </label>
-                <span className="text-[10px] font-bold text-sky-700">ດຶງຈາກ Preflight ອັດຕະໂນມັດ</span>
+                <span className="text-[10px] font-bold text-sky-700 shrink-0">ດຶງຈາກ Preflight ອັດຕະໂນມັດ</span>
               </div>
+
 
               <div className="relative">
                 <input

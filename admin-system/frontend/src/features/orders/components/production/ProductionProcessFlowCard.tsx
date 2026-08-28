@@ -32,7 +32,7 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
 }) => {
   // Post-Press Finishing Step derived dynamically from customer specs
   const bindingChoice = orderSpecs?.binding || 'ຫຍິບມຸງ / ເຂົ້າເລ່ມ';
-  const laminationChoice = orderSpecs?.lamination || 'ເຄືອບດ້ານ / เคลือบใส';
+  const laminationChoice = orderSpecs?.lamination || 'ເຄືອບດ້ານ / ເຄືອບເງົາ';
 
   // Sub-stages status tracking
   const [printDone, setPrintDone] = useState(

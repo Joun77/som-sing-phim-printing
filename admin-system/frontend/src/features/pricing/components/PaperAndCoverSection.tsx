@@ -1,5 +1,5 @@
 import React from 'react';
-import { Scissors, Bookmark, Search, ChevronUp, ChevronDown } from 'lucide-react';
+import { Scissors, Bookmark, Search, ChevronUp, ChevronDown, FileText } from 'lucide-react';
 import type { QuotationItem } from './QuotationManager';
 import type { InventoryItem } from '../../../types';
 
@@ -143,8 +143,9 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
 
                 {/* Cover Summary Banner */}
                 <div className="md:col-span-2 p-2.5 bg-amber-100/80 border border-amber-200 rounded-xl text-[11px] text-amber-950 flex flex-wrap justify-between items-center">
-                  <span>
-                    📄 ໃຊ້ເຈ້ຍປົກ: <strong>{activeCalc.totalCoverParentSheets?.toLocaleString() || activeItem.printVolume} ແຜ່ນ</strong> (1 ແຜ່ນປົກກາງຄູ່ / ເລັ້ມ + ເຜື່ອເສຍ)
+                  <span className="flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-amber-800" />
+                    <span>ໃຊ້ເຈ້ຍປົກ: <strong>{activeCalc.totalCoverParentSheets?.toLocaleString() || activeItem.printVolume} ແຜ່ນ</strong> (1 ແຜ່ນປົກກາງຄູ່ / ເລັ້ມ + ເຜື່ອເສຍ)</span>
                   </span>
                   <span className="font-bold font-sans">
                     ຕົ້ນທຶນເຈ້ຍປົກ: {formatCurrency(activeCalc.coverPaperCost || 0)}
@@ -157,8 +158,9 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
           {/* SECTION 2: INNER PAGES PAPER (ສ່ວນເຈ້ຍເນື້ອໃນ) */}
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
-                📄 ເຈ້ຍເນື້ອໃນ (Inner Pages Paper) *
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-slate-500" />
+                <span>ເຈ້ຍເນື້ອໃນ (Inner Pages Paper) *</span>
               </label>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-slate-500 font-medium hidden sm:inline">

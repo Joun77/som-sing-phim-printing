@@ -95,7 +95,7 @@ export const OrderTimelineLog: React.FC<OrderTimelineLogProps> = ({ logs, curren
                   )}
                   {log.carrierName && (
                     <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md border border-amber-100 flex items-center gap-1">
-                      <Truck className="w-3 h-3" /> ขนส่ง: {log.carrierName} {log.trackingNumber ? `(${log.trackingNumber})` : ''}
+                      <Truck className="w-3 h-3" /> ຂົນສົ່ງ: {log.carrierName} {log.trackingNumber ? `(${log.trackingNumber})` : ''}
                     </span>
                   )}
                   {log.proofVersion && (
@@ -105,7 +105,7 @@ export const OrderTimelineLog: React.FC<OrderTimelineLogProps> = ({ logs, curren
                   )}
                   {log.updatedBy && (
                     <span className="px-2 py-0.5 bg-slate-200 text-slate-700 rounded-md flex items-center gap-1">
-                      <User className="w-3 h-3" /> โดย: {log.updatedBy} {log.role ? `(${log.role})` : ''}
+                      <User className="w-3 h-3" /> ໂດຍ: {log.updatedBy} {log.role ? `(${log.role})` : ''}
                     </span>
                   )}
                 </div>

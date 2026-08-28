@@ -206,17 +206,16 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   ];
 
   const getPrinterMachineRate = (p: any) => {
-    if (!p) return 43;
+    if (!p) return 7;
     const prnPrice = Number(p.purchasePrice || p.purchaseCost || p.price || p.MachinePrice || 0);
-    const maintRate = Number(p.maintenanceRatePercent || p.maintenance_rate_percent || 20);
-    const lifePages = Number(p.expectedLifeA4Pages || p.printedPagesCapacity || p.TargetTotalPages || 3000000);
+    const maintRate = Number(p.maintenanceRatePercent || p.maintenance_rate_percent || 15);
+    const lifePages = Number(p.expectedLifeA4Pages || p.printedPagesCapacity || p.TargetTotalPages || (Number(p.lifespanYears || 5) * 12 * Number(p.estMonthlyVolume || 50000)) || 3000000);
     const machineCalc = calculateMachineUnitCost({
       purchase_price_lak: prnPrice,
       expected_life_pages: lifePages,
       maintenance_rate_percent: maintRate
     });
-    const deprRate = machineCalc.totalMachineCost > 0 ? Math.round(machineCalc.totalMachineCost) : Number(p.calculatedCostPerPage || p.costPerPage || 3);
-    return deprRate + 40; // Depr + 40 LAK Electricity per page
+    return machineCalc.totalMachineCost > 0 ? Math.round(machineCalc.totalMachineCost * 100) / 100 : Number(p.calculatedCostPerPage || p.costPerPage || 7);
   };
 
   const getPrinterActualInkCostPerPage = (p: any) => {
@@ -230,17 +229,19 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
           ? p.specs.printerColorLinks
           : (p.specs?.oemBaselineInks && p.specs?.oemBaselineInks.length > 0)
             ? p.specs.oemBaselineInks
-            : [];
-
-    if (oemSlots.length === 0) {
-      return Number(p.inkCostPerPage || p.calculatedCostPerPage || 0);
-    }
+            : [
+                { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500, oemPrice: 450000 },
+                { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+                { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+                { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 }
+              ];
 
     let totalInkCost = 0;
     oemSlots.forEach((slot: any) => {
       const oemVol = Number(slot.oemStandardVolumeMl || 70);
-      const oemYield = Number(slot.oemStandardIsoYieldA4 || 6000);
-      const isoRate = oemYield > 0 ? (oemVol / oemYield) : 0.012;
+      const oemYield = Number(slot.oemStandardIsoYieldA4 || (slot.colorGroup === 'Black' ? 7500 : 6000));
+      const isoRate = oemYield > 0 ? (oemVol / oemYield) : 0.0169;
+      const oemPrice = Number(slot.oemPrice || (slot.colorGroup === 'Black' ? 450000 : 320000));
 
       const activeLink = activePrnLinks.find((l: any) => 
         l.slotPosition === slot.slotPosition || 
@@ -251,34 +252,24 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
       let actualCostPerPage = 0;
       if (linkedInkItem) {
-        const actualPrice = Number(linkedInkItem.unitPrice || linkedInkItem.costPerPurchaseUnit || 0);
+        const actualPrice = Number(linkedInkItem.unitPrice || linkedInkItem.costPerPurchaseUnit || oemPrice);
         const resolvedVol = Number(
           linkedInkItem.volume || 
           linkedInkItem.specs?.volume || 
           linkedInkItem.specs?.volume_ml || 
           linkedInkItem.specs?.oemStandardVolumeMl || 
-          linkedInkItem.specs?.oemVolumeMl || 
-          (linkedInkItem.purchaseMultiplier > 1 ? linkedInkItem.purchaseMultiplier : null) ||
           140
         );
-        const costPerMl = resolvedVol > 0 ? (actualPrice / resolvedVol) : 0;
-        const linkedYield = Number(
-          linkedInkItem.yield ||
-          linkedInkItem.standard_page_yield ||
-          linkedInkItem.standardPageYield ||
-          linkedInkItem.specs?.yield ||
-          linkedInkItem.specs?.isoYield ||
-          0
-        );
-        const actualRate = linkedYield > 0 ? (resolvedVol / linkedYield) : isoRate;
-        actualCostPerPage = costPerMl * actualRate;
+        const actualVol = resolvedVol > 1 ? resolvedVol : 140;
+        const costPerMl = actualVol > 0 ? (actualPrice / actualVol) : 0;
+        actualCostPerPage = costPerMl * isoRate;
       } else {
-        actualCostPerPage = p.inkCostPerPage ? (Number(p.inkCostPerPage) / oemSlots.length) : 0;
+        actualCostPerPage = (oemVol > 0 ? (oemPrice / oemVol) : 0) * isoRate;
       }
       totalInkCost += actualCostPerPage;
     });
 
-    return Math.round(totalInkCost);
+    return Math.round(totalInkCost * 100) / 100;
   };
 
   const createNewItem = (name = 'ລາຍການສິນຄ້າ 1', specs?: any): QuotationItem => {
@@ -467,10 +458,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         ]);
 
     const avgDensity = firstAlloc?.average_density_pct || activeItem.avgCoverage || 15;
+    const totalJobPages = (Number(activeItem.printVolume) || 1) * Math.max(1, Number(activeItem.pagesPerBook || 1));
 
     if (mode === 'add' && (activeItem.printerAllocations || []).length > 0) {
       // Split load mode: Add new printer and distribute pages
-      const totalPages = activeItem.printVolume;
+      const totalPages = totalJobPages;
       const currentAllocations = activeItem.printerAllocations || [];
       const newCount = currentAllocations.length + 1;
       const pagesPerEngine = Math.floor(totalPages / newCount);
@@ -507,10 +499,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       const newAlloc: PrinterAllocation = {
         printer_id: printer.id,
         printer_name: printer.name || printer.id,
-        allocated_pages: activeItem.printVolume,
+        allocated_pages: totalJobPages,
         cost_per_page: rate,
         ink_cost_per_page: inkBaseRate,
-        subtotal_cost: activeItem.printVolume * rate,
+        subtotal_cost: totalJobPages * rate,
         color_mode: isMono ? 'MONO_K' : 'CMYK',
         average_density_pct: avgDensity,
         color_channels: channels,
@@ -549,12 +541,13 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       if (idx !== activeItemIndex) return it;
       let updated = { ...it, ...patch };
 
-      // If print volume changed and there is 1 allocation, sync its allocated_pages
-      if (patch.printVolume !== undefined && updated.printerAllocations && updated.printerAllocations.length === 1) {
+      // If print volume or pagesPerBook changed, sync total production pages
+      const totalPages = (Number(updated.printVolume) || 1) * Math.max(1, Number(updated.pagesPerBook || 1));
+      if ((patch.printVolume !== undefined || patch.pagesPerBook !== undefined) && updated.printerAllocations && updated.printerAllocations.length === 1) {
         updated.printerAllocations = [{
           ...updated.printerAllocations[0],
-          allocated_pages: patch.printVolume,
-          subtotal_cost: patch.printVolume * (updated.printerAllocations[0].cost_per_page || 50)
+          allocated_pages: totalPages,
+          subtotal_cost: totalPages * (updated.printerAllocations[0].cost_per_page || 50)
         }];
       }
 
@@ -1031,13 +1024,15 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     let machDepr = 0;
     let electricityCost = 0;
 
+    const totalJobProductionPages = (Number(item.printVolume) || 1) * Math.max(1, Number(item.pagesPerBook || 1));
+
     const allocations = (item.printerAllocations && item.printerAllocations.length > 0)
       ? item.printerAllocations
       : [
           {
             printer_id: item.selectedPrinterId || 'default',
             printer_name: 'Default Printer',
-            allocated_pages: item.printVolume,
+            allocated_pages: totalJobProductionPages,
             cost_per_page: 50,
             is_double_sided: item.isDoubleSided || false,
             color_mode: item.colorPrintMode || 'CMYK',
@@ -1052,8 +1047,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         ];
 
     allocations.forEach(alloc => {
-      const allocPages = Number(alloc.allocated_pages ?? item.printVolume ?? 0);
+      const allocPages = allocations.length === 1 
+        ? totalJobProductionPages 
+        : Number(alloc.allocated_pages ?? totalJobProductionPages);
       const isDuplex = alloc.is_double_sided !== undefined ? alloc.is_double_sided : (item.isDoubleSided || false);
+
       const sideFactor = isDuplex ? 2 : 1;
       const mode = alloc.color_mode || (item.colorPrintMode === 'MONO_K' ? 'MONO_K' : 'CMYK');
       const isMonoAlloc = mode === 'MONO_K';
@@ -2139,8 +2137,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                       {t('estimator.sec_customer', 'Customer Information')}
                     </span>
                     {selectedCustomerId && (
-                      <span className="text-[11px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-200 font-sans">
-                        👤 {selectedCustomerId}
+                      <span className="text-[11px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-200 font-sans flex items-center gap-1">
+                        <User className="w-3 h-3" />
+                        <span>{selectedCustomerId}</span>
                       </span>
                     )}
                   </div>
@@ -2218,8 +2217,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 {openPhases.phase4 && (
                   <div className="p-4 sm:p-5 border-t border-slate-100 space-y-4 animate-fade-in">
                     <ManualPrinterAllocator
-                      targetQuantity={activeItem.printVolume}
+                      targetQuantity={(Number(activeItem.printVolume) || 1) * Math.max(1, Number(activeItem.pagesPerBook || 1))}
                       allocations={activeItem.printerAllocations}
+
                       availablePrinters={printers.map(p => ({
                         id: p.id,
                         name: p.name || p.id,

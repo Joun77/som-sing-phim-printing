@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { X, RotateCw, Copy } from 'lucide-react';
 import { OrderDetailVerification, OverridePricingPayload } from '../../types/adminVerification';
 
 interface ManualOverrideModalProps {
@@ -47,7 +48,7 @@ export const ManualOverrideModal: React.FC<ManualOverrideModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reason.trim()) {
-      alert('โปรดระบุเหตุผลในการปรับปรุงราคาเพื่อการตรวจสอบย้อนหลัง');
+      alert('ກະລຸນາລະບຸເຫດຜົນໃນການປັບປຸງລາຄາເພື່ອການກວດສອບຍ້ອນຫຼັງ');
       return;
     }
 
@@ -62,30 +63,30 @@ export const ManualOverrideModal: React.FC<ManualOverrideModalProps> = ({
       });
       onClose();
     } catch (err) {
-      alert('เกิดข้อผิดพลาดในการบันทึก: ' + String(err));
+      alert('ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກ: ' + String(err));
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
       <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto space-y-6">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div>
             <h2 className="text-xl font-bold text-slate-900">
-              ปรับปรุงราคาและสเปก (Manual Override)
+              ປັບປຸງລາຄາ ແລະ ສະເປັກ (Manual Override)
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              ออเดอร์ #{order.orderNumber} — {order.customerName}
+              ອໍເດີ #{order.orderNumber} — {order.customerName}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-100 transition-all"
+            className="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -94,7 +95,7 @@ export const ManualOverrideModal: React.FC<ManualOverrideModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700 block">
-                จำนวนหน้าที่แท้จริง (Actual Pages)
+                ຈຳນວນໜ້າທີ່ແທ້ຈິງ (Actual Pages)
               </label>
               <input
                 type="number"
@@ -103,12 +104,12 @@ export const ManualOverrideModal: React.FC<ManualOverrideModalProps> = ({
                 onChange={(e) => setPageCount(Math.max(1, parseInt(e.target.value) || 1))}
                 className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
-              <span className="text-[11px] text-slate-400">เดิม: {order.pageCount} หน้า</span>
+              <span className="text-[11px] text-slate-400">ເດີມ: {order.pageCount} ໜ້າ</span>
             </div>
 
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700 block">
-                ความหนาแน่นหมึก TAC % (Actual TAC)
+                ຄວາມໜາແໜ້ນໝຶກ TAC % (Actual TAC)
               </label>
               <input
                 type="number"
@@ -119,14 +120,14 @@ export const ManualOverrideModal: React.FC<ManualOverrideModalProps> = ({
                 onChange={(e) => setOverrideTAC(parseFloat(e.target.value) || 0)}
                 className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
-              <span className="text-[11px] text-slate-400">เดิม: {order.coverage.tac.toFixed(2)}%</span>
+              <span className="text-[11px] text-slate-400">ເດີມ: {order.coverage.tac.toFixed(2)}%</span>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700 block">
-                กำหนดราคาต่อเล่มโดยตรง (₭ / เล่ม)
+                ກຳນົດລາຄາຕໍ່ຫົວໂດຍກົງ (₭ / ຫົວ)
               </label>
               <input
                 type="number"
@@ -141,9 +142,10 @@ export const ManualOverrideModal: React.FC<ManualOverrideModalProps> = ({
               <button
                 type="button"
                 onClick={handleRecalculatePreview}
-                className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold border border-slate-300 transition-all active:scale-98"
+                className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold border border-slate-300 transition-all active:scale-98 flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                🔄 คำนวณราคาจำลองใหม่ (Preview)
+                <RotateCw className="w-3.5 h-3.5" />
+                <span>ຄຳນວນລາຄາຈຳລອງໃໝ່ (Preview)</span>
               </button>
             </div>
           </div>
@@ -151,14 +153,14 @@ export const ManualOverrideModal: React.FC<ManualOverrideModalProps> = ({
           {/* Reason Input */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-700 block">
-              เหตุผลในการปรับปรุงราคา (Audit Reason) <span className="text-rose-500">*</span>
+              ເຫດຜົນໃນການປັບປຸງລາຄາ (Audit Reason) <span className="text-rose-500">*</span>
             </label>
             <textarea
               required
               rows={2}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="ระบุเหตุผล เช่น ลูกค้าส่งไฟล์ใหม่จำนวนหน้าลดลง, ปรับลดสัดส่วนหมึกตามจริง..."
+              placeholder="ລະບຸເຫດຜົນ ເຊັ່ນ: ລູກຄ້າສົ່ງໄຟລ໌ໃໝ່ຈຳນວນໜ້າຫຼຸດລົງ, ປັບຫຼຸດສັດສ່ວນໝຶກຕາມຈິງ..."
               className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
             />
           </div>
@@ -166,19 +168,19 @@ export const ManualOverrideModal: React.FC<ManualOverrideModalProps> = ({
           {/* Comparison Diff Preview */}
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-2">
             <span className="text-xs font-bold text-slate-500 block uppercase tracking-wider">
-              เปรียบเทียบผลลัพธ์ (Before vs After)
+              ປຽບທຽບຜົນຮັບ (Before vs After)
             </span>
-            <div className="grid grid-cols-2 gap-4 text-xs">
+            <div className="grid grid-cols-2 gap-4 text-xs font-medium">
               <div>
-                <span className="text-slate-400 block">ก่อนปรับ:</span>
+                <span className="text-slate-400 block">ກ່ອນປັບ:</span>
                 <span className="font-semibold text-slate-700">
-                  ₭{order.costAudit.unitPrice.toLocaleString()} / เล่ม (รวม ₭{order.costAudit.totalPrice.toLocaleString()})
+                  ₭{order.costAudit.unitPrice.toLocaleString()} / ຫົວ (ລວມ ₭{order.costAudit.totalPrice.toLocaleString()})
                 </span>
               </div>
               <div>
-                <span className="text-indigo-600 block font-bold">หลังปรับ:</span>
+                <span className="text-indigo-600 block font-bold">ຫຼັງປັບ:</span>
                 <span className="font-bold text-indigo-800 text-sm">
-                  ₭{previewPrice.unitPrice.toLocaleString()} / เล่ม (รวม ₭{previewPrice.totalPrice.toLocaleString()})
+                  ₭{previewPrice.unitPrice.toLocaleString()} / ຫົວ (ລວມ ₭{previewPrice.totalPrice.toLocaleString()})
                 </span>
               </div>
             </div>
@@ -189,25 +191,26 @@ export const ManualOverrideModal: React.FC<ManualOverrideModalProps> = ({
             <button
               type="button"
               onClick={onRequestDrivePermission}
-              className="w-full sm:w-auto px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-all"
+              className="w-full sm:w-auto px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              📥 คัดลอกข้อความขอสิทธิ์ Drive
+              <Copy className="w-3.5 h-3.5" />
+              <span>ຄັດລອກຂໍ້ຄວາມຂໍສິດ Drive</span>
             </button>
 
             <div className="flex space-x-2 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 sm:flex-none px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all"
+                className="flex-1 sm:flex-none px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all cursor-pointer"
               >
-                ยกเลิก
+                ຍົກເລີກ
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="flex-1 sm:flex-none px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all active:scale-95 disabled:opacity-50"
+                className="flex-1 sm:flex-none px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
               >
-                {isSubmitting ? 'กำลังบันทึก...' : 'ยืนยันและอนุมัติสั่งผลิต'}
+                {isSubmitting ? 'ກຳລັງບັນທຶກ...' : 'ຢືນຢັນ ແລະ ອະນຸມັດສັ່ງຜະລິດ'}
               </button>
             </div>
           </div>

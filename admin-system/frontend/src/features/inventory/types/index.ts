@@ -63,6 +63,19 @@ export interface PaperSpec {
   [key: string]: any;
 }
 
+export interface OffcutSpec {
+  parentMaterialId?: string;
+  parentMaterialName?: string;
+  widthMm: number;
+  heightMm: number;
+  dimensionFormatted?: string;
+  grammageGsm: number;
+  paperType: string;
+  paperSurface?: string;
+  usableFor?: string[];
+  notes?: string;
+}
+
 export interface InventoryBatch {
   id: string;
   purchaseDate: string;

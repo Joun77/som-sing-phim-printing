@@ -208,7 +208,7 @@ export const InvoiceTaxDocumentModal: React.FC<InvoiceTaxDocumentModalProps> = (
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-slate-100 text-slate-700 font-black border-b border-slate-200">
-                <th className="p-3">ลำดับ</th>
+                <th className="p-3">ລຳດັບ</th>
                 <th className="p-3">ລາຍການສິນຄ້າ / ບໍລິການພິມ</th>
                 <th className="p-3 text-right">ຈຳນວນ</th>
                 <th className="p-3 text-right">ລາຄາ/ໜ່ວຍ</th>
@@ -235,9 +235,9 @@ export const InvoiceTaxDocumentModal: React.FC<InvoiceTaxDocumentModalProps> = (
           <div className="space-y-2 max-w-xs">
             <span className="font-extrabold text-slate-700 block">ຂໍ້ມູນການຊຳຣະເງິນ (Payment Account):</span>
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1 text-[11px]">
-              <p className="font-extrabold text-slate-900">ธนาคารการค้าต่างประเทศลาว (BCEL)</p>
-              <p className="text-slate-600 font-medium">เลขบัญชี: 160-12-00-998877-001</p>
-              <p className="text-slate-500 font-medium">ชื่อบัญชี: SOM-SING PRINTING CO., LTD</p>
+              <p className="font-extrabold text-slate-900">ທະນາຄານການຄ້າຕ່າງປະເທດລາວ (BCEL)</p>
+              <p className="text-slate-600 font-medium">ເລກບັນຊີ: 160-12-00-998877-001</p>
+              <p className="text-slate-500 font-medium">ຊື່ບັນຊີ: SOM-SING PRINTING CO., LTD</p>
             </div>
           </div>
 

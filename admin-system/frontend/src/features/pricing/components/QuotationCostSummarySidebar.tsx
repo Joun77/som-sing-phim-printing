@@ -179,53 +179,112 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
             <span className="font-bold text-slate-100">{formatCurrency(grandNetCost)}</span>
           </div>
 
-          {/* Cost Composition Mini Bar */}
-          <div className="space-y-1.5 pt-1">
-            <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden flex">
+          {/* Cost & Profit Composition Multi-Segment Bar */}
+          <div className="space-y-2 pt-1">
+            <div className="w-full bg-white/20 h-2.5 rounded-full overflow-hidden flex">
               {grandPaperCost > 0 && (
                 <div 
                   style={{ width: `${Math.min(100, (grandPaperCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                  className="bg-sky-400 h-full" 
-                  title="Paper Cost"
+                  className="bg-sky-400 h-full transition-all duration-300" 
+                  title={`Paper Cost: ${formatCurrency(grandPaperCost)}`}
                 />
               )}
               {grandInkCost > 0 && (
                 <div 
                   style={{ width: `${Math.min(100, (grandInkCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                  className="bg-purple-400 h-full" 
-                  title="Ink Cost"
+                  className="bg-purple-400 h-full transition-all duration-300" 
+                  title={`Ink Cost: ${formatCurrency(grandInkCost)}`}
                 />
               )}
               {grandMachCost > 0 && (
                 <div 
                   style={{ width: `${Math.min(100, (grandMachCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                  className="bg-amber-400 h-full" 
-                  title="Machine Depreciation"
+                  className="bg-amber-400 h-full transition-all duration-300" 
+                  title={`Machine Depreciation: ${formatCurrency(grandMachCost)}`}
                 />
               )}
               {grandPostPressCost > 0 && (
                 <div 
                   style={{ width: `${Math.min(100, (grandPostPressCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                  className="bg-rose-400 h-full" 
-                  title="Post-Press Machinery"
+                  className="bg-rose-400 h-full transition-all duration-300" 
+                  title={`Post-Press Machinery: ${formatCurrency(grandPostPressCost)}`}
                 />
               )}
               {grandFinishingCost > 0 && (
                 <div 
                   style={{ width: `${Math.min(100, (grandFinishingCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                  className="bg-emerald-400 h-full" 
-                  title="Consumables"
+                  className="bg-teal-400 h-full transition-all duration-300" 
+                  title={`Consumables: ${formatCurrency(grandFinishingCost)}`}
                 />
               )}
               {grandLaborCost > 0 && (
                 <div 
                   style={{ width: `${Math.min(100, (grandLaborCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                  className="bg-blue-400 h-full" 
-                  title="Labor"
+                  className="bg-blue-400 h-full transition-all duration-300" 
+                  title={`Labor Cost: ${formatCurrency(grandLaborCost)}`}
+                />
+              )}
+              {(grandPackagingCost + quotationSetupFee) > 0 && (
+                <div 
+                  style={{ width: `${Math.min(100, ((grandPackagingCost + quotationSetupFee) / Math.max(1, finalGrandTotal)) * 100)}%` }} 
+                  className="bg-orange-400 h-full transition-all duration-300" 
+                  title={`Setup & Packaging: ${formatCurrency(grandPackagingCost + quotationSetupFee)}`}
+                />
+              )}
+              {grandNetProfit > 0 && (
+                <div 
+                  style={{ width: `${Math.min(100, (grandNetProfit / Math.max(1, finalGrandTotal)) * 100)}%` }} 
+                  className="bg-emerald-400 h-full transition-all duration-300" 
+                  title={`Net Profit Margin: ${formatCurrency(grandNetProfit)}`}
                 />
               )}
             </div>
+
+            {/* Mini Legend for Composition Tabs */}
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-slate-300 font-medium">
+              {grandPaperCost > 0 && (
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-sky-400"></span> ເຈ້ຍ ({((grandPaperCost / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
+                </span>
+              )}
+              {grandInkCost > 0 && (
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-purple-400"></span> ໝຶກ ({((grandInkCost / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
+                </span>
+              )}
+              {grandMachCost > 0 && (
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-400"></span> ເຄື່ອງພິມ ({((grandMachCost / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
+                </span>
+              )}
+              {grandPostPressCost > 0 && (
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-rose-400"></span> ຫຼັງພິມ ({((grandPostPressCost / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
+                </span>
+              )}
+              {grandFinishingCost > 0 && (
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-teal-400"></span> ສິ້ນເປືອງ ({((grandFinishingCost / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
+                </span>
+              )}
+              {grandLaborCost > 0 && (
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-blue-400"></span> ແຮງງານ ({((grandLaborCost / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
+                </span>
+              )}
+              {(grandPackagingCost + quotationSetupFee) > 0 && (
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-orange-400"></span> ຕັ້ງຄ່າ/ຫຸ້ມຫໍ່ ({(((grandPackagingCost + quotationSetupFee) / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
+                </span>
+              )}
+              {grandNetProfit > 0 && (
+                <span className="flex items-center gap-1 font-bold text-emerald-300">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span> ກຳໄລ ({((grandNetProfit / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
+                </span>
+              )}
+            </div>
           </div>
+
         </div>
 
         {/* ========================================================================= */}

@@ -41,7 +41,7 @@ export function formatLaoNotificationMessage(payload: StatusUpdateNotificationPa
   }
 
   if (details.amountLAK) {
-    return `ຢືນຢັນການຊຳລະເງິນສຳເລັດ: ອໍເດີ #${orderNumber} ຍອດເງິນ [₭ ${details.amountLAK.toLocaleString()}] ผ่านการตรวจสอบแล้ว`;
+    return `ຢືນຢັນການຊຳລະເງິນສຳເລັດ: ອໍເດີ #${orderNumber} ຍອດເງິນ [₭ ${details.amountLAK.toLocaleString()}] ຜ່ານການກວດສອບແລ້ວ`;
   }
 
   return `ອັບເດດສະຖານະອໍເດີ #${orderNumber} ສໍາເລັດ: ປ່ຽນຈາກ [${previousStatus}] ➔ [${newStatus}]`;

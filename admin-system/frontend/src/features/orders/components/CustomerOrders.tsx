@@ -5,10 +5,12 @@ import {
   CheckCircle2, 
   Clock, 
   AlertTriangle, 
-  Plus,
-  Activity,
-  Layers,
-  Calculator
+  Plus, 
+  Activity, 
+  Layers, 
+  Calculator,
+  Check,
+  X
 } from 'lucide-react';
 import OrdersTable from './OrdersTable';
 import CreateOrderPage from './CreateOrderPage';
@@ -22,11 +24,16 @@ import OrderDetailsModal from './OrderDetailsModal';
 import { QuotationManager } from '@features/pricing';
 import { ProductionBoard } from '@features/production';
 import SubmitQuotationModal from './SubmitQuotationModal';
+import QuickTrackingModal from './QuickTrackingModal';
+import ShippingLabelModal from './modals/ShippingLabelModal';
 
 export default function CustomerOrders({ initialSubTab = 'orders' }) {
   const { 
     orders, 
     updateOrderStatus,
+    startOrderProduction,
+    updateOrderTracking,
+    couriers,
     updateOrderPaymentStatus,
     settleOrderBalance, 
     deleteOrder, 
@@ -65,6 +72,8 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
   const [isAddOrderOpen, setIsAddOrderOpen] = useState(initialSubTab === 'create_order');
   const [lightbox, setLightbox] = useState(null);
   const [quoteModalOrder, setQuoteModalOrder] = useState(null);
+  const [trackingModalOrder, setTrackingModalOrder] = useState(null);
+  const [shippingLabelOrder, setShippingLabelOrder] = useState(null);
   const focusRef = useRef(null);
 
   useEffect(() => {
@@ -525,20 +534,30 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
                       <button
                         type="button"
                         onClick={() => handleToggleDeliveryStatus(ord.id, ord.status)}
-                        className={`px-3 py-1.5 rounded-xl font-black text-[11px] transition shadow-sm border ${
+                        className={`px-3 py-1.5 rounded-xl font-black text-[11px] transition shadow-sm border flex items-center justify-center gap-1 mx-auto ${
                           ord.status === 'Delivered'
                             ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
                             : 'bg-amber-100 text-amber-800 border-amber-200'
                         }`}
                       >
-                        {ord.status === 'Delivered' ? '✓ ສົ່ງມອບແລ້ວ (Delivered)' : 'ກຳລັງຂົນສົ່ງ (In Transit)'}
+                        {ord.status === 'Delivered' ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>ສົ່ງມອບແລ້ວ (Delivered)</span>
+                          </>
+                        ) : (
+                          <span>ກຳລັງຂົນສົ່ງ (In Transit)</span>
+                        )}
                       </button>
                     </td>
                     <td className="px-4 py-3.5 text-right font-sans">
                       {ord.remainingUnpaidBalance > 0 ? (
                         <span className="text-red-600 font-black">{formatLAK(ord.remainingUnpaidBalance)}</span>
                       ) : (
-                        <span className="text-emerald-600 font-black">✓ ຊຳຣະຄົບແລ້ວ</span>
+                        <span className="text-emerald-600 font-black inline-flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>ຊຳຣະຄົບແລ້ວ</span>
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-3.5 text-center flex items-center justify-center gap-2">
@@ -587,6 +606,35 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
           getPaymentStatusIcon={getPaymentStatusIcon}
           onViewDetails={setSelectedOrder}
           onOpenQuoteModal={(ord) => setQuoteModalOrder(ord)}
+          onStartProduction={startOrderProduction}
+          onReadyToShip={(id) => handleStatusChange(id, 'Ready')}
+          onOpenTrackingModal={(ord) => setTrackingModalOrder(ord)}
+          onPrintShippingLabel={(ord) => setShippingLabelOrder(ord)}
+          showToast={showToast}
+        />
+      )}
+
+      {/* Shipping Label Modal */}
+      {shippingLabelOrder && (
+        <ShippingLabelModal
+          isOpen={!!shippingLabelOrder}
+          onClose={() => setShippingLabelOrder(null)}
+          order={shippingLabelOrder}
+        />
+      )}
+
+      {/* Quick Tracking Modal */}
+      {trackingModalOrder && (
+        <QuickTrackingModal
+          isOpen={!!trackingModalOrder}
+          onClose={() => setTrackingModalOrder(null)}
+          order={trackingModalOrder}
+          couriers={couriers}
+          onSaveTracking={(orderId, courierName, trackingNum, fee) => {
+            if (updateOrderTracking) {
+              updateOrderTracking(orderId, courierName, trackingNum, fee);
+            }
+          }}
         />
       )}
 
@@ -601,7 +649,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             if (target) {
               target.totalPriceCharged = amount;
               target.remainingUnpaidBalance = amount - (target.depositAmountPaid || 0);
-              showToast(`ส่งใบเสนอราคาจำนวน ${formatLAK(amount)} เรียบร้อยแล้ว!`, 'success');
+              showToast(`ສົ່ງໃບສະເໜີລາຄາຈຳນວນ ${formatLAK(amount)} ຮຽບຮ້ອຍແລ້ວ!`, 'success');
             }
           }}
           formatCurrency={formatLAK}
@@ -666,9 +714,9 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
                 </div>
                 <button 
                   onClick={() => setIsSettleOpen(false)}
-                  className="p-2 hover:bg-slate-100 rounded-xl text-slate-400"
+                  className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 cursor-pointer"
                 >
-                  ✕
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 

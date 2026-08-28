@@ -20,7 +20,13 @@ import {
   X,
   Layers,
   Wrench,
-  RotateCcw
+  RotateCcw,
+  Phone,
+  Smartphone,
+  Zap,
+  Palette,
+  Droplet,
+  Search
 } from 'lucide-react';
 import type { MasterOrder, MasterOrderItem, ProductionStep } from '../orders/types';
 
@@ -78,15 +84,18 @@ const PRODUCTION_STEPS: StepConfig[] = [
 ];
 
 const RCA_CAUSES = [
-  { id: 'PAPER_JAM', icon: '📑', labelLao: 'ເຈ້ຍຕິດ / ປ້ອນບ່ຽວ (Paper Jam)', labelTh: 'กระดาษติด/ป้อนเบี้ยว' },
-  { id: 'COLOR_MISMATCH', icon: '🎨', labelLao: 'ສີບໍ່ຕົງ / ໝຶກພ້ຽນ (Color Mismatch)', labelTh: 'สีไม่ตรง/หมึกเพี้ยน' },
-  { id: 'PLATE_DAMAGED', icon: '🔲', labelLao: 'ເພລດເສຍ / ມີຮອຍຂີດ (Plate Scratch)', labelTh: 'เพลทเสีย/เป็นรอย' },
-  { id: 'INK_SMUDGE', icon: '💧', labelLao: 'ໝຶກເລິ / ເປິເປື້ອນ (Ink Smudge)', labelTh: 'หมึกเลอะ/เป็นจุด' },
-  { id: 'DIECUT_MISALIGNED', icon: '✂️', labelLao: 'ຕັດບ່ຽວ / ໃບມີດບໍ່ຄົມ (Diecut Misalignment)', labelTh: 'ไดคัท/ตัดเบี้ยว' },
-  { id: 'OTHER_FAULT', icon: '⚠️', labelLao: 'ອື່ນໆ / ຂັດຂ້ອງທົ່ວໄປ (Other Cause)', labelTh: 'สาเหตุอื่นๆ' },
+  { id: 'PAPER_JAM', icon: <FileText className="w-4 h-4 text-amber-500" />, labelLao: 'ເຈ້ຍຕິດ / ປ້ອນບ່ຽວ (Paper Jam)' },
+  { id: 'COLOR_MISMATCH', icon: <Palette className="w-4 h-4 text-purple-500" />, labelLao: 'ສີບໍ່ຕົງ / ໝຶກພ້ຽນ (Color Mismatch)' },
+  { id: 'PLATE_DAMAGED', icon: <Layers className="w-4 h-4 text-blue-500" />, labelLao: 'ເພລດເສຍ / ມີຮອຍຂີດ (Plate Scratch)' },
+  { id: 'INK_SMUDGE', icon: <Droplet className="w-4 h-4 text-cyan-500" />, labelLao: 'ໝຶກເລິ / ເປິເປື້ອນ (Ink Smudge)' },
+  { id: 'DIECUT_MISALIGNED', icon: <Scissors className="w-4 h-4 text-rose-500" />, labelLao: 'ຕັດບ່ຽວ / ໃບມີດບໍ່ຄົມ (Diecut Misalignment)' },
+  { id: 'OTHER_FAULT', icon: <AlertTriangle className="w-4 h-4 text-amber-600" />, labelLao: 'ອື່ນໆ / ຂັດຂ້ອງທົ່ວໄປ (Other Cause)' },
 ];
 
+import { useApp } from '../../store/AppContext';
+
 export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initialOrderNo }) => {
+  const { orders } = useApp();
   const pathOrderNo = typeof window !== 'undefined' && window.location.pathname.startsWith('/track')
     ? window.location.pathname.replace(/^\/track\/?/, '')
     : '';
@@ -109,6 +118,74 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
     setLoading(true);
     setError(null);
     try {
+      // 1. Check local AppContext orders first
+      const localOrd = orders.find(
+        (o: any) => o.id?.toLowerCase() === orderNo.toLowerCase() || 
+                   o.orderNumber?.toLowerCase() === orderNo.toLowerCase() || 
+                   o.order_no?.toLowerCase() === orderNo.toLowerCase()
+      );
+
+      if (localOrd) {
+        const mappedOrder: MasterOrder = {
+          id: localOrd.id,
+          order_no: localOrd.orderNumber || localOrd.id,
+          order_number: localOrd.orderNumber || localOrd.id,
+          customer_name: localOrd.customerName || 'ລູກຄ້າທົ່ວໄປ (General Customer)',
+          customer_phone: localOrd.customerPhone || '020-5555-5555',
+          total_amount_lak: localOrd.totalPriceCharged || localOrd.totalAmount || 0,
+          deposit_lak: (localOrd.totalPriceCharged || 0) * 0.5,
+          remaining_lak: (localOrd.totalPriceCharged || 0) * 0.5,
+          overall_status: localOrd.status === 'Completed' ? 'COMPLETED' : 'IN_PRODUCTION',
+          delivery_date: localOrd.dueDate || localOrd.date || '2026-08-30',
+          created_at: localOrd.createdTime || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          items: (localOrd.items && localOrd.items.length > 0) ? (localOrd.items || []).map((it: any, idx: number) => ({
+            id: it.id || `item-${idx + 1}`,
+            order_id: localOrd.id,
+            item_name: it.name || it.description || `ລາຍການທີ ${idx + 1}`,
+            quantity: it.quantity || 100,
+            page_count: it.pageCount || 1,
+            paper_size: it.paperSize || 'A4',
+            binding_type: it.bindingType || 'PERFECT_HOT_GLUE',
+            spine_width_mm: it.spineWidth || 5,
+            current_step: it.currentStep || 'PENDING',
+            avg_cov_c: 2.5,
+            avg_cov_m: 2.5,
+            avg_cov_y: 2.5,
+            avg_cov_k: 5.0,
+            unit_cost_lak: it.unitCost || 0,
+            unit_price_lak: it.unitPrice || 0,
+            total_price_lak: (it.unitPrice || 0) * (it.quantity || 1),
+            cover_file_url: `/api/v1/orders/files/orders/${orderNo}/cover.pdf`,
+            inner_file_url: `/api/v1/orders/files/orders/${orderNo}/inner.pdf`
+          })) : [
+            {
+              id: 'item-1',
+              order_id: localOrd.id,
+              item_name: localOrd.jobName || 'ງານພິມມາດຕະຖານ',
+              quantity: localOrd.totalQuantity || 100,
+              page_count: 1,
+              paper_size: 'A4',
+              binding_type: 'NONE',
+              spine_width_mm: 0,
+              current_step: 'PENDING',
+              avg_cov_c: 2.5,
+              avg_cov_m: 2.5,
+              avg_cov_y: 2.5,
+              avg_cov_k: 5.0,
+              unit_cost_lak: 0,
+              unit_price_lak: localOrd.totalPriceCharged || 0,
+              total_price_lak: localOrd.totalPriceCharged || 0,
+              cover_file_url: `/api/v1/orders/files/orders/${orderNo}/cover.pdf`,
+              inner_file_url: `/api/v1/orders/files/orders/${orderNo}/inner.pdf`
+            }
+          ]
+        };
+        setOrder(mappedOrder);
+        setLoading(false);
+        return;
+      }
+
       const res = await fetch(`/api/v1/orders/track/${orderNo}`);
       if (!res.ok) {
         throw new Error('Order not found');
@@ -356,7 +433,10 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
               </span>
             </div>
             <h2 className="text-2xl font-black text-white">{order.customer_name}</h2>
-            <p className="text-sm text-slate-400 font-medium">📞 {order.customer_phone || '-'}</p>
+            <p className="text-sm text-slate-400 font-medium flex items-center gap-1.5">
+              <Phone className="w-3.5 h-3.5 text-slate-400" />
+              <span>{order.customer_phone || '-'}</span>
+            </p>
           </div>
 
           <div className="text-right space-y-1">
@@ -378,7 +458,10 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
             <BookOpen className="w-6 h-6 text-indigo-400" />
             <span>ລາຍການງານພິມໃນໃບສັ່ງຜະລິດ ({order.items?.length || 0} ລາຍການ)</span>
           </h3>
-          <span className="text-xs font-bold text-slate-400">📱 Touchscreen Operator Mode</span>
+          <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+            <Smartphone className="w-3.5 h-3.5 text-slate-400" />
+            <span>Touchscreen Operator Mode</span>
+          </span>
         </div>
 
         {order.items?.map((item, idx) => {
@@ -428,8 +511,9 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
 
               {/* 3 Main Touch Action Buttons (Min 64px x 64px, High Contrast) */}
               <div>
-                <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2.5">
-                  ⚡ ປຸ່ມຄວບຄຸມການຜະລິດ (3 Main Touch Action Buttons):
+                <label className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>ປຸ່ມຄວບຄຸມການຜະລິດ (3 Main Touch Action Buttons):</span>
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                   {/* Button 1: Start (Emerald Green) */}
@@ -531,8 +615,18 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
                   <AlertTriangle className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-white">
-                    {actionType === 'COMPLETE' ? '📦 ຢືນຢັນພິມສຳເລັດ & ບັນທຶກເຈ້ຍເສຍ' : '⚠️ ພັກເຄື່ອງ / ບັນທຶກເຫດຂັດຂ້ອງ'}
+                  <h3 className="text-xl font-black text-white flex items-center gap-2">
+                    {actionType === 'COMPLETE' ? (
+                      <>
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                        <span>ຢືນຢັນພິມສຳເລັດ & ບັນທຶກເຈ້ຍເສຍ</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-5 h-5 text-amber-400" />
+                        <span>ພັກເຄື່ອງ / ບັນທຶກເຫດຂັດຂ້ອງ</span>
+                      </>
+                    )}
                   </h3>
                   <p className="text-xs text-slate-400 font-bold">{activeItem.item_name}</p>
                 </div>
@@ -599,8 +693,9 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
 
             {/* Root Cause Analysis (RCA) Selection Chips */}
             <div className="space-y-2">
-              <label className="block text-xs font-black text-slate-300 uppercase tracking-wider">
-                🔍 ເລືອກສາເຫດຄວາມຜິດພາດ (Root Cause Analysis - RCA):
+              <label className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Search className="w-3.5 h-3.5 text-indigo-400" />
+                <span>ເລືອກສາເຫດຄວາມຜິດພາດ (Root Cause Analysis - RCA):</span>
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {RCA_CAUSES.map((rca) => {
@@ -616,7 +711,7 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
                           : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
                       }`}
                     >
-                      <span className="text-base">{rca.icon}</span>
+                      <span>{rca.icon}</span>
                       <span className="leading-tight">{rca.labelLao}</span>
                     </button>
                   );

@@ -29,7 +29,7 @@ const normalizeLaoUnit = (unit?: string, fallback = 'ແຜ່ນ') => {
 
 export default function StockTable({ materials, loading, onRefresh, onOpenInbound, onViewDetails }: StockTableProps) {
   const queryClient = useQueryClient();
-  const { showToast, deleteInventorySku } = useApp();
+  const { showToast, deleteInventorySku, formatCurrency } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   
@@ -94,13 +94,18 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
     setEditLoading(true);
     setEditError(null);
     try {
+      const pCost = Number(editPurchaseCost) || 0;
+      const mult = Number(editMultiplier) || 1;
+      const cCost = mult > 0 ? (pCost / mult) : pCost;
+
       await updateMaterialDirect(editingMaterial.id || editingMaterial.sku, {
         name: editName,
         category: editCategory,
         purchase_unit: editPurchaseUnit,
         consumption_unit: editConsumptionUnit,
-        purchase_multiplier: Number(editMultiplier),
-        cost_per_purchase_unit: Number(editPurchaseCost),
+        purchase_multiplier: mult,
+        cost_per_purchase_unit: pCost,
+        cost_per_consumption_unit: cCost,
         min_stock_alert: Number(editMinAlert),
       });
 
@@ -115,6 +120,7 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
       setEditLoading(false);
     }
   };
+
 
   const renderStockBadge = (stockQty: number, minAlert: number, status?: string) => {
     const qty = Number(stockQty || 0);
@@ -160,7 +166,7 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-          {['ALL', 'paper', 'ink', 'lamination', 'binding'].map((cat) => (
+          {['ALL', 'paper', 'offcut', 'ink', 'lamination', 'binding'].map((cat) => (
             <button
               key={cat}
               onClick={() => setCategoryFilter(cat)}
@@ -170,7 +176,7 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {cat === 'ALL' ? 'ທັງໝວດໝູ່' : cat.toUpperCase()}
+              {cat === 'ALL' ? 'ທັງໝວດໝູ່' : cat === 'offcut' ? 'ເສດເຈ້ຍ (OFFCUT)' : cat.toUpperCase()}
             </button>
           ))}
         </div>
@@ -208,12 +214,23 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
                 filteredMaterials.map((m) => (
                   <tr key={m.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-3.5 px-4">
-                      <div className="font-bold text-slate-900">{m.name}</div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-slate-900">{m.name}</span>
+                        {(m.category?.toLowerCase() === 'offcut' || m.technical_specs?.dimensionFormatted) && (
+                          <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded text-[10px] font-mono font-bold">
+                            {m.technical_specs?.dimensionFormatted || 'Offcut'}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[11px] text-blue-600 font-mono mt-0.5">{m.sku || m.id}</div>
                     </td>
 
                     <td className="py-3.5 px-4">
-                      <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold">
+                      <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                        m.category?.toLowerCase() === 'offcut'
+                          ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                          : 'bg-slate-100 text-slate-700'
+                      }`}>
                         {m.category || 'General'}
                       </span>
                     </td>
@@ -227,15 +244,29 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
                       </div>
                     </td>
 
-                    <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-800">
-                      {Number(m.cost_per_consumption_unit || 0).toFixed(2)} LAK
-                      <div className="text-[10px] text-slate-400 font-normal font-sans">/ {normalizeLaoUnit(m.consumption_unit, 'ແຜ່ນ')}</div>
-                    </td>
+                    {(() => {
+                      const purchaseCost = Number(m.cost_per_purchase_unit || (m as any).costPerPurchaseUnit || 0);
+                      const mult = Number(m.purchase_multiplier || (m as any).purchaseMultiplier || 1);
+                      const rawConsCost = Number(m.cost_per_consumption_unit || (m as any).costPerConsumptionUnit || 0);
+                      const resolvedConsCost = (rawConsCost > 0 && (mult <= 1 || rawConsCost < purchaseCost))
+                        ? rawConsCost
+                        : (mult > 0 && purchaseCost > 0 ? (purchaseCost / mult) : rawConsCost);
 
-                    <td className="py-3.5 px-4 text-right font-mono text-slate-600">
-                      {Number(m.cost_per_purchase_unit || 0).toLocaleString()} LAK
-                      <div className="text-[10px] text-slate-400 font-normal font-sans">/ {normalizeLaoUnit(m.purchase_unit, 'ແພັກ')} (<span className="font-sans">{m.purchase_multiplier}</span>x)</div>
-                    </td>
+                      return (
+                        <>
+                          <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-800">
+                            {formatCurrency(resolvedConsCost)}
+                            <div className="text-[10px] text-slate-400 font-normal font-sans">/ {normalizeLaoUnit(m.consumption_unit, 'ແຜ່ນ')}</div>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-right font-mono text-slate-600">
+                            {formatCurrency(purchaseCost)}
+                            <div className="text-[10px] text-slate-400 font-normal font-sans">/ {normalizeLaoUnit(m.purchase_unit, 'ແພັກ')} (<span className="font-sans">{mult}</span>x)</div>
+                          </td>
+                        </>
+                      );
+                    })()}
+
 
                     <td className="py-3.5 px-4 text-center">
                       {renderStockBadge(m.stock_qty, m.min_stock_alert, m.stock_status)}

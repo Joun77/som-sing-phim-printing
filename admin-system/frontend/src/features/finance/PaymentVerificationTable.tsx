@@ -80,7 +80,7 @@ export const PaymentVerificationTable: React.FC = () => {
             ລາຍການສລິບໂອນເງິນລໍຖ້າກວດສອບ (Payment Slip Audits)
           </h3>
           <p className="text-sm font-semibold text-slate-500 mt-1">
-            ກວດສອບສລິບການໂອນ และ ກົດອະນຸມັດຍອດເພື່ອປ່ຽນສະຖານະເປັນ Paid & ເຂົ້າสู่ການຜະລິດ
+            ກວດສອບສລິບການໂອນ ແລະ ກົດອະນຸມັດຍອດເພື່ອປ່ຽນສະຖານະເປັນ Paid & ເຂົ້າສູ່ການຜະລິດ
           </p>
         </div>
         <span className="px-3.5 py-1.5 bg-emerald-50 text-emerald-700 font-extrabold text-sm rounded-full border border-emerald-200">
@@ -92,7 +92,7 @@ export const PaymentVerificationTable: React.FC = () => {
         <div className="text-center py-12 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 space-y-2">
           <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
           <p className="text-base font-bold text-slate-700">ບໍ່ມີສລິບຄ້າງອະນຸມັດໃນຂະນະນີ້</p>
-          <p className="text-xs text-slate-400 font-medium">ທຸກອໍເດີได้รับการກວດສອບສລິບและປັບສະຖານະเรียบร้อยแล้ว</p>
+          <p className="text-xs text-slate-400 font-medium">ທຸກອໍເດີໄດ້ຮັບການກວດສອບສລິບ ແລະ ປັບສະຖານະຮຽບຮ້ອຍແລ້ວ</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200">

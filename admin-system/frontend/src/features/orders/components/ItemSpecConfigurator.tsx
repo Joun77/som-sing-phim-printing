@@ -1190,7 +1190,7 @@ export default function ItemSpecConfigurator({
                 </span>
               </div>
               <div className="flex items-center gap-2 text-slate-400">
-                <span className="text-[11px] font-medium hidden sm:inline">{openPhases.phase4 ? 'ພັບເเก็บ' : 'ເປີດເບິ່ງ'}</span>
+                <span className="text-[11px] font-medium hidden sm:inline">{openPhases.phase4 ? 'ຫຍໍ້ເກັບ' : 'ເປີດເບິ່ງ'}</span>
                 {openPhases.phase4 ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </div>
             </button>

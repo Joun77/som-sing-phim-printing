@@ -42,7 +42,7 @@ export default function SubmitQuotationModal({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-black bg-sky-100 text-sky-800 px-2.5 py-1 rounded-full uppercase">
-                {currentLang === 'lo' ? 'ແຈ້ງລາຄາປະເມິນ (Submit Quotation)' : 'Submit Price Quotation (แจ้งราคาประเมิน)'}
+                {currentLang === 'lo' ? 'ແຈ້ງລາຄາປະເມີນ (Submit Quotation)' : 'Submit Price Quotation'}
               </span>
             </div>
             <h3 className="text-xl font-black text-slate-900 mt-1">
@@ -51,7 +51,7 @@ export default function SubmitQuotationModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+            className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -61,7 +61,7 @@ export default function SubmitQuotationModal({
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-extrabold text-slate-600">
-              {currentLang === 'lo' ? 'ໄຟລ໌งานพิมพ์จากลูกค้า:' : 'Customer Artwork File:'}
+              {currentLang === 'lo' ? 'ຟາຍງານພິມຈາກລູກຄ້າ:' : 'Customer Artwork File:'}
             </span>
             {fileUrl ? (
               <a
@@ -71,7 +71,7 @@ export default function SubmitQuotationModal({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-black shadow-xs transition"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>{currentLang === 'lo' ? 'ดาวน์โหลด / เปิดไฟล์' : 'Download / View Artwork'}</span>
+                <span>{currentLang === 'lo' ? 'ດາວໂຫຼດ / ເປີດຟາຍ' : 'Download / View Artwork'}</span>
                 <ExternalLink className="w-3 h-3 ml-0.5" />
               </a>
             ) : (
@@ -89,7 +89,7 @@ export default function SubmitQuotationModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs font-black text-slate-700 uppercase tracking-wider block">
-              {currentLang === 'lo' ? 'ราคาประเมินรวม (Estimated Quotation Total)' : 'Estimated Price Quote Total (ราคาประเมินรวม)'}
+              {currentLang === 'lo' ? 'ລາຄາປະເມີນລວມ (Estimated Quotation Total)' : 'Estimated Price Quote Total'}
             </label>
             <div className="relative">
               <input
@@ -108,11 +108,11 @@ export default function SubmitQuotationModal({
 
           <div className="space-y-1.5">
             <label className="text-xs font-black text-slate-700 uppercase tracking-wider block">
-              {currentLang === 'lo' ? 'หมายเหตุใบเสนอราคา (Quotation Notes / Terms)' : 'Quotation Terms & Notes (หมายเหตุราคา)'}
+              {currentLang === 'lo' ? 'ໝາຍເຫດໃບສະເໜີລາຄາ (Quotation Notes / Terms)' : 'Quotation Terms & Notes'}
             </label>
             <textarea
               rows={3}
-              placeholder="e.g. ราคารวมค่าจัดส่งเรียบร้อยแล้ว หรือ ยืนยันสเปกกระดาษ 130 แกรม"
+              placeholder="e.g. ລາຄາລວມຄ່າຈັດສົ່ງຮຽບຮ້ອຍແລ້ວ ຫຼື ຢືນຢັນສະເປັກເຈ້ຍ 130 ແກຣມ"
               value={quoteNotes}
               onChange={(e) => setQuoteNotes(e.target.value)}
               className="w-full px-3.5 py-2.5 border border-slate-200 rounded-2xl font-semibold text-xs text-slate-800 focus:outline-none focus:border-sky-500"
@@ -123,16 +123,16 @@ export default function SubmitQuotationModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-3 border-2 border-slate-200 text-slate-700 hover:bg-slate-50 rounded-2xl text-sm font-extrabold transition"
+              className="flex-1 py-3 border-2 border-slate-200 text-slate-700 hover:bg-slate-50 rounded-2xl text-sm font-extrabold transition cursor-pointer"
             >
-              {currentLang === 'lo' ? 'ยกเลิก' : 'Cancel'}
+              {currentLang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
             </button>
             <button
               type="submit"
-              className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-sm font-extrabold shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2"
+              className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-sm font-extrabold shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2 cursor-pointer"
             >
               <Send className="w-4 h-4" />
-              <span>{currentLang === 'lo' ? 'ยืนยันแจ้งราคา' : 'Submit Price Quote'}</span>
+              <span>{currentLang === 'lo' ? 'ຢືນຢັນແຈ້ງລາຄາ' : 'Submit Price Quote'}</span>
             </button>
           </div>
         </form>

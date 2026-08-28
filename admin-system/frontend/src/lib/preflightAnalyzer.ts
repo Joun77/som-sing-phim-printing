@@ -16,6 +16,8 @@ function calculateCMYKAndTACWithGCR(data: Uint8ClampedArray): {
   avgK: number;
   avgTAC: number;
   maxTAC: number;
+  chromaticPixelCount: number;
+  totalValidPixels: number;
 } {
   let sumC = 0;
   let sumM = 0;
@@ -24,8 +26,7 @@ function calculateCMYKAndTACWithGCR(data: Uint8ClampedArray): {
   let sumTAC = 0;
   let maxTAC = 0;
   let validPixels = 0;
-
-  const Tk = 0.25; // 25% Black Generation Threshold
+  let chromaticPixelCount = 0;
 
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i] / 255;
@@ -38,31 +39,36 @@ function calculateCMYKAndTACWithGCR(data: Uint8ClampedArray): {
       continue;
     }
 
-    // 1. Calculate raw gray component
-    const kRaw = 1 - Math.max(r, g, b);
+    const maxVal = Math.max(r, g, b);
+    const minVal = Math.min(r, g, b);
+    const delta = maxVal - minVal;
 
-    let k = 0;
-    if (kRaw > Tk) {
-      k = (kRaw - Tk) / (1 - Tk);
-    } else {
-      k = 0;
-    }
+    // Neutral gray threshold:
+    // If delta <= 0.035 (~9 RGB units) or saturation < 0.08, the pixel is neutral B&W/grayscale text or paper background.
+    const isNeutral = delta <= 0.035 || (maxVal > 0 && (delta / maxVal) < 0.08);
 
-    // 2. Recalculate C, M, Y based on adjusted K (GCR/UCR mode)
-    const denominator = 1 - k;
     let c = 0;
     let m = 0;
     let y = 0;
+    let k = 0;
 
-    if (denominator > 0.001) {
-      c = Math.max(0, Math.min(1, (1 - r - k) / denominator));
-      m = Math.max(0, Math.min(1, (1 - g - k) / denominator));
-      y = Math.max(0, Math.min(1, (1 - b - k) / denominator));
+    if (isNeutral) {
+      // Pure black / gray K channel only
+      k = 1 - maxVal;
     } else {
-      c = 0;
-      m = 0;
-      y = 0;
-      k = 1;
+      chromaticPixelCount++;
+      // Standard ISO Coated GCR Model
+      const kRaw = 1 - maxVal;
+      const Tk = 0.25;
+      k = kRaw > Tk ? (kRaw - Tk) / (1 - Tk) : 0;
+      const denominator = 1 - k;
+      if (denominator > 0.01) {
+        c = Math.max(0, Math.min(1, (1 - r - k) / denominator));
+        m = Math.max(0, Math.min(1, (1 - g - k) / denominator));
+        y = Math.max(0, Math.min(1, (1 - b - k) / denominator));
+      } else {
+        k = 1;
+      }
     }
 
     const pixelTAC = (c + m + y + k) * 100;
@@ -85,8 +91,11 @@ function calculateCMYKAndTACWithGCR(data: Uint8ClampedArray): {
     avgK: validPixels > 0 ? (sumK / validPixels) * 100 : 0,
     avgTAC: validPixels > 0 ? sumTAC / validPixels : 0,
     maxTAC: Math.round(maxTAC * 10) / 10,
+    chromaticPixelCount,
+    totalValidPixels: validPixels,
   };
 }
+
 
 /**
  * Auto-Converts an RGB Canvas to simulated CMYK Gamut Canvas
@@ -178,7 +187,7 @@ export async function analyzeImageClient(
       ctx.drawImage(img, 0, 0, w, h);
 
       const imgData = ctx.getImageData(0, 0, w, h);
-      const { avgC, avgM, avgY, avgK, avgTAC, maxTAC } = calculateCMYKAndTACWithGCR(imgData.data);
+      const { avgC, avgM, avgY, avgK, avgTAC, maxTAC, chromaticPixelCount, totalValidPixels } = calculateCMYKAndTACWithGCR(imgData.data);
 
       const isLargeEnough = img.naturalWidth >= 1200 && img.naturalHeight >= 1200;
       const dpiEstimate = isLargeEnough ? 300 : Math.round((img.naturalWidth / 8.27) * 0.8);
@@ -188,7 +197,9 @@ export async function analyzeImageClient(
       const tacWarning = maxTAC > 300;
       const lowDpiError = dpiEstimate < 300;
 
-      const hasColor = (avgC + avgM + avgY) > 0.5;
+      const chromaticRatio = totalValidPixels > 0 ? (chromaticPixelCount / totalValidPixels) : 0;
+      const hasColor = chromaticRatio >= 0.001 || ((avgC + avgM + avgY) >= 0.5);
+
 
       const diagnostics: PreflightDiagnostics = {
         colorSpace: 'PASS',
@@ -361,9 +372,11 @@ export async function analyzePDFClient(
           }
 
           // Check if page has true chromatic color:
-          // In black-and-white text pages, C, M, Y are negligible (< 1.2%) due to anti-aliasing.
-          // In true color pages, at least one chromatic channel is > 1.2% or their sum is > 2.5%.
-          const isColorPage = (pageResult.avgC > 1.2 || pageResult.avgM > 1.2 || pageResult.avgY > 1.2) || ((pageResult.avgC + pageResult.avgM + pageResult.avgY) > 2.5);
+          const chromaticRatio = pageResult.totalValidPixels > 0 
+            ? (pageResult.chromaticPixelCount / pageResult.totalValidPixels) 
+            : 0;
+          const isColorPage = chromaticRatio >= 0.001 || ((pageResult.avgC + pageResult.avgM + pageResult.avgY) >= 0.5);
+
           if (isColorPage) {
             colorPagesCount++;
             colorSumC += pageResult.avgC;
@@ -374,6 +387,7 @@ export async function analyzePDFClient(
             monoPagesCount++;
             monoSumK += pageResult.avgK;
           }
+
 
           // Cleanup page resources to prevent memory leak on large PDFs (100-500 pages)
           page.cleanup();

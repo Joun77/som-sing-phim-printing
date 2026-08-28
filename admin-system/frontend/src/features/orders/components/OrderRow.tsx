@@ -1,5 +1,16 @@
 import React from 'react';
-import { Eye, CheckCircle, XCircle, AlertTriangle, Clock } from 'lucide-react';
+import { 
+  Eye, 
+  CheckCircle, 
+  XCircle, 
+  AlertTriangle, 
+  Clock, 
+  Printer, 
+  Download, 
+  Truck, 
+  CheckCircle2,
+  PackageCheck
+} from 'lucide-react';
 
 interface OrderRowProps {
   ord: any;
@@ -11,6 +22,11 @@ interface OrderRowProps {
   getPaymentStatusBadge: (status: string) => string;
   getPaymentStatusIcon: (status: string) => React.ReactNode;
   onViewDetails: (ord: any) => void;
+  onStartProduction?: (orderId: string) => void;
+  onReadyToShip?: (orderId: string) => void;
+  onOpenTrackingModal?: (ord: any) => void;
+  onPrintShippingLabel?: (ord: any) => void;
+  showToast?: (msg: string, type?: string) => void;
   isSelected: boolean;
   focusRef?: React.Ref<HTMLTableRowElement> | null;
 }
@@ -25,6 +41,11 @@ const OrderRow = React.memo<OrderRowProps>(({
   getPaymentStatusBadge,
   getPaymentStatusIcon,
   onViewDetails,
+  onStartProduction,
+  onReadyToShip,
+  onOpenTrackingModal,
+  onPrintShippingLabel,
+  showToast,
   isSelected,
   focusRef
 }) => {
@@ -82,6 +103,44 @@ const OrderRow = React.memo<OrderRowProps>(({
     return currentLang === 'lo' ? 'ງານພິມດິຈິຕອນຕາມສັ່ງ' : 'Custom Print Job';
   };
 
+  const handleDownloadArtwork = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const urls: string[] = [];
+    if (ord.artworkLink) urls.push(ord.artworkLink);
+    if (ord.google_drive_link) urls.push(ord.google_drive_link);
+    if (ord.preflight?.versions) {
+      ord.preflight.versions.forEach((v: any) => { if (v.url) urls.push(v.url); });
+    }
+    if (Array.isArray(ord.items)) {
+      ord.items.forEach((it: any) => {
+        if (it.cover_file_url) urls.push(it.cover_file_url);
+        if (it.inner_file_url) urls.push(it.inner_file_url);
+        if (it.specs?.file_url) urls.push(it.specs.file_url);
+      });
+    }
+
+    const uniqueUrls = Array.from(new Set(urls.filter(Boolean)));
+    if (uniqueUrls.length === 0) {
+      if (showToast) {
+        showToast(currentLang === 'lo' ? 'ບໍ່ພົບຟາຍອາດເວິກໃນອໍເດີນີ້' : 'No artwork files found in this order', 'warning');
+      }
+      return;
+    }
+
+    uniqueUrls.forEach((url) => {
+      window.open(url, '_blank');
+    });
+
+    if (showToast) {
+      showToast(
+        currentLang === 'lo' 
+          ? `ກຳລັງເປີດດາວໂຫຼດຟາຍອາດເວິກ ${uniqueUrls.length} ຟາຍ...` 
+          : `Opening ${uniqueUrls.length} artwork files...`, 
+        'success'
+      );
+    }
+  };
+
   const renderSLATimer = () => {
     const promisedDate = ord.promisedDeliveryDate || ord.delivery_date;
     if (!promisedDate) return null;
@@ -128,6 +187,9 @@ const OrderRow = React.memo<OrderRowProps>(({
     }
   };
 
+  const isPreProduction = ['Received', 'Pending', 'PREPRESS_CHECK', 'QUOTATION', 'ORDER_CREATED', 'FILE_CONFIRMED'].includes(statusRaw) && !ord.stockDeducted;
+  const isPrintingPhase = ['Printing', 'Cutting', 'IN_PRODUCTION'].includes(statusRaw);
+
   return (
     <tr 
       className={`hover:bg-slate-50/30 transition ${
@@ -162,6 +224,11 @@ const OrderRow = React.memo<OrderRowProps>(({
           {getStatusIcon(statusRaw)}
           <span className="ml-1">{statusDisplay}</span>
         </span>
+        {ord.stockDeducted && (
+          <span className="block text-[10px] font-black text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 mt-1">
+            ຕັດສະຕັອກແລ້ວ
+          </span>
+        )}
       </td>
       {/* Total Price */}
       <td className="px-6 py-4 text-right font-sans font-black text-slate-900 whitespace-nowrap">
@@ -172,17 +239,99 @@ const OrderRow = React.memo<OrderRowProps>(({
           </span>
         )}
       </td>
-      {/* Single View Details Action */}
+      {/* Quick Action Controls */}
       <td className="px-6 py-4 whitespace-nowrap text-center">
-        <button
-          type="button"
-          onClick={() => onViewDetails(ord)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 hover:text-slate-950 rounded-xl text-xs font-bold transition shadow-xs border border-slate-200 active:scale-95 cursor-pointer"
-          title={currentLang === 'lo' ? 'ເບິ່ງລາຍລະອຽດ' : 'View Details'}
-        >
-          <Eye className="w-4 h-4 text-slate-600" />
-          <span>{currentLang === 'lo' ? 'ເບິ່ງລາຍລະອຽດ' : 'View Details'}</span>
-        </button>
+        <div className="flex items-center justify-center gap-1.5 flex-wrap max-w-xs mx-auto">
+          {/* Download Artwork Button */}
+          <button
+            type="button"
+            onClick={handleDownloadArtwork}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 hover:text-sky-900 rounded-xl text-xs font-bold transition border border-sky-200 active:scale-95 cursor-pointer"
+            title="ດາວໂຫຼດຟາຍອາດເວິກ"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>ດາວໂຫຼດຟາຍ</span>
+          </button>
+
+          {/* Print & Deduct Stock Button (Pre-production only) */}
+          {isPreProduction && onStartProduction && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartProduction(ord.id);
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition shadow-xs active:scale-95 cursor-pointer animate-pulse"
+              title="ສັ່ງພິມ ແລະ ຕັດສະຕັອກ"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>ສັ່ງພິມ & ຕັດສະຕັອກ</span>
+            </button>
+          )}
+
+          {/* Ready to Ship Button (In production) */}
+          {isPrintingPhase && onReadyToShip && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onReadyToShip(ord.id);
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition shadow-xs active:scale-95 cursor-pointer"
+              title="ພ້ອມສົ່ງ"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>ພ້ອມສົ່ງ</span>
+            </button>
+          )}
+
+          {/* Quick Tracking Button */}
+          {onOpenTrackingModal && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenTrackingModal(ord);
+              }}
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition border active:scale-95 cursor-pointer ${
+                ord.trackingNumber
+                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+              }`}
+              title="ເລກພັດສະດຸ"
+            >
+              <Truck className="w-3.5 h-3.5" />
+              <span>{ord.trackingNumber ? ord.trackingNumber : '+ ເລກພັດສະດຸ'}</span>
+            </button>
+          )}
+
+          {/* Print Shipping Label Button */}
+          {onPrintShippingLabel && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPrintShippingLabel(ord);
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-bold transition border border-slate-200 active:scale-95 cursor-pointer"
+              title="ພິມໃບປະໜ້າພັດສະດຸ"
+            >
+              <PackageCheck className="w-3.5 h-3.5 text-sky-600" />
+              <span>ໃບປະໜ້າ</span>
+            </button>
+          )}
+
+          {/* View Details Button */}
+          <button
+            type="button"
+            onClick={() => onViewDetails(ord)}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 hover:text-slate-950 rounded-xl text-xs font-bold transition shadow-xs border border-slate-200 active:scale-95 cursor-pointer"
+            title="ເບິ່ງລາຍລະອຽດ"
+          >
+            <Eye className="w-3.5 h-3.5 text-slate-600" />
+            <span>ເບິ່ງລາຍລະອຽດ</span>
+          </button>
+        </div>
       </td>
     </tr>
   );

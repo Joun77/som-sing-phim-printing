@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, PackageCheck, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { X, PackageCheck, Save, AlertCircle, CheckCircle2, Sparkles } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 interface POLine {
@@ -162,8 +162,9 @@ export const GoodsReceiptModal: React.FC<Props> = ({ po, onClose, onSuccess }) =
             />
           </div>
 
-          <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-100 text-[11px] text-emerald-800 font-medium">
-            💡 ລະບົບຈະເຮັດການຕັດບັນທຶກ Inbound Stock ແລະ ສ້າງຍອດໜີ້ Accounts Payable (AP) ໃຫ້ອັດຕະໂນມັດ
+          <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-100 text-[11px] text-emerald-800 font-medium flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span>ລະບົບຈະເຮັດການຕັດບັນທຶກ Inbound Stock ແລະ ສ້າງຍອດໜີ້ Accounts Payable (AP) ໃຫ້ອັດຕະໂນມັດ</span>
           </div>
 
           <div className="flex justify-end gap-2.5 pt-2">

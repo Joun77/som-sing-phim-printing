@@ -32,7 +32,7 @@ export default function RecordMeterModal({ isOpen, onClose, equipmentItem }: Rec
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (meterCount === '' || Number(meterCount) < 0) {
-      showToast(currentLang === 'lo' ? 'ກະລຸນາປ້ອນตัวเลขมิเตอร์ให้ถูกต้อง' : 'Please enter a valid meter count', 'error');
+      showToast(currentLang === 'lo' ? 'ກະລຸນາປ້ອນຕົວເລກມິເຕີໃຫ້ຖືກຕ້ອງ' : 'Please enter a valid meter count', 'error');
       return;
     }
 
@@ -47,7 +47,7 @@ export default function RecordMeterModal({ isOpen, onClose, equipmentItem }: Rec
 
     showToast(
       currentLang === 'lo'
-        ? `ບັນທຶກมิเตอร์เครื่องจักร "${equipmentItem.name}" ສຳເລັດ!`
+        ? `ບັນທຶກມິເຕີເຄື່ອງຈັກ "${equipmentItem.name}" ສຳເລັດ!`
         : `Logged meter reading for "${equipmentItem.name}" successfully!`,
       'success'
     );
@@ -63,7 +63,7 @@ export default function RecordMeterModal({ isOpen, onClose, equipmentItem }: Rec
             <Gauge className="w-5 h-5 text-emerald-600" />
             <div>
               <h3 className="font-extrabold text-base text-slate-800">
-                {currentLang === 'lo' ? 'บันทึกมิเตอร์นับจำนวนแผ่น (Record Meter Reading)' : 'Record Meter Reading'}
+                {currentLang === 'lo' ? 'ບັນທຶກມິເຕີນັບຈຳນວນແຜ່ນ (Record Meter Reading)' : 'Record Meter Reading'}
               </h3>
               <p className="text-[10px] font-bold text-slate-400">{equipmentItem.name} ({equipmentItem.id})</p>
             </div>

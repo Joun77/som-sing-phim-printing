@@ -8,7 +8,7 @@ import InboundHistoryTable from './InboundHistoryTable';
 import InboundFormModal from './InboundFormModal';
 import InventoryMaterialDetailsPage from './details/InventoryMaterialDetailsPage';
 import AddMaterialModal from './modals/AddMaterialModal';
-import OffcutModal from './modals/OffcutModal';
+import AddOffcutModal from './modals/AddOffcutModal';
 import StockDischargeModal from './modals/StockDischargeModal';
 import SupplierPriceUploader from './SupplierPriceUploader';
 import { fetchMaterials, fetchInboundHistory } from '../api/inventoryApi';
@@ -28,7 +28,7 @@ export default function InventoryManagement() {
   const [mainView, setMainView] = useState<'stock' | 'inbound_history'>('stock');
 
   // Navigation tabs & detail view state
-  const [activeTab, setActiveTab] = useState('All'); // All, Paper, Ink, Hardware, Finishing
+  const [activeTab, setActiveTab] = useState('All'); // All, Paper, Offcut, Ink, Hardware, Finishing, Packaging
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDetailLot, setSelectedDetailLot] = useState<any>(null);
 
@@ -79,7 +79,7 @@ export default function InventoryManagement() {
   }
 
   // Category tabs for Inventory (Excludes Machinery: Printer, Cutter, Laminator)
-  const categoryTabs = ['All', 'Paper', 'Ink', 'Hardware', 'Finishing'];
+  const categoryTabs = ['All', 'Paper', 'Offcut', 'Ink', 'Hardware', 'Finishing', 'Packaging'];
 
   // Filter logic for legacy / local items
   const filteredItems = inventory.filter(item => {
@@ -90,13 +90,17 @@ export default function InventoryManagement() {
 
     let matchesTab = activeTab === 'All';
     if (activeTab === 'Paper') {
-      matchesTab = cat === 'paper' || cat === 'material';
+      matchesTab = (cat === 'paper' || cat === 'material') && !item.isOffcut && !cat.includes('offcut');
+    } else if (activeTab === 'Offcut') {
+      matchesTab = cat === 'offcut' || item.isOffcut || (item.id || '').startsWith('OFF-');
     } else if (activeTab === 'Ink') {
       matchesTab = cat === 'ink' || cat === 'toner';
     } else if (activeTab === 'Hardware') {
       matchesTab = cat === 'hardware';
     } else if (activeTab === 'Finishing') {
       matchesTab = cat === 'finishing' || cat === 'film' || cat === 'glue';
+    } else if (activeTab === 'Packaging') {
+      matchesTab = cat === 'packaging' || (item.id || '').startsWith('PKG-');
     } else if (activeTab !== 'All') {
       matchesTab = cat === activeTab.toLowerCase();
     }
@@ -304,7 +308,7 @@ export default function InventoryManagement() {
       <AddMaterialModal isOpen={isAddMaterialOpen} onClose={() => setIsAddMaterialOpen(false)} />
 
       {/* Offcuts modal */}
-      <OffcutModal isOpen={isOffcutOpen} onClose={() => setIsOffcutOpen(false)} />
+      <AddOffcutModal isOpen={isOffcutOpen} onClose={() => setIsOffcutOpen(false)} />
 
       {/* Stock Discharge Modal */}
       <StockDischargeModal

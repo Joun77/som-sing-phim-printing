@@ -51,7 +51,7 @@ export default function LogDowntimeModal({ isOpen, onClose, equipmentItem }: Log
 
     showToast(
       currentLang === 'lo'
-        ? `ບັນທຶກປະວັດການສົ່ງຊ້ອມ / Downtime สำเร็จ!`
+        ? `ບັນທຶກປະຫວັດການສົ່ງສ້ອມ / Downtime ສຳເລັດ!`
         : `Logged downtime maintenance record successfully!`,
       'success'
     );
@@ -67,7 +67,7 @@ export default function LogDowntimeModal({ isOpen, onClose, equipmentItem }: Log
             <Wrench className="w-5 h-5 text-indigo-600" />
             <div>
               <h3 className="font-extrabold text-base text-slate-800">
-                {currentLang === 'lo' ? 'บันทึกประวัติการส่งซ่อม & Downtime' : 'Log Maintenance / Downtime'}
+                {currentLang === 'lo' ? 'ບັນທຶກປະຫວັດການສົ່ງສ້ອມ & Downtime' : 'Log Maintenance / Downtime'}
               </h3>
               <p className="text-[10px] font-bold text-slate-400">{equipmentItem.name} ({equipmentItem.id})</p>
             </div>
@@ -101,9 +101,9 @@ export default function LogDowntimeModal({ isOpen, onClose, equipmentItem }: Log
                 onChange={(e) => setStatus(e.target.value as any)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold bg-white text-slate-900 focus:outline-none focus:border-indigo-500"
               >
-                <option value="In Progress">In Progress (กำลังดำเนินการซ่อม)</option>
-                <option value="Pending">Pending (รออะไหล่/ช่าง)</option>
-                <option value="Completed">Completed (ซ่อมเสร็จแล้ว)</option>
+                <option value="In Progress">In Progress (ກຳລັງດຳເນີນການສ້ອມ)</option>
+                <option value="Pending">Pending (ລໍຖ້າອະໄຫຼ່/ຊ່າງ)</option>
+                <option value="Completed">Completed (ສ້ອມແປງສຳເລັດແລ້ວ)</option>
               </select>
             </div>
           </div>
@@ -139,12 +139,12 @@ export default function LogDowntimeModal({ isOpen, onClose, equipmentItem }: Log
               onChange={(e) => setReason(e.target.value)}
               className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold bg-white text-slate-900 focus:outline-none focus:border-indigo-500"
             >
-              <option value="Paper Jam / Roller Replacement">Paper Jam / Roller Replacement (เปลี่ยนลูกยาง/ซับกระดาษ)</option>
-              <option value="Printhead Cleaning / Calibration">Printhead Cleaning / Calibration (ล้างหัวพิมพ์/ตั้งศูนย์)</option>
-              <option value="Fuser / Drum Replacement">Fuser / Drum Replacement (เปลี่ยนดรัม/ชุดความร้อน)</option>
-              <option value="Electrical / Motor Error">Electrical / Motor Error (ระบบไฟฟ้า/มอเตอร์ขัดข้อง)</option>
-              <option value="Scheduled SLA Maintenance">Scheduled SLA Maintenance (บำรุงรักษาตามรอบ)</option>
-              <option value="Other">Other (อื่นๆ)</option>
+              <option value="Paper Jam / Roller Replacement">Paper Jam / Roller Replacement (ປ່ຽນລູກຢາງ/ຊັບເຈ້ຍ)</option>
+              <option value="Printhead Cleaning / Calibration">Printhead Cleaning / Calibration (ລ້າງຫົວພິມ/ຕັ້ງສູນ)</option>
+              <option value="Fuser / Drum Replacement">Fuser / Drum Replacement (ປ່ຽນດຣັມ/ຊຸດຄວາມຮ້ອນ)</option>
+              <option value="Electrical / Motor Error">Electrical / Motor Error (ລະບົບໄຟຟ້າ/ມໍເຕີຂັດຂ້ອງ)</option>
+              <option value="Scheduled SLA Maintenance">Scheduled SLA Maintenance (ບຳລຸງຮັກສາຕາມຮອບ)</option>
+              <option value="Other">Other (ອື່ນໆ)</option>
             </select>
           </div>
 

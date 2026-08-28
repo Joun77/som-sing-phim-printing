@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 
 import { formatLaoNotificationMessage } from '../../../utils/richToastNotification';
+import AddOffcutModal from '@features/inventory/components/modals/AddOffcutModal';
 
 export default function ProductionBoard({ showToast, formatLAK }) {
   const [orders, setOrders] = useState([]);
@@ -21,13 +22,6 @@ export default function ProductionBoard({ showToast, formatLAK }) {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'machines'
   const [isOffcutModalOpen, setIsOffcutModalOpen] = useState(false);
-  
-  // Offcut form state
-  const [selectedParentMaterial, setSelectedParentMaterial] = useState('paper-a4-80');
-  const [scrapName, setScrapName] = useState('');
-  const [scrapWidth, setScrapWidth] = useState(100);
-  const [scrapLength, setScrapLength] = useState(200);
-  const [scrapQty, setScrapQty] = useState(10);
 
   const fetchOrders = () => {
     setLoading(true);
@@ -109,7 +103,7 @@ export default function ProductionBoard({ showToast, formatLAK }) {
       orderNumber: orderNum,
       previousStatus: prevStatus,
       newStatus: nextStatus,
-      updatedBy: { userId: 'usr-1', userName: 'ช่างพิมพ์ / Admin', role: 'Operator' },
+      updatedBy: { userId: 'usr-1', userName: 'ຊ່າງພິມ / Admin', role: 'Operator' },
       timestamp: new Date().toLocaleTimeString(),
       details: {}
     });
@@ -131,37 +125,6 @@ export default function ProductionBoard({ showToast, formatLAK }) {
       console.error(err);
       showToast(laoMsg, 'success');
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: nextStatus } : o));
-    });
-  };
-
-  const handleAddOffcut = (e) => {
-    e.preventDefault();
-    const payload = {
-      parent_material_id: selectedParentMaterial,
-      name: scrapName || `Leftover strip from ${selectedParentMaterial}`,
-      width_mm: Number(scrapWidth),
-      length_mm: Number(scrapLength),
-      quantity: Number(scrapQty)
-    };
-
-    fetch('http://localhost:8080/api/inventory/offcuts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    .then(res => {
-      if (!res.ok) throw new Error('Failed to log scrap');
-      return res.json();
-    })
-    .then(() => {
-      showToast('Scrap piece registered to warehouse catalog!', 'success');
-      setIsOffcutModalOpen(false);
-      setScrapName('');
-    })
-    .catch(err => {
-      console.error(err);
-      showToast('Offline Mode: Scrap logged locally.', 'warning');
-      setIsOffcutModalOpen(false);
     });
   };
 
@@ -333,86 +296,10 @@ export default function ProductionBoard({ showToast, formatLAK }) {
 
       {/* Offcut Registration Modal */}
       {isOffcutModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/40 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white max-w-md w-full rounded-3xl shadow-2xl p-6 border border-slate-100 space-y-4">
-            <h4 className="text-lg font-black text-slate-900 uppercase">ສົ່ງເສດເຈ້ຍເສດເຫຼືອເຂົ້າຄັງ (Offcut Scrap Salvaging)</h4>
-            <form onSubmit={handleAddOffcut} className="space-y-4 text-xs font-semibold text-slate-600">
-              <div className="space-y-1">
-                <label className="block text-slate-500">ເຈ້ຍຕົ້ນກຳເນີດ (Parent Paper ID) *</label>
-                <select
-                  value={selectedParentMaterial}
-                  onChange={(e) => setSelectedParentMaterial(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-accent-sky text-xs font-bold"
-                >
-                  <option value="paper-a4-80">Double A A4 80gsm</option>
-                  <option value="paper-a3-120">Glossy Card A3 120gsm</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-slate-500">ຊື່ເສດເຈ້ຍ (Name / Description) *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="ເຊັ່ນ: ເສດເຈ້ຍຍາວ A4..."
-                  value={scrapName}
-                  onChange={(e) => setScrapName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="block text-slate-500">ຄວາມກວ້າງ (Width mm) *</label>
-                  <input
-                    type="number"
-                    required
-                    value={scrapWidth}
-                    onChange={(e) => setScrapWidth(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold font-sans"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-slate-500">ຄວາມຍາວ (Length mm) *</label>
-                  <input
-                    type="number"
-                    required
-                    value={scrapLength}
-                    onChange={(e) => setScrapLength(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold font-sans"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-slate-500">ຈຳນວນເສດເຈ້ຍ (Quantity) *</label>
-                <input
-                  type="number"
-                  required
-                  value={scrapQty}
-                  onChange={(e) => setScrapQty(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-sky font-bold font-sans"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsOffcutModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 font-bold transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md transition"
-                >
-                  Save to Stock
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <AddOffcutModal
+          isOpen={isOffcutModalOpen}
+          onClose={() => setIsOffcutModalOpen(false)}
+        />
       )}
     </div>
   );

@@ -327,7 +327,7 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                     <td className="p-3 text-slate-600">{it.paperSize || it.size || 'A4'} ({it.pages || '-'} ໜ້າ)</td>
                     <td className="p-3 text-slate-600">{it.binding || 'ຫຍິບມຸງ'} • {it.lamination || 'ເຄືອບດ້ານ'}</td>
                     <td className="p-3 pr-4 text-right font-mono font-black text-amber-600 text-sm">
-                      {(it.quantity || 1).toLocaleString()} ชิ้น
+                      {(it.quantity || 1).toLocaleString()} {currentLang === 'lo' ? 'ຊຸດ' : 'items'}
                     </td>
                   </tr>
                 ))}

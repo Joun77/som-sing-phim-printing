@@ -225,12 +225,12 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
             <Truck className="w-4 h-4" />
             <span>
               {isDelivered 
-                ? (currentLang === 'lo' ? '✓ ລູກຄ້າໄດ້ຮັບແລ້ວ' : 'Delivered') 
+                ? (currentLang === 'lo' ? 'ລູກຄ້າໄດ້ຮັບແລ້ວ (Delivered)' : 'Delivered') 
                 : isDispatched 
-                ? (currentLang === 'lo' ? '🚚 ກຳລັງຈັດສົ່ງ (In Transit)' : 'In Transit')
+                ? (currentLang === 'lo' ? 'ກຳລັງຈັດສົ່ງ (In Transit)' : 'In Transit')
                 : isPacked
-                ? (currentLang === 'lo' ? '📦 ແພັກແລ້ວ (ລໍຖ້າສົ່ງ)' : 'Packed / Ready')
-                : (currentLang === 'lo' ? '⏳ ລໍຖ້າແພັກກິ້ງ' : 'Pending Packaging')}
+                ? (currentLang === 'lo' ? 'ແພັກແລ້ວ (ລໍຖ້າສົ່ງ)' : 'Packed / Ready')
+                : (currentLang === 'lo' ? 'ລໍຖ້າແພັກກິ້ງ (Pending)' : 'Pending Packaging')}
             </span>
           </span>
         </div>
