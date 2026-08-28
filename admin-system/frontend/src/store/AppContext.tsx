@@ -624,8 +624,8 @@ export const AppProvider = ({ children }) => {
       purchaseMultiplier: multiplier,
       costPerPurchaseUnit: costPerPurchase,
       costPerConsumptionUnit: costPerConsumption,
-      consumptionUnit: isPaper ? 'แผ่น' : (item.consumptionUnit || 'Units'),
-      purchaseUnit: isPaper ? 'แพ็ก' : (item.purchaseUnit || 'Units'),
+      consumptionUnit: isPaper ? 'ແຜ່ນ' : (item.consumptionUnit === 'แผ่น' ? 'ແຜ່ນ' : (item.consumptionUnit || 'Units')),
+      purchaseUnit: isPaper ? 'ແພັກ' : (item.purchaseUnit === 'แพ็ก' ? 'ແພັກ' : (item.purchaseUnit || 'Units')),
       batches: realBatches
     };
   };
@@ -697,20 +697,32 @@ export const AppProvider = ({ children }) => {
   const refreshData = async () => {
     const deletedIds = getDeletedIds();
 
-    // 1. Assets / Equipment
+    // 1. Assets / Equipment (Database Fetch)
     try {
-      const res = await fetch('/api/v1/assets');
+      let res = await fetch('/api/equipment');
+      if (!res.ok) {
+        res = await fetch('/api/v1/assets');
+      }
       if (res && res.ok) {
         const resData = await res.json();
-        if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
+        const rawItems = Array.isArray(resData) ? resData : (resData?.data || []);
+        if (Array.isArray(rawItems) && rawItems.length > 0) {
           setEquipment(prevEq => {
             const mapById = new Map();
             (prevEq || []).filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach(item => mapById.set(item.id, item));
-            resData.data.filter((i: any) => !deletedIds.has(i.id) && !deletedIds.has(i.id?.toLowerCase())).forEach((item: any) => {
+            rawItems.filter((i: any) => !deletedIds.has(i.id) && !deletedIds.has(i.id?.toLowerCase())).forEach((item: any) => {
+              const formattedItem = {
+                ...item,
+                name: item.name || `${item.brand || ''} ${item.model || ''}`.trim() || item.id,
+                purchaseCost: Number(item.price || item.purchaseCost || item.purchasePrice || item.priceCost || 0),
+                printedPagesCapacity: Number(item.expectedLifeA4Pages || item.printedPagesCapacity || 500000),
+                maintenanceRatePercent: Number(item.maintenanceRatePercent || 20),
+                colorSchemeType: item.colorSchemeType || item.specs?.colorScheme || 'CMYK'
+              };
               if (mapById.has(item.id)) {
-                mapById.set(item.id, { ...mapById.get(item.id), ...item });
+                mapById.set(item.id, { ...mapById.get(item.id), ...formattedItem });
               } else {
-                mapById.set(item.id, item);
+                mapById.set(item.id, formattedItem);
               }
             });
             const merged = Array.from(mapById.values());
@@ -1248,8 +1260,8 @@ export const AppProvider = ({ children }) => {
             name: name,
             category: isPaper ? 'Paper' : (e.category === 'INK' ? 'Ink' : (e.category || 'Finishing')),
             stockQty: totalStock,
-            consumptionUnit: isPaper ? 'แผ่น' : (e.unit || 'Units'),
-            purchaseUnit: isPaper ? 'แพ็ก' : (e.unit || 'Units'),
+            consumptionUnit: isPaper ? 'ແຜ່ນ' : (e.unit || 'Units'),
+            purchaseUnit: isPaper ? 'ແພັກ' : (e.unit || 'Units'),
             purchaseMultiplier: sheetsPerPack,
             costPerPurchaseUnit: price,
             costPerConsumptionUnit: unitPrice,
@@ -2466,7 +2478,7 @@ export const AppProvider = ({ children }) => {
       }
     } catch (e) {}
 
-    // 2. Cascade Rollback / Delete in Inventory (Paper, Ink, Material, etc.)
+    // 2. Cascade Rollback in Inventory (Paper, Ink, Material, etc.)
     setInventory(prev => {
       let invUpdated = false;
       const nextInv: any[] = [];
@@ -2489,17 +2501,24 @@ export const AppProvider = ({ children }) => {
             b.poNumber !== targetEntry?.poNumber
           );
 
-          // Case 1: No remaining batches -> Delete this inventory SKU completely
-          if (remainingBatches.length === 0 || (item.batches || []).length <= 1) {
+          const multiplier = Number(item.purchaseMultiplier) || 1;
+          const qtyInPacks = Number(targetEntry?.quantity || targetEntry?.importQty || targetEntry?.currentQty || 1);
+          const sheetsToDeduct = qtyInPacks * multiplier;
+
+          const calculatedStockFromBatches = remainingBatches.reduce((sum, b) => sum + Number(b.currentQty || 0), 0);
+          const newStockQty = remainingBatches.length > 0 
+            ? calculatedStockFromBatches 
+            : Math.max(0, (Number(item.stockQty) || 0) - sheetsToDeduct);
+
+          // If the item ID was literally the inbound ID itself (a temporary standalone item), remove it
+          if (item.id === id && remainingBatches.length === 0) {
             recordDeletedId(item.id);
             if (item.sku) recordDeletedId(item.sku);
             if (item.name) recordDeletedId(item.name);
             deleteInventoryFromBackend(item.id);
-            continue; // Do not add to nextInv
+            continue;
           }
 
-          // Case 2: Other batches still exist -> Recalculate stock and update item
-          const newStockQty = remainingBatches.reduce((sum, b) => sum + Number(b.currentQty || 0), 0);
           const updatedItem = {
             ...item,
             batches: remainingBatches,
@@ -2819,8 +2838,9 @@ export const AppProvider = ({ children }) => {
       return newList;
     });
 
-    const targetSku = updatedEntry.skuCode || updatedEntry.sku || updatedEntry.id;
-    const itemName = updatedEntry.itemName || updatedEntry.name || '';
+    const isRestock = updatedEntry.categoryPill === 'RESTOCK' || updatedEntry.specs?.isRestock || updatedEntry.id?.startsWith('INB-RESTOCK');
+    const targetSku = updatedEntry.specs?.materialId || updatedEntry.specs?.skuCode || updatedEntry.specs?.sku || updatedEntry.skuCode || updatedEntry.sku || updatedEntry.originalSku || updatedEntry.id;
+    const itemName = (updatedEntry.itemName || updatedEntry.name || '').trim();
     const cat = (updatedEntry.category || '').toLowerCase();
     const isPaper = cat === 'paper' || cat === 'material';
     const isEquip = cat === 'printer' || cat === 'machinery' || cat === 'cutter' || cat === 'laminator' || cat === 'binder';
@@ -2902,7 +2922,7 @@ export const AppProvider = ({ children }) => {
             b.poNumber === updatedEntry.poNumber ||
             b.poNumber === updatedEntry.id ||
             b.poNumber === originalId ||
-            (existingBatches.length === 1)
+            (existingBatches.length === 1 && !isRestock)
           );
 
           let updatedBatches = [...existingBatches];
@@ -2937,9 +2957,9 @@ export const AppProvider = ({ children }) => {
 
           const newItem = {
             ...invItem,
-            id: targetSku || invItem.id,
-            sku: targetSku || invItem.sku || invItem.id,
-            name: itemName || invItem.name,
+            id: invItem.id,
+            sku: invItem.sku || invItem.id,
+            name: invItem.name || itemName,
             colorName: detectedColor,
             stockQty: newStockQty,
             purchaseMultiplier: isPaper ? sheetsPerPack : (invItem.purchaseMultiplier || 1),
@@ -2960,7 +2980,7 @@ export const AppProvider = ({ children }) => {
         return invItem;
       });
 
-      if (!matched) {
+      if (!matched && !isRestock && !updatedEntry.id?.startsWith('INB-RESTOCK')) {
         const detectedColor = updatedEntry.specs?.colorName || (itemName.includes('Black') ? 'Black' : (itemName.includes('Cyan') ? 'Cyan' : (itemName.includes('Magenta') ? 'Magenta' : (itemName.includes('Yellow') ? 'Yellow' : undefined))));
         const newItem = {
           id: targetSku,
@@ -2969,8 +2989,8 @@ export const AppProvider = ({ children }) => {
           colorName: detectedColor,
           category: isPaper ? 'Paper' : (cat === 'ink' ? 'Ink' : 'Finishing'),
           stockQty: totalSheets,
-          consumptionUnit: isPaper ? 'แผ่น' : (updatedEntry.unit || 'Units'),
-          purchaseUnit: isPaper ? 'แพ็ก' : (updatedEntry.unit || 'Units'),
+          consumptionUnit: isPaper ? 'ແຜ່ນ' : (updatedEntry.unit || 'Units'),
+          purchaseUnit: isPaper ? 'ແພັກ' : (updatedEntry.unit || 'Units'),
           purchaseMultiplier: isPaper ? sheetsPerPack : 1,
           costPerPurchaseUnit: costPerPurchase,
           costPerConsumptionUnit: costPerConsumption,

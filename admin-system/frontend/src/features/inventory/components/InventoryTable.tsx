@@ -306,7 +306,7 @@ export default function InventoryTable({ items, activeTab, onRestockItem, onView
                         onClick={() => {
                           if (window.confirm(currentLang === 'lo' ? `ທ່ານຕັ້ງໃຈລຶບ #${lot.id} (${parent.name}) ບໍ?` : `Are you sure you want to delete #${lot.id} (${parent.name})?`)) {
                             deleteInventoryBatch(parent.id, lot.id);
-                            showToast(currentLang === 'lo' ? `ລຶບຂໍ້ມູນ #${lot.id} สำเร็จ!` : `Deleted #${lot.id} successfully!`, 'info');
+                            showToast(currentLang === 'lo' ? `ລຶບຂໍ້ມູນ #${lot.id} ສຳເລັດ!` : `Deleted #${lot.id} successfully!`, 'info');
                           }
                         }}
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-xl text-xs font-black transition border border-slate-200 hover:border-rose-200 cursor-pointer"

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Edit3, Plus, CheckCircle2, AlertTriangle, XCircle, Search, X, Eye } from 'lucide-react';
+import { Edit3, Plus, CheckCircle2, AlertTriangle, XCircle, Search, X, Eye, Trash2 } from 'lucide-react';
 import { MaterialMaster } from '../types';
-import { updateMaterialDirect } from '../api/inventoryApi';
+import { updateMaterialDirect, deleteMaterial } from '../api/inventoryApi';
+import { useApp } from '@store/AppContext';
 
 interface StockTableProps {
   materials: MaterialMaster[];
@@ -12,8 +13,23 @@ interface StockTableProps {
   onViewDetails?: (material: MaterialMaster) => void;
 }
 
+const normalizeLaoUnit = (unit?: string, fallback = 'ແຜ່ນ') => {
+  if (!unit) return fallback;
+  const u = unit.trim().toLowerCase();
+  if (u === 'แผ่น' || u === 'sheet' || u === 'sheets' || u === 'แผ่น (sheet)' || u === 'ແຜ່ນ') return 'ແຜ່ນ';
+  if (u === 'แพ็ก' || u === 'pack' || u === 'packs' || u === 'แพ็ค' || u === 'ແພ໊ກ' || u === 'ແພັກ') return 'ແພັກ';
+  if (u === 'รีม' || u === 'ream' || u === 'reams' || u === 'ຣີມ') return 'ຣີມ';
+  if (u === 'ขวด' || u === 'bottle' || u === 'bottles' || u === 'ຂວດ') return 'ຂວດ';
+  if (u === 'ม้วน' || u === 'roll' || u === 'rolls' || u === 'ມ້ວນ') return 'ມ້ວນ';
+  if (u === 'เครื่อง' || u === 'machine' || u === 'unit' || u === 'units' || u === 'ເຄື່ອງ') return 'ເຄື່ອງ';
+  if (u === 'กล่อง' || u === 'box' || u === 'boxes' || u === 'ກ່ອງ') return 'ກ່ອງ';
+  if (u === 'ชุด' || u === 'set' || u === 'sets' || u === 'ຊຸດ') return 'ຊຸດ';
+  return unit;
+};
+
 export default function StockTable({ materials, loading, onRefresh, onOpenInbound, onViewDetails }: StockTableProps) {
   const queryClient = useQueryClient();
+  const { showToast, deleteInventorySku } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   
@@ -28,6 +44,26 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
   const [editMinAlert, setEditMinAlert] = useState<number | string>(10);
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+
+  const handleDeleteMaterial = async (m: MaterialMaster) => {
+    const targetId = m.id || m.sku;
+    const confirmMsg = `ທ່ານຕັ້ງໃຈລຶບສິນຄ້າ "${m.name}" (${m.sku || m.id}) ອອກຈາກຄັງສິນຄ້າແທ້ບໍ?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await deleteMaterial(targetId);
+      if (deleteInventorySku) {
+        deleteInventorySku(targetId);
+      }
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-items'] });
+      queryClient.invalidateQueries({ queryKey: ['materials'] });
+      showToast(`ລຶບສິນຄ້າ "${m.name}" ສຳເລັດ!`, 'success');
+      onRefresh();
+    } catch (err: any) {
+      showToast(err.message || 'ເກີດຂໍ້ຜິດພາດໃນການລຶບສິນຄ້າ', 'error');
+    }
+  };
 
   const filteredMaterials = materials.filter(m => {
     const matchesSearch = 
@@ -146,12 +182,12 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
           <table className="w-full text-left text-xs sm:text-sm">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
-                <th className="py-3.5 px-4">ຮຫັດ / ຊື່ສິນຄ້າ (Master SKU)</th>
+                <th className="py-3.5 px-4">ລະຫັດ / ຊື່ສິນຄ້າ (Master SKU)</th>
                 <th className="py-3.5 px-4">ໝວດໝູ່</th>
-                <th className="py-3.5 px-4 text-center">ຍົດສະຕ໋ອກຄງເຫຼືອ</th>
-                <th className="py-3.5 px-4 text-right">ຕົ້ນທຶນ/ຫນ່ວຍຕັດໃຊ້</th>
-                <th className="py-3.5 px-4 text-right">ຕົ້ນທຶນ/ຫນ່ວຍຊື້</th>
-                <th className="py-3.5 px-4 text-center">ສະຖານະສະຕ໋ອກ</th>
+                <th className="py-3.5 px-4 text-center">ຍອດສະຕັອກຄົງເຫຼືອ</th>
+                <th className="py-3.5 px-4 text-right">ຕົ້ນທຶນ/ໜ່ວຍຍ່ອຍໃຊ້</th>
+                <th className="py-3.5 px-4 text-right">ຕົ້ນທຶນ/ໜ່ວຍຊື້</th>
+                <th className="py-3.5 px-4 text-center">ສະຖານະສະຕັອກ</th>
                 <th className="py-3.5 px-4 text-center">ຈັດການ</th>
               </tr>
             </thead>
@@ -159,7 +195,7 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
               {loading ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-400">
-                    ກຳລັງໂຫຼດຂໍ້ມູນສະຕ໋ອກ...
+                    ກຳລັງໂຫຼດຂໍ້ມູນສະຕັອກ...
                   </td>
                 </tr>
               ) : filteredMaterials.length === 0 ? (
@@ -187,18 +223,18 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
                         {Number(m.stock_qty || 0).toLocaleString()}
                       </div>
                       <div className="text-[11px] text-slate-400 font-medium font-sans">
-                        {m.consumption_unit} (ເກຓຒໄກ້: <span className="font-sans">{m.min_stock_alert || 10}</span>)
+                        {normalizeLaoUnit(m.consumption_unit, 'ແຜ່ນ')} (ເກນເຕືອນ: <span className="font-sans">{m.min_stock_alert || 10}</span>)
                       </div>
                     </td>
 
                     <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-800">
                       {Number(m.cost_per_consumption_unit || 0).toFixed(2)} LAK
-                      <div className="text-[10px] text-slate-400 font-normal font-sans">/ {m.consumption_unit}</div>
+                      <div className="text-[10px] text-slate-400 font-normal font-sans">/ {normalizeLaoUnit(m.consumption_unit, 'ແຜ່ນ')}</div>
                     </td>
 
                     <td className="py-3.5 px-4 text-right font-mono text-slate-600">
                       {Number(m.cost_per_purchase_unit || 0).toLocaleString()} LAK
-                      <div className="text-[10px] text-slate-400 font-normal font-sans">/ {m.purchase_unit} (<span className="font-sans">{m.purchase_multiplier}</span>x)</div>
+                      <div className="text-[10px] text-slate-400 font-normal font-sans">/ {normalizeLaoUnit(m.purchase_unit, 'ແພັກ')} (<span className="font-sans">{m.purchase_multiplier}</span>x)</div>
                     </td>
 
                     <td className="py-3.5 px-4 text-center">
@@ -210,16 +246,16 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
                         {onViewDetails && (
                           <button
                             onClick={() => onViewDetails(m)}
-                            className="p-1.5 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-700 rounded-xl transition-all border border-indigo-100 hover:border-indigo-200 shadow-sm flex items-center gap-1 text-xs font-semibold"
-                            title="ລາຍລະອີດສິນຄ້າ"
+                            className="p-1.5 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-700 rounded-xl transition-all border border-indigo-100 hover:border-indigo-200 shadow-sm flex items-center gap-1 text-xs font-semibold cursor-pointer"
+                            title="ລາຍລະອຽດສິນຄ້າ"
                           >
                             <Eye className="w-3.5 h-3.5" />
-                            ລາຍລະອີດ
+                            ລາຍລະອຽດ
                           </button>
                         )}
                         <button
                           onClick={() => handleOpenEdit(m)}
-                          className="p-1.5 hover:bg-blue-50 text-blue-600 hover:text-blue-700 rounded-xl transition-all border border-blue-100 hover:border-blue-200 shadow-sm flex items-center gap-1 text-xs font-semibold"
+                          className="p-1.5 hover:bg-blue-50 text-blue-600 hover:text-blue-700 rounded-xl transition-all border border-blue-100 hover:border-blue-200 shadow-sm flex items-center gap-1 text-xs font-semibold cursor-pointer"
                           title="ແກ້ໄຂຂໍ້ມູນສິນຄ້າ"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
@@ -228,13 +264,21 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
                         {onOpenInbound && (
                           <button
                             onClick={() => onOpenInbound(m)}
-                            className="p-1.5 hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700 rounded-xl transition-all border border-emerald-100 hover:border-emerald-200 shadow-sm flex items-center gap-1 text-xs font-semibold"
+                            className="p-1.5 hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700 rounded-xl transition-all border border-emerald-100 hover:border-emerald-200 shadow-sm flex items-center gap-1 text-xs font-semibold cursor-pointer"
                             title="ຮັບເຂົ້າເພີ່ມ (Restock)"
                           >
                             <Plus className="w-3.5 h-3.5" />
                             ຮັບເຂົ້າ
                           </button>
                         )}
+                        <button
+                          onClick={() => handleDeleteMaterial(m)}
+                          className="p-1.5 hover:bg-rose-50 text-rose-500 hover:text-rose-700 rounded-xl transition-all border border-rose-100 hover:border-rose-200 shadow-sm flex items-center gap-1 text-xs font-semibold cursor-pointer"
+                          title="ລຶບສິນຄ້າ"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          ລຶບ
+                        </button>
                       </div>
                     </td>
                   </tr>

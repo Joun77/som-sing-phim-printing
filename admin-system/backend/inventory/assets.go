@@ -974,6 +974,10 @@ func DeductInventoryStockFIFOPessimisticLock(sku string, quantity float64) (floa
 				break
 			}
 		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("failed to iterate inventory batches: %w", err)
+		}
 		rows.Close()
 	}
 

@@ -34,6 +34,8 @@ import {
 
 import ItemSpecConfigurator, { calculateItemCosting } from './ItemSpecConfigurator';
 import CustomerCombobox from '@components/common/CustomerCombobox';
+import { PreflightItemCreationModal } from '@components/PreflightItemCreationModal';
+import type { PreflightResult } from '../types';
 import { useInventoryStore } from '@store/useInventoryStore';
 import { useApp } from '@store/AppContext';
 
@@ -145,7 +147,14 @@ export default function CreateOrderPage({
     bindingMachineId: '',
     spoilageRate: 5,
     targetMarginPercent: 35,
-    manualUnitPrice: null
+    manualUnitPrice: null,
+    pagesPerBook: 1,
+    colorPrintMode: 'CMYK',
+    fileName: '',
+    cCoverage: 5,
+    mCoverage: 5,
+    yCoverage: 5,
+    kCoverage: 15
   });
 
   const [items, setItems] = useState([
@@ -166,9 +175,38 @@ export default function CreateOrderPage({
     }
   }, [prefilledSpecs]);
 
+  const [isPreflightModalOpen, setIsPreflightModalOpen] = useState(false);
+
   const handleAddItemRow = () => {
     const newItem = createDefaultItem(`ລາຍການທີ ${items.length + 1}`, false);
     setItems(prev => [...prev, newItem]);
+  };
+
+  const handleConfirmPreflightItem = (pfResult: PreflightResult) => {
+    const rawName = pfResult.file_name ? pfResult.file_name.replace(/\.[^/.]+$/, '') : `ລາຍການທີ ${items.length + 1}`;
+    const cleanName = rawName.replace(/_+/g, ' ');
+    const isMonoOnly = (pfResult.color_pages_count || 0) === 0 && (pfResult.mono_pages_count || 0) > 0;
+    const detectedColorMode = isMonoOnly ? 'MONO_K' : 'CMYK';
+
+    const newItem = createDefaultItem(cleanName, true);
+    newItem.jobWidth = pfResult.target_width_mm || 210;
+    newItem.jobHeight = pfResult.target_height_mm || 297;
+    newItem.pagesPerBook = pfResult.total_pages || 1;
+    newItem.colorPrintMode = detectedColorMode;
+    newItem.fileName = pfResult.file_name;
+    newItem.cCoverage = pfResult.color_pages_avg_c || pfResult.avg_cov_c || 5;
+    newItem.mCoverage = pfResult.color_pages_avg_m || pfResult.avg_cov_m || 5;
+    newItem.yCoverage = pfResult.color_pages_avg_y || pfResult.avg_cov_y || 5;
+    newItem.kCoverage = (pfResult.color_pages_count || 0) > 0 ? (pfResult.color_pages_avg_k || 15) : (pfResult.mono_pages_avg_k || pfResult.avg_cov_k || 10);
+
+    setItems(prev => [...prev, newItem]);
+    setIsPreflightModalOpen(false);
+    if (showToast) showToast(`ເພີ່ມລາຍການ "${cleanName}" ຈາກການກວດໄຟລ໌ຮຽບຮ້ອຍ!`, 'success');
+  };
+
+  const handleSkipPreflightItem = () => {
+    handleAddItemRow();
+    setIsPreflightModalOpen(false);
   };
 
   const handleRemoveItemRow = (index) => {
@@ -589,6 +627,12 @@ export default function CreateOrderPage({
         onSave={handleSaveSpecModal}
         onCancel={() => setEditingItemIndex(null)}
         showToast={showToast}
+        customerData={{
+          name: customerType === 'existing' ? selectedCustomerId : newCustName,
+          phone: customerType === 'existing' ? (customers.find(c => c.id === selectedCustomerId || c.name === selectedCustomerId)?.phone || '') : newCustPhone,
+          deliveryMethod: deliveryMethod,
+          courier: selectedCourierId
+        }}
       />
     );
   }
@@ -908,11 +952,11 @@ export default function CreateOrderPage({
               </div>
               <button
                 type="button"
-                onClick={handleAddItemRow}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black shadow-md shadow-accent-sky/20 transition active:scale-95 w-fit"
+                onClick={() => setIsPreflightModalOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black shadow-md shadow-accent-sky/20 transition active:scale-95 w-fit cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                <span>+ ເພີ່ມຮາຍການສິນຄ້າ (Add New Item)</span>
+                <span>ເພີ່ມຮາຍການສິນຄ້າ (Add New Item)</span>
               </button>
             </div>
 
@@ -1343,6 +1387,15 @@ export default function CreateOrderPage({
           </div>
         </form>
       )}
+
+      {/* 🌟 PREFLIGHT & COLOR ANALYZER MODAL */}
+      <PreflightItemCreationModal
+        isOpen={isPreflightModalOpen}
+        onClose={() => setIsPreflightModalOpen(false)}
+        onConfirm={handleConfirmPreflightItem}
+        onSkip={handleSkipPreflightItem}
+        currentLang="lo"
+      />
     </div>
   );
 }

@@ -14,6 +14,14 @@ import { QuotationSaveModal } from './QuotationSaveModal';
 import { QuotationShareModal } from './QuotationShareModal';
 import { PricingTemplatesModal } from './PricingTemplatesModal';
 import { QuotationHistoryModal } from './QuotationHistoryModal';
+import { PreflightItemCreationModal } from '../../../components/PreflightItemCreationModal';
+import type { PreflightResult } from '@features/orders/types';
+import { PaperMaterialSelectorModal } from './PaperMaterialSelectorModal';
+import { PrinterSelectorModal } from './PrinterSelectorModal';
+import { PostPressSelectorModal } from './PostPressSelectorModal';
+import { MaterialInventorySearchModal } from './MaterialInventorySearchModal';
+import { JobQuantityAndPagesSection } from './JobQuantityAndPagesSection';
+import { PaperAndCoverSection } from './PaperAndCoverSection';
 import { 
   FinishingMaterialItem, 
   PricingTemplatePreset, 
@@ -87,7 +95,7 @@ export interface ItemModuleToggles {
   packagingDelivery: boolean;   // 6. Packaging & Delivery
 }
 
-const DEFAULT_CMYK_CHANNELS = [
+const DEFAULT_CHANNELS = [
   { channel_name: 'C', density_pct: 15, is_spot_color: false },
   { channel_name: 'M', density_pct: 15, is_spot_color: false },
   { channel_name: 'Y', density_pct: 15, is_spot_color: false },
@@ -107,6 +115,12 @@ export interface QuotationItem {
   jobHeight: number;
   isDoubleSided: boolean;
   printVolume: number;
+  pagesPerBook?: number;
+  unitName?: string;
+  includeCover?: boolean;
+  coverPaperId?: string;
+  coverPrintMode?: 'CMYK_1_SIDE' | 'CMYK_2_SIDES' | 'MONO_K';
+  coverPagesCount?: number;
   colorPrintMode: 'CMYK' | 'MONO_K';
   coverageMode: 'default' | 'advanced';
   avgCoverage: number;
@@ -269,7 +283,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   const createNewItem = (name = 'ລາຍການສິນຄ້າ 1', specs?: any): QuotationItem => {
     const isMono = specs?.colorMode === 'MONO_K';
-    const pages = Number(specs?.pageCount) || 100;
+    const pageCount = Number(specs?.pageCount) || (specs ? 150 : 1);
+    const orderQty = Number(specs?.orderQuantity) || 100;
+    const isBook = pageCount >= 4;
+
     const covC = specs ? (isMono ? 0 : Number(specs.avgCovC) || 0) : 10;
     const covM = specs ? (isMono ? 0 : Number(specs.avgCovM) || 0) : 10;
     const covY = specs ? (isMono ? 0 : Number(specs.avgCovY) || 0) : 10;
@@ -289,15 +306,76 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       { channel_name: 'K', density_pct: covK, is_spot_color: false },
     ];
 
+    let initialAllocations: any[] = [];
+    const colorPages = Number(specs?.colorPages || 0);
+    const monoPages = Number(specs?.monoPages || 0);
+
+    if (colorPages > 0 && monoPages > 0) {
+      initialAllocations = [
+        {
+          printer_id: defaultPrinter.id,
+          printer_name: `${defaultPrinter.name || defaultPrinter.id} (ໜ້າສີ ${colorPages} ໜ້າ)`,
+          allocated_pages: colorPages,
+          cost_per_page: rate,
+          ink_cost_per_page: inkBaseRate,
+          subtotal_cost: colorPages * rate,
+          color_mode: 'CMYK',
+          average_density_pct: Math.round((covC + covM + covY + covK) / 4),
+          color_channels: [
+            { channel_name: 'C', density_pct: covC, is_spot_color: false },
+            { channel_name: 'M', density_pct: covM, is_spot_color: false },
+            { channel_name: 'Y', density_pct: covY, is_spot_color: false },
+            { channel_name: 'K', density_pct: covK, is_spot_color: false },
+          ],
+        },
+        {
+          printer_id: defaultPrinter.id,
+          printer_name: `${defaultPrinter.name || defaultPrinter.id} (ໜ້າຂາວດຳ ${monoPages} ໜ້າ)`,
+          allocated_pages: monoPages,
+          cost_per_page: Math.round(rate * 0.5),
+          ink_cost_per_page: Math.round(inkBaseRate * 0.35),
+          subtotal_cost: monoPages * Math.round(rate * 0.5),
+          color_mode: 'MONO_K',
+          average_density_pct: Number(specs?.monoPagesAvgK) || 6.5,
+          color_channels: [
+            { channel_name: 'C', density_pct: 0, is_spot_color: false },
+            { channel_name: 'M', density_pct: 0, is_spot_color: false },
+            { channel_name: 'Y', density_pct: 0, is_spot_color: false },
+            { channel_name: 'K', density_pct: Number(specs?.monoPagesAvgK) || 6.5, is_spot_color: false },
+          ],
+        }
+      ];
+    } else {
+      initialAllocations = [{
+        printer_id: defaultPrinter.id,
+        printer_name: defaultPrinter.name || defaultPrinter.id,
+        allocated_pages: pageCount,
+        cost_per_page: rate,
+        ink_cost_per_page: inkBaseRate,
+        subtotal_cost: pageCount * rate,
+        color_mode: isMono ? 'MONO_K' : 'CMYK',
+        average_density_pct: Math.round((covC + covM + covY + covK) / (isMono ? 1 : 4)),
+        color_channels: channels,
+      }];
+    }
+
+    const defaultCoverPaper = papers.find(p => p.name?.includes('260') || p.name?.includes('300') || p.name?.includes('Art'))?.id || defaultPaper;
+
     return {
       id: `item-${Date.now()}-${Math.random().toString().slice(-4)}`,
       name: specs?.jobName || name,
       paperId: defaultPaper,
       jobSizePreset: specs?.suggestedPaper || 'A4',
-      jobWidth: 210,
-      jobHeight: 297,
-      isDoubleSided: false,
-      printVolume: pages,
+      jobWidth: Number(specs?.jobWidth) || 210,
+      jobHeight: Number(specs?.jobHeight) || 297,
+      isDoubleSided: isBook ? true : false,
+      printVolume: orderQty,
+      pagesPerBook: pageCount,
+      unitName: isBook ? 'ຊຸດ' : 'ແຜ່ນ',
+      includeCover: isBook,
+      coverPaperId: defaultCoverPaper,
+      coverPrintMode: 'CMYK_1_SIDE',
+      coverPagesCount: 4,
       colorPrintMode: isMono ? 'MONO_K' : 'CMYK',
       coverageMode: specs ? 'advanced' : 'default',
       avgCoverage: 15,
@@ -307,17 +385,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       kCoverage: covK,
       selectedPrinterId: defaultPrinter.id,
       selectedInkSet: 'Konica C6085 OEM Set',
-      printerAllocations: [{
-        printer_id: defaultPrinter.id,
-        printer_name: defaultPrinter.name || defaultPrinter.id,
-        allocated_pages: pages,
-        cost_per_page: rate,
-        ink_cost_per_page: inkBaseRate,
-        subtotal_cost: pages * rate,
-        color_mode: isMono ? 'MONO_K' : 'CMYK',
-        average_density_pct: Math.round((covC + covM + covY + covK) / (isMono ? 1 : 4)),
-        color_channels: channels,
-      }],
+      printerAllocations: initialAllocations,
       selectedPostPressIds: defaultPostPress,
       finishingMaterials: [
         { 
@@ -360,6 +428,122 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   const [activeItemIndex, setActiveItemIndex] = useState(0);
   const activeItem = items[activeItemIndex] || items[0];
 
+  const [isPreflightModalOpen, setIsPreflightModalOpen] = useState(false);
+
+  // Paper Substrate Inventory Search Modal State
+  const [isPaperModalOpen, setIsPaperModalOpen] = useState(false);
+  const [paperModalTarget, setPaperModalTarget] = useState<'inner' | 'cover'>('inner');
+
+  const handleSelectPaperFromModal = (paperId: string) => {
+    if (paperModalTarget === 'cover') {
+      updateActiveItem({ coverPaperId: paperId });
+    } else {
+      updateActiveItem({ paperId });
+    }
+  };
+
+  // Printer Fleet Search Modal State
+  const [isPrinterModalOpen, setIsPrinterModalOpen] = useState(false);
+
+  const handleSelectPrinterFromModal = (printer: any, mode: 'replace' | 'add' = 'replace') => {
+    const rate = getPrinterMachineRate(printer);
+    const inkBaseRate = getPrinterActualInkCostPerPage(printer);
+
+    // Preserve exact existing channels, density, and duplex from active allocation or item
+    const firstAlloc = activeItem.printerAllocations?.[0];
+    const isMono = firstAlloc ? firstAlloc.color_mode === 'MONO_K' : activeItem.colorPrintMode === 'MONO_K';
+    const isDuplex = firstAlloc ? firstAlloc.is_double_sided : activeItem.isDoubleSided;
+
+    const existingChannels = firstAlloc?.color_channels;
+    const channels = existingChannels && existingChannels.length > 0
+      ? existingChannels.map(c => ({ ...c }))
+      : (isMono ? [
+          { channel_name: 'K', density_pct: activeItem.kCoverage || 15, is_spot_color: false }
+        ] : [
+          { channel_name: 'C', density_pct: activeItem.cCoverage || 15, is_spot_color: false },
+          { channel_name: 'M', density_pct: activeItem.mCoverage || 15, is_spot_color: false },
+          { channel_name: 'Y', density_pct: activeItem.yCoverage || 15, is_spot_color: false },
+          { channel_name: 'K', density_pct: activeItem.kCoverage || 15, is_spot_color: false },
+        ]);
+
+    const avgDensity = firstAlloc?.average_density_pct || activeItem.avgCoverage || 15;
+
+    if (mode === 'add' && (activeItem.printerAllocations || []).length > 0) {
+      // Split load mode: Add new printer and distribute pages
+      const totalPages = activeItem.printVolume;
+      const currentAllocations = activeItem.printerAllocations || [];
+      const newCount = currentAllocations.length + 1;
+      const pagesPerEngine = Math.floor(totalPages / newCount);
+      const remainder = totalPages % newCount;
+
+      const updatedExisting = currentAllocations.map((a, idx) => {
+        const p = pagesPerEngine + (idx === 0 ? remainder : 0);
+        return {
+          ...a,
+          allocated_pages: p,
+          subtotal_cost: p * (a.cost_per_page || 0)
+        };
+      });
+
+      const newAlloc: PrinterAllocation = {
+        printer_id: `${printer.id}__${Date.now()}`,
+        printer_name: printer.name || printer.id,
+        allocated_pages: pagesPerEngine,
+        cost_per_page: rate,
+        ink_cost_per_page: inkBaseRate,
+        subtotal_cost: pagesPerEngine * rate,
+        color_mode: isMono ? 'MONO_K' : 'CMYK',
+        average_density_pct: avgDensity,
+        color_channels: channels,
+        is_double_sided: isDuplex
+      };
+
+      updateActiveItem({
+        printerAllocations: [...updatedExisting, newAlloc]
+      });
+      if (showToast) showToast(`ເພີ່ມ "${printer.name}" ເພື່ອແບ່ງການຜະລິດຮຽບຮ້ອຍ!`, 'success');
+    } else {
+      // Replace mode: Set as primary printer
+      const newAlloc: PrinterAllocation = {
+        printer_id: printer.id,
+        printer_name: printer.name || printer.id,
+        allocated_pages: activeItem.printVolume,
+        cost_per_page: rate,
+        ink_cost_per_page: inkBaseRate,
+        subtotal_cost: activeItem.printVolume * rate,
+        color_mode: isMono ? 'MONO_K' : 'CMYK',
+        average_density_pct: avgDensity,
+        color_channels: channels,
+        is_double_sided: isDuplex
+      };
+
+      updateActiveItem({
+        selectedPrinterId: printer.id,
+        printerAllocations: [newAlloc]
+      });
+      if (showToast) showToast(`ເລືອກເຄື່ອງພິມ "${printer.name}" ຮຽບຮ້ອຍ (ຮັກສາຄ່າສີໄວ້ຄືເກົ່າ)!`, 'success');
+    }
+  };
+
+  // Post-Press Machinery Search Modal State
+  const [isPostPressModalOpen, setIsPostPressModalOpen] = useState(false);
+
+  const handleTogglePostPressFromModal = (machId: string) => {
+    const current = activeItem.selectedPostPressIds || [];
+    const exists = current.includes(machId);
+    const next = exists ? current.filter(id => id !== machId) : [...current, machId];
+    updateActiveItem({ selectedPostPressIds: next });
+  };
+
+  // Material & Consumable Inventory Search Modal State
+  const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
+
+  const handleSelectMaterialFromModal = (mat: FinishingMaterialItem) => {
+    const current = activeItem.finishingMaterials || [];
+    updateActiveItem({ finishingMaterials: [...current, mat] });
+    if (showToast) showToast(`ເພີ່ມ "${mat.name}" ເຂົ້າໃນລາຍການແລ້ວ!`, 'success');
+  };
+
   const updateActiveItem = (patch: Partial<QuotationItem>) => {
     setItems(prev => prev.map((it, idx) => {
       if (idx !== activeItemIndex) return it;
@@ -391,6 +575,42 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     setItems(prev => [...prev, newItem]);
     setActiveItemIndex(items.length);
     if (showToast) showToast('ເພີ່ມລາຍການສິນຄ້າໃໝ່ຮຽບຮ້ອຍ!', 'success');
+  };
+
+  const handleConfirmPreflightItem = (pfResult: PreflightResult) => {
+    const rawName = pfResult.file_name ? pfResult.file_name.replace(/\.[^/.]+$/, '') : `ລາຍການທີ ${items.length + 1}`;
+    const cleanName = rawName.replace(/_+/g, ' ');
+
+    const isMonoOnly = (pfResult.color_pages_count || 0) === 0 && (pfResult.mono_pages_count || 0) > 0;
+    const detectedColorMode = isMonoOnly ? 'MONO_K' : 'CMYK';
+
+    const newItem = createNewItem(cleanName, {
+      jobName: cleanName,
+      fileName: pfResult.file_name,
+      pageCount: pfResult.total_pages || 1,
+      orderQuantity: 100,
+      colorPages: pfResult.color_pages_count || 0,
+      monoPages: pfResult.mono_pages_count || 0,
+      monoPagesAvgK: pfResult.mono_pages_avg_k || 6.5,
+      jobWidth: pfResult.target_width_mm || 210,
+      jobHeight: pfResult.target_height_mm || 297,
+      suggestedPaper: pfResult.target_paper_size || 'A4',
+      colorPrintMode: detectedColorMode,
+      cCoverage: pfResult.color_pages_avg_c || pfResult.avg_cov_c || 5,
+      mCoverage: pfResult.color_pages_avg_m || pfResult.avg_cov_m || 5,
+      yCoverage: pfResult.color_pages_avg_y || pfResult.avg_cov_y || 5,
+      kCoverage: (pfResult.color_pages_count || 0) > 0 ? (pfResult.color_pages_avg_k || 15) : (pfResult.mono_pages_avg_k || pfResult.avg_cov_k || 10),
+    });
+
+    setItems(prev => [...prev, newItem]);
+    setActiveItemIndex(items.length);
+    setIsPreflightModalOpen(false);
+    if (showToast) showToast(`ເພີ່ມລາຍການ "${cleanName}" (${pfResult.total_pages} ໜ້າ) ສຳເລັດ!`, 'success');
+  };
+
+  const handleSkipPreflightItem = () => {
+    handleAddItem();
+    setIsPreflightModalOpen(false);
   };
 
   const handleDuplicateItem = (idx: number) => {
@@ -682,6 +902,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   const [quotationNote, setQuotationNote] = useState('');
   const [shippingFee, setShippingFee] = useState<number>(0);
   const [shippingMethod, setShippingMethod] = useState('Anousith Express');
+  const [quotationSetupFee, setQuotationSetupFee] = useState<number>(0);
+  const [quotationPackagingCost, setQuotationPackagingCost] = useState<number>(0);
   const [isQuotationListOpen, setIsQuotationListOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isCopiedLink, setIsCopiedLink] = useState(false);
@@ -746,21 +968,57 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const portraitCuts = Math.floor(parentW / curW) * Math.floor(parentH / curH);
     const landscapeCuts = Math.floor(parentW / curH) * Math.floor(parentH / curW);
     const cutsPerSheet = Math.max(1, portraitCuts, landscapeCuts);
-    const parentSheetsNeeded = Math.ceil(item.printVolume / cutsPerSheet);
 
-    const tier = spoilageTiers.find(t => item.printVolume >= t.min && item.printVolume <= t.max);
+    // 1. Pages & Sheets Breakdown:
+    const pagesPerBook = Number(item.pagesPerBook || 1);
+    const orderQty = Number(item.printVolume || 1);
+    const hasCover = Boolean(item.includeCover && pagesPerBook >= 4);
+    const coverPagesCount = hasCover ? (Number(item.coverPagesCount) || 4) : 0;
+    const innerPagesPerBook = Math.max(1, pagesPerBook - coverPagesCount);
+    const innerSheetsPerBook = item.isDoubleSided ? Math.ceil(innerPagesPerBook / 2) : innerPagesPerBook;
+
+    // 2. Inner Paper Sheets Calculation:
+    const totalInnerSheets = innerSheetsPerBook * orderQty;
+    const innerParentSheetsNeeded = Math.ceil(totalInnerSheets / cutsPerSheet);
+
+    const tier = spoilageTiers.find(t => totalInnerSheets >= t.min && totalInnerSheets <= t.max);
     const itemSpoilageRate = (item.spoilagePercent !== undefined && item.spoilagePercent !== null)
       ? Number(item.spoilagePercent)
       : (tier ? tier.rate : 5);
-    const wastedSheets = Math.ceil(parentSheetsNeeded * (itemSpoilageRate / 100));
-    const totalParentSheets = parentSheetsNeeded + wastedSheets;
+    const innerWastedSheets = Math.ceil(innerParentSheetsNeeded * (itemSpoilageRate / 100));
+    const totalInnerParentSheets = innerParentSheetsNeeded + innerWastedSheets;
 
-    const fifoUnitCost = paperItem ? getFIFOCostPerSheet(paperItem.id, totalParentSheets) : getFIFOCostPerSheet(item.paperId, totalParentSheets);
+    const fifoUnitCost = paperItem ? getFIFOCostPerSheet(paperItem.id, totalInnerParentSheets) : getFIFOCostPerSheet(item.paperId, totalInnerParentSheets);
     const paperUnitCost = fifoUnitCost > 0 
       ? fifoUnitCost 
       : (paperItem 
           ? (Number(paperItem.costPerConsumptionUnit) || Number(paperItem.costPerSheet) || (Number(paperItem.costPerPurchaseUnit) && Number(paperItem.purchaseMultiplier) ? Number(paperItem.costPerPurchaseUnit) / Number(paperItem.purchaseMultiplier) : 0) || Number(paperItem.unitCost) || 184)
           : 184);
+
+    const innerPaperCost = totalInnerParentSheets * paperUnitCost;
+
+    // 3. Cover Paper Calculation (No lamination here - lamination is in post-press & consumables):
+    let coverPaperCost = 0;
+    let totalCoverParentSheets = 0;
+    let coverParentSheetsNeeded = 0;
+    let coverWastedSheets = 0;
+    let coverPaperUnitCost = 0;
+
+    if (hasCover) {
+      const coverPaperItem = inventory.find(p => p.id === item.coverPaperId) || paperItem;
+      const totalCoverSheets = 1 * orderQty; // 1 Spread sheet per book
+      coverParentSheetsNeeded = Math.ceil(totalCoverSheets / 1);
+      coverWastedSheets = Math.ceil(coverParentSheetsNeeded * (itemSpoilageRate / 100));
+      totalCoverParentSheets = coverParentSheetsNeeded + coverWastedSheets;
+      
+      const coverFifo = coverPaperItem ? getFIFOCostPerSheet(coverPaperItem.id, totalCoverParentSheets) : 0;
+      coverPaperUnitCost = coverFifo > 0 ? coverFifo : (coverPaperItem ? (Number(coverPaperItem.unitCost) || Number(coverPaperItem.costPerSheet) || 850) : 850);
+      coverPaperCost = totalCoverParentSheets * coverPaperUnitCost;
+    }
+
+    const parentSheetsNeeded = innerParentSheetsNeeded + coverParentSheetsNeeded;
+    const wastedSheets = innerWastedSheets + coverWastedSheets;
+    const totalParentSheets = totalInnerParentSheets + totalCoverParentSheets;
 
     const A4_AREA = 210 * 297;
     const areaFactor = (Number(jobW) * Number(jobH)) / A4_AREA;
@@ -943,7 +1201,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const hasLaborModule = item.activeModules ? item.activeModules.laborAndSetup : true;
     const hasPackagingModule = item.activeModules ? item.activeModules.packagingDelivery : true;
 
-    const rawPaperCost = Math.round(paperUnitCost * totalParentSheets);
+    const rawPaperCost = Math.round(innerPaperCost + coverPaperCost);
     const rawInkCost = Math.round(totalInkCostAccum);
     const rawMachineOverhead = machDepr + electricityCost;
 
@@ -997,6 +1255,15 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       itemSpoilageRate,
       paperUnitCost,
       paperCost,
+      innerPaperCost,
+      coverPaperCost,
+      coverPaperUnitCost,
+      totalInnerSheets,
+      totalInnerParentSheets,
+      totalCoverParentSheets,
+      innerPagesPerBook,
+      innerSheetsPerBook,
+      hasCover,
       cyanMl,
       magentaMl,
       yellowMl,
@@ -1029,16 +1296,16 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   const grandMachCost = calculatedItems.reduce((sum, c) => sum + c.machineOverhead, 0);
   const grandPostPressCost = calculatedItems.reduce((sum, c) => sum + c.postPressCost, 0);
   const grandFinishingCost = calculatedItems.reduce((sum, c) => sum + c.finishingMaterialsCost, 0);
-  const grandLaborCost = calculatedItems.reduce((sum, c) => sum + c.laborCost, 0);
-  const grandPackagingCost = calculatedItems.reduce((sum, c) => sum + c.packagingDeliveryCost, 0);
-  const grandNetCost = calculatedItems.reduce((sum, c) => sum + c.netCost, 0);
-  const grandSubtotal = calculatedItems.reduce((sum, c) => sum + c.sellingPrice, 0);
+  const grandLaborCost = calculatedItems.reduce((sum, c) => sum + c.laborCost, 0) + quotationSetupFee;
+  const grandPackagingCost = calculatedItems.reduce((sum, c) => sum + c.packagingDeliveryCost, 0) + quotationPackagingCost;
+  const grandNetCost = calculatedItems.reduce((sum, c) => sum + c.netCost, 0) + quotationSetupFee + quotationPackagingCost;
+  const grandSubtotal = calculatedItems.reduce((sum, c) => sum + c.sellingPrice, 0) + quotationSetupFee + quotationPackagingCost;
   const grandTotalUnits = items.reduce((sum, it) => sum + Number(it.printVolume || 0), 0);
   const taxAmount = taxEnabled
     ? (taxMode === 'override' ? Number(taxOverrideAmount || 0) : Math.round(grandSubtotal * (Number(taxRate || 0) / 100)))
     : 0;
   const finalGrandTotal = grandSubtotal + taxAmount + Number(shippingFee || 0);
-  const grandNetProfit = (grandSubtotal + taxAmount + Number(shippingFee || 0)) - grandNetCost;
+  const grandNetProfit = finalGrandTotal - grandNetCost;
   const grandProfitMargin = finalGrandTotal > 0 ? (grandNetProfit / finalGrandTotal) * 100 : 0;
 
   // Credit check warnings
@@ -1605,13 +1872,23 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                     <Layers className="w-4 h-4 text-emerald-600" />
                     <span>ລາຍການສິນຄ້າ ({items.length} ລາຍການ)</span>
                   </span>
-                  <button
-                    type="button"
-                    onClick={handleAddItem}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-md"
-                  >
-                    <span>+ ເພີ່ມລາຍການໃໝ່</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsPreflightModalOpen(true)}
+                      className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-sm"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>+ ເພີ່ມຈາກ Preflight</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAddItem}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-md"
+                    >
+                      <span>+ ລາຍການໃໝ່</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Item Tabs Pill List */}
@@ -1631,7 +1908,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                         <FileText className="w-3.5 h-3.5 shrink-0" />
                         <span>{idx + 1}. {item.name || `ລາຍການ ${idx + 1}`}</span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded font-sans font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                          {item.printVolume} ຫົວ
+                          {item.printVolume} {item.unitName || 'ຊຸດ'}{item.pagesPerBook ? ` (${item.pagesPerBook} ໜ້າ)` : ''}
                         </span>
                         {items.length > 1 && (
                           <button
@@ -1888,192 +2165,32 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
               </div>
 
               {/* PHASE 2: Job Overview & Production Quantity (ສະຫຼຸບງານ & ຈຳນວນຜະລິດ) */}
-              <div id="sec-phase2" className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition">
-                <button
-                  type="button"
-                  onClick={() => togglePhase('phase2')}
-                  className="w-full p-3.5 bg-slate-50/80 hover:bg-slate-100/80 flex items-center justify-between transition cursor-pointer"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">2</span>
-                    <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                      {currentLang === 'lo' ? 'ຈຳນວນທີ່ຕ້ອງການຜະລິດ (Quantity)' : 'Quantity Required'}
-                    </span>
-                    <span className="text-[11px] font-black px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200 font-sans flex items-center gap-1">
-                      <Layers3 className="w-3 h-3" />
-                      {activeItem.printVolume.toLocaleString()} ຫົວ
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <span className="text-[11px] font-medium hidden sm:inline">{openPhases.phase2 ? 'ພັບເກັບ' : 'ເປີດເບິ່ງ'}</span>
-                    {openPhases.phase2 ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </div>
-                </button>
+              <JobQuantityAndPagesSection
+                activeItem={activeItem}
+                updateActiveItem={updateActiveItem}
+                activeCalc={activeCalc}
+                isOpen={openPhases.phase2}
+                onToggle={() => togglePhase('phase2')}
+                currentLang={currentLang}
+              />
 
-                {openPhases.phase2 && (
-                  <div className="p-4 sm:p-5 border-t border-slate-100 space-y-3.5 animate-fade-in">
-                    <div className="space-y-1.5 p-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl shadow-xs">
-                      <div className="flex justify-between items-center">
-                        <label className="text-xs font-black text-emerald-950 uppercase tracking-wider block">
-                          {currentLang === 'lo' ? `ຈຳນວນທີ່ຕ້ອງການຜະລິດສຳລັບ "${activeItem.name}" *` : `Quantity Required for "${activeItem.name}" *`}
-                        </label>
-                        <span className="text-[11px] font-bold text-emerald-700">ກົດເລືອກຈຳນວນດ່ວນດ້ານລຸ່ມໄດ້</span>
-                      </div>
-
-                      <input
-                        type="number"
-                        min="1"
-                        value={activeItem.printVolume}
-                        onChange={(e) => updateActiveItem({ printVolume: Math.max(1, Number(e.target.value)) })}
-                        className="w-full min-h-[48px] px-4 py-2 border-2 border-emerald-400 rounded-xl focus:outline-none text-xl font-black font-sans bg-white text-emerald-950 text-center shadow-xs"
-                      />
-
-                      {/* Quick Quantity Preset Chips */}
-                      <div className="pt-2 flex flex-wrap gap-1.5 justify-center">
-                        {[50, 100, 200, 300, 500, 1000, 2000, 5000].map(qty => (
-                          <button
-                            key={qty}
-                            type="button"
-                            onClick={() => updateActiveItem({ printVolume: qty })}
-                            className={`px-3 py-1 rounded-xl text-xs font-black font-sans transition cursor-pointer ${
-                              activeItem.printVolume === qty
-                                ? 'bg-emerald-600 text-white shadow-xs'
-                                : 'bg-white text-emerald-900 border border-emerald-200 hover:bg-emerald-100'
-                            }`}
-                          >
-                            {qty.toLocaleString()} ຫົວ
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* PHASE 3: Inventory Paper Selection (ການເລືອກເຈ້ຍຈາກຄັງ) */}
-              <div id="sec-phase3" className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition">
-                <button
-                  type="button"
-                  onClick={() => togglePhase('phase3')}
-                  className="w-full p-3.5 bg-slate-50/80 hover:bg-slate-100/80 flex items-center justify-between transition cursor-pointer"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-6 h-6 rounded-lg bg-sky-600 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">3</span>
-                    <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                      {currentLang === 'lo' ? 'ເລືອກເຈ້ຍ & ຂະໜາດຕັດ (Paper & Cut)' : 'Paper & Cut Specs'}
-                    </span>
-                    <span className="text-[11px] font-bold px-2 py-0.5 bg-sky-50 text-sky-700 rounded-lg border border-sky-200 font-sans flex items-center gap-1">
-                      <Scissors className="w-3 h-3" />
-                      {activeCalc.cutsPerSheet} ຕັດ • {formatCurrency(activeCalc.paperCost)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <span className="text-[11px] font-medium hidden sm:inline">{openPhases.phase3 ? 'ພັບເກັບ' : 'ເປີດເບິ່ງ'}</span>
-                    {openPhases.phase3 ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </div>
-                </button>
-
-                {openPhases.phase3 && (
-                  <div className="p-4 sm:p-5 border-t border-slate-100 space-y-4 animate-fade-in">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block">{t('estimator.paper_select')}</label>
-                      <select
-                        value={activeItem.paperId}
-                        onChange={(e) => updateActiveItem({ paperId: e.target.value })}
-                        className="w-full min-h-[48px] px-3.5 py-2 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-sky-500 text-xs bg-white font-semibold font-sans"
-                      >
-                        {papers.map(p => {
-                          const fifoCost = getFIFOCostPerSheet(p.id, 1);
-                          const price = fifoCost > 0 
-                            ? fifoCost 
-                            : (Number(p.costPerConsumptionUnit) || Number(p.costPerSheet) || (Number(p.costPerPurchaseUnit) && Number(p.purchaseMultiplier) ? Number(p.costPerPurchaseUnit) / Number(p.purchaseMultiplier) : 0) || Number(p.unitCost) || 184);
-                          const stock = p.stockQty !== undefined ? p.stockQty : (p.stock_qty || 0);
-                          const gsm = p.gsm || p.specs?.grammageGsm || p.specs?.grammage;
-                          return (
-                            <option key={p.id} value={p.id}>
-                              {p.name} {gsm ? `(${gsm} gsm)` : ''} — ຕົ້ນທຶນ: {formatCurrency(price)}/ແຜ່ນ [{Number(stock).toLocaleString()} in stock]
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
-
-                    <div className="p-4 bg-sky-50/90 border border-sky-200 rounded-2xl text-xs space-y-2.5">
-                      <div className="flex justify-between items-center text-sky-950 font-black">
-                        <span className="flex items-center gap-1.5">
-                          <Scissors className="w-4 h-4 text-sky-600" />
-                          <span>ສະຫຼຸບການໃຊ້ເຈ້ຍ ({activeItem.name})</span>
-                        </span>
-                        <span className="px-2.5 py-0.5 bg-sky-100 text-sky-900 rounded-md font-bold font-sans">
-                          {activeCalc.cutsPerSheet} ຊິ້ນ/ແຜ່ນ
-                        </span>
-                      </div>
-                      
-                      <div className="text-slate-700 space-y-1.5 font-medium">
-                        <div className="flex justify-between">
-                          <span>ຕົ້ນທຶນເຈ້ຍຕໍ່ແຜ່ນ (Unit Cost):</span>
-                          <span className="font-sans font-bold text-slate-900">{formatCurrency(activeCalc.paperUnitCost)} / ແຜ່ນ</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>ຈຳນວນແຜ່ນທີ່ຕ້ອງໃຊ້ (Base Sheets):</span>
-                          <span className="font-sans font-bold text-slate-900">{activeCalc.parentSheetsNeeded.toLocaleString()} ແຜ່ນ</span>
-                        </div>
-                        <div className="space-y-1.5 pt-0.5 border-t border-sky-200/50">
-                          <div className="flex justify-between items-center text-amber-800 font-semibold">
-                            <span className="flex items-center gap-1.5">
-                              <span>ເຜື່ອເສຍຫາຍ (Spoilage Tier):</span>
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-900 rounded font-sans">
-                                {activeCalc.itemSpoilageRate}% ({activeItem.spoilagePercent !== undefined ? 'Custom' : 'Auto Tier'})
-                              </span>
-                            </span>
-                            <span className="font-sans font-bold text-amber-900">+{activeCalc.wastedSheets.toLocaleString()} ແຜ່ນ</span>
-                          </div>
-
-                          {/* Quick Spoilage % Chips */}
-                          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                            <span className="text-[10px] text-slate-400 font-bold">ປັບ % ເຜື່ອເສຍ:</span>
-                            {[
-                              { label: 'Auto Tier', val: undefined },
-                              { label: '3%', val: 3 },
-                              { label: '5%', val: 5 },
-                              { label: '7%', val: 7 },
-                              { label: '10%', val: 10 },
-                              { label: '15%', val: 15 },
-                            ].map(chip => {
-                              const isSelected = chip.val === undefined 
-                                ? activeItem.spoilagePercent === undefined 
-                                : activeItem.spoilagePercent === chip.val;
-                              return (
-                                <button
-                                  key={chip.label}
-                                  type="button"
-                                  onClick={() => updateActiveItem({ spoilagePercent: chip.val })}
-                                  className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
-                                    isSelected
-                                      ? 'bg-amber-500 text-white shadow-xs'
-                                      : 'bg-white text-slate-600 hover:bg-amber-50 border border-slate-200'
-                                  }`}
-                                >
-                                  {chip.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                        <div className="flex justify-between text-slate-900 font-bold border-t border-sky-200/70 pt-1.5">
-                          <span>ຈຳນວນແຜ່ນລວມທີ່ຕ້ອງຕັດ (FIFO Draw):</span>
-                          <span className="font-sans font-black text-slate-950 text-sm">{activeCalc.totalParentSheets.toLocaleString()} ແຜ່ນ</span>
-                        </div>
-                      </div>
-
-                      <div className="flex justify-between items-center bg-sky-100/80 p-2.5 rounded-xl text-sky-950 font-black border border-sky-200">
-                        <span className="text-xs">ມູນຄ່າຕົ້ນທຶນເຈ້ຍລວມ:</span>
-                        <span className="text-base font-sans text-sky-950 font-black">{formatCurrency(activeCalc.paperCost)}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* PHASE 3: Inventory Paper Selection (ການເລືອກເຈ້强ຈາກຄັງ & ໜ້າປົກ) */}
+              <PaperAndCoverSection
+                activeItem={activeItem}
+                updateActiveItem={updateActiveItem}
+                activeCalc={activeCalc}
+                papers={papers}
+                isOpen={openPhases.phase3}
+                onToggle={() => togglePhase('phase3')}
+                onOpenPaperSearch={(target) => {
+                  setPaperModalTarget(target);
+                  setIsPaperModalOpen(true);
+                }}
+                formatCurrency={formatCurrency}
+                getFIFOCostPerSheet={getFIFOCostPerSheet}
+                currentLang={currentLang}
+                t={t}
+              />
 
               {/* PHASE 4: Printing Process & Ink Setup (ເຄື່ອງພິມ & ລະບົບສີ) */}
               <div id="sec-phase4" className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition">
@@ -2112,6 +2229,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                         colorSchemeType: 'CMYK'
                       }))}
                       onAllocationsChange={(newAllocations) => updateActiveItem({ printerAllocations: newAllocations })}
+                      onOpenPrinterModal={() => setIsPrinterModalOpen(true)}
                     />
 
                     <div className="p-4 bg-purple-50/90 border border-purple-200 rounded-2xl text-xs space-y-2.5">
@@ -2182,7 +2300,14 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                   <div className="p-4 sm:p-5 border-t border-slate-100 space-y-3 animate-fade-in">
                     <div className="flex justify-between items-center text-xs text-slate-500 font-medium pb-1">
                       <span>ກົດເລືອກເຄື່ອງຈັກທີ່ຕ້ອງໃຊ້ສຳລັບງານນີ້:</span>
-                      <span className="font-bold text-amber-700">{postPressEquipment.length} ເຄື່ອງຈັກພ້ອມໃຊ້</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsPostPressModalOpen(true)}
+                        className="text-[10px] font-black text-amber-900 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                      >
+                        <Search className="w-3 h-3" />
+                        <span>ຄົ້ນຫາເຄື່ອງຈັກ ({postPressEquipment.length})</span>
+                      </button>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -2264,11 +2389,21 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 {openPhases.phase6 && (
                   <div className="p-4 sm:p-5 border-t border-slate-100 space-y-4 animate-fade-in">
                     
-                    {/* Quick Preset Materials Pills */}
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold text-slate-500 block">
-                        {currentLang === 'lo' ? 'ກົດເພີ່ມວັດຖຸດິບສຳເລັດຮູບດ່ວນ (ມີສູດຄິດໄລ່ຍົກກ່ອງ):' : 'Quick Add Consumables:'}
-                      </label>
+                    {/* Quick Preset Materials Pills + Search in Inventory Button */}
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="text-[11px] font-bold text-slate-500 block">
+                          {currentLang === 'lo' ? 'ກົດເພີ່ມວັດຖຸດິບສຳເລັດຮູບດ່ວນ (ມີສູດຄິດໄລ່ຍົກກ່ອງ):' : 'Quick Add Consumables:'}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setIsMaterialModalOpen(true)}
+                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
+                        >
+                          <Search className="w-3.5 h-3.5" />
+                          <span>ຄົ້ນຫາວັດຖຸດິບໃນຄັງ (Inventory Search)</span>
+                        </button>
+                      </div>
                       <div className="flex flex-wrap gap-1.5">
                         {[
                           { name: 'ລວດເຢັບແມັກ (#10)', calcMode: 'box' as const, packagePrice: 50000, unitsPerPackage: 1000, unitCost: 50, qtyPerItem: 2, unitName: 'ໂຕ', category: 'staple' },
@@ -2479,210 +2614,6 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 )}
               </div>
 
-              {/* PHASE 7: Dynamic Labor (ຄ່າແຮງງານ & ຕັ້ງເຄື່ອງ) */}
-              <div id="sec-phase7" className={`border rounded-2xl overflow-hidden bg-white shadow-xs transition ${
-                activeItem.activeModules?.laborAndSetup ? 'border-blue-200/80' : 'border-slate-200 opacity-60'
-              }`}>
-                <button
-                  type="button"
-                  onClick={() => togglePhase('phase7')}
-                  className="w-full p-3.5 bg-slate-50/80 hover:bg-slate-100/80 flex items-center justify-between transition cursor-pointer"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">7</span>
-                    <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                      {currentLang === 'lo' ? 'ຄ່າແຮງງານ & ຕັ້ງເຄື່ອງ (Labor)' : 'Labor & Overhead'}
-                    </span>
-                    <span className="text-[11px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-lg border border-blue-200 font-sans flex items-center gap-1">
-                      <Zap className="w-3 h-3" />
-                      {activeItem.laborMode === 'percent' ? `${activeItem.laborPercent}%` : formatCurrency(activeItem.laborCostManual)} • {formatCurrency(activeCalc.laborCost)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <span className="text-[11px] font-medium hidden sm:inline">{openPhases.phase7 ? 'ພັບເກັບ' : 'ເປີດເບິ່ງ'}</span>
-                    {openPhases.phase7 ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </div>
-                </button>
-
-                {openPhases.phase7 && (
-                  <div className="p-4 sm:p-5 border-t border-slate-100 space-y-3 animate-fade-in">
-                    <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
-                      <button
-                        type="button"
-                        onClick={() => updateActiveItem({ laborMode: 'percent' })}
-                        className={`flex-1 py-2 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                          activeItem.laborMode === 'percent'
-                            ? 'bg-white text-primary-navy shadow-xs'
-                            : 'text-slate-500 hover:text-slate-800'
-                        }`}
-                      >
-                        <PercentSquare className="w-3.5 h-3.5" />
-                        ຄິດໄລ່ເປັນ % ຕົ້ນທຶນ
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateActiveItem({ laborMode: 'manual' })}
-                        className={`flex-1 py-2 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                          activeItem.laborMode === 'manual'
-                            ? 'bg-white text-primary-navy shadow-xs'
-                            : 'text-slate-500 hover:text-slate-800'
-                        }`}
-                      >
-                        <Coins className="w-3.5 h-3.5" />
-                        ກຳນົດລາຄາ LAK
-                      </button>
-                    </div>
-
-                    {activeItem.laborMode === 'percent' ? (
-                      <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-2xl space-y-3">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-black text-blue-950">
-                            ອັດຕາຄ່າແຮງງານ & ຕັ້ງເຄື່ອງ (%):
-                          </label>
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={activeItem.laborPercent}
-                              onChange={(e) => updateActiveItem({ laborPercent: Math.max(0, Number(e.target.value)) })}
-                              className="w-20 min-h-[38px] px-3 border-2 border-blue-300 rounded-xl text-right font-sans font-black text-blue-950 bg-white text-sm focus:outline-none focus:border-blue-500"
-                            />
-                            <span className="font-bold text-blue-900 text-xs">%</span>
-                          </div>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <span className="text-[10px] font-bold text-blue-800 block">
-                            ຄ່າເປີເຊັນແນະນຳ (Recommended Presets):
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {[
-                              { label: '5% (ເບົາໆ)', val: 5 },
-                              { label: '10% (ມາດຕະຖານ)', val: 10 },
-                              { label: '15% (ແນະນຳ)', val: 15 },
-                              { label: '20% (ງານລະອຽດ)', val: 20 },
-                              { label: '25% (ພຣີມຽມ)', val: 25 },
-                            ].map((preset) => (
-                              <button
-                                key={preset.val}
-                                type="button"
-                                onClick={() => updateActiveItem({ laborPercent: preset.val })}
-                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                                  activeItem.laborPercent === preset.val
-                                    ? 'bg-blue-600 text-white shadow-xs'
-                                    : 'bg-white text-blue-900 border border-blue-200 hover:bg-blue-100'
-                                }`}
-                              >
-                                {preset.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="text-[11px] text-blue-900/90 font-medium pt-1 border-t border-blue-200/60 flex justify-between">
-                          <span>ຄິດໄລ່ຈາກຕົ້ນທຶນວັດສະດຸ & ເຄື່ອງຈັກ ({formatCurrency(activeCalc.directMatMach)}):</span>
-                          <span className="font-sans font-black text-blue-950">+{formatCurrency(activeCalc.laborCost)}</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-black text-slate-900">
-                            ລະບຸຄ່າແຮງງານ & ຕັ້ງເຄື່ອງ (LAK):
-                          </label>
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="number"
-                              step="1000"
-                              min="0"
-                              value={activeItem.laborCostManual}
-                              onChange={(e) => updateActiveItem({ laborCostManual: Math.max(0, Number(e.target.value)) })}
-                              className="w-36 min-h-[38px] px-3 border-2 border-slate-300 rounded-xl text-right font-sans font-black text-slate-900 bg-white text-sm focus:outline-none focus:border-indigo-500"
-                            />
-                            <span className="font-bold text-slate-700 text-xs">₭</span>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-1.5">
-                          {[10000, 25000, 50000, 100000, 200000].map((cash) => (
-                            <button
-                              key={cash}
-                              type="button"
-                              onClick={() => updateActiveItem({ laborCostManual: cash })}
-                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                                activeItem.laborCostManual === cash
-                                  ? 'bg-slate-800 text-white shadow-xs'
-                                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                              }`}
-                            >
-                              {cash.toLocaleString()} ₭
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* PHASE 8: Packaging & Delivery (ຄ່າບັນຈຸພັນ & ຂົນສົ່ງ) */}
-              <div id="sec-phase8" className={`border rounded-2xl overflow-hidden bg-white shadow-xs transition ${
-                activeItem.activeModules?.packagingDelivery ? 'border-slate-300' : 'border-slate-200 opacity-60'
-              }`}>
-                <button
-                  type="button"
-                  onClick={() => togglePhase('phase8')}
-                  className="w-full p-3.5 bg-slate-50/80 hover:bg-slate-100/80 flex items-center justify-between transition cursor-pointer"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-6 h-6 rounded-lg bg-slate-800 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">8</span>
-                    <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                      {currentLang === 'lo' ? 'ຄ່າບັນຈຸພັນ & ຂົນສົ່ງ (Packaging & Delivery)' : 'Packaging & Delivery'}
-                    </span>
-                    <span className="text-[11px] font-bold px-2 py-0.5 bg-slate-100 text-slate-700 rounded-lg border border-slate-200 font-sans flex items-center gap-1">
-                      <Truck className="w-3 h-3" />
-                      {formatCurrency(activeCalc.packagingDeliveryCost)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <span className="text-[11px] font-medium hidden sm:inline">{openPhases.phase8 ? 'ພັບເກັບ' : 'ເປີດເບິ່ງ'}</span>
-                    {openPhases.phase8 ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </div>
-                </button>
-
-                {openPhases.phase8 && (
-                  <div className="p-4 sm:p-5 border-t border-slate-100 space-y-3 animate-fade-in">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                      <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
-                        <label className="font-bold text-slate-700 block">ຄ່າກ່ອງ / ບັນຈຸພັນ (Packaging):</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1000"
-                          value={activeItem.packagingCost || 0}
-                          onChange={(e) => updateActiveItem({ packagingCost: Math.max(0, Number(e.target.value)) })}
-                          placeholder="0 ₭"
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono font-bold text-slate-900"
-                        />
-                      </div>
-                      <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
-                        <label className="font-bold text-slate-700 block">ຄ່າຂົນສົ່ງ (Delivery Fee):</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1000"
-                          value={activeItem.deliveryCost || 0}
-                          onChange={(e) => updateActiveItem({ deliveryCost: Math.max(0, Number(e.target.value)) })}
-                          placeholder="0 ₭"
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono font-bold text-slate-900"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
             </div>
           </div>
 
@@ -2708,6 +2639,16 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
               grandLaborCost={grandLaborCost}
               grandPackagingCost={grandPackagingCost}
               finalGrandTotal={finalGrandTotal}
+              quotationLaborMode={activeItem.laborMode || 'percent'}
+              setQuotationLaborMode={(mode) => updateActiveItem({ laborMode: mode })}
+              quotationLaborPercent={activeItem.laborPercent !== undefined ? activeItem.laborPercent : 15}
+              setQuotationLaborPercent={(pct) => updateActiveItem({ laborPercent: pct })}
+              quotationLaborCostManual={activeItem.laborCostManual || 50000}
+              setQuotationLaborCostManual={(cash) => updateActiveItem({ laborCostManual: cash })}
+              quotationSetupFee={quotationSetupFee}
+              setQuotationSetupFee={setQuotationSetupFee}
+              quotationPackagingCost={quotationPackagingCost}
+              setQuotationPackagingCost={setQuotationPackagingCost}
               taxMode={taxMode}
               setTaxMode={setTaxMode}
               taxRate={taxRate}
@@ -2851,6 +2792,58 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         onFormChange={setNewTemplateForm}
         activeItem={activeItem}
         currentLang={currentLang}
+      />
+
+      {/* 🌟 PREFLIGHT ITEM CREATION MODAL */}
+      <PreflightItemCreationModal
+        isOpen={isPreflightModalOpen}
+        onClose={() => setIsPreflightModalOpen(false)}
+        onConfirm={handleConfirmPreflightItem}
+        onSkip={handleSkipPreflightItem}
+        currentLang={currentLang}
+      />
+
+      {/* 🌟 PAPER SUBSTRATE INVENTORY SEARCH MODAL */}
+      <PaperMaterialSelectorModal
+        isOpen={isPaperModalOpen}
+        onClose={() => setIsPaperModalOpen(false)}
+        onSelect={handleSelectPaperFromModal}
+        selectedPaperId={paperModalTarget === 'cover' ? activeItem.coverPaperId : activeItem.paperId}
+        papers={papers}
+        title={paperModalTarget === 'cover' ? 'ເລືອກເຈ້ຍໜ້າປົກຈາກຄັງ (Select Book Cover Paper)' : 'ເລືອກເຈ້ຍເນື້ອໃນຈາກຄັງ (Select Inner Pages Paper)'}
+        targetType={paperModalTarget === 'cover' ? 'cover' : 'inner'}
+        formatCurrency={formatCurrency}
+        getFIFOCostPerSheet={getFIFOCostPerSheet}
+      />
+
+      {/* 🌟 PRINTER FLEET SEARCH MODAL */}
+      <PrinterSelectorModal
+        isOpen={isPrinterModalOpen}
+        onClose={() => setIsPrinterModalOpen(false)}
+        onSelect={handleSelectPrinterFromModal}
+        selectedPrinterId={activeItem.selectedPrinterId}
+        printers={printers}
+        formatCurrency={formatCurrency}
+        getPrinterMachineRate={getPrinterMachineRate}
+      />
+
+      {/* 🌟 POST-PRESS MACHINERY SEARCH MODAL */}
+      <PostPressSelectorModal
+        isOpen={isPostPressModalOpen}
+        onClose={() => setIsPostPressModalOpen(false)}
+        onSelect={handleTogglePostPressFromModal}
+        selectedEquipmentIds={activeItem.selectedPostPressIds || []}
+        equipmentList={postPressEquipment}
+        formatCurrency={formatCurrency}
+      />
+
+      {/* 🌟 FINISHING MATERIALS & CONSUMABLES INVENTORY SEARCH MODAL */}
+      <MaterialInventorySearchModal
+        isOpen={isMaterialModalOpen}
+        onClose={() => setIsMaterialModalOpen(false)}
+        onSelect={handleSelectMaterialFromModal}
+        inventory={inventory}
+        formatCurrency={formatCurrency}
       />
 
       {/* PRINT-ONLY CSS HELPER TO ISOLATE PREVIEW DOCUMENT */}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Boxes, Plus, Scissors, History, PackagePlus, FileSpreadsheet, RefreshCw } from 'lucide-react';
+import { Boxes, Plus, Scissors, History, PackagePlus, FileSpreadsheet, RefreshCw, MinusCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import InventoryTable from './InventoryTable';
@@ -70,8 +70,9 @@ export default function InventoryManagement() {
   if (selectedDetailLot) {
     return (
       <InventoryMaterialDetailsPage
-        lotId={selectedDetailLot.id}
-        parentSkuId={selectedDetailLot.parentItem?.id}
+        lotId={selectedDetailLot.id || selectedDetailLot.sku}
+        parentSkuId={selectedDetailLot.parentItem?.id || selectedDetailLot.sku || selectedDetailLot.id}
+        initialItem={selectedDetailLot}
         onBack={() => setSelectedDetailLot(null)}
       />
     );
@@ -125,38 +126,38 @@ export default function InventoryManagement() {
         <div className="flex flex-wrap gap-2.5">
           <button
             onClick={() => setIsInboundModalOpen(true)}
-            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-2xl transition shadow-lg shadow-blue-500/20 cursor-pointer"
+            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-2xl transition shadow-lg shadow-blue-500/20 cursor-pointer active:scale-98"
           >
             <PackagePlus className="w-4 h-4" />
-            <span>+ ຮັບເຂົ້າສິນຄ້າ (Stock Inbound)</span>
+            <span>{currentLang === 'lo' ? 'ຮັບເຂົ້າສິນຄ້າ (Stock Inbound)' : 'Stock Inbound'}</span>
           </button>
           <button
             onClick={() => setIsPriceUploaderOpen(true)}
-            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-2xl transition cursor-pointer shadow-sm"
+            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-2xl transition cursor-pointer shadow-sm active:scale-98"
           >
             <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
             <span>{currentLang === 'lo' ? 'ອັບໂຫຼດລາຄາເຈ້ຍ (Excel/CSV)' : 'Paper Price Sheets'}</span>
           </button>
           <button
             onClick={() => { setSelectedDischargeItem(null); setIsDischargeOpen(true); }}
-            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-rose-50 border border-rose-100 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-2xl transition cursor-pointer"
+            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-rose-50 border border-rose-100 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-2xl transition cursor-pointer active:scale-98"
           >
-            <Scissors className="w-4 h-4" />
-            <span>- ເບີກໃຊ້ງານ / ຕັດສະຕ໋ອກ</span>
+            <MinusCircle className="w-4 h-4 text-rose-600" />
+            <span>{currentLang === 'lo' ? 'ເບີກໃຊ້ງານ / ຕັດສະຕ໋ອກ' : 'Discharge Stock'}</span>
           </button>
           <button
             onClick={() => setIsOffcutOpen(true)}
-            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-2xl transition cursor-pointer"
+            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-2xl transition cursor-pointer active:scale-98"
           >
-            <Scissors className="w-4 h-4" />
-            <span>+ ເພີ່ມເສດເຈ້ຍ (Offcut)</span>
+            <Scissors className="w-4 h-4 text-slate-600" />
+            <span>{currentLang === 'lo' ? 'ເພີ່ມເສດເຈ້ຍ (Offcut)' : 'Add Offcut'}</span>
           </button>
           <button
             onClick={() => setIsAddMaterialOpen(true)}
-            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-2xl transition shadow-sm cursor-pointer"
+            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-2xl transition shadow-sm cursor-pointer active:scale-98"
           >
-            <Plus className="w-4 h-4" />
-            <span>+ ເພີ່ມ SKU ໃໝ່</span>
+            <Plus className="w-4 h-4 text-slate-700" />
+            <span>{currentLang === 'lo' ? 'ເພີ່ມ SKU ໃໝ່' : 'New SKU'}</span>
           </button>
         </div>
       </div>

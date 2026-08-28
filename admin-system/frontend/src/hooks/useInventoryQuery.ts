@@ -86,16 +86,22 @@ export function useEquipment() {
   return useQuery({
     queryKey: ['equipment'],
     queryFn: async () => {
-      const res = await fetch('/api/equipment', {
+      let res = await fetch('/api/equipment', {
         headers: getAuthHeaders(),
       });
       if (!res.ok) {
+        res = await fetch('/api/v1/assets', {
+          headers: getAuthHeaders(),
+        });
+      }
+      if (!res.ok) {
         throw new Error('Failed to fetch equipment list');
       }
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
+      const json = await res.json();
+      const items = Array.isArray(json) ? json : (json?.data || []);
+      return Array.isArray(items) ? items : [];
     },
-    staleTime: 1000 * 60,
+    staleTime: 1000 * 30,
   });
 }
 

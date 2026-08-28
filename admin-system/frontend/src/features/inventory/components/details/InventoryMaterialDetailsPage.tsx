@@ -8,25 +8,42 @@ import AssetEditModal from '../modals/AssetEditModal';
 import DynamicSpecDetail from './DynamicSpecDetail';
 import ConfirmDeleteModal, { DeleteActionButton } from '@components/common/ConfirmDeleteModal';
 
-export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBack }) {
+export default function InventoryMaterialDetailsPage({ 
+  lotId, 
+  parentSkuId, 
+  initialItem,
+  onBack 
+}: { 
+  lotId?: string; 
+  parentSkuId?: string; 
+  initialItem?: any;
+  onBack: () => void;
+}) {
   const { t, i18n } = useTranslation();
+  const currentLang = i18n.language || 'lo';
   const { inventory, linkedInboundEntries, deleteInventoryBatch, editInventoryBatch, addInventorySku, equipment, printerColorLinks, showToast, formatCurrency } = useApp();
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   // Find target material item and batch lot
-  let targetItem = null;
-  let targetLot = null;
+  let targetItem: any = null;
+  let targetLot: any = null;
 
-  if (parentSkuId) {
-    targetItem = inventory.find(i => i.id === parentSkuId || i.id.toLowerCase() === parentSkuId.toLowerCase());
+  const searchKey = (parentSkuId || lotId || initialItem?.id || initialItem?.sku || '').toLowerCase();
+
+  if (searchKey) {
+    targetItem = inventory.find(i => 
+      (i.id && i.id.toLowerCase() === searchKey) || 
+      (i.sku && i.sku.toLowerCase() === searchKey) ||
+      (i.name && i.name.toLowerCase() === searchKey)
+    );
   }
 
   if (!targetItem && lotId) {
     for (const item of inventory) {
       if (item.batches) {
-        const found = item.batches.find(b => b.id === lotId);
+        const found = item.batches.find((b: any) => b.id === lotId || b.id?.toLowerCase() === lotId.toLowerCase());
         if (found) {
           targetItem = item;
           targetLot = found;
@@ -36,12 +53,59 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
     }
   }
 
+  if (!targetItem && initialItem) {
+    targetItem = {
+      ...initialItem,
+      id: initialItem.id || initialItem.sku || 'MAT-ITEM',
+      name: initialItem.name || initialItem.itemName || initialItem.sku || 'Item',
+      category: initialItem.category || 'Paper',
+      stockQty: initialItem.stock_qty ?? initialItem.stockQty ?? initialItem.currentStock ?? 0,
+      consumptionUnit: initialItem.consumption_unit || initialItem.consumptionUnit || 'ແຜ່ນ',
+      purchaseUnit: initialItem.purchase_unit || initialItem.purchaseUnit || 'ແພັກ',
+      purchaseMultiplier: Number(initialItem.purchase_multiplier || initialItem.purchaseMultiplier || 500),
+      costPerPurchaseUnit: Number(initialItem.cost_per_purchase_unit || initialItem.costPerPurchaseUnit || 0),
+      costPerConsumptionUnit: Number(initialItem.cost_per_consumption_unit || initialItem.costPerConsumptionUnit || 0),
+      reorderThreshold: Number(initialItem.min_stock_alert || initialItem.reorderThreshold || 10),
+      specs: initialItem.specs || initialItem.technical_specs || { ...initialItem }
+    };
+  }
+
   const isSheetPaper = (targetItem?.category || '').toLowerCase() === 'paper' || (targetItem?.category || '').toLowerCase() === 'material';
   const multiplier = Number(targetItem?.purchaseMultiplier || targetItem?.specs?.sheetsPerPack || 500);
 
-  const matchedInboundEntries = (linkedInboundEntries || []).filter(
-    (e: any) => e && (e.sku === targetItem?.id || e.id === targetItem?.id || e.skuCode === targetItem?.id || e.name === targetItem?.name)
-  );
+  let allInboundRecords = [...(linkedInboundEntries || [])];
+  try {
+    const raw = localStorage.getItem('som_sing_inbound_list');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        parsed.forEach(p => {
+          if (!allInboundRecords.some(r => r.id === p.id)) {
+            allInboundRecords.push(p);
+          }
+        });
+      }
+    }
+  } catch (err) {}
+
+  const targetId = (targetItem?.id || '').toLowerCase();
+  const targetSku = (targetItem?.sku || '').toLowerCase();
+  const targetName = (targetItem?.name || '').toLowerCase().trim();
+
+  const matchedInboundEntries = allInboundRecords.filter((e: any) => {
+    if (!e) return false;
+    const eId = (e.id || '').toLowerCase();
+    const eSku = (e.sku || '').toLowerCase();
+    const eSkuCode = (e.skuCode || '').toLowerCase();
+    const eName = (e.name || e.itemName || '').toLowerCase().trim();
+    const eMatId = (e.specs?.materialId || '').toLowerCase();
+
+    return (
+      (targetId && (eId === targetId || eSku === targetId || eSkuCode === targetId || eMatId === targetId)) ||
+      (targetSku && (eSku === targetSku || eSkuCode === targetSku || eId === targetSku || eMatId === targetSku)) ||
+      (targetName && (eName === targetName || eName.includes(targetName) || targetName.includes(eName)))
+    );
+  });
 
   const rawBatches = (targetItem?.batches || []).filter((b: any) => b.id && !b.id.includes('-EMPTY'));
 
@@ -71,8 +135,9 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
     };
   });
 
-  const combinedBatches = realBatches.length > 0 ? realBatches : matchedInboundEntries.map((e: any) => {
-    const packQty = Number(e.importQty || 1);
+  // Convert matched inbound logs to batch items
+  const inboundAsBatches = matchedInboundEntries.map((e: any) => {
+    const packQty = Number(e.quantity || e.importQty || e.currentQty || e.initialQty || 1);
     const totalSheets = isSheetPaper ? packQty * multiplier : packQty;
     const totalCost = Number(e.totalPrice || (e.unitPrice ? e.unitPrice * packQty : targetItem?.costPerPurchaseUnit || 0));
     const reamCost = packQty > 0 ? Math.round(totalCost / packQty) : totalCost;
@@ -82,13 +147,22 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
 
     return {
       id: e.poNumber || e.id || `LOT-${targetItem?.id}`,
-      purchaseDate: e.receiptDate || e.importDate || '-',
-      supplierName: e.supplier || e.vendor || '',
+      purchaseDate: e.inboundDate || e.receiptDate || e.importDate || '-',
+      supplierName: e.supplierName || e.supplier || e.vendor || 'Restock Supplier',
       purchasePricePerReam: reamCost,
       costPerSheet: calculatedPerSheet,
       initialQty: totalSheets,
       currentQty: totalSheets
     };
+  });
+
+  // Combine and deduplicate batches by batch ID/PO Number
+  const combinedBatches: any[] = [...realBatches];
+  inboundAsBatches.forEach(ib => {
+    const exists = combinedBatches.some(b => b.id === ib.id || (b.purchaseDate === ib.purchaseDate && b.initialQty === ib.initialQty));
+    if (!exists) {
+      combinedBatches.push(ib);
+    }
   });
 
   let effectiveStock = combinedBatches.reduce((sum: number, b: any) => sum + (Number(b.currentQty) || 0), 0);
@@ -155,8 +229,25 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
 
   const formatLAK = formatCurrency;
 
-  const renderDualUnitQuantity = (currentQty, category, purchaseUnit, consumptionUnit, itemsPerPurchaseUnit = 500) => {
+  const normalizeLaoUnit = (unit?: string, fallback = 'ແຜ່ນ') => {
+    if (!unit) return fallback;
+    const u = unit.trim().toLowerCase();
+    if (u === 'แผ่น' || u === 'sheet' || u === 'sheets' || u === 'แผ่น (sheet)' || u === 'ແຜ່ນ') return 'ແຜ່ນ';
+    if (u === 'แพ็ก' || u === 'pack' || u === 'packs' || u === 'แพ็ค' || u === 'ແພ໊ກ' || u === 'ແພັກ') return 'ແພັກ';
+    if (u === 'รีม' || u === 'ream' || u === 'reams' || u === 'ຣີມ') return 'ຣີມ';
+    if (u === 'ขวด' || u === 'bottle' || u === 'bottles' || u === 'ຂວດ') return 'ຂວດ';
+    if (u === 'ม้วน' || u === 'roll' || u === 'rolls' || u === 'ມ້ວນ') return 'ມ້ວນ';
+    if (u === 'เครื่อง' || u === 'machine' || u === 'unit' || u === 'units' || u === 'ເຄື່ອງ') return 'ເຄື່ອງ';
+    if (u === 'กล่อง' || u === 'box' || u === 'boxes' || u === 'ກ່ອງ') return 'ກ່ອງ';
+    if (u === 'ชุด' || u === 'set' || u === 'sets' || u === 'ຊຸດ') return 'ຊຸດ';
+    return unit;
+  };
+
+  const renderDualUnitQuantity = (currentQty: number, category?: string, purchaseUnit?: string, consumptionUnit?: string, itemsPerPurchaseUnit = 500) => {
     const isPaperCategory = (category || '').toLowerCase() === 'paper' || (category || '').toLowerCase() === 'material';
+    const normConsumption = normalizeLaoUnit(consumptionUnit, 'ແຜ່ນ');
+    const normPurchase = normalizeLaoUnit(purchaseUnit, 'ແພັກ');
+
     if (isPaperCategory) {
       const mult = itemsPerPurchaseUnit || 500;
       const reams = Math.floor(currentQty / mult);
@@ -164,17 +255,17 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
       return (
         <div>
           <span className="text-2xl font-black text-slate-900 font-mono">
-            {currentQty.toLocaleString()} <span className="text-sm font-bold text-slate-600">แผ่น</span>
+            {currentQty.toLocaleString()} <span className="text-sm font-bold text-slate-600">ແຜ່ນ</span>
           </span>
           <span className="text-xs font-bold text-slate-500 block font-sans mt-0.5">
-            ({reams > 0 ? `${reams} ${purchaseUnit || 'แพ็ก'}` : ''}{remainder > 0 ? `${reams > 0 ? ' + ' : ''}${remainder} แผ่น` : (reams === 0 ? `0 ${purchaseUnit || 'แพ็ก'}` : '')})
+            ({reams > 0 ? `${reams} ${normPurchase}` : ''}{remainder > 0 ? `${reams > 0 ? ' + ' : ''}${remainder} ແຜ່ນ` : (reams === 0 ? `0 ${normPurchase}` : '')})
           </span>
         </div>
       );
     }
     return (
       <span className="text-2xl font-black text-slate-900 font-mono">
-        {currentQty.toLocaleString()} <span className="text-sm font-bold text-slate-600">{consumptionUnit || 'Units'}</span>
+        {currentQty.toLocaleString()} <span className="text-sm font-bold text-slate-600">{normConsumption}</span>
       </span>
     );
   };
@@ -187,8 +278,6 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
       onBack();
     }
   };
-
-  const currentLang = i18n.language || 'lo';
 
   return (
     <div className="min-h-screen bg-slate-100/60 p-4 md:p-8 space-y-6 animate-fade-in">
@@ -244,7 +333,7 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
             </span>
             <span className="text-xl font-black text-emerald-600 font-mono block mt-1">
               {formatLAK(lotData.costPerSheet || targetItem.costPerConsumptionUnit)}
-              <span className="text-xs text-slate-400 font-bold ml-1">/{targetItem.consumptionUnit || 'แผ่น'}</span>
+              <span className="text-xs text-slate-400 font-bold ml-1">/{normalizeLaoUnit(targetItem.consumptionUnit, 'ແຜ່ນ')}</span>
             </span>
           </div>
           <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
@@ -328,7 +417,7 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
             {lotData.initialQty > 0 && (
               <div>
                 <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ຈຳນວນນຳເຂົ້າເລີ່ມຕົ້ນ:' : 'Initial Received Qty:'}</span>
-                <span className="font-mono text-slate-900 font-bold">{lotData.initialQty} {targetItem.consumptionUnit || 'แผ่น'}</span>
+                <span className="font-mono text-slate-900 font-bold">{lotData.initialQty} {targetItem.consumptionUnit || 'ແຜ່ນ'}</span>
               </div>
             )}
             {(lotData.purchasePrice || lotData.costPerSheet || targetItem.costPerConsumptionUnit) > 0 && (
@@ -368,7 +457,7 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                <th className="py-3 px-4">ວັນທີນຳເຂົ້າ (Date)</th>
+                <th className="py-3 px-4">{currentLang === 'lo' ? 'ວັນທີ & ເວລານຳເຂົ້າ (Date & Time)' : 'Date & Time'}</th>
                 <th className="py-3 px-4">ລະຫັດລ໋ອດ / ໃບສັ່ງ (Lot ID)</th>
                 <th className="py-3 px-4">ຜູ້ຈັດຈຳໜ່າຍ (Supplier)</th>
                 <th className="py-3 px-4 text-right">ຈຳນວນນຳເຂົ້າ</th>
@@ -383,11 +472,11 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
                     <td className="py-3 px-4 font-mono font-bold text-slate-600">{batch.purchaseDate && batch.purchaseDate !== '-' ? batch.purchaseDate : '-'}</td>
                     <td className="py-3 px-4 font-mono font-bold text-sky-600">{batch.id}</td>
                     <td className="py-3 px-4 text-slate-800">{batch.supplierName && batch.supplierName !== 'Unknown Vendor' && batch.supplierName !== '-' ? batch.supplierName : '-'}</td>
-                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">{batch.initialQty} {targetItem.consumptionUnit || 'แผ่น'}</td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">{batch.initialQty} {normalizeLaoUnit(targetItem.consumptionUnit, 'ແຜ່ນ')}</td>
                     <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600">{formatLAK(batch.purchasePricePerReam || batch.costPerSheet)}</td>
                     <td className="py-3 px-4 text-right font-mono font-black text-slate-800">
                       <span className="px-2.5 py-1 bg-slate-100 rounded-xl text-slate-700 font-mono">
-                        {batch.currentQty} {targetItem.consumptionUnit || 'แผ่น'}
+                        {batch.currentQty} {normalizeLaoUnit(targetItem.consumptionUnit, 'ແຜ່ນ')}
                       </span>
                     </td>
                   </tr>
@@ -424,7 +513,7 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
                 <th className="py-3 px-4">ລະຫັດໃບສັ່ງພິມ (Job Order Ref)</th>
                 <th className="py-3 px-4">ລາຍລະອຽດການຜະລິດ</th>
                 <th className="py-3 px-4 text-right">ຈຳນວນເບີກ</th>
-                <th className="py-3 px-4 text-right">ຕົ້ນທຶນรวม (LAK ₭)</th>
+                <th className="py-3 px-4 text-right">ຕົ້ນທຶນລວມ (LAK ₭)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
@@ -434,7 +523,7 @@ export default function InventoryMaterialDetailsPage({ lotId, parentSkuId, onBac
                     <td className="py-3 px-4 font-mono font-bold text-slate-600">{u.date}</td>
                     <td className="py-3 px-4 font-mono font-bold text-sky-600">{u.jobId}</td>
                     <td className="py-3 px-4 text-slate-800">{u.description || 'Production Printing Job'}</td>
-                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">{u.qty} {targetItem.consumptionUnit || 'แผ่น'}</td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">{u.qty} {targetItem.consumptionUnit || 'ແຜ່ນ'}</td>
                     <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600">{formatLAK(u.cost)}</td>
                   </tr>
                 ))

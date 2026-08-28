@@ -30,6 +30,7 @@ import ImportForm from './ImportForm';
 import DynamicSpecDetail from '@features/inventory/components/details/DynamicSpecDetail';
 import ProcurementDetailCard from '@features/inventory/components/details/ProcurementDetailCard';
 import InboundEditModal from './modals/InboundEditModal';
+import RestockBatchModal from './modals/RestockBatchModal';
 import type { InboundEntry } from '../types';
 import { formatCompositeItemName } from '@utils/costCalculator';
 
@@ -90,6 +91,7 @@ export default function InboundManagement() {
   // Drawers & Modals state
   const [selectedDrawerItem, setSelectedDrawerItem] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [lightboxImg, setLightboxImg] = useState(null);
 
@@ -221,7 +223,7 @@ export default function InboundManagement() {
   const [specVolumeBottle, setSpecVolumeBottle] = useState('1000 ml');
   const [specCompatiblePrinter, setSpecCompatiblePrinter] = useState('');
 
-  // Group 3: Hardware & Equipment Specs (กาว, สันห่วง, แม็ก, กรรไกร)
+  // Group 3: Hardware & Equipment Specs (ກາວ, ສັນຫ່ວງ, ແມັກ, ມີດຕັດ)
   const [specHwType, setSpecHwType] = useState('FASTENER');
   const [specHwSpec, setSpecHwSpec] = useState('');
   const [specPackCount, setSpecPackCount] = useState('');
@@ -388,11 +390,12 @@ export default function InboundManagement() {
 
   const saveInboundToBackend = (item: any, isUpdate = false) => {
     const resolvedName = resolveInboundItemName(item);
+    const resolvedSku = item.specs?.materialId || item.specs?.skuCode || item.specs?.sku || item.skuCode || item.sku || item.id;
     const apiPayload = {
       id: item.id,
       poNumber: item.poNumber || item.id,
       inboundDate: item.inboundDate || item.receiptDate || new Date().toISOString().split('T')[0],
-      skuCode: item.skuCode || item.sku || item.id,
+      skuCode: resolvedSku,
       itemName: resolvedName,
       supplierName: item.supplierName || item.supplier || '',
       category: item.category,
@@ -422,8 +425,8 @@ export default function InboundManagement() {
     }).catch(err => console.log('Inbound API delete error', err));
   };
 
-  const handleImportSubmit = (type, data) => {
-    const logId = `INB-${Date.now().toString().slice(-4)}`;
+  const processSingleImportItem = (type: string, data: any, batchIndex?: number) => {
+    const logId = data.id || `INB-${Date.now().toString().slice(-4)}${batchIndex !== undefined ? `-${batchIndex}` : ''}`;
     const calcTotal = Number(data.price) || Number(data.unitPrice) || Number(data.rawImportCost) || ((data.importQty || 1) * Number(data.unitPrice || 0));
     const resolvedItemName = resolveInboundItemName(data);
 
@@ -431,15 +434,20 @@ export default function InboundManagement() {
     if (data.id) unrecordDeletedId(data.id);
     if (resolvedItemName) unrecordDeletedId(resolvedItemName);
 
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const fullDate = data.importDate ? (data.importDate.includes(':') ? data.importDate : `${data.importDate} ${timeStr}`) : `${now.toISOString().split('T')[0]} ${timeStr}`;
+
     const newLog = {
       id: logId,
-      poNumber: logId,
-      receiptDate: data.importDate || new Date().toISOString().split('T')[0],
+      poNumber: data.poNumber || logId,
+      receiptDate: fullDate,
+      inboundDate: fullDate,
       category: type,
       categoryPill: type,
       name: resolvedItemName,
       itemName: resolvedItemName,
-      sku: data.id,
+      sku: data.sku || data.id,
       currentQty: (type === 'PRINTER' || type === 'MACHINERY') ? 1 : data.importQty || 1,
       initialQty: (type === 'PRINTER' || type === 'MACHINERY') ? 1 : data.importQty || 1,
       unit: data.unit || 'Unit',
@@ -457,11 +465,6 @@ export default function InboundManagement() {
       receiptUrl: data.receiptUrl || data.payment_slip || ''
     };
 
-    setInboundList(prev => {
-      const newList = [newLog, ...prev];
-      localStorage.setItem('som_sing_inbound_list', JSON.stringify(newList));
-      return newList;
-    });
     saveInboundToBackend(newLog);
 
     if (type === 'PRINTER' || type === 'MACHINERY') {
@@ -488,8 +491,6 @@ export default function InboundManagement() {
           });
         });
       }
-
-      showToast(`${type === 'PRINTER' ? 'Printer' : 'Machinery'} registered successfully in assets!`, 'success');
     } else {
       const sheetsPerPack = Number(data.sheetsPerPack || data.specs?.sheetsPerPack || data.sheets_per_pack || data.sheets_per_ream || 500);
       const isSheetPaper = type === 'PAPER' || type === 'MATERIAL' || data.category === 'Paper';
@@ -498,7 +499,13 @@ export default function InboundManagement() {
       const unitPrice = Number(data.unitPrice || data.price || calcTotal || 95000);
       const perSheetPrice = isSheetPaper ? Math.round(unitPrice / sheetsPerPack) : unitPrice;
 
-      const existingItem = inventory.find(item => item.id === data.id || item.id === logId);
+      const existingItem = inventory.find(item => 
+        (item.id && (item.id === data.id || item.id === data.sku || item.id === logId)) ||
+        (item.sku && (item.sku === data.sku || item.sku === data.id || item.sku === data.skuCode)) ||
+        (data.restockItemId && item.id === data.restockItemId) ||
+        (item.name && data.name && item.name.toLowerCase().trim() === data.name.toLowerCase().trim()) ||
+        (item.name && resolvedItemName && item.name.toLowerCase().trim() === resolvedItemName.toLowerCase().trim())
+      );
       if (existingItem) {
         addInventoryBatch(existingItem.id, {
           batchId: `LOT-${logId}`,
@@ -514,8 +521,8 @@ export default function InboundManagement() {
           name: data.name,
           category: isSheetPaper ? 'Paper' : (type === 'INK' ? 'Ink' : 'Finishing'),
           stockQty: totalSheets,
-          consumptionUnit: isSheetPaper ? 'แผ่น' : (data.unit || 'Units'),
-          purchaseUnit: isSheetPaper ? 'แพ็ก' : (data.unit || 'Units'),
+          consumptionUnit: isSheetPaper ? 'ແຜ່ນ' : (data.unit || 'Units'),
+          purchaseUnit: isSheetPaper ? 'ແພັກ' : (data.unit || 'Units'),
           purchaseMultiplier: isSheetPaper ? sheetsPerPack : 1,
           costPerPurchaseUnit: unitPrice,
           costPerConsumptionUnit: perSheetPrice,
@@ -545,8 +552,28 @@ export default function InboundManagement() {
           notes: data.isCompatible ? 'Compatible Ink' : 'OEM Ink'
         });
       }
+    }
 
-      showToast(`${type} stock recorded successfully!`, 'success');
+    return newLog;
+  };
+
+  const handleImportSubmit = (type, data) => {
+    if (type === 'BATCH' && Array.isArray(data)) {
+      const createdLogs = data.map((item, idx) => processSingleImportItem(item.type, item.data, idx + 1));
+      setInboundList(prev => {
+        const newList = [...createdLogs, ...prev];
+        localStorage.setItem('som_sing_inbound_list', JSON.stringify(newList));
+        return newList;
+      });
+      showToast(currentLang === 'lo' ? `ບັນທຶກ ${data.length} ລາຍການຮຽບຮ້ອຍແລ້ວ!` : `Successfully recorded ${data.length} items!`, 'success');
+    } else {
+      const newLog = processSingleImportItem(type, data);
+      setInboundList(prev => {
+        const newList = [newLog, ...prev];
+        localStorage.setItem('som_sing_inbound_list', JSON.stringify(newList));
+        return newList;
+      });
+      showToast(`${type} recorded successfully!`, 'success');
     }
 
     setIsModalOpen(false);
@@ -713,27 +740,34 @@ export default function InboundManagement() {
           </p>
         </div>
 
-        {/* Global Import Action Button */}
-        <div className="flex items-center gap-2.5">
+        {/* Global Import Action Buttons - 2 Distinct Buttons */}
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="flex items-center gap-2 px-4 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-2xl font-bold shadow-xs hover:border-slate-300 transition active:scale-98 cursor-pointer disabled:opacity-60"
+            className="flex items-center gap-2 px-3.5 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-2xl font-bold shadow-xs hover:border-slate-300 transition active:scale-98 cursor-pointer disabled:opacity-60"
             title={currentLang === 'lo' ? 'ດຶງຂໍ້ມູນລ່າສຸດ' : 'Refresh live data'}
           >
             <RefreshCw className={`w-4 h-4 text-indigo-600 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span className="text-xs">{currentLang === 'lo' ? 'ຣີເຟຣຊຂໍ້ມູນ' : 'Refresh'}</span>
+            <span className="text-xs">{currentLang === 'lo' ? 'ຣີເຟຣຊ' : 'Refresh'}</span>
           </button>
 
+          {/* Button 1: Restock Existing Inventory */}
           <button
-            onClick={() => {
-              setEditingItem(null);
-              setIsModalOpen(true);
-            }}
-            className="flex items-center gap-2 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white rounded-2xl font-bold shadow-lg shadow-indigo-200 transition cursor-pointer"
+            onClick={() => setIsRestockModalOpen(true)}
+            className="flex items-center gap-2 px-5 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-2xl font-bold shadow-lg shadow-emerald-200 transition cursor-pointer"
           >
-            <Plus className="w-5 h-5" />
-            <span>{currentLang === 'lo' ? 'ບັນທຶກການນຳເຂົ້າໃໝ່' : 'New Inbound Entry'}</span>
+            <RefreshCw className="w-4 h-4" />
+            <span>{currentLang === 'lo' ? 'ເຕີມສະຕັອກເດີມ (Restock)' : 'Restock Existing'}</span>
+          </button>
+
+          {/* Button 2: New Item Batch Inbound */}
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 px-5 py-3.5 bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white rounded-2xl font-bold shadow-lg shadow-indigo-200 transition cursor-pointer"
+          >
+            <PackagePlus className="w-4 h-4" />
+            <span>{currentLang === 'lo' ? 'ນຳເຂົ້າສິນຄ້າໃໝ່ (New Items)' : 'New Inbound'}</span>
           </button>
         </div>
       </div>
@@ -857,7 +891,7 @@ export default function InboundManagement() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
-                <th className="py-4 px-6">{currentLang === 'lo' ? 'ວັນທີນຳເຂົ້າ' : 'Import Date'}</th>
+                <th className="py-4 px-6">{currentLang === 'lo' ? 'ວັນທີ & ເວລານຳເຂົ້າ' : 'Import Date & Time'}</th>
                 <th className="py-4 px-6 text-center">{currentLang === 'lo' ? 'ປະເພດ' : 'Type'}</th>
                 <th className="py-4 px-6">{currentLang === 'lo' ? 'ລະຫັດສິນຄ້າ' : 'Item Code'}</th>
                 <th className="py-4 px-6">{currentLang === 'lo' ? 'ຊື່ / ລຸ້ນ' : 'Name/Model'}</th>
@@ -879,7 +913,9 @@ export default function InboundManagement() {
                 filteredData.map(item => (
                   <tr key={item.id} className="hover:bg-slate-50/80 transition group">
                     <td className="py-4 px-6">
-                      <span className="font-mono font-bold text-slate-800 block">{item.receiptDate}</span>
+                      <span className="font-mono font-bold text-slate-800 block text-xs">
+                        {item.inboundDate || item.receiptDate || item.createdAt || '-'}
+                      </span>
                     </td>
                     <td className="py-4 px-6 text-center">
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
@@ -892,7 +928,9 @@ export default function InboundManagement() {
                         {item.categoryPill || item.category}
                       </span>
                     </td>
-                    <td className="py-4 px-6 font-mono font-bold text-slate-600">{item.sku || item.poNumber}</td>
+                    <td className="py-4 px-6 font-mono font-bold text-slate-600">
+                      {item.specs?.materialId || item.sku || item.skuCode || item.specs?.skuCode || item.specs?.sku || item.poNumber}
+                    </td>
                     <td className="py-4 px-6">
                       <span className="font-bold text-slate-900 block group-hover:text-sky-600 transition">{resolveInboundItemName(item)}</span>
                     </td>
@@ -1151,15 +1189,32 @@ export default function InboundManagement() {
         </div>
       )}
 
-      {/* Dynamic New Inbound Import Modal */}
+      {/* Restock Existing Inventory Batch Modal */}
+      {isRestockModalOpen && (
+        <RestockBatchModal
+          isOpen={isRestockModalOpen}
+          onClose={() => setIsRestockModalOpen(false)}
+          onSuccess={(restockItems) => {
+            setInboundList(prev => {
+              const combined = [...restockItems, ...prev];
+              localStorage.setItem('som_sing_inbound_list', JSON.stringify(combined));
+              return combined;
+            });
+            fetchInbound();
+            refreshData();
+          }}
+        />
+      )}
+
+      {/* Dynamic Full-Screen New Items Inbound Workspace */}
       {isModalOpen && (
         <FormModalTemplate
           onClose={() => setIsModalOpen(false)}
-          icon={<Boxes className="w-5 h-5 text-accent-sky" />}
-          title={currentLang === 'lo' ? 'ນຳເຂົ້າສິນຄ້າ / ອຸປະກອນໃໝ່ (Dynamic Inbound Form)' : 'New Inbound Procurement'}
-          subtitle={currentLang === 'lo' ? 'ເພີ່ມວັດຖຸດິບ, ເຈ້ຍ, ໝຶກ, ເຄື່ອງຈັກ ແລະ ອຸປະກອນເຂົ້າສະຕ໋ອກ ERP' : 'Add Paper, Ink, Equipment & Materials to Stock'}
-          badgeText="INBOUND FORM"
-          maxWidthClass="max-w-6xl"
+          icon={<PackagePlus className="w-5 h-5 text-indigo-600" />}
+          title={currentLang === 'lo' ? 'ນຳເຂົ້າສິນຄ້າ / ອຸປະກອນໃໝ່ (New Inbound Workspace)' : 'New Inbound Procurement Workspace'}
+          subtitle={currentLang === 'lo' ? 'ເພີ່ມວັດຖຸດິບ, ເຈ້ຍ, ໝຶກ, ເຄື່ອງຈັກ ແລະ ອຸປະກອນເຂົ້າສະຕ໋ອກ ERP ພ້ອມກັນຫຼາຍລາຍການ' : 'Add Paper, Ink, Equipment & Materials to Stock with Independent Split-Pane Control'}
+          badgeText="NEW ITEMS WORKSPACE"
+          maxWidthClass="max-w-[96vw] w-[96vw] max-h-[94vh]"
         >
           <ImportForm 
             onSubmit={(type, data) => {
@@ -1176,22 +1231,25 @@ export default function InboundManagement() {
         <InboundEditModal
           item={editingItem}
           onSave={(updatedItem) => {
+            const masterSku = updatedItem.sku || updatedItem.skuCode || editingItem.sku || editingItem.skuCode || editingItem.specs?.materialId || editingItem.specs?.skuCode || editingItem.specs?.sku;
             const payload = {
               ...updatedItem,
+              sku: masterSku,
+              skuCode: masterSku,
               originalId: editingItem.id,
-              originalSku: editingItem.sku || editingItem.skuCode,
+              originalSku: masterSku,
               originalName: editingItem.name || editingItem.itemName
             };
             setInboundList(prev => {
-              const newList = prev.map(item => item.id === updatedItem.id ? updatedItem : item);
+              const newList = prev.map(item => item.id === updatedItem.id ? { ...item, ...payload } : item);
               localStorage.setItem('som_sing_inbound_list', JSON.stringify(newList));
               return newList;
             });
             updateInboundEntry(payload);
-            saveInboundToBackend(updatedItem, true);
+            saveInboundToBackend(payload, true);
             setEditingItem(null);
-            setSelectedDrawerItem(updatedItem);
-            showToast(currentLang === 'lo' ? 'ແກ້ໄຂຂໍ້ມູນสำเร็จ!' : 'Inbound item updated successfully!', 'success');
+            setSelectedDrawerItem(payload);
+            showToast(currentLang === 'lo' ? 'ແກ້ໄຂຂໍ້ມູນສຳເລັດ!' : 'Inbound item updated successfully!', 'success');
           }}
           onClose={() => setEditingItem(null)}
         />

@@ -1,26 +1,27 @@
 import React, { useState } from 'react';
 import {
-  Upload,
+  UploadCloud,
   FileText,
-  CheckCircle2,
   AlertTriangle,
-  ArrowRight,
-  RefreshCw,
-  Cpu,
-  Layers,
-  Image as ImageIcon,
+  CheckCircle2,
   Maximize2,
-  Eye,
   ZoomIn,
   ZoomOut,
-  RotateCcw,
-  Info,
-  Printer,
-  ShieldCheck,
-  Zap,
-  Save,
+  RotateCw,
+  Send,
+  Droplet,
   Palette,
-  Droplet
+  Info,
+  Check,
+  ChevronRight,
+  Printer,
+  Sparkles,
+  Layers,
+  FileCode,
+  FileSpreadsheet,
+  Layers3,
+  Loader2,
+  CheckSquare
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { PreflightResult } from '../features/orders/types';
@@ -56,11 +57,23 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number; pct: number }>({ current: 0, total: 0, pct: 0 });
   const [result, setResult] = useState<PreflightResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
-  const [printColorMode, setPrintColorMode] = useState<'CMYK' | 'MONO_K'>('CMYK');
+  
+  // 1. Paper Size Selector States
+  const [targetPaperSize, setTargetPaperSize] = useState<string>('A4');
+  const [customWidthMM, setCustomWidthMM] = useState<number>(210);
+  const [customHeightMM, setCustomHeightMM] = useState<number>(297);
+
+  // 2. Customer Requested Print Mode
+  const [customerPrintMode, setCustomerPrintMode] = useState<'COLOR' | 'MONO_ALL'>('COLOR');
+  const [colorChannelOption, setColorChannelOption] = useState<'4_COLOR' | '6_COLOR' | '12_COLOR'>('4_COLOR');
+
+  // 3. Tabs for Coverage Inspection: 'color_pages' | 'mono_pages' | 'all_pages'
+  const [activeCoverageTab, setActiveCoverageTab] = useState<'color_pages' | 'mono_pages' | 'all_pages'>('color_pages');
   
   // Auto-convert CMYK Simulation & Backend Log States
   const [isCmykSimulated, setIsCmykSimulated] = useState(false);
@@ -73,7 +86,44 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
     return ext !== '.pdf';
   };
 
-  const handleFileUpload = async (selectedFile: File) => {
+  const handlePaperSizeSelect = (size: string) => {
+    setTargetPaperSize(size);
+    let w = 210;
+    let h = 297;
+    if (size === 'A5') { w = 148; h = 210; }
+    else if (size === 'A3') { w = 297; h = 420; }
+    setCustomWidthMM(w);
+    setCustomHeightMM(h);
+
+    if (result) {
+      setResult({
+        ...result,
+        target_paper_size: size,
+        target_width_mm: w,
+        target_height_mm: h,
+      });
+    }
+  };
+
+  const handleCustomDimensionChange = (w: number, h: number) => {
+    setCustomWidthMM(w);
+    setCustomHeightMM(h);
+    if (result) {
+      setResult({
+        ...result,
+        target_paper_size: 'CUSTOM',
+        target_width_mm: w,
+        target_height_mm: h,
+      });
+    }
+  };
+
+  const handleFileUpload = async (
+    selectedFile: File,
+    overrideSize?: string,
+    overrideW?: number,
+    overrideH?: number
+  ) => {
     const ext = selectedFile.name.slice(selectedFile.name.lastIndexOf('.')).toLowerCase();
     if (!SUPPORTED_EXTENSIONS.includes(ext)) {
       setErrorMessage(
@@ -87,40 +137,35 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
     setFile(selectedFile);
     setIsAnalyzing(true);
     setErrorMessage(null);
-    setResult(null);
-    setZoomLevel(1);
+    setProgress({ current: 0, total: 1, pct: 0 });
 
     const isImg = isImageFile(selectedFile.name);
 
-    // Create local preview
-    const objectUrl = URL.createObjectURL(selectedFile);
-    setPreviewUrl(objectUrl);
+    if (!previewUrl || selectedFile !== file) {
+      const objectUrl = URL.createObjectURL(selectedFile);
+      setPreviewUrl(objectUrl);
+    }
+
+    const currentSize = overrideSize || targetPaperSize;
+    const currentW = overrideW || customWidthMM;
+    const currentH = overrideH || customHeightMM;
 
     try {
       let analysisResult: PreflightResult;
 
-      if (isImg) {
-        analysisResult = await analyzeImageClient(selectedFile);
-      } else {
-        analysisResult = await analyzePDFClient(selectedFile);
-      }
-
-      // Background upload to store file on server if online
-      try {
-        const formData = new FormData();
-        formData.append('file', selectedFile);
-        const uploadRes = await fetch('/api/v1/orders/upload', {
-          method: 'POST',
-          body: formData,
-        });
-        if (uploadRes.ok) {
-          const uploadData = await uploadRes.json();
-          if (uploadData.file_url) {
-            analysisResult.file_url = uploadData.file_url;
-          }
+      const options = {
+        targetPaperSize: currentSize,
+        targetWidthMM: currentW,
+        targetHeightMM: currentH,
+        onProgress: (current: number, total: number, pct: number) => {
+          setProgress({ current, total, pct });
         }
-      } catch {
-        // Server offline
+      };
+
+      if (isImg) {
+        analysisResult = await analyzeImageClient(selectedFile, options);
+      } else {
+        analysisResult = await analyzePDFClient(selectedFile, options);
       }
 
       setResult(analysisResult);
@@ -135,45 +180,6 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
     } finally {
       setIsAnalyzing(false);
     }
-  };
-
-  const handleAutoConvertRGBToCMYK = () => {
-    if (!previewUrl) return;
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const srcCanvas = document.createElement('canvas');
-      srcCanvas.width = img.naturalWidth || img.width;
-      srcCanvas.height = img.naturalHeight || img.height;
-      const ctx = srcCanvas.getContext('2d');
-      if (!ctx) return;
-
-      ctx.drawImage(img, 0, 0);
-      const cmykCanvas = convertRGBToCMYKCanvas(srcCanvas);
-      const convertedDataUrl = cmykCanvas.toDataURL('image/jpeg', 0.92);
-
-      setCmykSimulatedUrl(convertedDataUrl);
-      setIsCmykSimulated(true);
-
-      if (result) {
-        setResult({
-          ...result,
-          has_rgb: false,
-          is_standard_cmyk: true,
-          color_space: 'CMYK Gamut Proofed (Soft Proof)',
-          status_badge_lao: currentLang === 'lo' ? 'ແປງເປັນ CMYK Gamut ຮຽບຮ້ອຍ' : 'Converted to CMYK Gamut',
-          diagnostics: {
-            ...result.diagnostics,
-            colorSpace: 'PASS',
-            tac: 'PASS',
-            bleed: result.diagnostics?.bleed || 'PASS',
-            dpi: result.diagnostics?.dpi || 'PASS',
-          },
-        });
-      }
-    };
-    img.src = previewUrl;
   };
 
   const handleSavePreflightReport = async (resToSave?: PreflightResult) => {
@@ -237,71 +243,174 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
     setReportSavedStatus(null);
   };
 
-  // Calculate Total Ink Coverage (TIC / TAC)
-  const totalInkCoverage = result
-    ? Math.round((result.avg_cov_c + result.avg_cov_m + result.avg_cov_y + result.avg_cov_k) * 100) / 100
+  // Calculate paper area in sq meters for accurate ink volume ml
+  const paperWidthMM = result?.target_width_mm || customWidthMM;
+  const paperHeightMM = result?.target_height_mm || customHeightMM;
+  const paperAreaM2 = (paperWidthMM * paperHeightMM) / 1000000;
+
+  const totalPages = result?.total_pages || 1;
+  const colorPages = customerPrintMode === 'MONO_ALL' ? 0 : (result?.color_pages_count || 0);
+  const monoPages = customerPrintMode === 'MONO_ALL' ? totalPages : (result?.mono_pages_count || 0);
+
+  const rawColorC = result?.color_pages_avg_c || result?.avg_cov_c || 0;
+  const rawColorM = result?.color_pages_avg_m || result?.avg_cov_m || 0;
+  const rawColorY = result?.color_pages_avg_y || result?.avg_cov_y || 0;
+  const rawColorK = result?.color_pages_avg_k || result?.avg_cov_k || 0;
+  const totalColorInkCoverage = Math.round((rawColorC + rawColorM + rawColorY + rawColorK) * 100) / 100;
+
+  const rawMonoK = result?.mono_pages_avg_k || result?.avg_cov_k || 0;
+  const convertedMonoAllK = Math.round((rawColorK + 0.299 * rawColorC + 0.587 * rawColorM + 0.114 * rawColorY) * 100) / 100;
+  const effectiveMonoK = customerPrintMode === 'MONO_ALL' ? Math.max(convertedMonoAllK, rawMonoK) : rawMonoK;
+
+  // 🌟 Mathematical Model for ALL PAGES COMBINED Tab (Weighted Average):
+  const combinedC = customerPrintMode === 'MONO_ALL' ? 0 : Math.round(((rawColorC * colorPages) / totalPages) * 100) / 100;
+  const combinedM = customerPrintMode === 'MONO_ALL' ? 0 : Math.round(((rawColorM * colorPages) / totalPages) * 100) / 100;
+  const combinedY = customerPrintMode === 'MONO_ALL' ? 0 : Math.round(((rawColorY * colorPages) / totalPages) * 100) / 100;
+  const combinedK = customerPrintMode === 'MONO_ALL' 
+    ? effectiveMonoK 
+    : Math.round((((rawColorK * colorPages) + (rawMonoK * monoPages)) / totalPages) * 100) / 100;
+
+  const grandTotalAverageInk = Math.round((combinedC + combinedM + combinedY + combinedK) * 100) / 100;
+
+  // Estimated Ink Volume in mL (~ 1.5 ml per m2 at 100% solid)
+  const estimatedColorInkML = colorPages > 0 
+    ? Math.round(colorPages * paperAreaM2 * (totalColorInkCoverage / 100) * 1.5 * 10) / 10 
     : 0;
+
+  const estimatedMonoInkML = monoPages > 0 
+    ? Math.round(monoPages * paperAreaM2 * (effectiveMonoK / 100) * 1.2 * 10) / 10 
+    : 0;
+
+  const estimatedGrandTotalInkML = Math.round((estimatedColorInkML + estimatedMonoInkML) * 10) / 10;
+
+  // Multi-Color Channel Generator for 4, 6, and 12 Inks
+  const getDynamicChannels = (c: number, m: number, y: number, k: number, option: '4_COLOR' | '6_COLOR' | '12_COLOR') => {
+    if (option === '4_COLOR') {
+      return [
+        { name: 'Cyan (C)', val: c, color: 'bg-cyan-500', text: 'text-cyan-700' },
+        { name: 'Magenta (M)', val: m, color: 'bg-pink-500', text: 'text-pink-700' },
+        { name: 'Yellow (Y)', val: y, color: 'bg-amber-400', text: 'text-amber-700' },
+        { name: 'Black (K)', val: k, color: 'bg-slate-700', text: 'text-slate-800' },
+      ];
+    }
+    if (option === '6_COLOR') {
+      const lc = Math.round(c * 0.55 * 100) / 100;
+      const lm = Math.round(m * 0.55 * 100) / 100;
+      const primaryC = Math.round(c * 0.45 * 100) / 100;
+      const primaryM = Math.round(m * 0.45 * 100) / 100;
+      return [
+        { name: 'Cyan (C)', val: primaryC, color: 'bg-cyan-600', text: 'text-cyan-800' },
+        { name: 'Magenta (M)', val: primaryM, color: 'bg-pink-600', text: 'text-pink-800' },
+        { name: 'Yellow (Y)', val: y, color: 'bg-amber-400', text: 'text-amber-700' },
+        { name: 'Black (K)', val: k, color: 'bg-slate-800', text: 'text-slate-900' },
+        { name: 'Light Cyan (Lc)', val: lc, color: 'bg-sky-300', text: 'text-sky-600' },
+        { name: 'Light Magenta (Lm)', val: lm, color: 'bg-rose-300', text: 'text-rose-600' },
+      ];
+    }
+    // 12 Colors (Fine Art / Giclée)
+    const lc = Math.round(c * 0.4 * 100) / 100;
+    const lm = Math.round(m * 0.4 * 100) / 100;
+    const gy = Math.round(k * 0.35 * 100) / 100;
+    const lgy = Math.round(k * 0.2 * 100) / 100;
+    const red = Math.round(((m + y) * 0.15) * 100) / 100;
+    const green = Math.round(((c + y) * 0.15) * 100) / 100;
+    const blue = Math.round(((c + m) * 0.12) * 100) / 100;
+    const co = Math.round(((c + m + y + k) * 0.08) * 100) / 100;
+
+    return [
+      { name: 'Photo Cyan (PC)', val: Math.round(c * 0.6 * 100) / 100, color: 'bg-cyan-500', text: 'text-cyan-700' },
+      { name: 'Photo Magenta (PM)', val: Math.round(m * 0.6 * 100) / 100, color: 'bg-pink-500', text: 'text-pink-700' },
+      { name: 'Yellow (Y)', val: y, color: 'bg-amber-400', text: 'text-amber-700' },
+      { name: 'Photo Black (PBk)', val: Math.round(k * 0.45 * 100) / 100, color: 'bg-slate-900', text: 'text-slate-900' },
+      { name: 'Matte Black (MBk)', val: Math.round(k * 0.3 * 100) / 100, color: 'bg-stone-800', text: 'text-stone-800' },
+      { name: 'Light Cyan (Lc)', val: lc, color: 'bg-sky-300', text: 'text-sky-600' },
+      { name: 'Light Magenta (Lm)', val: lm, color: 'bg-rose-300', text: 'text-rose-600' },
+      { name: 'Gray (Gy)', val: gy, color: 'bg-slate-400', text: 'text-slate-600' },
+      { name: 'Photo Gray (PGy)', val: lgy, color: 'bg-slate-300', text: 'text-slate-500' },
+      { name: 'Red (R)', val: red, color: 'bg-red-500', text: 'text-red-700' },
+      { name: 'Green (G)', val: green, color: 'bg-emerald-500', text: 'text-emerald-700' },
+      { name: 'Chroma Optimizer (CO)', val: co, color: 'bg-indigo-300', text: 'text-indigo-600' },
+    ];
+  };
+
+  const handleSendToQuotationAction = () => {
+    if (!result) return;
+
+    const exportPayload: PreflightResult = {
+      ...result,
+      color_mode: customerPrintMode === 'MONO_ALL' ? 'MONO_K' : 'CMYK',
+      color_pages_count: colorPages,
+      mono_pages_count: monoPages,
+      color_pages_avg_c: combinedC,
+      color_pages_avg_m: combinedM,
+      color_pages_avg_y: combinedY,
+      color_pages_avg_k: combinedK,
+      mono_pages_avg_k: effectiveMonoK,
+      target_paper_size: targetPaperSize,
+      target_width_mm: customWidthMM,
+      target_height_mm: customHeightMM,
+    };
+
+    if (onSendToQuotation) {
+      onSendToQuotation(exportPayload);
+    }
+  };
 
   return (
     <div className="w-full space-y-6 text-slate-800 font-sans">
       
-      {/* 1. TOP HEADER BANNER (CLEAN WHITE ENTERPRISE THEME) */}
+      {/* 1. TOP HEADER BANNER */}
       <div className="bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-7 shadow-sm flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-sky-50 text-accent-sky border border-sky-100 flex items-center justify-center shrink-0 shadow-xs">
-            <Cpu className="w-6 h-6" />
+          <div className="p-3.5 bg-gradient-to-br from-primary-navy to-slate-900 text-white rounded-2xl shadow-md">
+            <Sparkles className="w-6 h-6 text-accent-sky" />
           </div>
           <div>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
-                {currentLang === 'lo' ? 'ກວດສອບໄຟລ໌ພິມ & ຄ່າສີ CMYK' : 'Preflight & Color Cost Engine'}
-              </h2>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-black">
-                Pixel Engine
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider bg-accent-sky/10 text-accent-sky rounded-md font-sans">
+                Engine 2.0 • Full-Scan Split
+              </span>
+              <span className="text-xs font-bold text-slate-400 font-sans">
+                GCR & TAC Color Extraction
               </span>
             </div>
-            <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
-              {currentLang === 'lo' 
-                ? 'ສະແດງຕົວຢ່າງໄຟລ໌ Preview, ສະກັດຄ່າສີສະເລ່ຍ CMYK, ກວດສອບ DPI ແລະ ສົ່ງເຂົ້າໃບສະເໜີລາຄາທັນທີ' 
-                : 'Interactive artwork preview, pixel-accurate CMYK ink extraction, DPI check & instant quotation sync.'
-              }
-            </p>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-0.5">
+              {currentLang === 'lo' ? 'ກວດສອບໄຟລ໌ພິມ & ຄ່າສີ CMYK' : 'Preflight & Color Cost Engine'}
+            </h2>
           </div>
         </div>
 
-        {result && (
-          <button
-            onClick={resetAll}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer border border-slate-200/80 active:scale-95"
-          >
-            <RotateCcw className="w-4 h-4 text-slate-600" />
-            <span>{currentLang === 'lo' ? 'ອັບໂຫຼດໄຟລ໌ໃໝ່' : 'Upload New File'}</span>
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {file && (
+            <button
+              onClick={resetAll}
+              className="px-4 py-2 text-xs font-black text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition cursor-pointer border border-slate-200"
+            >
+              {currentLang === 'lo' ? 'ເລີ່ມໃໝ່ (New File)' : 'Reset / New File'}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* 2. INITIAL CLEAN WHITE DROP ZONE & INFO PILLARS */}
-      {!result && (
-        <div className="space-y-6">
-          {/* Main Drag & Drop Zone */}
+      {/* 2. MAIN LAYOUT */}
+      {!file ? (
+        /* Empty Upload State */
+        <div className="bg-white border border-slate-200/90 rounded-3xl p-8 sm:p-12 shadow-sm">
           <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setIsDragOver(true);
-            }}
+            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
             onDragLeave={() => setIsDragOver(false)}
             onDrop={handleDrop}
             onClick={() => document.getElementById('preflight-file-input')?.click()}
-            className={`border-2 border-dashed rounded-3xl p-10 sm:p-16 text-center transition-all cursor-pointer bg-white shadow-xs ${
+            className={`border-2 border-dashed rounded-3xl p-10 sm:p-14 text-center transition-all cursor-pointer ${
               isDragOver
-                ? 'border-accent-sky bg-sky-50/40 scale-[1.005]'
-                : 'border-slate-300 hover:border-accent-sky hover:bg-slate-50/60'
+                ? 'border-accent-sky bg-accent-sky/5 scale-[1.01]'
+                : 'border-slate-300 hover:border-accent-sky/70 hover:bg-slate-50'
             }`}
           >
             <input
               id="preflight-file-input"
               type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff,.tif,.psd,.bmp,.gif"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff,.tif,.psd"
               className="hidden"
               onChange={(e) => {
                 if (e.target.files && e.target.files[0]) {
@@ -310,579 +419,509 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
               }}
             />
 
-            <div className="flex flex-col items-center justify-center gap-4 max-w-2xl mx-auto">
-              <div className="flex items-center gap-3 p-4 bg-sky-50 rounded-2xl text-accent-sky border border-sky-100 shadow-xs">
-                <Upload className="w-8 h-8 animate-bounce text-accent-sky" />
-                <ImageIcon className="w-8 h-8 text-pink-500" />
-                <FileText className="w-8 h-8 text-indigo-500" />
+            <div className="flex flex-col items-center justify-center space-y-4 max-w-md mx-auto">
+              <div className="w-16 h-16 rounded-3xl bg-primary-navy/10 text-primary-navy flex items-center justify-center shadow-xs">
+                <UploadCloud className="w-8 h-8" />
               </div>
-
-              <div className="space-y-1">
-                <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-                  {currentLang === 'lo' 
-                    ? 'ອັບໂຫຼດໄຟລ໌' 
-                    : 'Upload Artwork File'
-                  }
+              <div className="space-y-1.5">
+                <h3 className="text-base font-black text-slate-900">
+                  {currentLang === 'lo' ? 'ລາກໄຟລ໌ມາວາງທີ່ນີ້ ຫຼື ຄລິກເພື່ອເລືອກໄຟລ໌' : 'Drag & Drop Artwork or Click to Browse'}
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-500 font-medium leading-relaxed">
-                  {currentLang === 'lo' 
-                    ? 'ກວດສອບເມັດສີ CMYK, ຈຳນວນໜ້າ ແລະ ຄວາມຄົມຊັດ DPI ອັດຕະໂນມັດ' 
-                    : 'System extracts exact CMYK coverage, page count, and resolution DPI for precise cost estimation.'
-                  }
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  {currentLang === 'lo'
+                    ? 'ຮອງຮັບ PDF (ສະແກນທຸກໜ້າ 1-500+ ໜ້າ, ແຍກໜ້າສີ/ຂາວດຳ), PNG, JPG, WebP, TIFF, PSD'
+                    : 'Supports multi-page PDF (Full-Scan all pages with Color/Mono Split), PNG, JPG, WebP, TIFF'}
                 </p>
               </div>
-
-              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold border border-slate-200">PDF Document</span>
-                <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold border border-slate-200">JPEG / JPG</span>
-                <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold border border-slate-200">PNG Transparent</span>
-                <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold border border-slate-200">WebP / TIFF</span>
-                <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold border border-slate-200">PSD</span>
-              </div>
-
-              {isAnalyzing && (
-                <div className="flex items-center gap-2.5 mt-4 px-6 py-3.5 bg-sky-50 border border-sky-200 rounded-2xl text-sky-700 animate-pulse text-sm font-bold shadow-xs">
-                  <RefreshCw className="w-5 h-5 animate-spin text-accent-sky" />
-                  <span>{currentLang === 'lo' ? 'ກຳລັງອ່ານເມັດສີ ແລະ ປະມວນຜົນພິກເຊວຕົວຈິງ...' : 'Extracting pixels & computing CMYK coverage...'}</span>
-                </div>
-              )}
-
-              {errorMessage && (
-                <div className="flex items-center gap-2.5 mt-4 px-5 py-3 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-xs sm:text-sm font-semibold">
-                  <AlertTriangle className="w-5 h-5 shrink-0 text-rose-600" />
-                  <span>{errorMessage}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 3 Information Pillars (Clean White Cards) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-2 shadow-xs">
-              <div className="flex items-center gap-2 text-sky-600 font-black text-sm">
-                <ShieldCheck className="w-5 h-5" />
-                <span>100% Real Pixel Sampling</span>
-              </div>
-              <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                {currentLang === 'lo' 
-                  ? 'ຖອດລະຫັດເມັດສີ RGB ຕົວຈິງຈາກທຸກພິກເຊວ ແລ້ວແປງເປັນ CMYK % ທີ່ຖືກຕ້ອງຕາມມາດຕະຖານໂຮງພິມ' 
-                  : 'Decodes actual RGB pixels with GCR algorithm into standard CMYK printing coverage percentages.'
-                }
-              </p>
-            </div>
-
-            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-2 shadow-xs">
-              <div className="flex items-center gap-2 text-indigo-600 font-black text-sm">
-                <Printer className="w-5 h-5" />
-                <span>DPI & Print Resolution</span>
-              </div>
-              <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                {currentLang === 'lo' 
-                  ? 'ກວດສອບຂະໜາດພິກເຊວ (W × H) ເພື່ອແນະນຳຂະໜາດພິມທີ່ເໝາະສົມ (A3, A4, A5, ສະຕິກເກີ) ປ້ອງກັນພາບແຕກ' 
-                  : 'Verifies pixel dimensions to recommend optimal print sizes and avoid low-resolution pixelation.'
-                }
-              </p>
-            </div>
-
-            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-2 shadow-xs">
-              <div className="flex items-center gap-2 text-emerald-600 font-black text-sm">
-                <Zap className="w-5 h-5" />
-                <span>1-Click Quotation Sync</span>
-              </div>
-              <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                {currentLang === 'lo' 
-                  ? 'ສົ່ງຄ່າ % ສີ ແລະ ຈຳນວນໜ້າເຂົ້າຟອມໃບສະເໜີລາຄາອັດຕະໂນມັດ ໂດຍບໍ່ຕ້ອງປ້ອນຂໍ້ມູນເອງ' 
-                  : 'Automatically forwards ink percentages and page count to the Quotation Engine without manual typing.'
-                }
-              </p>
             </div>
           </div>
         </div>
-      )}
-
-      {/* 3. 2-COLUMN SPLIT STUDIO (FULL-WIDTH 100% WHITE ENTERPRISE THEME) */}
-      {result && (
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+      ) : (
+        /* File Uploaded & Analysis View */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
-          {/* LEFT: Interactive Preview Canvas (8 Cols on XL) */}
-          <div className="xl:col-span-8 bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-7 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <Eye className="w-5 h-5 text-accent-sky" />
-                <h3 className="text-sm sm:text-base font-black text-slate-900">
-                  {currentLang === 'lo' ? 'ຕົວຢ່າງໄຟລ໌ພິມ (Live Artwork Preview)' : 'Live Artwork Preview'}
-                </h3>
-              </div>
+          {/* Left Column (8 cols): PDF / Artwork Viewer */}
+          <div className="lg:col-span-7 xl:col-span-8 space-y-4">
+            <div className="bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
+              
+              {/* Viewer Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-accent-sky" />
+                  <span className="text-xs font-black text-slate-800 truncate max-w-[300px]">
+                    {file.name}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
+                    {(file.size / (1024 * 1024)).toFixed(2)} MB
+                  </span>
+                </div>
 
-              {/* Zoom & Auto-Convert Controls */}
-              <div className="flex items-center gap-2">
-                {isImageFile(result.file_name) && (
+                {/* Zoom Controls */}
+                <div className="flex items-center gap-1.5">
                   <button
-                    type="button"
-                    onClick={handleAutoConvertRGBToCMYK}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
-                      isCmykSimulated
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs'
-                        : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200'
-                    }`}
-                    title="Auto-convert RGB pixels to CMYK gamut simulation"
+                    onClick={() => setZoomLevel(prev => Math.max(0.6, prev - 0.15))}
+                    className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 transition cursor-pointer"
                   >
-                    <Palette className="w-3.5 h-3.5" />
-                    <span>{isCmykSimulated ? (currentLang === 'lo' ? 'ແປງ CMYK ແລ້ວ' : 'CMYK Proofed') : (currentLang === 'lo' ? 'ຈຳລອງສີ CMYK' : 'Simulate CMYK')}</span>
+                    <ZoomOut className="w-3.5 h-3.5" />
                   </button>
-                )}
+                  <span className="text-[11px] font-mono font-bold text-slate-600 w-10 text-center">
+                    {Math.round(zoomLevel * 100)}%
+                  </span>
+                  <button
+                    onClick={() => setZoomLevel(prev => Math.min(2.0, prev + 0.15))}
+                    className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 transition cursor-pointer"
+                  >
+                    <ZoomIn className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
 
-                {isImageFile(result.file_name) && (
-                  <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
-                    <button
-                      onClick={() => setZoomLevel((z) => Math.max(0.5, z - 0.25))}
-                      className="p-1 hover:bg-slate-200 rounded text-slate-600 transition cursor-pointer"
-                      title="Zoom Out"
-                    >
-                      <ZoomOut className="w-3.5 h-3.5" />
-                    </button>
-                    <span className="px-1.5 font-mono text-xs font-bold text-slate-700">
-                      {Math.round(zoomLevel * 100)}%
-                    </span>
-                    <button
-                      onClick={() => setZoomLevel((z) => Math.min(3, z + 0.25))}
-                      className="p-1 hover:bg-slate-200 rounded text-slate-600 transition cursor-pointer"
-                      title="Zoom In"
-                    >
-                      <ZoomIn className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setZoomLevel(1)}
-                      className="px-2 py-0.5 text-[11px] font-bold bg-white hover:bg-slate-200 rounded text-slate-700 transition cursor-pointer border border-slate-200 shadow-2xs"
-                    >
-                      Fit
-                    </button>
+              {/* Viewer Frame */}
+              <div className="w-full bg-slate-900/90 rounded-2xl overflow-hidden min-h-[500px] flex items-center justify-center p-4 relative">
+                {isAnalyzing && (
+                  <div className="absolute inset-0 z-20 bg-slate-900/80 backdrop-blur-xs flex flex-col items-center justify-center text-white space-y-3 p-6 text-center">
+                    <Loader2 className="w-10 h-10 animate-spin text-accent-sky" />
+                    <div className="space-y-1">
+                      <div className="text-sm font-black">
+                        ກຳລັງສະແກນໜ້າທີ {progress.current} / {progress.total} ({progress.pct}%)...
+                      </div>
+                      <div className="text-xs text-slate-400 font-sans">
+                        Full-Scan Pixel-by-Pixel & แยกหน้าสี / ขาวดำ
+                      </div>
+                    </div>
+                    <div className="w-64 bg-slate-700 h-2 rounded-full overflow-hidden">
+                      <div className="bg-accent-sky h-full transition-all duration-150" style={{ width: `${progress.pct}%` }} />
+                    </div>
                   </div>
                 )}
-              </div>
-            </div>
 
-            {/* Preview Viewport (560px Height) */}
-            <div className="relative w-full h-[560px] bg-slate-50 rounded-2xl overflow-hidden border border-slate-200/80 flex items-center justify-center group">
-              {previewUrl && isImageFile(result.file_name) ? (
-                <div className="w-full h-full overflow-auto flex items-center justify-center p-4">
-                  <img
-                    src={cmykSimulatedUrl || previewUrl}
-                    alt={result.file_name}
-                    style={{
-                      transform: `scale(${zoomLevel})`,
-                      transformOrigin: 'center center',
-                      transition: 'transform 0.15s ease-out',
-                    }}
-                    className="max-h-full max-w-full object-contain rounded-lg shadow-md"
-                  />
-                </div>
-              ) : previewUrl && !isImageFile(result.file_name) ? (
-                <iframe
-                  src={previewUrl}
-                  title="PDF Preview"
-                  className="w-full h-full border-0 rounded-2xl bg-white"
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-3 text-slate-400">
-                  <FileText className="w-16 h-16 text-slate-300" />
-                  <p className="text-xs font-semibold">{currentLang === 'lo' ? 'ບໍ່ມີຕົວຢ່າງສະແດງຜົນ' : 'No preview available'}</p>
-                </div>
-              )}
-
-              {/* Overlaid Dimension Tag */}
-              {result.image_width && result.image_height && (
-                <div className="absolute bottom-4 left-4 px-3.5 py-2 bg-white/90 backdrop-blur-md rounded-xl text-xs font-mono border border-slate-200 text-slate-800 shadow-md flex items-center gap-2.5">
-                  <Maximize2 className="w-3.5 h-3.5 text-accent-sky" />
-                  <span>
-                    {result.image_width} × {result.image_height} px
-                  </span>
-                  <span className="text-slate-300">|</span>
-                  <span className="text-emerald-700 font-black">~{result.dpi_estimate || 300} DPI</span>
-                </div>
-              )}
-            </div>
-
-            {/* File Notice Footer */}
-            <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-              <span className="truncate max-w-md font-bold text-slate-700 flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-slate-400" />
-                {result.file_name}
-              </span>
-              <span className="font-mono text-slate-400 text-[11px]">
-                {result.execution_notice || 'Realtime Pixel Sampling'}
-              </span>
-            </div>
-          </div>
-
-          {/* RIGHT: Sidebar Color Analytics & Specifications (4 Cols on XL) */}
-          <div className="xl:col-span-4 space-y-5">
-            
-            {/* Status & Readiness Card */}
-            <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
-                  {currentLang === 'lo' ? 'ຜົນກວດສອບມາດຕະຖານພິມ' : 'Preflight Standard'}
-                </span>
-                <span
-                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black ${
-                    result.has_rgb && !result.is_standard_cmyk
-                      ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                      : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                  }`}
-                >
-                  {result.has_rgb && !result.is_standard_cmyk ? (
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                {previewUrl && (
+                  isImageFile(file.name) ? (
+                    <img
+                      src={cmykSimulatedUrl || previewUrl}
+                      alt="Artwork Preview"
+                      style={{ transform: `scale(${zoomLevel})` }}
+                      className="max-h-[600px] object-contain rounded-lg shadow-2xl transition-transform"
+                    />
                   ) : (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  )}
-                  {result.status_badge_lao}
-                </span>
+                    <iframe
+                      src={previewUrl}
+                      title="PDF Preview"
+                      className="w-full h-[600px] rounded-lg border-0 bg-white shadow-2xl"
+                    />
+                  )
+                )}
               </div>
 
-              {/* 4 Diagnostic Status Badges (Clean White/Slate Cards) */}
-              <div className="grid grid-cols-2 gap-2.5 pt-1">
-                {/* 1. Color Space */}
-                <div className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between ${
-                  result.has_rgb
-                    ? 'bg-rose-50/60 border-rose-200 text-rose-900'
-                    : 'bg-emerald-50/60 border-emerald-200 text-emerald-900'
-                }`}>
-                  <span className="truncate">Color Space</span>
-                  <span className={`font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
-                    result.has_rgb ? 'bg-rose-200/80 text-rose-900' : 'bg-emerald-200/80 text-emerald-900'
-                  }`}>
-                    {result.has_rgb ? 'RGB' : 'CMYK'}
-                  </span>
-                </div>
-
-                {/* 2. Bleed Area */}
-                <div className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between ${
-                  (result.bleed_mm || 0) >= 3.0
-                    ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900'
-                    : (result.bleed_mm || 0) > 0
-                    ? 'bg-amber-50/60 border-amber-200 text-amber-900'
-                    : 'bg-rose-50/60 border-rose-200 text-rose-900'
-                }`}>
-                  <span className="truncate">Bleed ({result.bleed_mm || 0}mm)</span>
-                  <span className={`font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
-                    (result.bleed_mm || 0) >= 3.0 
-                      ? 'bg-emerald-200/80 text-emerald-900' 
-                      : (result.bleed_mm || 0) > 0 
-                      ? 'bg-amber-200/80 text-amber-900' 
-                      : 'bg-rose-200/80 text-rose-900'
-                  }`}>
-                    {(result.bleed_mm || 0) >= 3.0 ? 'Pass' : (result.bleed_mm || 0) > 0 ? '<3mm' : '0mm'}
-                  </span>
-                </div>
-
-                {/* 3. TAC (Total Area Coverage) */}
-                <div className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between ${
-                  (result.tac_max_percent || 0) > 300
-                    ? 'bg-amber-50/60 border-amber-200 text-amber-900'
-                    : 'bg-emerald-50/60 border-emerald-200 text-emerald-900'
-                }`}>
-                  <span className="truncate">TAC ({result.tac_max_percent || 0}%)</span>
-                  <span className={`font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
-                    (result.tac_max_percent || 0) > 300 ? 'bg-amber-200/80 text-amber-900' : 'bg-emerald-200/80 text-emerald-900'
-                  }`}>
-                    {(result.tac_max_percent || 0) > 300 ? '>300%' : 'OK'}
-                  </span>
-                </div>
-
-                {/* 4. Image Resolution */}
-                <div className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between ${
-                  (result.dpi_estimate || 300) < 300
-                    ? 'bg-rose-50/60 border-rose-200 text-rose-900'
-                    : 'bg-emerald-50/60 border-emerald-200 text-emerald-900'
-                }`}>
-                  <span className="truncate">Resolution</span>
-                  <span className={`font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
-                    (result.dpi_estimate || 300) < 300 ? 'bg-rose-200/80 text-rose-900' : 'bg-emerald-200/80 text-emerald-900'
-                  }`}>
-                    {result.dpi_estimate || 300} DPI
-                  </span>
-                </div>
-              </div>
-
-              {result.warning_message_lao && (
-                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2.5 leading-relaxed font-semibold">
-                  <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <span>{result.warning_message_lao}</span>
+              {/* Execution Notice */}
+              {result && (
+                <div className="text-[11px] text-slate-500 font-mono flex items-center justify-between px-1">
+                  <span>{result.execution_notice}</span>
+                  {reportSavedStatus && <span className="text-emerald-600 font-bold">{reportSavedStatus}</span>}
                 </div>
               )}
 
-              {/* Print Color Mode Switcher (Full CMYK vs Mono K) */}
-              <div className="bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80 flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setPrintColorMode('CMYK')}
-                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 ${
-                    printColorMode === 'CMYK'
-                      ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <Palette className="w-3.5 h-3.5 text-accent-sky" />
-                  <span>{currentLang === 'lo' ? 'ພິມ 4 ສີ (Full CMYK)' : 'Full 4-Color CMYK'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPrintColorMode('MONO_K')}
-                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 ${
-                    printColorMode === 'MONO_K'
-                      ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <Droplet className="w-3.5 h-3.5 text-slate-600" />
-                  <span>{currentLang === 'lo' ? 'ພິມ 1 ສີ ຂາວດຳ (Mono K)' : 'Monochrome (K Only)'}</span>
-                </button>
-              </div>
-
-              {/* CMYK Progress Bars & Values */}
-              <div className="space-y-3.5 pt-1">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-600">
-                  <span>
-                    {printColorMode === 'MONO_K'
-                      ? (currentLang === 'lo' ? 'ຄ່າສີສະເລ່ຍພິມຂາວດຳ (K %)' : 'Average Mono K %')
-                      : (currentLang === 'lo' ? 'ຄ່າສີສະເລ່ຍ CMYK (%)' : 'Average CMYK Coverage (%)')}
-                  </span>
-                  <span className="text-slate-500 font-mono text-xs">
-                    Total Ink:{' '}
-                    <strong className="text-slate-900 font-black">
-                      {printColorMode === 'MONO_K'
-                        ? `${Math.min(100, Math.round((result.avg_cov_k + 0.299 * result.avg_cov_c + 0.587 * result.avg_cov_m + 0.114 * result.avg_cov_y) * 100) / 100)}%`
-                        : `${totalInkCoverage}%`}
-                    </strong>
-                  </span>
-                </div>
-
-                {printColorMode === 'CMYK' ? (
-                  <>
-                    {/* Cyan */}
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-cyan-700 flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 inline-block"></span>
-                          Cyan (C)
-                        </span>
-                        <span className="font-mono text-cyan-800 font-black">{result.avg_cov_c.toFixed(2)}%</span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200/60">
-                        <div
-                          className="bg-cyan-500 h-2.5 rounded-full transition-all duration-700"
-                          style={{ width: `${Math.min(result.avg_cov_c * 2.5, 100)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    {/* Magenta */}
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-pink-700 flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-pink-500 inline-block"></span>
-                          Magenta (M)
-                        </span>
-                        <span className="font-mono text-pink-800 font-black">{result.avg_cov_m.toFixed(2)}%</span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200/60">
-                        <div
-                          className="bg-pink-500 h-2.5 rounded-full transition-all duration-700"
-                          style={{ width: `${Math.min(result.avg_cov_m * 2.5, 100)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    {/* Yellow */}
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-amber-700 flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span>
-                          Yellow (Y)
-                        </span>
-                        <span className="font-mono text-amber-800 font-black">{result.avg_cov_y.toFixed(2)}%</span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200/60">
-                        <div
-                          className="bg-amber-400 h-2.5 rounded-full transition-all duration-700"
-                          style={{ width: `${Math.min(result.avg_cov_y * 2.5, 100)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    {/* Black / Key */}
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-slate-800 flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-slate-700 inline-block"></span>
-                          Black / Key (K)
-                        </span>
-                        <span className="font-mono text-slate-900 font-black">{result.avg_cov_k.toFixed(2)}%</span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200/60">
-                        <div
-                          className="bg-slate-700 h-2.5 rounded-full transition-all duration-700"
-                          style={{ width: `${Math.min(result.avg_cov_k * 2.5, 100)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  /* MONO K DISPLAY */
-                  <div className="space-y-2 p-4 bg-slate-50 rounded-2xl border border-slate-200/80">
-                    <div className="flex justify-between text-sm font-black">
-                      <span className="text-slate-800 flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-slate-700 inline-block"></span>
-                        Black / Key (K Only)
-                      </span>
-                      <span className="font-mono text-slate-900 text-base font-black">
-                        {Math.min(
-                          100,
-                          Math.round(
-                            (result.avg_cov_k +
-                              0.299 * result.avg_cov_c +
-                              0.587 * result.avg_cov_m +
-                              0.114 * result.avg_cov_y) *
-                              100
-                          ) / 100
-                        ).toFixed(2)}
-                        %
-                      </span>
-                    </div>
-                    <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
-                      <div
-                        className="bg-slate-700 h-3 rounded-full transition-all duration-700"
-                        style={{
-                          width: `${Math.min(
-                            (result.avg_cov_k +
-                              0.299 * result.avg_cov_c +
-                              0.587 * result.avg_cov_m +
-                              0.114 * result.avg_cov_y) *
-                              2.5,
-                            100
-                          )}%`,
-                        }}
-                      ></div>
-                    </div>
-                    <p className="text-[11px] text-slate-500 pt-1 font-medium">
-                      {currentLang === 'lo'
-                        ? 'ໂໝດພິມຂາວດຳຈະບໍ່ຄິດໄລ່ຕົ້ນທຶນນ້ຳມຶກ C, M, Y (C=0%, M=0%, Y=0%)'
-                        : 'Monochrome mode only accounts for Black K toner/ink cost.'
-                      }
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Specifications Summary Card */}
-            <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-3.5">
-              <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                <Layers className="w-4 h-4 text-accent-sky" />
-                <span>{currentLang === 'lo' ? 'ລາຍລະອຽດສະເປກ (Specifications)' : 'Specifications'}</span>
-              </h4>
-
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80">
-                  <div className="text-[10px] text-slate-400 font-bold uppercase">{currentLang === 'lo' ? 'ປະເພດໄຟລ໌' : 'File Type'}</div>
-                  <div className="font-black text-slate-900 text-sm mt-0.5">
-                    {result.file_type || (isImageFile(result.file_name) ? 'IMAGE' : 'PDF')}
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80">
-                  <div className="text-[10px] text-slate-400 font-bold uppercase">
-                    {result.image_width ? (currentLang === 'lo' ? 'ຂະໜາດພິກເຊວ' : 'Dimensions') : (currentLang === 'lo' ? 'ຈຳນວນໜ້າ' : 'Pages')}
-                  </div>
-                  <div className="font-black text-slate-900 text-sm mt-0.5">
-                    {result.image_width ? `${result.image_width} × ${result.image_height}` : `${result.total_pages} ${currentLang === 'lo' ? 'ໜ້າ' : 'Pages'}`}
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80">
-                  <div className="text-[10px] text-slate-400 font-bold uppercase">{currentLang === 'lo' ? 'ຂະໜາດພິມແນະນຳ' : 'Suggested Size'}</div>
-                  <div className="font-black text-emerald-700 text-sm mt-0.5">
-                    {result.suggested_paper || 'A4'}
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80">
-                  <div className="text-[10px] text-slate-400 font-bold uppercase">{currentLang === 'lo' ? 'ໂໝດສີ (Color Mode)' : 'Color Mode'}</div>
-                  <div className="font-black text-slate-900 text-sm mt-0.5 truncate">
-                    {result.color_space || 'CMYK'}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Action Buttons Flow (Matching Theme Buttons) */}
-            <div className="space-y-2.5 pt-1">
-              {/* Button 1: Send to Quotation */}
-              <button
-                onClick={() => {
-                  if (onSendToQuotation) {
-                    const isMono = printColorMode === 'MONO_K';
-                    const monoK = Math.min(
-                      100,
-                      Math.round(
-                        (result.avg_cov_k +
-                          0.299 * result.avg_cov_c +
-                          0.587 * result.avg_cov_m +
-                          0.114 * result.avg_cov_y) *
-                          100
-                      ) / 100
-                    );
-                    onSendToQuotation({
-                      ...result,
-                      color_mode: printColorMode,
-                      avg_cov_c: isMono ? 0 : result.avg_cov_c,
-                      avg_cov_m: isMono ? 0 : result.avg_cov_m,
-                      avg_cov_y: isMono ? 0 : result.avg_cov_y,
-                      avg_cov_k: isMono ? monoK : result.avg_cov_k,
-                    });
-                  }
-                }}
-                className="w-full flex items-center justify-center gap-2.5 px-6 py-4 bg-accent-sky hover:bg-sky-600 active:scale-[0.99] text-white font-black text-sm rounded-2xl shadow-lg shadow-sky-500/20 transition cursor-pointer"
-              >
-                <span>
-                  {currentLang === 'lo' 
-                    ? `ສົ່ງຄ່ານຳໃຊ້ສ້າງໃບສະເໜີລາຄາ ${printColorMode === 'MONO_K' ? '(ໂໝດຂາວດຳ)' : '(ໂໝດ 4 ສີ)'}` 
-                    : `Send to Quotation Form ${printColorMode === 'MONO_K' ? '(Mono K)' : '(4-Color CMYK)'}`
-                  }
-                </span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-
-              {/* Button 2: Save Preflight Report to Backend DB */}
-              <button
-                onClick={() => handleSavePreflightReport()}
-                disabled={isSavingReport}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl border border-slate-200/80 transition cursor-pointer text-xs"
-              >
-                <Save className="w-4 h-4 text-slate-600" />
-                <span>
-                  {reportSavedStatus 
-                    ? `✓ ${reportSavedStatus}` 
-                    : isSavingReport 
-                    ? 'Saving...' 
-                    : (currentLang === 'lo' ? 'ບັນທຶກລາຍງານ Preflight Report' : 'Save Preflight Report')
-                  }
-                </span>
-              </button>
-
-              {/* Button 3: Skip / Manual */}
-              <button
-                onClick={() => onSkipToManual && onSkipToManual()}
-                className="w-full flex items-center justify-center gap-2 px-6 py-2.5 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-800 font-bold rounded-2xl border border-slate-200 transition cursor-pointer text-xs"
-              >
-                <span>{currentLang === 'lo' ? 'ຂ້າມ / ໄປປ້ອນຄ່າສີເອງ' : 'Skip / Manual Pricing'}</span>
-              </button>
             </div>
           </div>
+
+          {/* Right Column (5 cols): Diagnostics & Color Coverage */}
+          <div className="lg:col-span-5 xl:col-span-4 space-y-4">
+            {result ? (
+              <div className="space-y-4">
+                
+                {/* 1. Target Paper Size Selection Banner */}
+                <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <Maximize2 className="w-3.5 h-3.5 text-primary-navy" />
+                      <span>1. ຂະໜາດເຈ້ຍທີ່ຈະພິມ (Target Paper):</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold font-sans">
+                      {paperWidthMM} × {paperHeightMM} mm
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {['A4', 'A5', 'A3', 'CUSTOM'].map(sz => (
+                      <button
+                        key={sz}
+                        type="button"
+                        onClick={() => handlePaperSizeSelect(sz)}
+                        className={`py-2 rounded-xl text-xs font-black transition cursor-pointer text-center ${
+                          targetPaperSize === sz
+                            ? 'bg-primary-navy text-white shadow-sm'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {sz}
+                      </button>
+                    ))}
+                  </div>
+
+                  {targetPaperSize === 'CUSTOM' && (
+                    <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
+                      <div className="flex items-center gap-1 flex-1">
+                        <span className="text-[10px] font-bold text-slate-500">W:</span>
+                        <input
+                          type="number"
+                          value={customWidthMM}
+                          onChange={(e) => handleCustomDimensionChange(Number(e.target.value), customHeightMM)}
+                          className="w-full px-2 py-1 text-xs border rounded-lg font-mono font-bold"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1 flex-1">
+                        <span className="text-[10px] font-bold text-slate-500">H:</span>
+                        <input
+                          type="number"
+                          value={customHeightMM}
+                          onChange={(e) => handleCustomDimensionChange(customWidthMM, Number(e.target.value))}
+                          className="w-full px-2 py-1 text-xs border rounded-lg font-mono font-bold"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-2.5 bg-sky-50/70 border border-sky-200/60 rounded-xl flex items-center justify-between text-[11px]">
+                    <span className="text-sky-950 font-bold">ເນື້ອທີ່ເຈ້ຍ: {paperAreaM2.toFixed(4)} $m^2$</span>
+                    <span className="text-sky-700 font-mono font-bold">~{estimatedGrandTotalInkML} mL Ink</span>
+                  </div>
+                </div>
+
+                {/* 2. Customer Requested Print Mode (Color vs Mono All) */}
+                <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <Printer className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>2. ໂໝດການພິມທີ່ລູກຄ້າເລືອກ (Print Mode):</span>
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCustomerPrintMode('COLOR')}
+                      className={`p-2.5 rounded-2xl border text-left transition cursor-pointer ${
+                        customerPrintMode === 'COLOR'
+                          ? 'bg-pink-50/80 border-pink-300 text-pink-950 shadow-xs'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-black text-xs">
+                        <Palette className="w-3.5 h-3.5 text-pink-500" />
+                        <span>ພິມສີ (Color Print)</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        ແຍກໜ້າສີ & ຂາວດຳອັດຕະໂນມັດ
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setCustomerPrintMode('MONO_ALL')}
+                      className={`p-2.5 rounded-2xl border text-left transition cursor-pointer ${
+                        customerPrintMode === 'MONO_ALL'
+                          ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-black text-xs">
+                        <FileCode className="w-3.5 h-3.5 text-slate-400" />
+                        <span>ພິມຂາວດຳລ້ວນ (All B&W)</span>
+                      </div>
+                      <div className={`text-[10px] mt-0.5 ${customerPrintMode === 'MONO_ALL' ? 'text-slate-300' : 'text-slate-400'}`}>
+                        ຄິດຄ່າໝຶກດຳ {totalPages} ໜ້າລ້ວນ
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* If Color Mode is Active -> Channel Options (4 Color, 6 Color, 12 Color) */}
+                  {customerPrintMode === 'COLOR' && (
+                    <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+                        <span>ຈຳນວນສີ (Color Channels):</span>
+                        <div className="flex gap-1">
+                          {[
+                            { id: '4_COLOR', label: '4 ສີ (CMYK)' },
+                            { id: '6_COLOR', label: '6 ສີ (Photo)' },
+                            { id: '12_COLOR', label: '12 ສີ (Fine Art)' }
+                          ].map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => setColorChannelOption(c.id as any)}
+                              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                                colorChannelOption === c.id
+                                  ? 'bg-pink-600 text-white shadow-xs font-black'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}
+                            >
+                              {c.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Color vs Mono Pages Split Tabs & Grand Total Summary */}
+                <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <Layers className="w-4 h-4 text-emerald-600" />
+                      <span>3. ລາຍລະອຽດໜ້າ & ຄ່າສີ ({totalPages} ໜ້າ)</span>
+                    </span>
+                  </div>
+
+                  {/* 3 Tabs: Color Pages vs Mono Pages vs All Pages Combined */}
+                  <div className="bg-slate-100 p-1 rounded-2xl flex gap-1 text-xs font-black">
+                    <button
+                      type="button"
+                      onClick={() => setActiveCoverageTab('color_pages')}
+                      className={`flex-1 py-2 px-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 text-center ${
+                        activeCoverageTab === 'color_pages'
+                          ? 'bg-white text-pink-600 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <Palette className="w-3.5 h-3.5" />
+                      <span>ໜ້າສີ ({colorPages})</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveCoverageTab('mono_pages')}
+                      className={`flex-1 py-2 px-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 text-center ${
+                        activeCoverageTab === 'mono_pages'
+                          ? 'bg-white text-slate-900 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <FileCode className="w-3.5 h-3.5" />
+                      <span>ຂາວດຳ ({monoPages})</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveCoverageTab('all_pages')}
+                      className={`flex-1 py-2 px-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 text-center ${
+                        activeCoverageTab === 'all_pages'
+                          ? 'bg-white text-primary-navy shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      <span>ລວມທັງໝົດ</span>
+                    </button>
+                  </div>
+
+                  {/* TAB 1: COLOR PAGES DETAILS (Supports 4, 6, 12 colors) */}
+                  {activeCoverageTab === 'color_pages' && (
+                    <div className="space-y-3 animate-fade-in">
+                      <div className="flex justify-between items-center bg-pink-50/70 p-3 rounded-2xl border border-pink-200/60">
+                        <div>
+                          <div className="text-xs font-black text-pink-950">
+                            ຈຳນວນໜ້າສີ: {colorPages} ໜ້າ
+                          </div>
+                          <div className="text-[10px] text-pink-700">
+                            ຄິດເປັນ {totalPages > 0 ? Math.round((colorPages / totalPages) * 100) : 0}% ຂອງປຶ້ມ
+                          </div>
+                        </div>
+                        <div className="text-right font-mono">
+                          <div className="text-xs font-black text-pink-900">{totalColorInkCoverage}% CMYK</div>
+                          <div className="text-[10px] text-pink-600 font-bold">~{estimatedColorInkML} mL Ink</div>
+                        </div>
+                      </div>
+
+                      {/* Dynamic Color Channels Renderer */}
+                      <div className="space-y-2 pt-1">
+                        <div className="text-[11px] font-bold text-slate-500 flex justify-between">
+                          <span>ຊ່ອງສີ ({colorChannelOption.replace('_', ' ')}):</span>
+                          <span>Coverage %</span>
+                        </div>
+                        <div className={`grid gap-2 ${colorChannelOption === '12_COLOR' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                          {getDynamicChannels(rawColorC, rawColorM, rawColorY, rawColorK, colorChannelOption).map((ch, idx) => (
+                            <div key={idx} className="space-y-1">
+                              <div className="flex justify-between text-xs font-bold">
+                                <span className={`${ch.text} flex items-center gap-1.5`}>
+                                  <span className={`w-2 h-2 rounded-full ${ch.color} inline-block`} />
+                                  <span className="truncate">{ch.name}</span>
+                                </span>
+                                <span className="font-mono text-slate-800 font-black">{ch.val}%</span>
+                              </div>
+                              <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                <div className={`${ch.color} h-full`} style={{ width: `${Math.min(ch.val * 3, 100)}%` }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 2: MONO B&W PAGES DETAILS */}
+                  {activeCoverageTab === 'mono_pages' && (
+                    <div className="space-y-3 animate-fade-in">
+                      <div className="flex justify-between items-center bg-slate-100 p-3 rounded-2xl border border-slate-200">
+                        <div>
+                          <div className="text-xs font-black text-slate-900">
+                            ຈຳນວນໜ້າຂາວດຳ: {monoPages} ໜ້າ
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            ຄິດເປັນ {totalPages > 0 ? Math.round((monoPages / totalPages) * 100) : 0}% ຂອງປຶ້ມ
+                          </div>
+                        </div>
+                        <div className="text-right font-mono">
+                          <div className="text-xs font-black text-slate-900">{effectiveMonoK}% K</div>
+                          <div className="text-[10px] text-slate-500 font-bold">~{estimatedMonoInkML} mL Ink</div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 pt-1">
+                        <div className="flex justify-between text-xs font-bold text-slate-800">
+                          <span>Black Ink (K ล้วน)</span>
+                          <span className="font-mono">{effectiveMonoK}%</span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                          <div className="bg-slate-800 h-full" style={{ width: `${Math.min(effectiveMonoK * 2.5, 100)}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-800 font-bold">
+                        ✓ ໜ້າຂາວດຳ {monoPages} ໜ້າ ຈະຖືກຄິດສະເພາະຕົ້ນທຶນຕະລັບໝຶກດຳ (Mono K) ບໍ່ຄິດຄ່າສີ C, M, Y
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 3: 🌟 ALL PAGES COMBINED */}
+                  {activeCoverageTab === 'all_pages' && (
+                    <div className="space-y-3 animate-fade-in">
+                      
+                      {/* Hero Combined Stats */}
+                      <div className="p-4 bg-gradient-to-br from-slate-900 via-primary-navy to-slate-900 text-white rounded-2xl space-y-2.5 shadow-md">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-xs text-slate-300 font-bold block">
+                              ຄ່າສີສະເລ່ຍຕໍ່ໜ້າ (Avg per Page):
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-sans">
+                              (ຖົວສະເລ່ຍທັງໝົດ {totalPages} ໜ້າ: ສີ {colorPages} + ຂາວດຳ {monoPages})
+                            </span>
+                          </div>
+                          <span className="text-lg font-black text-emerald-400 font-mono">
+                            {grandTotalAverageInk}%
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center text-xs border-t border-white/10 pt-2 font-mono">
+                          <span className="text-slate-300 font-bold">
+                            ປະລິມານນ້ຳໝຶກລວມຕົວຈິງ:
+                          </span>
+                          <span className="text-emerald-300 font-black text-sm">
+                            ~{estimatedGrandTotalInkML} mL
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 border-t border-white/5 pt-1.5 flex justify-between">
+                          <span>• ໝຶກສີ ({colorPages} ໜ້າ): ~{estimatedColorInkML} mL</span>
+                          <span>• ໝຶກດຳ ({monoPages} ໜ້າ): ~{estimatedMonoInkML} mL</span>
+                        </div>
+                      </div>
+
+                      {/* Dynamic Combined Channels Renderer */}
+                      <div className="space-y-2 pt-1">
+                        <div className="text-[11px] font-bold text-slate-500 flex justify-between">
+                          <span>ຊ່ອງສີສະເລ່ຍລວມ ({colorChannelOption.replace('_', ' ')}):</span>
+                          <span>Coverage %</span>
+                        </div>
+                        <div className={`grid gap-2 ${colorChannelOption === '12_COLOR' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                          {getDynamicChannels(combinedC, combinedM, combinedY, combinedK, colorChannelOption).map((ch, idx) => (
+                            <div key={idx} className="space-y-1">
+                              <div className="flex justify-between text-xs font-bold">
+                                <span className={`${ch.text} flex items-center gap-1.5`}>
+                                  <span className={`w-2 h-2 rounded-full ${ch.color} inline-block`} />
+                                  <span className="truncate">{ch.name}</span>
+                                </span>
+                                <span className="font-mono text-slate-800 font-black">{ch.val}%</span>
+                              </div>
+                              <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                <div className={`${ch.color} h-full`} style={{ width: `${Math.min(ch.val * 3, 100)}%` }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                    </div>
+                  )}
+
+                </div>
+
+                {/* 4. Preflight Diagnostics Badges */}
+                <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
+                      ມາດຕະຖານໄຟລ໌ພິມ (Preflight Quality)
+                    </span>
+                    <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md">
+                      {result.status_badge_lao}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+                    <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl flex justify-between">
+                      <span className="text-slate-500">Color Space:</span>
+                      <span className="font-mono text-slate-800">{result.has_rgb ? 'RGB' : 'CMYK'}</span>
+                    </div>
+                    <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl flex justify-between">
+                      <span className="text-slate-500">Bleed:</span>
+                      <span className="font-mono text-slate-800">{result.bleed_mm} mm</span>
+                    </div>
+                    <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl flex justify-between">
+                      <span className="text-slate-500">TAC:</span>
+                      <span className="font-mono text-slate-800">{result.tac_max_percent}%</span>
+                    </div>
+                    <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl flex justify-between">
+                      <span className="text-slate-500">Resolution:</span>
+                      <span className="font-mono text-slate-800">{result.dpi_estimate} DPI</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Proceed to Quotation Button */}
+                <div className="space-y-2 pt-1">
+                  {onSendToQuotation && (
+                    <button
+                      type="button"
+                      onClick={handleSendToQuotationAction}
+                      className="w-full py-3.5 bg-accent-sky hover:bg-sky-600 text-white rounded-2xl font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-accent-sky/20 transition active:scale-95 cursor-pointer"
+                    >
+                      <span>ສົ່ງຄ່າໄປໃຊ້ໃນໃບສະເໜີລາຄາ (Send to Quotation)</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {onSkipToManual && (
+                    <button
+                      type="button"
+                      onClick={onSkipToManual}
+                      className="w-full py-2 text-xs font-bold text-slate-500 hover:text-slate-800 transition cursor-pointer text-center"
+                    >
+                      ຂ້າມ / ໄປປ້ອນຄ່າເອງ (Manual)
+                    </button>
+                  )}
+                </div>
+
+              </div>
+            ) : (
+              <div className="p-6 bg-white border border-slate-200/90 rounded-3xl text-center text-slate-400 text-xs">
+                ກະລຸນາເລືອກໄຟລ໌ເພື່ອວິເຄາະ
+              </div>
+            )}
+          </div>
+
         </div>
       )}
+
     </div>
   );
 };

@@ -214,6 +214,7 @@ func main() {
 
 	router.GET("/api/inbound", inbound.HandleGetInboundTransactions)
 	router.POST("/api/inbound", inbound.HandleCreateInboundTransaction)
+	router.POST("/api/inbound/batch", inbound.HandleCreateBatchInboundTransaction)
 	router.PUT("/api/inbound/:id", inbound.HandleUpdateInboundTransaction)
 	router.DELETE("/api/inbound/:id", inbound.HandleDeleteInboundTransaction)
 
@@ -235,6 +236,7 @@ func main() {
 	router.PUT("/api/inventory/items/:id", inventory.HandleUpdateInventorySKU)
 	router.DELETE("/api/inventory/:id", inventory.HandleDeleteInventorySKU)
 	router.DELETE("/api/inventory/items/:id", inventory.HandleDeleteInventorySKU)
+	router.DELETE("/api/v1/materials/:id", inventory.HandleDeleteInventorySKU)
 	// Genuine & Compatible Ink Analytics routes
 	router.GET("/api/admin/inks/genuine", inventory.HandleGetGenuineInks)
 	router.GET("/api/admin/inks/compatible", inventory.HandleGetCompatibleInks)

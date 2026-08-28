@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Trash2, Palette, Split, Droplets } from 'lucide-react';
+import { AlertTriangle, Trash2, Palette, Split, Droplets, Plus, Search } from 'lucide-react';
 import { PrinterAllocation, ColorChannel } from '../types';
 
 interface AvailablePrinter {
@@ -17,6 +17,7 @@ interface Props {
   allocations: PrinterAllocation[];
   availablePrinters: AvailablePrinter[];
   onAllocationsChange: (newAllocations: PrinterAllocation[]) => void;
+  onOpenPrinterModal?: () => void;
 }
 
 const DEFAULT_CMYK_CHANNELS: ColorChannel[] = [
@@ -43,6 +44,7 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
   allocations,
   availablePrinters,
   onAllocationsChange,
+  onOpenPrinterModal,
 }) => {
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
@@ -52,15 +54,23 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
   const isComplete = remainingPages === 0 && targetQuantity > 0;
 
   const handleAddPrinter = (printerId: string) => {
-    const printer = availablePrinters.find((p) => p.id === printerId);
+    const printer = availablePrinters.find((p) => p.id === printerId) || availablePrinters[0];
     if (!printer) return;
 
     const remainingToAssign = Math.max(0, remainingPages);
     const pages = allocations.length === 0 ? targetQuantity : (remainingToAssign > 0 ? remainingToAssign : Math.floor(targetQuantity / (allocations.length + 1)));
 
     const isMono = printer.colorSchemeType === 'MONO' || printer.colorSchemeType === 'K' || printer.name.toLowerCase().includes('mono');
-    const initialMode = isMono ? 'MONO_K' : 'CMYK';
-    const initialChannels = isMono ? DEFAULT_MONO_CHANNELS.map(c => ({ ...c })) : DEFAULT_CMYK_CHANNELS.map(c => ({ ...c }));
+    
+    // Inherit color channels, density, and duplex from existing allocation if available to preserve user/preflight values
+    const existingChannels = allocations[0]?.color_channels;
+    const initialChannels = existingChannels && existingChannels.length > 0
+      ? existingChannels.map(c => ({ ...c }))
+      : (isMono ? DEFAULT_MONO_CHANNELS.map(c => ({ ...c })) : DEFAULT_CMYK_CHANNELS.map(c => ({ ...c })));
+    
+    const initialMode = allocations[0]?.color_mode || (isMono ? 'MONO_K' : 'CMYK');
+    const initialDensity = allocations[0]?.average_density_pct || 15;
+    const initialDoubleSided = allocations[0]?.is_double_sided || false;
 
     onAllocationsChange([
       ...allocations,
@@ -71,9 +81,9 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
         cost_per_page: printer.cost_per_page || 0,
         ink_cost_per_page: printer.ink_cost_per_page || 0,
         subtotal_cost: pages * (printer.cost_per_page || 0),
-        is_double_sided: false,
+        is_double_sided: initialDoubleSided,
         color_mode: initialMode,
-        average_density_pct: 15,
+        average_density_pct: initialDensity,
         color_channels: initialChannels,
       },
     ]);
@@ -111,16 +121,40 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
     onAllocationsChange(updated);
   };
 
+  const handleRemoveAllocation = (uniquePrinterId: string) => {
+    const remaining = allocations.filter((a) => a.printer_id !== uniquePrinterId);
+    onAllocationsChange(remaining);
+  };
+
+  const handleToggleDoubleSided = (uniquePrinterId: string) => {
+    const updated = allocations.map((a) => {
+      if (a.printer_id === uniquePrinterId) {
+        return { ...a, is_double_sided: !a.is_double_sided };
+      }
+      return a;
+    });
+    onAllocationsChange(updated);
+  };
+
   const handleColorModeChange = (uniquePrinterId: string, mode: 'CMYK' | 'MONO_K') => {
     const updated = allocations.map((a) => {
       if (a.printer_id === uniquePrinterId) {
-        const channels = mode === 'CMYK'
-          ? DEFAULT_CMYK_CHANNELS.map(c => ({ ...c }))
-          : DEFAULT_MONO_CHANNELS.map(c => ({ ...c }));
+        const channels = mode === 'MONO_K'
+          ? [{ channel_name: 'K', density_pct: a.color_channels.find(c => c.channel_name === 'K')?.density_pct || 15, is_spot_color: false }]
+          : [
+              { channel_name: 'C', density_pct: a.color_channels.find(c => c.channel_name === 'C')?.density_pct || 15, is_spot_color: false },
+              { channel_name: 'M', density_pct: a.color_channels.find(c => c.channel_name === 'M')?.density_pct || 15, is_spot_color: false },
+              { channel_name: 'Y', density_pct: a.color_channels.find(c => c.channel_name === 'Y')?.density_pct || 15, is_spot_color: false },
+              { channel_name: 'K', density_pct: a.color_channels.find(c => c.channel_name === 'K')?.density_pct || 15, is_spot_color: false },
+            ];
+
+        const avg = channels.reduce((sum, c) => sum + c.density_pct, 0) / (channels.length || 1);
+
         return {
           ...a,
           color_mode: mode,
           color_channels: channels,
+          average_density_pct: avg,
         };
       }
       return a;
@@ -129,298 +163,290 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
   };
 
   const handleChannelDensityChange = (uniquePrinterId: string, channelName: string, density: number) => {
-    const validDensity = Math.max(0, Math.min(100, density || 0)); // Strictly 0 - 100% ISO Range
+    const validDensity = Math.min(100, Math.max(0, density || 0));
     const updated = allocations.map((a) => {
       if (a.printer_id === uniquePrinterId) {
-        const channels = (a.color_channels || DEFAULT_CMYK_CHANNELS).map((ch) => {
-          if (ch.channel_name === channelName) {
-            return { ...ch, density_pct: validDensity };
-          }
-          return ch;
-        });
-        return { ...a, color_channels: channels };
+        const channels = a.color_channels.map((c) =>
+          c.channel_name === channelName ? { ...c, density_pct: validDensity } : c
+        );
+        const avg = channels.reduce((sum, c) => sum + c.density_pct, 0) / (channels.length || 1);
+        return {
+          ...a,
+          color_channels: channels,
+          average_density_pct: avg,
+        };
       }
       return a;
     });
     onAllocationsChange(updated);
   };
 
-  const handleSetAllChannelsDensity = (uniquePrinterId: string, density: number) => {
-    const validDensity = Math.max(0, Math.min(100, density || 0));
+  const handleApplyPreset = (uniquePrinterId: string, presetValue: number) => {
     const updated = allocations.map((a) => {
       if (a.printer_id === uniquePrinterId) {
-        const channels = (a.color_channels || DEFAULT_CMYK_CHANNELS).map((ch) => ({
-          ...ch,
-          density_pct: validDensity,
-        }));
-        return { ...a, average_density_pct: validDensity, color_channels: channels };
+        const channels = a.color_channels.map((c) => ({ ...c, density_pct: presetValue }));
+        return {
+          ...a,
+          color_channels: channels,
+          average_density_pct: presetValue,
+        };
       }
       return a;
     });
     onAllocationsChange(updated);
-  };
-
-  const handleRemovePrinter = (uniquePrinterId: string) => {
-    onAllocationsChange(allocations.filter((a) => a.printer_id !== uniquePrinterId));
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4 shadow-xs">
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 pb-3 border-b border-slate-100">
-        <div>
-          <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-            <Palette className="w-4 h-4 text-indigo-600" />
-            <span>ການຕັ້ງຄ່າເຄື່ອງພິມ & ແບ່ງການຜະລິດ (Multi-Printer Load Allocation)</span>
-          </h4>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            ກຳນົດຈຳນວນແຜ່ນ, ໜ້າພິມ (1 ໜ້າ/2 ໜ້າ) ແລະ ລະບົບສີ (4 ສີ CMYK / ຂາວດຳ K) ຕາມມາດຕະຖານ ISO Coverage (0-100%)
-          </p>
+    <div className="space-y-4">
+      {/* Header & Status Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-indigo-50/70 border border-indigo-100 rounded-2xl">
+        <div className="flex items-center gap-2">
+          <Palette className="w-5 h-5 text-indigo-600 shrink-0" />
+          <div>
+            <h4 className="text-xs font-black text-indigo-950 uppercase tracking-wide">
+              {currentLang === 'lo' ? 'ການຕັ້ງຄ່າເຄື່ອງພິມ & ແບ່ງການຜະລິດ (Multi-Printer Load Allocation)' : 'Multi-Printer Load Allocation'}
+            </h4>
+            <p className="text-[10px] text-slate-500 font-medium">
+              {currentLang === 'lo' ? 'ກຳນົດຈຳນວນແຜ່ນ, ໜ້າພິມ (1 ໜ້າ/2 ໜ້າ) ແລະ ລະບົບສີ (4 ສີ CMYK / ຂາວດຳ K) ຕາມມາດຕະຖານ ISO Coverage (0–100%)' : 'Set sheet allocation, simplex/duplex, and color density per printer'}
+            </p>
+          </div>
         </div>
-        
-        <div className="flex items-center gap-3">
+
+        <div className="flex items-center gap-2">
           {allocations.length > 1 && (
             <button
               type="button"
               onClick={handleDistributeEvenly}
-              className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-indigo-200"
-              title="ແບ່ງຈຳນວນແຜ່ນພິມເທົ່າໆກັນທຸກເຄື່ອງ"
+              className="px-2.5 py-1 bg-white border border-indigo-200 hover:bg-indigo-100 text-indigo-900 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
             >
               <Split className="w-3.5 h-3.5" />
-              <span>ແບ່ງເທົ່າກັນ (Split Evenly)</span>
+              <span>{currentLang === 'lo' ? 'ແບ່ງເທົ່າກັນ' : 'Split Evenly'}</span>
             </button>
           )}
 
-          <div className="text-right shrink-0">
-            <span
-              className={`text-xs font-black px-2.5 py-1 rounded-lg border ${
-                isComplete
-                  ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                  : remainingPages < 0
-                  ? 'text-rose-700 bg-rose-50 border-rose-200'
-                  : 'text-amber-700 bg-amber-50 border-amber-200'
-              }`}
-            >
-              {totalAllocated.toLocaleString()} / {targetQuantity.toLocaleString()} ແຜ່ນ
-            </span>
+          <div className={`px-2.5 py-1 rounded-lg text-xs font-black font-sans ${
+            isComplete ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'
+          }`}>
+            {totalAllocated.toLocaleString()} / {targetQuantity.toLocaleString()} {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'}
           </div>
         </div>
       </div>
 
+      {/* Allocations List */}
       {allocations.length === 0 ? (
-        <div className="text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-          <Palette className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-          <p className="text-xs text-slate-500 font-medium">
-            ຍັງບໍ່ໄດ້ເລືອກເຄື່ອງພິມ — ກະລຸນາກົດປຸ່ມເພີ່ມເຄື່ອງພິມດ້ານລຸ່ມເພື່ອແບ່ງການຜະລິດ
+        <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center space-y-2">
+          <p className="text-xs font-bold text-slate-500">
+            {currentLang === 'lo' ? '-- ຍັງບໍ່ມີເຄື່ອງພິມທີ່ຖືກເລືອກ --' : '-- No printer allocated --'}
           </p>
+          <button
+            type="button"
+            onClick={onOpenPrinterModal || (() => handleAddPrinter(availablePrinters[0]?.id))}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-2xs"
+          >
+            + {currentLang === 'lo' ? 'ເລືອກເຄື່ອງພິມຫຼັກ' : 'Select Primary Printer'}
+          </button>
         </div>
       ) : (
-        <div className="space-y-4">
-          {allocations.map((item, pIdx) => {
-            const colorMode = item.color_mode === 'MONO_K' ? 'MONO_K' : 'CMYK';
-            const channels = item.color_channels && item.color_channels.length > 0
-              ? item.color_channels
-              : (colorMode === 'MONO_K' ? DEFAULT_MONO_CHANNELS : DEFAULT_CMYK_CHANNELS);
-            const pctShare = targetQuantity > 0 ? Math.round(((item.allocated_pages || 0) / targetQuantity) * 100) : 0;
+        <div className="space-y-3">
+          {allocations.map((item, idx) => {
+            const isMono = item.color_mode === 'MONO_K';
+            const allocatedPct = targetQuantity > 0 ? Math.round(((item.allocated_pages || 0) / targetQuantity) * 100) : 100;
+            const inkCost = item.ink_cost_per_page || 0;
+            const machCost = item.cost_per_page || 0;
 
             return (
               <div
                 key={item.printer_id}
-                className="bg-slate-50/80 rounded-2xl border border-slate-200 p-4 space-y-3 transition-all hover:border-slate-300"
+                className="p-4 bg-white border border-slate-200/90 rounded-2xl shadow-xs space-y-3 hover:border-indigo-300 transition"
               >
-                {/* Header row */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                {/* Printer Header & Quota */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
                   <div className="flex items-center gap-2.5">
-                    <span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
-                      {pIdx + 1}
+                    <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-xs font-sans">
+                      {idx + 1}
                     </span>
                     <div>
-                      <p className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                        <span>{item.printer_name}</span>
-                        <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
-                          {pctShare}% ຂອງງານທັງໝົດ
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-900 font-sans">
+                          {item.printer_name}
                         </span>
-                      </p>
-                      <p className="text-[11px] text-slate-500 font-medium flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                        {item.ink_cost_per_page ? (
-                          <>
-                            <span className="font-bold text-sky-700">
-                              {currentLang === 'lo' ? 'ໝຶກ' : 'Ink'}: LAK {item.ink_cost_per_page.toLocaleString()} / {currentLang === 'lo' ? 'ແຜ່ນ' : 'page'} (@5%)
-                            </span>
-                            <span className="text-slate-300">•</span>
-                            <span>
-                              {currentLang === 'lo' ? 'ຄ່າເຄື່ອງ & ໄຟ' : 'Mach & Elec'}: LAK {(item.cost_per_page || 0).toLocaleString()} / {currentLang === 'lo' ? 'ແຜ່ນ' : 'page'}
-                            </span>
-                            <span className="text-slate-300">•</span>
-                            <span className="font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
-                              {currentLang === 'lo' ? 'ລວມ' : 'Total'}: LAK {((item.ink_cost_per_page || 0) + (item.cost_per_page || 0)).toLocaleString()} / {currentLang === 'lo' ? 'ແຜ່ນ' : 'page'}
-                            </span>
-                          </>
-                        ) : (
-                          <span>{item.cost_per_page ? `${item.cost_per_page.toLocaleString()} LAK / ${currentLang === 'lo' ? 'ແຜ່ນ' : 'page'} (${currentLang === 'lo' ? 'ຄ່າເສື່ອມ + ຄ່າໄຟ' : 'Depr + Electricity'})` : 'Master Equipment Asset'}</span>
-                        )}
-                      </p>
+                        <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-black font-sans">
+                          {allocatedPct}% ຂອງງານທັງໝົດ
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-500 font-medium">
+                        <span className="text-indigo-900 font-bold font-sans">
+                          ໝຶກ: LAK {inkCost.toLocaleString()} / ແຜ່ນ (@5%)
+                        </span>
+                        <span>•</span>
+                        <span>ຄ່າເສື່ອມ & ໄຟ: LAK {machCost.toLocaleString()} / ແຜ່ນ</span>
+                        <span>•</span>
+                        <span className="text-purple-700 font-black font-sans bg-purple-50 px-1.5 py-0.2 rounded">
+                          ລວມ: LAK {(inkCost + machCost).toLocaleString()} / ແຜ່ນ
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 self-end sm:self-auto">
+                  <div className="flex items-center gap-2">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-slate-600 font-bold">ຈຳນວນຜະລິດ:</span>
+                      <label className="text-[11px] font-bold text-slate-600">
+                        {currentLang === 'lo' ? 'ຈຳນວນຜະລິດ:' : 'Allocated:'}
+                      </label>
                       <input
                         type="number"
                         min="0"
+                        max={targetQuantity * 2}
                         value={item.allocated_pages ?? ''}
-                        onChange={(e) =>
-                          handlePageChange(item.printer_id, parseInt(e.target.value, 10))
-                        }
-                        className="w-28 px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-right font-bold text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500"
-                        placeholder="0"
+                        onChange={(e) => handlePageChange(item.printer_id, parseInt(e.target.value, 10))}
+                        className="w-24 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-right focus:outline-none focus:border-indigo-500 font-sans"
                       />
-                      <span className="text-xs text-slate-400 font-semibold">ແຜ່ນ</span>
+                      <span className="text-[11px] text-slate-400 font-medium">
+                        {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'}
+                      </span>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePrinter(item.printer_id)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                      title="ລຶບເຄື່ອງພິມນີ້"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {allocations.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAllocation(item.printer_id)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                        title="ລົບເຄື່ອງພິມນີ້"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {/* Sidedness & Color Mode Selection */}
-                <div className="pt-2.5 border-t border-slate-200 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    {/* Sidedness Control per Printer */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-700">ໜ້າພິມ:</span>
-                      <div className="inline-flex rounded-lg bg-slate-200/80 p-0.5 text-xs font-bold">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const updated = allocations.map(a => a.printer_id === item.printer_id ? { ...a, is_double_sided: false } : a);
-                            onAllocationsChange(updated);
-                          }}
-                          className={`px-3 py-1 rounded-md transition ${
-                            !item.is_double_sided
-                              ? 'bg-white text-indigo-700 shadow-sm'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          ພິມ 1 ໜ້າ (Single-Sided)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const updated = allocations.map(a => a.printer_id === item.printer_id ? { ...a, is_double_sided: true } : a);
-                            onAllocationsChange(updated);
-                          }}
-                          className={`px-3 py-1 rounded-md transition ${
-                            item.is_double_sided
-                              ? 'bg-white text-indigo-700 shadow-sm'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          ພິມ 2 ໜ້າ (Double-Sided Duplex)
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Color Mode Selection (CMYK vs MONO Black only) */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                        <Droplets className="w-3.5 h-3.5 text-slate-500" />
-                        ລະບົບສີ:
-                      </span>
-                      <div className="inline-flex rounded-lg bg-slate-200/80 p-0.5 text-xs font-bold">
-                        <button
-                          type="button"
-                          onClick={() => handleColorModeChange(item.printer_id, 'CMYK')}
-                          className={`px-3.5 py-1 rounded-md transition ${
-                            colorMode === 'CMYK'
-                              ? 'bg-white text-indigo-700 shadow-sm'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          ພິມ 4 ສີ (Full Color CMYK)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleColorModeChange(item.printer_id, 'MONO_K')}
-                          className={`px-3.5 py-1 rounded-md transition ${
-                            colorMode === 'MONO_K'
-                              ? 'bg-white text-indigo-700 shadow-sm'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          ພິມຂາວດຳ (Monochrome Black / K)
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* ISO Standard Presets Quick Toolbar */}
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    <span className="text-[11px] font-bold text-slate-500 mr-1">ມາດຕະຖານ ISO Coverage:</span>
-                    {ISO_COVERAGE_PRESETS.map((preset) => (
+                {/* Duplex / Simplex + Color Mode Toggle */}
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Duplex Switch */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-slate-500">ໜ້າພິມ:</span>
+                    <div className="flex rounded-xl bg-slate-100 p-0.5 border border-slate-200">
                       <button
-                        key={preset.value}
                         type="button"
-                        onClick={() => handleSetAllChannelsDensity(item.printer_id, preset.value)}
-                        className="px-2 py-0.5 bg-white hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 border border-slate-200 rounded text-[10px] font-bold transition shadow-2xs cursor-pointer"
+                        onClick={() => handleToggleDoubleSided(item.printer_id)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                          !item.is_double_sided
+                            ? 'bg-white text-indigo-900 shadow-2xs'
+                            : 'text-slate-500 hover:text-slate-900'
+                        }`}
                       >
-                        {preset.label}
+                        ພິມ 1 ໜ້າ (Single-Sided)
                       </button>
-                    ))}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleDoubleSided(item.printer_id)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                          item.is_double_sided
+                            ? 'bg-white text-indigo-900 shadow-2xs'
+                            : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        ພິມ 2 ໜ້າ (Double-Sided Duplex)
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Channels & Density Sliders (Strictly 0% - 100%) */}
-                  <div className="bg-white rounded-xl p-3 border border-slate-200 space-y-2.5">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {channels.map((ch) => {
-                        const name = ch.channel_name;
-                        let badgeBg = 'bg-slate-100 text-slate-800';
-                        if (name === 'C' || name === 'Cyan') badgeBg = 'bg-cyan-500 text-white';
-                        else if (name === 'M' || name === 'Magenta') badgeBg = 'bg-pink-500 text-white';
-                        else if (name === 'Y' || name === 'Yellow') badgeBg = 'bg-amber-400 text-slate-900';
-                        else if (name === 'K' || name === 'Black') badgeBg = 'bg-slate-900 text-white';
-
-                        return (
-                          <div
-                            key={name}
-                            className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-200/80"
-                          >
-                            <span className={`w-8 h-8 rounded-lg font-bold text-xs flex items-center justify-center shrink-0 shadow-xs ${badgeBg}`}>
-                              {name}
-                            </span>
-
-                            <div className="flex-1 min-w-0">
-                              <div className="flex justify-between items-center">
-                                <span className="text-xs font-bold text-slate-700 truncate block">
-                                  {name === 'C' ? 'Cyan (C)' : name === 'M' ? 'Magenta (M)' : name === 'Y' ? 'Yellow (Y)' : 'Black (K / BK)'}
-                                </span>
-                                <span className="text-xs font-black text-indigo-700 font-sans">
-                                  {ch.density_pct || 0}%
-                                </span>
-                              </div>
-
-                              <div className="flex items-center gap-2 mt-1">
-                                <input
-                                  type="range"
-                                  min="0"
-                                  max="100"
-                                  step="1"
-                                  value={ch.density_pct || 0}
-                                  onChange={(e) => handleChannelDensityChange(item.printer_id, ch.channel_name, parseFloat(e.target.value))}
-                                  className="flex-1 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                  {/* Color Mode Switch */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                      <Droplets className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>ລະບົບສີ:</span>
+                    </span>
+                    <div className="flex rounded-xl bg-slate-100 p-0.5 border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => handleColorModeChange(item.printer_id, 'CMYK')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                          !isMono
+                            ? 'bg-white text-indigo-900 shadow-2xs'
+                            : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        ພິມ 4 ສີ (Full Color CMYK)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleColorModeChange(item.printer_id, 'MONO_K')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                          isMono
+                            ? 'bg-white text-indigo-900 shadow-2xs'
+                            : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        ພິມຂາວດຳ (Monochrome Black / K)
+                      </button>
                     </div>
+                  </div>
+                </div>
+
+                {/* ISO Coverage Presets & Channel Sliders */}
+                <div className="space-y-2 pt-1 border-t border-slate-100">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-slate-400">ມາດຕະຖານ ISO Coverage:</span>
+                      <div className="flex flex-wrap gap-1">
+                        {ISO_COVERAGE_PRESETS.map((preset) => (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            onClick={() => handleApplyPreset(item.printer_id, preset.value)}
+                            className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-900 text-slate-600 text-[10px] font-bold transition cursor-pointer"
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dynamic Color Channel Bars */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
+                    {item.color_channels.map((ch) => {
+                      const name = ch.channel_name;
+                      const badgeColor =
+                        name === 'C'
+                          ? 'bg-cyan-500 text-white'
+                          : name === 'M'
+                          ? 'bg-pink-500 text-white'
+                          : name === 'Y'
+                          ? 'bg-amber-400 text-slate-900'
+                          : 'bg-slate-900 text-white';
+
+                      return (
+                        <div
+                          key={ch.channel_name}
+                          className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black font-sans ${badgeColor}`}>
+                                {name}
+                              </span>
+                              <span className="text-[11px] font-bold text-slate-700">
+                                {name === 'C' ? 'Cyan (C)' : name === 'M' ? 'Magenta (M)' : name === 'Y' ? 'Yellow (Y)' : 'Black (K / BK)'}
+                              </span>
+                            </div>
+                            <span className="text-xs font-black text-indigo-700 font-sans">
+                              {ch.density_pct || 0}%
+                            </span>
+                          </div>
+
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={ch.density_pct || 0}
+                            onChange={(e) => handleChannelDensityChange(item.printer_id, ch.channel_name, parseFloat(e.target.value))}
+                            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -429,36 +455,24 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Add Printer Action (Always Available) */}
-      <div className="p-3 bg-indigo-50/50 rounded-2xl border border-dashed border-indigo-200 space-y-2">
-        <label className="text-xs font-bold text-indigo-950 block">
-          + ເພີ່ມເຄື່ອງພິມເພື່ອແບ່ງການຜະລິດ (Add Printer to Distribute Load):
-        </label>
-        <select
-          onChange={(e) => {
-            if (e.target.value) handleAddPrinter(e.target.value);
-            e.target.value = '';
-          }}
-          className="w-full text-xs font-bold py-2.5 px-3.5 border border-indigo-300 rounded-xl text-indigo-900 bg-white hover:border-indigo-400 cursor-pointer transition shadow-2xs"
-          defaultValue=""
+      {/* Add Printer / Split Load Action Button (Clean button replacing the dropdown box) */}
+      <div className="flex items-center justify-between p-3.5 bg-gradient-to-r from-purple-50/70 via-slate-50 to-purple-50/40 rounded-2xl border border-purple-200/80">
+        <div>
+          <span className="text-xs font-black text-purple-950 block">
+            {currentLang === 'lo' ? '+ ເພີ່ມເຄື່ອງພິມເພື່ອແບ່ງໂຫຼດການຜະລິດ' : '+ Add Printer to Distribute Load'}
+          </span>
+          <span className="text-[10px] text-slate-500 font-medium">
+            {currentLang === 'lo' ? 'ເລືອກເຄື່ອງພິມເພີ່ມຕື່ມເພື່ອແບ່ງໜ້າພິມ (Laser, Inkjet, Offset, 4/6/12 ສີ)' : 'Select additional printer from fleet to split pages'}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={onOpenPrinterModal || (() => handleAddPrinter(availablePrinters[0]?.id))}
+          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95"
         >
-          <option value="" disabled>
-            -- {currentLang === 'lo' ? 'ເລືອກເຄື່ອງພິມຈາກລາຍການຫຼັກເພື່ອເພີ່ມເຂົ້າໃນງານ' : 'Select Printer from Master Equipment List'} --
-          </option>
-          {availablePrinters.map((p) => {
-            const inkRate = p.ink_cost_per_page || 0;
-            const machRate = p.cost_per_page || 0;
-            const totalRate = inkRate + machRate;
-            const detailText = inkRate > 0
-              ? `LAK ${totalRate.toLocaleString()}/${currentLang === 'lo' ? 'ແຜ່ນ' : 'page'} (ໝຶກ ${inkRate.toLocaleString()} + ເຄື່ອງ/ໄຟ ${machRate.toLocaleString()})`
-              : `${machRate.toLocaleString()} LAK/${currentLang === 'lo' ? 'ແຜ່ນ' : 'page'}`;
-            return (
-              <option key={p.id} value={p.id}>
-                {p.name} {p.printerCategory ? `[${p.printerCategory}]` : ''} - {detailText}
-              </option>
-            );
-          })}
-        </select>
+          <Search className="w-3.5 h-3.5" />
+          <span>{currentLang === 'lo' ? 'ຄົ້ນຫາ & ເພີ່ມເຄື່ອງພິມ' : 'Search & Add Printer'}</span>
+        </button>
       </div>
 
       {!isComplete && targetQuantity > 0 && (

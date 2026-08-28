@@ -23,10 +23,10 @@ export type ProductionStep =
   | 'COMPLETED';
 
 export interface PreflightDiagnostics {
-  colorSpace: 'PASS' | 'ERROR';
+  colorSpace: 'PASS' | 'WARN' | 'ERROR';
   bleed: 'PASS' | 'WARN' | 'ERROR';
-  tac: 'PASS' | 'WARN';
-  dpi: 'PASS' | 'ERROR';
+  tac: 'PASS' | 'WARN' | 'ERROR';
+  dpi: 'PASS' | 'WARN' | 'ERROR';
 }
 
 export interface PreflightResult {
@@ -34,6 +34,16 @@ export interface PreflightResult {
   file_url?: string;
   file_type?: 'PDF' | 'IMAGE' | string;
   total_pages: number;
+  color_pages_count?: number;
+  mono_pages_count?: number;
+  color_pages_avg_c?: number;
+  color_pages_avg_m?: number;
+  color_pages_avg_y?: number;
+  color_pages_avg_k?: number;
+  mono_pages_avg_k?: number;
+  target_paper_size?: string;
+  target_width_mm?: number;
+  target_height_mm?: number;
   image_width?: number;
   image_height?: number;
   dpi_estimate?: number;

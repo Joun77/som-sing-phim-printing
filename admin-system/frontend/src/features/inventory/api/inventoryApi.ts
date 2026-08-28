@@ -156,3 +156,15 @@ export async function deductInkBottle(payload: DeductInkBottlePayload): Promise<
   const json = await res.json();
   return json.data;
 }
+
+/**
+ * Delete material by ID or SKU
+ */
+export async function deleteMaterial(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/v1/materials/${id}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok) {
+    await fetch(`${API_BASE}/api/inventory/items/${id}`, { method: 'DELETE' }).catch(() => {});
+  }
+}

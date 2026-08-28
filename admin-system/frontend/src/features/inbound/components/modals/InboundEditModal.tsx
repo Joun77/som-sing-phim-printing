@@ -52,11 +52,16 @@ export default function InboundEditModal({ item, onSave, onClose }: InboundEditM
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    const masterSku = item.specs?.materialId || item.specs?.skuCode || item.specs?.sku || item.skuCode || item.sku || '';
+
     const specsData = {
       ...(item.specs || {}),
       ...(item.technical_specs || {}),
       ...(formData.specs || {}),
       ...formData,
+      sku: masterSku || formData.sku || item.sku,
+      skuCode: masterSku || formData.skuCode || item.skuCode,
+      materialId: masterSku || formData.materialId || item.materialId,
       supplier_phone: supplierPhone,
       purchase_link: purchaseLink
     };
@@ -64,6 +69,10 @@ export default function InboundEditModal({ item, onSave, onClose }: InboundEditM
     const updatedItem = {
       ...item,
       ...formData,
+      id: item.id,
+      poNumber: item.poNumber || item.id,
+      sku: masterSku || item.sku || item.skuCode,
+      skuCode: masterSku || item.skuCode || item.sku,
       name: itemName,
       itemName: itemName,
       supplier: supplierName,
@@ -177,9 +186,9 @@ export default function InboundEditModal({ item, onSave, onClose }: InboundEditM
                 onChange={(e) => setPaymentMethod(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800 focus:outline-none focus:border-sky-500"
               >
-                <option value="TRANSFER">โอนเงิน (Bank Transfer)</option>
-                <option value="CASH">เงินสด (Cash)</option>
-                <option value="CREDIT_30">เครดิต 30 วัน (30 Days Credit)</option>
+                <option value="TRANSFER">{currentLang === 'lo' ? 'ໂອນເງິນ (Bank Transfer)' : 'Bank Transfer'}</option>
+                <option value="CASH">{currentLang === 'lo' ? 'ເງິນສົດ (Cash)' : 'Cash'}</option>
+                <option value="CREDIT_30">{currentLang === 'lo' ? 'ສິນເຊື່ອ 30 ວັນ (30 Days Credit)' : '30 Days Credit'}</option>
               </select>
             </div>
 

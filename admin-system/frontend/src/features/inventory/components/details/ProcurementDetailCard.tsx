@@ -23,8 +23,8 @@ export default function ProcurementDetailCard({ item, currentLang }: { item: any
         </div>
         {item.receiptDate && (
           <div>
-            <span className="text-slate-400 block text-[11px]">{currentLang === 'lo' ? 'ວັນທີນຳເຂົ້າ:' : 'Import Date:'}</span>
-            <span className="text-slate-800 font-bold">{item.receiptDate}</span>
+            <span className="text-slate-400 block text-[11px]">{currentLang === 'lo' ? 'ວັນທີ & ເວລານຳເຂົ້າ:' : 'Import Date & Time:'}</span>
+            <span className="text-slate-800 font-bold font-mono">{item.inboundDate || item.receiptDate}</span>
           </div>
         )}
         {item.paymentMethod && (
@@ -32,9 +32,9 @@ export default function ProcurementDetailCard({ item, currentLang }: { item: any
             <span className="text-slate-400 block text-[11px]">{currentLang === 'lo' ? 'ຊ່ອງທາງຊຳລະເງິນ:' : 'Payment Method:'}</span>
             <span className="font-bold text-slate-800">
               {item.paymentMethod === 'TRANSFER' 
-                ? (currentLang === 'lo' ? 'ໂອນເງິນ (Bank Transfer)' : 'Bank Transfer (โอนจ่าย)') 
+                ? (currentLang === 'lo' ? 'ໂອນເງິນ (Bank Transfer)' : 'Bank Transfer') 
                 : item.paymentMethod === 'CASH' 
-                ? (currentLang === 'lo' ? 'ເງິນສົດ (Cash)' : 'Cash (เงินสด)')
+                ? (currentLang === 'lo' ? 'ເງິນສົດ (Cash)' : 'Cash')
                 : item.paymentMethod}
             </span>
           </div>
