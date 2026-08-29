@@ -61,7 +61,7 @@ const DEFAULT_INFO_TABS: ProductInfoTab[] = [
     id: 'materials',
     titleLo: 'ຄູ່ມືວັດສະດຸ & ປະເພດເຈ້ຍ',
     titleEn: 'Materials & Paper Guide',
-    icon: '📜',
+    icon: '',
     contentLo: '• Art Card 260g - 350g: ເຈ້ຍເນື້ອແໜ້ນ ຜິວລຽບ ເໝາະສຳລັບໂປສເຕີ, ນາມບັດ, ປົກປຶ້ມ\n• Greenread 75g: ເຈ້ຍຖະໜອມສາຍຕາ ນ້ຳໜັກເບົາ\n• Sticker PP / PVC: ກັນນ້ຳ 100% ຕິດແໜ້ນ ທົນທານ',
     contentEn: 'Premium grade paper and synthetic materials for professional printing.',
   },
@@ -69,7 +69,7 @@ const DEFAULT_INFO_TABS: ProductInfoTab[] = [
     id: 'bleed',
     titleLo: 'ໄລຍະຕັດຕົກ & ມາດຕະຖານຟາຍ',
     titleEn: 'Bleed & File Specs',
-    icon: '📐',
+    icon: '',
     contentLo: '• ເຜື່ອໄລຍະຕັດຕົກ (Bleed) +3mm ຮອບດ້ານ\n• ຄວາມລະອຽດແນະນຳ 300 DPI ຂຶ້ນໄປ\n• ໂໝດສີແນະນຳ CMYK Process Color',
     contentEn: 'Add +3mm bleed margin. Resolution at 300 DPI minimum. CMYK color profile recommended.',
   },
@@ -77,7 +77,7 @@ const DEFAULT_INFO_TABS: ProductInfoTab[] = [
     id: 'shipping',
     titleLo: 'ໄລຍະເວລາຜະລິດ & ການຈັດສົ່ງ',
     titleEn: 'Production & Delivery',
-    icon: '🚚',
+    icon: '',
     contentLo: '• ໄລຍະເວລາຜະລິດ: 1 - 2 ວັນລັດຖະການ\n• ຈັດສົ່ງທົ່ວປະເທດລາວຜ່ານ Anousith, HAL, Express\n• ນະຄອນຫຼວງວຽງຈັນ ສົ່ງດ່ວນເຖິງທີ່ພາຍໃນມື້',
     contentEn: 'Production time: 1-2 business days. Nationwide express shipping.',
   },
@@ -618,8 +618,8 @@ export function WebCatalogPage() {
       displayType: 'cards',
       groupType: 'process',
       options: [
-        { optionType: 'process', label: '🎨 ພິມ 4 ສີ (Full Color CMYK)', labelLo: '🎨 ພິມ 4 ສີ (Full Color CMYK)', labelEn: 'Full Color (CMYK)', value: 'cmyk', isDefault: true, extraCostRate: 0, addPrice: 0 },
-        { optionType: 'process', label: '📄 ພິມຂາວ-ດຳ (Black & White)', labelLo: '📄 ພິມຂາວ-ດຳ (Black & White)', labelEn: 'Black & White (Grayscale)', value: 'grayscale', isDefault: false, extraCostRate: 0, addPrice: 0 },
+        { optionType: 'process', label: 'ພິມ 4 ສີ (Full Color CMYK)', labelLo: 'ພິມ 4 ສີ (Full Color CMYK)', labelEn: 'Full Color (CMYK)', value: 'cmyk', isDefault: true, extraCostRate: 0, addPrice: 0 },
+        { optionType: 'process', label: 'ພິມຂາວ-ດຳ (Black & White)', labelLo: 'ພິມຂາວ-ດຳ (Black & White)', labelEn: 'Black & White (Grayscale)', value: 'grayscale', isDefault: false, extraCostRate: 0, addPrice: 0 },
       ]
     };
     setSpecGroups(prev => [...prev, colorGroup]);
@@ -638,8 +638,8 @@ export function WebCatalogPage() {
           optionType: 'process', 
           machineId: 'MAC-CUTTER-920',
           machineName: 'QZYK920 Hydraulic Paper Guillotine',
-          label: '✂️ ຕັດຊື່ມາດຕະຖານ (Guillotine Straight Cut)', 
-          labelLo: '✂️ ຕັດຊື່ມາດຕະຖານ (Straight Cut)', 
+          label: 'ຕັດຊື່ມາດຕະຖານ (Guillotine Straight Cut)', 
+          labelLo: 'ຕັດຊື່ມາດຕະຖານ (Straight Cut)', 
           labelEn: 'Standard Straight Cut', 
           value: 'straight_cut', 
           isDefault: true, 
@@ -647,8 +647,8 @@ export function WebCatalogPage() {
         },
         { 
           optionType: 'process', 
-          label: '✨ ຕັດໄດຄັດຕາມຮູບຊົງ (Kiss Cut / Die-cut)', 
-          labelLo: '✨ ຕັດໄດຄັດຕາມຮູບຊົງ (Die-cut Shape)', 
+          label: 'ຕັດໄດຄັດຕາມຮູບຊົງ (Kiss Cut / Die-cut)', 
+          labelLo: 'ຕັດໄດຄັດຕາມຮູບຊົງ (Die-cut Shape)', 
           labelEn: 'Custom Shape Die-cut', 
           value: 'die_cut', 
           isDefault: false, 
@@ -658,8 +658,8 @@ export function WebCatalogPage() {
           optionType: 'process', 
           machineId: 'MAC-BIND-WD50',
           machineName: 'WD-50A Perfect Glue Thermal Binder',
-          label: '📖 ເຂົ້າເລັ້ມສັນກາວ / ເຈາະສັນຫ່ວງ (Binding / Punching)', 
-          labelLo: '📖 ເຂົ້າເລັ້ມສັນກາວ / ເຈາະສັນຫ່ວງ', 
+          label: 'ເຂົ້າເລັ້ມສັນກາວ / ເຈາະສັນຫ່ວງ (Binding / Punching)', 
+          labelLo: 'ເຂົ້າເລັ້ມສັນກາວ / ເຈາະສັນຫ່ວງ', 
           labelEn: 'Binding & Punching', 
           value: 'binding_punch', 
           isDefault: false, 
@@ -669,8 +669,8 @@ export function WebCatalogPage() {
           optionType: 'process', 
           machineId: 'MAC-LAM-FM360',
           machineName: 'FM-360 Roll Laminator Hot & Cold',
-          label: '🛡️ ເຄືອບຟິล์ມກັນຮອຍ ເງົາ/ດ້ານ (Lamination)', 
-          labelLo: '🛡️ ເຄືອບຟິล์ມກັນຮອຍ (Lamination)', 
+          label: 'ເຄືອບຟິล์ມກັນຮອຍ ເງົາ/ດ້ານ (Lamination)', 
+          labelLo: 'ເຄືອບຟິล์ມກັນຮອຍ (Lamination)', 
           labelEn: 'Film Lamination', 
           value: 'lamination', 
           isDefault: false, 
@@ -1568,11 +1568,11 @@ export function WebCatalogPage() {
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
                 {[
                   { id: 'ALL', label: 'ທັງໝົດ', count: materials.length },
-                  { id: 'Paper', label: '📄 ເຈ້ຍ (Paper)', count: categorizedMaterials.Paper.length },
-                  { id: 'Sticker', label: '🏷️ ສະຕິກເກີ (Sticker)', count: categorizedMaterials.Sticker.length },
-                  { id: 'Finishing', label: '✨ ຟິล์ມເຄືອບ (Finishing)', count: categorizedMaterials.Finishing.length },
-                  { id: 'Binding', label: '🪢 ເຂົ້າເລັ້ມ (Binding)', count: categorizedMaterials.Binding.length },
-                  { id: 'Ink', label: '💧 ໝຶກ (Ink)', count: categorizedMaterials.Ink.length },
+                  { id: 'Paper', label: 'ເຈ້ຍ (Paper)', count: categorizedMaterials.Paper.length },
+                  { id: 'Sticker', label: 'ສະຕິກເກີ (Sticker)', count: categorizedMaterials.Sticker.length },
+                  { id: 'Finishing', label: 'ຟິล์ມເຄືອບ (Finishing)', count: categorizedMaterials.Finishing.length },
+                  { id: 'Binding', label: 'ເຂົ້າເລັ້ມ (Binding)', count: categorizedMaterials.Binding.length },
+                  { id: 'Ink', label: 'ໝຶກ (Ink)', count: categorizedMaterials.Ink.length },
                 ].map((tab) => (
                   <button
                     key={tab.id}

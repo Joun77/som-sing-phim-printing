@@ -415,11 +415,12 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
       // 2. Search query matching
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const idMatch = String(ord.id || '').toLowerCase().includes(q) || String(ord.orderNo || '').toLowerCase().includes(q);
-        const nameMatch = String(ord.customerName || ord.customer_name || ord.customer || '').toLowerCase().includes(q);
-        const phoneMatch = String(ord.phone || ord.customer_phone || '').toLowerCase().includes(q);
-        const trackingMatch = String(ord.trackingNumber || ord.trackingNo || '').toLowerCase().includes(q);
-        const addressMatch = String(ord.address || ord.delivery_address || '').toLowerCase().includes(q);
+        const anyOrd = ord as any;
+        const idMatch = String(ord.id || '').toLowerCase().includes(q) || String(anyOrd.orderNo || '').toLowerCase().includes(q);
+        const nameMatch = String(ord.customerName || anyOrd.customer_name || anyOrd.customer || '').toLowerCase().includes(q);
+        const phoneMatch = String(ord.customerPhone || anyOrd.phone || anyOrd.customer_phone || '').toLowerCase().includes(q);
+        const trackingMatch = String(ord.trackingNumber || anyOrd.trackingNo || '').toLowerCase().includes(q);
+        const addressMatch = String(anyOrd.address || anyOrd.delivery_address || '').toLowerCase().includes(q);
         const itemsMatch = Array.isArray(ord.items) && ord.items.some((it: any) => 
           String(it.name || it.job_name || '').toLowerCase().includes(q)
         );
@@ -430,7 +431,8 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
       }
 
       // 3. Date range matching
-      if (!isWithinDatePreset(ord.date || ord.createdDate || '')) {
+      const anyOrd = ord as any;
+      if (!isWithinDatePreset(ord.createdTime || anyOrd.date || anyOrd.createdDate || '')) {
         return false;
       }
 
@@ -448,7 +450,8 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
 
       // 5. Courier / Delivery method filter
       if (courierFilter !== 'all') {
-        const m = (ord.deliveryMethod || ord.shippingCourier || ord.courier || '').toLowerCase();
+        const anyOrd = ord as any;
+        const m = (ord.deliveryMethod || anyOrd.shippingCourier || ord.courier || '').toLowerCase();
         if (courierFilter === 'pickup') {
           if (!m.includes('pickup') && !m.includes('ຮັບເອງ')) return false;
         } else {
@@ -466,7 +469,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
     const inProdCount = filteredOrders.filter(o => ['Printing', 'Cutting', 'IN_PRODUCTION'].includes(o.status)).length;
     const readyCount = filteredOrders.filter(o => ['Ready', 'READY_FOR_PICKUP'].includes(o.status)).length;
     const completedCount = filteredOrders.filter(o => ['Delivered', 'COMPLETED'].includes(o.status)).length;
-    const totalRevenue = filteredOrders.reduce((sum, o) => sum + Number(o.totalPriceCharged || o.totalAmount || 0), 0);
+    const totalRevenue = filteredOrders.reduce((sum, o: any) => sum + Number(o.totalPriceCharged || o.totalAmount || 0), 0);
     const totalUnpaid = filteredOrders.reduce((sum, o) => sum + Number(o.remainingUnpaidBalance || 0), 0);
 
     return {
@@ -634,7 +637,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
   }
 
   if (selectedOrder) {
-    const currentOrder = orders.find(o => o.id === selectedOrder.id || o.orderNo === selectedOrder.orderNo) || selectedOrder;
+    const currentOrder = orders.find(o => o.id === selectedOrder.id || (o as any).orderNo === (selectedOrder as any).orderNo) || selectedOrder;
 
     return (
       <>

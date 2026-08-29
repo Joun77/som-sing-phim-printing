@@ -138,11 +138,11 @@ export const BoxModelViewer: React.FC<BoxModelViewerProps> = ({
         if (finishingEffect === 'gold_foil') {
           ctx.font = 'bold 20px sans-serif';
           ctx.fillStyle = '#FDE68A';
-          ctx.fillText('✨ GOLD HOT-FOIL EMBOSSED', 512, 630);
+          ctx.fillText('GOLD HOT-FOIL EMBOSSED', 512, 630);
         } else if (finishingEffect === 'spot_uv') {
           ctx.font = 'bold 20px sans-serif';
           ctx.fillStyle = '#67E8F9';
-          ctx.fillText('💎 SPOT UV GLOSS VARNISH', 512, 630);
+          ctx.fillText('SPOT UV GLOSS VARNISH', 512, 630);
         }
       }
       const texture = new THREE.CanvasTexture(canvas);
@@ -341,17 +341,17 @@ export const BoxModelViewer: React.FC<BoxModelViewerProps> = ({
       <div className="absolute top-4 right-4">
         {finishingEffect === 'gold_foil' && (
           <span className="px-3 py-1 bg-amber-500/20 backdrop-blur-md border border-amber-500/40 text-amber-300 rounded-full text-[10px] font-black uppercase">
-            ✨ Gold Hot-Foil Sim
+            Gold Hot-Foil Sim
           </span>
         )}
         {finishingEffect === 'silver_foil' && (
           <span className="px-3 py-1 bg-slate-200/20 backdrop-blur-md border border-slate-200/40 text-slate-200 rounded-full text-[10px] font-black uppercase">
-            ⚡ Silver Foil Sim
+            Silver Foil Sim
           </span>
         )}
         {finishingEffect === 'spot_uv' && (
           <span className="px-3 py-1 bg-cyan-500/20 backdrop-blur-md border border-cyan-500/40 text-cyan-300 rounded-full text-[10px] font-black uppercase">
-            💎 Spot UV Gloss Sim
+            Spot UV Gloss Sim
           </span>
         )}
       </div>

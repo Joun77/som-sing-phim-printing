@@ -1150,7 +1150,7 @@ export default function ItemSpecConfigurator({
                     <div className="flex items-center justify-between text-emerald-950 font-black">
                       <span className="flex items-center gap-1.5">
                         <Sparkles className="w-4 h-4 text-emerald-600 animate-bounce" />
-                        <span>💡 ມີເສດເຈ້ຍພ້ອມໃຊ້ (Smart Offcut Available)</span>
+                        <span>ມີເສດເຈ້ຍພ້ອມໃຊ້ (Smart Offcut Available)</span>
                       </span>
                       <span className="px-2 py-0.5 bg-emerald-200 text-emerald-900 rounded font-bold font-mono text-[10px]">
                         {matchingOffcut.specs?.dimensionFormatted || `${matchingOffcut.specs?.widthMm || 148} × ${matchingOffcut.specs?.heightMm || 210} mm`}

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { UploadCloudIcon, CheckIcon, SparkleIcon, XIcon } from './icons'
 import { BorderBeam } from './reactbits/BorderBeam'
+import { FileText, Zap, Rocket } from 'lucide-react'
 
 export interface UploadProgressModalProps {
   isOpen: boolean
@@ -100,8 +101,9 @@ export const UploadProgressModal: React.FC<UploadProgressModalProps> = ({
               ? 'ກຳລັງກວດສອບຄຸນນະພາບຟາຍ (Preflight)...'
               : 'ກຳລັງອ່ານ ແລະ ປະມວນຜົນຟາຍ...'}
           </h3>
-          <p className="text-xs font-bold text-slate-400 truncate max-w-xs mx-auto m-0">
-            📄 {fileName}
+          <p className="text-xs font-bold text-slate-400 truncate max-w-xs mx-auto m-0 flex items-center justify-center gap-1.5">
+            <FileText className="w-3.5 h-3.5 text-amber-400" />
+            <span>{fileName}</span>
           </p>
           {totalMB > 0 && (
             <span className="inline-block mt-1 text-[11px] font-mono text-amber-400/90 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
@@ -113,8 +115,18 @@ export const UploadProgressModal: React.FC<UploadProgressModalProps> = ({
         {/* Progress Bar & Percentage */}
         <div className="space-y-2">
           <div className="flex justify-between items-center text-xs font-black">
-            <span className="text-amber-400">
-              {stage === 'analyzing' ? '⚡ Analyzing Vector, CMYK & 300 DPI' : '🚀 Uploading & Processing'}
+            <span className="text-amber-400 flex items-center gap-1">
+              {stage === 'analyzing' ? (
+                <>
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>ກວດສອບ Vector, CMYK & 300 DPI (Preflight)</span>
+                </>
+              ) : (
+                <>
+                  <Rocket className="w-3.5 h-3.5" />
+                  <span>ກຳລັງອັບໂຫຼດ ແລະ ປະມວນຜົນ...</span>
+                </>
+              )}
             </span>
             <span className="text-slate-100 font-mono text-sm">{Math.min(progress, 100)}%</span>
           </div>

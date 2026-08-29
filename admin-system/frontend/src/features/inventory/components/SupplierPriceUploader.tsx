@@ -8,7 +8,8 @@ import {
   History, 
   FileText, 
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
@@ -316,9 +317,10 @@ export default function SupplierPriceUploader({ isOpen, onClose, onSuccess }: Su
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); loadSampleData(); }}
-                    className="px-3 py-1 bg-white border border-slate-200 hover:border-indigo-300 text-slate-700 text-xs font-bold rounded-lg shadow-sm"
+                    className="px-3 py-1 bg-white border border-slate-200 hover:border-indigo-300 text-slate-700 text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5"
                   >
-                    ⚡ {currentLang === 'lo' ? 'ໂຫຼດຂໍ້ມູນຕົວຢ່າງ (Quick Sample)' : 'Load Quick Sample'}
+                    <Zap className="w-3.5 h-3.5 text-amber-500" />
+                    <span>{currentLang === 'lo' ? 'ໂຫຼດຂໍ້ມູນຕົວຢ່າງ (Quick Sample)' : 'Load Quick Sample'}</span>
                   </button>
                 </div>
               </div>

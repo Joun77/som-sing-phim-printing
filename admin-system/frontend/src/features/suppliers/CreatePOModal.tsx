@@ -6,6 +6,9 @@ import { SupplierData } from './SupplierFormModal';
 interface Props {
   onClose: () => void;
   onSuccess: () => void;
+  initialSupplierId?: string;
+  initialLines?: LineInput[];
+  initialNotes?: string;
 }
 
 interface LineInput {
@@ -16,16 +19,24 @@ interface LineInput {
   unit_price: number;
 }
 
-export const CreatePOModal: React.FC<Props> = ({ onClose, onSuccess }) => {
+export const CreatePOModal: React.FC<Props> = ({ 
+  onClose, 
+  onSuccess,
+  initialSupplierId,
+  initialLines,
+  initialNotes
+}) => {
   const queryClient = useQueryClient();
   const [suppliers, setSuppliers] = useState<SupplierData[]>([]);
-  const [selectedSupplierId, setSelectedSupplierId] = useState('');
+  const [selectedSupplierId, setSelectedSupplierId] = useState(initialSupplierId || '');
   const [expectedDelivery, setExpectedDelivery] = useState('');
   const [currency, setCurrency] = useState('LAK');
-  const [notes, setNotes] = useState('');
-  const [lines, setLines] = useState<LineInput[]>([
-    { description: 'Art Paper 260gsm (500 sheets/pack)', quantity: 10, unit: 'pack', unit_price: 450000 }
-  ]);
+  const [notes, setNotes] = useState(initialNotes || '');
+  const [lines, setLines] = useState<LineInput[]>(
+    initialLines && initialLines.length > 0
+      ? initialLines
+      : [{ description: 'Art Paper 260gsm (500 sheets/pack)', quantity: 10, unit: 'pack', unit_price: 450000 }]
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

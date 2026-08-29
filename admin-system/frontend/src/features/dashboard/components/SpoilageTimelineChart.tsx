@@ -203,7 +203,7 @@ export const SpoilageTimelineChart: React.FC = () => {
         <div className="flex justify-between items-center text-[11px] text-slate-400 font-semibold px-2">
           <span>{timelineData[0]?.dateStr}</span>
           <span className="text-indigo-600 font-bold">
-            {currentLang === 'lo' ? '💡 ຄລິກທີ່ແທ່ງວັນທີເພື່ອເບິ່ງ Spoilage Logs ລາຍລະອຽດ' : 'Click any date bar to view itemized logs'}
+            {currentLang === 'lo' ? 'ຄລິກທີ່ແທ່ງວັນທີເພື່ອເບິ່ງ Spoilage Logs ລາຍລະອຽດ' : 'Click any date bar to view itemized logs'}
           </span>
           <span>{timelineData[timelineData.length - 1]?.dateStr}</span>
         </div>

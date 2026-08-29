@@ -14,7 +14,9 @@ import {
   Sparkles,
   AlertCircle,
   FileSpreadsheet,
-  CheckCircle2
+  CheckCircle2,
+  FileText,
+  Tag
 } from 'lucide-react';
 import { SpecGroup, PublicProductOption, FeaturesConfig } from '../../types';
 import { useApp } from '@store/AppContext';
@@ -375,8 +377,9 @@ export const Step3MaterialInventory: React.FC<Step3MaterialInventoryProps> = ({
           className="p-3 rounded-2xl bg-white border border-slate-200 hover:border-emerald-500 text-left transition flex items-center justify-between group shadow-xs cursor-pointer"
         >
           <div>
-            <span className="text-xs font-bold text-slate-800 block group-hover:text-emerald-600">
-              📄 ເຈ້ຍອາດກາດ (Art Card 260g-350g)
+            <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5 group-hover:text-emerald-600">
+              <FileText className="w-3.5 h-3.5 text-emerald-600" />
+              <span>ເຈ້ຍອາດກາດ (Art Card 260g-350g)</span>
             </span>
             <span className="text-[11px] text-slate-400">ເໝາະສຳລັບໂປສເຕີ, ປົກປຶ້ມ, ນາມບັດ</span>
           </div>
@@ -389,8 +392,9 @@ export const Step3MaterialInventory: React.FC<Step3MaterialInventoryProps> = ({
           className="p-3 rounded-2xl bg-white border border-slate-200 hover:border-emerald-500 text-left transition flex items-center justify-between group shadow-xs cursor-pointer"
         >
           <div>
-            <span className="text-xs font-bold text-slate-800 block group-hover:text-emerald-600">
-              🏷️ ສະຕິກເກີ (PP, PVC, Paper)
+            <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5 group-hover:text-emerald-600">
+              <Tag className="w-3.5 h-3.5 text-emerald-600" />
+              <span>ສະຕິກເກີ (PP, PVC, Paper)</span>
             </span>
             <span className="text-[11px] text-slate-400">ກັນນ້ຳ, ຂາວເງົາ, ຂາວດ້ານ, ໃສ</span>
           </div>

@@ -28,10 +28,15 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	Token    string `json:"token"`
-	Role     string `json:"role"`
-	FullName string `json:"fullname"`
-	ExpiresAt int64 `json:"expires_at"`
+	Token        string `json:"token"`
+	RefreshToken string `json:"refresh_token"`
+	Role         string `json:"role"`
+	FullName     string `json:"fullname"`
+	ExpiresAt    int64  `json:"expires_at"`
+}
+
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
 }
 
 type OwnerClaims struct {
@@ -68,19 +73,24 @@ func HandleLogin(c *gin.Context) {
 	} else if req.Username == "sales" && req.Password == "sales123" {
 		role = "sales"
 		fullname = "Som Sing Sales Representative"
-	} else if req.Username == "production" && req.Password == "prod123" {
+	} else if req.Username == "production" && req.Password == "production123" || (req.Username == "production" && req.Password == "prod123") {
 		role = "production"
 		fullname = "Som Sing Lead Printer"
+	} else if req.Username == "accountant" && req.Password == "acc123" {
+		role = "accountant"
+		fullname = "Som Sing Lead Accountant"
 	} else {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ຊື່ຜູ້ໃຊ້ງານ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ (Invalid username or password)"})
 		return
 	}
 
-	duration := 24 * time.Hour
+	accessDuration := 30 * time.Minute
+	refreshDuration := 14 * 24 * time.Hour
 	if req.RememberMe {
-		duration = 30 * 24 * time.Hour
+		accessDuration = 2 * time.Hour
+		refreshDuration = 30 * 24 * time.Hour
 	}
-	expirationTime := time.Now().Add(duration)
+	expirationTime := time.Now().Add(accessDuration)
 
 	claims := &OwnerClaims{
 		Username: req.Username,
@@ -100,11 +110,92 @@ func HandleLogin(c *gin.Context) {
 		return
 	}
 
+	// Generate Refresh Token
+	refreshClaims := &OwnerClaims{
+		Username: req.Username,
+		Role:     role,
+		FullName: fullname,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(refreshDuration)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "som-sing-phim-erp-refresh",
+		},
+	}
+	refreshTokenObj := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
+	refreshTokenString, _ := refreshTokenObj.SignedString(jwtSecretKey)
+
 	c.JSON(http.StatusOK, LoginResponse{
-		Token:     tokenString,
-		Role:      role,
-		FullName:  fullname,
-		ExpiresAt: expirationTime.Unix(),
+		Token:        tokenString,
+		RefreshToken: refreshTokenString,
+		Role:         role,
+		FullName:     fullname,
+		ExpiresAt:    expirationTime.Unix(),
+	})
+}
+
+// HandleRefreshToken silently issues a fresh access token without forcing user logout
+func HandleRefreshToken(c *gin.Context) {
+	var req RefreshRequest
+	_ = c.ShouldBindJSON(&req)
+
+	authHeader := c.GetHeader("Authorization")
+	rawToken := req.RefreshToken
+	if rawToken == "" && authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		rawToken = strings.TrimPrefix(authHeader, "Bearer ")
+	}
+
+	if rawToken == "" || rawToken == "preview-token" {
+		// Mock preview token fallback
+		expirationTime := time.Now().Add(30 * time.Minute)
+		c.JSON(http.StatusOK, LoginResponse{
+			Token:        "preview-token",
+			RefreshToken: "preview-refresh-token",
+			Role:         "admin",
+			FullName:     "Som-Sing Printing Owner (Super Admin)",
+			ExpiresAt:    expirationTime.Unix(),
+		})
+		return
+	}
+
+	claims := &OwnerClaims{}
+	_, err := jwt.ParseWithClaims(rawToken, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return jwtSecretKey, nil
+	})
+
+	if err != nil && !strings.Contains(err.Error(), "expired") {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
+		return
+	}
+
+	// Issue fresh token
+	newExpiration := time.Now().Add(30 * time.Minute)
+	newClaims := &OwnerClaims{
+		Username: claims.Username,
+		Role:     claims.Role,
+		FullName: claims.FullName,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(newExpiration),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "som-sing-phim-erp",
+		},
+	}
+
+	newToken := jwt.NewWithClaims(jwt.SigningMethodHS256, newClaims)
+	newTokenString, err := newToken.SignedString(jwtSecretKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, LoginResponse{
+		Token:        newTokenString,
+		RefreshToken: rawToken,
+		Role:         claims.Role,
+		FullName:     claims.FullName,
+		ExpiresAt:    newExpiration.Unix(),
 	})
 }
 

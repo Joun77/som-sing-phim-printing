@@ -10,7 +10,7 @@ interface InboundHistoryTableProps {
   onRefresh: () => void;
 }
 
-export default function InboundHistoryTable({ records, loading, onRefresh }: InboundHistoryTableProps) {
+export const InboundHistoryTable = React.memo(function InboundHistoryTable({ records, loading, onRefresh }: InboundHistoryTableProps) {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'COMPLETED' | 'CANCELLED'>('ALL');
@@ -296,4 +296,6 @@ export default function InboundHistoryTable({ records, loading, onRefresh }: Inb
       )}
     </div>
   );
-}
+});
+
+export default InboundHistoryTable;

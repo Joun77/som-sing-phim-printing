@@ -100,7 +100,7 @@ export function UploadStudioCard({
             <div className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl text-sm font-black bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 text-slate-950 shadow-xl shadow-amber-500/25">
               <span>
                 {isDragOver
-                  ? 'ປ່ອຍຟາຍລົງບ່ອນນີ້ເລີຍ (Drop Files Here) 🚀'
+                  ? 'ປ່ອຍຟາຍລົງບ່ອນນີ້ເລີຍ (Drop Files Here)'
                   : isGeneralDocWorkflow
                   ? 'ເລືອກຟາຍເອກະສານ ຫຼື ລາກມາວາງ (Upload Documents)'
                   : 'ເລືອກຟາຍອາດເວິກ ຫຼື ລາກມາວາງ (Upload Artworks)'}

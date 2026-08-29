@@ -133,6 +133,8 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
             paymentStatus={order.paymentStatus}
             depositAmountPaid={order.depositAmountPaid || order.deposit_amount}
             remainingUnpaidBalance={order.remainingUnpaidBalance}
+            transRef={order.transRef || order.trans_ref || order.transactionRef}
+            verifiedAt={order.verifiedAt || order.verified_at}
             isPaymentConfirmed={isPaymentConfirmed}
             currentLang={currentLang}
             formatLAK={formatLAK}
@@ -213,11 +215,34 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
             customerPhone={customerPhone}
             deliveryAddress={deliveryAddress}
             driveLink={driveLink}
+            proofUrl={order.proofUrl || order.proof_url}
+            proofApprovedAt={order.proofApprovedAt || order.proof_approved_at}
+            proofRejectedAt={order.proofRejectedAt || order.proof_rejected_at}
+            proofRejectionReason={order.proofRejectionReason || order.proof_rejection_reason}
+            orderStatus={order.status || order.overall_status}
             items={order.items}
             isArtworkApproved={isArtworkApproved}
             currentLang={currentLang}
             onConfigureWorkflow={() => setIsWorkflowModalOpen(true)}
             productionWorkflow={order.productionWorkflow}
+            onUploadProof={(proofUrl) => {
+              if (order) {
+                order.proofUrl = proofUrl;
+                order.proof_url = proofUrl;
+                order.status = 'WAITING_APPROVAL';
+                order.overall_status = 'WAITING_APPROVAL';
+                if (onUpdateOrder) {
+                  onUpdateOrder({ ...order, proofUrl, proof_url: proofUrl, status: 'WAITING_APPROVAL', overall_status: 'WAITING_APPROVAL' });
+                }
+                handleStatusChange(order.id, 'WAITING_APPROVAL');
+                showToast(
+                  currentLang === 'lo'
+                    ? 'ອັບໂຫຼດ Digital Proof ແລະ ສົ່ງໃຫ້ລູກຄ້າກວດສອບແລ້ວ (WAITING_APPROVAL)'
+                    : 'Digital proof uploaded and waiting customer sign-off',
+                  'success'
+                );
+              }
+            }}
             onApproveArtwork={() => {
               setIsWorkflowModalOpen(true);
             }}

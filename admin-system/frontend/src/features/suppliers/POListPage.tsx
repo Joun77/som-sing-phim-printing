@@ -10,11 +10,15 @@ import {
   Filter,
   CheckCircle2,
   Clock,
-  Calendar
+  Calendar,
+  AlertTriangle,
+  Sparkles,
+  ArrowRight
 } from 'lucide-react';
 import { CreatePOModal } from './CreatePOModal';
 import { GoodsReceiptModal } from './GoodsReceiptModal';
 import { useQueryClient } from '@tanstack/react-query';
+import { useApp } from '@store/AppContext';
 
 interface POLine {
   id: string;
@@ -42,11 +46,55 @@ interface PurchaseOrder {
 
 export const POListPage: React.FC = () => {
   const queryClient = useQueryClient();
+  const { inventory, suppliers } = useApp();
   const [pos, setPos] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [receiptTargetPO, setReceiptTargetPO] = useState<PurchaseOrder | null>(null);
+
+  // Auto-Draft PO State
+  const [draftInitialLines, setDraftInitialLines] = useState<any[]>([]);
+  const [draftSupplierId, setDraftSupplierId] = useState<string>('');
+  const [draftNotes, setDraftNotes] = useState<string>('');
+
+  // Detect low stock items across raw materials
+  const lowStockItems = React.useMemo(() => {
+    if (!inventory || !Array.isArray(inventory)) return [];
+    return inventory.filter((item: any) => {
+      const currentStock = Number(item.stockQty || item.stock_quantity || 0);
+      const minAlert = Number(item.minStockAlert || item.min_stock_alert || item.reorderPoint || 20);
+      return currentStock <= minAlert;
+    });
+  }, [inventory]);
+
+  const handleOpenSmartAutoPO = () => {
+    if (lowStockItems.length === 0) return;
+
+    // Calculate daily consumption velocity & recommended reorder quantity
+    const autoLines = lowStockItems.map((item: any) => {
+      const minAlert = Number(item.minStockAlert || item.min_stock_alert || 20);
+      const dailyUsage = Math.max(5, Math.ceil(minAlert / 7));
+      const leadTimeDays = 7;
+      const safetyStock = Math.max(10, Math.ceil(minAlert * 0.5));
+      const reorderQty = (dailyUsage * leadTimeDays) + safetyStock;
+      const unitPrice = Number(item.unitPrice || item.costPerPurchaseUnit || 50000);
+
+      return {
+        material_id: item.id || item.sku,
+        description: `${item.name || item.itemName || 'ວັດຖຸດິບ'} (${item.category || 'Material'})`,
+        quantity: reorderQty,
+        unit: item.unit || 'pack',
+        unit_price: unitPrice
+      };
+    });
+
+    const defaultSupplier = suppliers && suppliers.length > 0 ? (suppliers[0].id || suppliers[0].code) : '';
+    setDraftInitialLines(autoLines);
+    setDraftSupplierId(defaultSupplier);
+    setDraftNotes('ສ້າງຮ່າງໃບສັ່ງຊື້ອັດຕະໂນມັດ ຈາກລະບົບ Smart Reorder Point (ສາງວັດຖຸດິບໃກ້ໝົດ)');
+    setCreateOpen(true);
+  };
 
   const fetchPOs = async () => {
     setLoading(true);
@@ -86,6 +134,37 @@ export const POListPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Low-Stock Smart Restock Banner */}
+      {lowStockItems.length > 0 && (
+        <div className="p-4 sm:p-5 rounded-3xl bg-amber-500/10 border-2 border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-amber-500/20 text-amber-600 shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-black text-amber-900 flex items-center gap-2">
+                <span>ສະຕັອກໃກ້ໝົດ — ສ້າງຮ່າງ PO ອັດຕະໂນມັດແລ້ວ</span>
+                <span className="px-2 py-0.5 rounded-md bg-amber-200/80 text-amber-800 text-[10px] font-bold">
+                  {lowStockItems.length} ລາຍການ
+                </span>
+              </h4>
+              <p className="text-xs text-amber-800 font-medium mt-0.5">
+                ພົບວັດຖຸດິບຕ່ຳກວ່າ Reorder Point: {lowStockItems.slice(0, 2).map((i: any) => i.name).join(', ')} {lowStockItems.length > 2 ? `...ອີກ ${lowStockItems.length - 2} ລາຍການ` : ''}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleOpenSmartAutoPO}
+            className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-md shadow-amber-600/20 transition flex items-center gap-2 cursor-pointer shrink-0 active:scale-95"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>ກວດສອບ & ສົ່ງ PO</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">
@@ -104,7 +183,12 @@ export const POListPage: React.FC = () => {
 
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <button
-            onClick={() => setCreateOpen(true)}
+            onClick={() => {
+              setDraftInitialLines([]);
+              setDraftSupplierId('');
+              setDraftNotes('');
+              setCreateOpen(true);
+            }}
             className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -223,6 +307,9 @@ export const POListPage: React.FC = () => {
       {createOpen && (
         <CreatePOModal
           onClose={() => setCreateOpen(false)}
+          initialSupplierId={draftSupplierId}
+          initialLines={draftInitialLines}
+          initialNotes={draftNotes}
           onSuccess={() => {
             setCreateOpen(false);
             fetchPOs();

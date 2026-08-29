@@ -12,7 +12,11 @@ import {
   Sparkles,
   Link as LinkIcon,
   Check,
-  X
+  X,
+  AlertTriangle,
+  CheckCircle2,
+  Send,
+  Eye
 } from 'lucide-react';
 
 interface ArtworkPrepressCardProps {
@@ -21,6 +25,11 @@ interface ArtworkPrepressCardProps {
   customerPhone: string;
   deliveryAddress: string;
   driveLink?: string;
+  proofUrl?: string;
+  proofApprovedAt?: string;
+  proofRejectedAt?: string;
+  proofRejectionReason?: string;
+  orderStatus?: string;
   items?: any[];
   isArtworkApproved: boolean;
   currentLang: string;
@@ -28,6 +37,7 @@ interface ArtworkPrepressCardProps {
   onRevertArtwork: () => void;
   onOpenDriveLink: () => void;
   onAttachArtwork?: (link: string) => void;
+  onUploadProof?: (proofUrl: string) => void;
   onConfigureWorkflow?: () => void;
   productionWorkflow?: any;
 }
@@ -38,6 +48,11 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
   customerPhone,
   deliveryAddress,
   driveLink,
+  proofUrl,
+  proofApprovedAt,
+  proofRejectedAt,
+  proofRejectionReason,
+  orderStatus,
   items = [],
   isArtworkApproved,
   currentLang,
@@ -45,11 +60,23 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
   onRevertArtwork,
   onOpenDriveLink,
   onAttachArtwork,
+  onUploadProof,
   onConfigureWorkflow,
   productionWorkflow,
 }) => {
   const [isAttaching, setIsAttaching] = useState(false);
   const [newLink, setNewLink] = useState('');
+  const [isAttachingProof, setIsAttachingProof] = useState(false);
+  const [newProofLink, setNewProofLink] = useState('');
+
+  const handleSaveProofLink = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newProofLink.trim() && onUploadProof) {
+      onUploadProof(newProofLink.trim());
+      setIsAttachingProof(false);
+      setNewProofLink('');
+    }
+  };
 
   const handleSaveNewLink = (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,6 +148,154 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
             <span className="text-slate-400 block text-[10.5px] font-bold">{currentLang === 'lo' ? 'ສະຖານທີ່ຈັດສົ່ງ:' : 'Delivery Address:'}</span>
             <span className="text-slate-700 block font-medium mt-0.5">{deliveryAddress}</span>
           </div>
+        </div>
+
+        {/* Revision Alert Banner: Display when customer requested revision */}
+        {(orderStatus === 'PROOF_REJECTED' || (proofRejectionReason && !proofApprovedAt)) && (
+          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 space-y-3 mb-4 animate-fade-in">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-rose-800 font-black text-xs">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{currentLang === 'lo' ? 'ລູກຄ້າຂໍແກ້ໄຂແບບພິມ (Revision Requested)' : 'Customer Requested Proof Revision'}</span>
+              </div>
+              <span className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 text-[10px] font-bold">
+                {proofRejectedAt ? new Date(proofRejectedAt).toLocaleDateString() : 'Action Needed'}
+              </span>
+            </div>
+            <div className="bg-white p-3 rounded-xl border border-rose-200/80 text-xs font-semibold text-rose-900 shadow-xs">
+              "{proofRejectionReason}"
+            </div>
+          </div>
+        )}
+
+        {/* Proof Approved Banner */}
+        {(proofApprovedAt || orderStatus === 'FILE_CONFIRMED' || orderStatus === 'READY_TO_PRINT') && (
+          <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs font-black text-emerald-900 mb-4 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{currentLang === 'lo' ? 'ລູກຄ້າຢືນຢັນແບບພິມແລ້ວ (Proof Approved)' : 'Customer Approved Digital Proof'}</span>
+            </div>
+            <span className="text-[10.5px] font-mono text-emerald-700 font-bold bg-white px-2 py-0.5 rounded-lg border border-emerald-200">
+              {proofApprovedAt ? new Date(proofApprovedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Confirmed'}
+            </span>
+          </div>
+        )}
+
+        {/* Digital Proof Preview File (Pre-press to Customer) */}
+        <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 space-y-3 mb-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black text-indigo-950 flex items-center gap-1.5">
+              <Eye className="w-4 h-4 text-indigo-600" />
+              {currentLang === 'lo' ? 'ໄຟລ໌ຕົວຢ່າງ Digital Proof (ສົ່ງໃຫ້ລູກຄ້າກວດ)' : 'Digital Proof Preview (Customer Review)'}
+            </span>
+            <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border ${
+              proofUrl ? 'bg-indigo-100 text-indigo-800 border-indigo-200' : 'bg-slate-100 text-slate-600 border-slate-200'
+            }`}>
+              {proofUrl ? (orderStatus === 'WAITING_APPROVAL' ? 'Waiting Sign-off' : 'Proof Ready') : 'No Proof Sent'}
+            </span>
+          </div>
+
+          {proofUrl ? (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-indigo-200/80 shadow-xs">
+              <div className="min-w-0 flex-1">
+                <span className="text-xs font-bold text-slate-900 block truncate font-mono">
+                  {proofUrl}
+                </span>
+                <span className="text-[10.5px] text-slate-500 block mt-0.5 font-medium">
+                  {currentLang === 'lo' ? 'ລິ້ງ Digital Proof ສົ່ງຫາລູກຄ້າທາງ SMS / WhatsApp' : 'Customer Sign-off Digital Proof Link'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => window.open(proofUrl, '_blank')}
+                  className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs border-none"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>{currentLang === 'lo' ? 'ເບິ່ງ Proof' : 'View Proof'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAttachingProof(true)}
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
+                >
+                  <span>{currentLang === 'lo' ? 'ປ່ຽນໄຟລ໌' : 'Change'}</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white p-3.5 rounded-xl border border-dashed border-indigo-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-xs font-bold text-slate-800 block">
+                  {currentLang === 'lo' ? 'ຍັງບໍ່ໄດ້ອັບໂຫຼດໄຟລ໌ Proof ໃຫ້ລູກຄ້າ' : 'No Proof Uploaded Yet'}
+                </span>
+                <span className="text-[10.5px] text-slate-400 block mt-0.5">
+                  {currentLang === 'lo' ? 'ອັບໂຫຼດຮູບ ຫຼື PDF ຕົວຢ່າງເພື່ອສົ່ງໃຫ້ລູກຄ້າກວດສອບ' : 'Upload Proof Image or PDF for customer verification'}
+                </span>
+              </div>
+
+              {isAttachingProof ? (
+                <form onSubmit={handleSaveProofLink} className="flex items-center gap-2 w-full sm:w-auto">
+                  <input
+                    type="url"
+                    required
+                    value={newProofLink}
+                    onChange={(e) => setNewProofLink(e.target.value)}
+                    placeholder="https://..."
+                    className="px-3 py-1.5 text-xs border rounded-lg bg-slate-50 font-mono w-full sm:w-48"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shrink-0"
+                  >
+                    {currentLang === 'lo' ? 'ສົ່ງ Proof' : 'Send'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsAttachingProof(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-700 text-xs flex items-center justify-center cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsAttachingProof(true)}
+                  className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs border-none"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{currentLang === 'lo' ? 'ອັບໂຫຼດ & ສົ່ງ Proof' : 'Upload & Send Proof'}</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {isAttachingProof && proofUrl && (
+            <form onSubmit={handleSaveProofLink} className="flex items-center gap-2 bg-white p-3 rounded-xl border border-indigo-200">
+              <input
+                type="url"
+                required
+                value={newProofLink}
+                onChange={(e) => setNewProofLink(e.target.value)}
+                placeholder="https://..."
+                className="px-3 py-1.5 text-xs border rounded-lg bg-slate-50 font-mono flex-1"
+              />
+              <button
+                type="submit"
+                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shrink-0"
+              >
+                {currentLang === 'lo' ? 'ບັນທຶກ' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAttachingProof(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 text-xs flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </form>
+          )}
         </div>
 
         {/* Attached Customer Artwork File (Google Drive / Canva / Cloud File) */}

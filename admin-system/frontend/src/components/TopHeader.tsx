@@ -238,7 +238,7 @@ export default function TopHeader({ onToggleMobileSidebar, collapsed, onToggleCo
           </button>
 
           {profileOpen && (
-            <div className="absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-4 space-y-3 z-[100] animate-fade-in text-white">
+            <div className="absolute right-0 mt-2 w-72 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-4 space-y-3 z-[100] animate-fade-in text-white">
               <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white font-black text-xs flex items-center justify-center shadow-md">
                   {user?.username ? user.username.substring(0, 2).toUpperCase() : 'SP'}
@@ -246,8 +246,46 @@ export default function TopHeader({ onToggleMobileSidebar, collapsed, onToggleCo
                 <div>
                   <div className="text-xs font-black text-white">{user?.fullName || 'ຮ້ານ ສົມສິ່ງພິມ'}</div>
                   <span className="inline-block mt-0.5 px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold rounded-md border border-emerald-500/30">
-                    {user?.role ? user.role.toUpperCase() : 'SUPER ADMIN'}
+                    {user?.role === 'owner' || user?.role === 'admin'
+                      ? 'ເຈົ້າຂອງຮ້ານ (Owner)'
+                      : user?.role === 'sales'
+                      ? 'ພະນັກງານຂາຍ (Sales)'
+                      : user?.role === 'production'
+                      ? 'ຊ່າງພິມ (Operator)'
+                      : user?.role === 'accountant'
+                      ? 'ພະນັກງານບັນຊີ (Accountant)'
+                      : user?.role?.toUpperCase() || 'SUPER ADMIN'}
                   </span>
+                </div>
+              </div>
+
+              {/* Role Switcher for Verification & Simulation */}
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                  {currentLang === 'en' ? 'Switch Role (Simulation)' : 'ສະຫຼັບບົດບາດ (Role Switcher)'}
+                </span>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { id: 'owner', label: 'Owner' },
+                    { id: 'sales', label: 'Sales' },
+                    { id: 'production', label: 'Operator' },
+                    { id: 'accountant', label: 'Accountant' }
+                  ].map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => {
+                        useAuthStore.getState().setUserRole(r.id);
+                      }}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold transition text-center cursor-pointer ${
+                        user?.role === r.id
+                          ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/50'
+                          : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-transparent'
+                      }`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -264,8 +302,10 @@ export default function TopHeader({ onToggleMobileSidebar, collapsed, onToggleCo
 
               <button
                 onClick={() => {
-                  setProfileOpen(false);
-                  useAuthStore.getState().logout();
+                  if (window.confirm(currentLang === 'en' ? 'Are you sure you want to sign out?' : 'ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການອອກຈາກລະບົບ?')) {
+                    setProfileOpen(false);
+                    useAuthStore.getState().logout();
+                  }
                 }}
                 className="w-full py-2 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer"
               >

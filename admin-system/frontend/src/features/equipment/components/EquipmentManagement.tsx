@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Settings, Plus, Wrench, ShieldAlert } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Settings, Plus, Wrench, ShieldAlert, AlertTriangle, ArrowRight, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import EquipmentTable from './EquipmentTable';
@@ -15,6 +15,19 @@ export default function EquipmentManagement() {
   const [activeCategory, setActiveCategory] = useState('All'); // All, Printer, Cutter, Binder, Laminator
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(null);
+
+  // Predictive Maintenance Detection (Components wear >= 90% or overdue interval)
+  const criticalWearMachines = useMemo(() => {
+    return (equipment || []).filter(eq => {
+      if (eq.components && Array.isArray(eq.components)) {
+        if (eq.components.some((c: any) => c.usage >= (c.threshold || 90))) return true;
+      }
+      const curMeter = Number(eq.current_meter || eq.printedCount || 0);
+      const lastMeter = Number(eq.last_serviced_meter || 0);
+      const interval = Number(eq.maintenance_interval_impressions || 50000);
+      return (curMeter - lastMeter) >= interval;
+    });
+  }, [equipment]);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -104,6 +117,41 @@ export default function EquipmentManagement() {
           </p>
         </div>
       </div>
+
+      {/* Predictive Maintenance & Critical Component Wear Alert Banner */}
+      {criticalWearMachines.length > 0 && (
+        <div className="p-4 sm:p-5 rounded-3xl bg-rose-500/10 border-2 border-rose-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-rose-500/20 text-rose-600 shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-black text-rose-950 flex items-center gap-2">
+                <span>ແຈ້ງເຕືອນການບຳລຸງຮັກສາເຊີງຄາດການ (Predictive Maintenance Alert)</span>
+                <span className="px-2 py-0.5 rounded-md bg-rose-200 text-rose-900 text-[10px] font-bold">
+                  {criticalWearMachines.length} ເຄື່ອງຈັກ
+                </span>
+              </h4>
+              <p className="text-xs text-rose-800 font-medium mt-0.5">
+                ກວດພົບອຸປະກອນຫຼຸ້ຍຫ້ຽນ ≥ 90% ຫຼື ຮອດກຳນົດຮອບບຳລຸງຮັກສາ: {criticalWearMachines.map(m => m.name).join(', ')} — ກະລຸນາສັ່ງອາໄຫຼ່ ແລະ ກຽມຊ່າງສ້ອມ
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (criticalWearMachines.length > 0) {
+                setSelectedEquipmentId(criticalWearMachines[0].id);
+              }
+            }}
+            className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-md shadow-rose-600/20 transition flex items-center gap-2 cursor-pointer shrink-0 active:scale-95"
+          >
+            <Wrench className="w-4 h-4" />
+            <span>ກວດສອບ & ເປີດໃບສັ່ງສ້ອມ</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Category filters & Search controls row */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">

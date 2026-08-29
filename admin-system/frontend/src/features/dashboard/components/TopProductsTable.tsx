@@ -33,7 +33,7 @@ export const TopProductsTable: React.FC = () => {
       const orderRev = Number(ord.totalPriceCharged || ord.depositAmountPaid || 0);
 
       if (items.length === 0) {
-        const prodName = ord.productType || ord.notes || 'ງານພິມດ່ວນຕາມແບບ';
+        const prodName = (ord as any).productType || ord.notes || 'ງານພິມດ່ວນຕາມແບບ';
         const key = prodName.toLowerCase().trim();
         if (!productMap[key]) {
           productMap[key] = {
@@ -51,8 +51,8 @@ export const TopProductsTable: React.FC = () => {
         productMap[key].revenue += orderRev;
         productMap[key].estCost += Math.round(orderRev * 0.42);
       } else {
-        items.forEach(item => {
-          const name = item.name || item.title || ord.productType || 'ງານພິມດ່ວນ';
+        items.forEach((item: any) => {
+          const name = item.name || item.title || (ord as any).productType || 'ງານພິມດ່ວນ';
           const key = name.toLowerCase().trim();
           const itemRev = (Number(item.price || item.unitPrice || 0) * Number(item.quantity || 1)) || (orderRev / items.length);
 

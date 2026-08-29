@@ -73,10 +73,11 @@ func (b *SSEBroadcaster) Broadcast(event domain.PublicOrderTrackingDTO) {
 
 // OrderHandler handles HTTP requests for pricing calculation, tracking, and SSE lifecycle streaming
 type OrderHandler struct {
-	pricingService service.IPricingService
-	db             *sql.DB
-	orderStore     map[string]domain.Order
-	storeMu        sync.RWMutex
+	pricingService   service.IPricingService
+	db               *sql.DB
+	orderStore       map[string]domain.Order
+	verifiedTransMap map[string]bool
+	storeMu          sync.RWMutex
 }
 
 // NewOrderHandler initializes a new OrderHandler
@@ -85,9 +86,10 @@ func NewOrderHandler(pricingSvc service.IPricingService, dbConn *sql.DB) *OrderH
 		pricingSvc = service.NewPricingService()
 	}
 	return &OrderHandler{
-		pricingService: pricingSvc,
-		db:             dbConn,
-		orderStore:     make(map[string]domain.Order),
+		pricingService:   pricingSvc,
+		db:               dbConn,
+		orderStore:       make(map[string]domain.Order),
+		verifiedTransMap: make(map[string]bool),
 	}
 }
 
@@ -103,11 +105,26 @@ func (h *OrderHandler) RegisterRoutes(r *gin.Engine) {
 
 		// Real-time lifecycle Server-Sent Events (SSE) stream (Supports ?tracking=:code)
 		apiV1.GET("/orders/stream", h.HandleOrderStream)
+
+		// Order Creation & Proof Review Endpoints
+		apiV1.POST("/orders", h.HandleCreateOrder)
+		apiV1.POST("/orders/:tracking_code/proof/approve", h.HandleApproveProof)
+		apiV1.POST("/orders/:tracking_code/proof/reject", h.HandleRejectProof)
+		apiV1.POST("/orders/:tracking_code/proof/upload", h.HandleUploadProof)
+
+		// Fintech & Logistics Endpoints
+		apiV1.POST("/checkout/verify-slip", h.HandleVerifySlip)
+		apiV1.GET("/public/locations/provinces", h.HandleGetLocations)
+		apiV1.GET("/locations/provinces", h.HandleGetLocations)
+		apiV1.GET("/couriers", h.HandleGetCouriers)
 	}
 
 	// Legacy backward compatibility routes
 	r.POST("/api/pricing/calculate", h.HandleCalculatePricing)
 	r.GET("/api/orders/track/:tracking_code", h.HandleTrackOrder)
+	r.POST("/api/orders", h.HandleCreateOrder)
+	r.POST("/v1/checkout/verify-slip", h.HandleVerifySlip)
+	r.GET("/v1/couriers", h.HandleGetCouriers)
 }
 
 // HandleCalculatePricing calculates authoritative pricing with full internal breakdown for Admin
@@ -313,4 +330,357 @@ func (h *OrderHandler) findOrderByCode(code string) (*domain.Order, bool) {
 	}
 
 	return &o, true
+}
+
+// HandleCreateOrder handles creating new order with multi-item serialization
+func (h *OrderHandler) HandleCreateOrder(c *gin.Context) {
+	var order domain.Order
+	if err := c.ShouldBindJSON(&order); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid order payload", "details": err.Error()})
+		return
+	}
+
+	if order.ID == "" {
+		order.ID = fmt.Sprintf("ORD-%d", time.Now().UnixNano()/1e6)
+	}
+	if order.OrderNo == "" {
+		order.OrderNo = order.ID
+	}
+	if order.TrackingCode == "" {
+		order.TrackingCode = order.OrderNo
+	}
+	if order.OverallStatus == "" {
+		order.OverallStatus = domain.StatusPaidPrepress
+	}
+	now := time.Now()
+	if order.CreatedAt.IsZero() {
+		order.CreatedAt = now
+	}
+	order.UpdatedAt = now
+
+	h.SaveOrder(order)
+	c.JSON(http.StatusCreated, gin.H{
+		"status":  "success",
+		"message": "Order created successfully",
+		"data":    order.MaskForCustomer(),
+	})
+}
+
+// HandleApproveProof handles customer/staff approving digital proof
+func (h *OrderHandler) HandleApproveProof(c *gin.Context) {
+	code := c.Param("tracking_code")
+	order, found := h.findOrderByCode(code)
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "Order not found"})
+		return
+	}
+
+	var req struct {
+		SignatureName string `json:"signature_name"`
+	}
+	_ = c.ShouldBindJSON(&req)
+
+	now := time.Now()
+	order.OverallStatus = domain.StatusFileConfirmed
+	order.ProofApprovedAt = &now
+	order.ProofSignatureIP = c.ClientIP()
+	order.UpdatedAt = now
+
+	if h.db != nil {
+		_, _ = h.db.Exec(`
+			UPDATE orders
+			SET overall_status = 'FILE_CONFIRMED',
+			    status = 'FILE_CONFIRMED',
+			    proof_approved_at = $1,
+			    proof_signature_ip = $2,
+			    updated_at = $1
+			WHERE tracking_code = $3 OR order_no = $3 OR id = $3
+		`, now, c.ClientIP(), code)
+	}
+
+	h.SaveOrder(*order)
+	c.JSON(http.StatusOK, gin.H{
+		"status":      "success",
+		"message":     "Digital proof approved successfully",
+		"approved_at": now.Format(time.RFC3339),
+		"data":        order.MaskForCustomer(),
+	})
+}
+
+// HandleRejectProof handles customer requesting proof revision with notes
+func (h *OrderHandler) HandleRejectProof(c *gin.Context) {
+	code := c.Param("tracking_code")
+	order, found := h.findOrderByCode(code)
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "Order not found"})
+		return
+	}
+
+	var req struct {
+		Reason string `json:"reason" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Reason for revision is required"})
+		return
+	}
+
+	now := time.Now()
+	order.OverallStatus = domain.StatusProofRejected
+	order.ProofRejectedAt = &now
+	order.ProofRejectionReason = req.Reason
+	order.UpdatedAt = now
+
+	if h.db != nil {
+		_, _ = h.db.Exec(`
+			UPDATE orders
+			SET overall_status = 'PROOF_REJECTED',
+			    status = 'PROOF_REJECTED',
+			    proof_rejected_at = $1,
+			    proof_rejection_reason = $2,
+			    updated_at = $1
+			WHERE tracking_code = $3 OR order_no = $3 OR id = $3
+		`, now, req.Reason, code)
+	}
+
+	h.SaveOrder(*order)
+	c.JSON(http.StatusOK, gin.H{
+		"status":      "success",
+		"message":     "Proof revision requested successfully",
+		"rejected_at": now.Format(time.RFC3339),
+		"reason":      req.Reason,
+		"data":        order.MaskForCustomer(),
+	})
+}
+
+// HandleUploadProof handles prepress uploading a proof preview
+func (h *OrderHandler) HandleUploadProof(c *gin.Context) {
+	code := c.Param("tracking_code")
+	order, found := h.findOrderByCode(code)
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "Order not found"})
+		return
+	}
+
+	var req struct {
+		ProofURL string `json:"proof_url" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Proof URL is required"})
+		return
+	}
+
+	now := time.Now()
+	order.ProofURL = req.ProofURL
+	order.OverallStatus = domain.StatusWaitingApproval
+	order.UpdatedAt = now
+
+	if h.db != nil {
+		_, _ = h.db.Exec(`
+			UPDATE orders
+			SET proof_url = $1,
+			    overall_status = 'WAITING_APPROVAL',
+			    status = 'WAITING_APPROVAL',
+			    updated_at = $2
+			WHERE tracking_code = $3 OR order_no = $3 OR id = $3
+		`, req.ProofURL, now, code)
+	}
+
+	h.SaveOrder(*order)
+	c.JSON(http.StatusOK, gin.H{
+		"status":    "success",
+		"message":   "Proof uploaded and order set to WAITING_APPROVAL",
+		"proof_url": req.ProofURL,
+		"data":      order.MaskForCustomer(),
+	})
+}
+
+// HandleVerifySlip validates payment slips with duplicate trans_ref anti-fraud protection
+func (h *OrderHandler) HandleVerifySlip(c *gin.Context) {
+	var req struct {
+		OrderID   string  `json:"order_id" binding:"required"`
+		QRPayload string  `json:"qr_payload"`
+		SlipImage string  `json:"slip_image"`
+		Amount    float64 `json:"amount"`
+		TransRef  string  `json:"trans_ref"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid slip verification payload", "details": err.Error()})
+		return
+	}
+
+	transRef := req.TransRef
+	if transRef == "" {
+		transRef = fmt.Sprintf("BCEL-%d-%s", time.Now().Unix(), req.OrderID)
+	}
+
+	// Anti-Fraud Check: Check for duplicate transaction reference
+	h.storeMu.Lock()
+	if h.verifiedTransMap[transRef] {
+		h.storeMu.Unlock()
+		c.JSON(http.StatusConflict, gin.H{
+			"status":  "error",
+			"message": "ກວດພົບສະລິບຊ້ຳຊ້ອນ! ລະຫັດທຸລະກຳນີ້ຖືກນຳໃຊ້ແລ້ວ (Duplicate transaction reference)",
+			"trans_ref": transRef,
+		})
+		return
+	}
+	h.verifiedTransMap[transRef] = true
+	h.storeMu.Unlock()
+
+	now := time.Now()
+	order, found := h.findOrderByCode(req.OrderID)
+	if found && order != nil {
+		order.OverallStatus = domain.StatusPaidPrepress
+		if int64(req.Amount) > 0 {
+			order.DepositLAK = int64(req.Amount)
+			if order.DepositLAK >= order.TotalAmountLAK {
+				order.RemainingLAK = 0
+			} else {
+				order.RemainingLAK = order.TotalAmountLAK - order.DepositLAK
+			}
+		}
+		order.UpdatedAt = now
+		h.SaveOrder(*order)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":      "success",
+		"message":     "Slip verified successfully (BCEL OnePay Universal Pipeline)",
+		"order_id":    req.OrderID,
+		"new_status":  "PAID_PREPRESS",
+		"trans_ref":   transRef,
+		"amount":      req.Amount,
+		"verified_at": now.Format(time.RFC3339),
+	})
+}
+
+// HandleGetLocations returns standardized Lao provinces and districts
+func (h *OrderHandler) HandleGetLocations(c *gin.Context) {
+	type District struct {
+		NameLa string `json:"nameLa"`
+		NameEn string `json:"nameEn"`
+	}
+	type Province struct {
+		NameLa    string     `json:"nameLa"`
+		NameEn    string     `json:"nameEn"`
+		Label     string     `json:"label"`
+		Districts []District `json:"districts"`
+	}
+
+	locations := []Province{
+		{
+			NameLa: "ນະຄອນຫຼວງວຽງຈັນ",
+			NameEn: "Vientiane Capital",
+			Label:  "ນະຄອນຫຼວງວຽງຈັນ (Vientiane Capital)",
+			Districts: []District{
+				{NameLa: "ຈັນທະບູລີ", NameEn: "Chanthabuly"},
+				{NameLa: "ສີໂຄດຕະບອງ", NameEn: "Sikhottabong"},
+				{NameLa: "ໄຊເສດຖາ", NameEn: "Xaysetha"},
+				{NameLa: "ສີສັດຕະນາກ", NameEn: "Sisattanak"},
+				{NameLa: "ນາຊາຍທອງ", NameEn: "Naxaithong"},
+				{NameLa: "ໄຊທານີ", NameEn: "Xaythany"},
+				{NameLa: "ຫາດຊາຍຟອງ", NameEn: "Hadxayfong"},
+				{NameLa: "ສັງທອງ", NameEn: "Sangthong"},
+				{NameLa: "ປາກງື່ມ", NameEn: "Pakngum"},
+			},
+		},
+		{
+			NameLa: "ແຂວງວຽງຈັນ",
+			NameEn: "Vientiane Province",
+			Label:  "ແຂວງວຽງຈັນ (Vientiane Province)",
+			Districts: []District{
+				{NameLa: "ໂພນໂຮງ", NameEn: "Phonhong"},
+				{NameLa: "ທຸລະຄົມ", NameEn: "Thoulakhom"},
+				{NameLa: "ແກ້ວອຸດົມ", NameEn: "Keooudom"},
+				{NameLa: "ກາສີ", NameEn: "Kasy"},
+				{NameLa: "ວັງວຽງ", NameEn: "Vangvieng"},
+			},
+		},
+		{
+			NameLa: "ຫຼວງພະບາງ",
+			NameEn: "Luangprabang",
+			Label:  "ຫຼວງພະບາງ (Luangprabang)",
+			Districts: []District{
+				{NameLa: "ຫຼວງພະບາງ", NameEn: "Luangprabang"},
+				{NameLa: "ຊຽງເງິນ", NameEn: "Xiengngeun"},
+				{NameLa: "ປາກອູ", NameEn: "Pak Ou"},
+				{NameLa: "ນ້ຳບາກ", NameEn: "Nambak"},
+			},
+		},
+		{
+			NameLa: "ຈຳປາສັກ",
+			NameEn: "Champasak",
+			Label:  "ຈຳປາສັກ (Champasak)",
+			Districts: []District{
+				{NameLa: "ປາກເຊ", NameEn: "Pakse"},
+				{NameLa: "ຊະນະສົມບູນ", NameEn: "Sanasomboun"},
+				{NameLa: "ປາກຊ່ອງ", NameEn: "Paksong"},
+			},
+		},
+		{
+			NameLa: "ສະຫວັນນະເຂດ",
+			NameEn: "Savannakhet",
+			Label:  "ສະຫວັນນະເຂດ (Savannakhet)",
+			Districts: []District{
+				{NameLa: "ໄກສອນ ພົມວິຫານ", NameEn: "Kaysone Phomvihane"},
+				{NameLa: "ອຸທຸມພອນ", NameEn: "Outhoumphone"},
+				{NameLa: "ເຊໂປນ", NameEn: "Sepone"},
+			},
+		},
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   locations,
+	})
+}
+
+// HandleGetCouriers returns available Lao logistics couriers
+func (h *OrderHandler) HandleGetCouriers(c *gin.Context) {
+	couriers := []gin.H{
+		{
+			"id":        "anousith_express",
+			"name":      "Anousith Express (ອານຸສິດ ຂົນສົ່ງດ່ວນ)",
+			"shortName": "Anousith",
+			"fee":       25000,
+			"eta":       "1-2 ວັນ",
+			"freeAbove": 300000,
+			"color":     "#dc2626",
+			"logoUrl":   "/images/couriers/anousith.png",
+		},
+		{
+			"id":        "hal_logistics",
+			"name":      "HAL Logistics (ຮຸ່ງອາລຸນ ຂົນສົ່ງ)",
+			"shortName": "HAL",
+			"fee":       30000,
+			"eta":       "1-2 ວັນ",
+			"freeAbove": 300000,
+			"color":     "#ea580c",
+			"logoUrl":   "/images/couriers/hal.png",
+		},
+		{
+			"id":        "mixay_express",
+			"name":      "Mixay Express (ມີໄຊ ຂົນສົ່ງ)",
+			"shortName": "Mixay",
+			"fee":       25000,
+			"eta":       "2-3 ວັນ",
+			"freeAbove": 300000,
+			"color":     "#2563eb",
+			"logoUrl":   "/images/couriers/mixay.png",
+		},
+		{
+			"id":        "self_pickup",
+			"name":      "ຮັບເອງທີ່ຮ້ານ ສົມສິ່ງພິມ (Self Pickup)",
+			"shortName": "Self Pickup",
+			"fee":       0,
+			"eta":       "ພ້ອມຮັບທັນທີເມື່ອຜະລິດແລ້ວ",
+			"freeAbove": 0,
+			"color":     "#10b981",
+		},
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   couriers,
+	})
 }

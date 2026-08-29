@@ -338,11 +338,28 @@ export async function getRates(): Promise<RatesResponse> {
     const thb = data && data.THB && data.THB.rate_to_lak
     if (typeof thb === 'number' && thb > 0) {
       setDemo(false)
-      return { THB: thb, LAK: 1 }
+      const res: RatesResponse = { THB: thb, LAK: 1 }
+      try {
+        localStorage.setItem('ssp_cached_rates', JSON.stringify(res))
+      } catch {
+        /* ignore */
+      }
+      return res
     }
     throw new Error('Invalid rates payload')
   } catch {
     setDemo(true)
+    try {
+      const cached = localStorage.getItem('ssp_cached_rates')
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (parsed && typeof parsed.THB === 'number' && parsed.THB > 0) {
+          return parsed
+        }
+      }
+    } catch {
+      /* ignore */
+    }
     return { THB: 630.5, LAK: 1 }
   }
 }
@@ -355,10 +372,19 @@ export async function calculatePrice(payload: PricingPayload): Promise<PricingRe
   } catch {
     setDemo(true)
     // Local fallback mirroring the backend math for parity.
-    const qty = payload.quantity
+    const qty = Math.max(1, payload.quantity)
     const paperCost = qty * (payload.paper_cost_per_unit || 0)
     const inkVolume = 0.007 * (payload.ink_coverage_percent || 0)
     const inkCost = qty * inkVolume * (payload.ink_cost_per_ml || 0)
+
+    // Machine overhead (Depreciation + Maintenance Reserve)
+    const machinePrice = (payload as any).machine_price || (payload as any).machine_price_lak || 0
+    const expectedLife = (payload as any).target_total_pages || (payload as any).expected_life_pages || 0
+    const deprPerSheet = expectedLife > 0 ? machinePrice / expectedLife : ((payload as any).machine_depreciation_rate || (payload as any).machine_depreciation_rate_lak || 0)
+    const maintRate = (payload as any).maintenance_rate_percent !== undefined ? (payload as any).maintenance_rate_percent : 20
+    const maintPerSheet = deprPerSheet * (maintRate / 100)
+    const machineCost = qty * (deprPerSheet + maintPerSheet)
+
     const laminationCost =
       payload.lamination_type && payload.lamination_type !== 'none'
         ? qty * (payload.lamination_cost || 0)
@@ -368,7 +394,7 @@ export async function calculatePrice(payload: PricingPayload): Promise<PricingRe
         ? qty * (payload.binding_cost || 0)
         : 0
     const laborCost = (payload.labor_cost_per_hour || 0) * (payload.estimated_hours || 0)
-    const totalCost = paperCost + inkCost + laminationCost + bindingCost + laborCost
+    const totalCost = paperCost + inkCost + machineCost + laminationCost + bindingCost + laborCost
     const salePrice = totalCost * (1 + (payload.markup_margin || 0))
     return {
       job_name: payload.job_name,
@@ -470,17 +496,19 @@ function normalizeRemoteOrder(o: RawOrder): Order {
     DRAFT: 'PENDING_SLIP_CHECK',
     QUOTATION: 'PENDING_SLIP_CHECK',
     PENDING_PAYMENT: 'PENDING_SLIP_CHECK',
+    PENDING_SLIP_CHECK: 'PENDING_SLIP_CHECK',
     WAITING_DEPOSIT: 'PENDING_SLIP_CHECK',
-    ORDER_CREATED: 'ORDER_CREATED',
-    PAID_PREPRESS: 'ORDER_CREATED',
-    PREPRESS_CHECK: 'ORDER_CREATED',
+    PAYMENT_APPROVED: 'PAYMENT_APPROVED',
+    PAID_PREPRESS: 'PAYMENT_APPROVED',
+    PREPRESS_CHECK: 'PREPRESS_CHECK',
     WAITING_APPROVAL: 'WAITING_APPROVAL',
     PROOF_REJECTED: 'PROOF_REJECTED',
     FILE_CONFIRMED: 'FILE_CONFIRMED',
-    READY_TO_PRINT: 'FILE_CONFIRMED',
+    READY_TO_PRINT: 'READY_TO_PRINT',
+    ORDER_CREATED: 'READY_TO_PRINT',
     IN_PRODUCTION: 'IN_PRODUCTION',
     POST_PRESS: 'POST_PRESS',
-    FINISHING: 'FINISHING',
+    FINISHING: 'POST_PRESS',
     SHIPPED: 'SHIPPED',
     READY_FOR_DELIVERY: 'SHIPPED',
     DELIVERED: 'DELIVERED',
@@ -553,6 +581,19 @@ export async function fetchPublicProductBySlug(slug: string): Promise<RemoteProd
     return json.data || null
   } catch {
     return null
+  }
+}
+
+export async function fetchLaoLocations(): Promise<any[]> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/public/locations/provinces`).catch(() => null)
+    if (!res || !res.ok) return []
+    const json = await res.json()
+    if (Array.isArray(json)) return json
+    if (json && Array.isArray(json.data)) return json.data
+    return []
+  } catch {
+    return []
   }
 }
 

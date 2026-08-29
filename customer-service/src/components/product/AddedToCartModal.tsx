@@ -1,5 +1,6 @@
 import React from 'react'
 import { CheckIcon } from '../icons.tsx'
+import { Plus, Zap } from 'lucide-react'
 
 interface AddedToCartModalProps {
   isOpen: boolean
@@ -29,7 +30,7 @@ export function AddedToCartModal({
 
         <div>
           <h3 className="font-black text-xl text-white m-0">
-            {language === 'en' ? '🎉 Added to Cart Successfully!' : '🎉 ເພີ່ມເຂົ້າກະຕ່າສຳເລັດແລ້ວ!'}
+            {language === 'en' ? 'Added to Cart Successfully!' : 'ເພີ່ມເຂົ້າກະຕ່າສຳເລັດແລ້ວ!'}
           </h3>
           <p className="text-xs font-medium text-slate-300 mt-1">
             {language === 'en'
@@ -55,7 +56,8 @@ export function AddedToCartModal({
             onClick={onContinueShopping}
             className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-black text-xs border border-slate-700 transition flex items-center justify-center gap-2 cursor-pointer shadow"
           >
-            <span>{language === 'en' ? '➕ Order Another Item' : '➕ ສັ່ງພິມລາຍການໃໝ່'}</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>{language === 'en' ? 'Order Another Item' : 'ສັ່ງພິມລາຍການໃໝ່'}</span>
           </button>
 
           <button
@@ -63,7 +65,8 @@ export function AddedToCartModal({
             onClick={onGoToCheckout}
             className="py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/25 hover:brightness-110 transition flex items-center justify-center gap-2 cursor-pointer"
           >
-            <span>{language === 'en' ? '⚡ Checkout Now' : '⚡ ໄປທີ່ກະຕ່າ / ຊຳລະເງິນ'}</span>
+            <Zap className="w-3.5 h-3.5" />
+            <span>{language === 'en' ? 'Checkout Now' : 'ໄປທີ່ກະຕ່າ / ຊຳລະເງິນ'}</span>
           </button>
         </div>
       </div>

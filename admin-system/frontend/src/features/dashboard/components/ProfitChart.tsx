@@ -145,8 +145,8 @@ export const ProfitChart: React.FC = () => {
       let catKey = 'custom';
 
       const items = Array.isArray(ord.items) ? ord.items : [];
-      const itemNames = items.map(i => (i.name || i.title || '').toLowerCase()).join(' ');
-      const desc = `${ord.productType || ''} ${ord.notes || ''} ${itemNames}`.toLowerCase();
+      const itemNames = items.map((i: any) => (i.name || i.title || '').toLowerCase()).join(' ');
+      const desc = `${(ord as any).productType || ''} ${ord.notes || ''} ${itemNames}`.toLowerCase();
 
       if (desc.includes('ປຶ້ມ') || desc.includes('book') || desc.includes('magazine') || desc.includes('report')) {
         catKey = 'books';

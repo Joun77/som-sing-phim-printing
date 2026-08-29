@@ -223,19 +223,33 @@ export interface DeductInkBottlePayload {
 export interface Offcut {
   id: string;
   name: string;
-  qty: number;
-  paperId: string;
+  qty?: number;
+  stockQty?: number;
+  paperId?: string;
+  sku?: string;
+  paperType?: string;
+  widthMm?: number;
+  heightMm?: number;
+  location?: string;
+  costPerConsumptionUnit?: number;
+  costPerSheet?: number;
+  specs?: any;
   notes?: string;
 }
 
 export interface SpoilageLog {
   id: string;
-  date: string;
-  materialId: string;
-  materialName: string;
-  quantity: number;
-  unitCost: number;
-  totalCost: number;
+  date?: string;
+  createdAt?: string;
+  materialId?: string;
+  materialName?: string;
+  quantity?: number;
+  qty?: number;
+  unitCost?: number;
+  totalCost?: number;
+  costImpact?: number;
   cause?: string;
+  reason?: string;
+  notes?: string;
   orderId?: string;
 }

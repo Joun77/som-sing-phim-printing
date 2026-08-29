@@ -125,7 +125,7 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
     if (isNowDone && completedStepItem && addEarningRecord) {
       const stepItem = completedStepItem as ProductionWorkflowStep;
       const assignedEmp = employees.find(
-        (e) => e.id === stepItem.assignedStaffId || e.name === stepItem.assignedStaffName
+        (e) => e.id === stepItem.assignedTo || e.name === stepItem.assignedStaffName
       ) || employees.find((e) => (e.role || '').includes('operator') || (e.role || '').includes('cutting')) || employees[0];
 
       if (assignedEmp && assignedEmp.pieceRatePerImpression && Number(assignedEmp.pieceRatePerImpression) > 0) {
@@ -150,8 +150,8 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
 
         showToast(
           currentLang === 'lo'
-            ? `🎉 ບັນທຶກຄ່າແຮງງານພິເສດ (${assignedEmp.name}): +${earned.toLocaleString()} LAK`
-            : `🎉 Incentive recorded for ${assignedEmp.name}: +${earned.toLocaleString()} LAK`,
+            ? `ບັນທຶກຄ່າແຮງງານພິເສດ (${assignedEmp.name}): +${earned.toLocaleString()} LAK`
+            : `Incentive recorded for ${assignedEmp.name}: +${earned.toLocaleString()} LAK`,
           'success'
         );
       }

@@ -37,6 +37,7 @@ import {
 import { FormModalTemplate } from '../../../../components/common/FormModalTemplate';
 import ItemSpecConfigurator, { calculateItemCosting } from '../ItemSpecConfigurator';
 import { PreflightItemCreationModal } from '../../../../components/PreflightItemCreationModal';
+import { useApp } from '@store/AppContext';
 import type { PreflightResult } from '../../types';
 
 export interface EditOrderModalProps {
@@ -58,6 +59,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
   equipment = [],
   formatCurrency = (v) => `${Number(v || 0).toLocaleString()} ₭`
 }) => {
+  const { offcuts = [] } = useApp();
   const [activeStep, setActiveStep] = useState<number>(1);
   const [activeJobIndex, setActiveJobIndex] = useState<number>(0);
 
@@ -846,6 +848,93 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Smart Offcut Reclaim Suggestion Banner */}
+            {(() => {
+              const activeJob = items[activeJobIndex];
+              if (!activeJob) return null;
+              const jobW = Number(activeJob.jobWidth || (activeJob.paperSize === 'A5' ? 148 : activeJob.paperSize === 'A6' ? 105 : 210));
+              const jobH = Number(activeJob.jobHeight || (activeJob.paperSize === 'A5' ? 210 : activeJob.paperSize === 'A6' ? 148 : 297));
+              const jobQty = Number(activeJob.quantity || 1);
+
+              const matchedOffcut = (offcuts || []).find((off: any) => {
+                const offW = Number(off.specs?.widthMm || off.widthMm || 0);
+                const offH = Number(off.specs?.heightMm || off.heightMm || 0);
+                const offQty = Number(off.stockQty || off.qty || 0);
+                const fits = (offW >= jobW && offH >= jobH) || (offW >= jobH && offH >= jobW);
+                return fits && offQty >= Math.min(5, Math.ceil(jobQty * 0.1));
+              });
+
+              const savedCostLAK = Math.round(jobQty * 450);
+
+              if (activeJob.useOffcut) {
+                return (
+                  <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="font-bold">
+                        ນຳໃຊ້ເສດເຈ້ຍຈາກສາງ: <strong>{activeJob.offcutName || 'Offcut Stock'}</strong> (ຕັດຍອດຈາກ offcut_inventory ອັດຕະໂນມັດ — ປະຢັດຕົ້ນທຶນ {formatCurrency(activeJob.offcutSavings || savedCostLAK)})
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleActiveJobConfigChange({
+                          ...activeJob,
+                          useOffcut: false,
+                          offcutId: undefined,
+                          offcutName: undefined,
+                          offcutSavings: undefined
+                        });
+                      }}
+                      className="text-xs text-slate-500 hover:text-red-600 font-bold underline cursor-pointer shrink-0"
+                    >
+                      ຍົກເລີກ
+                    </button>
+                  </div>
+                );
+              }
+
+              if (matchedOffcut) {
+                return (
+                  <div className="p-4 rounded-2xl bg-emerald-500/10 border-2 border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs animate-fade-in">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-700 shrink-0">
+                        <Scissors className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-emerald-950 flex items-center gap-1.5">
+                          <span>ມີເສດເຈ້ຍ {matchedOffcut.name || matchedOffcut.specs?.paperType || 'Art Card'} ພ້ອມໃຊ້ {matchedOffcut.stockQty || matchedOffcut.qty} ແຜ່ນ</span>
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-200 text-emerald-900 text-[10px] font-bold">
+                            ປະຢັດຕົ້ນທຶນ ~{formatCurrency(savedCostLAK)}
+                          </span>
+                        </h4>
+                        <p className="text-xs text-emerald-800 font-medium mt-0.5">
+                          ຂະໜາດເສດເຈ້ຍ {matchedOffcut.specs?.widthMm || matchedOffcut.widthMm}×{matchedOffcut.specs?.heightMm || matchedOffcut.heightMm} mm ສາມາດຮອງຮັບງານພິມ Job #{activeJobIndex + 1} ໄດ້ໂດຍບໍ່ຕ້ອງຕັດແຜ່ນໃຫຍ່
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleActiveJobConfigChange({
+                          ...activeJob,
+                          useOffcut: true,
+                          offcutId: matchedOffcut.id,
+                          offcutName: matchedOffcut.name || 'Offcut Stock',
+                          offcutSavings: savedCostLAK
+                        });
+                      }}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>ນຳໃຊ້ເສດເຈ້ຍ (Use Offcut)</span>
+                    </button>
+                  </div>
+                );
+              }
+              return null;
+            })()}
 
             {/* Embedded Quotation-Grade ItemSpecConfigurator for Active Job */}
             {items[activeJobIndex] && (

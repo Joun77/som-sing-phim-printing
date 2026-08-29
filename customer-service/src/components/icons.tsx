@@ -8,6 +8,7 @@ const base = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLin
 export interface IconProps {
   size?: number
   color?: string
+  className?: string
 }
 
 export function FacebookIcon({ size = 22, color = 'currentColor' }: IconProps) {
@@ -92,9 +93,9 @@ export function CopyIcon({ size = 18 }: IconProps) {
   )
 }
 
-export function CheckIcon({ size = 22 }: IconProps) {
+export function CheckIcon({ size = 22, className }: IconProps) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" {...base} strokeWidth={2.4} aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base} strokeWidth={2.4} className={className} aria-hidden="true">
       <path d="m4.5 12.5 5 5 10-11" />
     </svg>
   )

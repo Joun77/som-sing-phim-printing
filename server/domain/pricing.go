@@ -54,6 +54,9 @@ type PricingCalculationRequest struct {
 	FoldingCostLAK             int64           `json:"folding_cost_lak,omitempty"`
 	LaborHours                 decimal.Decimal `json:"labor_hours,omitempty"`
 	LaborRatePerHourLAK        int64           `json:"labor_rate_per_hour_lak,omitempty"`
+	MachinePriceLAK            int64           `json:"machine_price_lak,omitempty"`
+	ExpectedLifePages          int64           `json:"expected_life_pages,omitempty"`
+	MaintenanceRatePercent     decimal.Decimal `json:"maintenance_rate_percent,omitempty"`
 	MachineDepreciationRateLAK int64           `json:"machine_depreciation_rate_lak,omitempty"`
 	PlateCostPerUnitLAK        int64           `json:"plate_cost_per_unit_lak,omitempty"`
 	SpoilageRatePercent        decimal.Decimal `json:"spoilage_rate_percent,omitempty"`

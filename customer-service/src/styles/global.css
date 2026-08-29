@@ -57,7 +57,7 @@
   --warning-soft: #FEF3C7;
 
   /* Typography */
-  --font-main: 'Plus Jakarta Sans', 'Noto Sans Lao', 'Noto Sans Thai', 'Sarabun', sans-serif;
+  --font-main: 'Noto Sans Lao', 'Plus Jakarta Sans', 'Noto Sans Thai', 'Sarabun', sans-serif;
   --font-serif: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
   --font-thai: var(--font-main);
   --font-sans: var(--font-main);

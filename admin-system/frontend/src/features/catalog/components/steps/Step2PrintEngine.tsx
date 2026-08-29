@@ -19,7 +19,10 @@ import {
   X,
   Radio,
   FileCheck,
-  CheckCircle2
+  CheckCircle2,
+  Palette,
+  FileText,
+  RefreshCw
 } from 'lucide-react';
 import { useApp } from '@store/AppContext';
 import { SpecGroup, PublicProductOption, FeaturesConfig } from '../../types';
@@ -477,7 +480,7 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                <span>🔄</span>
+                <RefreshCw className="w-3.5 h-3.5 text-sky-600" />
                 <span>ຮອງຮັບທັງ ສີ & ຂາວດຳ (Dual-Mode)</span>
               </span>
               {colorCapabilityMode === 'dual_mode' && <Check className="w-3.5 h-3.5 text-sky-600" />}
@@ -499,7 +502,7 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                <span>🎨</span>
+                <Palette className="w-3.5 h-3.5 text-sky-600" />
                 <span>ພິມ 4 ສີເທົ່ານັ້ນ (Color Only)</span>
               </span>
               {colorCapabilityMode === 'color_only' && <Check className="w-3.5 h-3.5 text-sky-600" />}
@@ -521,7 +524,7 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                <span>📄</span>
+                <FileText className="w-3.5 h-3.5 text-slate-500" />
                 <span>ພິມຂາວດຳເທົ່ານັ້ນ (Mono Only)</span>
               </span>
               {colorCapabilityMode === 'mono_only' && <Check className="w-3.5 h-3.5 text-sky-600" />}
@@ -582,7 +585,7 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
                   />
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm">{isColorMode ? '🎨' : '📄'}</span>
+                      <span className="text-sm">{isColorMode ? <Palette className="w-4 h-4 text-sky-600" /> : <FileText className="w-4 h-4 text-slate-500" />}</span>
                       <input
                         type="text"
                         value={opt.labelLo || opt.label}
@@ -607,8 +610,9 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
                 {/* 2. Machine Linker Dropdown */}
                 <div className="lg:col-span-5 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-500">
-                      🖨️ ເຄື່ອງພິມທີ່ຜູກກັບໂໝດນີ້:
+                    <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                      <Printer className="w-3 h-3 text-slate-400" />
+                      <span>ເຄື່ອງພິມທີ່ຜູກກັບໂໝດນີ້:</span>
                     </span>
                     <span className="text-[10px] font-mono font-bold text-sky-700">
                       {isColorMode ? 'ສູດຄິດໄລ່: 4-Color (CMYK)' : 'ສູດຄິດໄລ່: Mono (K)'}
@@ -703,14 +707,15 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
                     </span>
                   </div>
 
-                  <span className="text-lg">🖨️</span>
+                  <Printer className="w-5 h-5 text-slate-400" />
                 </div>
 
                 {/* 2-Pillar Cost Matrix for this printer */}
                 <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
                   <div className="p-3 rounded-2xl bg-sky-50 border border-sky-200">
-                    <span className="text-[10px] font-bold text-sky-900 block">
-                      🎨 ຕົ້ນທຶນ 4 ສີ (Full CMYK):
+                    <span className="text-[10px] font-bold text-sky-900 block flex items-center gap-1">
+                      <Palette className="w-3 h-3 text-sky-600" />
+                      <span>ຕົ້ນທຶນ 4 ສີ (Full CMYK):</span>
                     </span>
                     <strong className="text-sm font-mono font-black text-sky-700">
                       {printer.totalColorCost.toLocaleString()} ₭
@@ -719,8 +724,9 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
                   </div>
 
                   <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
-                    <span className="text-[10px] font-bold text-slate-700 block">
-                      📄 ຕົ້ນທຶນຂາວດຳ (Mono K):
+                    <span className="text-[10px] font-bold text-slate-700 block flex items-center gap-1">
+                      <FileText className="w-3 h-3 text-slate-500" />
+                      <span>ຕົ້ນທຶນຂາວດຳ (Mono K):</span>
                     </span>
                     <strong className="text-sm font-mono font-black text-slate-800">
                       {printer.totalBwCost.toLocaleString()} ₭
@@ -808,7 +814,8 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
               : 'bg-slate-50 border-slate-200 text-slate-500'
           }`}>
             <div className="flex items-center gap-2 font-bold text-xs mb-1">
-              <span>📄 ພິມ 1 ດ້ານ (Single-sided):</span>
+              <FileText className="w-3.5 h-3.5 text-sky-600" />
+              <span>ພິມ 1 ດ້ານ (Single-sided):</span>
             </div>
             <p className="text-[11px] text-slate-500">
               ຄິດໄລ່ຕົ້ນທຶນການພິມ 1 ເທົ່າ (1x Click + Ink Rate). ເໝາະສຳລັບ: ສະຕິກເກີ, ໂປສເຕີ, ຮູບພາບຕັ້ງໂຕະ.
@@ -821,7 +828,8 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
               : 'bg-slate-50 border-slate-200 text-slate-500'
           }`}>
             <div className="flex items-center gap-2 font-bold text-xs mb-1">
-              <span>📑 ພິມ 2 ດ້ານ (Double-sided / Duplex):</span>
+              <Layers className="w-3.5 h-3.5 text-sky-600" />
+              <span>ພິມ 2 ດ້ານ (Double-sided / Duplex):</span>
             </div>
             <p className="text-[11px] text-slate-500">
               ຄິດໄລ່ຕົ້ນທຶນການພິມ 2 ເທົ່າ (2x Click + Ink Rate) ອັດຕະໂນມັດເມື່ອລູກຄ້າເລືອກ. ເໝາະສຳລັບ: ນາມບັດ 2 ດ້ານ, ແຜ່ນພັບ, ປຶ້ມ.

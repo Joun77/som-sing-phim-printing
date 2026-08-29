@@ -6,7 +6,7 @@ import { BANK_ACCOUNT, COURIERS, FREE_SHIPPING_THRESHOLD } from '../data/shippin
 import { buildBcelOnePayPayload } from '../utils/promptpay.ts'
 import { formatMoney } from '../utils/currency.ts'
 import { generateOrderId } from '../utils/orderId.ts'
-import { submitOrder, verifySlipPayment, fetchCouriers, fetchPaymentMethods } from '../api/client.ts'
+import { submitOrder, verifySlipPayment, fetchCouriers, fetchPaymentMethods, fetchLaoLocations } from '../api/client.ts'
 import ProductArt from '../components/ProductArt.tsx'
 import {
   CheckIcon,
@@ -16,6 +16,7 @@ import {
   TruckIcon,
   UploadIcon,
 } from '../components/icons.tsx'
+import { Zap } from 'lucide-react'
 
 interface CopyButtonProps {
   text: string
@@ -94,12 +95,11 @@ export default function CheckoutPage() {
   const [locations, setLocations] = useState<LaoProvince[]>(LAO_LOCATIONS)
 
   useEffect(() => {
-    // Fetch locations live from PostgreSQL Database
-    fetch('http://localhost:8080/api/v1/public/locations/provinces')
-      .then((res) => res.json())
+    // Fetch locations live from PostgreSQL Database / Backend API
+    fetchLaoLocations()
       .then((data) => {
-        if (data.status === 'success' && Array.isArray(data.data) && data.data.length > 0) {
-          setLocations(data.data)
+        if (Array.isArray(data) && data.length > 0) {
+          setLocations(data)
         }
       })
       .catch(() => {})
@@ -577,7 +577,7 @@ export default function CheckoutPage() {
                         {c.logoUrl ? (
                           <span className="courier-brand" style={{ background: '#fff', border: '1px solid #e2e8f0', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                             <img
-                              src={c.logoUrl.startsWith('http') || c.logoUrl.startsWith('data:') ? c.logoUrl : `http://localhost:8080${c.logoUrl.startsWith('/') ? '' : '/'}${c.logoUrl}`}
+                              src={c.logoUrl}
                               alt={c.short}
                               style={{ width: '28px', height: '28px', objectFit: 'contain' }}
                               onError={(e) => {
@@ -613,14 +613,14 @@ export default function CheckoutPage() {
                 <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px dashed #cbd5e1' }}>
                   {courierId === 'self_pickup' ? (
                     <div style={{ padding: '16px', borderRadius: '12px', background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46' }}>
-                      <strong style={{ display: 'block', marginBottom: '4px' }}>📍 ຮັບສິນຄ້າທີ່ຮ້ານ ສົມສິ່ງພິມ (Self Pickup)</strong>
-                      <span style={{ fontSize: '0.88rem' }}>ສະຖານທີ່: ຖະໜົນລ້ານຊ້າງ, ບ້านຫັດສະດີ, ເມືອງຈັນທະບູລີ, ນະຄອນຫຼວງວຽງຈັນ (ເປີດທຸກວັນ ຈັນ-ເສົາ 08:30 - 17:30)</span>
+                      <strong style={{ display: 'block', marginBottom: '4px' }}>ຮັບສິນຄ້າທີ່ຮ້ານ ສົມສິ່ງພິມ (Self Pickup)</strong>
+                      <span style={{ fontSize: '0.88rem' }}>ສະຖານທີ່: ຖະໜົນລ້ານຊ້າງ, ບ້ານຫັດສະດີ, ເມືອງຈັນທະບູລີ, ນະຄອນຫຼວງວຽງຈັນ (ເປີດທຸກວັນ ຈັນ-ເສົາ 08:30 - 17:30)</span>
                     </div>
                   ) : (
                     <>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
                         <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
-                          📦 ຂໍ້ມູນຜູ້ຮັບ ແລະ ສາຂາປາຍທາງ
+                          ຂໍ້ມູນຜູ້ຮັບ ແລະ ສາຂາປາຍທາງ
                         </h3>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.86rem', color: '#334155' }}>
                           <input
@@ -875,7 +875,7 @@ export default function CheckoutPage() {
                       gap: '10px',
                     }}
                   >
-                    <span style={{ fontSize: '1.2rem' }}>⚡</span>
+                    <Zap size={20} className="text-amber-400 shrink-0" />
                     <div>
                       <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)', display: 'block' }}>
                         ງານພິມຕາມສັ່ງດ່ວນ (On-Demand) — ຊຳລະເຕັມຈຳນວນ 100%
@@ -1108,7 +1108,8 @@ export default function CheckoutPage() {
                       }
                     }}
                   >
-                    ⚡ ໃຊ້ສະລິບທົດສອບ (Quick Test Slip)
+                    <Zap size={14} />
+                    <span>ໃຊ້ສະລິບທົດສອບ (Quick Test Slip)</span>
                   </button>
                 </div>
               )}
@@ -1154,12 +1155,12 @@ export default function CheckoutPage() {
                       {item.bookItems && item.bookItems.length > 0 && (
                         <div style={{ marginTop: '8px', padding: '8px 10px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.2)', fontSize: '0.78rem' }}>
                           <strong style={{ display: 'block', marginBottom: '4px', color: '#b45309' }}>
-                            📚 {language === 'en' ? 'Included Books' : 'ລາຍການປຶ້ມໃນຊຸດ'} ({item.bookItems.length} {language === 'en' ? 'Titles' : 'ເລື່ອງ'}):
+                            {language === 'en' ? 'Included Books' : 'ລາຍການປຶ້ມໃນຊຸດ'} ({item.bookItems.length} {language === 'en' ? 'Titles' : 'ເລື່ອງ'}):
                           </strong>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                             {item.bookItems.map((b, bIdx) => (
                               <div key={b.id || bIdx} style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                                <span>📖 {b.title || `ເລື່ອງທີ ${bIdx + 1}`}</span>
+                                <span>{b.title || `ເລື່ອງທີ ${bIdx + 1}`}</span>
                                 <span style={{ fontWeight: 600 }}>
                                   {b.innerPageCount} {language === 'en' ? 'pp' : 'ໜ້າ'} (ສັນ {b.spineThicknessMm}mm) × {b.quantity}
                                 </span>

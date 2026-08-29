@@ -24,6 +24,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { useApp } from '@store/AppContext';
 import { FormModalTemplate } from '@components/common';
 import ImportForm from './ImportForm';
@@ -77,9 +78,18 @@ export const resolveInboundItemName = (item: any): string => {
 };
 
 export default function InboundManagement() {
-   const { showToast, askConfirmation, formatCurrency, addEquipment, addInventorySku, addInventoryBatch, updateInboundEntry, deleteInboundEntry, unrecordDeletedId, saveInventoryToBackend, inventory, addStock, addPrinterColorLink, refreshData } = useApp();
+  const queryClient = useQueryClient();
+  const { showToast, askConfirmation, formatCurrency, addEquipment, addInventorySku, addInventoryBatch, updateInboundEntry, deleteInboundEntry, unrecordDeletedId, saveInventoryToBackend, inventory, addStock, addPrinterColorLink, refreshData } = useApp();
   const { i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
+
+  const invalidateInboundAndInventory = () => {
+    queryClient.invalidateQueries({ queryKey: ['inbound'] });
+    queryClient.invalidateQueries({ queryKey: ['inbound-records'] });
+    queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    queryClient.invalidateQueries({ queryKey: ['inventory-items'] });
+    queryClient.invalidateQueries({ queryKey: ['materials'] });
+  };
 
   // Filters state
   const [activeCategoryFilter, setActiveCategoryFilter] = useState('ALL');
@@ -628,6 +638,7 @@ export default function InboundManagement() {
       showToast(`${type} recorded successfully!`, 'success');
     }
 
+    invalidateInboundAndInventory();
     setIsModalOpen(false);
   };
 
@@ -722,6 +733,7 @@ export default function InboundManagement() {
       showToast(currentLang === 'lo' ? 'ບັນທຶກຂໍ້ມູນນຳເຂົ້າສິນຄ້າໃໝ່ຮຽບຮ້ອຍແລ້ວ!' : 'New inbound entry created!', 'success');
     }
 
+    invalidateInboundAndInventory();
     setIsModalOpen(false);
     setEditingItem(null);
   };
@@ -740,6 +752,7 @@ export default function InboundManagement() {
         });
         deleteInboundFromBackend(id);
         if (selectedDrawerItem?.id === id) setSelectedDrawerItem(null);
+        invalidateInboundAndInventory();
         showToast(currentLang === 'lo' ? 'ລຶບລາຍການ ແລະ ປັບປຸງສະຕັອກຮຽບຮ້ອຍແລ້ວ' : 'Item deleted and stock synchronized successfully', 'success');
       }
     );
@@ -1280,6 +1293,7 @@ export default function InboundManagement() {
               localStorage.setItem('som_sing_inbound_list', JSON.stringify(combined));
               return combined;
             });
+            invalidateInboundAndInventory();
             fetchInbound();
             refreshData();
           }}
@@ -1327,6 +1341,7 @@ export default function InboundManagement() {
             });
             updateInboundEntry(payload);
             saveInboundToBackend(payload, true);
+            invalidateInboundAndInventory();
             setEditingItem(null);
             setSelectedDrawerItem(payload);
             showToast(currentLang === 'lo' ? 'ແກ້ໄຂຂໍ້ມູນສຳເລັດ!' : 'Inbound item updated successfully!', 'success');

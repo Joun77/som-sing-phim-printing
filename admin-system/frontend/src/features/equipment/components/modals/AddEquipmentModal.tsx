@@ -108,6 +108,10 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
       };
     }
 
+    const totalCapacity = category === 'Printer' 
+      ? Math.max(1, Number(printedPagesCapacity) || 500000)
+      : Math.max(1, (Number(estMonthlyVolume) || 50000) * totalMonths);
+
     addEquipment({
       name,
       category,
@@ -115,17 +119,19 @@ export default function AddEquipmentModal({ isOpen, onClose }) {
       purchaseCost: Number(purchaseCost),
       purchasePrice: Number(purchaseCost),
       MachinePrice: Number(purchaseCost),
-      lifespanYears: Number(lifespanYears),
-      estMonthlyVolume: Number(estMonthlyVolume),
-      maintenanceRatePercent: Number(maintenanceRatePercent),
-      printedPagesCapacity: Number(estMonthlyVolume) * totalMonths,
-      TargetTotalPages: Number(estMonthlyVolume) * totalMonths,
+      lifespanYears: Math.max(1, Number(lifespanYears) || 5),
+      estMonthlyVolume: Math.max(1, Number(estMonthlyVolume) || 50000),
+      maintenanceRatePercent: Number(maintenanceRatePercent) || 0,
+      printedPagesCapacity: totalCapacity,
+      expectedLifeA4Pages: totalCapacity,
+      TargetTotalPages: totalCapacity,
       MaintenanceCostPerPage: category === 'Printer' ? Number(maintenanceCostPerPage) : (Math.round(netCostPerUnit * 100) / 100),
       maintenanceCostPerPage: category === 'Printer' ? Number(maintenanceCostPerPage) : (Math.round(netCostPerUnit * 100) / 100),
       ...categoryParams
     });
 
     queryClient.invalidateQueries({ queryKey: ['equipment'] });
+    queryClient.invalidateQueries({ queryKey: ['machinery-list'] });
     showToast(`ລົງທະບຽນໂປຣໄຟລ໌ເຄື່ອງຈັກ "${name}" ສຳເລັດ!`, 'success');
     onClose();
   };

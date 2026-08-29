@@ -62,6 +62,7 @@ export default function EditEquipmentModal({ isOpen, onClose, equipmentItem }: E
   if (!isOpen || !equipmentItem) return null;
 
   const isPostPress = formData.category !== 'Printer' && formData.category !== 'PRINTER';
+  const isPrinter = !isPostPress;
 
   const handleChange = (field: string, value: any) => {
     setFormData((prev: any) => ({ ...prev, [field]: value }));
@@ -93,7 +94,7 @@ export default function EditEquipmentModal({ isOpen, onClose, equipmentItem }: E
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const isPrinter = !isPostPress;
+    const capacity = Math.max(1, Number(formData.printedPagesCapacity) || 500000);
 
     const updated = {
       ...formData,
@@ -102,15 +103,15 @@ export default function EditEquipmentModal({ isOpen, onClose, equipmentItem }: E
       purchaseCost: assetVal,
       purchasePrice: assetVal,
       MachinePrice: assetVal,
-      lifespanYears: lifespanYrs,
-      estMonthlyVolume: monthlyVol,
+      lifespanYears: Math.max(1, lifespanYrs),
+      estMonthlyVolume: Math.max(1, monthlyVol),
       maintenanceRatePercent: maintRatePct,
       costPerConsumptionUnit: isPrinter ? Number(formData.maintenanceCostPerPage) : calculatedRate,
       calculatedCostPerPage: isPrinter ? Number(formData.maintenanceCostPerPage) : calculatedRate,
-      printedPagesCapacity: Number(formData.printedPagesCapacity),
-      expectedLifeA4Pages: Number(formData.printedPagesCapacity),
-      lifetimePagesA4: Number(formData.printedPagesCapacity),
-      TargetTotalPages: Number(formData.printedPagesCapacity),
+      printedPagesCapacity: capacity,
+      expectedLifeA4Pages: capacity,
+      lifetimePagesA4: capacity,
+      TargetTotalPages: capacity,
       maintenanceCostPerPage: isPrinter ? Number(formData.maintenanceCostPerPage) : calculatedRate,
       MaintenanceCostPerPage: isPrinter ? Number(formData.maintenanceCostPerPage) : calculatedRate,
       printerCategory: formData.printerCategory || 'Inkjet',
@@ -120,16 +121,17 @@ export default function EditEquipmentModal({ isOpen, onClose, equipmentItem }: E
         ...(equipmentItem.specs || {}),
         printerCategory: formData.printerCategory || 'Inkjet',
         postPressSubtype: formData.postPressSubtype,
-        lifespanYears: lifespanYrs,
-        estMonthlyVolume: monthlyVol,
+        lifespanYears: Math.max(1, lifespanYrs),
+        estMonthlyVolume: Math.max(1, monthlyVol),
         maintenanceRatePercent: maintRatePct,
-        expectedLifeA4Pages: Number(formData.printedPagesCapacity),
+        expectedLifeA4Pages: capacity,
         netCostPerUnit: calculatedRate
       }
     };
 
     updateEquipment(equipmentItem.id, updated);
     queryClient.invalidateQueries({ queryKey: ['equipment'] });
+    queryClient.invalidateQueries({ queryKey: ['machinery-list'] });
     showToast(
       currentLang === 'lo'
         ? `ອັບເດັດຂໍ້ມູນເຄື່ອງຈັກ "${formData.name}" ສຳເລັດ!`

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { X, PackagePlus, RefreshCw, AlertCircle, CheckCircle2, DollarSign, Layers, Search } from 'lucide-react';
+import { X, PackagePlus, RefreshCw, AlertCircle, CheckCircle2, DollarSign, Layers, Search, Zap } from 'lucide-react';
 import { MaterialMaster, CreateInboundPayload } from '../types';
 import { createInbound } from '../api/inventoryApi';
 
@@ -394,12 +394,13 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
                   value={purchaseMultiplier}
                   onChange={(e) => setPurchaseMultiplier(e.target.value)}
                   className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  placeholder="500 แผ่น/รีม"
+                  placeholder="500 ແຜ່ນ/ຣີມ"
                 />
               </div>
             </div>
-            <p className="text-[11px] text-slate-500">
-              ⚡ แปลงเป็นหน่วยตัดสต็อกใช้งานจริง: <strong className="text-blue-700">{(numQty * numMult).toLocaleString()}</strong> หน่วย
+            <p className="text-[11px] text-slate-500 flex items-center gap-1">
+              <Zap className="w-3.5 h-3.5 text-blue-600 inline shrink-0" />
+              <span>ແປງເປັນຫົວໜ່ວຍຕັດສະຕັອກຕົວຈິງ: <strong className="text-blue-700">{(numQty * numMult).toLocaleString()}</strong> ຫົວໜ່ວຍ</span>
             </p>
           </div>
 
@@ -407,7 +408,7 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
           <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl space-y-3">
             <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
               <DollarSign className="w-4 h-4 text-blue-600" />
-              ราคาจัดซื้อ & การคำนวณต้นทุน
+              ລາຄາຈັດຊື້ & ການຄິດໄລ່ຕົ້ນທຶນ (Purchase Cost & Moving Average)
             </h4>
             <div className="grid grid-cols-2 gap-3">
               <div>

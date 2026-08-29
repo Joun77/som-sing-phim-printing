@@ -19,6 +19,8 @@ interface PaymentSlipCardProps {
   paymentStatus?: string;
   depositAmountPaid?: number;
   remainingUnpaidBalance?: number;
+  transRef?: string;
+  verifiedAt?: string;
   isPaymentConfirmed: boolean;
   currentLang: string;
   formatLAK: (n: number) => string;
@@ -37,6 +39,8 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
   paymentStatus = 'Unpaid',
   depositAmountPaid,
   remainingUnpaidBalance,
+  transRef,
+  verifiedAt,
   isPaymentConfirmed,
   currentLang,
   formatLAK,
@@ -199,6 +203,15 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
             <div className="flex justify-between text-slate-900 font-black border-t border-slate-200 pt-1.5">
               <span className="text-amber-600">{currentLang === 'lo' ? 'ຍອດທີ່ຕ້ອງຊຳລະ (LAK):' : 'Total Amount (LAK):'}</span>
               <span className="text-base font-mono text-amber-600">{formatLAK(totalAmountLAK)}</span>
+            </div>
+          )}
+
+          {transRef && (
+            <div className="mt-2 pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px]">
+              <span className="text-slate-500 font-bold">Ref: <span className="font-mono text-slate-800 font-black">{transRef}</span></span>
+              <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                {verifiedAt ? new Date(verifiedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Auto-Verified'}
+              </span>
             </div>
           )}
         </div>

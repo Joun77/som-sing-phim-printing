@@ -29,7 +29,7 @@ const FINISHES: MaterialFinish[] = [
     gsm: '300-350 GSM',
     textureGradient: 'linear-gradient(135deg, #182C56 0%, #0B1938 100%)',
     foilShine: 'radial-gradient(circle at 50% 30%, rgba(255,255,255,0.2) 0%, transparent 60%)',
-    badge: '📄 High-End Paper Stock'
+    badge: 'High-End Paper Stock'
   },
   {
     id: 'metallic-foil',
@@ -40,7 +40,7 @@ const FINISHES: MaterialFinish[] = [
     gsm: '260-400 GSM',
     textureGradient: 'linear-gradient(135deg, #EBD8B2 0%, #C5A059 50%, #8F6D2C 100%)',
     foilShine: 'radial-gradient(circle at 35% 30%, rgba(255,255,255,0.9) 0%, transparent 60%)',
-    badge: '✨ Hot Foil Finishing'
+    badge: 'Hot Foil Finishing'
   },
   {
     id: 'spot-uv',
@@ -51,7 +51,7 @@ const FINISHES: MaterialFinish[] = [
     gsm: '300-350 GSM',
     textureGradient: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
     foilShine: 'linear-gradient(45deg, transparent 35%, rgba(255,255,255,0.4) 50%, transparent 65%)',
-    badge: '💎 3D Spot Coating'
+    badge: '3D Spot Coating'
   },
   {
     id: 'emboss',
@@ -62,7 +62,7 @@ const FINISHES: MaterialFinish[] = [
     gsm: '250-450 GSM',
     textureGradient: 'linear-gradient(135deg, #F4EFEA 0%, #E5DDD0 50%, #D0C3B2 100%)',
     foilShine: 'radial-gradient(circle at 50% 50%, rgba(255,255,255,0.65) 0%, transparent 70%)',
-    badge: '🏛️ Artisan Die Press'
+    badge: 'Artisan Die Press'
   },
   {
     id: 'linen-kraft',
@@ -73,7 +73,7 @@ const FINISHES: MaterialFinish[] = [
     gsm: '250-350 GSM',
     textureGradient: 'linear-gradient(135deg, #D7C4A5 0%, #B89F78 50%, #9B825D 100%)',
     foilShine: 'radial-gradient(circle at 50% 30%, rgba(255,255,255,0.3) 0%, transparent 60%)',
-    badge: '🌿 Eco & Textured Stock'
+    badge: 'Eco & Textured Stock'
   }
 ]
 

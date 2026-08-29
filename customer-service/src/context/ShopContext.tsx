@@ -109,7 +109,20 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     return TRANSLATIONS[language]?.[key] || TRANSLATIONS['lo']?.[key] || (key as string)
   }
 
-  const [rates, setRates] = useState({ THB: 630.5, LAK: 1 })
+  const [rates, setRates] = useState<{ THB: number; LAK: number }>(() => {
+    try {
+      const cached = localStorage.getItem('ssp_cached_rates')
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (parsed && typeof parsed.THB === 'number' && parsed.THB > 0) {
+          return parsed
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return { THB: 630.5, LAK: 1 }
+  })
   const [ratesLoaded, setRatesLoaded] = useState(false)
   const [demoMode, setDemoMode] = useState(false)
   const [orderDraft, setOrderDraft] = useState<OrderDraft | null>(null)

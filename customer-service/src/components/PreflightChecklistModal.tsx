@@ -1,6 +1,7 @@
 import React from 'react'
 import { PreflightReport } from '../lib/preflightAnalyzer'
 import { CheckIcon, AlertCircleIcon, XIcon, ArrowRightIcon, FileTextIcon, DownloadIcon, SparkleIcon, ShieldIcon, PrinterIcon } from './icons'
+import { Zap } from 'lucide-react'
 
 export interface PreflightChecklistModalProps {
   report: PreflightReport
@@ -198,7 +199,10 @@ export const PreflightChecklistModal: React.FC<PreflightChecklistModalProps> = (
                 </div>
                 <div className="flex justify-between py-1">
                   <span className="text-slate-400">ໄລຍະເວລາຜະລິດ (Lead Time):</span>
-                  <span className="font-bold text-emerald-400">⚡ ພິມດ່ວນ 24–48 ຊົ່ວໂມງ</span>
+                  <span className="font-bold text-emerald-400 flex items-center gap-1">
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>ພິມດ່ວນ 24–48 ຊົ່ວໂມງ</span>
+                  </span>
                 </div>
               </div>
             </div>

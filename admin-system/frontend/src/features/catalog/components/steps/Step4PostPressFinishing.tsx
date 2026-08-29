@@ -16,7 +16,10 @@ import {
   Wrench,
   X,
   FileCheck,
-  Ban
+  Ban,
+  Package,
+  Settings,
+  Shield
 } from 'lucide-react';
 import { useApp } from '@store/AppContext';
 import { SpecGroup, FeaturesConfig } from '../../types';
@@ -85,7 +88,7 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
           category: 'Cutter',
           costPerUnit: 28.3,
           unit: 'ແຜ່ນ',
-          icon: '✂️',
+          icon: '',
           defaultPrice: 0,
         },
         {
@@ -96,7 +99,7 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
           category: 'Laminator',
           costPerUnit: 27.5,
           unit: 'ແຜ່ນ',
-          icon: '🛡️',
+          icon: '',
           defaultPrice: 3000,
         },
         {
@@ -107,26 +110,26 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
           category: 'Binder',
           costPerUnit: 110,
           unit: 'ເລັ້ມ',
-          icon: '📖',
+          icon: '',
           defaultPrice: 10000,
         },
       ];
     }
 
     return nonPrinters.map(eq => {
-      let icon = '✂️';
+      let icon = '';
       let cat: 'Cutter' | 'Laminator' | 'Binder' | 'Puncher' = 'Cutter';
       let unit = 'ແຜ່ນ';
 
       if (eq.category === 'Laminator' || eq.name?.toLowerCase().includes('laminat')) {
-        icon = '🛡️';
+        icon = '';
         cat = 'Laminator';
       } else if (eq.category === 'Binder' || eq.name?.toLowerCase().includes('binder')) {
-        icon = '📖';
+        icon = '';
         cat = 'Binder';
         unit = 'ເລັ້ມ';
       } else if (eq.category === 'Puncher' || eq.name?.toLowerCase().includes('punch')) {
-        icon = '🕳️';
+        icon = '';
         cat = 'Puncher';
       }
 
@@ -138,10 +141,10 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
         brand: eq.brand || 'Shop Machine',
         type: eq.model || eq.category || 'Finishing Machine',
         category: cat,
-        costPerUnit,
-        unit,
-        icon,
-        defaultPrice: cat === 'Binder' ? 10000 : (cat === 'Laminator' ? 3000 : 0),
+        costPerUnit: Math.round(costPerUnit),
+        unit: unit,
+        icon: icon,
+        defaultPrice: 0,
       };
     });
   }, [equipment]);
@@ -162,20 +165,20 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
       ));
       showToast('ປິດໃຊ້ງານຫຼັງພິມ (ສິນຄ້ານີ້ຈະບໍ່ມີຕົວເລືອກງານຕັດ/ເຄືອບທີ່ໜ້າລູກຄ້າ)', 'info');
     } else {
-      loadStickerFinishingPreset();
+      loadCuttingLaminationPreset();
       showToast('ເປີດໃຊ້ງານຫຼັງພິມ & ງານຕັດສຳເລັດ', 'success');
     }
   };
 
-  // Preset: Sticker Cutting & Lamination Group
-  const loadStickerFinishingPreset = () => {
-    const cutMach = dynamicFinishingMachines.find(m => m.category === 'Cutter') || dynamicFinishingMachines[0];
-    const lamMach = dynamicFinishingMachines.find(m => m.category === 'Laminator') || dynamicFinishingMachines[1];
+  // Quick Preset Handlers
+  const loadCuttingLaminationPreset = () => {
+    const cutMach = dynamicFinishingMachines.find(m => m.category === 'Cutter');
+    const lamMach = dynamicFinishingMachines.find(m => m.category === 'Laminator');
 
     const cutGroup: SpecGroup = {
       id: `group_cut_${Date.now() % 10000}`,
-      titleLo: 'ຮູບແບບການຕັດ (Cutting & Die-Cut)',
-      titleEn: 'Cutting Method',
+      titleLo: 'ຮູບແບບການຕັດໄດຄັດ (Cutting / Die-Cut)',
+      titleEn: 'Die-Cut Options',
       displayType: 'cards',
       groupType: 'finishing',
       options: [
@@ -183,8 +186,8 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
           optionType: 'finishing', 
           machineId: cutMach?.id || 'MAC-CUTTER-920',
           machineName: cutMach?.name || 'QZYK920 Hydraulic Paper Guillotine',
-          label: '✂️ ຕັດຊື່ແບ່ງແຜ່ນ A3+ (Straight Cut)', 
-          labelLo: '✂️ ຕັດຊື່ແບ່ງແຜ່ນ A3+', 
+          label: 'ຕັດຊື່ແບ່ງແຜ່ນ A3+ (Straight Cut)', 
+          labelLo: 'ຕັດຊື່ແບ່ງແຜ່ນ A3+', 
           labelEn: 'Straight Cut Sheet', 
           value: 'straight_cut', 
           isDefault: true, 
@@ -195,8 +198,8 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
           optionType: 'finishing', 
           machineId: cutMach?.id || 'MAC-CUTTER-920',
           machineName: cutMach?.name || 'QZYK920 Hydraulic Paper Guillotine',
-          label: '✨ ໄດຄັດລອກເປັນດວງ (Kiss-Cut Sheet)', 
-          labelLo: '✨ ໄດຄັດລອກເປັນດວງ (Kiss-Cut)', 
+          label: 'ໄດຄັດລອກເປັນດວງ (Kiss-Cut Sheet)', 
+          labelLo: 'ໄດຄັດລອກເປັນດວງ (Kiss-Cut)', 
           labelEn: 'Kiss-Cut Sheet', 
           value: 'kiss_cut', 
           isDefault: false, 
@@ -207,8 +210,8 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
           optionType: 'finishing', 
           machineId: cutMach?.id || 'MAC-CUTTER-920',
           machineName: cutMach?.name || 'QZYK920 Hydraulic Paper Guillotine',
-          label: '🌟 ໄດຄັດຂາດແຍກດວງ (Die-Cut Individual)', 
-          labelLo: '🌟 ໄດຄັດຂາດແຍກດວງ (Die-Cut Individual)', 
+          label: 'ໄດຄັດຂາດແຍກດວງ (Die-Cut Individual)', 
+          labelLo: 'ໄດຄັດຂາດແຍກດວງ (Die-Cut Individual)', 
           labelEn: 'Die-Cut Individual', 
           value: 'die_cut_individual', 
           isDefault: false, 
@@ -239,8 +242,8 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
           optionType: 'finishing', 
           machineId: lamMach?.id || 'MAC-LAM-FM360',
           machineName: lamMach?.name || 'FM-360 Roll Laminator Hot & Cold',
-          label: '🛡️ ເຄືອບຟິล์ມເງົາ (Glossy Lamination)', 
-          labelLo: '🛡️ ເຄືອບຟິล์ມເງົາ (Glossy)', 
+          label: 'ເຄືອບຟິล์ມເງົາ (Glossy Lamination)', 
+          labelLo: 'ເຄືອບຟິล์ມເງົາ (Glossy)', 
           labelEn: 'Glossy Lamination', 
           value: 'gloss_lam', 
           isDefault: false, 
@@ -251,8 +254,8 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
           optionType: 'finishing', 
           machineId: lamMach?.id || 'MAC-LAM-FM360',
           machineName: lamMach?.name || 'FM-360 Roll Laminator Hot & Cold',
-          label: '✨ ເຄືອບຟິล์ມດ້ານ (Matte Lamination)', 
-          labelLo: '✨ ເຄືອບຟິล์ມດ້ານ (Matte)', 
+          label: 'ເຄືອບຟິล์ມດ້ານ (Matte Lamination)', 
+          labelLo: 'ເຄືອບຟິล์ມດ້ານ (Matte)', 
           labelEn: 'Matte Lamination', 
           value: 'matte_lam', 
           isDefault: false, 
@@ -278,11 +281,11 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
 
   // Preset: Book Binding Preset
   const loadBookBindingPreset = () => {
-    const bindMach = dynamicFinishingMachines.find(m => m.category === 'Binder') || dynamicFinishingMachines[2];
+    const bindMach = dynamicFinishingMachines.find(m => m.category === 'Binder');
 
     const bindGroup: SpecGroup = {
       id: `group_bind_${Date.now() % 10000}`,
-      titleLo: 'ວິທີເຂົ້າເລັ້ມປຶ້ມ (Binding Method)',
+      titleLo: 'ຮູບແບບການເຂົ້າເລັ້ມ (Binding Style)',
       titleEn: 'Book Binding Style',
       displayType: 'cards',
       groupType: 'binding',
@@ -291,9 +294,9 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
           optionType: 'binding', 
           machineId: bindMach?.id || 'MAC-BIND-WD50',
           machineName: bindMach?.name || 'WD-50A Perfect Glue Thermal Binder',
-          label: '📖 ເຂົ້າເລັ້ມສັນກາວຮ້ອນ (Perfect Glue)', 
-          labelLo: '📖 ເຂົ້າເລັ້ມສັນກາວຮ້ອນ', 
-          labelEn: 'Perfect Glue Binding', 
+          label: 'ເຂົ້າເລັ້ມໄສກາວຮ້ອນ (Perfect Glue)', 
+          labelLo: 'ເຂົ້າເລັ້ມໄສກາວຮ້ອນ (Perfect Glue)', 
+          labelEn: 'Perfect Glue Thermal Binding', 
           value: 'perfect_glue', 
           isDefault: true, 
           extraCostRate: bindMach?.costPerUnit || 110, 
@@ -301,8 +304,8 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
         },
         { 
           optionType: 'binding', 
-          label: '🖇️ ສັນຫ່ວງກະດູກງູ / ສັນຂົດລວດ (Wire-O)', 
-          labelLo: '🖇️ ສັນຫ່ວງກະດູກງູ / ສັນຂົດລວດ', 
+          label: 'ສັນຫ່ວງກະດູກງູ / ສັນຂົດລວດ (Wire-O)', 
+          labelLo: 'ສັນຫ່ວງກະດູກງູ / ສັນຂົດລວດ (Wire-O)', 
           labelEn: 'Wire-O Spiral Binding', 
           value: 'wire_o', 
           isDefault: false, 
@@ -311,8 +314,8 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
         },
         { 
           optionType: 'binding', 
-          label: '📑 ເຢັບມຸງຫຼັງຄາ (Saddle Stitch)', 
-          labelLo: '📑 ເຢັບມຸງຫຼັງຄາ (Saddle Stitch)', 
+          label: 'ຫຍິບມຸງຫຼັງຄາ (Saddle Stitch)', 
+          labelLo: 'ຫຍິບມຸງຫຼັງຄາ (Saddle Stitch)', 
           labelEn: 'Saddle Stitch', 
           value: 'saddle_stitch', 
           isDefault: false, 
@@ -574,12 +577,13 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-white border border-slate-200 rounded-3xl shadow-xs">
             <button
               type="button"
-              onClick={loadStickerFinishingPreset}
+              onClick={loadCuttingLaminationPreset}
               className="p-3 rounded-2xl bg-white border border-slate-200 hover:border-purple-500 text-left transition flex items-center justify-between group shadow-xs cursor-pointer"
             >
               <div>
-                <span className="text-xs font-bold text-slate-800 block group-hover:text-purple-600">
-                  ✂️ ງານຕັດໄດຄັດ & ເຄືອບຟິล์ມ
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5 group-hover:text-purple-600">
+                  <Scissors className="w-3.5 h-3.5 text-purple-600" />
+                  <span>ງານຕັດໄດຄັດ & ເຄືອບຟິล์ມ</span>
                 </span>
                 <span className="text-[11px] text-slate-400">Kiss-Cut, Die-Cut, ເຄືອບດ້ານ/ເງົາ</span>
               </div>
@@ -592,8 +596,9 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
               className="p-3 rounded-2xl bg-white border border-slate-200 hover:border-purple-500 text-left transition flex items-center justify-between group shadow-xs cursor-pointer"
             >
               <div>
-                <span className="text-xs font-bold text-slate-800 block group-hover:text-purple-600">
-                  📖 ງານເຂົ້າເລັ້ມປຶ້ມ (Binding Styles)
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5 group-hover:text-purple-600">
+                  <BookOpen className="w-3.5 h-3.5 text-purple-600" />
+                  <span>ງານເຂົ້າເລັ້ມປຶ້ມ (Binding Styles)</span>
                 </span>
                 <span className="text-[11px] text-slate-400">ສັນກາວຮ້ອນ, ສັນຫ່ວງ, ເຢັບມຸມ</span>
               </div>
@@ -729,10 +734,11 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
                             </div>
                           </div>
 
-                          {/* 2. ⚙️ Machine Linker (Depreciation & Wear) */}
+                          {/* 2. Machine Linker (Depreciation & Wear) */}
                           <div className="lg:col-span-3 space-y-1">
                             <label className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                              <span>⚙️ ເຄື່ອງຈັກ (ຄ່າເສື່ອມ/ຄ່າໄຟ):</span>
+                              <Settings className="w-3 h-3 text-slate-400" />
+                              <span>ເຄື່ອງຈັກ (ຄ່າເສື່ອມ/ຄ່າໄຟ):</span>
                             </label>
                             <select
                               value={opt.machineId || ''}
@@ -749,16 +755,17 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
                               <option value="">-- ບໍ່ຜູກເຄື່ອງຈັກ --</option>
                               {dynamicFinishingMachines.map((mach) => (
                                 <option key={mach.id} value={mach.id}>
-                                  {mach.icon} [{mach.category}] {mach.name} (+{mach.costPerUnit} ₭)
+                                  [{mach.category}] {mach.name} (+{mach.costPerUnit} ₭)
                                 </option>
                               ))}
                             </select>
                           </div>
 
-                          {/* 3. 📦 Consumable Material SKU Linker (Film / Ring / Glue / Foil) */}
+                          {/* 3. Consumable Material SKU Linker (Film / Ring / Glue / Foil) */}
                           <div className="lg:col-span-3 space-y-1">
                             <label className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                              <span>📦 ວັດສະດຸ/ຟິล์ມ/ສັນຫ່ວງໃນຄັງ:</span>
+                              <Package className="w-3 h-3 text-slate-400" />
+                              <span>ວັດສະດຸ/ຟິล์ມ/ສັນຫ່ວງໃນຄັງ:</span>
                             </label>
                             <select
                               value={opt.materialSku || ''}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Scale, TrendingDown, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Scale, TrendingDown, RefreshCw, CheckCircle2, Clock } from 'lucide-react';
 
 interface MaterialQuote {
   material_name: string;
@@ -111,8 +111,9 @@ export const SupplierPriceCompare: React.FC = () => {
                       <div className="text-[11px] font-semibold text-slate-500 font-sans">
                         ≈ ₭{sup.lak_converted.toLocaleString()} LAK
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-2">
-                        ⏱️ ໄລຍະເວລາຈັດສົ່ງ: {sup.lead_time_days} ວັນ
+                      <div className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-slate-400" />
+                        <span>ໄລຍະເວລາຈັດສົ່ງ: {sup.lead_time_days} ວັນ</span>
                       </div>
                     </div>
                   );

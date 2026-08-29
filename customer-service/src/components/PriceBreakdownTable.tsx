@@ -165,7 +165,7 @@ export const PriceBreakdownTable: React.FC<PriceBreakdownTableProps> = ({
                         ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
                         : 'bg-slate-500/10 text-slate-600 dark:text-slate-300 border border-slate-500/20'
                     }`}>
-                      {isColor ? '🌈 ພິມ 4 ສີ (CMYK)' : '⚫ ພິມຂາວ-ດຳ'}
+                      {isColor ? 'ພິມ 4 ສີ (CMYK)' : 'ພິມຂາວ-ດຳ (Mono K)'}
                     </span>
                   </td>
                   <td className="py-3.5 text-right font-mono font-bold text-amber-600 dark:text-amber-400">

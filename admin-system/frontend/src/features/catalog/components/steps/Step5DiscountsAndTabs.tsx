@@ -27,7 +27,10 @@ import {
   CheckCircle2,
   Sliders,
   Eye,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Palette,
+  Settings,
+  Ruler
 } from 'lucide-react';
 import { ProductDiscountTier, ProductInfoTab, SpecGroup, FeaturesConfig, CustomBreakdownRow } from '../../types';
 import { useApp } from '@store/AppContext';
@@ -57,33 +60,33 @@ export interface Step5DiscountsAndTabsProps {
 export const DEFAULT_PRESET_TABS: ProductInfoTab[] = [
   {
     id: 'specs',
-    titleLo: '📜 ຄູ່ມືວັດສະດຸ & ສະເປັກ (Specs & Material Guide)',
+    titleLo: 'ຄູ່ມືວັດສະດຸ & ສະເປັກ (Specs & Material Guide)',
     titleEn: 'Material & Spec Guide',
-    icon: '📜',
+    icon: '',
     contentLo: '• ເຈ້ຍອາດກາດພຣີມ້ຽມ 260g - 350g ເນື້ອແໜ້ນ ຜິວລຽບລະອຽດສູງ\n• ສະຕິກເກີ PP / PVC ກັນນ້ຳ 100% ຕິດແໜ້ນ ທົນແດດ ທົນນ້ຳ\n• ພິມດ້ວຍລະບົບດິຈິຕອນ 4 ສີ Ultra HD ລະອຽດ 2400 DPI',
     contentEn: 'Premium grade paper and synthetic materials with 2400 DPI Ultra HD printing.',
   },
   {
     id: 'bleed',
-    titleLo: '📐 ໄລຍະຕັດຕົກ & ມາດຕະຖານຟາຍ (Bleed & File Specs)',
+    titleLo: 'ໄລຍະຕັດຕົກ & ມາດຕະຖານຟາຍ (Bleed & File Specs)',
     titleEn: 'Bleed & Artwork Setup',
-    icon: '📐',
+    icon: '',
     contentLo: '• ຂະໜາດຕັດຕົກ (Bleed): ເຜື່ອຂອບອອກ 2 mm ທຸກດ້ານ\n• ໄລຍະປອດໄພ (Safe Zone): ວາງຂໍ້ຄວາມຫ່າງຈາກຂອບຕັດຢ່າງໜ້ອຍ 3 mm\n• ໂໝດສີ: CMYK Color Profile (ຄວາມລະອຽດແນະນຳ 300 DPI ຂຶ້ນໄປ)',
     contentEn: 'Include 2mm bleed on all sides and maintain 3mm safe margin. Format: PDF/AI 300 DPI.',
   },
   {
     id: 'delivery',
-    titleLo: '🚚 ຮອບຜະລິດ & ການຈັດສົ່ງ (Production & Delivery)',
+    titleLo: 'ຮອບຜະລິດ & ການຈັດສົ່ງ (Production & Delivery)',
     titleEn: 'Production & Shipping',
-    icon: '🚚',
+    icon: '',
     contentLo: '• ງານດ່ວນພິເສດ (Rush 24h): ຜະລິດພາຍໃນ 24 ຊົ່ວໂມງ\n• ງານມາດຕະຖານ: 1-2 ວັນລັດຖະການ\n• ຈັດສົ່ງທົ່ວນະຄອນຫຼວງວຽງຈັນ ແລະ ຕ່າງແຂວງຜ່ານຂົນສົ່ງເອກະຊົນ',
     contentEn: 'Standard turnaround 1-2 business days. 24h expedited rush available.',
   },
   {
     id: 'faq',
-    titleLo: '❓ ຄຳຖາມທີ່ພົບເລື້ອຍ (FAQ)',
+    titleLo: 'ຄຳຖາມທີ່ພົບເລື້ອຍ (FAQ)',
     titleEn: 'Frequently Asked Questions',
-    icon: '❓',
+    icon: '',
     contentLo: 'Q: ສັ່ງຂັ້ນຕ່ຳເທົ່າໃດ?\nA: ເລີ່ມຕົ້ນພຽງ 1 ແຜ່ນ / 100 ຊິ້ນ ຂຶ້ນໄປ\nQ: ຖ້າບໍ່ມີຟາຍ ມີບໍລິການອອກແບບບໍ່?\nA: ຮ້ານມີ Template ຟຣີ ແລະ ບໍລິການຈັດອາດເວິກ',
     contentEn: 'Q: Minimum order quantity? A: Starts from 1 sheet. Free templates provided.',
   },
@@ -526,7 +529,7 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
       id: `tab_${Date.now() % 10000}`,
       titleLo: 'ແທັບຂໍ້ມູນໃໝ່ (Custom Tab)',
       titleEn: 'Custom Info Tab',
-      icon: '📌',
+      icon: '',
       contentLo: 'ເນື້ອໃນລາຍລະອຽດຂໍ້ມູນສິນຄ້າ (ພາສາລາວ)...',
       contentEn: 'Detailed product information (English)...',
     };
@@ -577,8 +580,10 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <span className="px-3.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-mono font-bold">
-            🎨 ສີ: {formatLAK(totalColorBaseCost)} | 📄 ຂາວດຳ: {formatLAK(totalMonoBaseCost)}
+          <span className="px-3.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-mono font-bold flex items-center gap-2">
+            <span className="flex items-center gap-1"><Palette className="w-3.5 h-3.5 text-sky-600" /> ສີ: {formatLAK(totalColorBaseCost)}</span>
+            <span>|</span>
+            <span className="flex items-center gap-1"><FileText className="w-3.5 h-3.5 text-slate-500" /> ຂາວດຳ: {formatLAK(totalMonoBaseCost)}</span>
           </span>
         </div>
       </div>
@@ -598,11 +603,11 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
 
           <button
             type="button"
-            onClick={() => handleApplyGlobalMargin(targetMarginPercent)}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black transition shadow-md shadow-accent-sky/20 active:scale-95 cursor-pointer"
+            onClick={() => setBreakdownMode(breakdownMode === 'auto' ? 'custom' : 'auto')}
+            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold transition flex items-center gap-2 cursor-pointer self-start sm:self-auto"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>ຄິດໄລ່ລາຄາຂາຍ & ຕົວເລືອກໃໝ່ (Recalculate)</span>
+            <Sliders className="w-3.5 h-3.5 text-slate-500" />
+            <span>{breakdownMode === 'auto' ? 'ສະຫຼັບໄປ: ໂໝດກຳນົດສູດເອງ (Custom)' : 'ສະຫຼັບໄປ: ໂໝດອັດຕະໂນມັດ (Auto)'}</span>
           </button>
         </div>
 
@@ -629,7 +634,7 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
             <div className="space-y-2 pt-2 border-t border-slate-200/80">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold text-slate-600 flex items-center gap-1">
-                  <span>🎨</span>
+                  <Palette className="w-3.5 h-3.5 text-sky-600" />
                   <span>ພິມ 4 ສີ:</span>
                 </span>
                 <span className="font-mono font-bold text-sky-700">
@@ -638,7 +643,7 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold text-slate-600 flex items-center gap-1">
-                  <span>📄</span>
+                  <FileText className="w-3.5 h-3.5 text-slate-500" />
                   <span>ພິມຂາວດຳ:</span>
                 </span>
                 <span className="font-mono font-bold text-slate-600">
@@ -717,7 +722,9 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
           {/* Color Total Cost */}
           <div className="p-5 bg-sky-50/80 text-slate-900 rounded-2xl border border-sky-200 flex items-center justify-between shadow-xs">
             <div className="flex items-center gap-3">
-              <span className="text-2xl">🎨</span>
+              <div className="w-10 h-10 rounded-xl bg-sky-200 flex items-center justify-center text-sky-700 font-bold">
+                <Palette className="w-5 h-5" />
+              </div>
               <div>
                 <span className="text-xs font-black text-sky-900 uppercase tracking-wider block">
                   ຕົ້ນທຶນການຜະລິດລວມ (ກໍລະນີພິມ 4 ສີ):
@@ -738,7 +745,9 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
           {/* Mono Total Cost */}
           <div className="p-5 bg-slate-50 text-slate-900 rounded-2xl border border-slate-200 flex items-center justify-between shadow-xs">
             <div className="flex items-center gap-3">
-              <span className="text-2xl">📄</span>
+              <div className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center text-slate-700 font-bold">
+                <FileText className="w-5 h-5" />
+              </div>
               <div>
                 <span className="text-xs font-black text-slate-900 uppercase tracking-wider block">
                   ຕົ້ນທຶນການຜະລິດລວມ (ກໍລະນີພິມຂາວດຳ):
@@ -758,69 +767,53 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
         </div>
 
         {/* Global Profit Margin Simulator Card (Dual Color & Mono Result) */}
-        <div className="p-6 bg-emerald-50/40 border-2 border-emerald-500/30 rounded-3xl space-y-5 shadow-xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="p-6 bg-slate-900 text-white rounded-3xl space-y-6 shadow-xl border border-slate-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
             <div className="space-y-1">
-              <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                <Percent className="w-4 h-4 text-emerald-600" />
-                <span>ກຳນົດອັດຕາກຳໄລເປົ້າໝາຍສິນຄ້າ (Target Profit Margin %):</span>
-                <span className="px-2.5 py-0.5 bg-emerald-600 text-white rounded-lg text-xs font-mono font-bold">
-                  {targetMarginPercent}%
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-lg text-xs font-mono font-bold border border-emerald-500/30">
+                  Margin {targetMarginPercent}%
                 </span>
-              </h4>
-              <p className="text-xs text-slate-600">
-                ສູດຄິດໄລ່ລາຄາຂາຍ: <code className="text-emerald-700 font-mono font-bold">ລາຄາຂາຍ = ຕົ້ນທຶນລວມ ÷ (1 - {targetMarginPercent}%)</code>
+                <h4 className="text-sm font-black text-white">
+                  ຕາຕະລາງລາຄາຂາຍໜ້າເວັບ (Selling Price Simulator)
+                </h4>
+              </div>
+              <p className="text-xs text-slate-400">
+                ລາຄາຂາຍໜ້າເວັບທີ່ລູກຄ້າເຫັນ ຖືກຄຳນວອນຈາກ (ຕົ້ນທຶນລວມ ÷ (1 - Margin%)) ອັດຕະໂນມັດ
               </p>
             </div>
 
-            {/* Margin Preset Pills */}
-            <div className="flex items-center gap-1.5 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs">
-              {[20, 25, 30, 35, 40, 50].map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => handleApplyGlobalMargin(m)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold font-mono transition cursor-pointer ${
-                    targetMarginPercent === m
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  {m}%
-                </button>
-              ))}
-              <div className="flex items-center pl-1 pr-1">
-                <input
-                  type="number"
-                  min={5}
-                  max={90}
-                  value={targetMarginPercent}
-                  onChange={(e) => handleApplyGlobalMargin(Math.max(5, Math.min(90, parseInt(e.target.value, 10) || 35)))}
-                  className="w-12 px-1.5 py-1 text-xs font-mono font-bold bg-white border border-slate-300 rounded-lg text-center text-slate-900"
-                />
-              </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-300">ປັບ Margin ລວມ (%):</label>
+              <input
+                type="number"
+                min="0"
+                max="90"
+                value={targetMarginPercent}
+                onChange={(e) => setTargetMarginPercent(parseFloat(e.target.value) || 0)}
+                className="w-20 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-sm font-mono font-black text-center text-emerald-400 outline-none focus:border-emerald-500"
+              />
             </div>
           </div>
 
-          {/* Dual Pricing Result Cards (Color vs Mono) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-            
+          {/* Dual Selling Price Display Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Color Selling Price Card */}
-            <div className="p-4 bg-sky-600 text-white rounded-2xl space-y-2 shadow-md">
+            <div className="p-4 bg-gradient-to-tr from-sky-950/80 to-indigo-950/80 rounded-2xl space-y-2 border border-sky-500/30 shadow-md">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-sky-100 flex items-center gap-1.5">
-                  <span>🎨</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-sky-200 flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5 text-sky-400" />
                   <span>1. ລາຄາຂາຍພິມ 4 ສີ (Color Selling Price)</span>
                 </span>
-                <span className="px-2 py-0.5 bg-white/20 rounded-md text-[10px] font-mono font-bold">
+                <span className="px-2 py-0.5 bg-sky-500/20 text-sky-300 rounded-md text-[10px] font-mono font-bold">
                   Margin {targetMarginPercent}%
                 </span>
               </div>
               <div className="flex items-baseline justify-between pt-1">
-                <span className="text-2xl font-mono font-black tracking-tight">
+                <span className="text-2xl font-mono font-black tracking-tight text-white">
                   {suggestedColorSellingPrice.toLocaleString()} ₭
                 </span>
-                <span className="text-xs font-mono text-emerald-200 font-bold">
+                <span className="text-xs font-mono text-emerald-400 font-bold">
                   (ກຳໄລ +{colorUnitProfit.toLocaleString()} ₭)
                 </span>
               </div>
@@ -834,7 +827,7 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
             <div className="p-4 bg-slate-800 text-white rounded-2xl space-y-2 shadow-md border border-slate-700">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
-                  <span>📄</span>
+                  <FileText className="w-3.5 h-3.5 text-slate-400" />
                   <span>2. ລາຄາຂາຍພິມຂາວດຳ (Mono Selling Price)</span>
                 </span>
                 <span className="px-2 py-0.5 bg-white/10 rounded-md text-[10px] font-mono font-bold">
@@ -854,184 +847,43 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
                 <span>{!defaultOptionIsColor ? '✓ ເປັນລາຄາເລີ່ມຕົ້ນ (Base)' : `ສ່ວນຕ່າງ -${Math.max(0, suggestedColorSellingPrice - suggestedMonoSellingPrice).toLocaleString()} ₭`}</span>
               </div>
             </div>
-
           </div>
 
-          {/* Sync Status Banner */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-            <div className="flex items-center gap-2 text-xs text-slate-600">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>ລາຄາຂາຍນີ້ຈະຖືກນຳໄປໃຊ້ເປັນລາຄາເລີ່ມຕົ້ນ (Base Price: {suggestedPrimarySellingPrice.toLocaleString()} ₭) ແລະ ຄິດໄລ່ສ່ວນຕ່າງຕົວເລືອກໃຫ້ອັດຕະໂນມັດ</span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => handleApplyGlobalMargin(targetMarginPercent)}
-              className="px-4 py-2 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold font-mono transition flex items-center gap-2 self-start sm:self-auto cursor-pointer shadow-sm"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>ບັນທຶກລາຄານີ້ ({suggestedPrimarySellingPrice.toLocaleString()} ₭)</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* SECTION 2: LIVE CUSTOMER QUOTATION BREAKDOWN TABLE & SELLING RATES */}
-      <div className="p-6 bg-white border border-slate-200/90 rounded-3xl space-y-5 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-          <div className="space-y-1">
-            <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-              <FileSpreadsheet className="w-4 h-4 text-amber-500" />
-              <span>2. ຕາຕະລາງສະຫຼຸບລາຄາຄ່າບໍລິການໃຫ້ກັບລູກຄ້າ (Customer Quotation Breakdown & Selling Rates)</span>
-            </h3>
-            <p className="text-xs text-slate-500">
-              ເລືອກຮູບແບບການສະແດງລາຍການບໍລິການໃນໜ້າເວັບລູກຄ້າ (ແຍກອັດຕະໂນມັດ ຫຼື ກຳນົດສູດ & ຊື່ເອງ)
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* Mode Switcher: Auto vs Custom */}
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
-              <button
-                type="button"
-                onClick={() => setBreakdownMode('auto')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                  breakdownMode === 'auto'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span>🟢 ມາດຕະຖານ (Auto)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setBreakdownMode('custom')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                  breakdownMode === 'custom'
-                    ? 'bg-sky-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span>🟣 ກຳນົດສູດເອງ (Custom)</span>
-              </button>
-            </div>
-
-            {/* Color Mode Switcher */}
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
-              <button
-                type="button"
-                onClick={() => setPreviewColorMode('color')}
-                className={`px-2.5 py-1.5 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer ${
-                  previewColorMode === 'color'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span>🎨 ສີ 4C</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPreviewColorMode('mono')}
-                className={`px-2.5 py-1.5 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer ${
-                  previewColorMode === 'mono'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span>📄 ຂາວດຳ K</span>
-              </button>
-            </div>
-
-            {/* Quantity Picker */}
-            <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1.5 rounded-xl border border-slate-200">
-              <span className="text-[11px] font-bold text-slate-500">ຈຳນວນ:</span>
-              <select
-                value={previewQuantity}
-                onChange={(e) => setPreviewQuantity(parseInt(e.target.value, 10) || 1)}
-                className="bg-transparent text-xs font-mono font-bold text-slate-800 outline-none cursor-pointer"
-              >
-                {[1, 10, 50, 100, 300, 500, 1000].map((q) => (
-                  <option key={q} value={q} className="bg-white">
-                    {q} ຊິ້ນ
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* CUSTOM MODE TOOLBAR & PRESETS */}
-        {breakdownMode === 'custom' && (
-          <div className="p-4 bg-sky-50/60 border border-sky-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <span className="text-xs font-bold text-sky-950 flex items-center gap-1.5">
-                <span>⚙️</span>
-                <span>ໂໝດກຳນົດສູດ & ຕັ້ງຊື່ລາຍການເອງ (Custom Breakdown Engine)</span>
-              </span>
-              <p className="text-[11px] text-slate-600">
-                ທ່ານສາມາດຕັ້ງຊື່ລາຍການ ແລະ ຕິກເລືອກຕົ້ນທຶນ (ພິມ + ເຈ້ຍ + ງານຕັດ) ທີ່ຈະນຳມາບວກລວມກັນໃນແຕ່ລະແຖວໄດ້ຢ່າງອິດສະຫຼະ
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={loadCombinedPreset}
-                className="px-3 py-1.5 bg-white border border-sky-200 text-sky-700 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer hover:bg-sky-50"
-              >
-                <Zap className="w-3.5 h-3.5 text-amber-500" />
-                <span>ສູດລວມ: ພິມ+ເຈ້ຍ</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleAddCustomRow}
-                className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>ເພີ່ມລາຍການໃໝ່</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* BREAKDOWN TABLE: AUTO MODE */}
-        {breakdownMode === 'auto' ? (
-          <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10.5px]">
-                    <th className="py-3 px-4 font-bold">ລາຍການບໍລິການ (Service Item)</th>
-                    <th className="py-3 px-4 font-bold text-center">ສເປັກທີ່ເລືອກ (Specification)</th>
-                    <th className="py-3 px-4 font-bold text-right">ຕົ້ນທຶນຕົວຈິງ (Cost)</th>
-                    <th className="py-3 px-4 font-bold text-right">ລາຄາຂາຍ/ໜ່ວຍ (Selling Rate)</th>
-                    <th className="py-3 px-4 font-bold text-right">ຈຳນວນ (Qty)</th>
-                    <th className="py-3 px-4 font-bold text-right">ລວມມູນຄ່າ (Subtotal)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {/* Row 1: Print Engine Service Rate */}
-                  <tr>
-                    <td className="py-3.5 px-4 font-bold text-slate-900">
-                      <div className="flex flex-col">
-                        <span className="text-xs font-black">
-                          {previewColorMode === 'color' ? '🎨 ຄ່າພິມ 4 ສີ (Color Print Service)' : '📄 ຄ່າພິມຂາວດຳ (Mono Print Service)'}
-                        </span>
-                        <span className="text-[10.5px] text-slate-500">
-                          (Coverage {baselineCoveragePercent}% · {previewColorMode === 'color' ? 'CMYK Full Color' : 'Monochrome Grayscale'})
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <span className={`inline-block px-3 py-1 rounded-full font-mono text-[11px] font-bold ${
-                        previewColorMode === 'color'
-                          ? 'bg-sky-50 text-sky-700 border border-sky-200'
-                          : 'bg-slate-100 text-slate-700 border border-slate-200'
-                      }`}>
-                        {previewColorMode === 'color' ? '🌈 ພິມ 4 ສີ (CMYK)' : '⚫ ພິມຂາວ-ດຳ (Mono K)'}
+          {breakdownMode === 'auto' ? (
+            /* BREAKDOWN TABLE: AUTO MODE */
+            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-700 font-bold">
+                  <th className="py-3 px-4">ລາຍການຕົ້ນທຶນ (Cost Component)</th>
+                  <th className="py-3 px-4 text-center">ຕົວເລືອກທີ່ເລືອກ (Selected Spec)</th>
+                  <th className="py-3 px-4 text-right">ຕົ້ນທຶນ/ຊິ້ນ (Cost)</th>
+                  <th className="py-3 px-4 text-right">ລາຄາຂາຍ/ຊິ້ນ (Price)</th>
+                  <th className="py-3 px-4 text-right">ຈຳນວນ (Qty)</th>
+                  <th className="py-3 px-4 text-right">ຍອດລວມ (Subtotal)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {/* Print Engine Rate */}
+                <tr>
+                  <td className="py-3.5 px-4 font-bold text-slate-900">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-black">1. ລະບົບພິມ (Print Engine Base)</span>
+                      <span className="text-[10.5px] text-slate-500">
+                        {defaultMachineName} (Coverage {baselineCoveragePercent}%)
                       </span>
-                    </td>
+                    </div>
+                  </td>
+                  <td className="py-3.5 px-4 text-center">
+                    <span className={`inline-block px-3 py-1 rounded-full font-mono text-[11px] font-bold ${
+                      previewColorMode === 'color'
+                        ? 'bg-sky-50 text-sky-700 border border-sky-200'
+                        : 'bg-slate-100 text-slate-700 border border-slate-200'
+                    }`}>
+                      {previewColorMode === 'color' ? 'ພິມ 4 ສີ (CMYK)' : 'ພິມຂາວ-ດຳ (Mono K)'}
+                    </span>
+                  </td>
                     <td className="py-3.5 px-4 text-right font-mono text-slate-500">
                       {(previewColorMode === 'color' ? colorPrintUnitCost : monoPrintUnitCost).toLocaleString()} ₭
                     </td>
@@ -1051,7 +903,7 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
                     <tr key={mat.groupId || idx}>
                       <td className="py-3.5 px-4 font-bold text-slate-900">
                         <div className="flex flex-col">
-                          <span className="text-xs font-black">📄 {mat.groupTitle}</span>
+                          <span className="text-xs font-black">{mat.groupTitle}</span>
                           <span className="text-[10.5px] text-slate-500">
                             ({mat.optionLabel})
                           </span>
@@ -1082,7 +934,7 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
                     <tr key={fin.groupId || idx}>
                       <td className="py-3.5 px-4 font-bold text-slate-900">
                         <div className="flex flex-col">
-                          <span className="text-xs font-black">✂️ {fin.groupTitle}</span>
+                          <span className="text-xs font-black">{fin.groupTitle}</span>
                           <span className="text-[10.5px] text-slate-500">
                             ({fin.optionLabel})
                           </span>
@@ -1185,7 +1037,7 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
                         {/* Components Checkboxes */}
                         <td className="py-3.5 px-4">
                           <div className="flex flex-wrap items-center justify-center gap-2">
-                            <label className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition ${
+                            <label className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition ${
                               row.includePrintCost 
                                 ? 'bg-sky-50 text-sky-800 border border-sky-300' 
                                 : 'bg-slate-100 text-slate-500 border border-slate-200'
@@ -1196,10 +1048,11 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
                                 onChange={(e) => handleUpdateCustomRow(idx, { includePrintCost: e.target.checked })}
                                 className="rounded text-sky-600 focus:ring-0"
                               />
-                              <span>🎨 ຄ່າພິມ ({printCost.toLocaleString()}₭)</span>
+                              <Printer className="w-3 h-3 text-sky-600" />
+                              <span>ຄ່າພິມ ({printCost.toLocaleString()}₭)</span>
                             </label>
 
-                            <label className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition ${
+                            <label className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition ${
                               row.includeMaterialCost 
                                 ? 'bg-emerald-50 text-emerald-800 border border-emerald-300' 
                                 : 'bg-slate-100 text-slate-500 border border-slate-200'
@@ -1210,10 +1063,11 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
                                 onChange={(e) => handleUpdateCustomRow(idx, { includeMaterialCost: e.target.checked })}
                                 className="rounded text-emerald-600 focus:ring-0"
                               />
-                              <span>📄 ຄ່າເຈ້ຍ ({materialUnitCost.toLocaleString()}₭)</span>
+                              <FileText className="w-3 h-3 text-emerald-600" />
+                              <span>ຄ່າເຈ້ຍ ({materialUnitCost.toLocaleString()}₭)</span>
                             </label>
 
-                            <label className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition ${
+                            <label className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition ${
                               row.includeFinishingCost 
                                 ? 'bg-purple-50 text-purple-800 border border-purple-300' 
                                 : 'bg-slate-100 text-slate-500 border border-slate-200'
@@ -1224,7 +1078,8 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
                                 onChange={(e) => handleUpdateCustomRow(idx, { includeFinishingCost: e.target.checked })}
                                 className="rounded text-purple-600 focus:ring-0"
                               />
-                              <span>✂️ ຄ່າງານຕັດ ({finishingUnitCost.toLocaleString()}₭)</span>
+                              <Scissors className="w-3 h-3 text-purple-600" />
+                              <span>ຄ່າງານຕັດ ({finishingUnitCost.toLocaleString()}₭)</span>
                             </label>
                           </div>
                         </td>
@@ -1283,6 +1138,7 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* SECTION 2.5: MINIMUM ORDER QUANTITY (MOQ) */}
@@ -1425,7 +1281,7 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
         {/* Tier Discount Cards / Table */}
         {!enableDiscounts || discountTiers.length === 0 ? (
           <div className="py-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-2xl space-y-2">
-            <span className="text-2xl block">🏷️</span>
+            <Tag className="w-8 h-8 mx-auto text-slate-400" />
             <span className="text-xs font-bold text-slate-700 block">
               ສິນຄ້ານີ້ບໍ່ມີສ່ວນຫຼຸດຕາມຈຳນວນ (Flat Standard Pricing)
             </span>
@@ -1580,7 +1436,7 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
         {/* Tabs Editor */}
         {!enableInfoTabs || infoTabs.length === 0 ? (
           <div className="py-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-2xl space-y-2">
-            <span className="text-2xl block">📄</span>
+            <FileText className="w-8 h-8 mx-auto text-slate-400" />
             <span className="text-xs font-bold text-slate-700 block">
               ບໍ່ມີແທັບຂໍ້ມູນເພີ່ມເຕີມສຳລັບສິນຄ້ານີ້
             </span>
@@ -1601,7 +1457,7 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
                       type="text"
                       value={tab.titleLo}
                       onChange={(e) => handleUpdateInfoTab(tIdx, 'titleLo', e.target.value)}
-                      placeholder="ຫົວຂໍ້ແທັບ (ລາວ) ເຊັ່ນ: 📜 ຄູ່ມືວັດສະດຸ"
+                      placeholder="ຫົວຂໍ້ແທັບ (ລາວ) ເຊັ່ນ: ຄູ່ມືວັດສະດຸ"
                       className="px-3 py-1.5 text-xs font-bold bg-white border border-slate-200 rounded-xl text-slate-900 focus:ring-2 focus:ring-accent-sky/30 focus:border-accent-sky"
                     />
                     <input

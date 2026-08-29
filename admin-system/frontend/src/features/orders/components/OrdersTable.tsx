@@ -23,7 +23,7 @@ interface OrdersTableProps {
   onResetFilters?: () => void;
 }
 
-export default function OrdersTable({
+export const OrdersTable = React.memo(function OrdersTable({
   filteredOrders,
   selectedOrder,
   selectedOrderIds = [],
@@ -130,4 +130,6 @@ export default function OrdersTable({
       </table>
     </div>
   );
-}
+});
+
+export default OrdersTable;

@@ -177,7 +177,7 @@ export default function TrackingPage() {
       await rejectDigitalProof(order.order_id || order.id || '', revisionNotes.trim())
       setRevisionRequested(true)
       setShowRevisionBox(false)
-      setOrder((prev) => (prev ? { ...prev, status: 'PREPRESS_CHECK', proof_rejection_reason: revisionNotes.trim() } : null))
+      setOrder((prev) => (prev ? { ...prev, status: 'PROOF_REJECTED', proof_rejection_reason: revisionNotes.trim(), proof_rejected_at: new Date().toISOString() } : null))
     } catch (err) {
       console.error('Failed to submit revision:', err)
     } finally {
@@ -621,10 +621,10 @@ export default function TrackingPage() {
                 >
                   <div>
                     <h4 className="text-sm font-black m-0" style={{ color: 'var(--text-main)' }}>
-                      🔁 สั่งพิมพ์ซ้ำ (Re-order)
+                      ສັ່ງພິມຊ້ຳ (Re-order)
                     </h4>
                     <p className="text-xs m-0" style={{ color: 'var(--text-muted)' }}>
-                      คัดลอกสเปกงานเดิม ({order.specs?.paper || ''} {order.specs?.size || ''}) และไฟล์อาร์ตเวิร์กลงตะกร้าทันที
+                      ຄັດລອກສະເປກງານເດີມ ({order.specs?.paper || ''} {order.specs?.size || ''}) ແລະ ໄຟລ໌ອາດເວິກລົງກະຕ່າທັນທີ
                     </p>
                   </div>
                   <button
@@ -634,7 +634,7 @@ export default function TrackingPage() {
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                   >
                     <RefreshIcon size={18} />
-                    <span>{reorderSuccess ? '✓ เพิ่มลงตะกร้าแล้ว (Added)' : '🔁 สั่งพิมพ์ซ้ำ (Re-order)'}</span>
+                    <span>{reorderSuccess ? '✓ ເພີ່ມລົງກະຕ່າແລ້ວ (Added)' : 'ສັ່ງພິມຊ້ຳ (Re-order)'}</span>
                   </button>
                 </div>
               )}
@@ -646,7 +646,7 @@ export default function TrackingPage() {
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
               >
                 <RefreshIcon size={20} />
-                <span>{reorderSuccess ? '✓ เพิ่มลงตะกร้าสินค้าแล้ว' : '🔁 สั่งพิมพ์ซ้ำ (Re-order)'}</span>
+                <span>{reorderSuccess ? '✓ ເພີ່ມລົງກະຕ່າສິນຄ້າແລ້ວ' : 'ສັ່ງພິມຊ້ຳ (Re-order)'}</span>
               </button>
 
               <a

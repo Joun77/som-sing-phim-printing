@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '@store/useAuthStore';
-import { ShieldCheck, Lock, User, LogIn, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Lock, User, LogIn, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('admin123');
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -49,7 +50,7 @@ export const LoginPage: React.FC = () => {
       }
 
       const data = await response.json();
-      loginStore(data.token, { username, role: data.role, fullName: data.fullname }, rememberMe);
+      loginStore(data.token, { username, role: data.role, fullName: data.fullname }, rememberMe, data.refresh_token);
     } catch (err: any) {
       setError(err.message || 'ເກີດຂໍ້ຜິດພາດໃນການເຊື່ອມຕໍ່ເຊີບເວີ');
     } finally {
@@ -113,13 +114,21 @@ export const LoginPage: React.FC = () => {
                 <Lock className="w-5 h-5" />
               </div>
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-2 border-slate-200 focus:border-blue-600 focus:bg-white rounded-2xl text-slate-900 font-bold placeholder-slate-400 outline-none transition"
+                className="w-full pl-12 pr-12 py-3.5 bg-slate-50 border-2 border-slate-200 focus:border-blue-600 focus:bg-white rounded-2xl text-slate-900 font-bold placeholder-slate-400 outline-none transition"
                 placeholder="ປ້ອນລະຫັດຜ່ານ..."
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
           </div>
 

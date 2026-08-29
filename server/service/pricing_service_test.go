@@ -124,3 +124,32 @@ func TestPricingService_PublicMasking(t *testing.T) {
 		t.Errorf("expected currency LAK, got %s", pubResp.Currency)
 	}
 }
+
+func TestPricingService_MachineOverheadIntegration(t *testing.T) {
+	svc := service.NewPricingService()
+
+	// Machine Price = 50,000,000 LAK, Expected Life = 500,000 pages => 100 LAK/page depr
+	// Maintenance Rate = 20% => 20 LAK/page maint
+	// Total Machine Overhead = 120 LAK/page
+	// 1000 quantity * 1 page = 120,000 LAK machine cost
+	req := domain.PricingCalculationRequest{
+		JobName:                "Booklet 1000 copies",
+		Quantity:               1000,
+		PageCount:              1,
+		PaperCostPerUnitLAK:    1000,
+		MachinePriceLAK:        50000000,
+		ExpectedLifePages:      500000,
+		MaintenanceRatePercent: decimal.NewFromFloat(20.0),
+		MarkupMarginPercent:    decimal.NewFromFloat(20.0),
+	}
+
+	resp, err := svc.CalculatePricing(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if resp.CostBreakdown.MachineDepreciationLAK != 120000 {
+		t.Errorf("expected machine overhead 120000, got %d", resp.CostBreakdown.MachineDepreciationLAK)
+	}
+}
+

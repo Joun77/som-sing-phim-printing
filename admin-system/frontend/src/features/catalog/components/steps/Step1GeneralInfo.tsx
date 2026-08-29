@@ -11,7 +11,14 @@ import {
   Check, 
   Sparkles,
   Settings2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  BookOpen,
+  Ruler,
+  Zap,
+  Palette,
+  Download,
+  Scissors,
+  Rocket
 } from 'lucide-react';
 import { PublicCategory, PricingModel, FeaturesConfig } from '../../types';
 
@@ -304,8 +311,9 @@ export const Step1GeneralInfo: React.FC<Step1GeneralInfoProps> = ({
               <label className="text-xs font-bold text-slate-700">
                 ລາຄາເລີ່ມຕົ້ນ (Base Starting Price LAK)
               </label>
-              <span className="text-[10px] text-sky-700 font-bold">
-                ⚡ ຄິດໄລ່ຈາກຂັ້ນຕອນທີ 5
+              <span className="text-[10px] text-sky-700 font-bold flex items-center gap-1">
+                <Zap className="w-3 h-3 text-sky-600" />
+                <span>ຄິດໄລ່ຈາກຂັ້ນຕອນທີ 5</span>
               </span>
             </div>
             <div className="relative">
@@ -527,7 +535,10 @@ export const Step1GeneralInfo: React.FC<Step1GeneralInfoProps> = ({
               }`}
             >
               <div>
-                <span className="text-xs font-black block mb-1">🖼️ ໄຟລ໌ພ້ອມພິມທົ່ວໄປ (Print Ready)</span>
+                <span className="text-xs font-black flex items-center gap-1.5 mb-1">
+                  <ImageIcon className="w-3.5 h-3.5 text-sky-600" />
+                  <span>ໄຟລ໌ພ້ອມພິມທົ່ວໄປ (Print Ready)</span>
+                </span>
                 <span className="text-[11px] text-slate-500">
                   ສະຕິກເກີ, ນາມບັດ, ໂບຣຊົວ (PDF, JPG, PNG 1-2 ໜ້າ)
                 </span>
@@ -556,7 +567,10 @@ export const Step1GeneralInfo: React.FC<Step1GeneralInfoProps> = ({
               }`}
             >
               <div>
-                <span className="text-xs font-black block mb-1">📚 ງານປຶ້ມ & ເອກະສານ (Multi-Page PDF)</span>
+                <span className="text-xs font-black flex items-center gap-1.5 mb-1">
+                  <BookOpen className="w-3.5 h-3.5 text-sky-600" />
+                  <span>ງານປຶ້ມ & ເອກະສານ (Multi-Page PDF)</span>
+                </span>
                 <span className="text-[11px] text-slate-500">
                   ນັບຈຳນວນໜ້າ PDF ອັດຕະໂນມັດ, ຄິດໄລ່ສັນປົກປຶ້ມ
                 </span>
@@ -585,7 +599,10 @@ export const Step1GeneralInfo: React.FC<Step1GeneralInfoProps> = ({
               }`}
             >
               <div>
-                <span className="text-xs font-black block mb-1">📐 ປ້າຍຕາລາງແມັດ (Large Format SQM)</span>
+                <span className="text-xs font-black flex items-center gap-1.5 mb-1">
+                  <Ruler className="w-3.5 h-3.5 text-sky-600" />
+                  <span>ປ້າຍຕາລາງແມັດ (Large Format SQM)</span>
+                </span>
                 <span className="text-[11px] text-slate-500">
                   ປ້າຍໄວນິລ, ສະຕິກເກີມ້ວນໃຫຍ່ ຄຳນວອນ ກວ້າງ x ຍາວ (m²)
                 </span>
@@ -610,8 +627,9 @@ export const Step1GeneralInfo: React.FC<Step1GeneralInfoProps> = ({
               }
               className="w-4 h-4 text-sky-600 rounded"
             />
-            <span className="text-xs font-semibold text-slate-800">
-              ⚡ ກວດໄຟລ໌ Preflight ອັດຕະໂນມັດ (DPI, Bleed)
+            <span className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-amber-500" />
+              <span>ກວດໄຟລ໌ Preflight ອັດຕະໂນມັດ (DPI, Bleed)</span>
             </span>
           </label>
 
@@ -624,8 +642,9 @@ export const Step1GeneralInfo: React.FC<Step1GeneralInfoProps> = ({
               }
               className="w-4 h-4 text-sky-600 rounded"
             />
-            <span className="text-xs font-semibold text-slate-800">
-              🎨 ອອກແບບອອນລາຍ (Canva / Canvas Editor)
+            <span className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+              <Palette className="w-3.5 h-3.5 text-indigo-500" />
+              <span>ອອກແບບອອນລາຍ (Canva / Canvas Editor)</span>
             </span>
           </label>
 
@@ -638,8 +657,9 @@ export const Step1GeneralInfo: React.FC<Step1GeneralInfoProps> = ({
               }
               className="w-4 h-4 text-sky-600 rounded"
             />
-            <span className="text-xs font-semibold text-slate-800">
-              📥 ດາວໂຫຼດ Template ໄດຄັດ (AI, PSD)
+            <span className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+              <Download className="w-3.5 h-3.5 text-emerald-500" />
+              <span>ດາວໂຫຼດ Template ໄດຄັດ (AI, PSD)</span>
             </span>
           </label>
 
@@ -652,8 +672,9 @@ export const Step1GeneralInfo: React.FC<Step1GeneralInfoProps> = ({
               }
               className="w-4 h-4 text-sky-600 rounded"
             />
-            <span className="text-xs font-semibold text-slate-800">
-              ✂️ ງານຕັດ & ເຂົ້າເລັ້ມ (Finishing Selector)
+            <span className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+              <Scissors className="w-3.5 h-3.5 text-purple-500" />
+              <span>ງານຕັດ & ເຂົ້າເລັ້ມ (Finishing Selector)</span>
             </span>
           </label>
 
@@ -666,8 +687,9 @@ export const Step1GeneralInfo: React.FC<Step1GeneralInfoProps> = ({
               }
               className="w-4 h-4 text-sky-600 rounded"
             />
-            <span className="text-xs font-semibold text-slate-800">
-              🚀 ງານດ່ວນພິເສດ (Rush 24h Delivery)
+            <span className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+              <Rocket className="w-3.5 h-3.5 text-rose-500" />
+              <span>ງານດ່ວນພິເສດ (Rush 24h Delivery)</span>
             </span>
           </label>
         </div>

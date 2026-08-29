@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { FileTextIcon, EyeIcon, DownloadIcon, CheckIcon, AlertCircleIcon, XIcon } from './icons'
+import { Trash2, FileText, Zap, Maximize2 } from 'lucide-react'
 import { PreflightReport } from '../lib/preflightAnalyzer'
 
 interface ArtworkDocumentViewerProps {
@@ -99,8 +100,9 @@ export const ArtworkDocumentViewer: React.FC<ArtworkDocumentViewerProps> = ({
           {/* Browser Tool Actions */}
           <div className="flex items-center gap-2">
             {report?.estimatedDPI && (
-              <span className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                ⚡ {report.estimatedDPI} DPI · {report.colorSpace || 'CMYK'}
+              <span className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                <Zap className="w-3 h-3 text-emerald-500" />
+                <span>{report.estimatedDPI} DPI · {report.colorSpace || 'CMYK'}</span>
               </span>
             )}
 
@@ -111,7 +113,8 @@ export const ArtworkDocumentViewer: React.FC<ArtworkDocumentViewerProps> = ({
               className="px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-md transition flex items-center gap-1.5 cursor-pointer"
               title="ຂະຫຍາຍເຕັມຈໍ (Explode Fullscreen Preview)"
             >
-              <span>⛶ ຂະຫຍາຍເຕັມຈໍ</span>
+              <Maximize2 className="w-3.5 h-3.5" />
+              <span>ຂະຫຍາຍເຕັມຈໍ</span>
             </button>
 
             <button
@@ -126,10 +129,11 @@ export const ArtworkDocumentViewer: React.FC<ArtworkDocumentViewerProps> = ({
               <button
                 type="button"
                 onClick={onDelete}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/40 transition cursor-pointer"
+                className="px-3 py-1.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/40 transition cursor-pointer flex items-center gap-1"
                 title="ລຶບຟາຍນີ້"
               >
-                🗑️ ລຶບ
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>ລຶບ</span>
               </button>
             )}
           </div>
@@ -243,7 +247,7 @@ export const ArtworkDocumentViewer: React.FC<ArtworkDocumentViewerProps> = ({
           </div>
 
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>📄 ຊື່ຟາຍ: <strong className="text-slate-700 dark:text-slate-300 font-mono">{fileName}</strong> ({report.fileSizeMB} MB)</span>
+            <span className="flex items-center gap-1.5"><FileText className="w-3.5 h-3.5 text-amber-500" /><span>ຊື່ຟາຍ:</span> <strong className="text-slate-700 dark:text-slate-300 font-mono">{fileName}</strong> ({report.fileSizeMB} MB)</span>
             <span className="text-emerald-600 dark:text-emerald-400 font-semibold">✓ ຕັດຕົກ (Bleed +3mm) ພ້ອມພິມທັນທີ</span>
           </div>
         </div>

@@ -135,3 +135,95 @@ func TestOrderHandler_TrackOrder_Masking(t *testing.T) {
 		t.Errorf("SECURITY RISK: cost_breakdown was not masked in customer tracking response!")
 	}
 }
+
+func TestOrderHandler_ProofReviewFlow(t *testing.T) {
+	r, h := setupTestRouter()
+
+	testOrder := domain.Order{
+		ID:             "ORD-PROOF-001",
+		OrderNo:        "ORD-PROOF-001",
+		TrackingCode:   "TRK-PROOF-001",
+		CustomerName:   "Khamla",
+		OverallStatus:  domain.StatusPrepressCheck,
+		TotalAmountLAK: 150000,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	}
+	h.SaveOrder(testOrder)
+
+	// Step 1: Upload Proof
+	uploadBody, _ := json.Marshal(map[string]string{"proof_url": "https://storage.example.com/proofs/proof-001.png"})
+	reqUpload, _ := http.NewRequest(http.MethodPost, "/api/v1/orders/TRK-PROOF-001/proof/upload", bytes.NewBuffer(uploadBody))
+	reqUpload.Header.Set("Content-Type", "application/json")
+	wUpload := httptest.NewRecorder()
+	r.ServeHTTP(wUpload, reqUpload)
+
+	if wUpload.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for proof upload, got %d: %s", wUpload.Code, wUpload.Body.String())
+	}
+
+	// Step 2: Reject Proof with revision notes
+	rejectBody, _ := json.Marshal(map[string]string{"reason": "Please fix spelling of Company Name"})
+	reqReject, _ := http.NewRequest(http.MethodPost, "/api/v1/orders/TRK-PROOF-001/proof/reject", bytes.NewBuffer(rejectBody))
+	reqReject.Header.Set("Content-Type", "application/json")
+	wReject := httptest.NewRecorder()
+	r.ServeHTTP(wReject, reqReject)
+
+	if wReject.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for proof reject, got %d: %s", wReject.Code, wReject.Body.String())
+	}
+
+	// Step 3: Approve Proof
+	approveBody, _ := json.Marshal(map[string]string{"signature_name": "Khamla"})
+	reqApprove, _ := http.NewRequest(http.MethodPost, "/api/v1/orders/TRK-PROOF-001/proof/approve", bytes.NewBuffer(approveBody))
+	reqApprove.Header.Set("Content-Type", "application/json")
+	wApprove := httptest.NewRecorder()
+	r.ServeHTTP(wApprove, reqApprove)
+
+	if wApprove.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for proof approve, got %d: %s", wApprove.Code, wApprove.Body.String())
+	}
+}
+
+func TestOrderHandler_VerifySlip_AntiFraud(t *testing.T) {
+	r, h := setupTestRouter()
+
+	testOrder := domain.Order{
+		ID:             "ORD-SLIP-001",
+		OrderNo:        "ORD-SLIP-001",
+		TrackingCode:   "TRK-SLIP-001",
+		CustomerName:   "Chanthone",
+		OverallStatus:  domain.StatusPendingSlipCheck,
+		TotalAmountLAK: 250000,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	}
+	h.SaveOrder(testOrder)
+
+	// Submission 1: Valid transfer slip
+	payload := map[string]interface{}{
+		"order_id":  "ORD-SLIP-001",
+		"amount":    250000,
+		"trans_ref": "BCEL-TX-998811",
+	}
+	body1, _ := json.Marshal(payload)
+	req1, _ := http.NewRequest(http.MethodPost, "/api/v1/checkout/verify-slip", bytes.NewBuffer(body1))
+	req1.Header.Set("Content-Type", "application/json")
+	w1 := httptest.NewRecorder()
+	r.ServeHTTP(w1, req1)
+
+	if w1.Code != http.StatusOK {
+		t.Fatalf("expected status 200 on first slip verification, got %d: %s", w1.Code, w1.Body.String())
+	}
+
+	// Submission 2: Duplicate trans_ref (Fraud attack simulation)
+	body2, _ := json.Marshal(payload)
+	req2, _ := http.NewRequest(http.MethodPost, "/api/v1/checkout/verify-slip", bytes.NewBuffer(body2))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusConflict {
+		t.Fatalf("expected status 409 Conflict for duplicate trans_ref, got %d: %s", w2.Code, w2.Body.String())
+	}
+}

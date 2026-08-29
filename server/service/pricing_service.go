@@ -133,9 +133,21 @@ func (s *PricingService) CalculatePricing(ctx context.Context, req domain.Pricin
 	laborCostDec := req.LaborHours.Mul(decimal.NewFromInt(req.LaborRatePerHourLAK)).Round(0)
 	laborFinishingCostDec := laminationCostDec.Add(bindingCostDec).Add(grommetsCostDec).Add(foldingCostDec).Add(laborCostDec).Round(0)
 
-	// 5. Machine Depreciation & Plate Costs
+	// 5. Machine Depreciation & Maintenance Overhead & Plate Costs
 	plateCostDec := decimal.NewFromInt(req.PlateCostPerUnitLAK)
-	machineDeprDec := decimal.NewFromInt(req.MachineDepreciationRateLAK).Mul(totalImpressionsDec).Round(0)
+	var machineDeprDec decimal.Decimal
+	if req.MachinePriceLAK > 0 && req.ExpectedLifePages > 0 {
+		deprPerSheet := decimal.NewFromInt(req.MachinePriceLAK).Div(decimal.NewFromInt(req.ExpectedLifePages))
+		maintRate := req.MaintenanceRatePercent
+		if maintRate.IsZero() {
+			maintRate = decimal.NewFromInt(20) // Default 20% maintenance reserve
+		}
+		maintPerSheet := deprPerSheet.Mul(maintRate).Div(decimal.NewFromInt(100))
+		machineRatePerSheet := deprPerSheet.Add(maintPerSheet)
+		machineDeprDec = machineRatePerSheet.Mul(totalImpressionsDec).Round(0)
+	} else {
+		machineDeprDec = decimal.NewFromInt(req.MachineDepreciationRateLAK).Mul(totalImpressionsDec).Round(0)
+	}
 
 	// 6. Net Internal Cost
 	netInternalCostDec := baseMaterialCostDec.

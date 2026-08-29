@@ -1,4 +1,5 @@
 import React from 'react'
+import { FileText, BookOpen, Sparkles } from 'lucide-react'
 import type { Product } from '../../data/catalog.ts'
 
 interface ProductInfoTabsSectionProps {
@@ -43,7 +44,8 @@ export function ProductInfoTabsSection({
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
-            <span>📝 {language === 'en' ? 'Description & Details' : 'ລາຍລະອຽດສິນຄ້າ'}</span>
+            <FileText className="w-4 h-4" />
+            <span>{language === 'en' ? 'Description & Details' : 'ລາຍລະອຽດສິນຄ້າ'}</span>
           </button>
         )}
 
@@ -58,8 +60,9 @@ export function ProductInfoTabsSection({
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
+            <BookOpen className="w-4 h-4" />
             <span>
-              {tab.icon || '📌'} {language === 'en' && tab.titleEn ? tab.titleEn : tab.titleLo}
+              {language === 'en' && tab.titleEn ? tab.titleEn : tab.titleLo}
             </span>
           </button>
         ))}
@@ -95,7 +98,9 @@ export function ProductInfoTabsSection({
       {selectedCustomTab !== 'description' && currentTab && (
         <div className="space-y-4 text-xs sm:text-sm text-slate-700 dark:text-slate-300 animate-fadeIn">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">{currentTab.icon || '📌'}</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold">
+              <BookOpen className="w-4 h-4" />
+            </div>
             <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white m-0">
               {language === 'en' && currentTab.titleEn ? currentTab.titleEn : currentTab.titleLo}
             </h3>

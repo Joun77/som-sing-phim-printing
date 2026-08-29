@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { CheckIcon } from '../icons.tsx'
+import { Sparkles, Image as ImageIcon, Type, Palette, Stamp, Trash2, Undo, Settings, Ruler, Info } from 'lucide-react'
 
 export interface CanvasElement {
   id: string
@@ -57,9 +58,9 @@ const BG_PRESETS = [
 ]
 
 const STICKER_PRESETS = [
-  { id: 'gold-seal', name: '★ Premium Quality Seal ★', icon: '👑', svg: 'seal' },
-  { id: 'luxury-frame', name: 'Luxury Double Frame', icon: '🖼️', svg: 'frame' },
-  { id: 'atelier-ribbon', name: 'Som Sing Phim Ribbon', icon: '🎀', svg: 'ribbon' },
+  { id: 'gold-seal', name: '★ Premium Quality Seal ★', icon: '★', svg: 'seal' },
+  { id: 'luxury-frame', name: 'Luxury Double Frame', icon: '◫', svg: 'frame' },
+  { id: 'atelier-ribbon', name: 'Som Sing Phim Ribbon', icon: '✦', svg: 'ribbon' },
   { id: 'gold-divider', name: 'Vintage Gold Divider', icon: '✦', svg: 'divider' },
   { id: 'love-crest', name: 'Romantic Monogram Crest', icon: '❦', svg: 'crest' },
 ]
@@ -258,9 +259,9 @@ export default function ArtworkStudioModal({
       // Labels
       ctx.font = '10px sans-serif'
       ctx.fillStyle = 'rgba(239, 68, 68, 0.8)'
-      ctx.fillText('✂️ Bleed 3mm', 8, 14)
+      ctx.fillText('Bleed 3mm', 8, 14)
       ctx.fillStyle = 'rgba(16, 185, 129, 0.8)'
-      ctx.fillText('🛡️ Safe Zone', safeMargin + 6, safeMargin + 14)
+      ctx.fillText('Safe Zone', safeMargin + 6, safeMargin + 14)
       ctx.restore()
     }
   }, [isOpen, elements, selectedId, bgColor, showGuides, CANVAS_WIDTH, CANVAS_HEIGHT])
@@ -514,8 +515,8 @@ export default function ArtworkStudioModal({
           style={{ background: 'var(--bg-primary)', borderColor: 'var(--border-subtle)' }}
         >
           <div className="flex items-center gap-3">
-            <span className="p-2 rounded-xl text-lg" style={{ background: 'rgba(197, 160, 89, 0.15)', color: 'var(--gold)' }}>
-              ✨
+            <span className="p-2 rounded-xl text-lg flex items-center justify-center" style={{ background: 'rgba(197, 160, 89, 0.15)', color: 'var(--gold)' }}>
+              <Sparkles className="w-5 h-5" />
             </span>
             <div>
               <strong className="text-sm font-bold text-white block">
@@ -535,7 +536,8 @@ export default function ArtworkStudioModal({
                 showGuides ? 'bg-gold/15 text-amber-300 border-gold' : 'bg-slate-800 text-slate-400 border-slate-700'
               }`}
             >
-              <span>📏 {showGuides ? 'ເຊື່ອງ Safe Zone' : 'ສະແດງ Safe Zone & Bleed'}</span>
+              <Ruler className="w-3.5 h-3.5" />
+              <span>{showGuides ? 'ເຊື່ອງ Safe Zone' : 'ສະແດງ Safe Zone & Bleed'}</span>
             </button>
 
             <button
@@ -571,30 +573,34 @@ export default function ArtworkStudioModal({
               <button
                 type="button"
                 onClick={() => setActiveTab('text')}
-                className={`py-2 rounded-lg text-xs font-bold transition ${activeTab === 'text' ? 'bg-gold text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                className={`py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 ${activeTab === 'text' ? 'bg-gold text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'}`}
               >
-                🔤 ຂໍ້ຄວາມ
+                <Type className="w-3.5 h-3.5" />
+                <span>ຂໍ້ຄວາມ</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('image')}
-                className={`py-2 rounded-lg text-xs font-bold transition ${activeTab === 'image' ? 'bg-gold text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                className={`py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 ${activeTab === 'image' ? 'bg-gold text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'}`}
               >
-                🖼️ ຮູບພາບ
+                <ImageIcon className="w-3.5 h-3.5" />
+                <span>ຮູບພາບ</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('stickers')}
-                className={`py-2 rounded-lg text-xs font-bold transition ${activeTab === 'stickers' ? 'bg-gold text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                className={`py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 ${activeTab === 'stickers' ? 'bg-gold text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'}`}
               >
-                ⭐ ຕາປະທັບ
+                <Stamp className="w-3.5 h-3.5" />
+                <span>ຕາປະທັບ</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('background')}
-                className={`py-2 rounded-lg text-xs font-bold transition ${activeTab === 'background' ? 'bg-gold text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                className={`py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 ${activeTab === 'background' ? 'bg-gold text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'}`}
               >
-                🎨 ພື້ນຫຼັງ
+                <Palette className="w-3.5 h-3.5" />
+                <span>ພື້ນຫຼັງ</span>
               </button>
             </div>
 
@@ -652,7 +658,7 @@ export default function ArtworkStudioModal({
                   className="w-full py-8 px-4 rounded-2xl border-2 border-dashed border-gold/40 hover:border-gold flex flex-col items-center justify-center gap-2 cursor-pointer transition text-center"
                   style={{ background: 'rgba(197, 160, 89, 0.05)' }}
                 >
-                  <span className="text-2xl">📸</span>
+                  <ImageIcon className="w-8 h-8 text-amber-400" />
                   <strong className="text-xs text-white">ກົດເພື່ອເລືອກຮູບພາບ</strong>
                   <small className="text-[11px] text-slate-400">JPG, PNG (ຮອງຮັບພື້ນຫຼັງໂປ່ງໃສ)</small>
                 </button>
@@ -707,9 +713,10 @@ export default function ArtworkStudioModal({
               <button
                 type="button"
                 onClick={() => setElements([])}
-                className="text-xs text-rose-400 hover:text-rose-300 transition cursor-pointer"
+                className="text-xs text-rose-400 hover:text-rose-300 transition cursor-pointer flex items-center gap-1"
               >
-                🗑️ ລ້າງທັງໝົດ (Clear)
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>ລ້າງທັງໝົດ (Clear)</span>
               </button>
               <button
                 type="button"
@@ -718,9 +725,10 @@ export default function ArtworkStudioModal({
                     setElements(elements.slice(0, -1))
                   }
                 }}
-                className="text-xs text-slate-400 hover:text-white transition cursor-pointer"
+                className="text-xs text-slate-400 hover:text-white transition cursor-pointer flex items-center gap-1"
               >
-                ↩ ຍ້ອນກັບ (Undo)
+                <Undo className="w-3.5 h-3.5" />
+                <span>ຍ້ອນກັບ (Undo)</span>
               </button>
             </div>
           </div>
@@ -750,7 +758,7 @@ export default function ArtworkStudioModal({
             </div>
 
             <div className="mt-3 flex items-center gap-4 text-xs text-slate-400">
-              <span>💡 ກົດ ແລະ ລາກເພື່ອຍ້າຍຕຳແໜ່ງ (Drag & Drop)</span>
+              <span className="flex items-center gap-1"><Info className="w-3.5 h-3.5 text-amber-400" /> ກົດ ແລະ ລາກເພື່ອຍ້າຍຕຳແໜ່ງ (Drag & Drop)</span>
               <span>•</span>
               <span>ອັດຕາສ່ວນຂະໜາດຈິງ 300 DPI Prepress Ready</span>
             </div>
@@ -764,8 +772,9 @@ export default function ArtworkStudioModal({
             {selectedEl ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                  <strong className="text-xs font-bold text-white uppercase tracking-wider">
-                    ⚙️ ຄຸນສົມບັດ ({selectedEl.type})
+                  <strong className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <Settings className="w-3.5 h-3.5 text-amber-400" />
+                    <span>ຄຸນສົມບັດ ({selectedEl.type})</span>
                   </strong>
                   <button
                     type="button"

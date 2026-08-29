@@ -35,7 +35,7 @@ import PriceBreakdownTable from '../components/PriceBreakdownTable.tsx'
 import MultiBookOrderManager from '../components/MultiBookOrderManager.tsx'
 import type { BookOrderItem } from '../types/order.ts'
 import { calculateSpineThickness } from '../utils/spineCalculator.ts'
-import { BookOpen, Ruler, Layers, Settings2, FileCheck, CheckCircle2 } from 'lucide-react'
+import { BookOpen, Ruler, Layers, Settings2, FileCheck, CheckCircle2, Tag, Image, Palette, Scissors, Sparkles, Rocket, Package, Award, Sparkle } from 'lucide-react'
 import {
   type ArtworkBatchItem,
   OptionButton,
@@ -818,9 +818,13 @@ export default function ProductPage() {
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-950/40 to-slate-900 text-amber-400 p-6 text-center space-y-2">
                       <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shadow-lg">
-                        <span className="text-3xl">
-                          {product?.category === 'stickers' ? '🏷️' : product?.category === 'photos' ? '🖼️' : '📄'}
-                        </span>
+                        {product?.category === 'stickers' ? (
+                          <Tag className="w-8 h-8 text-amber-400" />
+                        ) : product?.category === 'photos' ? (
+                          <Image className="w-8 h-8 text-amber-400" />
+                        ) : (
+                          <BookOpen className="w-8 h-8 text-amber-400" />
+                        )}
                       </div>
                       <span className="text-sm font-black text-slate-200">{productName}</span>
                       <span className="text-xs text-slate-400 font-mono">
@@ -836,8 +840,9 @@ export default function ProductPage() {
                         ★ {language === 'en' ? 'Bestseller' : 'ສິນຄ້າຍອດນິຍົມ'}
                       </span>
                     )}
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-900/80 text-amber-300 border border-amber-500/30 backdrop-blur-sm">
-                      ✨ ດິຈິຕອນ 2400 DPI
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-900/80 text-amber-300 border border-amber-500/30 backdrop-blur-sm flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-400" />
+                      <span>ດິຈິຕອນ 2400 DPI</span>
                     </span>
                   </div>
 
@@ -893,16 +898,16 @@ export default function ProductPage() {
 
                 {/* Trust & Guarantee Badges */}
                 <div className="grid grid-cols-3 gap-2 pt-2 text-center text-[10px] font-bold text-slate-600 dark:text-slate-400">
-                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800">
-                    <span className="block text-base mb-0.5">🚀</span>
+                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800 flex flex-col items-center">
+                    <Rocket className="w-4 h-4 text-amber-500 mb-1" />
                     <span>{language === 'en' ? '1-2 Days' : 'ຜະລິດໄວ 1-2 ວັນ'}</span>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800">
-                    <span className="block text-base mb-0.5">💎</span>
+                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800 flex flex-col items-center">
+                    <Sparkles className="w-4 h-4 text-amber-500 mb-1" />
                     <span>{language === 'en' ? '100% CMYK' : 'ສີຄົມຊັດ 100%'}</span>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800">
-                    <span className="block text-base mb-0.5">📦</span>
+                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800 flex flex-col items-center">
+                    <Package className="w-4 h-4 text-amber-500 mb-1" />
                     <span>{language === 'en' ? 'Nationwide' : 'ຈັດສົ່ງທົ່ວປະເທດ'}</span>
                   </div>
                 </div>
@@ -993,8 +998,9 @@ export default function ProductPage() {
                     </button>
 
                     <div>
-                      <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white m-0">
-                        🎨 {productName} — ປັບແຕ່ງສເປັກ ({uploadedArtworks.length} ຟາຍ)
+                      <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white m-0 flex items-center gap-2">
+                        <Palette className="w-5 h-5 text-amber-500" />
+                        <span>{productName} — ປັບແຕ່ງສເປັກ ({uploadedArtworks.length} ຟາຍ)</span>
                       </h2>
                       <span className="text-xs text-slate-500 font-medium">
                         ຄລິກເລືອກຮູບເພື່ອປັບແຕ່ງສະເປັກ ຫຼື ເພີ່ມ/ລຶບຟາຍໄດ້ສະດວກ
@@ -1009,12 +1015,12 @@ export default function ProductPage() {
                       className="btn btn--gold flex items-center gap-1.5 text-xs font-black px-4 py-2.5 shadow-md"
                     >
                       <UploadCloudIcon size={16} />
-                      <span>➕ ເພີ່ມຟາຍໃໝ່ (Add More Files)</span>
+                      <span>ເພີ່ມຟາຍໃໝ່ (Add More Files)</span>
                     </button>
                   </div>
                 </div>
 
-                {/* 🎞️ Visual Multi-File Filmstrip / Thumbnail Tray */}
+                {/* Visual Multi-File Filmstrip / Thumbnail Tray */}
                 <ArtworkFilmstrip
                   uploadedArtworks={uploadedArtworks}
                   activeArtworkIndex={activeArtworkIndex}
@@ -1064,7 +1070,7 @@ export default function ProductPage() {
                             onClick={applySpecsToAllArtworks}
                             className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-bold transition flex items-center gap-1"
                           >
-                            <span>📋 ນຳໃຊ້ສເປັກນີ້ກັບທຸກຟາຍ</span>
+                            <span>ນຳໃຊ້ສເປັກນີ້ກັບທຸກຟາຍ</span>
                           </button>
                         )}
                       </div>
@@ -1075,22 +1081,11 @@ export default function ProductPage() {
                         {product.specGroups && product.specGroups.length > 0 ? (
                           product.specGroups.map((g) => {
                             const groupTitle = language === 'en' && g.titleEn ? g.titleEn : (g.titleLo || (g as any).title || '');
-                            const titleLower = groupTitle.toLowerCase();
-                            let icon = '⚙️';
-                            if (titleLower.includes('ເຄືອບ') || titleLower.includes('film') || titleLower.includes('lamination')) icon = '✨';
-                            else if (titleLower.includes('ເຈ້ຍ') || titleLower.includes('paper') || titleLower.includes('card')) icon = '📄';
-                            else if (titleLower.includes('ສີ') || titleLower.includes('color') || titleLower.includes('ink')) icon = '🎨';
-                            else if (titleLower.includes('ເລັ້ມ') || titleLower.includes('bind') || titleLower.includes('spine')) icon = '📖';
-                            else if (titleLower.includes('ຂະໜາດ') || titleLower.includes('size')) icon = '📐';
-                            else if (titleLower.includes('ຮູບແບບ') || titleLower.includes('theme') || titleLower.includes('template')) icon = '🖼️';
-                            else if (titleLower.includes('ສະຕິກເກີ') || titleLower.includes('sticker')) icon = '🏷️';
-
                             const activeVal = selectedGroupOptions[g.id] || activeArtwork?.selectedGroupOptions?.[g.id] || g.options[0]?.id || '';
 
                             return (
                               <SpecGroup
                                 key={g.id}
-                                icon={icon}
                                 title={groupTitle}
                                 displayType={(g as any).displayType || 'cards'}
                                 options={g.options}
@@ -1118,8 +1113,9 @@ export default function ProductPage() {
                             <div className="space-y-2.5">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                                    🎨 {language === 'en' ? 'Color Print Mode' : 'ລະບົບສີງານພິມ (Color Mode)'}
+                                  <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                                    <Palette className="w-3.5 h-3.5 text-amber-500" />
+                                    <span>{language === 'en' ? 'Color Print Mode' : 'ລະບົບສີງານພິມ (Color Mode)'}</span>
                                   </span>
                                 </div>
                                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
@@ -1179,7 +1175,6 @@ export default function ProductPage() {
 
                             {/* Specs Options */}
                             <SpecGroup
-                              icon="📐"
                               title={t('sizeSelect')}
                               options={product.sizes}
                               value={activeArtwork.sizeId}
@@ -1189,7 +1184,6 @@ export default function ProductPage() {
                               convertTo={convertTo}
                             />
                             <SpecGroup
-                              icon="📜"
                               title={t('materialSelect')}
                               options={product.materials}
                               value={activeArtwork.materialId}
@@ -1199,7 +1193,6 @@ export default function ProductPage() {
                               convertTo={convertTo}
                             />
                             <SpecGroup
-                              icon="✨"
                               title={t('finishingSelect')}
                               options={product.finishings}
                               value={activeArtwork.finishingId}

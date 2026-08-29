@@ -12,6 +12,7 @@ import {
   EyeIcon,
   XIcon,
 } from '../components/icons.tsx'
+import { Scale, Droplets, FileText, Tag, Sliders, Scissors, Image, Sparkles, Package, Mail, CreditCard, Leaf, BarChart2, AlertTriangle, Layers } from 'lucide-react'
 import { useShop } from '../context/ShopContext.tsx'
 
 interface PaperItem {
@@ -283,12 +284,12 @@ const PAPER_DATA: PaperItem[] = [
 ]
 
 const PRODUCT_PRESETS = [
-  { id: 'card', name: 'ນາມບັດ / ກາດ', category: 'art', paperId: '1', icon: '💳' },
-  { id: 'flyer', name: 'ໃບປິວ / ແຜ່ນພັບ', category: 'art', paperId: '2', icon: '📄' },
-  { id: 'letter', name: 'ເຈ້ຍ A4 / ເອກະສານ', category: 'uncoated', paperId: '3', icon: '✉️' },
-  { id: 'box', name: 'ກ່ອງບັນຈຸພັນ', category: 'art', paperId: '1', icon: '📦' },
-  { id: 'sticker', name: 'ສະຫຼາກສິນຄ້າກັນນ້ຳ', category: 'sticker', paperId: '6', icon: '🏷️' },
-  { id: 'eco', name: 'ງານຄຣາຟ ວິນເທຈ', category: 'kraft', paperId: '4', icon: '🌿' },
+  { id: 'card', name: 'ນາມບັດ / ກາດ', category: 'art', paperId: '1', icon: '' },
+  { id: 'flyer', name: 'ໃບປິວ / ແຜ່ນພັບ', category: 'art', paperId: '2', icon: '' },
+  { id: 'letter', name: 'ເຈ້ຍ A4 / ເອກະສານ', category: 'uncoated', paperId: '3', icon: '' },
+  { id: 'box', name: 'ກ່ອງບັນຈຸພັນ', category: 'art', paperId: '1', icon: '' },
+  { id: 'sticker', name: 'ສະຫຼາກສິນຄ້າກັນນ້ຳ', category: 'sticker', paperId: '6', icon: '' },
+  { id: 'eco', name: 'ງານຄຣາຟ ວິນເທຈ', category: 'kraft', paperId: '4', icon: '' },
 ]
 
 export default function PrintGuidePage() {
@@ -442,7 +443,7 @@ export default function PrintGuidePage() {
         <div className="pg-compact-header">
           <div className="pg-header-left">
             <div className="pg-header-icon">
-              <LayersIcon size={20} />
+              <Layers size={20} />
             </div>
             <div>
               <h1 className="pg-header-title">
@@ -458,7 +459,7 @@ export default function PrintGuidePage() {
 
           <div className="pg-header-actions">
             <button onClick={() => setIsCompareModalOpen(true)} className="pg-btn-compare-top">
-              <span style={{ color: 'var(--gold)' }}>⚖️</span>
+              <Scale size={16} className="text-amber-400" />
               <span>{isLao ? 'ສົມທຽບສະເປັກ' : 'Compare Specs'}</span>
               {compareList.length > 0 && (
                 <span className="pg-badge-count">{compareList.length}</span>
@@ -508,7 +509,7 @@ export default function PrintGuidePage() {
                 }`}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                  <FileTextIcon size={15} />
+                  <FileText size={15} />
                   <span>{isLao ? 'ເຈ້ຍທັງໝົດ' : 'All Papers'}</span>
                 </span>
                 <span className="pg-badge-count" style={{ background: 'var(--bg-surface)', color: 'var(--text-muted)' }}>
@@ -528,7 +529,7 @@ export default function PrintGuidePage() {
                   className="pg-nav-btn"
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                    <span>🖼️</span>
+                    <Image size={15} />
                     <span>{isLao ? 'ເຈ້ຍອາດ (Art Paper)' : 'Art Paper'}</span>
                   </span>
                   <span style={{ fontSize: '8.5px', transform: accordions.art ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
@@ -565,7 +566,7 @@ export default function PrintGuidePage() {
                   className="pg-nav-btn"
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                    <span>📄</span>
+                    <FileText size={15} />
                     <span>{isLao ? 'ເຈ້ຍປອນ / A4 (Woodfree)' : 'Woodfree / Bond'}</span>
                   </span>
                   <span style={{ fontSize: '8.5px', transform: accordions.uncoated ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
@@ -602,8 +603,8 @@ export default function PrintGuidePage() {
                   className="pg-nav-btn"
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                    <span>🌿</span>
-                    <span>{isLao ? 'ເຈ້ຍຄຣາຟ (Kraft Vintage)' : 'Kraft Paper'}</span>
+                    <Leaf size={15} />
+                    <span>{isLao ? 'ເຈ້ຍຄຣາຟ (Kraft Paper)' : 'Kraft Paper'}</span>
                   </span>
                   <span style={{ fontSize: '8.5px', transform: accordions.kraft ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
                     ▼
@@ -676,7 +677,7 @@ export default function PrintGuidePage() {
                   className="pg-nav-btn"
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                    <span>🏷️</span>
+                    <Tag size={15} />
                     <span>{isLao ? 'ສະຕິກເກີ / ສະຫຼາກ' : 'Stickers & Labels'}</span>
                   </span>
                   <span style={{ fontSize: '8.5px', transform: accordions.sticker ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
@@ -714,7 +715,7 @@ export default function PrintGuidePage() {
                 className={`pg-nav-btn ${activeTab === 'finishing' ? 'is-active' : ''}`}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                  <span>✂️</span>
+                  <Scissors size={15} />
                   <span>{isLao ? 'ເຕັກນິກການເຄືອບ & ພັບ' : 'Finishing & Creasing'}</span>
                 </span>
               </button>
@@ -727,7 +728,7 @@ export default function PrintGuidePage() {
                 className={`pg-nav-btn ${activeTab === 'simulator' ? 'is-active' : ''}`}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                  <span>🎚️</span>
+                  <Sliders size={15} />
                   <span>{isLao ? 'ທົດລອງແກຣມ (GSM)' : 'GSM Simulator'}</span>
                 </span>
               </button>
@@ -740,7 +741,7 @@ export default function PrintGuidePage() {
                 className={`pg-nav-btn ${activeTab === 'matrix' ? 'is-active' : ''}`}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                  <span>📊</span>
+                  <BarChart2 size={15} />
                   <span>{isLao ? 'ຕາຕະລາງສົມທຽບສະເປັກ' : 'Spec Matrix Table'}</span>
                 </span>
               </button>
@@ -782,7 +783,7 @@ export default function PrintGuidePage() {
                         className={`pg-btn-pin ${isInCompare(selectedPaper.id) ? 'is-active' : ''}`}
                         style={{ padding: '0.45rem 0.8rem', fontSize: '12px', fontWeight: 700, gap: '0.35rem', display: 'inline-flex' }}
                       >
-                        <span>⚖️</span>
+                        <Scale size={14} />
                         <span>
                           {isInCompare(selectedPaper.id)
                             ? isLao ? 'ຢູ່ໃນລາຍການສົມທຽບ' : 'In Comparison'
@@ -834,7 +835,7 @@ export default function PrintGuidePage() {
 
                       <div className="pg-box-block" style={{ background: 'rgba(245, 158, 11, 0.08)', borderColor: 'rgba(245, 158, 11, 0.25)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#F59E0B', fontWeight: 700, fontSize: '12px' }}>
-                          <span>⚠️</span>
+                          <AlertTriangle size={14} />
                           <span>{isLao ? 'ຂໍ້ຄວນລະວັງ / ເຕັກນິກການພິມ' : 'Technical Note'}</span>
                         </div>
                         <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-main)', lineHeight: 1.5 }}>
@@ -992,7 +993,7 @@ export default function PrintGuidePage() {
                             className={`pg-btn-pin ${isInCompare(paper.id) ? 'is-active' : ''}`}
                             title={isInCompare(paper.id) ? 'Remove' : 'Add to compare'}
                           >
-                            ⚖️
+                            <Scale size={14} />
                           </button>
                         </div>
                       </div>
@@ -1002,7 +1003,9 @@ export default function PrintGuidePage() {
 
                 {filteredPapers.length === 0 && (
                   <div style={{ padding: '2.5rem', textAlign: 'center', background: 'var(--bg-card)', borderRadius: 'var(--radius-lg, 20px)', border: '1px dashed var(--border-subtle)' }}>
-                    <p style={{ fontSize: '2rem', margin: '0 0 0.5rem 0' }}>📄</p>
+                    <div style={{ margin: '0 auto 0.5rem auto', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <FileText size={32} className="text-slate-500" />
+                    </div>
                     <h3 style={{ fontSize: '15px', color: 'var(--text-main)', margin: '0 0 0.25rem 0' }}>
                       {isLao ? 'ບໍ່ພົບເຈ້ຍທີ່ກົງກັບເງື່ອນໄຂ' : 'No matching materials found'}
                     </h3>
@@ -1156,7 +1159,7 @@ export default function PrintGuidePage() {
 
                 <div className="pg-finishing-grid">
                   <div className="pg-finish-card">
-                    <div style={{ fontSize: '1.75rem' }}>✨</div>
+                    <div style={{ color: 'var(--gold)' }}><Sparkles size={24} /></div>
                     <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
                       {isLao ? 'PVC ເງົາ vs ດ້ານ vs Soft-Touch' : 'Gloss vs Matte vs Soft-Touch'}
                     </h4>
@@ -1178,7 +1181,7 @@ export default function PrintGuidePage() {
                   </div>
 
                   <div className="pg-finish-card">
-                    <div style={{ fontSize: '1.75rem' }}>✂️</div>
+                    <div style={{ color: 'var(--gold)' }}><Scissors size={24} /></div>
                     <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
                       {isLao ? 'ປ້ອງກັນສັນພັບແຕກດ້ວຍ Creasing' : 'Creasing Line Prevents Cracking'}
                     </h4>
@@ -1190,7 +1193,7 @@ export default function PrintGuidePage() {
                   </div>
 
                   <div className="pg-finish-card">
-                    <div style={{ fontSize: '1.75rem' }}>💧</div>
+                    <div style={{ color: 'var(--gold)' }}><Droplets size={24} /></div>
                     <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
                       {isLao ? 'Coated vs Uncoated ກັບການຊຶມໝຶກ' : 'Coated vs Uncoated Ink Absorption'}
                     </h4>
@@ -1215,8 +1218,9 @@ export default function PrintGuidePage() {
           <div className="pg-modal-box" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.85rem' }}>
               <div>
-                <h3 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
-                  ⚖️ {isLao ? 'ສົມທຽບເຈ້ຍ & ວັດສະດຸ (Side-by-Side)' : 'Side-by-Side Material Comparison'}
+                <h3 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Scale size={18} className="text-amber-400" />
+                  <span>{isLao ? 'ສົມທຽບເຈ້ຍ & ວັດສະດຸ (Side-by-Side)' : 'Side-by-Side Material Comparison'}</span>
                 </h3>
                 <p style={{ fontSize: '11.5px', color: 'var(--text-muted)', margin: '3px 0 0 0' }}>
                   {isLao ? 'ປຽບທຽບສະເປັກເຈ້ຍທີ່ທ່ານເລືອກໄວ້ເພື່ອການຕັດສິນໃຈທີ່ຖືກຕ້ອງ' : 'Compare selected paper specs side-by-side.'}
@@ -1268,7 +1272,7 @@ export default function PrintGuidePage() {
               </div>
             ) : (
               <div style={{ padding: '2rem', textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
-                {isLao ? 'ຍັງບໍ່ມີລາຍການເຈ້ຍທີ່ເລືອກ. ກົດປຸ່ມ ⚖️ ເທິງກາດເຈ້ຍເພື່ອເພີ່ມໃນການສົມທຽບ.' : 'No materials selected. Click ⚖️ on paper cards to compare.'}
+                {isLao ? 'ຍັງບໍ່ມີລາຍການເຈ້ຍທີ່ເລືອກ. ກົດປຸ່ມສົມທຽບເທິງກາດເຈ້ຍເພື່ອເພີ່ມໃນການສົມທຽບ.' : 'No materials selected. Click compare icon on paper cards to compare.'}
               </div>
             )}
 

@@ -60,6 +60,8 @@ func main() {
 	// Auth routes
 	router.POST("/api/auth/login", auth.HandleLogin)
 	router.POST("/api/v1/auth/login", auth.HandleLogin)
+	router.POST("/api/auth/refresh", auth.HandleRefreshToken)
+	router.POST("/api/v1/auth/refresh", auth.HandleRefreshToken)
 
 	// Web Product Catalog & Categories routes (Admin & Public)
 	router.GET("/api/v1/admin/catalog/categories", catalog.HandleGetCategories)

@@ -1,5 +1,6 @@
 import React from 'react';
 import { FileScanStatus } from '../../types/pricing';
+import { Info, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 
 interface DriveLinkInputProps {
   value: string;
@@ -24,7 +25,7 @@ export const DriveLinkInput: React.FC<DriveLinkInputProps> = ({
   return (
     <div className="space-y-2">
       <label className="block text-sm font-semibold text-slate-800">
-        ลิงก์ไฟล์ Google Drive / PDF Artworks
+        ລິ້ງໄຟລ໌ Google Drive / PDF Artworks
       </label>
       <div className="relative">
         <input
@@ -42,8 +43,8 @@ export const DriveLinkInput: React.FC<DriveLinkInputProps> = ({
         />
         {isScanning && (
           <div className="absolute right-3 top-3.5 flex items-center space-x-2">
-            <span className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></span>
-            <span className="text-xs font-medium text-indigo-600">กำลังสแกนไฟล์...</span>
+            <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
+            <span className="text-xs font-medium text-indigo-600">ກຳລັງສະແກນໄຟລ໌...</span>
           </div>
         )}
       </div>
@@ -51,29 +52,26 @@ export const DriveLinkInput: React.FC<DriveLinkInputProps> = ({
       {/* Real-time Status Badge Indicator */}
       {isAutoVerified && (
         <div className="flex items-center space-x-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs font-medium animate-fadeIn">
-          <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-          </svg>
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
           <span>
-            ตรวจพบไฟล์เรียบร้อยแล้ว {detectedPages ? `(${detectedPages} หน้า)` : ''} — คำนวณราคาตามความหนาแน่นหมึกจริงอัตโนมัติ
+            ກວດພົບໄຟລ໌ຮຽບຮ້ອຍແລ້ວ {detectedPages ? `(${detectedPages} ໜ້າ)` : ''} — ຄິດໄລ່ລາຄາຕາມຄວາມໜາແໜ້ນນ້ຳໝຶກຈິງອັດຕະໂນມັດ
           </span>
         </div>
       )}
 
       {isPendingVerification && (
         <div className="flex items-start space-x-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs font-medium animate-fadeIn">
-          <svg className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
+          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-semibold">กำลังใช้เรทประเมินมาตรฐานชั่วคราว</p>
-            <p className="text-amber-700/90">{scanError || 'เอกสารขนาดใหญ่หรือต้องขอสิทธิ์เข้าถึง ทีมงานจะตรวจสอบความถูกต้องก่อนเริ่มผลิต'}</p>
+            <p className="font-semibold">ກຳລັງໃຊ້ອັດຕາປະເມີນມາດຕະຖານຊົ່ວຄາວ</p>
+            <p className="text-amber-700/90">{scanError || 'ເອກະສານຂະໜາດໃຫຍ່ ຫຼື ຕ້ອງຂໍສິດເຂົ້າເຖິງ, ທີມງານຈະກວດສອບຄວາມຖືກຕ້ອງກ່ອນເລີ່ມຜະລິດ'}</p>
           </div>
         </div>
       )}
 
-      <p className="text-xs text-slate-500">
-        💡 โปรดตั้งค่าสิทธิ์แชร์เป็น <strong>&ldquo;ทุกคนที่มีลิงก์ (Anyone with the link)&rdquo;</strong> เพื่อให้ระบบประเมินราคาได้ทันที
+      <p className="text-xs text-slate-500 flex items-center gap-1.5">
+        <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+        <span>ກະລຸນາຕັ້ງຄ່າສິດແຊຣ໌ເປັນ <strong>&ldquo;ທຸກຄົນທີ່ມີລິ້ງ (Anyone with the link)&rdquo;</strong> ເພື່ອໃຫ້ລະບົບປະເມີນລາຄາໄດ້ທັນທີ</span>
       </p>
     </div>
   );

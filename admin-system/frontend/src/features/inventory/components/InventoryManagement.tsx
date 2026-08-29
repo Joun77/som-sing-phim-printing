@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Boxes, Plus, Scissors, History, PackagePlus, FileSpreadsheet, RefreshCw, MinusCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { useApp } from '@store/AppContext';
 import InventoryTable from './InventoryTable';
 import StockTable from './StockTable';
@@ -16,11 +17,20 @@ import { fetchMaterials, fetchInboundHistory } from '../api/inventoryApi';
 import { MaterialMaster, StockInboundRecord } from '../types';
 
 export default function InventoryManagement() {
+  const queryClient = useQueryClient();
   const { 
     inventory, 
     offcuts, 
     showToast 
   } = useApp();
+
+  const invalidateInventoryQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    queryClient.invalidateQueries({ queryKey: ['inventory-items'] });
+    queryClient.invalidateQueries({ queryKey: ['materials'] });
+    queryClient.invalidateQueries({ queryKey: ['inbound'] });
+    queryClient.invalidateQueries({ queryKey: ['inbound-records'] });
+  };
 
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
@@ -322,16 +332,29 @@ export default function InventoryManagement() {
         onClose={() => setIsInboundModalOpen(false)}
         onSuccess={() => {
           showToast('ບັນທຶກການຮັບເຂົ້າສິນຄ້າ ແລະ ຄຳນວນຕົ້ນທຶນສຳເລັດ!', 'success');
+          invalidateInventoryQueries();
           loadBackendData();
         }}
         materials={backendMaterials}
       />
 
       {/* Universal SKU Modal */}
-      <AddMaterialModal isOpen={isAddMaterialOpen} onClose={() => setIsAddMaterialOpen(false)} />
+      <AddMaterialModal 
+        isOpen={isAddMaterialOpen} 
+        onClose={() => {
+          setIsAddMaterialOpen(false);
+          invalidateInventoryQueries();
+        }} 
+      />
 
       {/* Offcuts modal */}
-      <AddOffcutModal isOpen={isOffcutOpen} onClose={() => setIsOffcutOpen(false)} />
+      <AddOffcutModal 
+        isOpen={isOffcutOpen} 
+        onClose={() => {
+          setIsOffcutOpen(false);
+          invalidateInventoryQueries();
+        }} 
+      />
 
       {/* Stock Discharge Modal */}
       <StockDischargeModal
@@ -340,6 +363,7 @@ export default function InventoryManagement() {
         onClose={() => {
           setIsDischargeOpen(false);
           setSelectedDischargeItem(null);
+          invalidateInventoryQueries();
         }}
       />
 
@@ -348,6 +372,7 @@ export default function InventoryManagement() {
         isOpen={isPriceUploaderOpen}
         onClose={() => setIsPriceUploaderOpen(false)}
         onSuccess={() => {
+          invalidateInventoryQueries();
           showToast(
             currentLang === 'lo'
               ? 'ອັບເດດຖານຂໍ້ມູນລາຄາກະດາດທັງລະບົບແລ້ວ'

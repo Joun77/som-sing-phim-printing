@@ -27,7 +27,7 @@ const normalizeLaoUnit = (unit?: string, fallback = 'ແຜ່ນ') => {
   return unit;
 };
 
-export default function StockTable({ materials, loading, onRefresh, onOpenInbound, onViewDetails }: StockTableProps) {
+export const StockTable = React.memo(function StockTable({ materials, loading, onRefresh, onOpenInbound, onViewDetails }: StockTableProps) {
   const queryClient = useQueryClient();
   const { showToast, deleteInventorySku, formatCurrency, updateMaterialReorderPoint } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
@@ -472,4 +472,6 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
       )}
     </div>
   );
-}
+});
+
+export default StockTable;

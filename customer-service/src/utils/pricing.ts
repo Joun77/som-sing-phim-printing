@@ -33,9 +33,11 @@ export interface ProductConfig {
   materialId: string
   finishingId: string
   quantity?: number
+  machineDepreciationPerSheet?: number
+  maintenanceRatePercent?: number
 }
 
-export function computeUnitPrice(product: Product, { sizeId, materialId, finishingId }: ProductConfig) {
+export function computeUnitPrice(product: Product, { sizeId, materialId, finishingId, machineDepreciationPerSheet, maintenanceRatePercent }: ProductConfig) {
   const size = pickOption(product.sizes, sizeId)
   const material = pickOption(product.materials, materialId)
   const finishing = pickOption(product.finishings, finishingId)
@@ -44,7 +46,15 @@ export function computeUnitPrice(product: Product, { sizeId, materialId, finishi
   const materialAdd = material ? material.add : 0
   const finishingAdd = finishing ? finishing.add : 0
 
-  return product.basePrice + sizeAdd + materialAdd + finishingAdd
+  // Machine overhead (Depreciation + Maintenance Reserve)
+  let machineOverhead = 0
+  if (machineDepreciationPerSheet && machineDepreciationPerSheet > 0) {
+    const maintRate = maintenanceRatePercent !== undefined ? maintenanceRatePercent : 20
+    const maintCost = machineDepreciationPerSheet * (maintRate / 100)
+    machineOverhead = machineDepreciationPerSheet + maintCost
+  }
+
+  return product.basePrice + sizeAdd + materialAdd + finishingAdd + machineOverhead
 }
 
 export interface PriceBreakdown {

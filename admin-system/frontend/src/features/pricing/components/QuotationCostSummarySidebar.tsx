@@ -201,56 +201,56 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
                 <div 
                   style={{ width: `${Math.min(100, (grandPaperCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
                   className="bg-sky-400 h-full transition-all duration-300" 
-                  title={`Paper Cost: ${formatCurrency(grandPaperCost)}`}
+                  title={`${currentLang === 'lo' ? 'ຕົ້ນທຶນເຈ້ຍ' : 'Paper Cost'}: ${formatCurrency(grandPaperCost)}`}
                 />
               )}
               {grandInkCost > 0 && (
                 <div 
                   style={{ width: `${Math.min(100, (grandInkCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
                   className="bg-purple-400 h-full transition-all duration-300" 
-                  title={`Ink Cost: ${formatCurrency(grandInkCost)}`}
+                  title={`${currentLang === 'lo' ? 'ຕົ້ນທຶນໝຶກ' : 'Ink Cost'}: ${formatCurrency(grandInkCost)}`}
                 />
               )}
               {grandMachCost > 0 && (
                 <div 
                   style={{ width: `${Math.min(100, (grandMachCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
                   className="bg-amber-400 h-full transition-all duration-300" 
-                  title={`Machine Depreciation: ${formatCurrency(grandMachCost)}`}
+                  title={`${currentLang === 'lo' ? 'ຄ່າຫຼຸ້ຍຫ້ຽນເຄື່ອງຈັກ' : 'Machine Depreciation'}: ${formatCurrency(grandMachCost)}`}
                 />
               )}
               {grandPostPressCost > 0 && (
                 <div 
                   style={{ width: `${Math.min(100, (grandPostPressCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
                   className="bg-rose-400 h-full transition-all duration-300" 
-                  title={`Post-Press Machinery: ${formatCurrency(grandPostPressCost)}`}
+                  title={`${currentLang === 'lo' ? 'ເຄື່ອງຈັກຫຼັງພິມ' : 'Post-Press Machinery'}: ${formatCurrency(grandPostPressCost)}`}
                 />
               )}
               {grandFinishingCost > 0 && (
                 <div 
                   style={{ width: `${Math.min(100, (grandFinishingCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
                   className="bg-teal-400 h-full transition-all duration-300" 
-                  title={`Consumables: ${formatCurrency(grandFinishingCost)}`}
+                  title={`${currentLang === 'lo' ? 'ວັດສະດຸສິ້ນເປືອງ' : 'Consumables'}: ${formatCurrency(grandFinishingCost)}`}
                 />
               )}
               {grandLaborCost > 0 && (
                 <div 
                   style={{ width: `${Math.min(100, (grandLaborCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
                   className="bg-blue-400 h-full transition-all duration-300" 
-                  title={`Labor Cost: ${formatCurrency(grandLaborCost)}`}
+                  title={`${currentLang === 'lo' ? 'ຄ່າແຮງງານ' : 'Labor Cost'}: ${formatCurrency(grandLaborCost)}`}
                 />
               )}
               {(grandPackagingCost + quotationSetupFee) > 0 && (
                 <div 
                   style={{ width: `${Math.min(100, ((grandPackagingCost + quotationSetupFee) / Math.max(1, finalGrandTotal)) * 100)}%` }} 
                   className="bg-orange-400 h-full transition-all duration-300" 
-                  title={`Setup & Packaging: ${formatCurrency(grandPackagingCost + quotationSetupFee)}`}
+                  title={`${currentLang === 'lo' ? 'ຄ່າຕັ້ງຄ່າ & ບັນຈຸພັນ' : 'Setup & Packaging'}: ${formatCurrency(grandPackagingCost + quotationSetupFee)}`}
                 />
               )}
               {grandNetProfit > 0 && (
                 <div 
                   style={{ width: `${Math.min(100, (grandNetProfit / Math.max(1, finalGrandTotal)) * 100)}%` }} 
                   className="bg-emerald-400 h-full transition-all duration-300" 
-                  title={`Net Profit Margin: ${formatCurrency(grandNetProfit)}`}
+                  title={`${currentLang === 'lo' ? 'ກຳໄລສຸດທິ' : 'Net Profit Margin'}: ${formatCurrency(grandNetProfit)}`}
                 />
               )}
             </div>
