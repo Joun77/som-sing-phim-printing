@@ -20,10 +20,12 @@ import {
   Camera,
   Image as ImageIcon,
   Settings,
-  Plus
+  Plus,
+  Edit3
 } from 'lucide-react';
 import { useApp } from '@store/AppContext';
 import { CourierManagementModal } from './CourierManagementModal';
+import CustomerInvoiceModal from './modals/CustomerInvoiceModal';
 import OrderStepBar from './reception/OrderStepBar';
 
 interface OrderDeliveryPageProps {
@@ -36,6 +38,7 @@ interface OrderDeliveryPageProps {
   onUpdatePayment?: (orderId: any, paymentStatus: string, depositAmount?: number, remainingBalance?: number) => void;
   showToast: (msg: string, type?: string) => void;
   setLightbox?: (v: { src: string; title: string } | null) => void;
+  onEditOrder?: (order: any) => void;
 }
 
 export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
@@ -48,6 +51,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
   onUpdatePayment,
   showToast,
   setLightbox,
+  onEditOrder,
 }) => {
   if (!order) return null;
 
@@ -59,6 +63,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
 
   const { couriers } = useApp();
   const [isCourierModalOpen, setIsCourierModalOpen] = useState(false);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
 
   const [courier, setCourier] = useState(order.deliveryMethod || 'Anousith Express');
   const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber || '');
@@ -102,7 +107,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
       setIsDelivered(false);
     }
     if (order) order.isPacked = next;
-    showToast(next ? '✓ ແພັກກິ້ງສິນຄ້າຮຽບຮ້ອຍແລ້ວ! ປົດລັອກຂັ້ນຕອນມອບໃຫ້ຂົນສົ່ງ' : 'Reverted packaging status', 'info');
+    showToast(next ? 'ແພັກກິ້ງສິນຄ້າຮຽບຮ້ອຍແລ້ວ! ປົດລັອກຂັ້ນຕອນມອບໃຫ້ຂົນສົ່ງ' : 'Reverted packaging status', 'info');
   };
 
   // 2. Action: Handed to Courier & Save Proof
@@ -128,7 +133,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
     }
     showToast(
       currentLang === 'lo' 
-        ? '✓ ບັນທຶກຫຼັກຖານ & ມອບໃຫ້ຂົນສົ່ງແລ້ວ! (ສະຖານະ: ກຳລັງຈັດສົ່ງ)' 
+        ? 'ບັນທຶກຫຼັກຖານ & ມອບໃຫ້ຂົນສົ່ງແລ້ວ! (ສະຖານະ: ກຳລັງຈັດສົ່ງ)' 
         : 'Dispatched to courier with proof recorded!', 
       'success'
     );
@@ -146,7 +151,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
     }
     showToast(
       currentLang === 'lo' 
-        ? '✓ ຢືນຢັນຮັບຊຳລະຍອດທີ່ເຫຼືອຄົບ 100% ແລ້ວ!' 
+        ? 'ຢືນຢັນຮັບຊຳລະຍອດທີ່ເຫຼືອຄົບ 100% ແລ້ວ!' 
         : 'Final balance settled successfully!', 
       'success'
     );
@@ -177,7 +182,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
     }
     showToast(
       currentLang === 'lo' 
-        ? '✓ ລູກຄ້າໄດ້ຮັບສິນຄ້າແລ້ວ! ນຳທາງສູ່ໜ້າສະຫຼຸບອໍເດີ (Step 4)' 
+        ? 'ລູກຄ້າໄດ້ຮັບສິນຄ້າແລ້ວ! ນຳທາງສູ່ໜ້າສະຫຼຸບອໍເດີ (Step 4)' 
         : 'Customer received confirmed! Advancing to Step 4 Summary', 
       'success'
     );
@@ -212,7 +217,29 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {onEditOrder && (
+            <button
+              type="button"
+              onClick={() => onEditOrder(order)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-2xl text-xs font-black transition active:scale-95 cursor-pointer shadow-xs"
+              title={currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ & ສະເປກ' : 'Edit Order Specs & Details'}
+            >
+              <Edit3 className="w-3.5 h-3.5 text-amber-700" />
+              <span>{currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ' : 'Edit Order'}</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsInvoiceModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 rounded-2xl text-xs font-black transition active:scale-95 cursor-pointer shadow-2xs"
+            title="Customer Payment Invoice / Receipt"
+          >
+            <CreditCard className="w-3.5 h-3.5 text-blue-600" />
+            <span>{currentLang === 'lo' ? 'ໃບບິນລູກຄ້າ' : 'Invoice'}</span>
+          </button>
+
           <span className={`px-3.5 py-1.5 rounded-2xl text-xs font-black border uppercase flex items-center gap-1.5 shadow-xs ${
             isDelivered 
               ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
@@ -308,7 +335,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
                     : 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-sm shadow-amber-500/20'
                 }`}
               >
-                {isPacked ? '✓ ແພັກສຳເລັດແລ້ວ' : 'ກົດຢືນຢັນແພັກ'}
+                {isPacked ? 'ແພັກສຳເລັດແລ້ວ' : 'ກົດຢືນຢັນແພັກ'}
               </button>
             </div>
 
@@ -452,7 +479,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
             {isDispatched ? (
               <div className="p-3.5 rounded-2xl bg-purple-50 border border-purple-200 text-purple-900 text-xs font-black flex items-center justify-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-purple-600" />
-                <span>{currentLang === 'lo' ? '✓ ມອບໃຫ້ຂົນສົ່ງຮຽບຮ້ອຍແລ້ວ (ກຳລັງນຳສົ່ງຮອດລູກຄ້າ)' : 'Dispatched / In Transit'}</span>
+                <span>{currentLang === 'lo' ? 'ມອບໃຫ້ຂົນສົ່ງຮຽບຮ້ອຍແລ້ວ (ກຳລັງນຳສົ່ງຮອດລູກຄ້າ)' : 'Dispatched / In Transit'}</span>
               </div>
             ) : (
               <button
@@ -540,7 +567,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
                   className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2 border-none"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>{currentLang === 'lo' ? `✓ ຢືນຢັນຮັບຊຳລະຍອດທີ່ເຫຼືອ (${formatLAK(remainingBalance)})` : 'Settle Full Balance'}</span>
+                  <span>{currentLang === 'lo' ? `ຢືນຢັນຮັບຊຳລະຍອດທີ່ເຫຼືອ (${formatLAK(remainingBalance)})` : 'Settle Full Balance'}</span>
                 </button>
               </div>
             ) : (
@@ -563,7 +590,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
             {isDelivered ? (
               <div className="p-4 rounded-2xl bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-black flex items-center justify-center gap-2 shadow-xs">
                 <CheckCircle2 className="w-5 h-5 text-emerald-700" />
-                <span>{currentLang === 'lo' ? '✓ ລູກຄ້າໄດ້ຮັບສິນຄ້າແລ້ວ (ອໍເດີສຳເລັດ)' : 'Delivered & Completed'}</span>
+                <span>{currentLang === 'lo' ? 'ລູກຄ້າໄດ້ຮັບສິນຄ້າແລ້ວ (ອໍເດີສຳເລັດ)' : 'Delivered & Completed'}</span>
               </div>
             ) : !isDispatched ? (
               <div className="p-4 rounded-2xl bg-slate-100 border border-slate-200 text-slate-500 text-xs font-bold text-center flex items-center justify-center gap-2">
@@ -577,7 +604,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
                 className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white text-sm font-black shadow-lg shadow-emerald-600/25 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2.5 border-none animate-pulse"
               >
                 <PackageCheck className="w-5 h-5" />
-                <span>{currentLang === 'lo' ? '3.3 ຢືນຢັນລູກຄ້າໄດ້ຮັບສິນຄ້າແລ້ວ ➜ ໄປໜ້າສະຫຼຸບ (Step 4)' : 'Confirm Customer Received ➜ Step 4'}</span>
+                <span>{currentLang === 'lo' ? '3.3 ຢືນຢັນລູກຄ້າໄດ້ຮັບສິນຄ້າແລ້ວ (Step 4)' : 'Confirm Customer Received (Step 4)'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             )}
@@ -593,6 +620,17 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
         onSelectCourier={(cName) => setCourier(cName)}
         currentLang={currentLang}
       />
+
+      {/* Customer Payment Invoice / Receipt Modal */}
+      {isInvoiceModalOpen && (
+        <CustomerInvoiceModal
+          isOpen={isInvoiceModalOpen}
+          onClose={() => setIsInvoiceModalOpen(false)}
+          order={order}
+          currentLang={currentLang}
+          formatLAK={formatLAK}
+        />
+      )}
 
     </div>
   );

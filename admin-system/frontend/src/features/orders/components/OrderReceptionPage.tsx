@@ -1,9 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import OrderReceptionHeader from './reception/OrderReceptionHeader';
 import PaymentSlipCard from './reception/PaymentSlipCard';
 import ArtworkPrepressCard from './reception/ArtworkPrepressCard';
 import OrderStepBar from './reception/OrderStepBar';
+import ConfigureWorkflowModal from './modals/ConfigureWorkflowModal';
+import CustomerInvoiceModal from './modals/CustomerInvoiceModal';
 import { ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react';
+import { IndustrialJobTicket } from './production/PaperCuttingTicketCard';
+import { ProductionWorkflow } from '../types';
 
 interface OrderReceptionPageProps {
   order: any;
@@ -13,8 +17,10 @@ interface OrderReceptionPageProps {
   currentLang: string;
   handleStatusChange: (orderId: any, status: string) => void;
   onUpdatePayment?: (orderId: any, paymentStatus: string, depositAmount?: number, remainingBalance?: number) => void;
+  onUpdateOrder?: (order: any) => void;
   showToast: (msg: string, type?: string) => void;
   setLightbox?: (v: { src: string; title: string } | null) => void;
+  onEditOrder?: (order: any) => void;
 }
 
 export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
@@ -25,10 +31,34 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
   currentLang,
   handleStatusChange,
   onUpdatePayment,
+  onUpdateOrder,
   showToast,
   setLightbox,
+  onEditOrder,
 }) => {
+  const [isWorkflowModalOpen, setIsWorkflowModalOpen] = useState(false);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+
   if (!order) return null;
+
+  const handleConfirmWorkflow = (workflow: ProductionWorkflow) => {
+    order.productionWorkflow = workflow;
+    order.status = 'IN_PRODUCTION';
+    if (!order.stockDeducted) {
+      order.stockDeducted = true;
+      order.stockDeductedAt = new Date().toISOString();
+    }
+    if (onUpdateOrder) {
+      onUpdateOrder({ ...order, productionWorkflow: workflow, status: 'IN_PRODUCTION', stockDeducted: true, stockDeductedAt: order.stockDeductedAt });
+    }
+    handleStatusChange(order.id, 'IN_PRODUCTION');
+    showToast(
+      currentLang === 'lo'
+        ? `ກຳນົດສາຍງານ (${workflow.templateNameLao || workflow.templateName}) & ສັ່ງຜະລິດແລ້ວ! ຕັດສະຕັອກເຈ້ຍ-ໝຶກອັດຕະໂນມັດ`
+        : `Workflow configured (${workflow.templateName}) & sent to production! Stock deducted.`,
+      'success'
+    );
+  };
 
   const customerName = order.customerName || order.customer_name || order.customer || 'Somphavath DOUANGSVA';
   const customerPhone = order.phone || order.customer_phone || '02058866339';
@@ -59,7 +89,8 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
   const isReadyToAdvance = isPaymentConfirmed && isArtworkApproved;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 lg:p-8 space-y-6 animate-fade-in font-sans">
+    <>
+      <div className="min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 lg:p-8 space-y-6 animate-fade-in font-sans print:hidden">
       
       {/* 1. Header Sub-Component */}
       <OrderReceptionHeader
@@ -71,10 +102,12 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
         isArtworkApproved={isArtworkApproved}
         currentLang={currentLang}
         onBack={onBack}
+        onViewInvoice={() => setIsInvoiceModalOpen(true)}
         onPrintJobTicket={() => {
           showToast(currentLang === 'lo' ? 'ກຳລັງພິມໃບສັ່ງຜະລິດ...' : 'Printing Job Ticket...', 'info');
           window.print();
         }}
+        onEditOrder={onEditOrder ? () => onEditOrder(order) : undefined}
       />
 
       {/* 2. Interactive StepBar */}
@@ -115,7 +148,7 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
               }
               showToast(
                 currentLang === 'lo' 
-                  ? '✓ ຢືນຢັນຮັບຊຳລະເຕັມ 100% ສຳເລັດແລ້ວ! ສົ່ງຕໍ່ຝ່າຍ Pre-Press' 
+                  ? 'ຢືນຢັນຮັບຊຳລະເຕັມ 100% ສຳເລັດແລ້ວ! ສົ່ງຕໍ່ຝ່າຍ Pre-Press' 
                   : 'Full 100% payment verified! Handed over to Pre-Press', 
                 'success'
               );
@@ -132,7 +165,7 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
               }
               showToast(
                 currentLang === 'lo' 
-                  ? `✓ ຢືນຢັນຮັບມັດຈຳ ${formatLAK(depositAmt)} ສຳເລັດ! ສົ່ງຕໍ່ຝ່າຍ Pre-Press` 
+                  ? `ຢືນຢັນຮັບມັດຈຳ ${formatLAK(depositAmt)} ສຳເລັດ! ສົ່ງຕໍ່ຝ່າຍ Pre-Press` 
                   : `Deposit of ${formatLAK(depositAmt)} verified! Handed over to Pre-Press`, 
                 'success'
               );
@@ -155,6 +188,19 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
                 showToast(currentLang === 'lo' ? 'ແຈ້ງເຕືອນລູກຄ້າໃຫ້ສົ່ງສະລິບໃໝ່ແລ້ວ' : 'Customer notified to re-upload slip', 'warning');
               }
             }}
+            onUploadSlip={(fileUrl) => {
+              if (order) {
+                order.paymentSlipUrl = fileUrl;
+                order.payment_slip_url = fileUrl;
+                order.slipUrl = fileUrl;
+              }
+              showToast(
+                currentLang === 'lo' 
+                  ? (fileUrl ? 'ອັບໂຫລດສະລິບໂອນເງິນສຳເລັດ!' : 'ລົບຮູບສະລິບອອກແລ້ວ') 
+                  : (fileUrl ? 'Slip uploaded successfully!' : 'Slip removed'), 
+                'success'
+              );
+            }}
             setLightbox={setLightbox}
           />
         </div>
@@ -170,14 +216,10 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
             items={order.items}
             isArtworkApproved={isArtworkApproved}
             currentLang={currentLang}
+            onConfigureWorkflow={() => setIsWorkflowModalOpen(true)}
+            productionWorkflow={order.productionWorkflow}
             onApproveArtwork={() => {
-              handleStatusChange(order.id, 'IN_PRODUCTION');
-              showToast(
-                currentLang === 'lo' 
-                  ? '✓ ຢືນຢັນໄຟລ໌ພິມ & ສັ່ງຜະລິດແລ້ວ! (ຕັດສະຕັອກເຈ້ຍ & ໝຶກອັດຕະໂນມັດ)' 
-                  : 'Artwork approved & sent to press! Stock deducted automatically', 
-                'success'
-              );
+              setIsWorkflowModalOpen(true);
             }}
             onRevertArtwork={() => {
               handleStatusChange(order.id, 'PREPRESS_CHECK');
@@ -194,6 +236,28 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
         </div>
 
       </div>
+
+      {/* Workflow Configuration Modal */}
+      {isWorkflowModalOpen && (
+        <ConfigureWorkflowModal
+          isOpen={isWorkflowModalOpen}
+          onClose={() => setIsWorkflowModalOpen(false)}
+          order={order}
+          currentLang={currentLang}
+          onConfirmWorkflow={handleConfirmWorkflow}
+        />
+      )}
+
+      {/* Customer Payment Invoice / Receipt Modal */}
+      {isInvoiceModalOpen && (
+        <CustomerInvoiceModal
+          isOpen={isInvoiceModalOpen}
+          onClose={() => setIsInvoiceModalOpen(false)}
+          order={order}
+          currentLang={currentLang}
+          formatLAK={formatLAK}
+        />
+      )}
 
       {/* 4. Bottom Action Banner: Unlock Send to Production button when Step 1 is ready */}
       {isReadyToAdvance && (
@@ -220,13 +284,19 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
             onClick={() => onSelectStep(2)}
             className="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 text-sm font-black shadow-lg shadow-amber-500/25 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2.5 border-none"
           >
-            <span>{currentLang === 'lo' ? '🚀 ສົ່ງເຂົ້າສາຍການຜະລິດ (Advance to Step 2)' : 'Advance to Production Tracker'}</span>
+            <span>{currentLang === 'lo' ? 'ສົ່ງເຂົ້າສາຍການຜະລິດ (Advance to Step 2)' : 'Advance to Production Tracker'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       )}
 
-    </div>
+      </div>
+
+      {/* 5. Industrial Factory Job Ticket (Hidden on screen, Active on Print) */}
+      <div className="hidden print:block">
+        <IndustrialJobTicket order={order} currentLang={currentLang} />
+      </div>
+    </>
   );
 };
 

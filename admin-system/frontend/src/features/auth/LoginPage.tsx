@@ -44,14 +44,14 @@ export const LoginPage: React.FC = () => {
       }
 
       if (!response.ok) {
-        const data = await response.json().catch(() => ({ error: 'ເຂົ້າสู่ລະບົບບໍ່ສຳເລັດ' }));
-        throw new Error(data.error || 'ເຂົ້າสู่ລະບົບບໍ່ສຳເລັດ');
+        const data = await response.json().catch(() => ({ error: 'ເຂົ້າສູ່ລະບົບບໍ່ສຳເລັດ' }));
+        throw new Error(data.error || 'ເຂົ້າສູ່ລະບົບບໍ່ສຳເລັດ');
       }
 
       const data = await response.json();
       loginStore(data.token, { username, role: data.role, fullName: data.fullname }, rememberMe);
     } catch (err: any) {
-      setError(err.message || 'ເກີດຂໍ້ຜິດພາດในการเชื่อมต่อเซิร์ฟเวอร์');
+      setError(err.message || 'ເກີດຂໍ້ຜິດພາດໃນການເຊື່ອມຕໍ່ເຊີບເວີ');
     } finally {
       setLoading(false);
     }
@@ -70,7 +70,7 @@ export const LoginPage: React.FC = () => {
               ສົມສິ່ງພິມ (Som-Sing Printing)
             </h2>
             <p className="text-base text-slate-500 font-semibold mt-1">
-              ລະບົບເຂົ້າสู่ລະບົບສຳລັບຜູ້ບໍລິຫານ (Owner Full Access)
+              ລະບົບເຂົ້າສູ່ລະບົບສຳລັບຜູ້ບໍລິຫານ (Owner Full Access)
             </p>
           </div>
         </div>
@@ -133,7 +133,7 @@ export const LoginPage: React.FC = () => {
                 className="w-5 h-5 rounded-lg border-2 border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
               />
               <span className="text-sm font-bold text-slate-700">
-                ຈົດຈຳການເຂົ້າสู่ລະບົບ (Remember Me)
+                ຈົດຈຳການເຂົ້າສູ່ລະບົບ (Remember Me)
               </span>
             </label>
           </div>
@@ -149,7 +149,7 @@ export const LoginPage: React.FC = () => {
             ) : (
               <>
                 <LogIn className="w-5 h-5" />
-                ເຂົ້າสู่ລະບົບຜູ້ບໍລິຫານ
+                ເຂົ້າສູ່ລະບົບຜູ້ບໍລິຫານ
               </>
             )}
           </button>

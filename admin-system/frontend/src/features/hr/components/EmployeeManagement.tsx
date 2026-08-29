@@ -3,7 +3,8 @@ import {
   Users, UserPlus, Pencil, Trash2, Phone, MapPin, Star,
   Clock, Calendar, CheckCircle2, XCircle, AlertCircle,
   Search, ChevronDown, X, Briefcase, Banknote, TrendingUp,
-  Shield, Award, UserCheck, Filter
+  Shield, Award, UserCheck, Filter, Coins, Trophy, Sparkles,
+  Calculator, Flame
 } from 'lucide-react';
 import { useApp } from '@store/AppContext';
 import { useTranslation } from 'react-i18next';
@@ -33,7 +34,8 @@ const getShiftInfo = (shiftId: string) => SHIFTS.find(s => s.id === shiftId) || 
 const emptyForm = {
   name: '', nameEn: '', role: 'press_operator', phone: '', address: '',
   salary: '', salaryType: 'monthly', startDate: '', shift: 'morning',
-  status: 'active', skills: '', avatar: ''
+  status: 'active', skills: '', avatar: '',
+  pieceRatePerImpression: 5, salesCommissionRate: 0, impressionsProduced: 0
 };
 
 // ========== AVATAR ==========
@@ -82,14 +84,20 @@ function StatCard({ icon: Icon, label, value, sub, color }: StatCardProps) {
 
 // ========== MAIN COMPONENT ==========
 export default function EmployeeManagement() {
-  const { showToast, askConfirmation, formatCurrency } = useApp();
+  const { showToast, askConfirmation, formatCurrency, earningRecords = [], employees: contextEmployees, setEmployees: setContextEmployees } = useApp();
   const { i18n } = useTranslation();
   const lang = i18n.language || 'lo';
 
   // Multi-currency salary formatting (keeps the '—' guard for empty values)
   const formatLAK = (n: any) => (n || n === 0) ? formatCurrency(n) : '—';
 
-  const [employees, setEmployees] = useState(INITIAL_EMPLOYEES);
+  const [employees, setEmployees] = useState(contextEmployees && contextEmployees.length > 0 ? contextEmployees : INITIAL_EMPLOYEES);
+
+  useEffect(() => {
+    if (contextEmployees && contextEmployees.length > 0) {
+      setEmployees(contextEmployees);
+    }
+  }, [contextEmployees]);
 
   useEffect(() => {
     fetch('http://localhost:8080/api/employees')
@@ -112,9 +120,13 @@ export default function EmployeeManagement() {
             skills: item.skills || [],
             shift: 'morning',
             avatar: item.nameEn ? item.nameEn.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) : 'EM',
-            rating: 5.0
+            rating: 5.0,
+            pieceRatePerImpression: item.pieceRatePerImpression || 5,
+            salesCommissionRate: item.salesCommissionRate || 0,
+            impressionsProduced: item.impressionsProduced || 0
           }));
           setEmployees(mapped);
+          if (setContextEmployees) setContextEmployees(mapped);
         }
       })
       .catch(err => console.log('Using initial employees fallback', err));
@@ -151,6 +163,32 @@ export default function EmployeeManagement() {
     return { active, totalPayroll, totalPresent, totalAbsent, avgRating };
   }, [employees]);
 
+  // Top Earners Leaderboard (Top 5 Incentive Earners)
+  const topEarners = useMemo(() => {
+    const earnerMap: Record<string, { employee: any; totalEarned: number; impressions: number; jobsCount: number }> = {};
+
+    employees.forEach(emp => {
+      earnerMap[emp.id] = {
+        employee: emp,
+        totalEarned: 0,
+        impressions: Number(emp.impressionsProduced) || 0,
+        jobsCount: 0
+      };
+    });
+
+    earningRecords.forEach(rec => {
+      if (earnerMap[rec.employeeId]) {
+        earnerMap[rec.employeeId].totalEarned += Number(rec.earnedAmount || 0);
+        earnerMap[rec.employeeId].impressions += Number(rec.impressions || 0);
+        earnerMap[rec.employeeId].jobsCount += 1;
+      }
+    });
+
+    return Object.values(earnerMap)
+      .sort((a, b) => (b.totalEarned || b.impressions) - (a.totalEarned || a.impressions))
+      .slice(0, 5);
+  }, [employees, earningRecords]);
+
   const openAdd = () => {
     setForm({ ...emptyForm, avatar: '' });
     setIsEditing(false);
@@ -161,7 +199,9 @@ export default function EmployeeManagement() {
   const openEdit = (emp: any) => {
     setForm({
       ...emp,
-      skills: Array.isArray(emp.skills) ? emp.skills.join(', ') : emp.skills
+      skills: Array.isArray(emp.skills) ? emp.skills.join(', ') : emp.skills,
+      pieceRatePerImpression: emp.pieceRatePerImpression !== undefined ? emp.pieceRatePerImpression : 5,
+      salesCommissionRate: emp.salesCommissionRate || 0
     });
     setIsEditing(true);
     setIsModalOpen(true);
@@ -187,7 +227,9 @@ export default function EmployeeManagement() {
       address: form.address,
       salaryLAK: Number(form.salary) || 0,
       status: form.status ? form.status.toUpperCase() : 'ACTIVE',
-      skills: skillArr
+      skills: skillArr,
+      pieceRatePerImpression: Number(form.pieceRatePerImpression) || 0,
+      salesCommissionRate: Number(form.salesCommissionRate) || 0
     };
 
     fetch(isEditing ? `http://localhost:8080/api/employees/${form.id}` : 'http://localhost:8080/api/employees', {
@@ -197,7 +239,15 @@ export default function EmployeeManagement() {
     }).catch(err => console.log('API save error', err));
 
     if (isEditing) {
-      setEmployees(prev => prev.map(e => e.id === form.id ? { ...form, skills: skillArr, avatar: avatarInit } : e));
+      const updatedList = employees.map(e => e.id === form.id ? { 
+        ...form, 
+        skills: skillArr, 
+        avatar: avatarInit,
+        pieceRatePerImpression: Number(form.pieceRatePerImpression) || 0,
+        salesCommissionRate: Number(form.salesCommissionRate) || 0
+      } : e);
+      setEmployees(updatedList);
+      if (setContextEmployees) setContextEmployees(updatedList);
       showToast(T('ອັບເດດຂໍ້ມູນພະນັກງານສຳເລັດ!', 'Employee updated successfully!'), 'success');
     } else {
       const newEmp = {
@@ -206,10 +256,15 @@ export default function EmployeeManagement() {
         skills: skillArr,
         avatar: avatarInit,
         salary: Number(form.salary) || 0,
+        pieceRatePerImpression: Number(form.pieceRatePerImpression) || 0,
+        salesCommissionRate: Number(form.salesCommissionRate) || 0,
+        impressionsProduced: 0,
         attendance: { present: 0, absent: 0, late: 0 },
         rating: 5.0
       };
-      setEmployees(prev => [newEmp, ...prev]);
+      const updatedList = [newEmp, ...employees];
+      setEmployees(updatedList);
+      if (setContextEmployees) setContextEmployees(updatedList);
       showToast(T('ເພີ່ມພະນັກງານໃໝ່ສຳເລັດ!', 'New employee added successfully!'), 'success');
     }
     closeModal();
@@ -378,6 +433,101 @@ export default function EmployeeManagement() {
               </div>
             </div>
 
+            {/* Piece-Rate & Incentive Earnings Section */}
+            {(() => {
+              const empEarnings = earningRecords.filter(r => r.employeeId === emp.id);
+              const totalEmpEarned = empEarnings.reduce((sum, r) => sum + Number(r.earnedAmount || 0), 0);
+              const totalEmpImpressions = empEarnings.reduce((sum, r) => sum + Number(r.impressions || 0), 0) || Number(emp.impressionsProduced || 0);
+
+              return (
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-5">
+                  <div className="flex items-center justify-between border-b pb-3">
+                    <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                      <Coins className="w-5 h-5 text-amber-500" />
+                      <span>{T('ຍອດລາຍຮັບພິເສດຕາມຜົນງານ (Piece-Rate & Incentives)', 'Piece-Rate & Production Incentives')}</span>
+                    </h3>
+                    <span className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-black rounded-xl font-sans">
+                      +{formatLAK(totalEmpEarned)}
+                    </span>
+                  </div>
+
+                  {/* Summary Metric Chips */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-2xl">
+                      <span className="text-[10px] font-bold text-amber-800 uppercase block">
+                        {T('ອັດຕາຕໍ່ Impression', 'Rate per Impression')}
+                      </span>
+                      <span className="text-base font-black text-amber-950 font-sans">
+                        {emp.pieceRatePerImpression || 5} <span className="text-xs font-semibold">LAK</span>
+                      </span>
+                    </div>
+
+                    <div className="p-3.5 bg-indigo-50/70 border border-indigo-200/80 rounded-2xl">
+                      <span className="text-[10px] font-bold text-indigo-800 uppercase block">
+                        {T('ຍອດພິມລວມ (Impressions)', 'Total Impressions')}
+                      </span>
+                      <span className="text-base font-black text-indigo-950 font-sans">
+                        {totalEmpImpressions.toLocaleString()} <span className="text-xs font-semibold">ແຜ່ນ</span>
+                      </span>
+                    </div>
+
+                    <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl">
+                      <span className="text-[10px] font-bold text-emerald-800 uppercase block">
+                        {T('ລວມຄ່າແຮງພິເສດເດືອນນີ້', 'Total Monthly Earned')}
+                      </span>
+                      <span className="text-base font-black text-emerald-700 font-sans">
+                        {formatLAK(totalEmpEarned)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Earning Records Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                          <th className="py-2.5 px-3">ວັນທີ & ເວລາ</th>
+                          <th className="py-2.5 px-3">ເລກອໍເດີ (Order)</th>
+                          <th className="py-2.5 px-3">ຂັ້ນຕອນ (Step)</th>
+                          <th className="py-2.5 px-3 text-center">Impression</th>
+                          <th className="py-2.5 px-3 text-right">ເງິນພິເສດ (Earned)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                        {empEarnings.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-6 text-center text-slate-400">
+                              {T('ຍັງບໍ່ມີບັນທຶກຄ່າແຮງງານພິເສດ', 'No piece-rate records yet')}
+                            </td>
+                          </tr>
+                        ) : (
+                          empEarnings.map((rec, idx) => (
+                            <tr key={rec.id || idx} className="hover:bg-slate-50/60 transition">
+                              <td className="py-2.5 px-3 font-mono text-[11px] text-slate-500">
+                                {rec.recordedAt ? rec.recordedAt.split('T')[0] : 'Today'}
+                              </td>
+                              <td className="py-2.5 px-3 font-mono font-bold text-sky-600">
+                                {rec.orderNumber || rec.orderId}
+                              </td>
+                              <td className="py-2.5 px-3 font-bold text-slate-900">
+                                {rec.stepName}
+                              </td>
+                              <td className="py-2.5 px-3 text-center font-mono">
+                                {rec.impressions?.toLocaleString()}
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono font-black text-emerald-600">
+                                +{formatLAK(rec.earnedAmount)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Payroll summary */}
             <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
               <h3 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b pb-3">
@@ -385,17 +535,27 @@ export default function EmployeeManagement() {
                 {T('ສະຫຼຸບເງິນເດືອນ', 'Payroll Summary')}
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                {[
-                  { label: T('ເງິນເດືອນພື້ນຖານ / ເດືອນ', 'Base Salary / Month'), value: formatLAK(emp.salary), highlight: true },
-                  { label: T('ຄ່າລ່ວງເວລາ (ຄາດ)', 'Overtime (Estimated)'), value: formatLAK(Math.round(emp.salary * 0.1)) },
-                  { label: T('ຄ່ານ້ຳ + ຄ່າໂດຍສານ', 'Allowances'), value: formatLAK(100000) },
-                  { label: T('ລວມທັງໝົດ (ຄາດ)', 'Total Estimated'), value: formatLAK(emp.salary + Math.round(emp.salary * 0.1) + 100000), highlight: true },
-                ].map((row, i) => (
-                  <div key={i} className={`flex justify-between items-center p-3 rounded-xl border ${row.highlight ? 'bg-slate-50 border-slate-200' : 'border-transparent'}`}>
-                    <span className="text-slate-500 font-medium">{row.label}</span>
-                    <span className={`font-mono font-black ${row.highlight ? 'text-slate-900' : 'text-slate-700'}`}>{row.value}</span>
-                  </div>
-                ))}
+                {(() => {
+                  const empEarnings = earningRecords.filter(r => r.employeeId === emp.id);
+                  const pieceRateTotal = empEarnings.reduce((sum, r) => sum + Number(r.earnedAmount || 0), 0);
+                  const baseSalary = Number(emp.salary || 0);
+                  const overtime = Math.round(baseSalary * 0.1);
+                  const allowance = 100000;
+                  const grandTotal = baseSalary + overtime + allowance + pieceRateTotal;
+
+                  return [
+                    { label: T('ເງິນເດືອນພື້ນຖານ / ເດືອນ', 'Base Salary / Month'), value: formatLAK(baseSalary), highlight: true },
+                    { label: T('ຄ່າແຮງງານພິເສດ (Piece-Rate)', 'Piece-Rate Incentive'), value: `+${formatLAK(pieceRateTotal)}`, highlight: true, color: 'text-emerald-600' },
+                    { label: T('ຄ່າລ່ວງເວລາ (ຄາດ)', 'Overtime (Estimated)'), value: formatLAK(overtime) },
+                    { label: T('ຄ່ານ້ຳ + ຄ່າໂດຍສານ', 'Allowances'), value: formatLAK(allowance) },
+                    { label: T('ລວມທັງໝົດ (ຄາດ)', 'Total Estimated Payroll'), value: formatLAK(grandTotal), highlight: true, grand: true },
+                  ].map((row, i) => (
+                    <div key={i} className={`flex justify-between items-center p-3 rounded-xl border ${row.highlight ? (row.grand ? 'bg-indigo-50/60 border-indigo-200' : 'bg-slate-50 border-slate-200') : 'border-transparent'}`}>
+                      <span className="text-slate-500 font-medium">{row.label}</span>
+                      <span className={`font-mono font-black ${row.color || (row.grand ? 'text-indigo-900 text-sm' : (row.highlight ? 'text-slate-900' : 'text-slate-700'))}`}>{row.value}</span>
+                    </div>
+                  ));
+                })()}
               </div>
             </div>
 
@@ -454,7 +614,75 @@ export default function EmployeeManagement() {
         <StatCard icon={UserCheck} label={T('ພະນັກງານທີ່ໃຊ້ງານ', 'Active Staff')} value={stats.active} sub={`${employees.length} ${T('ທັງໝົດ', 'total')}`} color="bg-emerald-50 text-emerald-600" />
         <StatCard icon={Banknote} label={T('ເງິນເດືອນລວມ / ເດືອນ', 'Monthly Payroll')} value={`${(stats.totalPayroll / 1000000).toFixed(1)}M`} sub="ກີບ LAK" color="bg-blue-50 text-blue-600" />
         <StatCard icon={TrendingUp} label={T('ມາວຽກໂດຍສະເລ່ຍ', 'Avg Attendance')} value={`${stats.totalPresent}`} sub={T(`ຂາດ ${stats.totalAbsent} ວັນ`, `${stats.totalAbsent} absences`)} color="bg-purple-50 text-purple-600" />
-        <StatCard icon={Star} label={T('ຄະແນນສະເລ່ຍ', 'Avg Rating')} value={stats.avgRating} sub="/ 5.0" color="bg-amber-50 text-amber-600" />
+        <StatCard icon={Coins} label={T('ລວມຄ່າແຮງພິເສດ (Incentives)', 'Total Piece-Rate')} value={formatLAK(earningRecords.reduce((s, r) => s + Number(r.earnedAmount || 0), 0))} sub={`${earningRecords.length} ${T('ລາຍການຜະລິດ', 'recorded tasks')}`} color="bg-amber-50 text-amber-600" />
+      </div>
+
+      {/* Top Earners Piece-Rate Leaderboard */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between border-b pb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100 shrink-0">
+              <Trophy className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-black text-slate-900">
+                {T('ຕາຕະລາງຊ່າງທີ່ສ້າງຜົນງານສູງສຸດ (Top Incentive Earners)', 'Top Incentive Earners Leaderboard')}
+              </h2>
+              <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                {T('ຈັດອັນດັບຊ່າງທີ່ສ້າງຍອດພິມ ແລະ ໄດ້ຮັບຄ່າແຮງງານພິເສດສູງສຸດປະຈຳເດືອນ', 'Top technicians by production volume & piece-rate incentives.')}
+              </p>
+            </div>
+          </div>
+
+          <span className="px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 text-xs font-black rounded-xl">
+            🏆 Top 5 Technicians
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+          {topEarners.map((earner, idx) => {
+            const role = getRoleInfo(earner.employee.role);
+            return (
+              <div 
+                key={earner.employee.id}
+                onClick={() => setSelectedEmp(earner.employee)}
+                className="p-4 rounded-2xl bg-slate-50/70 hover:bg-amber-50/40 border border-slate-200/80 hover:border-amber-300 transition cursor-pointer flex flex-col justify-between space-y-3"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
+                      idx === 0 ? 'bg-amber-400 text-amber-950 shadow-xs' : idx === 1 ? 'bg-slate-300 text-slate-800' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {idx + 1}
+                    </span>
+                    <Avatar initials={earner.employee.avatar} size="sm" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-400 font-mono">
+                    {earner.jobsCount} {T('ງານ', 'jobs')}
+                  </span>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 truncate">
+                    {lang === 'lo' ? earner.employee.name : earner.employee.nameEn}
+                  </h4>
+                  <span className="text-[10px] text-slate-400 block truncate">
+                    {lang === 'lo' ? role.labelLo.split(' (')[0] : role.labelEn}
+                  </span>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                  <div className="text-[10px] text-slate-500 font-semibold">
+                    {earner.impressions.toLocaleString()} {T('ແຜ່ນ', 'imp')}
+                  </div>
+                  <div className="text-xs font-black text-emerald-600 font-mono">
+                    +{formatLAK(earner.totalEarned)}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Filters */}
@@ -726,6 +954,66 @@ function EmployeeModal({ isEditing, form, setForm, onSave, onClose, T }: Employe
               className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:bg-white focus:border-slate-400 outline-none transition"
               placeholder="Digital Printing, CMYK, Mimaki"
             />
+          </div>
+
+          {/* Phase C: Piece-Rate & Incentive Rate Configuration */}
+          <div className="p-4 bg-amber-50/70 border border-amber-200/80 rounded-2xl space-y-3">
+            <div className="flex items-center gap-2">
+              <Coins className="w-4 h-4 text-amber-600" />
+              <h4 className="text-xs font-black text-amber-950 uppercase tracking-wide">
+                {T('ຕັ້ງຄ່າຄ່າແຮງງານຕາມຜົນງານ (Piece-Rate & Commission)', 'Piece-Rate & Incentive Configuration')}
+              </h4>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-700 block">
+                  {T('ຄ່າແຮງງານຕໍ່ 1 Impression (LAK)', 'Piece-Rate / Impression (LAK)')}
+                </label>
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={form.pieceRatePerImpression !== undefined ? form.pieceRatePerImpression : 5}
+                  onChange={e => F('pieceRatePerImpression', Number(e.target.value) || 0)}
+                  className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl text-sm font-black text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  placeholder="5"
+                />
+                <span className="text-[10px] text-slate-400 block font-medium">
+                  = {(Number(form.pieceRatePerImpression || 5) * 1000).toLocaleString()} LAK / 1,000 แผ่น
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-700 block">
+                  {T('ຄອມມິດຊັ່ນຍອດຂາຍ (%)', 'Sales Commission (%)')}
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="100"
+                  value={form.salesCommissionRate !== undefined ? form.salesCommissionRate : 0}
+                  onChange={e => F('salesCommissionRate', Number(e.target.value) || 0)}
+                  className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl text-sm font-black text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  placeholder="0"
+                />
+                <span className="text-[10px] text-slate-400 block font-medium">
+                  {T('ສຳລັບພະນັກງານຂາຍ/ຕ້ອນຮັບ', 'For sales & CRM reps')}
+                </span>
+              </div>
+            </div>
+
+            {/* Live Calculation Preview Simulation */}
+            <div className="p-2.5 bg-white/90 border border-amber-200 rounded-xl text-[11px] flex items-center justify-between">
+              <span className="text-slate-600 font-medium flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                <span>{T('ຕົວຢ່າງ: ງານພິມ 5,000 Impressions', 'Example: 5,000 Impressions Job')}</span>
+              </span>
+              <span className="font-mono font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                +{(Number(form.pieceRatePerImpression !== undefined ? form.pieceRatePerImpression : 5) * 5000).toLocaleString()} LAK
+              </span>
+            </div>
           </div>
         </div>
 

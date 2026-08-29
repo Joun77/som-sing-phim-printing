@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Clock, CreditCard, Printer, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Clock, CreditCard, Printer, AlertTriangle, Edit3 } from 'lucide-react';
 
 interface OrderReceptionHeaderProps {
   orderIdDisplay: string;
@@ -11,6 +11,8 @@ interface OrderReceptionHeaderProps {
   currentLang: string;
   onBack: () => void;
   onPrintJobTicket?: () => void;
+  onViewInvoice?: () => void;
+  onEditOrder?: () => void;
 }
 
 export const OrderReceptionHeader: React.FC<OrderReceptionHeaderProps> = ({
@@ -23,6 +25,8 @@ export const OrderReceptionHeader: React.FC<OrderReceptionHeaderProps> = ({
   currentLang,
   onBack,
   onPrintJobTicket,
+  onViewInvoice,
+  onEditOrder,
 }) => {
   const renderSLABadge = () => {
     if (!promisedDate) return null;
@@ -80,7 +84,7 @@ export const OrderReceptionHeader: React.FC<OrderReceptionHeaderProps> = ({
             : 'bg-amber-50 text-amber-700 border-amber-200'
         }`}>
           <CreditCard className="w-4 h-4" />
-          <span>{isPaymentConfirmed ? (currentLang === 'lo' ? '✓ ຊຳລະແລ້ວ' : 'Paid') : (currentLang === 'lo' ? '⏳ ລໍຖ້າກວດສະລິບ' : 'Pending Slip')}</span>
+          <span>{isPaymentConfirmed ? (currentLang === 'lo' ? 'ຊຳລະແລ້ວ' : 'Paid') : (currentLang === 'lo' ? 'ລໍຖ້າກວດສະລິບ' : 'Pending Slip')}</span>
         </span>
 
         <span className={`px-3.5 py-1.5 rounded-2xl text-xs font-black border uppercase flex items-center gap-1.5 shadow-xs ${
@@ -91,6 +95,30 @@ export const OrderReceptionHeader: React.FC<OrderReceptionHeaderProps> = ({
           <Printer className="w-4 h-4" />
           <span>{isArtworkApproved ? (currentLang === 'lo' ? 'ກຳລັງຜະລິດ' : 'In Production') : (currentLang === 'lo' ? 'ລໍຖ້າກວດໄຟລ໌' : 'Pre-Press Check')}</span>
         </span>
+
+        {onEditOrder && (
+          <button
+            type="button"
+            onClick={onEditOrder}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-2xl text-xs font-black transition active:scale-95 cursor-pointer shadow-xs"
+            title={currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ & ສະເປກ' : 'Edit Order Specs & Details'}
+          >
+            <Edit3 className="w-3.5 h-3.5 text-amber-700" />
+            <span>{currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ' : 'Edit Order'}</span>
+          </button>
+        )}
+
+        {onViewInvoice && (
+          <button
+            type="button"
+            onClick={onViewInvoice}
+            className="px-3.5 py-2 rounded-2xl bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 text-xs font-black flex items-center gap-1.5 shadow-2xs transition active:scale-95 cursor-pointer"
+            title="Customer Payment Invoice / Receipt"
+          >
+            <CreditCard className="w-3.5 h-3.5 text-blue-600" />
+            <span>{currentLang === 'lo' ? 'ໃບບິນລູກຄ້າ' : 'Invoice / Receipt'}</span>
+          </button>
+        )}
 
         {onPrintJobTicket && (
           <button

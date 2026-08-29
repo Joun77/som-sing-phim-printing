@@ -200,7 +200,48 @@ export interface Order {
   trackingNumber?: string;
   courier?: string;
   shippingFee?: number;
+  productionWorkflow?: ProductionWorkflow;
 }
+
+export type WorkflowStepCategory = 'PRE_PRESS' | 'PRESS' | 'POST_PRESS' | 'FINISHING' | 'QC' | 'PACKAGING' | 'OTHER';
+
+export interface ProductionWorkflowStep {
+  id: string;
+  name: string;
+  nameLao?: string;
+  category: WorkflowStepCategory;
+  assignedTo?: string; // employee ID
+  assignedStaffName?: string;
+  assignedStaffRole?: string;
+  assignedStaffAvatar?: string;
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+  completedAt?: string | null;
+  completedBy?: string | null;
+  notes?: string;
+  estimatedMinutes?: number;
+  machineId?: string;
+}
+
+export interface ProductionWorkflow {
+  templateId?: string;
+  templateName: string;
+  templateNameLao?: string;
+  steps: ProductionWorkflowStep[];
+  createdAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface WorkflowTemplate {
+  id: string;
+  name: string;
+  nameLao: string;
+  description?: string;
+  category: string;
+  isCustom?: boolean;
+  steps: Array<Omit<ProductionWorkflowStep, 'status' | 'completedAt' | 'completedBy'>>;
+}
+
 
 export interface Delivery {
   id: string;

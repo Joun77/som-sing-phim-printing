@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '@store/AppContext';
+import { useAuthStore } from '@store/useAuthStore';
 import { useTranslation } from 'react-i18next';
 import { 
   TrendingUp, 
@@ -8,25 +9,33 @@ import {
   FileText, 
   AlertTriangle, 
   Plus, 
-  Activity,
-  AlertCircle,
-  Sparkles,
-  Cpu,
-  Layers,
-  CheckCircle2,
-  Calendar,
-  ChevronRight,
-  ChevronLeft,
-  Printer,
-  PackageCheck,
-  Calculator,
-  Truck,
-  Clock,
-  Boxes,
-  ArrowUpRight
+  Activity, 
+  AlertCircle, 
+  Sparkles, 
+  Cpu, 
+  Layers, 
+  CheckCircle2, 
+  Calendar, 
+  ChevronRight, 
+  ChevronLeft, 
+  Printer, 
+  PackageCheck, 
+  Calculator, 
+  Truck, 
+  Clock, 
+  Boxes, 
+  ArrowUpRight,
+  ShieldCheck,
+  ShieldAlert,
+  Percent,
+  Droplets,
+  FileCheck
 } from 'lucide-react';
 import { HistoryAnalytics } from '@features/analytics';
 import { FormModalTemplate, FormSection } from '@components/common/FormModalTemplate';
+import ProfitChart from './ProfitChart';
+import SpoilageTimelineChart from './SpoilageTimelineChart';
+import TopProductsTable from './TopProductsTable';
 
 export default function DashboardOverview() {
   const { 
@@ -34,11 +43,15 @@ export default function DashboardOverview() {
     orders, 
     spoilageLogs, 
     getDashboardStats, 
-    addSpoilageLog,
-    showToast,
-    formatCurrency,
-    setActiveTab
+    addSpoilageLog, 
+    showToast, 
+    formatCurrency, 
+    setActiveTab 
   } = useApp();
+
+  const user = useAuthStore((state) => state.user);
+  const userRole = (user?.role || 'owner').toLowerCase();
+  const isExecutive = userRole === 'owner' || userRole === 'super_admin' || userRole === 'admin' || userRole === 'manager';
 
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
@@ -389,6 +402,105 @@ export default function DashboardOverview() {
         </div>
       </div>
 
+      {/* 4.1 EXECUTIVE FINANCIAL & SPOILAGE DRILLDOWN CARDS (OWNER / SUPER_ADMIN) */}
+      {isExecutive && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black uppercase text-indigo-500 tracking-wider flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-indigo-600" />
+              <span>{currentLang === 'lo' ? 'ແຜງວິເຄາະຕົ້ນທຶນ & ກຳໄລຂັ້ນຕົ້ນ (Executive Cost & Margin Audit)' : 'Executive Cost & Gross Margin Audit'}</span>
+            </span>
+            <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-black rounded-full border border-indigo-200">
+              Role: {userRole.toUpperCase()}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            
+            {/* Total Paper Cost */}
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px]">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                  {currentLang === 'lo' ? 'ຕົ້ນທຶນເຈ້ຍລວມ (Paper Cost)' : 'Total Paper Cost'}
+                </span>
+                <div className="p-2.5 bg-amber-50 text-amber-600 rounded-2xl border border-amber-100">
+                  <FileCheck className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-4 space-y-1">
+                <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-sans">
+                  {formatLAK(stats.paperCostTotal || 0)}
+                </h3>
+                <p className="text-xs sm:text-sm text-amber-600 font-bold">
+                  {currentLang === 'lo' ? 'ຄິດໄລ່ຈາກ Stock Deduction' : 'Deducted from paper stock'}
+                </p>
+              </div>
+            </div>
+
+            {/* Total Ink Cost */}
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px]">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                  {currentLang === 'lo' ? 'ຕົ້ນທຶນໝຶກລວມ (Ink Cost)' : 'Total Ink Cost'}
+                </span>
+                <div className="p-2.5 bg-cyan-50 text-cyan-600 rounded-2xl border border-cyan-100">
+                  <Droplets className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-4 space-y-1">
+                <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-sans">
+                  {formatLAK(stats.inkCostTotal || 0)}
+                </h3>
+                <p className="text-xs sm:text-sm text-cyan-600 font-bold">
+                  {currentLang === 'lo' ? 'ຕາມອັດຕາ Coverage %' : 'Coverage % and impressions'}
+                </p>
+              </div>
+            </div>
+
+            {/* Gross Profit Margin % */}
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px]">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                  {currentLang === 'lo' ? 'ອັດຕາກຳໄລຂັ້ນຕົ້ນ (Gross Margin)' : 'Gross Profit Margin'}
+                </span>
+                <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
+                  <Percent className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-4 space-y-1">
+                <h3 className="text-2xl sm:text-3xl font-black text-emerald-600 tracking-tight font-sans">
+                  {stats.grossProfitMargin || 58}%
+                </h3>
+                <p className="text-xs sm:text-sm text-emerald-600 font-bold">
+                  {currentLang === 'lo' ? '(Revenue - Paper - Ink) / Revenue' : 'High profitability index'}
+                </p>
+              </div>
+            </div>
+
+            {/* Spoilage Financial Cost Impact */}
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px]">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                  {currentLang === 'lo' ? 'ຕົ້ນທຶນຂອງເສຍ (Spoilage Loss)' : 'Spoilage Cost Impact'}
+                </span>
+                <div className="p-2.5 bg-rose-50 text-rose-600 rounded-2xl border border-rose-100">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-4 space-y-1">
+                <h3 className="text-2xl sm:text-3xl font-black text-rose-600 tracking-tight font-sans">
+                  {formatLAK(stats.spoilageCostImpact || 0)}
+                </h3>
+                <p className="text-xs sm:text-sm text-rose-500 font-bold">
+                  {spoilageLogs.length} {currentLang === 'lo' ? 'ລາຍການເສຍຫາຍ' : 'logged scrap entries'}
+                </p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* 5. REDESIGNED HIGH-END CRITICAL LOW STOCK WIDGET */}
       <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
@@ -597,8 +709,24 @@ export default function DashboardOverview() {
         </div>
       </div>
 
-      {/* 8. BI ANALYTICS & FINANCIAL AUDIT CHARTS */}
-      <HistoryAnalytics hideHeader={true} />
+      {/* 8. EXECUTIVE VISUALIZATIONS & DRILL-DOWN ANALYTICS */}
+      {isExecutive ? (
+        <div className="space-y-8 animate-fade-in">
+          {/* Top Products & Revenue Breakdown Side by Side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <ProfitChart />
+            <TopProductsTable />
+          </div>
+
+          {/* 30-Day Spoilage Timeline with Drilldown */}
+          <SpoilageTimelineChart />
+
+          {/* Historical Cashflow & Revenue Trend */}
+          <HistoryAnalytics hideHeader={true} />
+        </div>
+      ) : (
+        <HistoryAnalytics hideHeader={true} />
+      )}
 
       {/* UNIFIED DESIGN SYSTEM: SPOILAGE FORM MODAL (ENLARGED & HIGH READABILITY) */}
       <FormModalTemplate

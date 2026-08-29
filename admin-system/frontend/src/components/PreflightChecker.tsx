@@ -486,7 +486,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                         ກຳລັງສະແກນໜ້າທີ {progress.current} / {progress.total} ({progress.pct}%)...
                       </div>
                       <div className="text-xs text-slate-400 font-sans">
-                        Full-Scan Pixel-by-Pixel & แยกหน้าสี / ขาวดำ
+                        Full-Scan Pixel-by-Pixel & ແຍກໜ້າສີ / ຂາວດຳ
                       </div>
                     </div>
                     <div className="w-64 bg-slate-700 h-2 rounded-full overflow-hidden">
@@ -779,7 +779,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
 
                       <div className="space-y-1 pt-1">
                         <div className="flex justify-between text-xs font-bold text-slate-800">
-                          <span>Black Ink (K ล้วน)</span>
+                          <span>Black Ink (K ລ້ວນ)</span>
                           <span className="font-mono">{effectiveMonoK}%</span>
                         </div>
                         <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">

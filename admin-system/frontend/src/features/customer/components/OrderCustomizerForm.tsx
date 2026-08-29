@@ -548,14 +548,14 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
             {/* Coverage % */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                3. ຄວາມໜາແໜ້ນຂອງໝຶກ (Ink Coverage %): {coveragePercent}%
+                3. ຄວາມໜາແໜ້ນຂອງໝຶກ (Ink Coverage %): {actualCoverage}%
               </label>
               <input
                 type="range"
                 min={5}
                 max={100}
-                value={coveragePercent}
-                onChange={(e) => setCoveragePercent(Number(e.target.value))}
+                value={actualCoverage}
+                onChange={(e) => setActualCoverage(Number(e.target.value))}
                 className="w-full accent-emerald-500"
               />
             </div>

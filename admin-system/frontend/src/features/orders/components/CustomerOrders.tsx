@@ -10,7 +10,21 @@ import {
   Layers, 
   Calculator,
   Check,
-  X
+  X,
+  Search,
+  Calendar,
+  Filter,
+  Truck,
+  CreditCard,
+  RotateCcw,
+  DollarSign,
+  Wallet,
+  ArrowUpDown,
+  ChevronDown,
+  Download,
+  FileSpreadsheet,
+  CheckSquare,
+  Printer
 } from 'lucide-react';
 import OrdersTable from './OrdersTable';
 import CreateOrderPage from './CreateOrderPage';
@@ -26,11 +40,14 @@ import { ProductionBoard } from '@features/production';
 import SubmitQuotationModal from './SubmitQuotationModal';
 import QuickTrackingModal from './QuickTrackingModal';
 import ShippingLabelModal from './modals/ShippingLabelModal';
+import ArtworkViewerModal from './modals/ArtworkViewerModal';
+import EditOrderModal from './modals/EditOrderModal';
 
 export default function CustomerOrders({ initialSubTab = 'orders' }) {
   const { 
     orders, 
     updateOrderStatus,
+    updateOrderDetails,
     startOrderProduction,
     updateOrderTracking,
     couriers,
@@ -74,6 +91,8 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
   const [quoteModalOrder, setQuoteModalOrder] = useState(null);
   const [trackingModalOrder, setTrackingModalOrder] = useState(null);
   const [shippingLabelOrder, setShippingLabelOrder] = useState(null);
+  const [artworkModalOrder, setArtworkModalOrder] = useState(null);
+  const [editModalOrder, setEditModalOrder] = useState(null);
   const focusRef = useRef(null);
 
   useEffect(() => {
@@ -302,33 +321,279 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
     }
   };
 
+  // Advanced Search & Multi-Criteria Filter States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [datePreset, setDatePreset] = useState<'all' | 'today' | 'this_week' | 'this_month' | 'custom'>('all');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'unpaid' | 'deposit' | 'paid'>('all');
+  const [courierFilter, setCourierFilter] = useState<string>('all');
+  const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(false);
+
+  const isWithinDatePreset = useCallback((orderDateStr: string) => {
+    if (datePreset === 'all') return true;
+    if (!orderDateStr) return false;
+
+    let orderDate: Date;
+    if (orderDateStr.includes('/')) {
+      const parts = orderDateStr.split('/');
+      if (parts.length === 3) {
+        orderDate = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      } else {
+        orderDate = new Date(orderDateStr);
+      }
+    } else {
+      orderDate = new Date(orderDateStr);
+    }
+
+    if (isNaN(orderDate.getTime())) return true;
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    if (datePreset === 'today') {
+      return orderDate >= todayStart && orderDate <= todayEnd;
+    }
+
+    if (datePreset === 'this_week') {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(now.setDate(diff));
+      monday.setHours(0, 0, 0, 0);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      sunday.setHours(23, 59, 59, 999);
+      return orderDate >= monday && orderDate <= sunday;
+    }
+
+    if (datePreset === 'this_month') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      return orderDate >= startOfMonth && orderDate <= endOfMonth;
+    }
+
+    if (datePreset === 'custom') {
+      let pass = true;
+      if (customStartDate) {
+        const start = new Date(customStartDate + 'T00:00:00');
+        if (orderDate < start) pass = false;
+      }
+      if (customEndDate) {
+        const end = new Date(customEndDate + 'T23:59:59');
+        if (orderDate > end) pass = false;
+      }
+      return pass;
+    }
+
+    return true;
+  }, [datePreset, customStartDate, customEndDate]);
+
   const filteredOrders = useMemo(() => {
-    if (initialSubTab === 'completed') {
-      return orders.filter(o => o.status === 'Delivered' || o.status === 'COMPLETED');
+    return orders.filter(ord => {
+      // 1. Tab / Lifecycle status filter
+      if (initialSubTab === 'completed') {
+        if (ord.status !== 'Delivered' && ord.status !== 'COMPLETED') return false;
+      } else if (initialSubTab === 'cancelled') {
+        if (ord.status !== 'Cancelled' && ord.status !== 'CANCELLED') return false;
+      } else if (filterStatus === 'All') {
+        if (ord.status === 'Cancelled' || ord.status === 'CANCELLED') return false;
+      } else if (filterStatus === 'Received') {
+        if (!['Received', 'Pending', 'PREPRESS_CHECK', 'QUOTATION'].includes(ord.status)) return false;
+      } else if (filterStatus === 'Printing') {
+        if (!['Printing', 'Cutting', 'IN_PRODUCTION'].includes(ord.status)) return false;
+      } else if (filterStatus === 'Ready') {
+        if (!['Ready', 'READY_FOR_PICKUP'].includes(ord.status)) return false;
+      } else if (filterStatus === 'Delivered') {
+        if (!['Delivered', 'COMPLETED'].includes(ord.status)) return false;
+      } else if (filterStatus === 'Cancelled') {
+        if (!['Cancelled', 'CANCELLED'].includes(ord.status)) return false;
+      } else {
+        if (ord.status !== filterStatus) return false;
+      }
+
+      // 2. Search query matching
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const idMatch = String(ord.id || '').toLowerCase().includes(q) || String(ord.orderNo || '').toLowerCase().includes(q);
+        const nameMatch = String(ord.customerName || ord.customer_name || ord.customer || '').toLowerCase().includes(q);
+        const phoneMatch = String(ord.phone || ord.customer_phone || '').toLowerCase().includes(q);
+        const trackingMatch = String(ord.trackingNumber || ord.trackingNo || '').toLowerCase().includes(q);
+        const addressMatch = String(ord.address || ord.delivery_address || '').toLowerCase().includes(q);
+        const itemsMatch = Array.isArray(ord.items) && ord.items.some((it: any) => 
+          String(it.name || it.job_name || '').toLowerCase().includes(q)
+        );
+
+        if (!idMatch && !nameMatch && !phoneMatch && !trackingMatch && !addressMatch && !itemsMatch) {
+          return false;
+        }
+      }
+
+      // 3. Date range matching
+      if (!isWithinDatePreset(ord.date || ord.createdDate || '')) {
+        return false;
+      }
+
+      // 4. Payment status filter
+      if (paymentFilter !== 'all') {
+        const pStatus = ord.paymentStatus || 'Pending';
+        const isPaid = ['Paid', 'Fully Paid', 'PAID'].includes(pStatus) || ord.remainingUnpaidBalance === 0;
+        const isDeposit = ['Deposit', 'Deposit Paid'].includes(pStatus) || (ord.depositAmountPaid > 0 && ord.remainingUnpaidBalance > 0);
+        const isUnpaid = ['Unpaid', 'Pending', 'PENDING', 'Overdue'].includes(pStatus) && !isPaid && !isDeposit;
+
+        if (paymentFilter === 'paid' && !isPaid) return false;
+        if (paymentFilter === 'deposit' && !isDeposit) return false;
+        if (paymentFilter === 'unpaid' && !isUnpaid) return false;
+      }
+
+      // 5. Courier / Delivery method filter
+      if (courierFilter !== 'all') {
+        const m = (ord.deliveryMethod || ord.shippingCourier || ord.courier || '').toLowerCase();
+        if (courierFilter === 'pickup') {
+          if (!m.includes('pickup') && !m.includes('ຮັບເອງ')) return false;
+        } else {
+          if (!m.includes(courierFilter.toLowerCase())) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [orders, initialSubTab, filterStatus, searchQuery, isWithinDatePreset, paymentFilter, courierFilter]);
+
+  const summaryMetrics = useMemo(() => {
+    const totalCount = filteredOrders.length;
+    const pendingCount = filteredOrders.filter(o => ['Received', 'Pending', 'PREPRESS_CHECK', 'QUOTATION'].includes(o.status)).length;
+    const inProdCount = filteredOrders.filter(o => ['Printing', 'Cutting', 'IN_PRODUCTION'].includes(o.status)).length;
+    const readyCount = filteredOrders.filter(o => ['Ready', 'READY_FOR_PICKUP'].includes(o.status)).length;
+    const completedCount = filteredOrders.filter(o => ['Delivered', 'COMPLETED'].includes(o.status)).length;
+    const totalRevenue = filteredOrders.reduce((sum, o) => sum + Number(o.totalPriceCharged || o.totalAmount || 0), 0);
+    const totalUnpaid = filteredOrders.reduce((sum, o) => sum + Number(o.remainingUnpaidBalance || 0), 0);
+
+    return {
+      totalCount,
+      pendingCount,
+      inProdCount,
+      readyCount,
+      completedCount,
+      totalRevenue,
+      totalUnpaid
+    };
+  }, [filteredOrders]);
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setDatePreset('all');
+    setCustomStartDate('');
+    setCustomEndDate('');
+    setPaymentFilter('all');
+    setCourierFilter('all');
+    if (initialSubTab === 'orders') setFilterStatus('All');
+  };
+
+  const isAnyFilterActive = searchQuery !== '' || datePreset !== 'all' || paymentFilter !== 'all' || courierFilter !== 'all' || (filterStatus !== 'All' && initialSubTab === 'orders');
+
+  // Batch Operations State & Methods
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [bulkShippingOrders, setBulkShippingOrders] = useState<any[] | null>(null);
+
+  const handleToggleSelectOrder = (orderId: string) => {
+    setSelectedOrderIds(prev => 
+      prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]
+    );
+  };
+
+  const handleToggleSelectAll = (isChecked: boolean) => {
+    if (isChecked) {
+      setSelectedOrderIds(filteredOrders.map(o => o.id));
+    } else {
+      setSelectedOrderIds([]);
     }
-    if (initialSubTab === 'cancelled') {
-      return orders.filter(o => o.status === 'Cancelled' || o.status === 'CANCELLED');
+  };
+
+  const handleBulkStatusChange = (newStatus: string) => {
+    if (selectedOrderIds.length === 0) return;
+    selectedOrderIds.forEach(id => {
+      updateOrderStatus(id, newStatus);
+    });
+    showToast(`ອັບເດດສະຖານະ ${selectedOrderIds.length} ອໍເດີເປັນ [${newStatus}] ສຳເລັດແລ້ວ!`, 'success');
+    setSelectedOrderIds([]);
+  };
+
+  const handleExportCSV = (customList?: any[]) => {
+    const list = customList || (selectedOrderIds.length > 0 
+      ? orders.filter(o => selectedOrderIds.includes(o.id))
+      : filteredOrders);
+
+    if (!list || list.length === 0) {
+      showToast('ບໍ່ມີຂໍ້ມູນອໍເດີສຳລັບສົ່ງອອກ', 'warning');
+      return;
     }
-    if (filterStatus === 'All') {
-      return orders.filter(o => o.status !== 'Cancelled' && o.status !== 'CANCELLED');
+
+    const headers = [
+      'Order ID',
+      'Date',
+      'Customer Name',
+      'Phone',
+      'Delivery Method',
+      'Tracking Number',
+      'Total Amount (LAK)',
+      'Deposit Paid (LAK)',
+      'Remaining Balance (LAK)',
+      'Payment Status',
+      'Production Status',
+      'Items Summary',
+      'Notes'
+    ];
+
+    const escapeCSV = (val: any) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const rows = list.map(ord => {
+      const itemsText = Array.isArray(ord.items) 
+        ? ord.items.map((it: any) => `${it.name || it.job_name || 'Item'} x${it.quantity || 1}`).join('; ')
+        : ord.product_name || 'Custom Print';
+
+      return [
+        escapeCSV(ord.orderNo || ord.id),
+        escapeCSV(ord.date || ord.createdDate || ''),
+        escapeCSV(ord.customerName || ord.customer_name || ''),
+        escapeCSV(ord.phone || ord.customer_phone || ''),
+        escapeCSV(ord.deliveryMethod || ord.shippingCourier || 'Pickup'),
+        escapeCSV(ord.trackingNumber || ord.trackingNo || ''),
+        escapeCSV(Number(ord.totalPriceCharged || ord.totalAmount || 0)),
+        escapeCSV(Number(ord.depositAmountPaid || 0)),
+        escapeCSV(Number(ord.remainingUnpaidBalance || 0)),
+        escapeCSV(ord.paymentStatus || 'Pending'),
+        escapeCSV(ord.status || 'Pending'),
+        escapeCSV(itemsText),
+        escapeCSV(ord.notes || ord.productionNotes || '')
+      ].join(',');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `som-sing-orders-export-${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`ສົ່ງອອກລາຍງານ ${list.length} ອໍເດີເປັນ CSV ສຳເລັດ!`, 'success');
+  };
+
+  const handleBulkPrintShipping = () => {
+    const selectedOrdersList = orders.filter(o => selectedOrderIds.includes(o.id));
+    if (selectedOrdersList.length === 0) {
+      showToast('ກະລຸນາເລືອກອໍເດີທີ່ຕ້ອງການພິມໃບປະໜ້າ', 'warning');
+      return;
     }
-    if (filterStatus === 'Received') {
-      return orders.filter(o => ['Received', 'Pending', 'PREPRESS_CHECK', 'QUOTATION'].includes(o.status));
-    }
-    if (filterStatus === 'Printing') {
-      return orders.filter(o => ['Printing', 'Cutting', 'IN_PRODUCTION'].includes(o.status));
-    }
-    if (filterStatus === 'Ready') {
-      return orders.filter(o => ['Ready', 'READY_FOR_PICKUP'].includes(o.status));
-    }
-    if (filterStatus === 'Delivered') {
-      return orders.filter(o => ['Delivered', 'COMPLETED'].includes(o.status));
-    }
-    if (filterStatus === 'Cancelled') {
-      return orders.filter(o => ['Cancelled', 'CANCELLED'].includes(o.status));
-    }
-    return orders.filter(ord => ord.status === filterStatus);
-  }, [orders, initialSubTab, filterStatus]);
+    setBulkShippingOrders(selectedOrdersList);
+  };
 
   const handleToggleDeliveryStatus = (orderId, currentStatus) => {
     const nextStatus = currentStatus === 'Delivered' ? 'Ready' : 'Delivered';
@@ -369,6 +634,8 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
   }
 
   if (selectedOrder) {
+    const currentOrder = orders.find(o => o.id === selectedOrder.id || o.orderNo === selectedOrder.orderNo) || selectedOrder;
+
     return (
       <>
         {lightbox && (
@@ -378,22 +645,47 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             onClose={() => setLightbox(null)}
           />
         )}
+        {editModalOrder && (
+          <EditOrderModal
+            isOpen={!!editModalOrder}
+            onClose={() => setEditModalOrder(null)}
+            order={editModalOrder}
+            inventory={inventory}
+            equipment={equipment}
+            formatCurrency={formatLAK}
+            onSave={(updated) => {
+              if (updateOrderDetails) {
+                updateOrderDetails(updated.id, updated);
+              }
+              setSelectedOrder(updated);
+              setEditModalOrder(null);
+              showToast(currentLang === 'lo' ? 'ອັບເດດລາຍລະອຽດອໍເດີສຳເລັດ!' : 'Order details updated successfully!', 'success');
+            }}
+          />
+        )}
         {activeOrderStep === 1 && (
           <OrderReceptionPage
-            order={selectedOrder}
+            order={currentOrder}
             onBack={() => setSelectedOrder(null)}
             onSelectStep={(step) => setActiveOrderStep(step)}
             formatLAK={formatLAK}
             currentLang={currentLang}
             handleStatusChange={handleStatusChange}
             onUpdatePayment={updateOrderPaymentStatus}
+            onUpdateOrder={(updated) => {
+              if (updateOrderDetails) {
+                updateOrderDetails(updated.id, updated);
+              }
+              setSelectedOrder(updated);
+            }}
             showToast={showToast}
             setLightbox={setLightbox}
+            onEditOrder={(ord) => setEditModalOrder(ord)}
           />
         )}
         {activeOrderStep === 2 && (
           <ProductionTrackingPage
-            order={selectedOrder}
+            order={currentOrder}
             onBack={() => setSelectedOrder(null)}
             onSelectStep={(step) => setActiveOrderStep(step)}
             formatLAK={formatLAK}
@@ -408,11 +700,18 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             getPaymentStatusBadge={getPaymentStatusBadge}
             getPaymentStatusIcon={getPaymentStatusIcon}
             setLightbox={setLightbox}
+            onEditOrder={(ord) => setEditModalOrder(ord)}
+            onUpdateOrder={(updated) => {
+              if (updateOrderDetails) {
+                updateOrderDetails(updated.id, updated);
+              }
+              setSelectedOrder(updated);
+            }}
           />
         )}
         {activeOrderStep === 3 && (
           <OrderDeliveryPage
-            order={selectedOrder}
+            order={currentOrder}
             onBack={() => setSelectedOrder(null)}
             onSelectStep={(step) => setActiveOrderStep(step)}
             formatLAK={formatLAK}
@@ -421,16 +720,18 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             onUpdatePayment={updateOrderPaymentStatus}
             showToast={showToast}
             setLightbox={setLightbox}
+            onEditOrder={(ord) => setEditModalOrder(ord)}
           />
         )}
         {activeOrderStep === 4 && (
           <OrderCompletedSummaryPage
-            order={selectedOrder}
+            order={currentOrder}
             onBack={() => setSelectedOrder(null)}
             onSelectStep={(step) => setActiveOrderStep(step)}
             formatLAK={formatLAK}
             currentLang={currentLang}
             setLightbox={setLightbox}
+            onEditOrder={(ord) => setEditModalOrder(ord)}
           />
         )}
       </>
@@ -459,6 +760,14 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
           </p>
         </div>
         <div className="flex items-center gap-3 shrink-0 flex-wrap">
+          <button
+            onClick={() => handleExportCSV()}
+            className="flex items-center gap-2 px-4 py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-2xl text-xs sm:text-sm font-extrabold shadow-md transition active:scale-95 cursor-pointer"
+            title="Export filtered orders to CSV / Excel"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>{currentLang === 'lo' ? 'ສົ່ງອອກ CSV' : 'Export CSV'}</span>
+          </button>
           {initialSubTab === 'orders' && (
             <button
               onClick={() => setShowQuotation(true)}
@@ -476,6 +785,248 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             <span>{currentLang === 'lo' ? 'ເພີ່ມອໍເດີໃໝ່' : 'Add New Order'}</span>
           </button>
         </div>
+      </div>
+
+      {/* 1. Summary Metric KPI Cards Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* Total Orders Card */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex flex-col justify-between space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-500 uppercase">{currentLang === 'lo' ? 'ອໍເດີທັງໝົດ' : 'Total Orders'}</span>
+            <span className="p-1.5 rounded-xl bg-slate-100 text-slate-700"><Layers className="w-3.5 h-3.5" /></span>
+          </div>
+          <div>
+            <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono">{summaryMetrics.totalCount}</span>
+            <span className="text-[10px] text-slate-400 font-bold block">{currentLang === 'lo' ? 'ລາຍການໃນລະບົບ' : 'Filtered Items'}</span>
+          </div>
+        </div>
+
+        {/* Pending / Received */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex flex-col justify-between space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-blue-600 uppercase">{currentLang === 'lo' ? 'ລໍຖ້າຮັບ/ກວດ' : 'Reception'}</span>
+            <span className="p-1.5 rounded-xl bg-blue-50 text-blue-600"><Clock className="w-3.5 h-3.5" /></span>
+          </div>
+          <div>
+            <span className="text-xl sm:text-2xl font-black text-blue-700 font-mono">{summaryMetrics.pendingCount}</span>
+            <span className="text-[10px] text-slate-400 font-bold block">{currentLang === 'lo' ? 'ລໍຖ້າກວດໄຟລ໌/ມັດຈຳ' : 'Pending Slip'}</span>
+          </div>
+        </div>
+
+        {/* In Production */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex flex-col justify-between space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-purple-600 uppercase">{currentLang === 'lo' ? 'ກຳລັງຜະລິດ' : 'In Production'}</span>
+            <span className="p-1.5 rounded-xl bg-purple-50 text-purple-600"><Activity className="w-3.5 h-3.5 animate-pulse" /></span>
+          </div>
+          <div>
+            <span className="text-xl sm:text-2xl font-black text-purple-700 font-mono">{summaryMetrics.inProdCount}</span>
+            <span className="text-[10px] text-slate-400 font-bold block">{currentLang === 'lo' ? 'ແທ່ນພິມ & ແປຮູບ' : 'Press & Finish'}</span>
+          </div>
+        </div>
+
+        {/* Ready for Delivery */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex flex-col justify-between space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-amber-700 uppercase">{currentLang === 'lo' ? 'ລໍຖ້າຈັດສົ່ງ' : 'Ready'}</span>
+            <span className="p-1.5 rounded-xl bg-amber-50 text-amber-700"><Truck className="w-3.5 h-3.5" /></span>
+          </div>
+          <div>
+            <span className="text-xl sm:text-2xl font-black text-amber-800 font-mono">{summaryMetrics.readyCount}</span>
+            <span className="text-[10px] text-slate-400 font-bold block">{currentLang === 'lo' ? 'ແພັກແລ້ວ/ຂົນສົ່ງ' : 'Logistics Queue'}</span>
+          </div>
+        </div>
+
+        {/* Completed */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex flex-col justify-between space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-emerald-600 uppercase">{currentLang === 'lo' ? 'ສົ່ງມອບສຳເລັດ' : 'Completed'}</span>
+            <span className="p-1.5 rounded-xl bg-emerald-50 text-emerald-600"><CheckCircle2 className="w-3.5 h-3.5" /></span>
+          </div>
+          <div>
+            <span className="text-xl sm:text-2xl font-black text-emerald-700 font-mono">{summaryMetrics.completedCount}</span>
+            <span className="text-[10px] text-slate-400 font-bold block">{currentLang === 'lo' ? 'ຊຳຣະຄົບ 100%' : '100% Settled'}</span>
+          </div>
+        </div>
+
+        {/* Total Revenue & Unpaid */}
+        <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-md flex flex-col justify-between space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-black text-amber-400 uppercase">{currentLang === 'lo' ? 'ຍອດຂາຍລວມ' : 'Revenue'}</span>
+            <span className="p-1.5 rounded-xl bg-slate-800 text-amber-400"><Wallet className="w-3.5 h-3.5" /></span>
+          </div>
+          <div>
+            <span className="text-base sm:text-lg font-black text-white font-mono block truncate">{formatLAK(summaryMetrics.totalRevenue)}</span>
+            {summaryMetrics.totalUnpaid > 0 && (
+              <span className="text-[10px] text-red-400 font-black block mt-0.5">
+                ຄ້າງຊຳຣະ: {formatLAK(summaryMetrics.totalUnpaid)}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Instant Search & Multi-Criteria Filter Controls */}
+      <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+        {/* Search row */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={currentLang === 'lo' ? 'ຄົ້ນຫາຕາມ Order ID, ຊື່ລູກຄ້າ, ເບີໂທ, Tracking No, ຊື່ສິນຄ້າ...' : 'Search by Order ID, Customer, Phone, Tracking #, Item...'}
+              className="w-full pl-11 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm font-bold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-accent-sky focus:bg-white transition"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsFilterExpanded(!isFilterExpanded)}
+            className={`flex items-center justify-center gap-2 px-5 py-3 rounded-2xl text-xs sm:text-sm font-extrabold transition cursor-pointer border ${
+              isFilterExpanded || (datePreset !== 'all' || paymentFilter !== 'all' || courierFilter !== 'all')
+                ? 'bg-sky-50 text-sky-800 border-sky-200 shadow-xs'
+                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+            }`}
+          >
+            <Filter className="w-4 h-4 text-sky-600" />
+            <span>{currentLang === 'lo' ? 'ຕົວກັ່ນຕອງລະອຽດ' : 'Advanced Filters'}</span>
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isFilterExpanded ? 'rotate-180' : ''}`} />
+          </button>
+
+          {isAnyFilterActive && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="flex items-center justify-center gap-1.5 px-4 py-3 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 rounded-2xl text-xs sm:text-sm font-black transition active:scale-95 cursor-pointer"
+              title="Reset all search and filter conditions"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>{currentLang === 'lo' ? 'ລ້າງຕົວກັ່ນຕອງ' : 'Reset'}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Expandable Advanced Filter Panel */}
+        {isFilterExpanded && (
+          <div className="pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-4 animate-fade-in text-xs">
+            {/* Date Presets & Custom Picker */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-black text-slate-600 uppercase flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <span>{currentLang === 'lo' ? 'ຊ່ວງວັນທີ (Date Range)' : 'Date Range'}</span>
+              </label>
+              <div className="flex flex-wrap gap-1">
+                {[
+                  { id: 'all', lo: 'ທັງໝົດ', en: 'All' },
+                  { id: 'today', lo: 'ມື້ນີ້', en: 'Today' },
+                  { id: 'this_week', lo: 'ອາທິດນີ້', en: 'This Week' },
+                  { id: 'this_month', lo: 'ເດືອນນີ້', en: 'This Month' },
+                  { id: 'custom', lo: 'ກຳນົດເອງ', en: 'Custom' },
+                ].map(dp => (
+                  <button
+                    key={dp.id}
+                    type="button"
+                    onClick={() => setDatePreset(dp.id as any)}
+                    className={`px-3 py-1.5 rounded-xl font-bold text-xs transition cursor-pointer ${
+                      datePreset === dp.id 
+                        ? 'bg-slate-900 text-white shadow-xs' 
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {currentLang === 'lo' ? dp.lo : dp.en}
+                  </button>
+                ))}
+              </div>
+
+              {datePreset === 'custom' && (
+                <div className="grid grid-cols-2 gap-2 pt-1 animate-fade-in">
+                  <div>
+                    <span className="text-[9px] text-slate-400 font-bold block mb-0.5">ຈາກວັນທີ (From):</span>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-slate-400 font-bold block mb-0.5">ເຖິງວັນທີ (To):</span>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Payment Filter */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-black text-slate-600 uppercase flex items-center gap-1.5">
+                <CreditCard className="w-3.5 h-3.5 text-slate-500" />
+                <span>{currentLang === 'lo' ? 'ສະຖານະການເງິນ (Payment)' : 'Payment Status'}</span>
+              </label>
+              <div className="flex flex-wrap gap-1">
+                {[
+                  { id: 'all', lo: 'ທັງໝົດ', en: 'All' },
+                  { id: 'unpaid', lo: 'ຍັງບໍ່ຈ່າຍ', en: 'Unpaid' },
+                  { id: 'deposit', lo: 'ມັດຈຳແລ້ວ', en: 'Deposit' },
+                  { id: 'paid', lo: 'ຊຳຣະຄົບ 100%', en: 'Paid' },
+                ].map(pf => (
+                  <button
+                    key={pf.id}
+                    type="button"
+                    onClick={() => setPaymentFilter(pf.id as any)}
+                    className={`px-3 py-1.5 rounded-xl font-bold text-xs transition cursor-pointer ${
+                      paymentFilter === pf.id 
+                        ? 'bg-slate-900 text-white shadow-xs' 
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {currentLang === 'lo' ? pf.lo : pf.en}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Logistics / Courier Filter */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-black text-slate-600 uppercase flex items-center gap-1.5">
+                <Truck className="w-3.5 h-3.5 text-slate-500" />
+                <span>{currentLang === 'lo' ? 'ການຈັດສົ່ງ (Courier / Logistics)' : 'Logistics'}</span>
+              </label>
+              <select
+                value={courierFilter}
+                onChange={(e) => setCourierFilter(e.target.value)}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-800 focus:bg-white transition cursor-pointer"
+              >
+                <option value="all">{currentLang === 'lo' ? '-- ທຸກຊ່ອງທາງຈັດສົ່ງ --' : '-- All Couriers --'}</option>
+                <option value="pickup">{currentLang === 'lo' ? 'ຮັບເອງທີ່ຮ້ານ (Store Pickup)' : 'Store Pickup'}</option>
+                <option value="Anousith">Anousith Express</option>
+                <option value="HAL">HAL Logistics</option>
+                <option value="Menglong">Menglong Express</option>
+                <option value="Mixay">Mixay Express</option>
+                <option value="Kerry">Kerry Lao</option>
+                {couriers && couriers.map((c: any) => (
+                  <option key={c.id || c.name} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Filter tab bar only on 'orders' tab */}
@@ -596,6 +1147,9 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
         <OrdersTable
           filteredOrders={filteredOrders}
           selectedOrder={selectedOrder}
+          selectedOrderIds={selectedOrderIds}
+          onToggleSelectAll={handleToggleSelectAll}
+          onToggleSelectOrder={handleToggleSelectOrder}
           focusRef={focusRef}
           currentLang={currentLang}
           formatLAK={formatLAK}
@@ -605,21 +1159,128 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
           getPaymentStatusBadge={getPaymentStatusBadge}
           getPaymentStatusIcon={getPaymentStatusIcon}
           onViewDetails={setSelectedOrder}
-          onOpenQuoteModal={(ord) => setQuoteModalOrder(ord)}
-          onStartProduction={startOrderProduction}
-          onReadyToShip={(id) => handleStatusChange(id, 'Ready')}
-          onOpenTrackingModal={(ord) => setTrackingModalOrder(ord)}
           onPrintShippingLabel={(ord) => setShippingLabelOrder(ord)}
+          onEditOrder={(ord) => setEditModalOrder(ord)}
+          onDeleteOrder={(ord) => {
+            if (askConfirmation) {
+              askConfirmation(
+                `ທ່ານຕ້ອງການລົບອໍເດີ #${ord.orderNo || ord.id} ອອກຈາກລະບົບແທ້ບໍ? ການກະທຳນີ້ບໍ່ສາມາດກູ້ຄືນໄດ້.`,
+                () => deleteOrder(ord.id)
+              );
+            } else if (window.confirm(`ທ່ານຕ້ອງການລົບອໍເດີ #${ord.orderNo || ord.id} ແທ້ບໍ?`)) {
+              deleteOrder(ord.id);
+            }
+          }}
+          onResetFilters={handleResetFilters}
+        />
+      )}
+
+      {/* Floating Batch / Bulk Action Bar */}
+      {selectedOrderIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 backdrop-blur-md text-white px-6 py-3.5 rounded-3xl shadow-2xl border border-slate-700/60 flex items-center gap-4 animate-fade-in flex-wrap justify-center">
+          <div className="flex items-center gap-2 border-r border-slate-700 pr-4">
+            <CheckSquare className="w-4 h-4 text-sky-400" />
+            <span className="text-xs font-black">
+              {currentLang === 'lo' ? `ເລືອກແລ້ວ ${selectedOrderIds.length} ອໍເດີ` : `${selectedOrderIds.length} Orders Selected`}
+            </span>
+          </div>
+
+          {/* Bulk Shipping Print */}
+          <button
+            type="button"
+            onClick={handleBulkPrintShipping}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-black transition active:scale-95 cursor-pointer shadow-sm"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>{currentLang === 'lo' ? 'ພິມໃບປະໜ້າລວມ' : 'Bulk Print Labels'}</span>
+          </button>
+
+          {/* Batch Status Update Select */}
+          <div className="flex items-center gap-1.5 bg-slate-800 px-2.5 py-1.5 rounded-xl border border-slate-700">
+            <span className="text-[10px] text-slate-400 font-bold uppercase">{currentLang === 'lo' ? 'ປ່ຽນສະຖານະ:' : 'Status:'}</span>
+            <select
+              onChange={(e) => {
+                if (e.target.value) {
+                  handleBulkStatusChange(e.target.value);
+                  e.target.value = '';
+                }
+              }}
+              defaultValue=""
+              className="bg-transparent text-xs font-bold text-sky-300 focus:outline-none cursor-pointer"
+            >
+              <option value="" disabled className="bg-slate-900 text-slate-400">-- ເລືອກສະຖານະ --</option>
+              <option value="PREPRESS_CHECK" className="bg-slate-900 text-white">Pre-Press Check (ກວດໄຟລ໌)</option>
+              <option value="Printing" className="bg-slate-900 text-white">Printing / In Prod (ກຳລັງພິມ)</option>
+              <option value="Ready" className="bg-slate-900 text-white">Ready (ພ້ອມຈັດສົ່ງ)</option>
+              <option value="Delivered" className="bg-slate-900 text-white">Delivered (ສົ່ງມອບແລ້ວ)</option>
+              <option value="Cancelled" className="bg-slate-900 text-red-400">Cancelled (ຍົກເລີກ)</option>
+            </select>
+          </div>
+
+          {/* Bulk Export */}
+          <button
+            type="button"
+            onClick={() => handleExportCSV()}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-black transition active:scale-95 cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>{currentLang === 'lo' ? 'Export CSV' : 'Export CSV'}</span>
+          </button>
+
+          {/* Clear Selection */}
+          <button
+            type="button"
+            onClick={() => setSelectedOrderIds([])}
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg transition hover:bg-slate-800 cursor-pointer"
+            title="Clear Selection"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Edit Order Specs & Info Modal */}
+      {editModalOrder && (
+        <EditOrderModal
+          isOpen={!!editModalOrder}
+          onClose={() => setEditModalOrder(null)}
+          order={editModalOrder}
+          inventory={inventory}
+          equipment={equipment}
+          formatCurrency={formatLAK}
+          onSave={(updated) => {
+            if (updateOrderDetails) {
+              updateOrderDetails(updated.id, updated);
+            }
+            if (selectedOrder && (selectedOrder.id === updated.id || selectedOrder.orderNo === updated.orderNo)) {
+              setSelectedOrder(updated);
+            }
+            setEditModalOrder(null);
+            showToast(currentLang === 'lo' ? 'ອັບເດດລາຍລະອຽດອໍເດີສຳເລັດ!' : 'Order details updated successfully!', 'success');
+          }}
+        />
+      )}
+
+      {/* Artwork Viewer & Download per Job Modal */}
+      {artworkModalOrder && (
+        <ArtworkViewerModal
+          isOpen={!!artworkModalOrder}
+          onClose={() => setArtworkModalOrder(null)}
+          order={artworkModalOrder}
+          currentLang={currentLang}
           showToast={showToast}
         />
       )}
 
-      {/* Shipping Label Modal */}
-      {shippingLabelOrder && (
+      {/* Shipping Label Modal (Single & Bulk) */}
+      {(shippingLabelOrder || bulkShippingOrders) && (
         <ShippingLabelModal
-          isOpen={!!shippingLabelOrder}
-          onClose={() => setShippingLabelOrder(null)}
-          order={shippingLabelOrder}
+          isOpen={!!shippingLabelOrder || !!bulkShippingOrders}
+          onClose={() => {
+            setShippingLabelOrder(null);
+            setBulkShippingOrders(null);
+          }}
+          orders={bulkShippingOrders || (shippingLabelOrder ? [shippingLabelOrder] : [])}
         />
       )}
 
@@ -630,9 +1291,9 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
           onClose={() => setTrackingModalOrder(null)}
           order={trackingModalOrder}
           couriers={couriers}
-          onSaveTracking={(orderId, courierName, trackingNum, fee) => {
+          onSaveTracking={(orderId, courierName, trackingNum, fee, branchCode) => {
             if (updateOrderTracking) {
-              updateOrderTracking(orderId, courierName, trackingNum, fee);
+              updateOrderTracking(orderId, courierName, trackingNum, fee, branchCode);
             }
           }}
         />
@@ -668,7 +1329,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
       {/* Order Details Interactive Modal Overlay */}
       {selectedOrder && (
         <OrderDetailsModal 
-          order={selectedOrder} 
+          order={orders.find(o => o.id === selectedOrder.id) || selectedOrder} 
           onBack={() => setSelectedOrder(null)} 
           formatLAK={formatLAK}
           t={t}
@@ -690,6 +1351,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
           updateProductionStep={updateProductionStep}
           addSpoilageLog={addSpoilageLog}
           inventory={inventory}
+          onEditOrder={(ord) => setEditModalOrder(ord)}
         />
       )}
 

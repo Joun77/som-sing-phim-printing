@@ -1056,6 +1056,31 @@ func HandleGetOrderByOrderNo(c *gin.Context) {
 	c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 }
 
+// HandleGetOrderById fetches order details by ID or OrderNumber
+func HandleGetOrderById(c *gin.Context) {
+	id := c.Param("id")
+
+	storeMutex.RLock()
+	for _, o := range ordersStore {
+		if o.ID == id || o.OrderNo == id || o.OrderNumber == id {
+			storeMutex.RUnlock()
+			c.JSON(http.StatusOK, o)
+			return
+		}
+	}
+	storeMutex.RUnlock()
+
+	if db.DB != nil {
+		order, err := getOrderByIDFromDB(id)
+		if err == nil {
+			c.JSON(http.StatusOK, order)
+			return
+		}
+	}
+
+	c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+}
+
 type QuotationDecisionRequest struct {
 	ManagerID string `json:"manager_id"`
 	Reason    string `json:"reason"`
@@ -1336,6 +1361,116 @@ func HandleGetDigitalProof(c *gin.Context) {
 		SignatureIP:     order.ProofSignatureIP,
 	})
 }
+
+// HandleDeleteOrder removes an order from DB and memory
+func HandleDeleteOrder(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing order ID"})
+		return
+	}
+
+	if db.DB != nil {
+		_, err := db.DB.Exec("DELETE FROM orders WHERE id = $1 OR order_no = $1 OR order_number = $1", id)
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to delete order %s: %v", id, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete order from database", "details": err.Error()})
+			return
+		}
+	}
+
+	storeMutex.Lock()
+	delete(ordersStore, id)
+	storeMutex.Unlock()
+
+	log.Printf("[ORDER] Order %s successfully deleted", id)
+	c.JSON(http.StatusOK, gin.H{"status": "success", "deleted_id": id})
+}
+
+// HandleUpdateOrder updates customer info, specs, or financials of an order
+func HandleUpdateOrder(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing order ID"})
+		return
+	}
+
+	var updateReq map[string]any
+	if err := c.ShouldBindJSON(&updateReq); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid update payload", "details": err.Error()})
+		return
+	}
+
+	if db.DB != nil {
+		var customerName, customerPhone, deliveryDate, status, googleDriveLink string
+		var totalPrice, depositAmount float64
+
+		if val, ok := updateReq["customer_name"].(string); ok {
+			customerName = val
+		} else if val, ok := updateReq["customerName"].(string); ok {
+			customerName = val
+		}
+
+		if val, ok := updateReq["customer_phone"].(string); ok {
+			customerPhone = val
+		} else if val, ok := updateReq["customerPhone"].(string); ok {
+			customerPhone = val
+		}
+
+		if val, ok := updateReq["delivery_date"].(string); ok {
+			deliveryDate = val
+		} else if val, ok := updateReq["deliveryDate"].(string); ok {
+			deliveryDate = val
+		}
+
+		if val, ok := updateReq["status"].(string); ok {
+			status = val
+		}
+
+		if val, ok := updateReq["google_drive_link"].(string); ok {
+			googleDriveLink = val
+		} else if val, ok := updateReq["artworkLink"].(string); ok {
+			googleDriveLink = val
+		}
+
+		if val, ok := updateReq["total_price"].(float64); ok {
+			totalPrice = val
+		} else if val, ok := updateReq["totalPriceCharged"].(float64); ok {
+			totalPrice = val
+		}
+
+		if val, ok := updateReq["deposit_amount"].(float64); ok {
+			depositAmount = val
+		} else if val, ok := updateReq["depositAmountPaid"].(float64); ok {
+			depositAmount = val
+		}
+
+		if customerName != "" || status != "" || totalPrice > 0 || deliveryDate != "" {
+			_, err := db.DB.Exec(`
+				UPDATE orders 
+				SET customer_name = COALESCE(NULLIF($1, ''), customer_name),
+				    customer_phone = COALESCE(NULLIF($2, ''), customer_phone),
+				    delivery_date = COALESCE(NULLIF($3, ''), delivery_date),
+				    status = COALESCE(NULLIF($4, ''), status),
+				    overall_status = COALESCE(NULLIF($4, ''), overall_status),
+				    google_drive_link = COALESCE(NULLIF($5, ''), google_drive_link),
+				    total_price = CASE WHEN $6 > 0 THEN $6 ELSE total_price END,
+				    total_amount_lak = CASE WHEN $6 > 0 THEN $6 ELSE total_amount_lak END,
+				    deposit_amount = CASE WHEN $7 > 0 THEN $7 ELSE deposit_amount END,
+				    deposit_lak = CASE WHEN $7 > 0 THEN $7 ELSE deposit_lak END,
+				    remaining_lak = CASE WHEN $6 > 0 THEN GREATEST(0, $6 - $7) ELSE remaining_lak END,
+				    updated_at = NOW()
+				WHERE id = $8 OR order_no = $8 OR order_number = $8
+			`, customerName, customerPhone, deliveryDate, status, googleDriveLink, totalPrice, depositAmount, id)
+			if err != nil {
+				log.Printf("[DB ERROR] Failed to update order %s: %v", id, err)
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "updated_id": id, "data": updateReq})
+}
+
 
 
 

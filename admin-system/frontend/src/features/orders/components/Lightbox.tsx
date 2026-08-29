@@ -1,4 +1,5 @@
 import React from 'react';
+import { X } from 'lucide-react';
 
 export default function Lightbox({ src, title, onClose }) {
   React.useEffect(() => {
@@ -36,9 +37,9 @@ export default function Lightbox({ src, title, onClose }) {
             )}
             <button
               onClick={onClose}
-              className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition"
+              className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition flex items-center justify-center cursor-pointer"
             >
-              <span className="font-extrabold text-sm px-1">✕</span>
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>

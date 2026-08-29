@@ -29,7 +29,7 @@ const normalizeLaoUnit = (unit?: string, fallback = 'ແຜ່ນ') => {
 
 export default function StockTable({ materials, loading, onRefresh, onOpenInbound, onViewDetails }: StockTableProps) {
   const queryClient = useQueryClient();
-  const { showToast, deleteInventorySku, formatCurrency } = useApp();
+  const { showToast, deleteInventorySku, formatCurrency, updateMaterialReorderPoint } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   
@@ -108,6 +108,10 @@ export default function StockTable({ materials, loading, onRefresh, onOpenInboun
         cost_per_consumption_unit: cCost,
         min_stock_alert: Number(editMinAlert),
       });
+
+      if (updateMaterialReorderPoint) {
+        updateMaterialReorderPoint(editingMaterial.id || editingMaterial.sku, Number(editMinAlert));
+      }
 
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-items'] });

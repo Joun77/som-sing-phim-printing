@@ -63,6 +63,21 @@ export interface PaymentMethod {
   updatedAt?: string;
 }
 
+export interface EarningRecord {
+  id: string;
+  employeeId: string;
+  employeeName?: string;
+  orderId: string;
+  orderNumber?: string;
+  customerName?: string;
+  stepId: string;
+  stepName: string;
+  impressions: number;
+  ratePerImpression: number;
+  earnedAmount: number;
+  recordedAt: string;
+}
+
 export interface AppContextValue {
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -74,8 +89,9 @@ export interface AppContextValue {
   setPrefilledOrderSpecs: (specs: any) => void;
   currency: string;
   setCurrency: (code: string) => void;
-  formatCurrency: (num: number) => string;
-  convertToCurrency: (num: number) => number;
+  formatCurrency: (num: number, targetCurrency?: any) => string;
+  convertToCurrency?: (num: number) => number;
+  convertCurrency?: (amount: number, from: any, to: any) => number;
   exchangeRates: Record<string, any>;
   ratesUpdatedAt: string;
   updateExchangeRate: (code: string, side: string, rate: number) => void;
@@ -83,6 +99,12 @@ export interface AppContextValue {
   setRateMode: (mode: string) => void;
   isRatesOpen: boolean;
   setIsRatesOpen: (open: boolean) => void;
+  rateSource?: string;
+  lastUpdated?: string;
+  autoRefresh?: boolean;
+  setAutoRefresh?: (a: boolean) => void;
+  fetchLiveRates?: () => Promise<void>;
+  setExchangeRates?: (r: any) => void;
 
   quotations: Quotation[];
   setQuotations: Dispatch<SetStateAction<Quotation[]>>;
@@ -99,6 +121,8 @@ export interface AppContextValue {
   deleteEmployee: (...args: any[]) => any;
   assignEmployeeToMachine: (...args: any[]) => any;
   recordImpressions: (...args: any[]) => any;
+  earningRecords: EarningRecord[];
+  addEarningRecord: (record: Omit<EarningRecord, 'id' | 'recordedAt'>) => void;
 
   machineStatus: Record<string, MachineStatusEntry>;
   setMachineStatus: (...args: any[]) => any;
@@ -122,6 +146,7 @@ export interface AppContextValue {
   canAccess: (permission: string) => boolean;
 
   inventory: InventoryItem[];
+  lowStockAlerts: any[];
   equipment: Equipment[];
   orders: Order[];
   spoilageLogs: SpoilageLog[];
@@ -146,6 +171,7 @@ export interface AppContextValue {
   getFIFOCostPerSheet: (itemId: string, sheetsNeeded: number) => number;
   addInventoryBatch: (...args: any[]) => any;
   addInventorySku: (...args: any[]) => any;
+  updateMaterialReorderPoint: (skuId: string, threshold: number) => void;
   dischargeInventoryStock: (...args: any[]) => any;
   deductStockForOrder: (...args: any[]) => any;
   saveInventoryToBackend: (...args: any[]) => any;
@@ -161,14 +187,16 @@ export interface AppContextValue {
   deleteCustomer: (...args: any[]) => any;
   addOffcut: (...args: any[]) => any;
   consumeOffcut: (...args: any[]) => any;
+  deleteOffcut?: (...args: any[]) => any;
 
   updatePreflightCheck: (...args: any[]) => any;
   updateProductionStep: (...args: any[]) => any;
   addOrderVersion: (...args: any[]) => any;
   addOrder: (...args: any[]) => any;
   updateOrderStatus: (...args: any[]) => any;
+  updateOrderDetails?: (orderId: string, updatedOrder: any) => void;
   startOrderProduction?: (orderId: string) => boolean;
-  updateOrderTracking?: (orderId: string, courierName: string, trackingNumber: string, shippingFee?: number) => void;
+  updateOrderTracking?: (orderId: string, courierName: string, trackingNumber: string, shippingFee?: number, branchCode?: string) => void;
   settleOrderBalance: (...args: any[]) => any;
   deleteOrder: (...args: any[]) => any;
   addSpoilageLog: (...args: any[]) => any;

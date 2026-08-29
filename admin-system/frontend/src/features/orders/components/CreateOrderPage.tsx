@@ -1333,7 +1333,7 @@ export default function CreateOrderPage({
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500">ຮູບແບບການຈັດສົ່ງ:</span>
                   <span className="font-bold text-sky-900">
-                    {deliveryMethod === 'Pickup' ? '🏪 ຮັບເອງທີ່ຮ້ານ' : (deliveryMethod === 'Courier' ? '🚚 ຈັດສົ່ງຜ່ານຂົນສົ່ງ' : '⚡ ຈັດສົ່ງດ່ວນ')}
+                    {deliveryMethod === 'Pickup' ? 'ຮັບເອງທີ່ຮ້ານ' : (deliveryMethod === 'Courier' ? 'ຈັດສົ່ງຜ່ານຂົນສົ່ງ' : 'ຈັດສົ່ງດ່ວນ')}
                   </span>
                 </div>
                 {deliveryMethod === 'Courier' && (
@@ -1442,7 +1442,7 @@ export default function CreateOrderPage({
         </form>
       )}
 
-      {/* 🌟 PREFLIGHT & COLOR ANALYZER MODAL */}
+      {/* PREFLIGHT & COLOR ANALYZER MODAL */}
       <PreflightItemCreationModal
         isOpen={isPreflightModalOpen}
         onClose={() => setIsPreflightModalOpen(false)}

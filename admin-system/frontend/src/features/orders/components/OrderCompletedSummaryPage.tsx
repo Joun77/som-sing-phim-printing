@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   ArrowLeft, 
   CheckCircle2, 
@@ -15,9 +15,11 @@ import {
   Sparkles, 
   ShieldCheck,
   CheckCheck,
-  Calendar
+  Calendar,
+  Edit3
 } from 'lucide-react';
 import OrderStepBar from './reception/OrderStepBar';
+import CustomerInvoiceModal from './modals/CustomerInvoiceModal';
 
 interface OrderCompletedSummaryPageProps {
   order: any;
@@ -26,6 +28,7 @@ interface OrderCompletedSummaryPageProps {
   formatLAK: (n: number) => string;
   currentLang: string;
   setLightbox?: (v: { src: string; title: string } | null) => void;
+  onEditOrder?: (order: any) => void;
 }
 
 export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps> = ({
@@ -35,7 +38,10 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
   formatLAK,
   currentLang,
   setLightbox,
+  onEditOrder,
 }) => {
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+
   if (!order) return null;
 
   const orderIdDisplay = order.orderNo || order.order_no || order.orderNumber || order.id || 'ORDER';
@@ -88,7 +94,28 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {onEditOrder && (
+            <button
+              type="button"
+              onClick={() => onEditOrder(order)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-2xl text-xs font-black transition active:scale-95 cursor-pointer shadow-xs"
+              title={currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ & ສະເປກ' : 'Edit Order Specs & Details'}
+            >
+              <Edit3 className="w-3.5 h-3.5 text-amber-700" />
+              <span>{currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ' : 'Edit Order'}</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsInvoiceModalOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black transition active:scale-95 cursor-pointer shadow-md"
+          >
+            <CreditCard className="w-4 h-4 text-amber-300" />
+            <span>{currentLang === 'lo' ? 'ໃບບິນຊຳລະເງິນ (Invoice / Receipt)' : 'Customer Invoice / Receipt'}</span>
+          </button>
+
           <button
             type="button"
             onClick={() => {
@@ -97,11 +124,11 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
             className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black transition active:scale-95 cursor-pointer shadow-md"
           >
             <Printer className="w-4 h-4 text-amber-400" />
-            <span>{currentLang === 'lo' ? 'ພິມໃບສະຫຼຸບ / ໃບຮັບເງິນ' : 'Print Official Receipt'}</span>
+            <span>{currentLang === 'lo' ? 'ພິມໜ້າສະຫຼຸບ' : 'Print Summary'}</span>
           </button>
           <span className="px-3.5 py-1.5 rounded-2xl text-xs font-black border uppercase bg-emerald-50 text-emerald-800 border-emerald-200 flex items-center gap-1.5 shadow-xs">
             <CheckCheck className="w-4 h-4 text-emerald-600" />
-            <span>{currentLang === 'lo' ? '✓ ສຳເລັດສົມບູນ' : 'Completed'}</span>
+            <span>{currentLang === 'lo' ? 'ສຳເລັດສົມບູນ' : 'Completed'}</span>
           </span>
         </div>
       </div>
@@ -237,14 +264,23 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                   }}
                   className="h-[135px] rounded-2xl bg-slate-50 border border-slate-200 flex flex-col items-center justify-center p-2 cursor-pointer hover:border-emerald-400 transition relative group overflow-hidden shadow-inner"
                 >
-                  <img src={order.finalPaymentSlipUrl || paymentSlipUrl || ''} alt="Slip 2" className="max-h-[105px] max-w-full object-contain rounded-xl" />
-                  <span className="text-[10px] font-bold text-emerald-700 mt-1 block">
-                    {order.depositAmountPaid ? 'ສະລິບທີ 2: ປິດຍອດຈັດສົ່ງ' : 'ໃບຢັ້ງຢືນປິດຍອດບັນຊີ'}
-                  </span>
-                  <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-[11px] font-black text-white gap-1">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>ຂະຫຍາຍ</span>
-                  </div>
+                  {(order.finalPaymentSlipUrl || paymentSlipUrl) ? (
+                    <>
+                      <img src={order.finalPaymentSlipUrl || paymentSlipUrl} alt="Slip 2" className="max-h-[105px] max-w-full object-contain rounded-xl" />
+                      <span className="text-[10px] font-bold text-emerald-700 mt-1 block">
+                        {order.depositAmountPaid ? 'ສະລິບທີ 2: ປິດຍອດຈັດສົ່ງ' : 'ໃບຢັ້ງຢືນປິດຍອດບັນຊີ'}
+                      </span>
+                      <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-[11px] font-black text-white gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>ຂະຫຍາຍ</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center p-2">
+                      <CreditCard className="w-6 h-6 text-emerald-600 mx-auto" />
+                      <span className="text-[10px] font-bold text-slate-700 block mt-1">ຊຳລະຄົບຖ້ວນ 100%</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -274,7 +310,7 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
 
           <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-xs text-slate-600 flex justify-between items-center font-mono">
             <span>Ref: SSP-PAY-{orderIdDisplay}</span>
-            <span className="text-emerald-600 font-bold">✓ Verified by Cashier</span>
+            <span className="text-emerald-600 font-bold">Verified by Cashier</span>
           </div>
         </div>
 
@@ -351,8 +387,8 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
             </h4>
             <p className="text-xs text-slate-400 mt-0.5">
               {currentLang === 'lo' 
-                ? 'ຜ່ານການກວດຮັບ ➜ ຜະລິດ & QC ➜ ຈັດສົ່ງມອບຮັບ ➜ ປິດຍອດບັນຊີ ເຂົ້າສູ່ລະບົບ ERP ຮຽບຮ້ອຍແລ້ວ' 
-                : 'Verified through Reception ➜ Production ➜ Delivery ➜ Settle and archived to ERP'}
+                ? 'ຜ່ານການກວດຮັບ -> ຜະລິດ & QC -> ຈັດສົ່ງມອບຮັບ -> ປິດຍອດບັນຊີ ເຂົ້າສູ່ລະບົບ ERP ຮຽບຮ້ອຍແລ້ວ' 
+                : 'Verified through Reception -> Production -> Delivery -> Settle and archived to ERP'}
             </p>
           </div>
         </div>
@@ -365,6 +401,17 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
           <span>{currentLang === 'lo' ? '← ກັບສູ່ຕາຕະລາງອໍເດີ' : '← Back to Orders Table'}</span>
         </button>
       </div>
+
+      {/* Customer Payment Invoice / Receipt Modal */}
+      {isInvoiceModalOpen && (
+        <CustomerInvoiceModal
+          isOpen={isInvoiceModalOpen}
+          onClose={() => setIsInvoiceModalOpen(false)}
+          order={order}
+          currentLang={currentLang}
+          formatLAK={formatLAK}
+        />
+      )}
 
     </div>
   );

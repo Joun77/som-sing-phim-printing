@@ -171,7 +171,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     currency,
     setCurrency,
     formatCurrency,
-    printerColorLinks
+    printerColorLinks,
+    setActiveTab,
   } = useApp();
   
   const [quotationSearchQuery, setQuotationSearchQuery] = useState('');
@@ -274,8 +275,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   const createNewItem = (name = 'ລາຍການສິນຄ້າ 1', specs?: any): QuotationItem => {
     const isMono = specs?.colorMode === 'MONO_K';
-    const pageCount = Number(specs?.pageCount) || (specs ? 150 : 1);
-    const orderQty = Number(specs?.orderQuantity) || 100;
+    const pageCount = Number(specs?.pageCount) || (specs ? 1 : 1);
+    const orderQty = Number(specs?.orderQuantity) || 1;
     const isBook = pageCount >= 4;
 
     const covC = specs ? (isMono ? 0 : Number(specs.avgCovC) || 0) : 10;
@@ -581,7 +582,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       jobName: cleanName,
       fileName: pfResult.file_name,
       pageCount: pfResult.total_pages || 1,
-      orderQuantity: 100,
+      orderQuantity: 1,
       colorPages: pfResult.color_pages_count || 0,
       monoPages: pfResult.mono_pages_count || 0,
       monoPagesAvgK: pfResult.mono_pages_avg_k || 6.5,
@@ -832,7 +833,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   useEffect(() => {
     if (incomingSpecs) {
       const isMono = incomingSpecs.colorMode === 'MONO_K';
-      const pages = Number(incomingSpecs.pageCount) || 100;
+      const pages = Number(incomingSpecs.pageCount) || 1;
+      const orderQty = Number(incomingSpecs.orderQuantity) || 1;
+      const totalJobPages = pages * orderQty;
+      const isBook = pages >= 4;
       const covC = isMono ? 0 : Number(incomingSpecs.avgCovC) || 0;
       const covM = isMono ? 0 : Number(incomingSpecs.avgCovM) || 0;
       const covY = isMono ? 0 : Number(incomingSpecs.avgCovY) || 0;
@@ -840,7 +844,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
       updateActiveItem({
         name: incomingSpecs.jobName || activeItem.name,
-        printVolume: pages,
+        pagesPerBook: pages,
+        printVolume: orderQty,
+        unitName: isBook ? 'ຊຸດ' : 'ແຜ່ນ',
+        isDoubleSided: isBook ? true : activeItem.isDoubleSided,
+        includeCover: isBook,
         colorPrintMode: isMono ? 'MONO_K' : 'CMYK',
         coverageMode: 'advanced',
         cCoverage: covC,
@@ -852,9 +860,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         printerAllocations: [{
           printer_id: activeItem.selectedPrinterId || printers[0]?.id || 'PRN-DEFAULT',
           printer_name: printers.find(p => p.id === activeItem.selectedPrinterId)?.name || 'Default Printer',
-          allocated_pages: pages,
+          allocated_pages: totalJobPages,
           cost_per_page: 50,
-          subtotal_cost: pages * 50,
+          subtotal_cost: totalJobPages * 50,
           color_mode: isMono ? 'MONO_K' : 'CMYK',
           average_density_pct: Math.round((covC + covM + covY + covK) / (isMono ? 1 : 4)),
           color_channels: isMono ? [
@@ -879,6 +887,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   const [currentStep, setCurrentStep] = useState<'calc' | 'quote'>('calc');
   const [quotationTitle, setQuotationTitle] = useState('ໃບສະເໜີລາຄາງານພິມ');
+  const [quotationProfitMargin, setQuotationProfitMargin] = useState<number>(40);
+  const [quotationDiscountPercent, setQuotationDiscountPercent] = useState<number>(0);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isTemplateOption, setIsTemplateOption] = useState(false);
   const [templateCategory, setTemplateCategory] = useState('sticker');
@@ -1237,9 +1247,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const packagingDeliveryCost = hasPackagingModule ? (Number(item.packagingCost || 0) + Number(item.deliveryCost || 0)) : 0;
 
     const netCost = paperCost + inkCost + machineOverhead + postPressCost + finishingMaterialsCost + laborCost + packagingDeliveryCost;
-    const marginDec = Math.min(0.99, Math.max(0, Number(item.profitMargin || 40) / 100));
+    const marginDec = Math.min(0.99, Math.max(0, Number(quotationProfitMargin ?? item.profitMargin ?? 40) / 100));
     const baseSellingPrice = Math.round(netCost / (1.0 - marginDec));
-    const discountAmt = Math.round(baseSellingPrice * (Number(item.discountPercent || 0) / 100));
+    const discountAmt = Math.round(baseSellingPrice * (Number(quotationDiscountPercent ?? item.discountPercent ?? 0) / 100));
     const finalSellingPrice = baseSellingPrice - discountAmt;
     const unitPrice = Math.round(finalSellingPrice / Math.max(1, item.printVolume));
     const unitCost = Math.round(netCost / Math.max(1, item.printVolume));
@@ -1297,14 +1307,20 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   const grandLaborCost = calculatedItems.reduce((sum, c) => sum + c.laborCost, 0) + quotationSetupFee;
   const grandPackagingCost = calculatedItems.reduce((sum, c) => sum + c.packagingDeliveryCost, 0) + quotationPackagingCost;
   const grandNetCost = calculatedItems.reduce((sum, c) => sum + c.netCost, 0) + quotationSetupFee + quotationPackagingCost;
-  const grandSubtotal = calculatedItems.reduce((sum, c) => sum + c.sellingPrice, 0) + quotationSetupFee + quotationPackagingCost;
+
+  // Quotation-Wide Combined Margin & Discount Calculation
+  const grandMarginDec = Math.min(0.99, Math.max(0, Number(quotationProfitMargin || 40) / 100));
+  const grandBaseSellingPrice = Math.round(grandNetCost / (1.0 - grandMarginDec));
+  const grandDiscountAmount = Math.round(grandBaseSellingPrice * (Number(quotationDiscountPercent || 0) / 100));
+  const grandSubtotal = grandBaseSellingPrice - grandDiscountAmount;
+
   const grandTotalUnits = items.reduce((sum, it) => sum + Number(it.printVolume || 0), 0);
   const taxAmount = taxEnabled
     ? (taxMode === 'override' ? Number(taxOverrideAmount || 0) : Math.round(grandSubtotal * (Number(taxRate || 0) / 100)))
     : 0;
   const finalGrandTotal = grandSubtotal + taxAmount + Number(shippingFee || 0);
-  const grandNetProfit = finalGrandTotal - grandNetCost;
-  const grandProfitMargin = finalGrandTotal > 0 ? (grandNetProfit / finalGrandTotal) * 100 : 0;
+  const grandNetProfit = grandSubtotal - grandNetCost;
+  const grandProfitMargin = grandSubtotal > 0 ? (grandNetProfit / grandSubtotal) * 100 : 0;
 
   // Credit check warnings
   const creditStatus = checkCreditLimit(selectedCustomerId, finalGrandTotal);
@@ -1372,6 +1388,13 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
           : `Order with ${items.length} items created successfully! (Inventory will be deducted at IN_PRODUCTION stage)`,
         'success'
       );
+
+      if (onConvertToOrder) {
+        onConvertToOrder();
+      }
+      if (setActiveTab) {
+        setActiveTab('orders');
+      }
     });
   };
 
@@ -1405,8 +1428,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       rawItems: JSON.parse(JSON.stringify(items)),
       items: quoteItems,
       subtotal: grandSubtotal,
-      discountPercent: Number(activeItem.discountPercent || 0),
+      baseSellingPrice: grandBaseSellingPrice,
+      discountAmount: grandDiscountAmount,
+      discountPercent: Number(quotationDiscountPercent || 0),
       grossProfitMargin: grandProfitMargin,
+      profitMargin: quotationProfitMargin,
       taxEnabled,
       taxRate: Number(taxRate),
       taxMode,
@@ -1561,8 +1587,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       rawItems: JSON.parse(JSON.stringify(items)),
       items: quoteItems,
       subtotal: grandSubtotal,
-      discountPercent: Number(activeItem.discountPercent || 0),
+      baseSellingPrice: grandBaseSellingPrice,
+      discountAmount: grandDiscountAmount,
+      discountPercent: Number(quotationDiscountPercent || 0),
       grossProfitMargin: grandProfitMargin,
+      profitMargin: quotationProfitMargin,
       taxEnabled,
       taxRate: Number(taxRate),
       taxMode,
@@ -1674,6 +1703,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     setQuotationExpiry(quotation.expiresAt || '2026-08-31');
     setPaymentTerms(quotation.paymentTerms || 'Immediate / Cash');
     setQuotationNote(quotation.notes || '');
+    if (quotation.profitMargin !== undefined) setQuotationProfitMargin(Number(quotation.profitMargin));
+    else if (quotation.grossProfitMargin !== undefined) setQuotationProfitMargin(Number(quotation.grossProfitMargin));
+    if (quotation.discountPercent !== undefined) setQuotationDiscountPercent(Number(quotation.discountPercent));
     if (quotation.shippingFee !== undefined) setShippingFee(Number(quotation.shippingFee));
     if (quotation.shippingMethod) setShippingMethod(quotation.shippingMethod);
 
@@ -2645,6 +2677,13 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
               setQuotationLaborPercent={(pct) => updateActiveItem({ laborPercent: pct })}
               quotationLaborCostManual={activeItem.laborCostManual || 50000}
               setQuotationLaborCostManual={(cash) => updateActiveItem({ laborCostManual: cash })}
+              quotationProfitMargin={quotationProfitMargin}
+              setQuotationProfitMargin={setQuotationProfitMargin}
+              quotationDiscountPercent={quotationDiscountPercent}
+              setQuotationDiscountPercent={setQuotationDiscountPercent}
+              grandBaseSellingPrice={grandBaseSellingPrice}
+              grandDiscountAmount={grandDiscountAmount}
+              grandSubtotal={grandSubtotal}
               quotationSetupFee={quotationSetupFee}
               setQuotationSetupFee={setQuotationSetupFee}
               quotationPackagingCost={quotationPackagingCost}
@@ -2686,6 +2725,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
           shippingMethod={shippingMethod}
           shippingFee={shippingFee}
           quotationNote={quotationNote}
+          grandBaseSellingPrice={grandBaseSellingPrice}
+          grandDiscountAmount={grandDiscountAmount}
+          quotationDiscountPercent={quotationDiscountPercent}
           grandSubtotal={grandSubtotal}
           taxEnabled={taxEnabled}
           taxMode={taxMode}

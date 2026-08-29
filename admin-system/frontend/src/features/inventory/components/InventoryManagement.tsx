@@ -7,6 +7,7 @@ import StockTable from './StockTable';
 import InboundHistoryTable from './InboundHistoryTable';
 import InboundFormModal from './InboundFormModal';
 import InventoryMaterialDetailsPage from './details/InventoryMaterialDetailsPage';
+import OffcutsTab from './OffcutsTab';
 import AddMaterialModal from './modals/AddMaterialModal';
 import AddOffcutModal from './modals/AddOffcutModal';
 import StockDischargeModal from './modals/StockDischargeModal';
@@ -24,8 +25,8 @@ export default function InventoryManagement() {
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
 
-  // Master view mode: 'stock' (Master Stock & Ledger) vs 'inbound_history' (Procurement Inbound Logs)
-  const [mainView, setMainView] = useState<'stock' | 'inbound_history'>('stock');
+  // Master view mode: 'stock' (Master Stock & Ledger) vs 'offcuts' (Scrap Paper) vs 'inbound_history' (Procurement Inbound Logs)
+  const [mainView, setMainView] = useState<'stock' | 'offcuts' | 'inbound_history'>('stock');
 
   // Navigation tabs & detail view state
   const [activeTab, setActiveTab] = useState('All'); // All, Paper, Offcut, Ink, Hardware, Finishing, Packaging
@@ -166,41 +167,60 @@ export default function InventoryManagement() {
         </div>
       </div>
 
-      {/* Main View Switcher: Master Stock Ledger vs Inbound History */}
-      <div className="flex items-center justify-between gap-4 border-b border-slate-200 pb-2">
-        <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-2xl">
+      {/* Main View Switcher: Master Stock Ledger vs Offcuts vs Inbound History */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-2">
+        <div className="flex flex-wrap items-center gap-2 bg-slate-100 p-1 rounded-2xl">
           <button
             onClick={() => setMainView('stock')}
-            className={`px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+            className={`px-4 sm:px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               mainView === 'stock'
                 ? 'bg-white text-blue-700 shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Boxes className="w-4 h-4" />
-            ຕາຕະລາງສະຕ໋ອກ Master (Stock Ledger)
+            <span>{currentLang === 'lo' ? 'ຕາຕະລາງສະຕ໋ອກ Master (Stock)' : 'Master Stock'}</span>
           </button>
+
+          <button
+            onClick={() => setMainView('offcuts')}
+            className={`px-4 sm:px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              mainView === 'offcuts'
+                ? 'bg-white text-indigo-700 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Scissors className="w-4 h-4 text-indigo-600" />
+            <span>{currentLang === 'lo' ? 'ຄັງເສດເຈ້ຍ (Offcuts)' : 'Offcuts Ledger'}</span>
+            <span className="px-1.5 py-0.2 bg-indigo-50 text-indigo-700 rounded-md font-mono text-[10px] font-black">
+              {offcuts.length}
+            </span>
+          </button>
+
           <button
             onClick={() => setMainView('inbound_history')}
-            className={`px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+            className={`px-4 sm:px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               mainView === 'inbound_history'
                 ? 'bg-white text-blue-700 shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <History className="w-4 h-4" />
-            ປະຫວັດການຮັບເຂົ້າ & ຍົກເລີກບິນ ({inboundHistory.length})
+            <span>{currentLang === 'lo' ? 'ປະຫວັດການຮັບເຂົ້າ (Inbound)' : 'Inbound History'}</span>
+            <span className="px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded-md font-mono text-[10px] font-black">
+              {inboundHistory.length}
+            </span>
           </button>
         </div>
 
         <button
           onClick={loadBackendData}
           disabled={loadingBackendData}
-          className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+          className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer self-end sm:self-auto"
           title="ໂຫຼດຂໍ້ມູນໃໝ່"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loadingBackendData ? 'animate-spin text-blue-600' : ''}`} />
-          <span>ໂຫຼດໃໝ່</span>
+          <span>{currentLang === 'lo' ? 'ໂຫຼດໃໝ່' : 'Refresh'}</span>
         </button>
       </div>
 
@@ -227,7 +247,7 @@ export default function InventoryManagement() {
                     <button
                       key={tab}
                       onClick={() => setActiveTab(tab)}
-                      className={`px-4.5 py-2 rounded-xl transition ${
+                      className={`px-4.5 py-2 rounded-xl transition cursor-pointer ${
                         activeTab === tab 
                           ? 'bg-white text-slate-800 shadow-sm' 
                           : 'text-slate-500 hover:text-slate-800'
@@ -260,6 +280,9 @@ export default function InventoryManagement() {
             </>
           )}
         </>
+      ) : mainView === 'offcuts' ? (
+        /* Offcuts Remnants Management Tab */
+        <OffcutsTab onOpenAddModal={() => setIsOffcutOpen(true)} />
       ) : (
         /* Inbound History View */
         <InboundHistoryTable

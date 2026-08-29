@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { AppContextValue } from '../types';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import type { AppContextValue, EarningRecord } from '../types';
 
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -625,6 +625,68 @@ export const AppProvider = ({ children }) => {
     safeSetItem('ss_print_employees_v6', employees);
   }, [employees]);
 
+  // ---- Technician Earning Records (Piece-rate & Incentives) ----
+  const [earningRecords, setEarningRecords] = useState<EarningRecord[]>(() => {
+    const saved = localStorage.getItem('ss_print_earning_records_v1');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return [
+      {
+        id: 'EARN-101',
+        employeeId: 'EMP-001',
+        employeeName: 'ສົມສິດ ອິນທິລາດ',
+        orderId: 'ORD-20260804-001',
+        orderNumber: 'ORD-20260804-001',
+        customerName: 'ບໍລິສັດ ຈະເລີນພອນ',
+        stepId: 'step_default_print',
+        stepName: 'Digital / Offset Printing',
+        impressions: 2500,
+        ratePerImpression: 5,
+        earnedAmount: 12500,
+        recordedAt: '2026-08-04T10:30:00.000Z'
+      },
+      {
+        id: 'EARN-102',
+        employeeId: 'EMP-002',
+        employeeName: 'ຄຳຜັນ ວົງວິໄລ',
+        orderId: 'ORD-20260804-002',
+        orderNumber: 'ORD-20260804-002',
+        customerName: 'ຮ້ານອາຫານ ດາວຄຳ',
+        stepId: 'step_default_cut',
+        stepName: 'Guillotine Precision Cutting',
+        impressions: 1200,
+        ratePerImpression: 5,
+        earnedAmount: 6000,
+        recordedAt: '2026-08-04T11:15:00.000Z'
+      }
+    ];
+  });
+
+  useEffect(() => {
+    safeSetItem('ss_print_earning_records_v1', earningRecords);
+  }, [earningRecords]);
+
+  const addEarningRecord = (record: Omit<EarningRecord, 'id' | 'recordedAt'>) => {
+    const newRecord: EarningRecord = {
+      ...record,
+      id: `EARN-${Date.now().toString().slice(-6)}`,
+      recordedAt: new Date().toISOString()
+    };
+    setEarningRecords(prev => [newRecord, ...prev]);
+
+    // Also update impressionsProduced on the employee
+    setEmployees((prev: any[]) => prev.map(emp => {
+      if (emp.id === record.employeeId) {
+        return {
+          ...emp,
+          impressionsProduced: (Number(emp.impressionsProduced) || 0) + Number(record.impressions || 0)
+        };
+      }
+      return emp;
+    }));
+  };
+
   // ---- Machine status widget (Running / Setup / Downtime / Maintenance) ----
   const [machineStatus, setMachineStatus] = useState(() => {
     const saved = localStorage.getItem('ss_print_machine_status_v6');
@@ -1048,13 +1110,57 @@ export const AppProvider = ({ children }) => {
     } catch (e) {}
 
 
-    // 3. Orders
+    // 3. Orders (Safe Merge Strategy)
     try {
       let res = await fetch('/api/v1/orders');
       if (!res.ok) res = await fetch('/api/orders');
       if (res && res.ok) {
         const data = await res.json();
-        if (Array.isArray(data)) setOrders(data);
+        const serverList = Array.isArray(data) ? data : (data?.data && Array.isArray(data.data) ? data.data : []);
+        if (serverList.length > 0) {
+          setOrders(prev => {
+            const mapById = new Map();
+            // 1. Put backend orders
+            serverList.forEach((item: any) => {
+              const id = item.id || item.orderNo || item.order_no;
+              if (id) mapById.set(id, item);
+            });
+            // 2. Put local orders (local state takes precedence so newly created orders and status changes are preserved)
+            prev.forEach((item: any) => {
+              const id = item.id || item.orderNo || item.order_no;
+              if (id) mapById.set(id, item);
+            });
+            const merged = Array.from(mapById.values());
+            safeSetItem('ss_print_orders_v6', merged);
+            return merged;
+          });
+        }
+      }
+    } catch (e) {}
+
+    // 3.5. Quotations (Safe Merge Strategy)
+    try {
+      let res = await fetch('/api/v1/quotations');
+      if (!res.ok) res = await fetch('/api/quotations');
+      if (res && res.ok) {
+        const data = await res.json();
+        const serverList = Array.isArray(data) ? data : (data?.data && Array.isArray(data.data) ? data.data : []);
+        if (serverList.length > 0) {
+          setQuotations(prev => {
+            const mapById = new Map();
+            serverList.forEach((item: any) => {
+              const id = item.id || item.quotation_no;
+              if (id) mapById.set(id, item);
+            });
+            prev.forEach((item: any) => {
+              const id = item.id || item.quotation_no;
+              if (id) mapById.set(id, item);
+            });
+            const merged = Array.from(mapById.values());
+            safeSetItem('ss_print_quotations_v6', merged);
+            return merged;
+          });
+        }
       }
     } catch (e) {}
 
@@ -1165,6 +1271,50 @@ export const AppProvider = ({ children }) => {
         })
         .catch(err => console.warn('Payment methods fetch notice:', err));
     }
+
+    // 4. Offcuts Scrap Registry (Backend Sync)
+    try {
+      let offRes = await fetch('/api/inventory/offcuts');
+      if (!offRes.ok) offRes = await fetch('http://localhost:8080/api/inventory/offcuts');
+      if (offRes && offRes.ok) {
+        const offList = await offRes.json();
+        if (Array.isArray(offList) && offList.length > 0) {
+          const mappedOffcuts = offList.map((o: any) => ({
+            id: o.id || `OFF-${Date.now()}`,
+            sku: o.id,
+            name: o.name || 'Offcut Remnant',
+            category: 'Offcut',
+            stockQty: Number(o.quantity || 0),
+            consumptionUnit: 'ແຜ່ນ',
+            purchaseUnit: 'ແຜ່ນ',
+            purchaseMultiplier: 1,
+            costPerPurchaseUnit: 400,
+            costPerConsumptionUnit: 400,
+            paperId: o.parent_material_id || o.parentMaterialId || '',
+            isOffcut: true,
+            location: o.location || 'Main Stock',
+            notes: o.location ? `Location: ${o.location}` : '',
+            specs: {
+              widthMm: Number(o.width_mm || o.widthMm || 148),
+              heightMm: Number(o.length_mm || o.lengthMm || o.heightMm || 210),
+              dimensionFormatted: `${o.width_mm || 148} × ${o.length_mm || 210} mm`,
+              grammageGsm: 130,
+              paperType: 'Art Paper',
+              location: o.location || 'Main Stock',
+              parentMaterialId: o.parent_material_id || ''
+            }
+          }));
+          setOffcuts(prev => {
+            const mapById = new Map();
+            (prev || []).forEach(item => mapById.set(item.id, item));
+            mappedOffcuts.forEach(item => mapById.set(item.id, item));
+            const merged = Array.from(mapById.values());
+            safeSetItem('ss_print_offcuts_v6', merged);
+            return merged;
+          });
+        }
+      }
+    } catch (e) {}
   };
 
   useEffect(() => {
@@ -2074,11 +2224,52 @@ export const AppProvider = ({ children }) => {
     };
   };
 
+  // Computed Low-Stock Alerts (Threshold <= reorderPoint / minStockThreshold, default 100)
+  const lowStockAlerts = useMemo(() => {
+    if (!inventory || !Array.isArray(inventory)) return [];
+    return inventory.filter(item => {
+      if (!item) return false;
+      const cat = (item.category || '').toLowerCase();
+      if (['printer', 'cutter', 'laminator', 'binder', 'equipment', 'machinery'].includes(cat)) return false;
+      const threshold = Number(item.minStockThreshold ?? item.reorder_threshold ?? item.reorderPoint ?? 100);
+      const currentQty = Number(item.stockQty ?? item.quantity ?? 0);
+      return currentQty <= threshold;
+    });
+  }, [inventory]);
+
+  const updateMaterialReorderPoint = (skuId: string, threshold: number) => {
+    setInventory(prev => {
+      const next = prev.map(item => {
+        if (item.id === skuId || item.sku === skuId) {
+          const updated = { 
+            ...item, 
+            minStockThreshold: threshold, 
+            reorder_threshold: threshold, 
+            reorderPoint: threshold,
+            reorderThreshold: threshold
+          };
+          saveInventoryToBackend(updated);
+          return updated;
+        }
+        return item;
+      });
+      safeSetItem('ss_print_inventory_v6', next);
+      return next;
+    });
+    const currentLang = localStorage.getItem('i18nextLng') || 'lo';
+    showToast(
+      currentLang === 'en' 
+        ? `Reorder point updated to ${threshold.toLocaleString()} units` 
+        : `ອັບເດດຈຸດສັ່ງຊື້ຂັ້ນຕ່ຳ (Reorder Point: ${threshold.toLocaleString()}) ສຳເລັດ!`, 
+      'success'
+    );
+  };
+
   // Offcut management
   const addOffcut = (offcutData: any) => {
     const offcutId = offcutData.id || `OFF-${Date.now().toString().slice(-6)}`;
-    const costPerSheet = Number(offcutData.costPerSheet || offcutData.costPerConsumptionUnit || 0);
-    const qty = Number(offcutData.qty || offcutData.stockQty || 0);
+    const costPerSheet = Number(offcutData.costPerSheet || offcutData.costPerConsumptionUnit || 400);
+    const qty = Number(offcutData.qty || offcutData.stockQty || offcutData.quantity || 0);
 
     const newOffcut = {
       id: offcutId,
@@ -2092,18 +2283,20 @@ export const AppProvider = ({ children }) => {
       costPerPurchaseUnit: costPerSheet,
       costPerConsumptionUnit: costPerSheet,
       reorderThreshold: 10,
-      paperId: offcutData.paperId || '',
+      paperId: offcutData.paperId || offcutData.parent_material_id || '',
       isOffcut: true,
-      notes: offcutData.notes || '',
+      location: offcutData.location || 'Main Shelf',
+      notes: offcutData.notes || (offcutData.location ? `Location: ${offcutData.location}` : ''),
       specs: {
-        widthMm: offcutData.widthMm || 148,
-        heightMm: offcutData.heightMm || 210,
-        dimensionFormatted: offcutData.dimensionFormatted || `${offcutData.widthMm || 148} x ${offcutData.heightMm || 210} mm`,
-        grammageGsm: offcutData.grammageGsm || offcutData.grammage || 0,
+        widthMm: Number(offcutData.widthMm || offcutData.width_mm || 148),
+        heightMm: Number(offcutData.heightMm || offcutData.length_mm || 210),
+        dimensionFormatted: offcutData.dimensionFormatted || `${offcutData.widthMm || offcutData.width_mm || 148} × ${offcutData.heightMm || offcutData.length_mm || 210} mm`,
+        grammageGsm: Number(offcutData.grammageGsm || offcutData.grammage || 130),
         paperType: offcutData.paperType || 'Standard',
         paperSurface: offcutData.paperSurface || '',
-        parentMaterialId: offcutData.paperId || '',
-        usableFor: offcutData.usableFor || ['Namecards', 'Hangtags', 'Small Prints']
+        parentMaterialId: offcutData.paperId || offcutData.parent_material_id || '',
+        location: offcutData.location || 'Main Shelf',
+        usableFor: offcutData.usableFor || ['Namecards', 'Hangtags', 'Small Prints', 'Flyers']
       },
       batches: [
         {
@@ -2133,23 +2326,55 @@ export const AppProvider = ({ children }) => {
       safeSetItem('ss_print_inventory_v6', next);
       return next;
     });
+
+    // Backend sync
+    fetch('http://localhost:8080/api/inventory/offcuts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: offcutId,
+        parent_material_id: offcutData.paperId || offcutData.parent_material_id || '',
+        name: offcutData.name,
+        width_mm: Number(offcutData.widthMm || offcutData.width_mm || 148),
+        length_mm: Number(offcutData.heightMm || offcutData.length_mm || 210),
+        quantity: qty,
+        location: offcutData.location || 'Main Shelf'
+      })
+    }).catch(err => console.warn('Backend offcut sync notice:', err));
   };
 
   const consumeOffcut = (offcutId: string, qtyToUse: number) => {
     setOffcuts(prev => {
       return prev.map(off => {
         if (off.id === offcutId) {
+          const rem = Math.max(0, Number(off.stockQty || off.qty || 0) - Number(qtyToUse));
           return {
             ...off,
-            qty: Math.max(0, off.qty - Number(qtyToUse))
+            stockQty: rem,
+            qty: rem
           };
         }
         return off;
-      }).filter(off => off.qty > 0);
+      }).filter(off => Number(off.stockQty || off.qty || 0) > 0);
     });
 
     // Also deduct from inventory stock
     dischargeInventoryStock(offcutId, qtyToUse, 'OFFCUT_CONSUMPTION', 'Used for small job print');
+  };
+
+  const deleteOffcut = (offcutId: string) => {
+    setOffcuts(prev => {
+      const next = prev.filter(o => o.id !== offcutId);
+      safeSetItem('ss_print_offcuts_v6', next);
+      return next;
+    });
+    setInventory(prev => {
+      const next = prev.filter(i => i.id !== offcutId);
+      safeSetItem('ss_print_inventory_v6', next);
+      return next;
+    });
+    deleteInventoryFromBackend(offcutId);
+    showToast('ລຶບລາຍການເສດເຈ້ຍສຳເລັດ!', 'success');
   };
 
   // Pre-flight checkers
@@ -2356,18 +2581,35 @@ export const AppProvider = ({ children }) => {
     // Pending Receivables
     const outstandingPayments = orders.reduce((sum, ord) => sum + ord.remainingUnpaidBalance, 0);
 
+    let paperCostTotal = 0;
+    let inkCostTotal = 0;
     let materialCostForOrders = 0;
+
     orders.forEach(order => {
       order.items.forEach(item => {
         const invItem = inventory.find(i => i.id === item.id);
-        if (invItem) {
-          materialCostForOrders += item.quantity * invItem.costPerConsumptionUnit;
+        const itemCost = item.quantity * (invItem?.costPerConsumptionUnit || item.unitCost || 0);
+        
+        const cat = (invItem?.category || item.category || '').toLowerCase();
+        const name = (invItem?.name || item.name || '').toLowerCase();
+        
+        if (cat === 'paper' || name.includes('a4') || name.includes('a3') || name.includes('card') || name.includes('ເຈ້ຍ')) {
+          paperCostTotal += itemCost;
+        } else if (cat === 'ink' || name.includes('ink') || name.includes('ໝຶກ') || name.includes('cmyk')) {
+          inkCostTotal += itemCost;
         }
+        materialCostForOrders += itemCost;
       });
     });
 
-    const spoilageCost = spoilageLogs.reduce((sum, log) => sum + log.totalCost, 0);
-    const directMaterialCost = materialCostForOrders + spoilageCost;
+    // Fallback baseline for paper & ink if item categories are generic
+    if (paperCostTotal === 0 && materialCostForOrders > 0) {
+      paperCostTotal = Math.round(materialCostForOrders * 0.65);
+      inkCostTotal = Math.round(materialCostForOrders * 0.35);
+    }
+
+    const spoilageCostImpact = spoilageLogs.reduce((sum, log) => sum + (log.totalCost || log.costImpact || (log.quantity * 450)), 0);
+    const directMaterialCost = materialCostForOrders + spoilageCostImpact;
     
     let machineDepreciationFromOrders = 0;
     orders.forEach(order => {
@@ -2383,6 +2625,10 @@ export const AppProvider = ({ children }) => {
     const totalEarnedPrice = orders.reduce((sum, ord) => sum + ord.totalPriceCharged, 0);
     const netProfit = totalEarnedPrice - totalCost;
     
+    // Executive Gross Profit Margin %
+    const totalRevenueBase = Math.max(1, totalEarnedPrice || totalRevenue);
+    const grossProfitMargin = Math.max(0, Math.min(100, Math.round(((totalRevenueBase - paperCostTotal - inkCostTotal) / totalRevenueBase) * 1000) / 10));
+
     const activeOrdersCount = orders.filter(ord => ord.status !== 'Delivered').length;
 
     // Material deadstock warnings: materials with zero consumption in active orders
@@ -2404,7 +2650,12 @@ export const AppProvider = ({ children }) => {
       totalCost,
       netProfit,
       activeOrdersCount,
-      spoilageCost,
+      spoilageCost: spoilageCostImpact,
+      spoilageCostImpact,
+      paperCostTotal,
+      inkCostTotal,
+      grossProfitMargin,
+      totalEarnedPrice,
       outstandingPayments, // Pending Receivables
       deadstockItems,
       machineEfficiencies
@@ -2512,7 +2763,18 @@ export const AppProvider = ({ children }) => {
       });
     }
 
-    setOrders(prev => [newOrder, ...prev]);
+    setOrders(prev => {
+      const updated = [newOrder, ...prev];
+      safeSetItem('ss_print_orders_v6', updated);
+      return updated;
+    });
+
+    // Sync to Go Backend DB
+    fetch('http://localhost:8080/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newOrder)
+    }).catch(err => console.log('Order DB sync background notice:', err));
   };
 
   const updateOrderStatus = (orderId, newStatus) => {
@@ -2619,22 +2881,25 @@ export const AppProvider = ({ children }) => {
     return false;
   };
 
-  const updateOrderTracking = (orderId: string, courierName: string, trackingNo: string, shippingFee?: number) => {
+  const updateOrderTracking = (orderId: string, courierName: string, trackingNo: string, shippingFee?: number, branchCode?: string) => {
     setOrders(prev => prev.map(ord => {
       if (ord.id === orderId) {
         const now = new Date();
         const pad = (n: number) => n.toString().padStart(2, '0');
         const timeNow = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
         const logs = ord.activityLog || [];
+        const branchTxt = branchCode ? ` (ສາຂາ: ${branchCode})` : '';
         const newLog = {
           timestamp: timeNow,
-          description: `ອັບເດດຂໍ້ມູນການຈັດສົ່ງ: ${courierName} (ເລກພັດສະດຸ: ${trackingNo || 'ບໍ່ມີ'})`
+          description: `ອັບເດດຂໍ້ມູນການຈັດສົ່ງ: ${courierName}${branchTxt} (ເລກພັດສະດຸ: ${trackingNo || 'ບໍ່ມີ'})`
         };
         return {
           ...ord,
           deliveryMethod: courierName,
           courier: courierName,
           trackingNumber: trackingNo,
+          branchCode: branchCode || ord.branchCode,
+          courierBranch: branchCode || ord.courierBranch,
           shippingFee: shippingFee !== undefined ? shippingFee : (ord.shippingFee || 0),
           activityLog: [newLog, ...logs]
         };
@@ -2647,7 +2912,7 @@ export const AppProvider = ({ children }) => {
     fetch(`http://localhost:8080/api/orders/${orderId}/tracking`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ courier: courierName, tracking_number: trackingNo, shipping_fee: shippingFee })
+      body: JSON.stringify({ courier: courierName, tracking_number: trackingNo, shipping_fee: shippingFee, branch_code: branchCode })
     }).catch(err => console.log('Order tracking sync notice:', err));
   };
 
@@ -2704,8 +2969,31 @@ export const AppProvider = ({ children }) => {
     }));
   };
 
-  const deleteOrder = (orderId) => {
-    setOrders(prev => prev.filter(ord => ord.id !== orderId));
+  const updateOrderDetails = (orderId: string, updatedOrder: any) => {
+    setOrders(prev => {
+      const updated = prev.map(ord => (ord.id === orderId || ord.orderNo === orderId || ord.orderNumber === orderId) ? { ...ord, ...updatedOrder } : ord);
+      safeSetItem('ss_print_orders_v6', updated);
+      return updated;
+    });
+
+    // PostgreSQL Backend Sync
+    fetch(`/api/v1/orders/${orderId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedOrder)
+    }).catch(err => console.log('Order update DB notice:', err));
+
+    showToast(`ອັບເດດອໍເດີ #${updatedOrder.orderNo || orderId} ຮຽບຮ້ອຍແລ້ວ!`, 'success');
+  };
+
+  const deleteOrder = (orderId: string) => {
+    setOrders(prev => {
+      const updated = prev.filter(ord => ord.id !== orderId && ord.orderNo !== orderId && ord.orderNumber !== orderId);
+      safeSetItem('ss_print_orders_v6', updated);
+      return updated;
+    });
+    fetch(`/api/v1/orders/${orderId}`, { method: 'DELETE' }).catch(() => {});
+    showToast(`ລົບອໍເດີ #${orderId} ອອກຈາກລະບົບຮຽບຮ້ອຍແລ້ວ`, 'info');
   };
 
   const addSpoilageLog = (logData) => {
@@ -3147,36 +3435,79 @@ export const AppProvider = ({ children }) => {
       convertedOrderId: null,
       ...quotationData
     };
-    setQuotations(prev => [newQuote, ...prev]);
+    setQuotations(prev => {
+      const updated = [newQuote, ...prev];
+      safeSetItem('ss_print_quotations_v6', updated);
+      return updated;
+    });
+
+    // PostgreSQL Backend Sync
+    fetch('/api/v1/quotations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: newQuote.id,
+        quotation_no: newQuote.quotationNumber,
+        title: newQuote.title || newQuote.quotationTitle || 'ໃບສະເໜີລາຄາງານພິມ',
+        customer_name: newQuote.customerName || 'General Customer',
+        customer_phone: newQuote.customerPhone || '',
+        customer_address: newQuote.customerAddress || '',
+        status: newQuote.status || 'Draft',
+        total_cost: Number(newQuote.totalCost || newQuote.grandNetCost || 0),
+        total_selling_price: Number(newQuote.grandTotal || newQuote.finalGrandTotal || 0),
+        overall_profit_percent: Number(newQuote.profitMargin || newQuote.quotationProfitMargin || 40),
+        discount_percent: Number(newQuote.discountPercent || newQuote.quotationDiscountPercent || 0),
+        setup_fee: Number(newQuote.setupFee || newQuote.quotationSetupFee || 0),
+        packaging_cost: Number(newQuote.packagingCost || newQuote.quotationPackagingCost || 0),
+        shipping_fee: Number(newQuote.shippingFee || 0),
+        expiry_date: newQuote.expiryDate || newQuote.quotationExpiry || '',
+        notes: newQuote.notes || newQuote.quotationNote || '',
+        items: newQuote.items || []
+      })
+    }).catch(err => console.log('Quotation DB sync notice:', err));
+
     return newQuote;
   };
 
   const reviseQuotation = (quotationId, newTotal, note) => {
-    setQuotations(prev => prev.map(q => {
-      if (q.id !== quotationId) return q;
-      const nextVersion = (q.version || 0) + 1;
-      const newVersionEntry = {
-        version: nextVersion,
-        date: new Date().toISOString().split('T')[0],
-        total: Number(newTotal),
-        note: note || `Revision v${nextVersion}`
-      };
-      return {
-        ...q,
-        version: nextVersion,
-        grandTotal: Number(newTotal),
-        versions: [newVersionEntry, ...(q.versions || [])],
-        status: 'Pending'
-      };
-    }));
+    setQuotations(prev => {
+      const updated = prev.map(q => {
+        if (q.id !== quotationId) return q;
+        const nextVersion = (q.version || 0) + 1;
+        const newVersionEntry = {
+          version: nextVersion,
+          date: new Date().toISOString().split('T')[0],
+          total: Number(newTotal),
+          note: note || `Revision v${nextVersion}`
+        };
+        return {
+          ...q,
+          version: nextVersion,
+          grandTotal: Number(newTotal),
+          versions: [newVersionEntry, ...(q.versions || [])],
+          status: 'Pending'
+        };
+      });
+      safeSetItem('ss_print_quotations_v6', updated);
+      return updated;
+    });
   };
 
   const updateQuotation = (quotationId, updatedFields) => {
-    setQuotations(prev => prev.map(q => q.id === quotationId ? { ...q, ...updatedFields } : q));
+    setQuotations(prev => {
+      const updated = prev.map(q => q.id === quotationId ? { ...q, ...updatedFields } : q);
+      safeSetItem('ss_print_quotations_v6', updated);
+      return updated;
+    });
   };
 
   const deleteQuotation = (quotationId) => {
-    setQuotations(prev => prev.filter(q => q.id !== quotationId));
+    setQuotations(prev => {
+      const updated = prev.filter(q => q.id !== quotationId);
+      safeSetItem('ss_print_quotations_v6', updated);
+      return updated;
+    });
+    fetch(`/api/v1/quotations/${quotationId}`, { method: 'DELETE' }).catch(() => {});
   };
 
   // Convert an accepted quotation into a production order + job ticket
@@ -3720,6 +4051,8 @@ export const AppProvider = ({ children }) => {
       deleteEmployee,
       assignEmployeeToMachine,
       recordImpressions,
+      earningRecords,
+      addEarningRecord,
       machineStatus,
       setMachineStatus,
       setMachineOperationalStatus,
@@ -3748,6 +4081,7 @@ export const AppProvider = ({ children }) => {
       setActiveRole,
       canAccess,
       inventory,
+      lowStockAlerts,
       equipment,
       orders,
       spoilageLogs,
@@ -3770,6 +4104,7 @@ export const AppProvider = ({ children }) => {
       getFIFOCostPerSheet,
       addInventoryBatch,
       addInventorySku,
+      updateMaterialReorderPoint,
       dischargeInventoryStock,
       deductStockForOrder,
       saveInventoryToBackend,
@@ -3784,11 +4119,13 @@ export const AppProvider = ({ children }) => {
       deleteCustomer,
       addOffcut,
       consumeOffcut,
+      deleteOffcut,
       updatePreflightCheck,
       updateProductionStep,
       addOrderVersion,
       addOrder,
       updateOrderStatus,
+      updateOrderDetails,
       startOrderProduction,
       updateOrderTracking,
       updateOrderPaymentStatus,

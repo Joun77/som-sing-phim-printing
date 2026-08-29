@@ -525,6 +525,47 @@ export default function ItemSpecConfigurator({
     return calculateItemCosting(tempItem, inventory, equipment);
   }, [tempItem, inventory, equipment]);
 
+  // Smart Offcut Suggestion Logic
+  const matchingOffcut = useMemo(() => {
+    if (!inventory || !Array.isArray(inventory)) return null;
+    const jobW = Number(tempItem.jobWidth || 210);
+    const jobH = Number(tempItem.jobHeight || 297);
+    const requiredSheets = Math.max(1, Number(costing.parentSheetsNeeded || 1));
+    const selectedPaper = inventory.find(p => p.id === tempItem.paperId);
+
+    // Look through offcuts in inventory
+    const offcutItems = inventory.filter(i => 
+      i.category?.toLowerCase() === 'offcut' || i.isOffcut === true || i.id?.startsWith('OFF-')
+    );
+
+    for (const off of offcutItems) {
+      const offW = Number(off.specs?.widthMm || off.widthMm || 0);
+      const offH = Number(off.specs?.heightMm || off.heightMm || 0);
+      const offQty = Number(off.stockQty || off.qty || 0);
+
+      // Check if quantity is available
+      if (offQty < Math.min(10, requiredSheets)) continue;
+
+      // Check dimensions with normal or rotated orientation
+      const fitsNormal = offW >= jobW && offH >= jobH;
+      const fitsRotated = offW >= jobH && offH >= jobW;
+
+      if (fitsNormal || fitsRotated) {
+        const parentSku = off.paperId || off.specs?.parentMaterialId;
+        const paperType = (off.specs?.paperType || '').toLowerCase();
+        const selectedPaperName = (selectedPaper?.name || '').toLowerCase();
+
+        const isSkuMatch = parentSku && selectedPaper && (parentSku === selectedPaper.id || parentSku === selectedPaper.sku);
+        const isTypeMatch = paperType && selectedPaperName.includes(paperType);
+
+        if (isSkuMatch || isTypeMatch || !parentSku || offcutItems.length <= 5) {
+          return off;
+        }
+      }
+    }
+    return null;
+  }, [inventory, tempItem.jobWidth, tempItem.jobHeight, tempItem.paperId, costing.parentSheetsNeeded]);
+
   const updateField = (field: string, value: any) => {
     setTempItem(prev => {
       const updated = { ...prev, [field]: value };
@@ -921,7 +962,7 @@ export default function ItemSpecConfigurator({
                     </div>
                     {customerData.deliveryMethod && (
                       <span className="px-2.5 py-1 bg-white text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-black">
-                        🚚 {customerData.deliveryMethod}
+                        {customerData.deliveryMethod}
                       </span>
                     )}
                   </div>
@@ -1102,6 +1143,49 @@ export default function ItemSpecConfigurator({
                     ))}
                   </select>
                 </div>
+
+                {/* Smart Offcut Suggestion Callout Banner */}
+                {matchingOffcut && matchingOffcut.id !== tempItem.paperId && (
+                  <div className="p-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-2xl text-xs space-y-2.5 animate-fade-in shadow-xs">
+                    <div className="flex items-center justify-between text-emerald-950 font-black">
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-emerald-600 animate-bounce" />
+                        <span>💡 ມີເສດເຈ້ຍພ້ອມໃຊ້ (Smart Offcut Available)</span>
+                      </span>
+                      <span className="px-2 py-0.5 bg-emerald-200 text-emerald-900 rounded font-bold font-mono text-[10px]">
+                        {matchingOffcut.specs?.dimensionFormatted || `${matchingOffcut.specs?.widthMm || 148} × ${matchingOffcut.specs?.heightMm || 210} mm`}
+                      </span>
+                    </div>
+
+                    <div className="text-slate-600 leading-snug text-[11px]">
+                      ພົບເສດ <span className="font-black text-slate-900">{matchingOffcut.name}</span> ຈຳນວນ{' '}
+                      <span className="font-black text-emerald-700 font-sans">
+                        {Number(matchingOffcut.stockQty || matchingOffcut.qty || 0).toLocaleString()} ແຜ່ນ
+                      </span>{' '}
+                      ຢູ່ <span className="font-bold text-slate-700">{matchingOffcut.location || matchingOffcut.specs?.location || 'Shelf A'}</span>{' '}
+                      (ຂະໜາດພໍດີກັບງານ {tempItem.jobWidth || 210}×{tempItem.jobHeight || 297}mm — ຊ່ວຍປະຢັດຕົ້ນທຶນ!)
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[10px] font-bold text-emerald-800">
+                        ຕົ້ນທຶນເສດ: {formatLAK(matchingOffcut.costPerConsumptionUnit || matchingOffcut.costPerSheet || 400)}/ແຜ່ນ
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateField('paperId', matchingOffcut.id);
+                          if (showToast) {
+                            showToast(`ເລືອກໃຊ້ເສດເຈ້ຍ "${matchingOffcut.name}" ສຳເລັດ!`, 'success');
+                          }
+                        }}
+                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs border-none"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>{currentLang === 'lo' ? 'ນຳໃຊ້ເສດເຈ້ຍນີ້ (Use Offcut)' : 'Use This Offcut'}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Paper Calculation Summary Box */}
                 <div className="p-4 bg-sky-50/90 border border-sky-200 rounded-2xl text-xs space-y-2.5">

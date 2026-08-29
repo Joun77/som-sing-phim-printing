@@ -98,7 +98,7 @@ function AppContent() {
                     />
                   )}
                   {activeTab === 'quotation' && (
-                    <QuotationManager />
+                    <QuotationManager onConvertToOrder={() => setActiveTab('orders')} />
                   )}
                   {(activeTab === 'orders' || activeTab === 'create_order' || activeTab === 'production' || activeTab === 'deliveries') && (
                     <CustomerOrders initialSubTab={activeTab === 'orders' ? 'orders' : activeTab} />

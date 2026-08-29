@@ -79,7 +79,7 @@ export const CourierManagementModal: React.FC<CourierManagementModalProps> = ({
         setLogoUrl(`http://localhost:8080${data.fileUrl}`);
         setPreviewError(false);
         showToast(
-          currentLang === 'lo' ? '✓ ອັບໂຫລດຮູບສຳເລັດ!' : 'Logo uploaded successfully!',
+          currentLang === 'lo' ? 'ອັບໂຫລດຮູບສຳເລັດ!' : 'Logo uploaded successfully!',
           'success'
         );
       } else {
@@ -119,7 +119,7 @@ export const CourierManagementModal: React.FC<CourierManagementModalProps> = ({
         color,
       });
       showToast(
-        currentLang === 'lo' ? '✓ ອັບເດດຂໍ້ມູນຂົນສົ່ງສຳເລັດ!' : 'Courier updated successfully!',
+        currentLang === 'lo' ? 'ອັບເດດຂໍ້ມູນຂົນສົ່ງສຳເລັດ!' : 'Courier updated successfully!',
         'success'
       );
     } else {
@@ -135,7 +135,7 @@ export const CourierManagementModal: React.FC<CourierManagementModalProps> = ({
         isActive: true,
       });
       showToast(
-        currentLang === 'lo' ? '✓ ເພີ່ມບໍລິສັດຂົນສົ່ງໃໝ່ຮຽບຮ້ອຍ!' : 'New courier added successfully!',
+        currentLang === 'lo' ? 'ເພີ່ມບໍລິສັດຂົນສົ່ງໃໝ່ຮຽບຮ້ອຍ!' : 'New courier added successfully!',
         'success'
       );
     }

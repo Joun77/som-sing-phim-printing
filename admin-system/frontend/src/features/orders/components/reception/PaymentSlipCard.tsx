@@ -1,5 +1,16 @@
-import React from 'react';
-import { CreditCard, Sparkles, CheckCircle2, X, DollarSign, AlertCircle } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { 
+  CreditCard, 
+  Sparkles, 
+  CheckCircle2, 
+  X, 
+  DollarSign, 
+  AlertCircle, 
+  Upload, 
+  Image as ImageIcon,
+  Eye,
+  Trash2
+} from 'lucide-react';
 
 interface PaymentSlipCardProps {
   orderIdDisplay: string;
@@ -15,6 +26,7 @@ interface PaymentSlipCardProps {
   onConfirmDepositPayment: (amount: number) => void;
   onRevertPayment: () => void;
   onRejectSlip: () => void;
+  onUploadSlip?: (fileUrl: string) => void;
   setLightbox?: (v: { src: string; title: string } | null) => void;
 }
 
@@ -32,12 +44,44 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
   onConfirmDepositPayment,
   onRevertPayment,
   onRejectSlip,
+  onUploadSlip,
   setLightbox,
 }) => {
+  const [localSlip, setLocalSlip] = useState<string | null>(paymentSlipUrl || null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const isDeposit = paymentStatus === 'Deposit' || (depositAmountPaid && depositAmountPaid > 0 && depositAmountPaid < totalAmountLAK);
   const isPaidFull = paymentStatus === 'Paid' || paymentStatus === 'PAID' || paymentStatus === 'Fully Paid';
   const effectiveDepositPaid = depositAmountPaid || Math.round(totalAmountLAK / 2);
   const effectiveRemaining = remainingUnpaidBalance !== undefined ? remainingUnpaidBalance : (isDeposit ? totalAmountLAK - effectiveDepositPaid : 0);
+
+  const activeSlip = localSlip || paymentSlipUrl;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        setLocalSlip(result);
+        if (onUploadSlip) {
+          onUploadSlip(result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveLocalSlip = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLocalSlip(null);
+    if (onUploadSlip) {
+      onUploadSlip('');
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   return (
     <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm flex flex-col justify-between space-y-5">
@@ -51,7 +95,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
             <div>
               <span className="text-[10px] font-black uppercase text-amber-600 tracking-wider block">Step 1</span>
               <h3 className="text-sm font-black text-slate-900">
-                {currentLang === 'lo' ? '1. ກວດສອບສະລິບໂອນເງິນ (BCEL OnePay)' : '1. Payment Slip Inspection'}
+                {currentLang === 'lo' ? '1. ກວດສອບສະລິບໂອນເງິນຜ່ານທະນາຄານ' : '1. Bank Transfer Slip Verification'}
               </h3>
             </div>
           </div>
@@ -63,49 +107,73 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
               : 'bg-slate-100 text-slate-700 border-slate-200'
           }`}>
             {isPaidFull 
-              ? (currentLang === 'lo' ? '✓ ຊຳລະເຕັມ 100%' : 'Paid 100%') 
+              ? (currentLang === 'lo' ? 'ຊຳລະເຕັມ 100%' : 'Paid 100%') 
               : isDeposit 
-              ? (currentLang === 'lo' ? '⏳ ມັດຈຳແລ້ວ' : 'Deposit Paid') 
-              : (currentLang === 'lo' ? '⏳ ລໍຖ້າກວດສອບ' : 'Pending Check')}
+              ? (currentLang === 'lo' ? 'ມັດຈຳແລ້ວ' : 'Deposit Paid') 
+              : (currentLang === 'lo' ? 'ລໍຖ້າກວດສອບ' : 'Pending Check')}
           </span>
         </div>
 
-        {/* Interactive Slip Box Preview */}
-        <div 
-          onClick={() => {
-            if (paymentSlipUrl && setLightbox) {
-              setLightbox({ src: paymentSlipUrl, title: `Payment Slip - Order #${orderIdDisplay}` });
-            }
-          }}
-          className="w-full min-h-[200px] max-h-[240px] rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-3 overflow-hidden cursor-pointer hover:border-amber-400 hover:bg-amber-50/20 transition relative group shadow-inner"
-          title={currentLang === 'lo' ? 'ຄລິກເພື່ອເບິ່ງຮູບສະລິບເຕັມຈໍ' : 'Click to view full slip image'}
-        >
-          {paymentSlipUrl ? (
-            <>
-              <img 
-                src={paymentSlipUrl} 
-                alt="Payment Slip" 
-                className="max-h-[200px] max-w-full object-contain rounded-xl shadow-md border border-slate-200"
-              />
-              <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition rounded-2xl flex items-center justify-center gap-2 text-xs font-black text-white">
-                <Sparkles className="w-4 h-4 text-amber-400" />
-                <span>{currentLang === 'lo' ? 'ຄລິກເພື່ອຂະຫຍາຍຮູບສະລິບ' : 'Click to Zoom'}</span>
-              </div>
-            </>
-          ) : (
-            <div className="text-center p-4 space-y-2">
-              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto border border-amber-200 shadow-xs">
-                <CreditCard className="w-6 h-6" />
-              </div>
-              <p className="text-xs font-black text-slate-800">
-                {currentLang === 'lo' ? 'ໄດ້ຮັບການແຈ້ງຊຳລະຜ່ານ BCEL OnePay QR' : 'BCEL OnePay QR Transfer'}
-              </p>
-              <p className="text-[11px] font-mono text-slate-400 font-bold">
-                Ref: SSP-TXN-{Math.floor(100000 + Math.random() * 900000)}
-              </p>
+        {/* Hidden File Input for Upload */}
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          onChange={handleFileChange} 
+          accept="image/*,.pdf" 
+          className="hidden" 
+        />
+
+        {/* Slip Preview or Upload Box */}
+        {activeSlip ? (
+          /* Mode 1: Slip Attached - Zoomable View */
+          <div 
+            onClick={() => {
+              if (activeSlip && setLightbox) {
+                setLightbox({ src: activeSlip, title: `Bank Transfer Slip - Order #${orderIdDisplay}` });
+              }
+            }}
+            className="w-full min-h-[200px] max-h-[240px] rounded-2xl bg-slate-50 border-2 border-slate-200 flex flex-col items-center justify-center p-3 overflow-hidden cursor-pointer hover:border-amber-400 hover:bg-amber-50/20 transition relative group shadow-inner"
+            title={currentLang === 'lo' ? 'ຄລິກເພື່ອເບິ່ງຮູບສະລິບເຕັມຈໍ' : 'Click to view full slip image'}
+          >
+            <img 
+              src={activeSlip} 
+              alt="Bank Transfer Slip" 
+              className="max-h-[190px] max-w-full object-contain rounded-xl shadow-md border border-slate-200"
+            />
+            <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition rounded-2xl flex items-center justify-center gap-2 text-xs font-black text-white">
+              <Eye className="w-4 h-4 text-amber-400" />
+              <span>{currentLang === 'lo' ? 'ຄລິກເພື່ອຂະຫຍາຍຮູບສະລິບ' : 'Click to Zoom'}</span>
             </div>
-          )}
-        </div>
+            <button
+              type="button"
+              onClick={handleRemoveLocalSlip}
+              className="absolute top-2 right-2 p-1.5 bg-slate-900/80 hover:bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition shadow-sm z-10 cursor-pointer"
+              title={currentLang === 'lo' ? 'ປ່ຽນຮູບສະລິບ / ລົບອອກ' : 'Remove / Change Slip'}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          /* Mode 2: No Slip Yet - Upload Dropzone & Bank Notice */
+          <div 
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full min-h-[200px] max-h-[240px] rounded-2xl bg-slate-50 border-2 border-dashed border-slate-300 hover:border-amber-500 hover:bg-amber-50/30 flex flex-col items-center justify-center p-4 text-center cursor-pointer transition group shadow-inner"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto border border-amber-200 shadow-xs mb-2 group-hover:scale-105 transition">
+              <Upload className="w-5 h-5 text-amber-700" />
+            </div>
+            <p className="text-xs font-black text-slate-800">
+              {currentLang === 'lo' ? 'ອັບໂຫລດສະລິບ ຫຼື ແນບຫຼັກຖານການໂອນ' : 'Upload Bank Transfer Slip'}
+            </p>
+            <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
+              {currentLang === 'lo' ? 'ຮອງຮັບທຸກທະນາຄານ (BCEL, JDB, LDB, APB, ຯລຯ)' : 'Supports all bank transfer slips'}
+            </p>
+            <span className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-[11px] font-bold text-slate-700 shadow-xs group-hover:border-amber-400 group-hover:text-amber-700 transition">
+              <ImageIcon className="w-3.5 h-3.5 text-amber-600" />
+              <span>{currentLang === 'lo' ? 'ເລືອກຟາຍສະລິບ / ອັບໂຫລດຮູບ' : 'Choose Slip Image'}</span>
+            </span>
+          </div>
+        )}
 
         {/* Amount Breakdown Summary */}
         <div className="mt-4 p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-1.5 text-xs">
@@ -149,8 +217,8 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
                 <CheckCircle2 className={`w-4 h-4 ${isPaidFull ? 'text-emerald-600' : 'text-amber-600'}`} />
                 <span>
                   {isPaidFull 
-                    ? (currentLang === 'lo' ? '✓ ຊຳລະເຕັມ 100% ສຳເລັດແລ້ວ' : 'Fully Paid 100%') 
-                    : (currentLang === 'lo' ? `✓ ຮັບມັດຈຳ ${formatLAK(effectiveDepositPaid)} ແລ້ວ` : `Deposit ${formatLAK(effectiveDepositPaid)} Verified`)}
+                    ? (currentLang === 'lo' ? 'ຊຳລະເຕັມ 100% ສຳເລັດແລ້ວ' : 'Fully Paid 100%') 
+                    : (currentLang === 'lo' ? `ຮັບມັດຈຳ ${formatLAK(effectiveDepositPaid)} ແລ້ວ` : `Deposit ${formatLAK(effectiveDepositPaid)} Verified`)}
                 </span>
               </div>
               <button
@@ -159,7 +227,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
                 className="py-3 px-3.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-amber-700 border border-slate-200 text-xs font-black transition active:scale-95 cursor-pointer flex items-center gap-1.5 shrink-0"
                 title="Revert payment status"
               >
-                <span>↺ ຍົກເລີກ</span>
+                <span>ຍົກເລີກ</span>
               </button>
             </div>
           </div>
@@ -173,7 +241,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
                 className="py-3.5 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border-none"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>{currentLang === 'lo' ? '✓ ຈ່າຍເຕັມ 100%' : '1. Pay Full 100%'}</span>
+                <span>{currentLang === 'lo' ? 'ຢືນຢັນຊຳລະ 100%' : 'Confirm Full 100%'}</span>
               </button>
 
               {/* Option 2: Deposit Payment (50%) */}
@@ -183,17 +251,17 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
                 className="py-3.5 px-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border-none"
               >
                 <DollarSign className="w-4 h-4" />
-                <span>{currentLang === 'lo' ? '💵 ຈ່າຍມັດຈຳ (50%)' : '2. Pay Deposit (50%)'}</span>
+                <span>{currentLang === 'lo' ? 'ຢືນຢັນມັດຈຳ (50%)' : 'Confirm Deposit (50%)'}</span>
               </button>
             </div>
 
             <button
               type="button"
               onClick={onRejectSlip}
-              className="w-full py-2 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-400 hover:text-red-600 border border-slate-200 text-[11px] font-bold transition active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+              className="w-full py-2 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-600 border border-slate-200 text-[11px] font-bold transition active:scale-95 cursor-pointer flex items-center justify-center gap-1"
             >
               <X className="w-3.5 h-3.5" />
-              <span>{currentLang === 'lo' ? 'ປະຕິເສດສະລິບ (ແຈ້ງລູກຄ້າສົ່ງໃໝ່)' : 'Reject Slip'}</span>
+              <span>{currentLang === 'lo' ? 'ປະຕິເສດສະລິບ / ແຈ້ງລູກຄ້າ' : 'Reject Slip / Notify Customer'}</span>
             </button>
           </div>
         )}

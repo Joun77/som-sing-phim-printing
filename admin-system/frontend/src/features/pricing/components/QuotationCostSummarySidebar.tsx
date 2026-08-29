@@ -43,6 +43,13 @@ export interface QuotationCostSummarySidebarProps {
   setQuotationLaborPercent: (val: number) => void;
   quotationLaborCostManual: number;
   setQuotationLaborCostManual: (val: number) => void;
+  quotationProfitMargin: number;
+  setQuotationProfitMargin: (val: number) => void;
+  quotationDiscountPercent: number;
+  setQuotationDiscountPercent: (val: number) => void;
+  grandBaseSellingPrice: number;
+  grandDiscountAmount: number;
+  grandSubtotal: number;
   quotationSetupFee: number;
   setQuotationSetupFee: (val: number) => void;
   quotationPackagingCost: number;
@@ -87,6 +94,13 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
   setQuotationLaborPercent,
   quotationLaborCostManual,
   setQuotationLaborCostManual,
+  quotationProfitMargin,
+  setQuotationProfitMargin,
+  quotationDiscountPercent,
+  setQuotationDiscountPercent,
+  grandBaseSellingPrice,
+  grandDiscountAmount,
+  grandSubtotal,
   quotationSetupFee,
   setQuotationSetupFee,
   quotationPackagingCost,
@@ -105,6 +119,7 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
   onProceedToQuote,
 }) => {
   const [isCostDetailsOpen, setIsCostDetailsOpen] = useState(false);
+  const [costBreakdownView, setCostBreakdownView] = useState<'item' | 'all'>('item');
   const [isShippingIncluded, setIsShippingIncluded] = useState(shippingFee > 0);
   const [isSetupFeeEnabled, setIsSetupFeeEnabled] = useState(quotationSetupFee > 0);
 
@@ -352,81 +367,152 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-slate-800 font-sans">
-                {formatCurrency(grandNetCost)}
+                {formatCurrency(costBreakdownView === 'item' ? (calculatedItems[activeItemIndex]?.netCost || 0) : grandNetCost)}
               </span>
               {isCostDetailsOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
             </div>
           </button>
 
           {isCostDetailsOpen && (
-            <div className="bg-slate-50 border-t border-slate-200 divide-y divide-slate-100 animate-fade-in">
-              {[
-                { 
-                  label: '1. ຕົ້ນທຶນເຈ້ຍ (Paper)', 
-                  sublabel: 'Paper Substrate FIFO', 
-                  value: grandPaperCost, 
-                  color: 'bg-sky-500', 
-                  active: true 
-                },
-                { 
-                  label: '2. ຕົ້ນທຶນການພິມ & ໝຶກ (Printing & Ink)', 
-                  sublabel: 'Ink Consumed + Machine Wear', 
-                  value: grandInkCost + grandMachCost, 
-                  color: 'bg-purple-500', 
-                  active: true 
-                },
-                { 
-                  label: '3. ເຄື່ອງຈັກຫຼັງພິມ (Post-Press)', 
-                  sublabel: 'Machinery Finishing', 
-                  value: grandPostPressCost, 
-                  color: 'bg-amber-500', 
-                  active: true 
-                },
-                { 
-                  label: '4. ວັດຖຸດິບຫຼັງພິມ (Consumables)', 
-                  sublabel: 'Staples, Wires, Materials', 
-                  value: grandFinishingCost, 
-                  color: 'bg-emerald-500', 
-                  active: true 
-                },
-                { 
-                  label: '5. ຄ່າແຮງງານຊ່າງ (Labor)', 
-                  sublabel: 'Order-level Batch Operations', 
-                  value: grandLaborCost - quotationSetupFee, 
-                  color: 'bg-blue-500', 
-                  active: true 
-                },
-                ...(quotationSetupFee > 0 ? [{ 
-                  label: '6. ຄ່າຕັ້ງເຄື່ອງ & ກຽມງານ (Setup Fee)', 
-                  sublabel: 'Make-Ready & Pre-run', 
-                  value: quotationSetupFee, 
-                  color: 'bg-indigo-500', 
-                  active: true 
-                }] : []),
-                { 
-                  label: `${quotationSetupFee > 0 ? '7' : '6'}. ບັນຈຸພັນ & ຂົນສົ່ງ (Packaging & Logistics)`, 
-                  sublabel: 'Box Materials & Courier', 
-                  value: grandPackagingCost, 
-                  color: 'bg-slate-500', 
-                  active: true 
-                },
-              ].map((row, idx) => (
-                <div key={idx} className="flex justify-between items-center px-4 py-2.5 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${row.color}`}></span>
-                    <div>
-                      <div className="text-xs font-semibold text-slate-700">{row.label}</div>
-                      <div className="text-[10px] text-slate-400 font-sans">{row.sublabel}</div>
+            <div className="bg-slate-50 border-t border-slate-200 animate-fade-in space-y-2 p-3">
+              {/* View Switcher: Active Item vs All Items Combined */}
+              <div className="grid grid-cols-2 gap-1 p-1 bg-slate-200/70 rounded-xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setCostBreakdownView('item')}
+                  className={`py-1.5 px-2 rounded-lg transition cursor-pointer text-center truncate ${
+                    costBreakdownView === 'item'
+                      ? 'bg-white text-primary-navy shadow-xs font-black'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title={activeItem.name}
+                >
+                  ລາຍການ: {activeItem.name}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCostBreakdownView('all')}
+                  className={`py-1.5 px-2 rounded-lg transition cursor-pointer text-center truncate ${
+                    costBreakdownView === 'all'
+                      ? 'bg-white text-primary-navy shadow-xs font-black'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  ລວມທຸກລາຍການ ({items.length})
+                </button>
+              </div>
+
+              {/* Rows Breakdown */}
+              <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                {(costBreakdownView === 'item' ? [
+                  { 
+                    label: '1. ຕົ້ນທຶນເຈ້ຍ (Paper)', 
+                    sublabel: 'Paper Substrate FIFO', 
+                    value: calculatedItems[activeItemIndex]?.paperCost || 0, 
+                    color: 'bg-sky-500' 
+                  },
+                  { 
+                    label: '2. ຕົ້ນທຶນການພິມ & ໝຶກ (Printing & Ink)', 
+                    sublabel: 'Ink Consumed + Machine Wear', 
+                    value: (calculatedItems[activeItemIndex]?.inkCost || 0) + (calculatedItems[activeItemIndex]?.machineOverhead || 0), 
+                    color: 'bg-purple-500' 
+                  },
+                  { 
+                    label: '3. ເຄື່ອງຈັກຫຼັງພິມ (Post-Press)', 
+                    sublabel: 'Machinery Finishing', 
+                    value: calculatedItems[activeItemIndex]?.postPressCost || 0, 
+                    color: 'bg-amber-500' 
+                  },
+                  { 
+                    label: '4. ວັດຖຸດິບຫຼັງພິມ (Consumables)', 
+                    sublabel: 'Staples, Wires, Materials', 
+                    value: calculatedItems[activeItemIndex]?.finishingMaterialsCost || 0, 
+                    color: 'bg-emerald-500' 
+                  },
+                  { 
+                    label: '5. ຄ່າແຮງງານຊ່າງ (Labor)', 
+                    sublabel: 'Item-level Labor Allocation', 
+                    value: calculatedItems[activeItemIndex]?.laborCost || 0, 
+                    color: 'bg-blue-500' 
+                  },
+                  { 
+                    label: '6. ບັນຈຸພັນ & ຂົນສົ່ງ (Packaging & Delivery)', 
+                    sublabel: 'Item-level Packaging', 
+                    value: calculatedItems[activeItemIndex]?.packagingDeliveryCost || 0, 
+                    color: 'bg-slate-500' 
+                  },
+                ] : [
+                  { 
+                    label: '1. ຕົ້ນທຶນເຈ້ຍ (Paper)', 
+                    sublabel: 'Paper Substrate FIFO (All Items)', 
+                    value: grandPaperCost, 
+                    color: 'bg-sky-500' 
+                  },
+                  { 
+                    label: '2. ຕົ້ນທຶນການພິມ & ໝຶກ (Printing & Ink)', 
+                    sublabel: 'Ink Consumed + Machine Wear', 
+                    value: grandInkCost + grandMachCost, 
+                    color: 'bg-purple-500' 
+                  },
+                  { 
+                    label: '3. ເຄື່ອງຈັກຫຼັງພິມ (Post-Press)', 
+                    sublabel: 'Machinery Finishing', 
+                    value: grandPostPressCost, 
+                    color: 'bg-amber-500' 
+                  },
+                  { 
+                    label: '4. ວັດຖຸດິບຫຼັງພິມ (Consumables)', 
+                    sublabel: 'Staples, Wires, Materials', 
+                    value: grandFinishingCost, 
+                    color: 'bg-emerald-500' 
+                  },
+                  { 
+                    label: '5. ຄ່າແຮງງານຊ່າງ (Labor)', 
+                    sublabel: 'Order-level Batch Operations', 
+                    value: grandLaborCost - quotationSetupFee, 
+                    color: 'bg-blue-500' 
+                  },
+                  ...(quotationSetupFee > 0 ? [{ 
+                    label: '6. ຄ່າຕັ້ງເຄື່ອງ & ກຽມງານ (Setup Fee)', 
+                    sublabel: 'Make-Ready & Pre-run', 
+                    value: quotationSetupFee, 
+                    color: 'bg-indigo-500' 
+                  }] : []),
+                  { 
+                    label: `${quotationSetupFee > 0 ? '7' : '6'}. ບັນຈຸພັນ & ຂົນສົ່ງ (Packaging & Logistics)`, 
+                    sublabel: 'Box Materials & Courier', 
+                    value: grandPackagingCost, 
+                    color: 'bg-slate-500' 
+                  },
+                ]).map((row, idx) => (
+                  <div key={idx} className="flex justify-between items-center px-3.5 py-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${row.color}`}></span>
+                      <div>
+                        <div className="text-xs font-semibold text-slate-700">{row.label}</div>
+                        <div className="text-[10px] text-slate-400 font-sans">{row.sublabel}</div>
+                      </div>
                     </div>
+                    <span className="text-xs font-black font-sans text-slate-800">
+                      {formatCurrency(row.value)}
+                    </span>
                   </div>
-                  <span className="text-xs font-black font-sans text-slate-800">
-                    {formatCurrency(row.value)}
+                ))}
+                <div className="flex justify-between items-center px-3.5 py-2.5 bg-slate-50 border-t border-slate-200">
+                  <div>
+                    <span className="text-xs font-black text-slate-800 block">
+                      {costBreakdownView === 'item' ? `ຕົ້ນທຶນ "${activeItem.name}"` : 'ລວມຕົ້ນທຶນສຸດທິທຸກລາຍການ'}
+                    </span>
+                    {costBreakdownView === 'item' && (
+                      <span className="text-[10px] text-slate-500 font-sans font-bold">
+                        ຕົ້ນທຶນ/ຫົວ: {formatCurrency(calculatedItems[activeItemIndex]?.unitCost || 0)}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-sm font-black text-primary-navy font-sans">
+                    {formatCurrency(costBreakdownView === 'item' ? (calculatedItems[activeItemIndex]?.netCost || 0) : grandNetCost)}
                   </span>
                 </div>
-              ))}
-              <div className="flex justify-between items-center px-4 py-3 bg-slate-100">
-                <span className="text-xs font-black text-slate-800">ລວມຕົ້ນທຶນສຸດທິ</span>
-                <span className="text-sm font-black text-primary-navy font-sans">{formatCurrency(grandNetCost)}</span>
               </div>
             </div>
           )}
@@ -705,32 +791,32 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
         </div>
 
         {/* ========================================================================= */}
-        {/* 🌟 5. ອັດຕາກຳໄລ & ສ່ວນຫຼຸດ (Target Profit Margin & Pricing Studio)        */}
+        {/* 🌟 5. ອັດຕາກຳໄລ & ສ່ວນຫຼຸດລວມ (Combined Profit Margin & Discount)        */}
         {/* ========================================================================= */}
         <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-3.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
               <Sliders className="w-3.5 h-3.5 text-emerald-600" />
-              <span>5. ອັດຕາກຳໄລ & ສ່ວນຫຼຸດ ({activeItem.name})</span>
+              <span>5. ອັດຕາກຳໄລ & ສ່ວນຫຼຸດລວມທັງໝົດ</span>
             </span>
             <span className={`text-xs font-black px-2.5 py-0.5 rounded-lg font-sans ${
-              activeMargin >= 35 ? 'bg-emerald-600 text-white' : activeMargin >= 25 ? 'bg-amber-500 text-white' : 'bg-rose-600 text-white'
+              quotationProfitMargin >= 35 ? 'bg-emerald-600 text-white' : quotationProfitMargin >= 25 ? 'bg-amber-500 text-white' : 'bg-rose-600 text-white'
             }`}>
-              {activeMargin}% Margin
+              {quotationProfitMargin}% Margin
             </span>
           </div>
 
           {/* Margin Slider & Number Input */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-600 font-bold">ອັດຕາກຳໄລເປົ້າໝາຍ (Target Profit Margin):</span>
+              <span className="text-slate-600 font-bold">ອັດຕາກຳໄລລວມ (Target Profit Margin):</span>
               <div className="flex items-center gap-1">
                 <input
                   type="number"
                   min="0"
                   max="90"
-                  value={activeMargin}
-                  onChange={(e) => updateActiveItem({ profitMargin: Math.max(0, Math.min(95, Number(e.target.value))) })}
+                  value={quotationProfitMargin}
+                  onChange={(e) => setQuotationProfitMargin(Math.max(0, Math.min(95, Number(e.target.value))))}
                   className="w-16 px-2 py-1 bg-white border border-emerald-300 rounded-lg text-right font-black font-sans text-emerald-950 text-xs shadow-2xs focus:outline-none focus:border-emerald-500"
                 />
                 <span className="font-bold text-emerald-900">%</span>
@@ -743,8 +829,8 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
               min="0"
               max="80"
               step="1"
-              value={activeMargin}
-              onChange={(e) => updateActiveItem({ profitMargin: Number(e.target.value) })}
+              value={quotationProfitMargin}
+              onChange={(e) => setQuotationProfitMargin(Number(e.target.value))}
               className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
             />
 
@@ -760,9 +846,9 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
                 <button
                   key={m.val}
                   type="button"
-                  onClick={() => updateActiveItem({ profitMargin: m.val })}
+                  onClick={() => setQuotationProfitMargin(m.val)}
                   className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
-                    activeMargin === m.val
+                    quotationProfitMargin === m.val
                       ? 'bg-emerald-600 text-white shadow-xs'
                       : 'bg-white text-emerald-900 border border-emerald-200 hover:bg-emerald-100'
                   }`}
@@ -773,7 +859,7 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
             </div>
 
             {/* Margin Guard Notice if < 25% */}
-            {isMarginLow && (
+            {quotationProfitMargin < 25.0 && (
               <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2 text-rose-800 text-[11px] animate-fade-in">
                 <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                 <div>
@@ -785,21 +871,75 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
           </div>
 
           {/* Discount Field */}
-          <div className="pt-2 border-t border-emerald-100 flex items-center justify-between text-xs">
-            <span className="text-slate-600 font-bold flex items-center gap-1">
-              <Tag className="w-3.5 h-3.5 text-amber-500" />
-              <span>ສ່ວນຫຼຸດລູກຄ້າ (Discount):</span>
-            </span>
-            <div className="flex items-center gap-1">
-              <input
-                type="number"
-                min="0"
-                max="50"
-                value={activeDiscount}
-                onChange={(e) => updateActiveItem({ discountPercent: Math.max(0, Math.min(50, Number(e.target.value))) })}
-                className="w-16 px-2 py-1 bg-white border border-emerald-300 rounded-lg text-right font-black font-sans text-slate-800 text-xs shadow-2xs focus:outline-none focus:border-emerald-500"
-              />
-              <span className="font-bold text-slate-600">%</span>
+          <div className="pt-2 border-t border-emerald-100 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-600 font-bold flex items-center gap-1">
+                <Tag className="w-3.5 h-3.5 text-amber-500" />
+                <span>ສ່ວນຫຼຸດລູກຄ້າລວມ (Total Discount):</span>
+              </span>
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min="0"
+                  max="50"
+                  value={quotationDiscountPercent}
+                  onChange={(e) => setQuotationDiscountPercent(Math.max(0, Math.min(50, Number(e.target.value))))}
+                  className="w-16 px-2 py-1 bg-white border border-emerald-300 rounded-lg text-right font-black font-sans text-slate-800 text-xs shadow-2xs focus:outline-none focus:border-emerald-500"
+                />
+                <span className="font-bold text-slate-600">%</span>
+              </div>
+            </div>
+
+            {/* Quick Discount Presets */}
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { label: '0%', val: 0 },
+                { label: '5%', val: 5 },
+                { label: '10%', val: 10 },
+                { label: '15%', val: 15 },
+                { label: '20%', val: 20 },
+              ].map((d) => (
+                <button
+                  key={d.val}
+                  type="button"
+                  onClick={() => setQuotationDiscountPercent(d.val)}
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                    quotationDiscountPercent === d.val
+                      ? 'bg-amber-500 text-white shadow-xs font-black'
+                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Combined Calculation Details Breakdown Box */}
+          <div className="p-3 bg-white/90 border border-emerald-200 rounded-xl space-y-1.5 text-xs">
+            <div className="flex justify-between text-slate-600">
+              <span>ຕົ້ນທຶນລວມທັງໝົດ (Total Net Cost):</span>
+              <span className="font-mono font-bold text-slate-900">{formatCurrency(grandNetCost)}</span>
+            </div>
+            <div className="flex justify-between text-slate-600">
+              <span>ລາຄາຂາຍກ່ອນສ່ວນຫຼຸດ (Base Total):</span>
+              <span className="font-mono font-bold text-slate-900">{formatCurrency(grandBaseSellingPrice)}</span>
+            </div>
+            {grandDiscountAmount > 0 && (
+              <div className="flex justify-between text-amber-600 font-semibold">
+                <span>ສ່ວນຫຼຸດລວມ ({quotationDiscountPercent}%):</span>
+                <span className="font-mono font-bold">- {formatCurrency(grandDiscountAmount)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-emerald-950 font-black border-t border-emerald-100 pt-1">
+              <span>ລວມຍອດຂາຍສຸດທິ (Subtotal):</span>
+              <span className="font-mono text-emerald-700 font-black">{formatCurrency(grandSubtotal)}</span>
+            </div>
+            <div className="flex justify-between text-[11px] text-slate-500 pt-0.5">
+              <span>ກຳໄລລວມ (Total Net Profit):</span>
+              <span className="font-mono font-bold text-emerald-600">
+                +{formatCurrency(grandNetProfit)} ({grandProfitMargin.toFixed(1)}%)
+              </span>
             </div>
           </div>
         </div>

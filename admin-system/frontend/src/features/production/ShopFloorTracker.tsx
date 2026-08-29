@@ -121,23 +121,23 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
       // 1. Check local AppContext orders first
       const localOrd = orders.find(
         (o: any) => o.id?.toLowerCase() === orderNo.toLowerCase() || 
-                   o.orderNumber?.toLowerCase() === orderNo.toLowerCase() || 
-                   o.order_no?.toLowerCase() === orderNo.toLowerCase()
+                   (o as any).orderNumber?.toLowerCase() === orderNo.toLowerCase() || 
+                   (o as any).orderNo?.toLowerCase() === orderNo.toLowerCase()
       );
 
       if (localOrd) {
         const mappedOrder: MasterOrder = {
           id: localOrd.id,
-          order_no: localOrd.orderNumber || localOrd.id,
-          order_number: localOrd.orderNumber || localOrd.id,
+          order_no: (localOrd as any).orderNumber || (localOrd as any).orderNo || localOrd.id,
+          order_number: (localOrd as any).orderNumber || (localOrd as any).orderNo || localOrd.id,
           customer_name: localOrd.customerName || 'ລູກຄ້າທົ່ວໄປ (General Customer)',
-          customer_phone: localOrd.customerPhone || '020-5555-5555',
-          total_amount_lak: localOrd.totalPriceCharged || localOrd.totalAmount || 0,
+          customer_phone: (localOrd as any).customerPhone || '020-5555-5555',
+          total_amount_lak: localOrd.totalPriceCharged || (localOrd as any).totalAmount || 0,
           deposit_lak: (localOrd.totalPriceCharged || 0) * 0.5,
           remaining_lak: (localOrd.totalPriceCharged || 0) * 0.5,
           overall_status: localOrd.status === 'Completed' ? 'COMPLETED' : 'IN_PRODUCTION',
-          delivery_date: localOrd.dueDate || localOrd.date || '2026-08-30',
-          created_at: localOrd.createdTime || new Date().toISOString(),
+          delivery_date: (localOrd as any).dueDate || (localOrd as any).deliveryDate || (localOrd as any).date || '2026-08-30',
+          created_at: (localOrd as any).createdTime || (localOrd as any).createdAt || new Date().toISOString(),
           updated_at: new Date().toISOString(),
           items: (localOrd.items && localOrd.items.length > 0) ? (localOrd.items || []).map((it: any, idx: number) => ({
             id: it.id || `item-${idx + 1}`,
@@ -162,8 +162,8 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
             {
               id: 'item-1',
               order_id: localOrd.id,
-              item_name: localOrd.jobName || 'ງານພິມມາດຕະຖານ',
-              quantity: localOrd.totalQuantity || 100,
+              item_name: (localOrd as any).jobName || (localOrd as any).customJobName || 'ງານພິມມາດຕະຖານ',
+              quantity: (localOrd as any).totalQuantity || (localOrd as any).quantity || 100,
               page_count: 1,
               paper_size: 'A4',
               binding_type: 'NONE',

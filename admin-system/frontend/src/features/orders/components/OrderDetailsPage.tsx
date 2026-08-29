@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft,
   CheckCircle2, 
@@ -25,9 +25,17 @@ import {
   X,
   BookOpen,
   Ruler,
-  ExternalLink
+  ExternalLink,
+  Edit3,
+  Save,
+  Copy,
+  PackageCheck
 } from 'lucide-react';
 import ShippingLabelModal from './modals/ShippingLabelModal';
+import CustomerInvoiceModal from './modals/CustomerInvoiceModal';
+import { EditOrderModal } from './modals/EditOrderModal';
+import { IndustrialJobTicket } from './production/PaperCuttingTicketCard';
+import { useApp } from '@store/AppContext';
 
 export default function OrderDetailsPage({
   order,
@@ -51,7 +59,9 @@ export default function OrderDetailsPage({
   viewMode = 'orders',
   updateProductionStep,
   addSpoilageLog,
-  inventory
+  inventory,
+  equipment,
+  onEditOrder
 }: {
   order: any;
   onBack: () => void;
@@ -75,10 +85,64 @@ export default function OrderDetailsPage({
   updateProductionStep?: (orderId: any, step: string, done: boolean) => void;
   addSpoilageLog?: (log: any) => void;
   inventory?: any[];
+  equipment?: any[];
+  onEditOrder?: (order: any) => void;
 }) {
   if (!order) return null;
 
+  const { 
+    couriers = [], 
+    updateOrderTracking: contextUpdateOrderTracking, 
+    updateOrderDetails: contextUpdateOrderDetails,
+    inventory: contextInventory = [],
+    equipment: contextEquipment = []
+  } = useApp();
+
   const [isShippingLabelOpen, setIsShippingLabelOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+
+  // Delivery & Tracking inputs state
+  const [courierName, setCourierName] = useState<string>(order.courier || order.deliveryMethod || 'Anousith Express');
+  const [trackingNo, setTrackingNo] = useState<string>(order.trackingNumber || order.trackingNo || '');
+  const [shippingFeeVal, setShippingFeeVal] = useState<number>(order.shippingFee || 15000);
+  const [isSavingTracking, setIsSavingTracking] = useState(false);
+  const [copiedTracking, setCopiedTracking] = useState(false);
+
+  useEffect(() => {
+    if (order) {
+      setCourierName(order.courier || order.deliveryMethod || 'Anousith Express');
+      setTrackingNo(order.trackingNumber || order.trackingNo || '');
+      setShippingFeeVal(order.shippingFee || 15000);
+    }
+  }, [order?.id, order?.trackingNumber, order?.trackingNo, order?.courier, order?.deliveryMethod, order?.shippingFee]);
+
+  const handleSaveTracking = () => {
+    setIsSavingTracking(true);
+    try {
+      if (contextUpdateOrderTracking) {
+        contextUpdateOrderTracking(order.id, courierName, trackingNo, shippingFeeVal);
+      }
+      showToast(
+        currentLang === 'lo' 
+          ? `ບັນທຶກຂໍ້ມູນການຈັດສົ່ງສຳເລັດ (${courierName}: ${trackingNo || 'ບໍ່ມີເລກພັດສະດຸ'})` 
+          : `Tracking info saved (${courierName}: ${trackingNo || 'No tracking #'})`,
+        'success'
+      );
+    } catch (err) {
+      showToast(currentLang === 'lo' ? 'ບັນທຶກບໍ່ສຳເລັດ' : 'Failed to save tracking', 'error');
+    } finally {
+      setIsSavingTracking(false);
+    }
+  };
+
+  const handleCopyTracking = () => {
+    if (!trackingNo) return;
+    navigator.clipboard.writeText(trackingNo);
+    setCopiedTracking(true);
+    showToast(currentLang === 'lo' ? 'ຄັດລອກເລກພັດສະດຸແລ້ວ' : 'Tracking number copied!', 'info');
+    setTimeout(() => setCopiedTracking(false), 2000);
+  };
 
   const getSpecDetails = (itemName: string) => {
     const name = (itemName || '').toLowerCase();
@@ -150,78 +214,8 @@ export default function OrderDetailsPage({
 
   const renderJobTicket = () => {
     return (
-      <div className="hidden print:block p-8 max-w-xl mx-auto border-2 border-dashed border-slate-400 rounded-3xl space-y-6 text-slate-800 font-sans">
-        <div className="text-center space-y-2 border-b-2 pb-4">
-          <h1 className="text-2xl font-black uppercase tracking-wider text-slate-900">ສົມສິງ ພິມ (Som Sing Printing)</h1>
-          <p className="text-xs font-bold text-slate-500">ໃບສັ່ງຜະລິດ / Work Order Job Ticket</p>
-          <p className="text-xs font-mono font-bold text-slate-900 mt-2">Order ID: #{order.id} | Date: {order.date}</p>
-        </div>
-        
-        <div className="grid grid-cols-2 gap-4 text-xs">
-          <div className="space-y-1">
-            <span className="text-[10px] uppercase font-bold text-slate-400">ລູກຄ້າ / Customer</span>
-            <p className="font-bold text-slate-800 text-sm">{order.customerName}</p>
-            <p className="font-mono text-slate-500">{order.phone}</p>
-          </div>
-          <div className="space-y-1 text-right">
-            <span className="text-[10px] uppercase font-bold text-slate-400">ກຳນົດສົ່ງ / Promised Due</span>
-            <p className="font-bold text-slate-800 text-sm">{order.promisedDeliveryDate}</p>
-            <p className="font-mono text-slate-500">{order.deliveryMethod || 'Pickup'}</p>
-          </div>
-        </div>
-
-        <div className="border-y border-slate-200 py-4 space-y-3">
-          <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider">ລາຍການສັ່ງພິມ / Print Items Specifications</span>
-          <div className="divide-y divide-slate-100 font-sans text-xs">
-            {order.items && order.items.map((item, idx) => {
-              const spec = getSpecDetails(item.name);
-              return (
-                <div key={idx} className="py-2 flex justify-between items-start">
-                  <div>
-                    <p className="font-bold text-slate-900">{item.name}</p>
-                    <p className="text-[10px] text-slate-500 font-medium mt-0.5">
-                      Spec: {spec.paper} | Size: {spec.size} | Fin: {spec.finishing}
-                    </p>
-                  </div>
-                  <p className="font-mono font-black text-slate-900 text-sm">x{item.quantity}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider">ໝາຍເຫດການຜະລິດ / Production Notes</span>
-          <p className="text-xs p-3 bg-slate-50 border rounded-xl font-bold text-slate-700 min-h-[60px] italic">
-            {order.notes || 'ບໍ່ມີໝາຍເຫດເພີ່ມເຕີມ'}
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 border-t pt-4">
-          <div className="space-y-2 text-xs">
-            <span className="text-[10px] uppercase font-bold text-slate-400">ຂັ້ນຕອນການກວດສອບ / Checklists</span>
-            <div className="space-y-1 font-bold text-slate-700">
-              <p>[  ] 1. ກວດສອບໄຟລ໌ (Pre-flight)</p>
-              <p>[  ] 2. ພິມແຜ່ນງານ (Press Printing)</p>
-              <p>[  ] 3. ຕັດແລະເຄືອບ (Cutting & Binding)</p>
-              <p>[  ] 4. ກວດສອບ QC (Final QC)</p>
-            </div>
-          </div>
-          <div className="flex flex-col justify-end items-end text-right text-[10px] space-y-1 text-slate-400">
-            <p className="border-b border-slate-300 w-32 pb-4"></p>
-            <p className="font-bold">ລາຍເຊັນຊ່າງຮັບຜິດຊອບ</p>
-            <p className="font-mono">Date: ____/____/____</p>
-          </div>
-        </div>
-
-        <div className="pt-6 flex flex-col items-center justify-center space-y-1.5 border-t">
-          <div className="flex items-center gap-0.5 justify-center h-8 font-mono text-[9px] text-slate-800">
-            {[1,2,3,4,3,2,1,4,3,2,1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4,3,2,1,4,3,2,1].map((bar, bIdx) => (
-              <span key={bIdx} className="bg-slate-900 inline-block h-full" style={{ width: bar === 1 ? '1px' : bar === 2 ? '2px' : bar === 3 ? '3px' : '4px' }} />
-            ))}
-          </div>
-          <p className="text-[9px] font-mono font-bold tracking-widest text-slate-400">QC-MIMAKI-{order.id}</p>
-        </div>
+      <div className="hidden print:block">
+        <IndustrialJobTicket order={order} currentLang={currentLang} />
       </div>
     );
   };
@@ -330,6 +324,30 @@ export default function OrderDetailsPage({
             <span>{currentLang === 'lo' ? 'ພິມໃບສັ່ງຜະລິດ' : 'Print Job Ticket'}</span>
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => setIsInvoiceModalOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer shadow-2xs"
+          title="Customer Payment Invoice / Receipt"
+        >
+          <CreditCard className="w-4 h-4 text-blue-600" />
+          <span>{currentLang === 'lo' ? 'ໃບບິນລູກຄ້າ' : 'Invoice'}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (onEditOrder) {
+              onEditOrder(order);
+            } else {
+              setIsEditModalOpen(true);
+            }
+          }}
+          className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer"
+          title={currentLang === 'lo' ? 'ແກ້ໄຂລາຍລະອຽດອໍເດີ' : 'Edit Order'}
+        >
+          <Edit3 className="w-4 h-4 text-amber-700" />
+          <span>{currentLang === 'lo' ? 'ແກ້ໄຂ' : 'Edit'}</span>
+        </button>
         <button
           type="button"
           onClick={() => {
@@ -587,54 +605,96 @@ export default function OrderDetailsPage({
                 </h3>
 
                 <div className="space-y-3.5">
-                  {[
-                    { id: 'preflight', title: currentLang === 'lo' ? 'ກວດສອບໄຟລ໌' : 'File Validation', sub: 'CMYK Color & Resolution Pass', done: isProdStepDone('preflight'), icon: FileCheck, clickable: true },
-                    { id: 'printing', title: currentLang === 'lo' ? 'ພິມຜ່ານເຄື່ອງ' : 'Press Printing', sub: 'Active Industrial Digital Printer', done: isProdStepDone('printing'), icon: Printer },
-                    { id: 'cutting', title: currentLang === 'lo' ? 'ຕັດ & ເຄືອບ' : 'Cutting & Binding', sub: 'Laminating & Guillotine Cutting', done: isProdStepDone('cutting'), icon: Scissors },
-                    { id: 'qc', title: currentLang === 'lo' ? 'ກວດ QC ສຸດທ້າຍ' : 'Final QC Inspection', sub: 'Color Alignment & Count Validation', done: isProdStepDone('qc'), icon: ShieldCheck },
-                  ].map((step, sIdx) => {
-                    const StepIcon = step.icon;
-                    const isClickable = step.id !== 'preflight' && updateProductionStep;
-                    return (
-                      <button
-                        key={sIdx}
-                        type="button"
-                        disabled={!isClickable}
-                        title={isClickable ? (step.done ? (currentLang === 'lo' ? 'ກົດເພື່ອຍົກເລີກ' : 'Click to unmark') : (currentLang === 'lo' ? 'ກົດເພື່ອໝາຍວ່າສຳເລັດ' : 'Click to mark complete')) : (currentLang === 'lo' ? 'ໃຊ້ toggle ຂ້າງເທິງ' : 'Toggle via preflight checks above')}
-                        onClick={() => {
-                          if (isClickable) {
-                            updateProductionStep(order.id, step.id, !step.done);
-                            showToast(
-                              !step.done
-                                ? (currentLang === 'lo' ? `${step.title}: ສຳເລັດ!` : `${step.title}: Marked complete!`)
-                                : (currentLang === 'lo' ? `↺ ${step.title}: ຍົກເລີກ` : `↺ ${step.title}: Unmarked`),
-                              !step.done ? 'success' : 'info'
-                            );
-                          }
-                        }}
-                        className={`w-full p-3 rounded-2xl border transition-all text-left flex items-center justify-between ${
-                          step.done 
-                            ? 'bg-emerald-50/70 border-emerald-200 text-slate-800' 
-                            : 'bg-slate-50 border-slate-200 text-slate-400'
-                        } ${isClickable ? 'hover:border-purple-300 hover:shadow-sm cursor-pointer active:scale-[0.99]' : 'cursor-default'}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <StepIcon className={`w-4 h-4 shrink-0 ${step.done ? 'text-emerald-600' : 'text-slate-400'}`} />
-                          <div>
-                            <span className="text-xs font-bold block text-slate-900">{step.title}</span>
-                            <span className="text-[10px] text-slate-400 block font-mono mt-0.5">{step.sub}</span>
+                  {order.productionWorkflow?.steps && order.productionWorkflow.steps.length > 0 ? (
+                    order.productionWorkflow.steps.map((wfStep: any, sIdx: number) => {
+                      const isDone = wfStep.status === 'COMPLETED';
+                      return (
+                        <div
+                          key={wfStep.id || sIdx}
+                          className={`w-full p-3 rounded-2xl border transition-all text-left flex items-center justify-between ${
+                            isDone 
+                              ? 'bg-emerald-50/70 border-emerald-200 text-slate-800' 
+                              : 'bg-slate-50 border-slate-200 text-slate-400'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-black text-[10px] ${
+                              isDone ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
+                            }`}>
+                              {isDone ? <Check className="w-3.5 h-3.5" /> : sIdx + 1}
+                            </div>
+                            <div>
+                              <span className="text-xs font-bold block text-slate-900">{wfStep.nameLao || wfStep.name}</span>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[10px] text-slate-400 font-mono">{wfStep.category}</span>
+                                {wfStep.assignedStaffName && (
+                                  <span className="text-[10px] text-blue-600 font-bold">
+                                    • {wfStep.assignedStaffName}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
+                          {isDone ? (
+                            <span className="p-1 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                              <Check className="w-3.5 h-3.5" />
+                            </span>
+                          ) : (
+                            <span className="w-5 h-5 rounded-full border-2 border-slate-300 flex items-center justify-center shrink-0 bg-slate-100" />
+                          )}
                         </div>
-                        {step.done ? (
-                          <span className="p-1 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
-                            <Check className="w-3.5 h-3.5" />
-                          </span>
-                        ) : (
-                          <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${isClickable ? 'border-slate-300 hover:border-purple-400' : 'bg-slate-200 border-transparent'}`} />
-                        )}
-                      </button>
-                    );
-                  })}
+                      );
+                    })
+                  ) : (
+                    [
+                      { id: 'preflight', title: currentLang === 'lo' ? 'ກວດສອບໄຟລ໌' : 'File Validation', sub: 'CMYK Color & Resolution Pass', done: isProdStepDone('preflight'), icon: FileCheck, clickable: true },
+                      { id: 'printing', title: currentLang === 'lo' ? 'ພິມຜ່ານເຄື່ອງ' : 'Press Printing', sub: 'Active Industrial Digital Printer', done: isProdStepDone('printing'), icon: Printer },
+                      { id: 'cutting', title: currentLang === 'lo' ? 'ຕັດ & ເຄືອບ' : 'Cutting & Binding', sub: 'Laminating & Guillotine Cutting', done: isProdStepDone('cutting'), icon: Scissors },
+                      { id: 'qc', title: currentLang === 'lo' ? 'ກວດ QC ສຸດທ້າຍ' : 'Final QC Inspection', sub: 'Color Alignment & Count Validation', done: isProdStepDone('qc'), icon: ShieldCheck },
+                    ].map((step, sIdx) => {
+                      const StepIcon = step.icon;
+                      const isClickable = step.id !== 'preflight' && updateProductionStep;
+                      return (
+                        <button
+                          key={sIdx}
+                          type="button"
+                          disabled={!isClickable}
+                          title={isClickable ? (step.done ? (currentLang === 'lo' ? 'ກົດເພື່ອຍົກເລີກ' : 'Click to unmark') : (currentLang === 'lo' ? 'ກົດເພື່ອໝາຍວ່າສຳເລັດ' : 'Click to mark complete')) : (currentLang === 'lo' ? 'ໃຊ້ toggle ຂ້າງເທິງ' : 'Toggle via preflight checks above')}
+                          onClick={() => {
+                            if (isClickable) {
+                              updateProductionStep(order.id, step.id, !step.done);
+                              showToast(
+                                !step.done
+                                  ? (currentLang === 'lo' ? `${step.title}: ສຳເລັດ!` : `${step.title}: Marked complete!`)
+                                  : (currentLang === 'lo' ? `${step.title}: ຍົກເລີກ` : `${step.title}: Unmarked`),
+                                !step.done ? 'success' : 'info'
+                              );
+                            }
+                          }}
+                          className={`w-full p-3 rounded-2xl border transition-all text-left flex items-center justify-between ${
+                            step.done 
+                              ? 'bg-emerald-50/70 border-emerald-200 text-slate-800' 
+                              : 'bg-slate-50 border-slate-200 text-slate-400'
+                          } ${isClickable ? 'hover:border-purple-300 hover:shadow-sm cursor-pointer active:scale-[0.99]' : 'cursor-default'}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <StepIcon className={`w-4 h-4 shrink-0 ${step.done ? 'text-emerald-600' : 'text-slate-400'}`} />
+                            <div>
+                              <span className="text-xs font-bold block text-slate-900">{step.title}</span>
+                              <span className="text-[10px] text-slate-400 block font-mono mt-0.5">{step.sub}</span>
+                            </div>
+                          </div>
+                          {step.done ? (
+                            <span className="p-1 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                              <Check className="w-3.5 h-3.5" />
+                            </span>
+                          ) : (
+                            <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${isClickable ? 'border-slate-300 hover:border-purple-400' : 'bg-slate-200 border-transparent'}`} />
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
@@ -868,19 +928,105 @@ export default function OrderDetailsPage({
             </div>
           </div>
 
-          {/* Right Column: Dispatch progress tracking */}
+          {/* Right Column: Dispatch progress tracking & Tracking Number Management */}
           <div className="space-y-6">
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between min-h-[300px]">
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between min-h-[300px] space-y-6">
               <div className="space-y-5">
-                <h3 className="text-sm font-black text-slate-900 border-b pb-3 flex items-center gap-2">
-                  <Truck className="w-5 h-5 text-sky-600" />
-                  <span>{currentLang === 'lo' ? 'ສະຖານະການຈັດສົ່ງ' : 'Shipping Status'}</span>
-                </h3>
+                <div className="flex items-center justify-between border-b pb-3">
+                  <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                    <Truck className="w-5 h-5 text-sky-600" />
+                    <span>{currentLang === 'lo' ? 'ສະຖານະການຈັດສົ່ງ' : 'Shipping Status'}</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setIsShippingLabelOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-xl text-xs font-bold transition border border-sky-200"
+                  >
+                    <PackageCheck className="w-3.5 h-3.5" />
+                    <span>{currentLang === 'lo' ? 'ໃບປະໜ້າ' : 'Label'}</span>
+                  </button>
+                </div>
+
+                {/* Tracking & Courier Input Form */}
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
+                    {currentLang === 'lo' ? 'ຂໍ້ມູນຂົນສົ່ງ & ເລກພັດສະດຸ (Tracking)' : 'Courier & Tracking Details'}
+                  </span>
+                  
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-700 block">
+                      {currentLang === 'lo' ? 'ບໍລິສັດຂົນສົ່ງ (Courier)' : 'Courier Company'}
+                    </label>
+                    <select
+                      value={courierName}
+                      onChange={(e) => setCourierName(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    >
+                      <option value="Anousith Express">Anousith Express (ອານຸສິດ)</option>
+                      <option value="HAL Logistics">HAL Logistics (ຮຸ່ງອາລຸນ)</option>
+                      <option value="Mixay Express">Mixay Express (ມີໄຊ)</option>
+                      <option value="Kerry Lao">Kerry Lao (ເຄີຣີ)</option>
+                      <option value="J&T Express">J&T Express</option>
+                      <option value="Flash Express">Flash Express</option>
+                      <option value="Pick-up at Shop">ຮັບເອງທີ່ຮ້ານ (Pick-up)</option>
+                      {couriers.map((c: any) => (
+                        <option key={c.id || c.name} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-700 block">
+                      {currentLang === 'lo' ? 'ເລກພັດສະດຸ (Tracking Number)' : 'Tracking Number'}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={trackingNo}
+                        onChange={(e) => setTrackingNo(e.target.value)}
+                        placeholder={currentLang === 'lo' ? 'ປ້ອນເລກພັດສະດຸ...' : 'Enter tracking number...'}
+                        className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      />
+                      {trackingNo && (
+                        <button
+                          type="button"
+                          onClick={handleCopyTracking}
+                          className="p-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs transition cursor-pointer"
+                          title="Copy tracking number"
+                        >
+                          {copiedTracking ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-700 block">
+                      {currentLang === 'lo' ? 'ຄ່າຈັດສົ່ງ (Shipping Fee LAK)' : 'Shipping Fee (LAK)'}
+                    </label>
+                    <input
+                      type="number"
+                      value={shippingFeeVal}
+                      onChange={(e) => setShippingFeeVal(Number(e.target.value))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveTracking}
+                    disabled={isSavingTracking}
+                    className="w-full py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-black transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isSavingTracking ? (currentLang === 'lo' ? 'ກຳລັງບັນທຶກ...' : 'Saving...') : (currentLang === 'lo' ? 'ບັນທຶກເລກພັດສະດຸ' : 'Save Tracking')}</span>
+                  </button>
+                </div>
 
                 <div className="space-y-4">
                   {[
                     { id: 'ready', title: 'Package Ready', sub: 'Packaged & Checked by QC', done: isShippingStepDone('ready'), icon: Package },
-                    { id: 'dispatched', title: 'In Transit / Courier', sub: order.deliveryMethod || 'Kerry Lao', done: isShippingStepDone('dispatched'), icon: Truck },
+                    { id: 'dispatched', title: 'In Transit / Courier', sub: `${courierName} ${trackingNo ? `(#${trackingNo})` : ''}`, done: isShippingStepDone('dispatched'), icon: Truck },
                     { id: 'delivered', title: 'Handed Over Successfully', sub: 'Completed and signed by client', done: isShippingStepDone('delivered'), icon: CheckCircle2 },
                   ].map((step, sIdx) => {
                     const StepIcon = step.icon;
@@ -1127,6 +1273,21 @@ export default function OrderDetailsPage({
             <Printer className="w-4 h-4" />
             <span>{currentLang === 'lo' ? 'ພິມໃບປະໜ້າພັດສະດຸ' : 'Shipping Label'}</span>
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (onEditOrder) {
+                onEditOrder(order);
+              } else {
+                setIsEditModalOpen(true);
+              }
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer shadow-xs"
+            title={currentLang === 'lo' ? 'ແກ້ໄຂລາຍລະອຽດອໍເດີ & ສະເປກ' : 'Edit Order Specs & Details'}
+          >
+            <Edit3 className="w-4 h-4 text-amber-700" />
+            <span>{currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ' : 'Edit Order'}</span>
+          </button>
           <span className={`px-3 py-1.5 rounded-xl text-xs font-black border uppercase flex items-center gap-1.5 ${getStatusBadgeClass(order.status)}`}>
             {getStatusIcon(order.status)}
             <span>{t(`status.${order.status}`)}</span>
@@ -1189,8 +1350,8 @@ export default function OrderDetailsPage({
                 </h2>
                 <p className="text-xs text-slate-400">
                   {currentLang === 'lo' 
-                    ? 'ກວດສອບຍອດເງິນໂອນ BCEL OnePay ກ່ອນກົດຢືນຢັນຮັບອໍເດີ ເພື່ອສົ່ງຕໍ່ໃຫ້ຝ່າຍ Pre-Press ກວດໄຟລ໌' 
-                    : 'Inspect BCEL OnePay payment slip before accepting the order and passing artwork to Pre-Press'}
+                    ? 'ກວດສອບຍອດເງິນໂອນຜ່ານທະນາຄານ ກ່ອນກົດຢືນຢັນຮັບອໍເດີ ເພື່ອສົ່ງຕໍ່ໃຫ້ຝ່າຍ Pre-Press ກວດໄຟລ໌' 
+                    : 'Inspect bank transfer payment slip before accepting the order and passing artwork to Pre-Press'}
                 </p>
               </div>
 
@@ -1212,14 +1373,14 @@ export default function OrderDetailsPage({
                   <div className="flex items-center justify-between text-xs font-black mb-3">
                     <span className="text-amber-400 flex items-center gap-1.5">
                       <CreditCard className="w-4 h-4" />
-                      {currentLang === 'lo' ? 'ສະລິບໂອນເງິນ (BCEL OnePay)' : 'Payment Slip'}
+                      {currentLang === 'lo' ? 'ສະລິບໂອນເງິນຜ່ານທະນາຄານ' : 'Bank Transfer Slip'}
                     </span>
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${
                       isPaymentConfirmed
                         ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                         : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
                     }`}>
-                      {isPaymentConfirmed ? (currentLang === 'lo' ? '✓ ຊຳລະແລ້ວ' : 'Paid') : (currentLang === 'lo' ? '⏳ ລໍຖ້າກວດສອບ' : 'Pending Verification')}
+                      {isPaymentConfirmed ? (currentLang === 'lo' ? 'ຊຳລະແລ້ວ' : 'Paid') : (currentLang === 'lo' ? 'ລໍຖ້າກວດສອບ' : 'Pending Verification')}
                     </span>
                   </div>
 
@@ -1252,7 +1413,7 @@ export default function OrderDetailsPage({
                           <CreditCard className="w-6 h-6" />
                         </div>
                         <p className="text-xs font-bold text-slate-300">
-                          {currentLang === 'lo' ? 'ໄດ້ຮັບການແຈ້ງຊຳລະຜ່ານ BCEL OnePay QR' : 'BCEL OnePay QR Transfer'}
+                          {currentLang === 'lo' ? 'ໂອນເງິນຜ່ານທະນາຄານ (Bank Transfer)' : 'Bank Transfer'}
                         </p>
                         <p className="text-[11px] font-mono text-slate-400">
                           Ref: SSP-TXN-{Math.floor(100000 + Math.random() * 900000)}
@@ -1280,7 +1441,7 @@ export default function OrderDetailsPage({
                     <div className="flex items-center gap-2">
                       <div className="flex-1 py-3 px-4 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-black flex items-center justify-center gap-2 shadow-inner">
                         <CheckCircle2 className="w-4 h-4" />
-                        <span>{currentLang === 'lo' ? '✓ ຢືນຢັນການຊຳຣະເງິນແລ້ວ' : 'Payment Verified'}</span>
+                        <span>{currentLang === 'lo' ? 'ຢືນຢັນການຊຳຣະເງິນແລ້ວ' : 'Payment Verified'}</span>
                       </div>
                       <button
                         type="button"
@@ -1291,7 +1452,7 @@ export default function OrderDetailsPage({
                         className="py-3 px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-400 border border-slate-700 text-xs font-bold transition active:scale-95 cursor-pointer flex items-center gap-1.5 shrink-0"
                         title="Revert / Cancel payment status"
                       >
-                        <span>↺ ຍົກເລີກ</span>
+                        <span>ຍົກເລີກ</span>
                       </button>
                     </div>
                   ) : (
@@ -1302,7 +1463,7 @@ export default function OrderDetailsPage({
                           if (handleStatusChange) handleStatusChange(order.id, 'PREPRESS_CHECK');
                           showToast(
                             currentLang === 'lo' 
-                              ? '✓ ຢືນຢັນຮັບອໍເດີ & ຊຳຣະເງິນຖືກຕ້ອງແລ້ວ! ສົ່ງຕໍ່ຝ່າຍ Pre-Press' 
+                              ? 'ຢືນຢັນຮັບອໍເດີ & ຊຳຣະເງິນຖືກຕ້ອງແລ້ວ! ສົ່ງຕໍ່ຝ່າຍ Pre-Press' 
                               : 'Order accepted & payment verified! Handed over to Pre-Press', 
                             'success'
                           );
@@ -1408,7 +1569,7 @@ export default function OrderDetailsPage({
                     <div className="flex items-center gap-2">
                       <div className="flex-1 py-3 px-4 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 text-xs font-black flex items-center justify-center gap-2 shadow-inner">
                         <Printer className="w-4 h-4" />
-                        <span>{currentLang === 'lo' ? '✓ ໄຟລ໌ພ້ອມພິມ & ກຳລັງດຳເນີນການຜະລິດ' : 'In Production Queue'}</span>
+                        <span>{currentLang === 'lo' ? 'ໄຟລ໌ພ້ອມພິມ & ກຳລັງດຳເນີນການຜະລິດ' : 'In Production Queue'}</span>
                       </div>
                       <button
                         type="button"
@@ -1419,7 +1580,7 @@ export default function OrderDetailsPage({
                         className="py-3 px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-400 border border-slate-700 text-xs font-bold transition active:scale-95 cursor-pointer flex items-center gap-1.5 shrink-0"
                         title="Revert / Edit artwork"
                       >
-                        <span>↺ ແກ້ໄຂ</span>
+                        <span>ແກ້ໄຂ</span>
                       </button>
                     </div>
                   ) : (
@@ -1431,7 +1592,7 @@ export default function OrderDetailsPage({
                         }
                         showToast(
                           currentLang === 'lo' 
-                            ? '✓ ຢືນຢັນໄຟລ໌ພິມ & ສັ່ງຜະລິດແລ້ວ! (ຕັດສະຕັອກເຈ້ຍ & ໝຶກອັດຕະໂນມັດ)' 
+                            ? 'ຢືນຢັນໄຟລ໌ພິມ & ສັ່ງຜະລິດແລ້ວ! (ຕັດສະຕັອກເຈ້ຍ & ໝຶກອັດຕະໂນມັດ)' 
                             : 'Artwork approved & sent to press! Stock deducted automatically', 
                           'success'
                         );
@@ -1601,7 +1762,7 @@ export default function OrderDetailsPage({
 
           {/* BLOCK 2: SHIPPING & DELIVERY PROCESS (ຂະບວນການຈັດສົ່ງ) */}
           <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-5 shadow-sm flex flex-col justify-between">
-            <div>
+            <div className="space-y-4">
               <div className="flex justify-between items-center border-b border-slate-100 pb-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 bg-sky-50 text-sky-700 rounded-2xl border border-sky-100">
@@ -1612,19 +1773,107 @@ export default function OrderDetailsPage({
                     <h3 className="text-base font-black text-slate-900">{currentLang === 'lo' ? '2. ຂະບວນການຈັດສົ່ງ' : '2. Shipping & Delivery'}</h3>
                   </div>
                 </div>
-                <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase border ${
-                  order.status === 'Delivered'
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : order.status === 'Ready'
-                    ? 'bg-sky-50 text-sky-700 border-sky-200'
-                    : 'bg-slate-100 text-slate-500 border-slate-200'
-                }`}>
-                  {order.status === 'Delivered' ? 'Delivered' : order.status === 'Ready' ? 'Ready to Ship' : 'In Production'}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsShippingLabelOpen(true)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-xs font-bold transition"
+                    title="ພິມໃບປະໜ້າ"
+                  >
+                    <PackageCheck className="w-3.5 h-3.5" />
+                    <span>{currentLang === 'lo' ? 'ໃບປະໜ້າ' : 'Label'}</span>
+                  </button>
+                  <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase border ${
+                    order.status === 'Delivered'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : order.status === 'Ready'
+                      ? 'bg-sky-50 text-sky-700 border-sky-200'
+                      : 'bg-slate-100 text-slate-500 border-slate-200'
+                  }`}>
+                    {order.status === 'Delivered' ? 'Delivered' : order.status === 'Ready' ? 'Ready to Ship' : 'In Production'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Courier & Tracking Input Panel */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
+                  {currentLang === 'lo' ? 'ຈັດການຂໍ້ມູນຂົນສົ່ງ & ເລກພັດສະດຸ' : 'Courier & Tracking Management'}
                 </span>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-600 block">
+                      {currentLang === 'lo' ? 'ບໍລິສັດຂົນສົ່ງ' : 'Courier'}
+                    </label>
+                    <select
+                      value={courierName}
+                      onChange={(e) => setCourierName(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    >
+                      <option value="Anousith Express">Anousith Express (ອານຸສິດ)</option>
+                      <option value="HAL Logistics">HAL Logistics (ຮຸ່ງອາລຸນ)</option>
+                      <option value="Mixay Express">Mixay Express (ມີໄຊ)</option>
+                      <option value="Kerry Lao">Kerry Lao (ເຄີຣີ)</option>
+                      <option value="J&T Express">J&T Express</option>
+                      <option value="Flash Express">Flash Express</option>
+                      <option value="Pick-up at Shop">ຮັບເອງທີ່ຮ້ານ (Pick-up)</option>
+                      {couriers.map((c: any) => (
+                        <option key={c.id || c.name} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-600 block">
+                      {currentLang === 'lo' ? 'ຄ່າຈັດສົ່ງ (LAK)' : 'Shipping Fee (LAK)'}
+                    </label>
+                    <input
+                      type="number"
+                      value={shippingFeeVal}
+                      onChange={(e) => setShippingFeeVal(Number(e.target.value))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-600 block">
+                    {currentLang === 'lo' ? 'ເລກພັດສະດຸ (Tracking Number)' : 'Tracking Number'}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={trackingNo}
+                      onChange={(e) => setTrackingNo(e.target.value)}
+                      placeholder={currentLang === 'lo' ? 'ປ້ອນເລກພັດສະດຸ...' : 'Enter tracking number...'}
+                      className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                    {trackingNo && (
+                      <button
+                        type="button"
+                        onClick={handleCopyTracking}
+                        className="p-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs transition cursor-pointer"
+                        title="Copy tracking"
+                      >
+                        {copiedTracking ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleSaveTracking}
+                      disabled={isSavingTracking}
+                      className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-black transition active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs shrink-0"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{isSavingTracking ? (currentLang === 'lo' ? '...' : '...') : (currentLang === 'lo' ? 'ບັນທຶກ' : 'Save')}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Sub-steps tick list */}
-              <div className="space-y-3 pt-4">
+              <div className="space-y-3 pt-2">
                 {/* Sub-step 1: Ready to Ship */}
                 <div className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between ${
                   isShippingStepDone('ready')
@@ -1659,7 +1908,7 @@ export default function OrderDetailsPage({
                     <Truck className={`w-4 h-4 ${isShippingStepDone('dispatched') ? 'text-emerald-600' : 'text-slate-400'}`} />
                     <div>
                       <span className="text-xs font-bold block text-slate-900">Courier Dispatch</span>
-                      <span className="text-[10px] text-slate-500 block font-mono">{order.deliveryMethod || 'Kerry Lao'}</span>
+                      <span className="text-[10px] text-slate-500 block font-mono">{courierName} {trackingNo ? `(#${trackingNo})` : ''}</span>
                     </div>
                   </div>
                   {isShippingStepDone('dispatched') ? (
@@ -1933,6 +2182,39 @@ export default function OrderDetailsPage({
           isOpen={isShippingLabelOpen}
           onClose={() => setIsShippingLabelOpen(false)}
           order={order}
+        />
+      )}
+
+      {/* Edit Order Specs & Info Modal */}
+      {isEditModalOpen && (
+        <EditOrderModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          order={order}
+          inventory={inventory || contextInventory}
+          equipment={equipment || contextEquipment}
+          formatCurrency={formatLAK}
+          onSave={(updated) => {
+            if (contextUpdateOrderDetails) {
+              contextUpdateOrderDetails(updated.id, updated);
+            }
+            setIsEditModalOpen(false);
+            showToast(
+              currentLang === 'lo' ? 'ອັບເດດລາຍລະອຽດອໍເດີສຳເລັດ!' : 'Order details updated successfully!',
+              'success'
+            );
+          }}
+        />
+      )}
+
+      {/* Customer Payment Invoice / Receipt Modal */}
+      {isInvoiceModalOpen && (
+        <CustomerInvoiceModal
+          isOpen={isInvoiceModalOpen}
+          onClose={() => setIsInvoiceModalOpen(false)}
+          order={order}
+          currentLang={currentLang}
+          formatLAK={formatLAK}
         />
       )}
     </div>

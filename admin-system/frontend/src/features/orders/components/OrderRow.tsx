@@ -5,11 +5,9 @@ import {
   XCircle, 
   AlertTriangle, 
   Clock, 
-  Printer, 
-  Download, 
-  Truck, 
-  CheckCircle2,
-  PackageCheck
+  PackageCheck,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 
 interface OrderRowProps {
@@ -22,12 +20,12 @@ interface OrderRowProps {
   getPaymentStatusBadge: (status: string) => string;
   getPaymentStatusIcon: (status: string) => React.ReactNode;
   onViewDetails: (ord: any) => void;
-  onStartProduction?: (orderId: string) => void;
-  onReadyToShip?: (orderId: string) => void;
-  onOpenTrackingModal?: (ord: any) => void;
   onPrintShippingLabel?: (ord: any) => void;
-  showToast?: (msg: string, type?: string) => void;
+  onEditOrder?: (ord: any) => void;
+  onDeleteOrder?: (ord: any) => void;
   isSelected: boolean;
+  isRowChecked?: boolean;
+  onToggleCheck?: (id: string, e: React.MouseEvent | React.ChangeEvent) => void;
   focusRef?: React.Ref<HTMLTableRowElement> | null;
 }
 
@@ -41,12 +39,12 @@ const OrderRow = React.memo<OrderRowProps>(({
   getPaymentStatusBadge,
   getPaymentStatusIcon,
   onViewDetails,
-  onStartProduction,
-  onReadyToShip,
-  onOpenTrackingModal,
   onPrintShippingLabel,
-  showToast,
+  onEditOrder,
+  onDeleteOrder,
   isSelected,
+  isRowChecked = false,
+  onToggleCheck,
   focusRef
 }) => {
   const customerName = ord.customerName || ord.customer_name || ord.customer || (currentLang === 'lo' ? 'ລູກຄ້າທົ່ວໄປ' : 'Customer');
@@ -57,6 +55,7 @@ const OrderRow = React.memo<OrderRowProps>(({
   const totalAmountLAK = Number(
     ord.totalPriceCharged || ord.totalAmount || ord.total_amount_lak || ord.total_price || ord.totalPrice || 0
   );
+
   // Normalize Payment Status
   const paymentStatusRaw = ord.paymentStatus || ord.payment_status || (ord.status === 'PAID_PREPRESS' ? 'Paid' : 'Unpaid');
   const paymentStatus = (paymentStatusRaw === 'Paid' || paymentStatusRaw === 'PAID' || paymentStatusRaw === 'Fully Paid') 
@@ -65,16 +64,13 @@ const OrderRow = React.memo<OrderRowProps>(({
     ? 'Deposit' 
     : 'Unpaid';
 
-  const remainingBalance = paymentStatus === 'Paid'
-    ? 0
-    : Number(ord.remainingUnpaidBalance !== undefined ? ord.remainingUnpaidBalance : (paymentStatus === 'Deposit' ? Math.round(totalAmountLAK / 2) : totalAmountLAK));
-
   // Normalize Production Status
   const statusRaw = ord.status || ord.overall_status || ord.productionStatus || 'Pending';
   const promisedDate = ord.promisedDeliveryDate || ord.delivery_date;
   const isOverdue = promisedDate && statusRaw !== 'Delivered' && statusRaw !== 'COMPLETED'
     ? new Date(promisedDate + 'T23:59:59').getTime() - new Date().getTime() < 0
     : false;
+
   const statusDisplay = 
     statusRaw === 'REQUIRES_MANAGER_APPROVAL' || statusRaw === 'PREPRESS_CHECK' || statusRaw === 'PAID_PREPRESS'
       ? (currentLang === 'lo' ? 'ລໍຖ້າກວດຟາຍ' : 'Pre-Press Check')
@@ -101,44 +97,6 @@ const OrderRow = React.memo<OrderRowProps>(({
       return `${ord.product_name || ord.specs?.size} (x${ord.quantity || 1})`;
     }
     return currentLang === 'lo' ? 'ງານພິມດິຈິຕອນຕາມສັ່ງ' : 'Custom Print Job';
-  };
-
-  const handleDownloadArtwork = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const urls: string[] = [];
-    if (ord.artworkLink) urls.push(ord.artworkLink);
-    if (ord.google_drive_link) urls.push(ord.google_drive_link);
-    if (ord.preflight?.versions) {
-      ord.preflight.versions.forEach((v: any) => { if (v.url) urls.push(v.url); });
-    }
-    if (Array.isArray(ord.items)) {
-      ord.items.forEach((it: any) => {
-        if (it.cover_file_url) urls.push(it.cover_file_url);
-        if (it.inner_file_url) urls.push(it.inner_file_url);
-        if (it.specs?.file_url) urls.push(it.specs.file_url);
-      });
-    }
-
-    const uniqueUrls = Array.from(new Set(urls.filter(Boolean)));
-    if (uniqueUrls.length === 0) {
-      if (showToast) {
-        showToast(currentLang === 'lo' ? 'ບໍ່ພົບຟາຍອາດເວິກໃນອໍເດີນີ້' : 'No artwork files found in this order', 'warning');
-      }
-      return;
-    }
-
-    uniqueUrls.forEach((url) => {
-      window.open(url, '_blank');
-    });
-
-    if (showToast) {
-      showToast(
-        currentLang === 'lo' 
-          ? `ກຳລັງເປີດດາວໂຫຼດຟາຍອາດເວິກ ${uniqueUrls.length} ຟາຍ...` 
-          : `Opening ${uniqueUrls.length} artwork files...`, 
-        'success'
-      );
-    }
   };
 
   const renderSLATimer = () => {
@@ -187,38 +145,52 @@ const OrderRow = React.memo<OrderRowProps>(({
     }
   };
 
-  const isPreProduction = ['Received', 'Pending', 'PREPRESS_CHECK', 'QUOTATION', 'ORDER_CREATED', 'FILE_CONFIRMED'].includes(statusRaw) && !ord.stockDeducted;
-  const isPrintingPhase = ['Printing', 'Cutting', 'IN_PRODUCTION'].includes(statusRaw);
-
   return (
     <tr 
-      className={`hover:bg-slate-50/30 transition ${
+      ref={focusRef}
+      className={`hover:bg-slate-50/50 transition ${
         isOverdue ? 'bg-red-50/10' : ''
-      } ${isSelected ? 'bg-sky-50/20' : ''}`}
+      } ${isSelected ? 'bg-sky-50/30 ring-1 ring-sky-200' : ''} ${isRowChecked ? 'bg-sky-50/40' : ''}`}
     >
-      {/* Order ID & Date */}
-      <td className="px-6 py-4 whitespace-nowrap">
+      {/* Checkbox Multi-Select */}
+      <td className="pl-6 pr-2 py-4 whitespace-nowrap text-center w-10">
+        <input
+          type="checkbox"
+          checked={isRowChecked}
+          onChange={(e) => {
+            if (onToggleCheck) onToggleCheck(ord.id, e);
+          }}
+          className="w-4 h-4 rounded-lg text-accent-sky border-slate-300 focus:ring-accent-sky/30 cursor-pointer transition"
+        />
+      </td>
+
+      {/* 1. Order ID & Date */}
+      <td className="px-5 py-4 whitespace-nowrap">
         <span className="font-mono font-black text-slate-900 block text-sm lg:text-base">#{orderIdentifier}</span>
         <span className="text-xs text-slate-400 block font-sans mt-1">Due: {ord.promisedDeliveryDate || ord.delivery_date || '24-48h'}</span>
         {renderSLATimer()}
       </td>
-      {/* Customer Info */}
+
+      {/* 2. Customer Info */}
       <td className="px-6 py-4 whitespace-nowrap">
         <span className="font-bold text-slate-900 block">{customerName}</span>
         <span className="text-xs text-slate-400 block font-sans mt-0.5">{customerPhone || '-'}</span>
       </td>
-      {/* Print Items Summary */}
+
+      {/* 3. Print Items Summary */}
       <td className="px-6 py-4 min-w-[200px]">
         <span className="font-semibold text-slate-800 line-clamp-1">{itemsSummary()}</span>
       </td>
-      {/* Payment Status */}
+
+      {/* 4. Payment Status */}
       <td className="px-6 py-4 whitespace-nowrap">
         <span className={`inline-flex px-2.5 py-1 rounded-[8px] text-[10px] sm:text-xs font-extrabold uppercase border ${getPaymentStatusBadge(paymentStatus)}`}>
           {getPaymentStatusIcon(paymentStatus)}
           <span className="ml-1">{paymentStatus === 'Paid' ? (currentLang === 'lo' ? 'ຊຳລະແລ້ວ' : 'Paid') : paymentStatus === 'Deposit' ? (currentLang === 'lo' ? 'ມັດຈຳແລ້ວ' : 'Deposit') : (currentLang === 'lo' ? 'ຍັງບໍ່ຊຳລະ' : 'Unpaid')}</span>
         </span>
       </td>
-      {/* Production Status */}
+
+      {/* 5. Production Status */}
       <td className="px-6 py-4 whitespace-nowrap">
         <span className={`inline-flex px-2.5 py-1 rounded-[8px] text-[10px] sm:text-xs font-extrabold uppercase border ${getStatusBadgeClass(statusRaw)}`}>
           {getStatusIcon(statusRaw)}
@@ -230,82 +202,16 @@ const OrderRow = React.memo<OrderRowProps>(({
           </span>
         )}
       </td>
-      {/* Total Price */}
-      <td className="px-6 py-4 text-right font-sans font-black text-slate-900 whitespace-nowrap">
-        <span className="block text-sm lg:text-base font-mono">{formatLAK(totalAmountLAK)}</span>
-        {remainingBalance > 0 && (
-          <span className="text-xs font-sans font-bold text-red-500 block mt-1 font-mono">
-            {currentLang === 'lo' ? 'ຄ້າງ:' : 'Unpaid:'} {formatLAK(remainingBalance)}
-          </span>
-        )}
+
+      {/* 6. Total Amount */}
+      <td className="px-6 py-4 whitespace-nowrap text-right font-mono font-black text-slate-900 text-sm">
+        {formatLAK(totalAmountLAK)}
       </td>
-      {/* Quick Action Controls */}
+
+      {/* 7. Quick Actions: ໃບປະໜ້າ, ເບິ່ງລາຍລະອຽດ, ແກ້ໄຂ, ລົບ */}
       <td className="px-6 py-4 whitespace-nowrap text-center">
-        <div className="flex items-center justify-center gap-1.5 flex-wrap max-w-xs mx-auto">
-          {/* Download Artwork Button */}
-          <button
-            type="button"
-            onClick={handleDownloadArtwork}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 hover:text-sky-900 rounded-xl text-xs font-bold transition border border-sky-200 active:scale-95 cursor-pointer"
-            title="ດາວໂຫຼດຟາຍອາດເວິກ"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>ດາວໂຫຼດຟາຍ</span>
-          </button>
-
-          {/* Print & Deduct Stock Button (Pre-production only) */}
-          {isPreProduction && onStartProduction && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onStartProduction(ord.id);
-              }}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition shadow-xs active:scale-95 cursor-pointer animate-pulse"
-              title="ສັ່ງພິມ ແລະ ຕັດສະຕັອກ"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>ສັ່ງພິມ & ຕັດສະຕັອກ</span>
-            </button>
-          )}
-
-          {/* Ready to Ship Button (In production) */}
-          {isPrintingPhase && onReadyToShip && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onReadyToShip(ord.id);
-              }}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition shadow-xs active:scale-95 cursor-pointer"
-              title="ພ້ອມສົ່ງ"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>ພ້ອມສົ່ງ</span>
-            </button>
-          )}
-
-          {/* Quick Tracking Button */}
-          {onOpenTrackingModal && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenTrackingModal(ord);
-              }}
-              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition border active:scale-95 cursor-pointer ${
-                ord.trackingNumber
-                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
-                  : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-              }`}
-              title="ເລກພັດສະດຸ"
-            >
-              <Truck className="w-3.5 h-3.5" />
-              <span>{ord.trackingNumber ? ord.trackingNumber : '+ ເລກພັດສະດຸ'}</span>
-            </button>
-          )}
-
-          {/* Print Shipping Label Button */}
+        <div className="flex items-center justify-center gap-2 max-w-xs mx-auto">
+          {/* 1. Print Shipping Label */}
           {onPrintShippingLabel && (
             <button
               type="button"
@@ -313,24 +219,55 @@ const OrderRow = React.memo<OrderRowProps>(({
                 e.stopPropagation();
                 onPrintShippingLabel(ord);
               }}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-bold transition border border-slate-200 active:scale-95 cursor-pointer"
-              title="ພິມໃບປະໜ້າພັດສະດຸ"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-bold transition border border-slate-200 active:scale-95 cursor-pointer shadow-2xs"
+              title={currentLang === 'lo' ? 'ພິມໃບປະໜ້າພັດສະດຸ' : 'Print Shipping Label'}
             >
               <PackageCheck className="w-3.5 h-3.5 text-sky-600" />
-              <span>ໃບປະໜ້າ</span>
+              <span>{currentLang === 'lo' ? 'ໃບປະໜ້າ' : 'Label'}</span>
             </button>
           )}
 
-          {/* View Details Button */}
+          {/* 2. View Details */}
           <button
             type="button"
             onClick={() => onViewDetails(ord)}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 hover:text-slate-950 rounded-xl text-xs font-bold transition shadow-xs border border-slate-200 active:scale-95 cursor-pointer"
-            title="ເບິ່ງລາຍລະອຽດ"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 hover:text-slate-950 rounded-xl text-xs font-bold transition shadow-xs border border-slate-200 active:scale-95 cursor-pointer"
+            title={currentLang === 'lo' ? 'ເບິ່ງລາຍລະອຽດ' : 'View Details'}
           >
             <Eye className="w-3.5 h-3.5 text-slate-600" />
-            <span>ເບິ່ງລາຍລະອຽດ</span>
+            <span>{currentLang === 'lo' ? 'ເບິ່ງລາຍລະອຽດ' : 'Details'}</span>
           </button>
+
+          {/* 3. Edit Order */}
+          {onEditOrder && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditOrder(ord);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 hover:text-amber-950 rounded-xl text-xs font-bold transition border border-amber-200 active:scale-95 cursor-pointer shadow-2xs"
+              title={currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ' : 'Edit Order'}
+            >
+              <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+              <span>{currentLang === 'lo' ? 'ແກ້ໄຂ' : 'Edit'}</span>
+            </button>
+          )}
+
+          {/* 4. Delete Order */}
+          {onDeleteOrder && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteOrder(ord);
+              }}
+              className="inline-flex items-center justify-center p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl text-xs transition border border-transparent hover:border-red-200 active:scale-95 cursor-pointer"
+              title={currentLang === 'lo' ? 'ລົບອໍເດີ' : 'Delete Order'}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </td>
     </tr>
