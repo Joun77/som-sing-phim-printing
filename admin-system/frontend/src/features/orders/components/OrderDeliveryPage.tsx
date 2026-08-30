@@ -61,7 +61,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
   const deliveryAddress = order.address || order.delivery_address || 'Saysettha, Vientiane';
   const totalAmountLAK = Number(order.totalPriceCharged || order.totalAmount || order.total_amount_lak || 86250);
 
-  const { couriers } = useApp();
+  const { couriers, updateOrderTracking, addDelivery } = useApp();
   const [isCourierModalOpen, setIsCourierModalOpen] = useState(false);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
 
@@ -122,6 +122,25 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
     }
     setIsDispatched(true);
     handleStatusChange(order.id, 'Dispatched');
+
+    if (updateOrderTracking) {
+      updateOrderTracking(order.id, courier, trackingNumber, shippingFee);
+    }
+    if (addDelivery) {
+      addDelivery({
+        orderId: order.id,
+        orderNumber: orderIdDisplay,
+        customerName: customerName,
+        courierId: courier,
+        courierName: courier,
+        trackingCode: trackingNumber,
+        shippingFeeLAK: shippingFee,
+        status: 'IN_TRANSIT',
+        dispatchedAt: new Date().toISOString(),
+        podImageUrl: courierProofImage || ''
+      });
+    }
+
     if (order) {
       order.status = 'Dispatched';
       order.isDispatched = true;

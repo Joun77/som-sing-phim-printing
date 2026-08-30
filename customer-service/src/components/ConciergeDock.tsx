@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useShop } from '../context/ShopContext.tsx'
 import { WhatsAppIcon, SparkleIcon } from './icons.tsx'
+import { X } from 'lucide-react'
 
 export default function ConciergeDock() {
   const [isOpen, setIsOpen] = useState(false)
@@ -56,11 +57,11 @@ export default function ConciergeDock() {
             </div>
             <button
               type="button"
-              className="concierge-close-btn"
+              className="concierge-close-btn flex items-center justify-center"
               onClick={() => setIsOpen(false)}
               aria-label="Close Concierge Menu"
             >
-              ✕
+              <X size={14} />
             </button>
           </div>
           <div className="concierge-popup-body">
@@ -109,7 +110,7 @@ export default function ConciergeDock() {
         <span className="concierge-trigger-pulse" />
         <span className="concierge-trigger-icon">
           {isOpen ? (
-            '✕'
+            <X size={18} />
           ) : (
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />

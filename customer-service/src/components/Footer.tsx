@@ -13,6 +13,7 @@ import {
   ShieldIcon,
   PrinterIcon
 } from './icons.tsx'
+import { Lock, Check } from 'lucide-react'
 
 export default function Footer() {
   const { t, language, categories } = useShop()
@@ -103,14 +104,14 @@ export default function Footer() {
                 href="https://som-sing-phim-admin.web.app" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-amber-600 font-bold"
+                className="text-amber-600 font-bold flex items-center gap-1.5"
               >
-                {isLao ? '🔒 ລະບົບຈັດການຫຼັງຮ້ານ (Admin ERP)' : '🔒 Staff / Admin Portal'}
+                <Lock className="w-3.5 h-3.5 inline" /> {isLao ? 'ລະບົບຈັດການຫຼັງຮ້ານ (Admin ERP)' : 'Staff / Admin Portal'}
               </a>
             </li>
             <li>
-              <span className="text-muted text-xs">
-                {isLao ? '✓ ຮັບໄຟລ໌ຜ່ານ Google Drive & PDF' : '✓ Accepts Google Drive & Print-Ready PDF'}
+              <span className="text-muted text-xs flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5 text-emerald-500 inline" /> {isLao ? 'ຮັບໄຟລ໌ຜ່ານ Google Drive & PDF' : 'Accepts Google Drive & Print-Ready PDF'}
               </span>
             </li>
           </ul>
@@ -142,10 +143,13 @@ export default function Footer() {
       <div className="footer-bottom">
         <div className="container footer-bottom-inner">
           <span>© {new Date().getFullYear()} {t('appName')} {t('appSub')} — High-Precision Print Atelier</span>
-          <span className="footer-payment">
-            {isLao
-              ? '✓ ຮັບຊຳລະຜ່ານ BCEL OnePay QR, ໂອນເງິນຜ່ານທະນາຄານ ແລະ ຈັດສົ່ງຜ່ານ Anousith & HAL'
-              : '✓ Supports BCEL OnePay QR, Bank Transfer & Expedited Nationwide Logistics'}
+          <span className="footer-payment flex items-center gap-1.5">
+            <Check className="w-3.5 h-3.5 text-emerald-500 inline shrink-0" />
+            <span>
+              {isLao
+                ? 'ຮັບຊຳລະຜ່ານ BCEL OnePay QR, ໂອນເງິນຜ່ານທະນາຄານ ແລະ ຈັດສົ່ງຜ່ານ Anousith & HAL'
+                : 'Supports BCEL OnePay QR, Bank Transfer & Expedited Nationwide Logistics'}
+            </span>
           </span>
         </div>
       </div>

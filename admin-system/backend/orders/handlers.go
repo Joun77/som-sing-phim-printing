@@ -64,7 +64,19 @@ func HandleCreateOrder(c *gin.Context) {
 		return
 	}
 
+	if req.IdempotencyKey == "" {
+		req.IdempotencyKey = c.GetHeader("Idempotency-Key")
+	}
+
 	if req.IdempotencyKey != "" {
+		if db.DB != nil {
+			existing, err := getOrderByIdempotencyKeyFromDB(req.IdempotencyKey)
+			if err == nil && existing.ID != "" {
+				c.JSON(http.StatusOK, existing)
+				return
+			}
+		}
+
 		storeMutex.RLock()
 		for _, existing := range ordersStore {
 			if existing.IdempotencyKey != "" && existing.IdempotencyKey == req.IdempotencyKey {
@@ -712,9 +724,11 @@ func getOrderByIDFromDB(orderID string) (Order, error) {
 		       COALESCE(customer_id, ''), COALESCE(remaining_lak, 0), COALESCE(delivery_date, ''),
 		       stock_deducted_at, COALESCE(proof_url, ''), proof_approved_at, proof_rejected_at,
 		       COALESCE(proof_signature_ip, ''), COALESCE(proof_rejection_reason, ''),
+		       COALESCE(idempotency_key, ''),
 		       created_at, updated_at
 		FROM orders
-		WHERE id = $1 OR order_no = $1 OR order_number = $1
+		WHERE id = $1 OR order_no = $1 OR order_number = $1 OR idempotency_key = $1
+		LIMIT 1
 	`
 	var st string
 	err := db.DB.QueryRow(query, orderID).Scan(
@@ -723,6 +737,47 @@ func getOrderByIDFromDB(orderID string) (Order, error) {
 		&o.CustomerID, &o.RemainingLAK, &o.DeliveryDate,
 		&o.StockDeductedAt, &o.ProofURL, &o.ProofApprovedAt, &o.ProofRejectedAt,
 		&o.ProofSignatureIP, &o.ProofRejectionReason,
+		&o.IdempotencyKey,
+		&o.CreatedAt, &o.UpdatedAt,
+	)
+	if err != nil {
+		return o, err
+	}
+	o.OrderNumber = o.OrderNo
+	o.OverallStatus = OrderStatus(st)
+	o.Status = OrderStatus(st)
+	o.DepositAmount = o.DepositLAK
+	o.TotalPrice = o.TotalAmountLAK
+	o.Items, _ = getOrderItemsFromDB(o.ID)
+	return o, nil
+}
+
+func getOrderByIdempotencyKeyFromDB(idempotencyKey string) (Order, error) {
+	var o Order
+	if db.DB == nil {
+		return o, fmt.Errorf("database connection is nil")
+	}
+	query := `
+		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''), 
+		       COALESCE(overall_status, status::text), COALESCE(deposit_lak, deposit_amount), 
+		       COALESCE(total_amount_lak, total_price), total_cost, COALESCE(google_drive_link, ''),
+		       COALESCE(customer_id, ''), COALESCE(remaining_lak, 0), COALESCE(delivery_date, ''),
+		       stock_deducted_at, COALESCE(proof_url, ''), proof_approved_at, proof_rejected_at,
+		       COALESCE(proof_signature_ip, ''), COALESCE(proof_rejection_reason, ''),
+		       COALESCE(idempotency_key, ''),
+		       created_at, updated_at
+		FROM orders
+		WHERE idempotency_key = $1
+		LIMIT 1
+	`
+	var st string
+	err := db.DB.QueryRow(query, idempotencyKey).Scan(
+		&o.ID, &o.OrderNo, &o.CustomerName, &o.CustomerPhone, &st,
+		&o.DepositLAK, &o.TotalAmountLAK, &o.TotalCost, &o.GoogleDriveLink,
+		&o.CustomerID, &o.RemainingLAK, &o.DeliveryDate,
+		&o.StockDeductedAt, &o.ProofURL, &o.ProofApprovedAt, &o.ProofRejectedAt,
+		&o.ProofSignatureIP, &o.ProofRejectionReason,
+		&o.IdempotencyKey,
 		&o.CreatedAt, &o.UpdatedAt,
 	)
 	if err != nil {
@@ -795,17 +850,135 @@ func getOrderItemsFromDB(orderID string) ([]OrderItem, error) {
 	return items, nil
 }
 
+// GetOrdersByCustomer retrieves orders matching customer_id or customer_phone
+func GetOrdersByCustomer(customerID, phone string) ([]Order, error) {
+	if db.DB == nil {
+		storeMutex.RLock()
+		defer storeMutex.RUnlock()
+		var list []Order
+		for _, o := range ordersStore {
+			if (customerID != "" && o.CustomerID == customerID) || (phone != "" && o.CustomerPhone == phone) {
+				list = append(list, o)
+			}
+		}
+		return list, nil
+	}
+
+	query := `
+		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''), 
+		       COALESCE(overall_status, status::text), COALESCE(deposit_lak, deposit_amount), 
+		       COALESCE(total_amount_lak, total_price), total_cost, COALESCE(google_drive_link, ''),
+		       COALESCE(customer_id, ''), COALESCE(remaining_lak, 0), COALESCE(delivery_date, ''),
+		       stock_deducted_at, COALESCE(proof_url, ''), proof_approved_at, proof_rejected_at,
+		       COALESCE(proof_signature_ip, ''), COALESCE(proof_rejection_reason, ''),
+		       created_at, updated_at
+		FROM orders
+		WHERE (NULLIF($1, '') IS NOT NULL AND customer_id = $1)
+		   OR (NULLIF($2, '') IS NOT NULL AND customer_phone = $2)
+		ORDER BY created_at DESC
+	`
+	rows, err := db.DB.Query(query, customerID, phone)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []Order
+	for rows.Next() {
+		var o Order
+		var st string
+		err := rows.Scan(
+			&o.ID, &o.OrderNo, &o.CustomerName, &o.CustomerPhone, &st,
+			&o.DepositLAK, &o.TotalAmountLAK, &o.TotalCost, &o.GoogleDriveLink,
+			&o.CustomerID, &o.RemainingLAK, &o.DeliveryDate,
+			&o.StockDeductedAt, &o.ProofURL, &o.ProofApprovedAt, &o.ProofRejectedAt,
+			&o.ProofSignatureIP, &o.ProofRejectionReason,
+			&o.CreatedAt, &o.UpdatedAt,
+		)
+		if err != nil {
+			continue
+		}
+		o.OrderNumber = o.OrderNo
+		o.OverallStatus = OrderStatus(st)
+		o.Status = OrderStatus(st)
+		o.DepositAmount = o.DepositLAK
+		o.TotalPrice = o.TotalAmountLAK
+		o.Items, _ = getOrderItemsFromDB(o.ID)
+		list = append(list, o)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
+func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) string {
+	var custID string
+
+	// 1. Check by customer_id if provided
+	if o.CustomerID != "" {
+		err := tx.QueryRow("SELECT id FROM customers WHERE id = $1", o.CustomerID).Scan(&custID)
+		if err == nil && custID != "" {
+			_, _ = tx.Exec("UPDATE customers SET total_spent_lak = total_spent_lak + $1, total_orders_count = total_orders_count + 1, updated_at = NOW() WHERE id = $2", o.TotalAmountLAK, custID)
+			return custID
+		}
+	}
+
+	// 2. Check by phone
+	if custID == "" && o.CustomerPhone != "" {
+		err := tx.QueryRow("SELECT id FROM customers WHERE phone = $1", o.CustomerPhone).Scan(&custID)
+		if err == nil && custID != "" {
+			_, _ = tx.Exec("UPDATE customers SET total_spent_lak = total_spent_lak + $1, total_orders_count = total_orders_count + 1, updated_at = NOW() WHERE id = $2", o.TotalAmountLAK, custID)
+			return custID
+		}
+	}
+
+	// 3. Check by email
+	if custID == "" && o.CustomerEmail != "" {
+		err := tx.QueryRow("SELECT id FROM customers WHERE email = $1", o.CustomerEmail).Scan(&custID)
+		if err == nil && custID != "" {
+			_, _ = tx.Exec("UPDATE customers SET total_spent_lak = total_spent_lak + $1, total_orders_count = total_orders_count + 1, updated_at = NOW() WHERE id = $2", o.TotalAmountLAK, custID)
+			return custID
+		}
+	}
+
+	// 4. Auto-create customer profile if not found
+	custID = fmt.Sprintf("cust-%d", time.Now().UnixNano()/1e6)
+	custName := o.CustomerName
+	if custName == "" {
+		custName = "Customer " + o.CustomerPhone
+	}
+
+	insertCustQuery := `
+		INSERT INTO customers (id, name, phone, email, credit_limit, payment_terms, total_spent_lak, total_orders_count, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, 2000000.00, 'Net 30', $5, 1, NOW(), NOW())
+		ON CONFLICT (id) DO NOTHING
+	`
+	_, err := tx.Exec(insertCustQuery, custID, custName, o.CustomerPhone, o.CustomerEmail, o.TotalAmountLAK)
+	if err != nil {
+		log.Printf("[DB WARN] Failed to auto-create customer: %v", err)
+	}
+
+	return custID
+}
+
 func saveOrderToDB(o Order) error {
 	return db.RunInTransaction(func(tx *sql.Tx) error {
+		// Phase C: Customer Auto-Creation & Identity Linking
+		if linkedCustID := autoLinkOrCreateCustomer(tx, o); linkedCustID != "" {
+			o.CustomerID = linkedCustID
+		}
+
 		orderQuery := `
 			INSERT INTO orders (id, order_no, order_number, customer_id, customer_name, customer_phone, 
 			                    status, overall_status, deposit_amount, deposit_lak, remaining_lak,
 			                    total_price, total_amount_lak, total_cost, delivery_date, google_drive_link, 
 			                    stock_deducted_at, proof_url, proof_approved_at, proof_rejected_at,
-			                    proof_signature_ip, proof_rejection_reason,
+			                    proof_signature_ip, proof_rejection_reason, idempotency_key,
 			                    created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, NOW(), NOW())
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW(), NOW())
 			ON CONFLICT (id) DO UPDATE SET
+				customer_id = EXCLUDED.customer_id,
 				status = EXCLUDED.status,
 				overall_status = EXCLUDED.overall_status,
 				deposit_amount = EXCLUDED.deposit_amount,
@@ -817,6 +990,7 @@ func saveOrderToDB(o Order) error {
 				proof_rejected_at = EXCLUDED.proof_rejected_at,
 				proof_signature_ip = EXCLUDED.proof_signature_ip,
 				proof_rejection_reason = EXCLUDED.proof_rejection_reason,
+				idempotency_key = EXCLUDED.idempotency_key,
 				updated_at = NOW()
 		`
 		_, err := tx.Exec(orderQuery,
@@ -824,7 +998,7 @@ func saveOrderToDB(o Order) error {
 			string(o.Status), string(o.OverallStatus), o.DepositAmount, o.DepositLAK, o.RemainingLAK,
 			o.TotalPrice, o.TotalAmountLAK, o.TotalCost, o.DeliveryDate, o.GoogleDriveLink,
 			o.StockDeductedAt, o.ProofURL, o.ProofApprovedAt, o.ProofRejectedAt,
-			o.ProofSignatureIP, o.ProofRejectionReason,
+			o.ProofSignatureIP, o.ProofRejectionReason, o.IdempotencyKey,
 		)
 		if err != nil {
 			return err
@@ -1132,7 +1306,15 @@ func HandleApproveQuotation(c *gin.Context) {
 				    updated_at = NOW() 
 				WHERE id = $1 OR order_no = $1 OR order_number = $1
 			`
-			_, err := tx.Exec(updateQuery, id)
+			_, _ = tx.Exec(updateQuery, id)
+
+			updateQuoteQuery := `
+				UPDATE quotations
+				SET status = 'ACCEPTED',
+				    updated_at = NOW()
+				WHERE id = $1 OR quotation_no = $1
+			`
+			_, err := tx.Exec(updateQuoteQuery, id)
 			return err
 		})
 	}
@@ -1179,7 +1361,16 @@ func HandleRejectQuotation(c *gin.Context) {
 				    updated_at = NOW() 
 				WHERE id = $1 OR order_no = $1 OR order_number = $1
 			`
-			_, err := tx.Exec(updateQuery, id, req.Reason)
+			_, _ = tx.Exec(updateQuery, id, req.Reason)
+
+			updateQuoteQuery := `
+				UPDATE quotations
+				SET status = 'REJECTED',
+				    notes = COALESCE(notes, '') || ' [Rejected: ' || $2 || ']',
+				    updated_at = NOW()
+				WHERE id = $1 OR quotation_no = $1
+			`
+			_, err := tx.Exec(updateQuoteQuery, id, req.Reason)
 			return err
 		})
 	}
@@ -1445,7 +1636,40 @@ func HandleUpdateOrder(c *gin.Context) {
 			depositAmount = val
 		}
 
-		if customerName != "" || status != "" || totalPrice > 0 || deliveryDate != "" {
+		var courierName, trackingCode, courierBranch string
+		var shippingFee float64
+
+		if val, ok := updateReq["courier_name"].(string); ok {
+			courierName = val
+		} else if val, ok := updateReq["courier"].(string); ok {
+			courierName = val
+		} else if val, ok := updateReq["deliveryMethod"].(string); ok {
+			courierName = val
+		}
+
+		if val, ok := updateReq["internal_tracking_code"].(string); ok {
+			trackingCode = val
+		} else if val, ok := updateReq["tracking_number"].(string); ok {
+			trackingCode = val
+		} else if val, ok := updateReq["tracking_code"].(string); ok {
+			trackingCode = val
+		} else if val, ok := updateReq["trackingNumber"].(string); ok {
+			trackingCode = val
+		}
+
+		if val, ok := updateReq["branch_code"].(string); ok {
+			courierBranch = val
+		} else if val, ok := updateReq["courierBranch"].(string); ok {
+			courierBranch = val
+		}
+
+		if val, ok := updateReq["shipping_fee"].(float64); ok {
+			shippingFee = val
+		} else if val, ok := updateReq["shippingFee"].(float64); ok {
+			shippingFee = val
+		}
+
+		if customerName != "" || status != "" || totalPrice > 0 || deliveryDate != "" || courierName != "" || trackingCode != "" || courierBranch != "" || shippingFee > 0 {
 			_, err := db.DB.Exec(`
 				UPDATE orders 
 				SET customer_name = COALESCE(NULLIF($1, ''), customer_name),
@@ -1459,14 +1683,52 @@ func HandleUpdateOrder(c *gin.Context) {
 				    deposit_amount = CASE WHEN $7 > 0 THEN $7 ELSE deposit_amount END,
 				    deposit_lak = CASE WHEN $7 > 0 THEN $7 ELSE deposit_lak END,
 				    remaining_lak = CASE WHEN $6 > 0 THEN GREATEST(0, $6 - $7) ELSE remaining_lak END,
+				    courier_name = COALESCE(NULLIF($8, ''), courier_name),
+				    internal_tracking_code = COALESCE(NULLIF($9, ''), internal_tracking_code),
+				    tracking_code = COALESCE(NULLIF($9, ''), tracking_code),
 				    updated_at = NOW()
-				WHERE id = $8 OR order_no = $8 OR order_number = $8
-			`, customerName, customerPhone, deliveryDate, status, googleDriveLink, totalPrice, depositAmount, id)
+				WHERE id = $10 OR order_no = $10 OR order_number = $10
+			`, customerName, customerPhone, deliveryDate, status, googleDriveLink, totalPrice, depositAmount, courierName, trackingCode, id)
 			if err != nil {
 				log.Printf("[DB ERROR] Failed to update order %s: %v", id, err)
 			}
+			_ = courierBranch
+			_ = shippingFee
 		}
 	}
+
+	storeMutex.Lock()
+	if ord, exists := ordersStore[id]; exists {
+		if val, ok := updateReq["status"].(string); ok && val != "" {
+			ord.Status = OrderStatus(val)
+			ord.OverallStatus = OrderStatus(val)
+		}
+		if val, ok := updateReq["courier_name"].(string); ok && val != "" {
+			ord.CourierName = val
+		} else if val, ok := updateReq["courier"].(string); ok && val != "" {
+			ord.CourierName = val
+		}
+		if val, ok := updateReq["internal_tracking_code"].(string); ok && val != "" {
+			ord.InternalTrackingCode = val
+			ord.TrackingCode = val
+		} else if val, ok := updateReq["tracking_number"].(string); ok && val != "" {
+			ord.InternalTrackingCode = val
+			ord.TrackingCode = val
+		}
+		if val, ok := updateReq["branch_code"].(string); ok && val != "" {
+			ord.CourierBranch = val
+		} else if val, ok := updateReq["courierBranch"].(string); ok && val != "" {
+			ord.CourierBranch = val
+		}
+		if val, ok := updateReq["shipping_fee"].(float64); ok && val > 0 {
+			ord.ShippingFee = val
+		} else if val, ok := updateReq["shippingFee"].(float64); ok && val > 0 {
+			ord.ShippingFee = val
+		}
+		ord.UpdatedAt = time.Now()
+		ordersStore[id] = ord
+	}
+	storeMutex.Unlock()
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "updated_id": id, "data": updateReq})
 }

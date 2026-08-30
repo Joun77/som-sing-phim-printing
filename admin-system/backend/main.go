@@ -51,11 +51,20 @@ func main() {
 	router.Static("/api/v1/orders/files", "./uploads")
 
 	// Server status health check
-	router.GET("/health", func(c *gin.Context) {
+	healthHandler := func(c *gin.Context) {
+		dbStatus := "disconnected"
+		if db.DB != nil {
+			if err := db.DB.Ping(); err == nil {
+				dbStatus = "connected"
+			}
+		}
 		c.JSON(http.StatusOK, gin.H{
-			"status": "healthy",
+			"status":   "healthy",
+			"database": dbStatus,
 		})
-	})
+	}
+	router.GET("/health", healthHandler)
+	router.GET("/api/health", healthHandler)
 
 	// Auth routes
 	router.POST("/api/auth/login", auth.HandleLogin)
@@ -134,6 +143,8 @@ func main() {
 	router.GET("/api/quotations", orders.HandleGetQuotations)
 	router.POST("/api/v1/quotations", orders.HandleSaveQuotation)
 	router.POST("/api/quotations", orders.HandleSaveQuotation)
+	router.PUT("/api/v1/quotations/:id", orders.HandleSaveQuotation)
+	router.PUT("/api/quotations/:id", orders.HandleSaveQuotation)
 	router.DELETE("/api/v1/quotations/:id", orders.HandleDeleteQuotation)
 	router.DELETE("/api/quotations/:id", orders.HandleDeleteQuotation)
 	router.POST("/api/v1/quotations/:id/approve", orders.HandleApproveQuotation)
@@ -143,6 +154,7 @@ func main() {
 	router.POST("/api/v1/orders/upload", orders.HandleUploadOrderFile)
 	router.PATCH("/api/v1/orders/items/:id/step", orders.HandleUpdateOrderItemStep)
 	router.GET("/api/v1/orders/track/:order_no", orders.HandleGetOrderByOrderNo)
+	router.GET("/api/orders/track/:order_no", orders.HandleGetOrderByOrderNo)
 	router.PUT("/api/orders/:id/deposit", orders.HandleRecordDeposit)
 	router.PUT("/api/orders/:id/status", orders.HandleUpdateOrderStatus)
 	router.GET("/api/v1/orders/stream", orders.HandleOrderProgressSSEStream)
@@ -169,6 +181,12 @@ func main() {
 	router.POST("/api/v1/proof/:order_id/:token/approve", orders.HandleApproveProof)
 	router.POST("/api/v1/proof/:order_id/:token/reject", orders.HandleRejectProof)
 
+	// Public Customer Portal routes
+	router.POST("/api/v1/public/customer/auth", customers.HandlePublicCustomerAuth)
+	router.GET("/api/v1/public/customer/profile", customers.HandlePublicCustomerProfile)
+	router.PUT("/api/v1/public/customer/profile", customers.HandleSavePublicCustomerProfile)
+	router.GET("/api/v1/public/customer/orders", customers.HandlePublicCustomerOrders)
+
 	// Admin Notification Settings routes
 	router.GET("/api/v1/admin/notification-config", settings.HandleGetNotificationConfig)
 	router.PUT("/api/v1/admin/notification-config", settings.HandleUpdateNotificationConfig)
@@ -183,8 +201,18 @@ func main() {
 
 	// CRM Customer routes
 	router.GET("/api/customers", customers.HandleGetCustomers)
+	router.GET("/api/customers/:id", customers.HandleGetCustomerByID)
+	router.GET("/api/customers/:id/orders", customers.HandleGetCustomerOrders)
 	router.POST("/api/customers", customers.HandleCreateCustomer)
 	router.PUT("/api/customers/:id", customers.HandleUpdateCustomer)
+	router.DELETE("/api/customers/:id", customers.HandleDeleteCustomer)
+
+	router.GET("/api/v1/customers", customers.HandleGetCustomers)
+	router.GET("/api/v1/customers/:id", customers.HandleGetCustomerByID)
+	router.GET("/api/v1/customers/:id/orders", customers.HandleGetCustomerOrders)
+	router.POST("/api/v1/customers", customers.HandleCreateCustomer)
+	router.PUT("/api/v1/customers/:id", customers.HandleUpdateCustomer)
+	router.DELETE("/api/v1/customers/:id", customers.HandleDeleteCustomer)
 
 	// Spoilage audit log routes
 	router.GET("/api/spoilage", spoilage.HandleGetSpoilageLogs)
@@ -317,6 +345,26 @@ func main() {
 	router.GET("/api/v1/admin/shop-info", settings.HandleGetShopInfo)
 	router.PUT("/api/v1/admin/shop-info", settings.HandleUpdateShopInfo)
 	router.POST("/api/v1/admin/shop-info", settings.HandleUpdateShopInfo)
+
+	// Technician Piece-Rate Earnings routes
+	router.GET("/api/v1/hr/earnings", hr.HandleGetTechnicianEarnings)
+	router.POST("/api/v1/hr/earnings", hr.HandleCreateTechnicianEarning)
+	router.GET("/api/hr/earnings", hr.HandleGetTechnicianEarnings)
+	router.POST("/api/hr/earnings", hr.HandleCreateTechnicianEarning)
+
+	// Machine Status & Downtime Logs routes
+	router.GET("/api/v1/production/downtime", inventory.HandleGetDowntimeLogs)
+	router.POST("/api/v1/production/downtime", inventory.HandleCreateDowntimeLog)
+	router.GET("/api/production/downtime", inventory.HandleGetDowntimeLogs)
+	router.POST("/api/production/downtime", inventory.HandleCreateDowntimeLog)
+
+	// Delivery & Dispatch Tracking routes
+	router.GET("/api/v1/orders/deliveries", orders.HandleGetDeliveries)
+	router.POST("/api/v1/orders/deliveries", orders.HandleSaveDelivery)
+	router.PUT("/api/v1/orders/deliveries/:id", orders.HandleUpdateDelivery)
+	router.GET("/api/orders/deliveries", orders.HandleGetDeliveries)
+	router.POST("/api/orders/deliveries", orders.HandleSaveDelivery)
+	router.PUT("/api/orders/deliveries/:id", orders.HandleUpdateDelivery)
 
 	// Start Daily Predictive Maintenance Background Cron
 	inventory.StartPPMDailyCron()

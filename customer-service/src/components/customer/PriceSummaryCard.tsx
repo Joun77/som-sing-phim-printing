@@ -1,4 +1,5 @@
 import React from 'react';
+import { Check, Clock } from 'lucide-react';
 import { CustomerPriceQuote } from '../../types/pricing';
 
 interface PriceSummaryCardProps {
@@ -20,21 +21,29 @@ export const PriceSummaryCard: React.FC<PriceSummaryCardProps> = ({
   const isAutoVerified = quote?.badge === 'AUTO_VERIFIED';
 
   return (
-    <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xl border border-slate-800 space-y-6">
-      <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+      <div className="flex items-center justify-between pb-4 border-b border-slate-800">
         <div>
           <h3 className="text-lg font-bold text-slate-100">สรุปราคาประเมิน</h3>
           <p className="text-xs text-slate-400">คำนวณราคาอัตโนมัติ Real-time</p>
         </div>
         {quote && (
           <span
-            className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
+            className={`text-xs px-2.5 py-1 rounded-full font-semibold flex items-center gap-1.5 ${
               isAutoVerified
                 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                 : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
             }`}
           >
-            {isAutoVerified ? '✓ ตรวจไฟล์อัตโนมัติ' : '⏳ อัตราประเมินมาตรฐาน'}
+            {isAutoVerified ? (
+              <>
+                <Check className="w-3 h-3 text-emerald-400" /> ตรวจไฟล์อัตโนมัติ
+              </>
+            ) : (
+              <>
+                <Clock className="w-3 h-3 text-amber-400" /> อัตราประเมินมาตรฐาน
+              </>
+            )}
           </span>
         )}
       </div>

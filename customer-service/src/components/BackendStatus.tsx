@@ -1,10 +1,10 @@
 import { useShop } from '../context/ShopContext.tsx'
 
 const LABELS = {
-  checking: { dot: 'is-checking', text: 'กำลังตรวจสอบ…' },
-  connected: { dot: 'is-on', text: 'เชื่อมต่อ backend แล้ว' },
-  demo: { dot: 'is-demo', text: 'Demo Mode' },
-  offline: { dot: 'is-off', text: 'ไม่พบ backend' },
+  checking: { dot: 'is-checking', text: 'ກຳລັງກວດສອບ...' },
+  connected: { dot: 'is-on', text: 'ເຊື່ອມຕໍ່ Backend Real-time' },
+  demo: { dot: 'is-demo', text: 'ໂໝດ Offline / Demo' },
+  offline: { dot: 'is-off', text: 'ລະບົບຢູ່ໃນໂໝດ Offline / Demo' },
 }
 
 export default function BackendStatus() {
@@ -19,11 +19,11 @@ export default function BackendStatus() {
       onClick={testConnection}
       disabled={busy}
       title={connection.message}
-      aria-label="ทดสอบการเชื่อมต่อระบบหลังบ้าน"
+      aria-label="ກວດສອບການເຊື່ອມຕໍ່ລະບົບ"
     >
       <span className="backend-status-dot" aria-hidden="true" />
       <span className="backend-status-text">
-        {connection.status === 'connected' ? meta.text : connection.status === 'checking' ? meta.text : 'เชื่อมต่อ'}
+        {connection.status === 'connected' ? meta.text : connection.status === 'checking' ? meta.text : meta.text}
       </span>
     </button>
   )

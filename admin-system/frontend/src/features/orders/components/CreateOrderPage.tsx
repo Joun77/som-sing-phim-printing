@@ -376,7 +376,7 @@ export default function CreateOrderPage({
           target_margin_percent: (Number(it.targetMarginPercent) || 35) / 100.0
         };
 
-        const response = await fetch('http://localhost:8080/api/pricing/calculate', {
+        const response = await fetch('/api/pricing/calculate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -555,7 +555,7 @@ export default function CreateOrderPage({
       })
     };
 
-    fetch('http://localhost:8080/api/orders', {
+    fetch('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -566,7 +566,7 @@ export default function CreateOrderPage({
     })
     .then(orderData => {
       if (paymentStatus === 'Deposit Paid' && depositAmountPaid > 0) {
-        return fetch(`http://localhost:8080/api/orders/${orderData.id}/deposit`, {
+        return fetch(`/api/orders/${orderData.id}/deposit`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ deposit_amount: Number(depositAmountPaid) })

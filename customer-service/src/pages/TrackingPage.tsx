@@ -143,18 +143,45 @@ export default function TrackingPage() {
 
   useEffect(() => {
     if (!order) return
-    const interval = setInterval(() => {
-      const id = order.order_id || order.id
-      if (id) {
-        trackOrder(id).then((res) => {
-          if (res && res.status !== order.status) {
-            setOrder(res)
-          }
+    const id = order.order_id || order.id
+    if (!id) return
+
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '/api'
+    const sseUrl = `${apiBase}/v1/orders/stream?tracking=${encodeURIComponent(id)}`
+    let eventSource: EventSource | null = null
+
+    try {
+      eventSource = new EventSource(sseUrl)
+      
+      const handleStreamUpdate = (data: any) => {
+        if (!data) return
+        if (typeof data === 'string') {
+          try { data = JSON.parse(data) } catch (e) {}
+        }
+        trackOrder(id).then((updated) => {
+          if (updated) setOrder(updated)
         }).catch(() => {})
       }
-    }, 10000)
-    return () => clearInterval(interval)
-  }, [order])
+
+      eventSource.onmessage = (e) => {
+        handleStreamUpdate(e.data)
+      }
+      eventSource.addEventListener('order_status_update', (e: MessageEvent) => {
+        handleStreamUpdate(e.data)
+      })
+      eventSource.addEventListener('proof_update', (e: MessageEvent) => {
+        handleStreamUpdate(e.data)
+      })
+    } catch (e) {
+      console.warn('SSE stream notice:', e)
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close()
+      }
+    }
+  }, [order?.order_id, order?.id])
 
   const handleApproveProof = async () => {
     if (!order) return
@@ -330,9 +357,15 @@ export default function TrackingPage() {
                 <span className="tracking-status-label font-bold text-slate-800">
                   {steps[currentIdx]?.title}
                 </span>
-                <span className={`badge ${order.status === 'DELIVERED' || order.status === 'COMPLETED' ? 'badge--green' : 'badge--gold'}`}>
-                  {order.status === 'DELIVERED' || order.status === 'COMPLETED' ? (language === 'en' ? 'Completed' : 'ຈັດສົ່ງສຳເລັດ') : (language === 'en' ? 'In Progress' : 'ກຳລັງດຳເນີນການ')}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[11px] font-black flex items-center gap-1.5 animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>ອັບເດດສະຖານະສົດ (Live Sync)</span>
+                  </span>
+                  <span className={`badge ${order.status === 'DELIVERED' || order.status === 'COMPLETED' ? 'badge--green' : 'badge--gold'}`}>
+                    {order.status === 'DELIVERED' || order.status === 'COMPLETED' ? (language === 'en' ? 'Completed' : 'ຈັດສົ່ງສຳເລັດ') : (language === 'en' ? 'In Progress' : 'ກຳລັງດຳເນີນການ')}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -351,7 +384,7 @@ export default function TrackingPage() {
                   </div>
                   <div>
                     <h4 className="text-base font-black m-0" style={{ color: 'var(--text-main)' }}>
-                      {language === 'en' ? 'Action Required: Digital Proof Ready' : '🔔 ຕ້ອງກວດສອບ: ໄຟລ໌ Proof ພ້ອມໃຫ້ກວດແລ້ວ'}
+                      {language === 'en' ? 'Action Required: Digital Proof Ready' : 'ຕ້ອງກວດສອບ: ໄຟລ໌ Proof ພ້ອມໃຫ້ກວດແລ້ວ'}
                     </h4>
                     <p className="text-xs sm:text-sm m-0" style={{ color: 'var(--text-muted)' }}>
                       {language === 'en'
@@ -503,7 +536,7 @@ export default function TrackingPage() {
               {showRevisionBox && !proofApproved && !revisionRequested && (
                 <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid rgba(212,175,55,0.15)' }}>
                   <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '6px', color: 'var(--text)' }}>
-                    {language === 'en' ? 'Detail what needs revision:' : 'ລະບຸລາຍລະອຽດທີ່ຕ້ອງການໃຫ້ແກ້ໄຂ:'}
+                    {language === 'en' ? 'Detail what needs revision:' : 'ລະບຸລາຍລະອຽດที่ຕ້ອງການໃຫ້ແກ້ໄຂ:'}
                   </label>
                   <textarea
                     rows={3}
@@ -567,7 +600,7 @@ export default function TrackingPage() {
                       onClick={() => setZoomProof(false)}
                       className="btn btn--outline btn--sm"
                     >
-                      ✕ Close
+                      Close
                     </button>
                   </div>
                   <img
@@ -634,7 +667,7 @@ export default function TrackingPage() {
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                   >
                     <RefreshIcon size={18} />
-                    <span>{reorderSuccess ? '✓ ເພີ່ມລົງກະຕ່າແລ້ວ (Added)' : 'ສັ່ງພິມຊ້ຳ (Re-order)'}</span>
+                    <span>{reorderSuccess ? 'ເພີ່ມລົງກະຕ່າແລ້ວ (Added)' : 'ສັ່ງພິມຊ້ຳ (Re-order)'}</span>
                   </button>
                 </div>
               )}
@@ -646,7 +679,7 @@ export default function TrackingPage() {
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
               >
                 <RefreshIcon size={20} />
-                <span>{reorderSuccess ? '✓ ເພີ່ມລົງກະຕ່າສິນຄ້າແລ້ວ' : 'ສັ່ງພິມຊ້ຳ (Re-order)'}</span>
+                <span>{reorderSuccess ? 'ເພີ່ມລົງກະຕ່າສິນຄ້າແລ້ວ' : 'ສັ່ງພິມຊ້ຳ (Re-order)'}</span>
               </button>
 
               <a

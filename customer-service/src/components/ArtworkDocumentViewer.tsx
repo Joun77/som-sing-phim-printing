@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { FileTextIcon, EyeIcon, DownloadIcon, CheckIcon, AlertCircleIcon, XIcon } from './icons'
-import { Trash2, FileText, Zap, Maximize2 } from 'lucide-react'
+import { Trash2, FileText, Zap, Maximize2, Lock, RefreshCw, Check } from 'lucide-react'
 import { PreflightReport } from '../lib/preflightAnalyzer'
 
 interface ArtworkDocumentViewerProps {
@@ -92,7 +92,7 @@ export const ArtworkDocumentViewer: React.FC<ArtworkDocumentViewerProps> = ({
             </div>
 
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] font-mono text-slate-500 max-w-[260px] truncate">
-              <span className="text-emerald-500">🔒</span>
+              <Lock className="w-3 h-3 text-emerald-500 shrink-0" />
               <span className="truncate">somsingphim.la/proof/{fileName}</span>
             </div>
           </div>
@@ -120,9 +120,10 @@ export const ArtworkDocumentViewer: React.FC<ArtworkDocumentViewerProps> = ({
             <button
               type="button"
               onClick={onReupload}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition cursor-pointer"
+              className="px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition cursor-pointer flex items-center gap-1"
             >
-              🔄 ປ່ຽນຟາຍ
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>ປ່ຽນຟາຍ</span>
             </button>
 
             {onDelete && (
@@ -207,8 +208,8 @@ export const ArtworkDocumentViewer: React.FC<ArtworkDocumentViewerProps> = ({
                 ລາຍລະອຽດ ແລະ ຜົນການວິເຄາະຟາຍພິມ (Artwork Preflight Report)
               </h4>
             </div>
-            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-              ✓ ຜ່ານມາດຕະຖານໂຮງພິມ
+            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+              <Check className="w-3 h-3 inline" /> ຜ່ານມາດຕະຖານໂຮງພິມ
             </span>
           </div>
 
@@ -248,7 +249,9 @@ export const ArtworkDocumentViewer: React.FC<ArtworkDocumentViewerProps> = ({
 
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
             <span className="flex items-center gap-1.5"><FileText className="w-3.5 h-3.5 text-amber-500" /><span>ຊື່ຟາຍ:</span> <strong className="text-slate-700 dark:text-slate-300 font-mono">{fileName}</strong> ({report.fileSizeMB} MB)</span>
-            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">✓ ຕັດຕົກ (Bleed +3mm) ພ້ອມພິມທັນທີ</span>
+            <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+              <Check className="w-3 h-3 inline" /> ຕັດຕົກ (Bleed +3mm) ພ້ອມພິມທັນທີ
+            </span>
           </div>
         </div>
       )}

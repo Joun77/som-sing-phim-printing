@@ -1,6 +1,7 @@
 package hr
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -27,9 +28,27 @@ type Employee struct {
 	CreatedAt  string   `json:"createdAt"`
 }
 
+type TechnicianEarning struct {
+	ID                string  `json:"id"`
+	EmployeeID        string  `json:"employeeId"`
+	EmployeeName      string  `json:"employeeName"`
+	OrderID           string  `json:"orderId"`
+	OrderNumber       string  `json:"orderNumber,omitempty"`
+	CustomerName      string  `json:"customerName,omitempty"`
+	StepID            string  `json:"stepId"`
+	StepName          string  `json:"stepName"`
+	Impressions       int     `json:"impressions"`
+	RatePerImpression float64 `json:"ratePerImpression"`
+	EarnedAmountLAK   float64 `json:"earnedAmountLAK"`
+	RecordedAt        string  `json:"recordedAt"`
+}
+
 var (
 	employeeStoreMutex  sync.RWMutex
 	employeeMemoryStore = map[string]Employee{}
+
+	earningStoreMutex  sync.RWMutex
+	earningMemoryStore = map[string]TechnicianEarning{}
 )
 
 // HandleGetEmployees returns all employees from DB or memory fallback
@@ -173,4 +192,90 @@ func saveEmployeeToDB(emp Employee) error {
 
 func updateEmployeeInDB(emp Employee) error {
 	return saveEmployeeToDB(emp)
+}
+
+// HandleGetTechnicianEarnings fetches technician earning records (optional ?employee_id= filter)
+func HandleGetTechnicianEarnings(c *gin.Context) {
+	employeeID := c.Query("employee_id")
+
+	if db.DB != nil {
+		query := `SELECT id, employee_id, employee_name, order_id, COALESCE(order_number, ''), COALESCE(customer_name, ''), step_id, step_name, impressions, rate_per_impression, earned_amount_lak, recorded_at FROM technician_earnings`
+		var rows *sql.Rows
+		var err error
+
+		if employeeID != "" {
+			query += ` WHERE employee_id = $1 ORDER BY recorded_at DESC`
+			rows, err = db.DB.Query(query, employeeID)
+		} else {
+			query += ` ORDER BY recorded_at DESC`
+			rows, err = db.DB.Query(query)
+		}
+
+		if err == nil {
+			defer rows.Close()
+			var list []TechnicianEarning
+			for rows.Next() {
+				var rec TechnicianEarning
+				var recTime time.Time
+				err := rows.Scan(&rec.ID, &rec.EmployeeID, &rec.EmployeeName, &rec.OrderID, &rec.OrderNumber, &rec.CustomerName, &rec.StepID, &rec.StepName, &rec.Impressions, &rec.RatePerImpression, &rec.EarnedAmountLAK, &recTime)
+				if err != nil {
+					continue
+				}
+				rec.RecordedAt = recTime.Format(time.RFC3339)
+				list = append(list, rec)
+			}
+			if list == nil {
+				list = []TechnicianEarning{}
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "success", "data": list})
+			return
+		}
+	}
+
+	earningStoreMutex.RLock()
+	defer earningStoreMutex.RUnlock()
+
+	var result []TechnicianEarning
+	for _, rec := range earningMemoryStore {
+		if employeeID == "" || rec.EmployeeID == employeeID {
+			result = append(result, rec)
+		}
+	}
+	if result == nil {
+		result = []TechnicianEarning{}
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": result})
+}
+
+// HandleCreateTechnicianEarning creates a new technician piece-rate earning log
+func HandleCreateTechnicianEarning(c *gin.Context) {
+	var rec TechnicianEarning
+	if err := c.ShouldBindJSON(&rec); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+
+	if rec.ID == "" {
+		rec.ID = fmt.Sprintf("EARN-%d", time.Now().UnixNano())
+	}
+	if rec.RecordedAt == "" {
+		rec.RecordedAt = time.Now().Format(time.RFC3339)
+	}
+
+	if db.DB != nil {
+		_, err := db.DB.Exec(`
+			INSERT INTO technician_earnings (id, employee_id, employee_name, order_id, order_number, customer_name, step_id, step_name, impressions, rate_per_impression, earned_amount_lak, recorded_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+			ON CONFLICT (id) DO NOTHING`,
+			rec.ID, rec.EmployeeID, rec.EmployeeName, rec.OrderID, rec.OrderNumber, rec.CustomerName, rec.StepID, rec.StepName, rec.Impressions, rec.RatePerImpression, rec.EarnedAmountLAK)
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to save technician earning: %v", err)
+		}
+	}
+
+	earningStoreMutex.Lock()
+	earningMemoryStore[rec.ID] = rec
+	earningStoreMutex.Unlock()
+
+	c.JSON(http.StatusCreated, gin.H{"status": "success", "data": rec})
 }

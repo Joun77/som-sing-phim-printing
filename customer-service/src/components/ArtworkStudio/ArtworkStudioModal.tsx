@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { CheckIcon } from '../icons.tsx'
-import { Sparkles, Image as ImageIcon, Type, Palette, Stamp, Trash2, Undo, Settings, Ruler, Info } from 'lucide-react'
+import { Sparkles, Image as ImageIcon, Type, Palette, Stamp, Trash2, Undo, Settings, Ruler, Info, MousePointer, ArrowUp, X } from 'lucide-react'
 
 export interface CanvasElement {
   id: string
@@ -58,11 +58,11 @@ const BG_PRESETS = [
 ]
 
 const STICKER_PRESETS = [
-  { id: 'gold-seal', name: '★ Premium Quality Seal ★', icon: '★', svg: 'seal' },
-  { id: 'luxury-frame', name: 'Luxury Double Frame', icon: '◫', svg: 'frame' },
-  { id: 'atelier-ribbon', name: 'Som Sing Phim Ribbon', icon: '✦', svg: 'ribbon' },
-  { id: 'gold-divider', name: 'Vintage Gold Divider', icon: '✦', svg: 'divider' },
-  { id: 'love-crest', name: 'Romantic Monogram Crest', icon: '❦', svg: 'crest' },
+  { id: 'gold-seal', name: 'Premium Quality Seal', icon: 'seal', svg: 'seal' },
+  { id: 'luxury-frame', name: 'Luxury Double Frame', icon: 'frame', svg: 'frame' },
+  { id: 'atelier-ribbon', name: 'Som Sing Phim Ribbon', icon: 'ribbon', svg: 'ribbon' },
+  { id: 'gold-divider', name: 'Vintage Gold Divider', icon: 'divider', svg: 'divider' },
+  { id: 'love-crest', name: 'Romantic Monogram Crest', icon: 'crest', svg: 'crest' },
 ]
 
 const FONTS = [
@@ -283,7 +283,7 @@ export default function ArtworkStudioModal({
       ctx.fillStyle = '#EBD8B2'
       ctx.font = 'bold 11px sans-serif'
       ctx.textAlign = 'center'
-      ctx.fillText('★ SOM SING PHIM ★', el.x + el.width / 2, el.y + el.height / 2 - 4)
+      ctx.fillText('SOM SING PHIM', el.x + el.width / 2, el.y + el.height / 2 - 4)
       ctx.font = '9px sans-serif'
       ctx.fillText('PREMIUM QUALITY', el.x + el.width / 2, el.y + el.height / 2 + 10)
     } else if (el.stickerType === 'frame') {
@@ -305,7 +305,7 @@ export default function ArtworkStudioModal({
       ctx.fillStyle = '#EBD8B2'
       ctx.font = '14px sans-serif'
       ctx.textAlign = 'center'
-      ctx.fillText('✦', el.x + el.width / 2, el.y + el.height / 2 + 5)
+      ctx.fillText('-', el.x + el.width / 2, el.y + el.height / 2 + 5)
     }
     ctx.restore()
   }
@@ -556,7 +556,7 @@ export default function ArtworkStudioModal({
               onClick={onClose}
               className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 transition cursor-pointer"
             >
-              ✕
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -568,39 +568,61 @@ export default function ArtworkStudioModal({
             className="w-64 border-r flex flex-col p-4 overflow-y-auto"
             style={{ background: 'var(--bg-primary)', borderColor: 'var(--border-subtle)' }}
           >
-            {/* Tab navigation */}
-            <div className="grid grid-cols-4 gap-1 p-1 bg-slate-900/60 rounded-xl mb-4 border border-slate-800">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+              ເຄື່ອງມືອອກແບບ (Design Tools)
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 mb-4">
               <button
                 type="button"
                 onClick={() => setActiveTab('text')}
-                className={`py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 ${activeTab === 'text' ? 'bg-gold text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                className={`py-2.5 px-3 rounded-xl text-xs font-bold flex flex-col items-center gap-1.5 transition border cursor-pointer ${
+                  activeTab === 'text'
+                    ? 'bg-amber-500/20 border-gold text-gold'
+                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                }`}
               >
-                <Type className="w-3.5 h-3.5" />
+                <Type className="w-4 h-4" />
                 <span>ຂໍ້ຄວາມ</span>
               </button>
+
               <button
                 type="button"
                 onClick={() => setActiveTab('image')}
-                className={`py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 ${activeTab === 'image' ? 'bg-gold text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                className={`py-2.5 px-3 rounded-xl text-xs font-bold flex flex-col items-center gap-1.5 transition border cursor-pointer ${
+                  activeTab === 'image'
+                    ? 'bg-amber-500/20 border-gold text-gold'
+                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                }`}
               >
-                <ImageIcon className="w-3.5 h-3.5" />
+                <ImageIcon className="w-4 h-4" />
                 <span>ຮູບພາບ</span>
               </button>
+
               <button
                 type="button"
                 onClick={() => setActiveTab('stickers')}
-                className={`py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 ${activeTab === 'stickers' ? 'bg-gold text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                className={`py-2.5 px-3 rounded-xl text-xs font-bold flex flex-col items-center gap-1.5 transition border cursor-pointer ${
+                  activeTab === 'stickers'
+                    ? 'bg-amber-500/20 border-gold text-gold'
+                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                }`}
               >
-                <Stamp className="w-3.5 h-3.5" />
-                <span>ຕາປະທັບ</span>
+                <Stamp className="w-4 h-4" />
+                <span>ກາປະທັບ</span>
               </button>
+
               <button
                 type="button"
                 onClick={() => setActiveTab('background')}
-                className={`py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 ${activeTab === 'background' ? 'bg-gold text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                className={`py-2.5 px-3 rounded-xl text-xs font-bold flex flex-col items-center gap-1.5 transition border cursor-pointer ${
+                  activeTab === 'background'
+                    ? 'bg-amber-500/20 border-gold text-gold'
+                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                }`}
               >
-                <Palette className="w-3.5 h-3.5" />
-                <span>ພື້ນຫຼັງ</span>
+                <Palette className="w-4 h-4" />
+                <span>ສີພື້ນຫຼັງ</span>
               </button>
             </div>
 
@@ -779,9 +801,10 @@ export default function ArtworkStudioModal({
                   <button
                     type="button"
                     onClick={deleteSelected}
-                    className="text-xs text-rose-400 hover:text-rose-300 font-bold cursor-pointer"
+                    className="text-xs text-rose-400 hover:text-rose-300 font-bold cursor-pointer flex items-center gap-1"
                   >
-                    ລົບຊິ້ນນີ້ ✕
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>ລົບຊິ້ນນີ້</span>
                   </button>
                 </div>
 
@@ -928,15 +951,16 @@ export default function ArtworkStudioModal({
                   <button
                     type="button"
                     onClick={bringToFront}
-                    className="w-full py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 border border-slate-700 hover:border-gold transition cursor-pointer"
+                    className="w-full py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 border border-slate-700 hover:border-gold transition cursor-pointer flex items-center justify-center gap-1.5"
                   >
-                    ⬆ ນຳຂຶ້ນມາດ້ານໜ້າສຸດ (Bring to Front)
+                    <ArrowUp className="w-3.5 h-3.5" />
+                    <span>ນຳຂຶ້ນມາດ້ານໜ້າສຸດ (Bring to Front)</span>
                   </button>
                 </div>
               </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-center text-slate-500 p-4">
-                <span className="text-3xl mb-2">👆</span>
+                <MousePointer className="w-8 h-8 mb-2 text-slate-600" />
                 <p className="text-xs font-medium">ກົດເລືອກຂໍ້ຄວາມ ຫຼື ຮູບພາບໃນແຜ່ນງານເພື່ອປັບແຕ່ງສີ, ຂະໜາດ ແລະ ຟອນ</p>
               </div>
             )}

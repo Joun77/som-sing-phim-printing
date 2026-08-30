@@ -74,13 +74,13 @@ export const BankManagementModal: React.FC<BankManagementModalProps> = ({
     formData.append('file', file);
 
     try {
-      const res = await fetch('http://localhost:8080/api/v1/admin/couriers/upload-logo', {
+      const res = await fetch('/api/v1/admin/couriers/upload-logo', {
         method: 'POST',
         body: formData,
       });
       const data = await res.json();
       if (data.status === 'success' && data.fileUrl) {
-        setQrCodeUrl(`http://localhost:8080${data.fileUrl}`);
+        setQrCodeUrl(data.fileUrl);
         showToast(
           currentLang === 'lo' ? '✓ ອັບໂຫລດຮູບ QR Code ສຳເລັດ!' : 'QR Code uploaded successfully!',
           'success'
@@ -108,13 +108,13 @@ export const BankManagementModal: React.FC<BankManagementModalProps> = ({
     formData.append('file', file);
 
     try {
-      const res = await fetch('http://localhost:8080/api/v1/admin/couriers/upload-logo', {
+      const res = await fetch('/api/v1/admin/couriers/upload-logo', {
         method: 'POST',
         body: formData,
       });
       const data = await res.json();
       if (data.status === 'success' && data.fileUrl) {
-        setLogoUrl(`http://localhost:8080${data.fileUrl}`);
+        setLogoUrl(data.fileUrl);
         showToast(
           currentLang === 'lo' ? '✓ ອັບໂຫລດໂລໂກ້ທະນາຄານສຳເລັດ!' : 'Bank logo uploaded successfully!',
           'success'

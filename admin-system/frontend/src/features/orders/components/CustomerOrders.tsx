@@ -278,7 +278,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
       return;
     }
 
-    fetch(`http://localhost:8080/api/orders/${selectedOrder.id}/deposit`, {
+    fetch(`/api/orders/${selectedOrder.id}/deposit`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deposit_amount: Number(settleAmount) })

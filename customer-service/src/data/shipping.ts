@@ -33,7 +33,7 @@ export const COURIERS: Courier[] = [
     eta: '1-2 ວັນ (1-2 Days)',
     freeAbove: 350000,
     color: '#2563eb',
-    logoUrl: 'http://localhost:8080/api/v1/orders/files/logo_1787356736419680000.png',
+    logoUrl: '/api/v1/orders/files/logo_1787356736419680000.png',
   },
 ]
 
@@ -57,7 +57,7 @@ export const BANK_ACCOUNT: BankAccount = {
   branch: 'Vientiane Head Office',
   accountName: 'Som-Sing Phim Printing Shop',
   accountNumber: '160-12-00-01234567-001',
-  bcelOnePayQr: 'http://localhost:8080/api/v1/orders/files/logo_1787357758979996000.jpg',
+  bcelOnePayQr: '/api/v1/orders/files/logo_1787357758979996000.jpg',
   promptpayName: 'Som-Sing Phim',
-  logoUrl: 'http://localhost:8080/api/v1/orders/files/logo_1787357720008347000.png',
+  logoUrl: '/api/v1/orders/files/logo_1787357720008347000.png',
 }

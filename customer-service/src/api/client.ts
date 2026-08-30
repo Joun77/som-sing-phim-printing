@@ -11,7 +11,7 @@ import { generateOrderId } from '../utils/orderId.ts'
 
 // API base URL. Defaults to the Go backend directly (CORS-enabled).
 // Override in production with VITE_API_BASE_URL, e.g. https://api.somsingphim.com/api
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 const TIMEOUT_MS = 5000
 const MOCK_STORAGE_KEY = 'ssp_orders_v1'
 
@@ -449,16 +449,37 @@ export async function getOrders(): Promise<Order[]> {
 export async function trackOrder(orderId?: string | number | null): Promise<Order | null> {
   const id = String(orderId || '').trim()
   if (!id) return null
-  const orders = await getOrders()
-  const match =
-    orders.find(
+
+  try {
+    const raw = await request<RawOrder>(`/v1/orders/track/${encodeURIComponent(id)}`)
+    setDemo(false)
+    return normalizeRemoteOrder(raw)
+  } catch (err: any) {
+    // Check local store
+    const localOrders = readLocalOrders()
+    const match = localOrders.find(
       (o) =>
         o.order_id === id ||
         o.order_number === id ||
         String(o.id || '') === id ||
         String(o.order_id || '').toUpperCase() === id.toUpperCase()
-    ) || null
-  return match
+    )
+    if (match) return match
+
+    // Check demo orders only in demo mode
+    if (DEMO_MODE.enabled) {
+      const demoMatch = seedDemoOrders().find(
+        (o) =>
+          o.order_id === id ||
+          o.order_number === id ||
+          String(o.id || '') === id ||
+          String(o.order_id || '').toUpperCase() === id.toUpperCase()
+      )
+      if (demoMatch) return demoMatch
+    }
+
+    return null
+  }
 }
 
 interface RawOrder {

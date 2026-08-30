@@ -241,7 +241,7 @@ export default function MaterialExplorer() {
                 <div className="flex items-center gap-2">
                   <span className="print-registration-mark">⊕ CALIBRATED PROOF</span>
                   <span className="text-muted">
-                    {isLao ? '✓ ຮອງຮັບທຸກຂະໜາດ ແລະ ໄຟລ໌ງານພິມ' : '✓ Compatible with Custom Print Orders'}
+                    {isLao ? 'ຮອງຮັບທຸກຂະໜາດ ແລະ ໄຟລ໌ງານພິມ' : 'Compatible with Custom Print Orders'}
                   </span>
                 </div>
                 <span className="badge-luxury">{activeFinish.badge}</span>

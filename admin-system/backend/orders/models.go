@@ -108,7 +108,10 @@ type Order struct {
 	ProofRejectionReason string      `json:"proof_rejection_reason,omitempty"`
 	Items                []OrderItem `json:"items"`
 	InternalTrackingCode string      `json:"internal_tracking_code,omitempty"`
+	TrackingCode         string      `json:"tracking_code,omitempty"`
 	CourierName          string      `json:"courier_name,omitempty"`
+	CourierBranch        string      `json:"courier_branch,omitempty"`
+	ShippingFee          float64     `json:"shipping_fee,omitempty"`
 	PODImageUrl          string      `json:"pod_image_url,omitempty"`
 	IdempotencyKey       string      `json:"idempotency_key,omitempty"`
 	CreatedAt            time.Time   `json:"created_at"`

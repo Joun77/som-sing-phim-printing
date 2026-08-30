@@ -13,6 +13,7 @@ import (
 	"backend/server/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 // SSEConnectionEvent represents typed initial handshake payload for stream clients
@@ -248,6 +249,9 @@ func (h *OrderHandler) SaveOrder(order domain.Order) {
 	if order.OrderNo != "" {
 		h.orderStore[order.OrderNo] = order
 	}
+	if order.IdempotencyKey != "" {
+		h.orderStore[order.IdempotencyKey] = order
+	}
 	h.storeMu.Unlock()
 
 	// Broadcast masked payload to live clients
@@ -268,14 +272,15 @@ func (h *OrderHandler) findOrderByCode(code string) (*domain.Order, bool) {
 	}
 
 	query := `
-		SELECT id, order_no, COALESCE(tracking_code, order_no), COALESCE(internal_tracking_code, ''),
-		       COALESCE(courier_name, ''), customer_name, COALESCE(customer_phone, ''),
-		       total_amount_lak, deposit_lak, remaining_lak, overall_status,
+		SELECT id, COALESCE(order_no, order_number), COALESCE(tracking_code, order_no), COALESCE(internal_tracking_code, ''),
+		       COALESCE(courier_name, ''), customer_name, COALESCE(customer_phone, ''), COALESCE(customer_email, ''),
+		       COALESCE(customer_address, ''), COALESCE(total_amount_lak, total_price, 0), COALESCE(deposit_lak, deposit_amount, 0),
+		       COALESCE(remaining_lak, 0), COALESCE(overall_status, status::text),
 		       COALESCE(delivery_date, ''), COALESCE(google_drive_link, ''), COALESCE(proof_url, ''),
 		       proof_approved_at, proof_rejected_at, COALESCE(proof_signature_ip, ''), COALESCE(proof_rejection_reason, ''),
-		       stock_deducted_at, created_at, updated_at
+		       stock_deducted_at, COALESCE(idempotency_key, ''), created_at, updated_at
 		FROM orders
-		WHERE tracking_code = $1 OR order_no = $1 OR id = $1
+		WHERE tracking_code = $1 OR order_no = $1 OR order_number = $1 OR id = $1 OR idempotency_key = $1
 		LIMIT 1`
 
 	var o domain.Order
@@ -283,11 +288,11 @@ func (h *OrderHandler) findOrderByCode(code string) (*domain.Order, bool) {
 	var status string
 	err := h.db.QueryRow(query, code).Scan(
 		&o.ID, &o.OrderNo, &o.TrackingCode, &o.InternalTrackingCode,
-		&o.CourierName, &o.CustomerName, &o.CustomerPhone,
-		&totalAmt, &depAmt, &remAmt, &status,
+		&o.CourierName, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail,
+		&o.CustomerAddress, &totalAmt, &depAmt, &remAmt, &status,
 		&o.DeliveryDate, &o.GoogleDriveLink, &o.ProofURL,
 		&o.ProofApprovedAt, &o.ProofRejectedAt, &o.ProofSignatureIP, &o.ProofRejectionReason,
-		&o.StockDeductedAt, &o.CreatedAt, &o.UpdatedAt,
+		&o.StockDeductedAt, &o.IdempotencyKey, &o.CreatedAt, &o.UpdatedAt,
 	)
 	if err != nil {
 		return nil, false
@@ -301,11 +306,15 @@ func (h *OrderHandler) findOrderByCode(code string) (*domain.Order, bool) {
 	// Fetch Order Items
 	itemsQuery := `
 		SELECT id, order_id, COALESCE(job_name, ''), COALESCE(item_name, ''), quantity,
-		       COALESCE(page_count, 1), COALESCE(paper_size, 'A5'), COALESCE(binding_type, 'NONE'),
-		       COALESCE(current_step, 'PENDING'), COALESCE(unit_price_lak, 0), COALESCE(total_price_lak, 0),
-		       created_at, updated_at
+		       COALESCE(page_count, 1), COALESCE(paper_size, 'A5'), COALESCE(cover_paper_id, ''),
+		       COALESCE(inner_paper_id, ''), COALESCE(cover_file_url, ''), COALESCE(inner_file_url, ''),
+		       COALESCE(binding_type, 'NONE'), COALESCE(spine_width_mm, 0),
+		       COALESCE(current_step, 'PENDING'), COALESCE(unit_price_lak, unit_price_snapshot, 0),
+		       COALESCE(total_price_lak, 0), COALESCE(unit_cost_lak, cost_price_snapshot, 0),
+		       specs, created_at, updated_at
 		FROM order_items
-		WHERE order_id = $1`
+		WHERE order_id = $1
+		ORDER BY created_at ASC`
 
 	rows, err := h.db.Query(itemsQuery, o.ID)
 	if err == nil {
@@ -313,17 +322,26 @@ func (h *OrderHandler) findOrderByCode(code string) (*domain.Order, bool) {
 		for rows.Next() {
 			var it domain.OrderItem
 			var bType, cStep string
-			var unitP, totalP float64
+			var spineWidth float64
+			var unitP, totalP, unitC float64
+			var specsJSON []byte
 			if err := rows.Scan(
 				&it.ID, &it.OrderID, &it.JobName, &it.ItemName, &it.Quantity,
-				&it.PageCount, &it.PaperSize, &bType,
-				&cStep, &unitP, &totalP,
-				&it.CreatedAt, &it.UpdatedAt,
+				&it.PageCount, &it.PaperSize, &it.CoverPaperID,
+				&it.InnerPaperID, &it.CoverFileURL, &it.InnerFileURL,
+				&bType, &spineWidth,
+				&cStep, &unitP, &totalP, &unitC,
+				&specsJSON, &it.CreatedAt, &it.UpdatedAt,
 			); err == nil {
 				it.BindingType = domain.BindingType(bType)
 				it.CurrentStep = domain.ProductionStep(cStep)
+				it.SpineWidthMM = decimal.NewFromFloat(spineWidth)
 				it.UnitPriceLAK = int64(unitP)
 				it.TotalPriceLAK = int64(totalP)
+				it.UnitCostLAK = int64(unitC)
+				if len(specsJSON) > 0 {
+					_ = json.Unmarshal(specsJSON, &it.Specs)
+				}
 				o.Items = append(o.Items, it)
 			}
 		}
@@ -332,12 +350,32 @@ func (h *OrderHandler) findOrderByCode(code string) (*domain.Order, bool) {
 	return &o, true
 }
 
-// HandleCreateOrder handles creating new order with multi-item serialization
+// HandleCreateOrder handles creating new order with multi-item serialization and transactional PostgreSQL persistence
 func (h *OrderHandler) HandleCreateOrder(c *gin.Context) {
 	var order domain.Order
 	if err := c.ShouldBindJSON(&order); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid order payload", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "error",
+			"message": "ຮູບແບບຂໍ້ມູນອໍເດີບໍ່ຖືກຕ້ອງ (Invalid order payload)",
+			"details": err.Error(),
+		})
 		return
+	}
+
+	if order.IdempotencyKey == "" {
+		order.IdempotencyKey = c.GetHeader("Idempotency-Key")
+	}
+
+	// Idempotency Check: Check if order with this idempotency key already exists
+	if order.IdempotencyKey != "" {
+		if existing, found := h.findOrderByCode(order.IdempotencyKey); found && existing != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"status":  "success",
+				"message": "ດຶງຂໍ້ມູນອໍເດີເດີມສຳເລັດ (Order retrieved via idempotency key)",
+				"data":    existing.MaskForCustomer(),
+			})
+			return
+		}
 	}
 
 	if order.ID == "" {
@@ -358,10 +396,140 @@ func (h *OrderHandler) HandleCreateOrder(c *gin.Context) {
 	}
 	order.UpdatedAt = now
 
+	// Transactional Database Persistence
+	if h.db != nil {
+		tx, err := h.db.BeginTx(c.Request.Context(), nil)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"status":  "error",
+				"message": "ເກີດຂໍ້ຜິດພາດໃນການເລີ່ມຕົ້ນທຸລະກຳຖານຂໍ້ມູນ (Failed to start database transaction)",
+				"details": err.Error(),
+			})
+			return
+		}
+		defer tx.Rollback()
+
+		// 1. Auto-create or link customer
+		if order.CustomerPhone != "" {
+			var custID string
+			err := tx.QueryRowContext(c.Request.Context(), "SELECT id FROM customers WHERE phone = $1 LIMIT 1", order.CustomerPhone).Scan(&custID)
+			if err != nil {
+				custID = fmt.Sprintf("CUST-%d", time.Now().UnixNano()/1e6)
+				_, _ = tx.ExecContext(c.Request.Context(), `
+					INSERT INTO customers (id, name, phone, email, address, created_at, updated_at)
+					VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+					ON CONFLICT (phone) DO UPDATE SET updated_at = NOW()
+				`, custID, order.CustomerName, order.CustomerPhone, order.CustomerEmail, order.CustomerAddress)
+			}
+			order.CustomerID = custID
+		}
+
+		// 2. Insert into orders table
+		orderQuery := `
+			INSERT INTO orders (
+				id, order_no, order_number, tracking_code, internal_tracking_code,
+				courier_name, courier_id, customer_id, customer_name, customer_phone,
+				customer_email, customer_address, status, overall_status,
+				total_amount_lak, deposit_lak, remaining_lak, total_price, deposit_amount,
+				delivery_date, google_drive_link, proof_url, proof_approved_at, proof_rejected_at,
+				proof_signature_ip, proof_rejection_reason, stock_deducted_at, idempotency_key,
+				created_at, updated_at
+			) VALUES (
+				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+				$17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30
+			)
+			ON CONFLICT (id) DO UPDATE SET
+				status = EXCLUDED.status,
+				overall_status = EXCLUDED.overall_status,
+				total_amount_lak = EXCLUDED.total_amount_lak,
+				deposit_lak = EXCLUDED.deposit_lak,
+				remaining_lak = EXCLUDED.remaining_lak,
+				proof_url = EXCLUDED.proof_url,
+				proof_approved_at = EXCLUDED.proof_approved_at,
+				proof_rejected_at = EXCLUDED.proof_rejected_at,
+				proof_signature_ip = EXCLUDED.proof_signature_ip,
+				proof_rejection_reason = EXCLUDED.proof_rejection_reason,
+				stock_deducted_at = EXCLUDED.stock_deducted_at,
+				idempotency_key = EXCLUDED.idempotency_key,
+				updated_at = NOW()`
+
+		_, err = tx.ExecContext(c.Request.Context(), orderQuery,
+			order.ID, order.OrderNo, order.OrderNo, order.TrackingCode, order.InternalTrackingCode,
+			order.CourierName, order.CourierID, order.CustomerID, order.CustomerName, order.CustomerPhone,
+			order.CustomerEmail, order.CustomerAddress, string(order.OverallStatus), string(order.OverallStatus),
+			order.TotalAmountLAK, order.DepositLAK, order.RemainingLAK, float64(order.TotalAmountLAK), float64(order.DepositLAK),
+			order.DeliveryDate, order.GoogleDriveLink, order.ProofURL, order.ProofApprovedAt, order.ProofRejectedAt,
+			order.ProofSignatureIP, order.ProofRejectionReason, order.StockDeductedAt, order.IdempotencyKey,
+			order.CreatedAt, order.UpdatedAt,
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"status":  "error",
+				"message": "ບັນທຶກອໍເດີລົງຖານຂໍ້ມູນບໍ່ສຳເລັດ (Failed to persist order to database)",
+				"details": err.Error(),
+			})
+			return
+		}
+
+		// 3. Insert line items
+		for i, item := range order.Items {
+			if item.ID == "" {
+				order.Items[i].ID = fmt.Sprintf("item-%s-%d", order.ID, i+1)
+				item.ID = order.Items[i].ID
+			}
+			if item.OrderID == "" {
+				order.Items[i].OrderID = order.ID
+				item.OrderID = order.ID
+			}
+			specsBytes, _ := json.Marshal(item.Specs)
+			itemQuery := `
+				INSERT INTO order_items (
+					id, order_id, job_name, item_name, quantity, page_count,
+					paper_size, cover_paper_id, inner_paper_id, cover_file_url, inner_file_url,
+					binding_type, spine_width_mm, current_step, unit_cost_lak,
+					unit_price_lak, total_price_lak, unit_price_snapshot, cost_price_snapshot,
+					specs, created_at, updated_at
+				) VALUES (
+					$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb, $21, $22
+				)
+				ON CONFLICT (id) DO UPDATE SET
+					current_step = EXCLUDED.current_step,
+					cover_file_url = EXCLUDED.cover_file_url,
+					inner_file_url = EXCLUDED.inner_file_url,
+					updated_at = NOW()`
+
+			_, err = tx.ExecContext(c.Request.Context(), itemQuery,
+				item.ID, item.OrderID, item.JobName, item.ItemName, item.Quantity, item.PageCount,
+				item.PaperSize, item.CoverPaperID, item.InnerPaperID, item.CoverFileURL, item.InnerFileURL,
+				string(item.BindingType), item.SpineWidthMM.InexactFloat64(), string(item.CurrentStep), item.UnitCostLAK,
+				item.UnitPriceLAK, item.TotalPriceLAK, float64(item.UnitPriceLAK), float64(item.UnitCostLAK),
+				string(specsBytes), now, now,
+			)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"status":  "error",
+					"message": "ບັນທຶກລາຍການສິນຄ້າບໍ່ສຳເລັດ (Failed to persist order item)",
+					"details": err.Error(),
+				})
+				return
+			}
+		}
+
+		// 4. Commit transaction
+		if err := tx.Commit(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"status":  "error",
+				"message": "ເກີດຂໍ້ຜິດພາດໃນການຢືນຢັນທຸລະກຳ (Failed to commit order transaction)",
+				"details": err.Error(),
+			})
+			return
+		}
+	}
+
 	h.SaveOrder(order)
 	c.JSON(http.StatusCreated, gin.H{
 		"status":  "success",
-		"message": "Order created successfully",
+		"message": "ສ້າງອໍເດີສຳເລັດແລ້ວ (Order created successfully)",
 		"data":    order.MaskForCustomer(),
 	})
 }
@@ -371,7 +539,10 @@ func (h *OrderHandler) HandleApproveProof(c *gin.Context) {
 	code := c.Param("tracking_code")
 	order, found := h.findOrderByCode(code)
 	if !found {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "Order not found"})
+		c.JSON(http.StatusNotFound, gin.H{
+			"status":  "error",
+			"message": "ບໍ່ພົບຂໍ້ມູນອໍເດີ (Order not found)",
+		})
 		return
 	}
 
@@ -387,21 +558,21 @@ func (h *OrderHandler) HandleApproveProof(c *gin.Context) {
 	order.UpdatedAt = now
 
 	if h.db != nil {
-		_, _ = h.db.Exec(`
+		_, _ = h.db.ExecContext(c.Request.Context(), `
 			UPDATE orders
 			SET overall_status = 'FILE_CONFIRMED',
 			    status = 'FILE_CONFIRMED',
 			    proof_approved_at = $1,
 			    proof_signature_ip = $2,
 			    updated_at = $1
-			WHERE tracking_code = $3 OR order_no = $3 OR id = $3
+			WHERE tracking_code = $3 OR order_no = $3 OR order_number = $3 OR id = $3
 		`, now, c.ClientIP(), code)
 	}
 
 	h.SaveOrder(*order)
 	c.JSON(http.StatusOK, gin.H{
 		"status":      "success",
-		"message":     "Digital proof approved successfully",
+		"message":     "ຢືນຢັນແບບພິມດີຈິຕອນສຳເລັດແລ້ວ (Digital proof approved successfully)",
 		"approved_at": now.Format(time.RFC3339),
 		"data":        order.MaskForCustomer(),
 	})
@@ -412,7 +583,10 @@ func (h *OrderHandler) HandleRejectProof(c *gin.Context) {
 	code := c.Param("tracking_code")
 	order, found := h.findOrderByCode(code)
 	if !found {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "Order not found"})
+		c.JSON(http.StatusNotFound, gin.H{
+			"status":  "error",
+			"message": "ບໍ່ພົບຂໍ້ມູນອໍເດີ (Order not found)",
+		})
 		return
 	}
 
@@ -420,7 +594,10 @@ func (h *OrderHandler) HandleRejectProof(c *gin.Context) {
 		Reason string `json:"reason" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Reason for revision is required"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "error",
+			"message": "ກະລຸນາລະບຸເຫດຜົນໃນການຂໍແກ້ໄຂ (Reason for revision is required)",
+		})
 		return
 	}
 
@@ -431,21 +608,21 @@ func (h *OrderHandler) HandleRejectProof(c *gin.Context) {
 	order.UpdatedAt = now
 
 	if h.db != nil {
-		_, _ = h.db.Exec(`
+		_, _ = h.db.ExecContext(c.Request.Context(), `
 			UPDATE orders
 			SET overall_status = 'PROOF_REJECTED',
 			    status = 'PROOF_REJECTED',
 			    proof_rejected_at = $1,
 			    proof_rejection_reason = $2,
 			    updated_at = $1
-			WHERE tracking_code = $3 OR order_no = $3 OR id = $3
+			WHERE tracking_code = $3 OR order_no = $3 OR order_number = $3 OR id = $3
 		`, now, req.Reason, code)
 	}
 
 	h.SaveOrder(*order)
 	c.JSON(http.StatusOK, gin.H{
 		"status":      "success",
-		"message":     "Proof revision requested successfully",
+		"message":     "ສົ່ງຄຳຂໍແກ້ໄຂແບບພິມສຳເລັດ (Proof revision requested successfully)",
 		"rejected_at": now.Format(time.RFC3339),
 		"reason":      req.Reason,
 		"data":        order.MaskForCustomer(),
@@ -457,7 +634,10 @@ func (h *OrderHandler) HandleUploadProof(c *gin.Context) {
 	code := c.Param("tracking_code")
 	order, found := h.findOrderByCode(code)
 	if !found {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "Order not found"})
+		c.JSON(http.StatusNotFound, gin.H{
+			"status":  "error",
+			"message": "ບໍ່ພົບຂໍ້ມູນອໍເດີ (Order not found)",
+		})
 		return
 	}
 
@@ -465,7 +645,10 @@ func (h *OrderHandler) HandleUploadProof(c *gin.Context) {
 		ProofURL string `json:"proof_url" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Proof URL is required"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "error",
+			"message": "ກະລຸນາລະບຸລິ້ງໄຟລ໌ຕົວຢ່າງ (Proof URL is required)",
+		})
 		return
 	}
 
@@ -475,20 +658,20 @@ func (h *OrderHandler) HandleUploadProof(c *gin.Context) {
 	order.UpdatedAt = now
 
 	if h.db != nil {
-		_, _ = h.db.Exec(`
+		_, _ = h.db.ExecContext(c.Request.Context(), `
 			UPDATE orders
 			SET proof_url = $1,
 			    overall_status = 'WAITING_APPROVAL',
 			    status = 'WAITING_APPROVAL',
 			    updated_at = $2
-			WHERE tracking_code = $3 OR order_no = $3 OR id = $3
+			WHERE tracking_code = $3 OR order_no = $3 OR order_number = $3 OR id = $3
 		`, req.ProofURL, now, code)
 	}
 
 	h.SaveOrder(*order)
 	c.JSON(http.StatusOK, gin.H{
 		"status":    "success",
-		"message":   "Proof uploaded and order set to WAITING_APPROVAL",
+		"message":   "ອັບໂຫລດໄຟລ໌ຕົວຢ່າງ ແລະ ປ່ຽນສະຖານະເປັນ WAITING_APPROVAL ສຳເລັດ",
 		"proof_url": req.ProofURL,
 		"data":      order.MaskForCustomer(),
 	})
@@ -504,7 +687,11 @@ func (h *OrderHandler) HandleVerifySlip(c *gin.Context) {
 		TransRef  string  `json:"trans_ref"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid slip verification payload", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "error",
+			"message": "ຮູບແບບຂໍ້ມູນກວດສອບສະລິບບໍ່ຖືກຕ້ອງ (Invalid slip verification payload)",
+			"details": err.Error(),
+		})
 		return
 	}
 
@@ -513,19 +700,33 @@ func (h *OrderHandler) HandleVerifySlip(c *gin.Context) {
 		transRef = fmt.Sprintf("BCEL-%d-%s", time.Now().Unix(), req.OrderID)
 	}
 
-	// Anti-Fraud Check: Check for duplicate transaction reference
+	// Anti-Fraud Check 1: In-memory duplicate filter
 	h.storeMu.Lock()
 	if h.verifiedTransMap[transRef] {
 		h.storeMu.Unlock()
 		c.JSON(http.StatusConflict, gin.H{
-			"status":  "error",
-			"message": "ກວດພົບສະລິບຊ້ຳຊ້ອນ! ລະຫັດທຸລະກຳນີ້ຖືກນຳໃຊ້ແລ້ວ (Duplicate transaction reference)",
+			"status":    "error",
+			"message":   "ກວດພົບສະລິບຊ້ຳຊ້ອນ! ລະຫັດທຸລະກຳນີ້ຖືກນຳໃຊ້ແລ້ວ (Duplicate transaction reference)",
 			"trans_ref": transRef,
 		})
 		return
 	}
 	h.verifiedTransMap[transRef] = true
 	h.storeMu.Unlock()
+
+	// Anti-Fraud Check 2: Database uniqueness check if DB connected
+	if h.db != nil {
+		var existingID int
+		err := h.db.QueryRowContext(c.Request.Context(), "SELECT id FROM bank_transaction_logs WHERE trans_ref = $1 LIMIT 1", transRef).Scan(&existingID)
+		if err == nil {
+			c.JSON(http.StatusConflict, gin.H{
+				"status":    "error",
+				"message":   "ກວດພົບສະລິບຊ້ຳຊ້ອນ! ລະຫັດທຸລະກຳນີ້ຖືກນຳໃຊ້ແລ້ວ (Duplicate transaction reference)",
+				"trans_ref": transRef,
+			})
+			return
+		}
+	}
 
 	now := time.Now()
 	order, found := h.findOrderByCode(req.OrderID)
@@ -540,12 +741,36 @@ func (h *OrderHandler) HandleVerifySlip(c *gin.Context) {
 			}
 		}
 		order.UpdatedAt = now
+
+		if h.db != nil {
+			// Record bank transaction log
+			_, _ = h.db.ExecContext(c.Request.Context(), `
+				INSERT INTO bank_transaction_logs (order_id, qr_payload, trans_ref, amount, status, verified_at, created_at)
+				VALUES ($1, $2, $3, $4, 'SUCCESS', $5, $5)
+				ON CONFLICT DO NOTHING
+			`, order.ID, req.QRPayload, transRef, req.Amount, now)
+
+			// Update order payment status in database
+			_, _ = h.db.ExecContext(c.Request.Context(), `
+				UPDATE orders
+				SET overall_status = 'PAID_PREPRESS',
+				    status = 'PAID_PREPRESS',
+				    deposit_lak = $1,
+				    deposit_amount = $1,
+				    remaining_lak = $2,
+				    slip_verified_at = $3,
+				    slip_trans_ref = $4,
+				    updated_at = $3
+				WHERE tracking_code = $5 OR order_no = $5 OR order_number = $5 OR id = $5
+			`, order.DepositLAK, order.RemainingLAK, now, transRef, req.OrderID)
+		}
+
 		h.SaveOrder(*order)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":      "success",
-		"message":     "Slip verified successfully (BCEL OnePay Universal Pipeline)",
+		"message":     "ກວດສອບສະລິບສຳເລັດແລ້ວ (Slip verified successfully via BCEL OnePay Universal Pipeline)",
 		"order_id":    req.OrderID,
 		"new_status":  "PAID_PREPRESS",
 		"trans_ref":   transRef,

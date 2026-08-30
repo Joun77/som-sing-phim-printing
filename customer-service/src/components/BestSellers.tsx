@@ -29,7 +29,7 @@ export default function BestSellers() {
     features: p.features && p.features.length > 0 
       ? p.features.slice(0, 2) 
       : (isLao ? ['ພິມດິຈິຕອນ 4 ສີ', 'ຈັດສົ່ງດ່ວນ 24-48h'] : ['Ultra-HD Print', '24-48h Delivery']),
-    badge: i === 0 ? (isLao ? '🔥 ອັນດັບ 1 ຂາຍດີສຸດ' : '#1 Best Seller') : undefined
+    badge: i === 0 ? (isLao ? 'ອັນດັບ 1 ຂາຍດີສຸດ' : '#1 Best Seller') : undefined
   }))
 
   const containerRef = useRef<HTMLElement>(null)

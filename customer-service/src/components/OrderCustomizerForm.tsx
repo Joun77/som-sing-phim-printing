@@ -21,6 +21,7 @@ import {
   Ruler,
   Maximize2,
   ShieldAlert,
+  Scissors,
 } from 'lucide-react';
 
 export interface OrderCustomizerFormProps {
@@ -453,7 +454,7 @@ export const OrderCustomizerForm: React.FC<OrderCustomizerFormProps> = ({
               <div className="mt-4 flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/40 border border-slate-700/60">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-rose-950/80 border border-rose-800 flex items-center justify-center text-rose-300 text-sm">
-                    🧵
+                    <Scissors className="w-4 h-4 text-rose-300" />
                   </div>
                   <div>
                     <div className="text-sm font-medium text-white">พับขอบเย็บเสริมความแข็งแรง</div>

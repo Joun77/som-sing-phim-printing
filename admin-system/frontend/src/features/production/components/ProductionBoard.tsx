@@ -25,7 +25,7 @@ export default function ProductionBoard({ showToast, formatLAK }) {
 
   const fetchOrders = () => {
     setLoading(true);
-    fetch('http://localhost:8080/api/orders')
+    fetch('/api/orders')
       .then(res => res.json())
       .then(data => {
         setOrders(data);
@@ -42,7 +42,7 @@ export default function ProductionBoard({ showToast, formatLAK }) {
       })
       .finally(() => setLoading(false));
 
-    fetch('http://localhost:8080/api/v1/production/machines/schedule')
+    fetch('/api/v1/production/machines/schedule')
       .then(res => res.json())
       .then(resData => {
         if (resData?.data) setMachines(resData.data);
@@ -108,7 +108,7 @@ export default function ProductionBoard({ showToast, formatLAK }) {
       details: {}
     });
 
-    fetch(`http://localhost:8080/api/orders/${orderId}/status`, {
+    fetch(`/api/orders/${orderId}/status`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: nextStatus })

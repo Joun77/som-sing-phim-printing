@@ -1,5 +1,6 @@
 import React from 'react'
 import { MinusIcon, PlusIcon, ZapIcon } from './icons'
+import { Hash } from 'lucide-react'
 import { getQuantityTier } from '../utils/pricing'
 
 export interface QuantityStepperProps {
@@ -17,14 +18,14 @@ export function QuantityStepper({
   onChange,
   t,
   isOnDemand,
-  discountTiers,
+  discountTiers = [],
 }: QuantityStepperProps) {
-  const effectiveMin = isOnDemand ? 1 : Math.max(1, minQty)
+  const effectiveMin = minQty || 1
   const isBulk = effectiveMin > 1 && !isOnDemand
   const tier = getQuantityTier(value)
-  const activeTiers = (discountTiers && discountTiers.length > 0)
+  const activeTiers = discountTiers.length > 0
     ? discountTiers
-    : isBulk
+    : !isOnDemand
     ? [
         { minQuantity: Math.max(effectiveMin * 2, 100), discountPercentage: 5 },
         { minQuantity: Math.max(effectiveMin * 5, 500), discountPercentage: 10 },
@@ -39,8 +40,8 @@ export function QuantityStepper({
     <div className="spec-group space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
-            🔢 {t('quantityLabel')}
+          <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+            <Hash className="w-3.5 h-3.5 text-amber-500" /> {t('quantityLabel')}
           </span>
           <span className="text-[11px] font-semibold text-slate-500">
             {isOnDemand || effectiveMin === 1

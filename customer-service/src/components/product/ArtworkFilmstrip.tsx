@@ -1,5 +1,6 @@
 import React from 'react'
 import { PlusIcon, FileTextIcon } from '../icons.tsx'
+import { X } from 'lucide-react'
 import type { ArtworkBatchItem } from './types.ts'
 
 interface ArtworkFilmstripProps {
@@ -21,41 +22,43 @@ export function ArtworkFilmstrip({
   onDropFiles,
   language = 'lo',
 }: ArtworkFilmstripProps) {
+  const isLao = language === 'lo'
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      onDropFiles(e.dataTransfer.files)
+    }
+  }
+
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-xs text-slate-500">
-        <span className="font-bold">
-          {language === 'en' ? 'Uploaded Artworks' : 'ລາຍການຟາຍທັງໝົດ'} ({uploadedArtworks.length} {language === 'en' ? 'files' : 'ຟາຍ'}):
+    <div className="w-full space-y-2 mb-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
+          {isLao ? 'ໄຟລ໌ທັງໝົດທີ່ເລືອກ' : 'Batch Artwork Filmstrip'} ({uploadedArtworks.length})
         </span>
-        <span className="text-[11px] text-slate-400">
-          {language === 'en' ? '(Click image to customize specs)' : '(ເລືອກຮູບເພື່ອສະຫຼັບການຕັ້ງຄ່າ)'}
+        <span className="text-[11px] text-slate-500">
+          {isLao ? 'ກົດເລືອກເພື່ອສະແດງ / ກວດສອບ' : 'Click to inspect & preview'}
         </span>
       </div>
 
-      <div
-        onDragOver={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-        }}
-        onDrop={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            onDropFiles(e.dataTransfer.files)
-          }
-        }}
-        className="flex items-center gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin"
-      >
+      <div className="flex items-center gap-2.5 overflow-x-auto pb-2 pt-1 px-1 scrollbar-thin">
         {uploadedArtworks.map((art, idx) => {
-          const isActive = activeArtworkIndex === idx
+          const isActive = idx === activeArtworkIndex
           return (
             <div
-              key={art.id || idx}
+              key={idx}
               onClick={() => onSelectIndex(idx)}
-              className={`relative group flex-shrink-0 w-24 sm:w-28 rounded-2xl border-2 p-1.5 transition-all duration-200 cursor-pointer ${
+              className={`relative flex-shrink-0 w-24 sm:w-28 rounded-2xl p-1.5 border-2 transition-all cursor-pointer group select-none ${
                 isActive
-                  ? 'border-amber-500 bg-amber-500/10 shadow-lg shadow-amber-500/20 scale-105 ring-2 ring-amber-500/30'
-                  : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 hover:border-amber-400/60 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'border-amber-500 bg-amber-500/10 shadow-lg shadow-amber-500/20 scale-[1.02]'
+                  : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 opacity-75 hover:opacity-100 hover:border-slate-300'
               }`}
             >
               {/* Top Tag: File Number Badge */}
@@ -63,7 +66,7 @@ export function ArtworkFilmstrip({
                 #{idx + 1}
               </div>
 
-              {/* Quick Delete '✕' Button on Top-Right */}
+              {/* Quick Delete 'X' Button on Top-Right */}
               <button
                 type="button"
                 onClick={(e) => {
@@ -73,7 +76,7 @@ export function ArtworkFilmstrip({
                 className="absolute -top-1.5 -right-1.5 z-20 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] font-black shadow-md opacity-80 group-hover:opacity-100 hover:scale-110 transition cursor-pointer"
                 title="ລຶບຟາຍນີ້"
               >
-                ✕
+                <X className="w-3 h-3" />
               </button>
 
               {/* Miniature Preview Image / Box */}

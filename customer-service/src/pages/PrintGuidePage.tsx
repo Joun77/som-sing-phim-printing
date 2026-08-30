@@ -12,7 +12,7 @@ import {
   EyeIcon,
   XIcon,
 } from '../components/icons.tsx'
-import { Scale, Droplets, FileText, Tag, Sliders, Scissors, Image, Sparkles, Package, Mail, CreditCard, Leaf, BarChart2, AlertTriangle, Layers } from 'lucide-react'
+import { Scale, Droplets, FileText, Tag, Sliders, Scissors, Image, Sparkles, Package, Mail, CreditCard, Leaf, BarChart2, AlertTriangle, Layers, Crown } from 'lucide-react'
 import { useShop } from '../context/ShopContext.tsx'
 
 interface PaperItem {
@@ -475,7 +475,7 @@ export default function PrintGuidePage() {
           <aside className="pg-sidebar-panel">
             {/* Search Input */}
             <div className="pg-search-wrapper">
-              <span className="pg-search-icon">🔍</span>
+              <span className="pg-search-icon flex items-center justify-center"><SearchIcon size={14} /></span>
               <input
                 type="text"
                 value={searchQuery}
@@ -640,7 +640,7 @@ export default function PrintGuidePage() {
                   className="pg-nav-btn"
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                    <span>👑</span>
+                    <Crown size={15} className="text-amber-500" />
                     <span>{isLao ? 'ເຈ້ຍພິເສດ / ການ໌ດຫຼູ' : 'Specialty & Luxury'}</span>
                   </span>
                   <span style={{ fontSize: '8.5px', transform: accordions.specialty ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
@@ -1239,7 +1239,7 @@ export default function PrintGuidePage() {
                       onClick={() => toggleCompare(paper.id)}
                       style={{ position: 'absolute', top: '0.75rem', right: '0.75rem', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
                     >
-                      ✕
+                      <XIcon size={14} />
                     </button>
 
                     <span className="pg-tag-cat" style={{ width: 'fit-content' }}>

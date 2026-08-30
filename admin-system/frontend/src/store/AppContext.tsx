@@ -445,7 +445,7 @@ const initialCouriers = [
     id: 'hal_logistics',
     name: 'HAL Logistics (ຮົງອາລຸນ ຂົນສົ່ງ)',
     shortName: 'HAL',
-    logoUrl: 'http://localhost:8080/api/v1/orders/files/logo_1787356736419680000.png',
+    logoUrl: '/api/v1/orders/files/logo_1787356736419680000.png',
     fee: 20000,
     eta: '1-2 ວັນ (1-2 Days)',
     freeAbove: 350000,
@@ -674,6 +674,14 @@ export const AppProvider = ({ children }) => {
       recordedAt: new Date().toISOString()
     };
     setEarningRecords(prev => [newRecord, ...prev]);
+
+    fetch('/api/v1/hr/earnings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newRecord)
+    }).catch(err => console.warn('Add technician earning API notice:', err));
+
+    showToast('ບັນທຶກຄ່າຕອບແທນຊ່າງພິມຮຽບຮ້ອຍແລ້ວ!', 'success');
 
     // Also update impressionsProduced on the employee
     setEmployees((prev: any[]) => prev.map(emp => {
@@ -1222,12 +1230,45 @@ export const AppProvider = ({ children }) => {
       }
     } catch (e) {}
 
+    // 7. Technician Earnings
+    try {
+      const res = await fetch('/api/v1/hr/earnings');
+      if (res && res.ok) {
+        const resData = await res.json();
+        if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
+          setEarningRecords(resData.data);
+        }
+      }
+    } catch (e) {}
+
+    // 8. Machine Downtime Logs
+    try {
+      const res = await fetch('/api/v1/production/downtime');
+      if (res && res.ok) {
+        const resData = await res.json();
+        if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
+          setDowntimeLogs(resData.data);
+        }
+      }
+    } catch (e) {}
+
+    // 9. Deliveries / Dispatches
+    try {
+      const res = await fetch('/api/v1/orders/deliveries');
+      if (res && res.ok) {
+        const resData = await res.json();
+        if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
+          setDeliveries(resData.data);
+        }
+      }
+    } catch (e) {}
+
     const localCouriers = localStorage.getItem('ss_print_couriers_v1');
     if (localCouriers) {
       try {
         const parsed = JSON.parse(localCouriers);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          fetch('http://localhost:8080/api/v1/admin/couriers/sync', {
+          fetch('/api/v1/admin/couriers/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(parsed)
@@ -1237,7 +1278,7 @@ export const AppProvider = ({ children }) => {
         console.error(e);
       }
     } else {
-      fetch('http://localhost:8080/api/v1/couriers')
+      fetch('/api/v1/couriers')
         .then(res => (res && res.ok ? res.json() : null))
         .then(resData => {
           if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
@@ -1252,7 +1293,7 @@ export const AppProvider = ({ children }) => {
       try {
         const parsed = JSON.parse(localBanks);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          fetch('http://localhost:8080/api/v1/admin/payment-methods/sync', {
+          fetch('/api/v1/admin/payment-methods/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(parsed)
@@ -1262,7 +1303,7 @@ export const AppProvider = ({ children }) => {
         console.error(e);
       }
     } else {
-      fetch('http://localhost:8080/api/v1/payment-methods')
+      fetch('/api/v1/payment-methods')
         .then(res => (res && res.ok ? res.json() : null))
         .then(resData => {
           if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
@@ -1275,7 +1316,7 @@ export const AppProvider = ({ children }) => {
     // 4. Offcuts Scrap Registry (Backend Sync)
     try {
       let offRes = await fetch('/api/inventory/offcuts');
-      if (!offRes.ok) offRes = await fetch('http://localhost:8080/api/inventory/offcuts');
+      if (!offRes.ok) offRes = await fetch('/api/inventory/offcuts');
       if (offRes && offRes.ok) {
         const offList = await offRes.json();
         if (Array.isArray(offList) && offList.length > 0) {
@@ -1930,7 +1971,7 @@ export const AppProvider = ({ children }) => {
   const dischargeInventoryStock = (skuId: string, qtyNeeded: number, reason: string = 'MANUAL_DISCHARGE', remarks: string = '') => {
     deductStockFIFO(skuId, qtyNeeded);
 
-    fetch(`http://localhost:8080/api/inventory/${skuId}/discharge`, {
+    fetch(`/api/inventory/${skuId}/discharge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ skuId, quantity: qtyNeeded, reason, remarks })
@@ -1975,7 +2016,7 @@ export const AppProvider = ({ children }) => {
   };
 
   const saveInventoryToBackend = (item: any) => {
-    fetch('http://localhost:8080/api/inventory', {
+    fetch('/api/inventory', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(item)
@@ -2011,10 +2052,10 @@ export const AppProvider = ({ children }) => {
       }
     } catch (e) {}
 
-    fetch(`http://localhost:8080/api/inventory/${id}`, {
+    fetch(`/api/inventory/${id}`, {
       method: 'DELETE'
     }).catch(err => console.log('Inventory delete backend sync notice:', err));
-    fetch(`http://localhost:8080/api/inventory/items/${id}`, {
+    fetch(`/api/inventory/items/${id}`, {
       method: 'DELETE'
     }).catch(err => console.log('Inventory items delete backend sync notice:', err));
   };
@@ -2091,7 +2132,7 @@ export const AppProvider = ({ children }) => {
     });
 
     // Send JSON payload to Backend API
-    fetch(`http://localhost:8080/api/inventory/items/${newSku.id}`, {
+    fetch(`/api/inventory/items/${newSku.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newSku)
@@ -2193,12 +2234,12 @@ export const AppProvider = ({ children }) => {
     });
 
     const payload = { id: itemId, ...updatedFields };
-    fetch(`http://localhost:8080/api/inventory/items/${itemId}`, {
+    fetch(`/api/inventory/items/${itemId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).catch(err => console.log('API inventory items update notice:', err));
-    fetch(`http://localhost:8080/api/inventory/${itemId}`, {
+    fetch(`/api/inventory/${itemId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -2328,7 +2369,7 @@ export const AppProvider = ({ children }) => {
     });
 
     // Backend sync
-    fetch('http://localhost:8080/api/inventory/offcuts', {
+    fetch('/api/inventory/offcuts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2770,7 +2811,7 @@ export const AppProvider = ({ children }) => {
     });
 
     // Sync to Go Backend DB
-    fetch('http://localhost:8080/api/orders', {
+    fetch('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newOrder)
@@ -2870,7 +2911,7 @@ export const AppProvider = ({ children }) => {
       deductStockForOrder(orderToDeduct);
       showToast('ສັ່ງພິມ ແລະ ຕັດສະຕັອກກະດາດ/ນ້ຳມຶກຮຽບຮ້ອຍແລ້ວ!', 'success');
 
-      fetch(`http://localhost:8080/api/orders/${orderId}/status`, {
+      fetch(`/api/orders/${orderId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'IN_PRODUCTION' })
@@ -2881,9 +2922,9 @@ export const AppProvider = ({ children }) => {
     return false;
   };
 
-  const updateOrderTracking = (orderId: string, courierName: string, trackingNo: string, shippingFee?: number, branchCode?: string) => {
+  const updateOrderTracking = async (orderId: string, courierName: string, trackingNo: string, shippingFee?: number, branchCode?: string) => {
     setOrders(prev => prev.map(ord => {
-      if (ord.id === orderId) {
+      if (ord.id === orderId || ord.orderNo === orderId || ord.orderNumber === orderId) {
         const now = new Date();
         const pad = (n: number) => n.toString().padStart(2, '0');
         const timeNow = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
@@ -2897,10 +2938,16 @@ export const AppProvider = ({ children }) => {
           ...ord,
           deliveryMethod: courierName,
           courier: courierName,
+          courier_name: courierName,
           trackingNumber: trackingNo,
+          internal_tracking_code: trackingNo,
+          tracking_code: trackingNo,
           branchCode: branchCode || ord.branchCode,
+          branch_code: branchCode || ord.branch_code,
           courierBranch: branchCode || ord.courierBranch,
           shippingFee: shippingFee !== undefined ? shippingFee : (ord.shippingFee || 0),
+          status: 'SHIPPED',
+          overall_status: 'SHIPPED',
           activityLog: [newLog, ...logs]
         };
       }
@@ -2909,11 +2956,25 @@ export const AppProvider = ({ children }) => {
 
     showToast(`ບັນທຶກເລກພັດສະດຸ ${trackingNo || ''} ສຳເລັດແລ້ວ!`, 'success');
 
-    fetch(`http://localhost:8080/api/orders/${orderId}/tracking`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ courier: courierName, tracking_number: trackingNo, shipping_fee: shippingFee, branch_code: branchCode })
-    }).catch(err => console.log('Order tracking sync notice:', err));
+    try {
+      await fetch(`/api/v1/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courier_name: courierName,
+          courier: courierName,
+          internal_tracking_code: trackingNo,
+          tracking_number: trackingNo,
+          tracking_code: trackingNo,
+          shipping_fee: shippingFee,
+          branch_code: branchCode,
+          status: 'SHIPPED',
+          overall_status: 'SHIPPED'
+        })
+      });
+    } catch (err) {
+      console.log('Order tracking sync notice:', err);
+    }
   };
 
   const settleOrderBalance = (orderId, amountPaid, method, slipNote) => {
@@ -2996,32 +3057,40 @@ export const AppProvider = ({ children }) => {
     showToast(`ລົບອໍເດີ #${orderId} ອອກຈາກລະບົບຮຽບຮ້ອຍແລ້ວ`, 'info');
   };
 
-  const addSpoilageLog = (logData) => {
+  const addSpoilageLog = async (logData: any) => {
     const invItem = inventory.find(i => i.id === logData.materialId);
-    if (!invItem) return;
-
-    const unitCost = invItem.costPerConsumptionUnit;
-    const totalCost = logData.quantity * unitCost;
+    const unitCost = invItem ? (invItem.costPerConsumptionUnit || invItem.unitCost || 0) : 0;
+    const totalCost = (Number(logData.quantity) || 0) * (unitCost || Number(logData.unitCost) || 0);
 
     const newLog = {
       id: `sp-${Date.now().toString().slice(-4)}`,
       date: new Date().toISOString().split('T')[0],
-      materialName: invItem.name,
+      materialName: invItem?.name || logData.materialName || 'Material',
+      materialId: logData.materialId || '',
+      machineId: logData.machineId || '',
+      orderId: logData.orderId || '',
+      quantity: Number(logData.quantity) || 1,
+      unit: logData.unit || 'Sheet',
+      cause: logData.cause || logData.reason || 'ບໍ່ລະບຸ',
+      reason: logData.cause || logData.reason || 'ບໍ່ລະບຸ',
       unitCost,
-      totalCost,
+      totalCost: totalCost || Number(logData.costImpact) || 0,
+      costImpact: totalCost || Number(logData.costImpact) || 0,
       ...logData
     };
 
-    deductStockFIFO(logData.materialId, logData.quantity);
+    if (logData.materialId) {
+      deductStockFIFO(logData.materialId, Number(logData.quantity) || 1);
+    }
     setSpoilageLogs(prev => [newLog, ...prev]);
 
     if (logData.orderId) {
       setOrders(prev => prev.map(ord => {
-        if (ord.id === logData.orderId) {
+        if (ord.id === logData.orderId || ord.orderNo === logData.orderId || ord.orderNumber === logData.orderId) {
           const logs = ord.activityLog || [];
           const actLog = {
             timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16),
-            description: `ລາຍງານງານເສຍ: ${invItem.name} ຈຳນວນ ${logData.quantity} ໜ່ວຍ. ສາເຫດ: ${logData.cause || 'ບໍ່ລະບຸ'}`
+            description: `ລາຍງານງານເສຍ: ${invItem?.name || 'ວັດສະດຸ'} ຈຳນວນ ${logData.quantity} ໜ່ວຍ. ສາເຫດ: ${logData.cause || logData.reason || 'ບໍ່ລະບຸ'}`
           };
           return {
             ...ord,
@@ -3030,6 +3099,32 @@ export const AppProvider = ({ children }) => {
         }
         return ord;
       }));
+    }
+
+    try {
+      const res = await fetch('/api/v1/production/spoilage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newLog.id,
+          order_id: newLog.orderId,
+          machine_id: newLog.machineId,
+          material_id: newLog.materialId,
+          paper_sku: newLog.materialId,
+          spoilage_qty: newLog.quantity,
+          unit: newLog.unit,
+          reason: newLog.reason,
+          cost_impact: newLog.costImpact
+        })
+      });
+      if (res.ok) {
+        showToast('ບັນທຶກລາຍງານງານເສຍສຳເລັດແລ້ວ', 'success');
+      } else {
+        showToast('ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກລາຍງານງານເສຍ', 'error');
+      }
+    } catch (err) {
+      console.error('Failed to persist spoilage log:', err);
+      showToast('ເກີດຂໍ້ຜິດພາດໃນການເຊື່ອມຕໍ່ຖານຂໍ້ມູນ', 'error');
     }
   };
 
@@ -3098,7 +3193,7 @@ export const AppProvider = ({ children }) => {
     });
 
     // Send JSON payload to Equipment Backend API
-    fetch(`http://localhost:8080/api/equipment/${newEq.id}`, {
+    fetch(`/api/equipment/${newEq.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newEq)
@@ -3122,12 +3217,12 @@ export const AppProvider = ({ children }) => {
     });
 
     const payload = { id: eqId, ...updatedFields };
-    fetch(`http://localhost:8080/api/equipment/${eqId}`, {
+    fetch(`/api/equipment/${eqId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).catch(err => console.log('API equipment update notice:', err));
-    fetch(`http://localhost:8080/api/v1/assets/${eqId}`, {
+    fetch(`/api/v1/assets/${eqId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -3141,10 +3236,10 @@ export const AppProvider = ({ children }) => {
       safeSetItem('ss_print_equipment_v6', next);
       return next;
     });
-    fetch(`http://localhost:8080/api/equipment/${eqId}`, {
+    fetch(`/api/equipment/${eqId}`, {
       method: 'DELETE'
     }).catch(err => console.log('API equipment delete notice:', err));
-    fetch(`http://localhost:8080/api/v1/assets/${eqId}`, {
+    fetch(`/api/v1/assets/${eqId}`, {
       method: 'DELETE'
     }).catch(err => console.log('API assets delete notice:', err));
   };
@@ -3219,6 +3314,24 @@ export const AppProvider = ({ children }) => {
 
     setDowntimeLogs((prev: any[]) => [newLog, ...prev]);
 
+    fetch('/api/v1/production/downtime', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: newLog.id,
+        machineId: newLog.equipmentId,
+        machineName: newLog.equipmentName,
+        status: (newLog.status || 'Pending').toUpperCase(),
+        reason: newLog.reason,
+        technicianId: newLog.technician,
+        startTime: newLog.startTime,
+        endTime: newLog.endTime,
+        durationMinutes: newLog.downtimeMinutes
+      })
+    }).catch(err => console.warn('Downtime log API notice:', err));
+
+    showToast('ບັນທຶກລາຍງານການຢຸດທຳງານເຄື່ອງຈັກຮຽບຮ້ອຍແລ້ວ!', 'success');
+
     // Update machine status if downtime is pending/in progress
     if (logData.status !== 'Completed') {
       updateEquipment(logData.equipmentId, { status: 'Under Repair' });
@@ -3232,6 +3345,21 @@ export const AppProvider = ({ children }) => {
         if (merged.status === 'Completed' && log.equipmentId) {
           updateEquipment(log.equipmentId, { status: 'In Use' });
         }
+        fetch('/api/v1/production/downtime', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: merged.id,
+            machineId: merged.equipmentId,
+            machineName: merged.equipmentName,
+            status: (merged.status || 'Completed').toUpperCase(),
+            reason: merged.reason,
+            technicianId: merged.technician,
+            startTime: merged.startTime,
+            endTime: merged.endTime,
+            durationMinutes: merged.downtimeMinutes
+          })
+        }).catch(err => console.warn('Update downtime log API notice:', err));
         return merged;
       }
       return log;
@@ -3385,7 +3513,7 @@ export const AppProvider = ({ children }) => {
     }
 
     // 4. Send API DELETE to Backend
-    fetch(`http://localhost:8080/api/inbound/${id}`, {
+    fetch(`/api/inbound/${id}`, {
       method: 'DELETE'
     }).catch(err => console.log('API inbound delete notice:', err));
   };
@@ -3493,63 +3621,165 @@ export const AppProvider = ({ children }) => {
     });
   };
 
-  const updateQuotation = (quotationId, updatedFields) => {
+  const updateQuotation = (quotationId: string, updatedFields: Record<string, any>) => {
+    let updatedQuote: any = null;
     setQuotations(prev => {
-      const updated = prev.map(q => q.id === quotationId ? { ...q, ...updatedFields } : q);
+      const updated = prev.map(q => {
+        if (q.id === quotationId || q.quotationNumber === quotationId) {
+          updatedQuote = { ...q, ...updatedFields, updatedAt: new Date().toISOString().split('T')[0] };
+          return updatedQuote;
+        }
+        return q;
+      });
       safeSetItem('ss_print_quotations_v6', updated);
       return updated;
     });
+
+    if (updatedQuote) {
+      fetch(`/api/v1/quotations/${quotationId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: updatedQuote.id,
+          quotation_no: updatedQuote.quotationNumber || updatedQuote.quotation_no,
+          title: updatedQuote.title || updatedQuote.quotationTitle || 'ໃບສະເໜີລາຄາງານພິມ',
+          customer_name: updatedQuote.customerName || updatedQuote.customer_name || 'General Customer',
+          customer_phone: updatedQuote.customerPhone || updatedQuote.customer_phone || '',
+          customer_address: updatedQuote.customerAddress || updatedQuote.customer_address || '',
+          status: updatedQuote.status || 'Draft',
+          total_cost: Number(updatedQuote.totalCost || updatedQuote.grandNetCost || 0),
+          total_selling_price: Number(updatedQuote.grandTotal || updatedQuote.finalGrandTotal || updatedQuote.total_selling_price || 0),
+          overall_profit_percent: Number(updatedQuote.profitMargin || updatedQuote.quotationProfitMargin || updatedQuote.overall_profit_percent || 40),
+          discount_percent: Number(updatedQuote.discountPercent || updatedQuote.quotationDiscountPercent || 0),
+          setup_fee: Number(updatedQuote.setupFee || updatedQuote.quotationSetupFee || 0),
+          packaging_cost: Number(updatedQuote.packagingCost || updatedQuote.quotationPackagingCost || 0),
+          shipping_fee: Number(updatedQuote.shippingFee || 0),
+          expiry_date: updatedQuote.expiryDate || updatedQuote.quotationExpiry || updatedQuote.expiresAt || '',
+          notes: updatedQuote.notes || updatedQuote.quotationNote || '',
+          items: updatedQuote.items || []
+        })
+      }).then(res => {
+        if (res.ok) {
+          showToast('ບັນທຶກໃບສະເໜີລາຄາສຳເລັດແລ້ວ', 'success');
+        } else {
+          showToast('ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກໃບສະເໜີລາຄາ', 'error');
+        }
+      }).catch(err => {
+        console.error('Quotation update sync error:', err);
+        showToast('ເກີດຂໍ້ຜິດພາດໃນການເຊື່ອມຕໍ່ຖານຂໍ້ມູນ', 'error');
+      });
+    }
   };
 
-  const deleteQuotation = (quotationId) => {
+  const deleteQuotation = (quotationId: string) => {
     setQuotations(prev => {
-      const updated = prev.filter(q => q.id !== quotationId);
+      const updated = prev.filter(q => q.id !== quotationId && q.quotationNumber !== quotationId);
       safeSetItem('ss_print_quotations_v6', updated);
       return updated;
     });
     fetch(`/api/v1/quotations/${quotationId}`, { method: 'DELETE' }).catch(() => {});
+    showToast('ລົບໃບສະເໜີລາຄາຮຽບຮ້ອຍແລ້ວ', 'info');
   };
 
   // Convert an accepted quotation into a production order + job ticket
-  const convertQuotationToOrder = (quotationId) => {
-    const quotation = quotations.find(q => q.id === quotationId);
+  const convertQuotationToOrder = async (quotationId: string) => {
+    const quotation = quotations.find(q => q.id === quotationId || q.quotationNumber === quotationId);
     if (!quotation) return null;
 
-    const orderItems = (quotation.items || []).map(item => {
+    const orderItems = (quotation.items || []).map((item: any, idx: number) => {
       const invItem = inventory.find(i => i.id === item.id || i.name === item.name);
       return {
-        id: invItem ? invItem.id : item.id,
-        name: item.name || invItem?.name || 'Custom Print Job',
+        id: `item-${quotation.id}-${idx + 1}`,
+        job_name: item.name || invItem?.name || item.jobName || 'Custom Print Job',
+        item_name: item.name || invItem?.name || item.itemName || 'Custom Print Job',
         quantity: Number(item.quantity) || 1,
-        unitCost: Number(item.unitPrice) || 0
+        page_count: Number(item.pageCount || item.pages || 1),
+        paper_size: item.paperSize || item.size || 'A5',
+        unit_price_lak: Number(item.unitPrice || item.unitPriceSnapshot || item.unitCost || 0),
+        total_price_lak: Number(item.totalPrice || (Number(item.quantity || 1) * Number(item.unitPrice || 0))),
+        unit_cost_lak: Number(item.unitCost || item.costPriceSnapshot || 0),
+        specs: item.specs || item
       };
     });
 
-    const newOrder = {
-      customerName: quotation.customerName,
-      phone: quotation.phone || '',
-      items: orderItems,
-      totalPriceCharged: Number(quotation.grandTotal) || 0,
-      depositAmountPaid: Math.round((Number(quotation.grandTotal) || 0) * 0.5),
-      remainingUnpaidBalance: Math.round((Number(quotation.grandTotal) || 0) * 0.5),
-      paymentMethod: 'BCEL One',
-      paymentStatus: 'Deposit Paid',
-      status: 'Received',
-      promisedDeliveryDate: quotation.expiresAt || new Date().toISOString().split('T')[0],
-      artworkLink: quotation.artworkLink || '',
-      notes: `Converted from quotation ${quotation.quotationNumber} (v${quotation.version}). ${quotation.notes || ''}`,
-      sourceQuotationId: quotation.id
+    const totalPrice = Number(quotation.grandTotal || quotation.total_selling_price || quotation.finalGrandTotal) || 0;
+    const depositAmt = Math.round(totalPrice * 0.5);
+    const orderNo = `ORD-${new Date().toISOString().replace(/\D/g, '').slice(2, 8)}-${Date.now().toString().slice(-3)}`;
+
+    const orderPayload = {
+      order_no: orderNo,
+      order_number: orderNo,
+      customer_name: quotation.customerName || quotation.customer_name || 'General Customer',
+      customer_phone: quotation.customerPhone || quotation.customer_phone || quotation.phone || '',
+      customer_address: quotation.customerAddress || quotation.customer_address || '',
+      deposit_lak: depositAmt,
+      deposit_amount: depositAmt,
+      total_amount_lak: totalPrice,
+      total_price: totalPrice,
+      delivery_date: quotation.expiryDate || quotation.expiresAt || new Date().toISOString().split('T')[0],
+      artwork_link: quotation.artworkLink || '',
+      google_drive_link: quotation.artworkLink || '',
+      status: 'WAITING_DEPOSIT',
+      overall_status: 'WAITING_DEPOSIT',
+      notes: `ແປງມາຈາກໃບສະເໜີລາຄາ #${quotation.quotationNumber || quotation.quotation_no || quotation.id}. ${quotation.notes || ''}`,
+      source_quotation_id: quotation.id,
+      items: orderItems
     };
 
-    let createdId = null;
-    setOrders(prev => {
-      const id = `ord-${Date.now().toString().slice(-4)}`;
-      createdId = id;
-      return [{ ...newOrder, id }, ...prev];
-    });
+    try {
+      // 1. Create order in backend
+      const orderRes = await fetch('/api/v1/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderPayload)
+      });
 
-    setQuotations(prev => prev.map(q => q.id === quotationId ? { ...q, status: 'Accepted', convertedOrderId: createdId } : q));
-    return createdId;
+      let createdOrder: any = null;
+      if (orderRes.ok) {
+        const orderData = await orderRes.json();
+        createdOrder = orderData.data || orderData;
+      }
+
+      const createdId = createdOrder?.id || `ord-${Date.now().toString().slice(-4)}`;
+
+      // 2. Approve/Convert quotation in backend
+      await fetch(`/api/v1/quotations/${quotationId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: `Converted to Order ${orderNo}` })
+      }).catch(() => {});
+
+      // 3. Update local state
+      const localOrderObj = {
+        ...orderPayload,
+        id: createdId,
+        items: orderItems.map((it: any) => ({
+          id: it.id,
+          name: it.item_name,
+          quantity: it.quantity,
+          unitCost: it.unit_price_lak
+        })),
+        totalPriceCharged: totalPrice,
+        depositAmountPaid: depositAmt,
+        remainingUnpaidBalance: totalPrice - depositAmt,
+        paymentMethod: 'BCEL One',
+        paymentStatus: 'Deposit Paid',
+        status: 'Received',
+        promisedDeliveryDate: orderPayload.delivery_date,
+        artworkLink: orderPayload.artwork_link,
+        sourceQuotationId: quotation.id
+      };
+
+      setOrders(prev => [localOrderObj, ...prev]);
+      setQuotations(prev => prev.map(q => (q.id === quotationId || q.quotationNumber === quotationId) ? { ...q, status: 'Accepted', convertedOrderId: createdId } : q));
+
+      showToast('ແປງໃບສະເໜີລາຄາເປັນອໍເດີຜະລິດຮຽບຮ້ອຍແລ້ວ', 'success');
+      return createdId;
+    } catch (err) {
+      console.error('Failed to convert quotation to order:', err);
+      showToast('ເກີດຂໍ້ຜິດພາດໃນການແປງໃບສະເໜີລາຄາ', 'error');
+      return null;
+    }
   };
 
   // ---- Employee actions (CRUD + shift/machine assignment + incentives) ----
@@ -3649,17 +3879,33 @@ export const AppProvider = ({ children }) => {
   };
 
   // ---- Delivery / dispatch actions ----
-  const addDelivery = (deliveryData) => {
+  const addDelivery = (deliveryData: any) => {
     const newDelivery = {
       id: `dlv-${Date.now().toString().slice(-4)}`,
-      status: deliveryData.status || 'Dispatched',
+      status: deliveryData.status || 'PENDING_PICKUP',
       ...deliveryData
     };
     setDeliveries(prev => [newDelivery, ...prev]);
+
+    fetch('/api/v1/orders/deliveries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newDelivery)
+    }).catch(err => console.warn('Add delivery API notice:', err));
+
+    showToast('ເພີ່ມລາຍການຈັດສົ່ງຮຽບຮ້ອຍແລ້ວ!', 'success');
   };
 
-  const updateDelivery = (deliveryId, updatedFields) => {
+  const updateDelivery = (deliveryId: string, updatedFields: Record<string, any>) => {
     setDeliveries(prev => prev.map(d => d.id === deliveryId ? { ...d, ...updatedFields } : d));
+
+    fetch(`/api/v1/orders/deliveries/${deliveryId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedFields)
+    }).catch(err => console.warn('Update delivery API notice:', err));
+
+    showToast('ອັບເດດສະຖານະການຈັດສົ່ງຮຽບຮ້ອຍແລ້ວ!', 'success');
   };
 
   const addCustomer = (customerData) => {
@@ -3676,7 +3922,7 @@ export const AppProvider = ({ children }) => {
     };
     setCustomers(prev => [...prev, newCust]);
 
-    fetch('http://localhost:8080/api/customers', {
+    fetch('/api/customers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newCust)
@@ -3687,7 +3933,7 @@ export const AppProvider = ({ children }) => {
     setCustomers(prev => prev.map(c => {
       if (c.id === customerId) {
         const updated = { ...c, ...updatedFields };
-        fetch(`http://localhost:8080/api/customers/${customerId}`, {
+        fetch(`/api/customers/${customerId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updated)
@@ -3700,6 +3946,9 @@ export const AppProvider = ({ children }) => {
 
   const deleteCustomer = (customerId) => {
     setCustomers(prev => prev.filter(c => c.id !== customerId));
+    fetch(`/api/customers/${customerId}`, {
+      method: 'DELETE'
+    }).catch(err => console.warn('Delete customer API notice:', err));
   };
 
   const updateInboundEntry = (updatedEntry: any) => {
@@ -3722,7 +3971,7 @@ export const AppProvider = ({ children }) => {
     const costPerPurchase = Number(updatedEntry.unitPrice || (totalPrice / Math.max(1, packQty)));
     const costPerConsumption = isPaper ? Math.round(totalPrice / Math.max(1, totalSheets)) : costPerPurchase;
 
-    fetch(`http://localhost:8080/api/inbound/${updatedEntry.id}`, {
+    fetch(`/api/inbound/${updatedEntry.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updatedEntry)
@@ -3917,7 +4166,7 @@ export const AppProvider = ({ children }) => {
   // ---- Couriers CRUD Helpers ----
   const syncCouriersToBackend = async (list: any[]) => {
     try {
-      await fetch('http://localhost:8080/api/v1/admin/couriers/sync', {
+      await fetch('/api/v1/admin/couriers/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(list)
@@ -3968,7 +4217,7 @@ export const AppProvider = ({ children }) => {
   // ---- Bank Accounts CRUD Helpers ----
   const syncBankAccountsToBackend = async (list: any[]) => {
     try {
-      await fetch('http://localhost:8080/api/v1/admin/payment-methods/sync', {
+      await fetch('/api/v1/admin/payment-methods/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(list)

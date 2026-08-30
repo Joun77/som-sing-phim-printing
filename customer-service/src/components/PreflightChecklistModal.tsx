@@ -130,7 +130,7 @@ export const PreflightChecklistModal: React.FC<PreflightChecklistModalProps> = (
             {/* Quality Checklist Summary Badges */}
             <div className="mt-4 pt-3 border-t border-slate-800/80">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
-                ✓ ຜົນການກວດສອບມາດຕະຖານໂຮງພິມ (Preflight Assurance)
+                ຜົນການກວດສອບມາດຕະຖານໂຮງພິມ (Preflight Assurance)
               </div>
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 {report.items.slice(0, 4).map((item) => {

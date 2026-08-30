@@ -100,7 +100,7 @@ export default function EmployeeManagement() {
   }, [contextEmployees]);
 
   useEffect(() => {
-    fetch('http://localhost:8080/api/employees')
+    fetch('/api/employees')
       .then(res => res.json())
       .then(data => {
         if (data.status === 'success' && Array.isArray(data.data) && data.data.length > 0) {
@@ -178,7 +178,7 @@ export default function EmployeeManagement() {
 
     earningRecords.forEach(rec => {
       if (earnerMap[rec.employeeId]) {
-        earnerMap[rec.employeeId].totalEarned += Number(rec.earnedAmount || 0);
+        earnerMap[rec.employeeId].totalEarned += Number(rec.earnedAmountLAK || rec.earnedAmount || 0);
         earnerMap[rec.employeeId].impressions += Number(rec.impressions || 0);
         earnerMap[rec.employeeId].jobsCount += 1;
       }
@@ -232,7 +232,7 @@ export default function EmployeeManagement() {
       salesCommissionRate: Number(form.salesCommissionRate) || 0
     };
 
-    fetch(isEditing ? `http://localhost:8080/api/employees/${form.id}` : 'http://localhost:8080/api/employees', {
+    fetch(isEditing ? `/api/employees/${form.id}` : '/api/employees', {
       method: isEditing ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -274,7 +274,7 @@ export default function EmployeeManagement() {
     askConfirmation(
       T(`ທ່ານຕ້ອງການລຶບພະນັກງານ "${emp.name}" ແທ້ ຫຼື ບໍ່?`, `Delete employee "${emp.nameEn}"?`),
       () => {
-        fetch(`http://localhost:8080/api/employees/${emp.id}`, { method: 'DELETE' })
+        fetch(`/api/employees/${emp.id}`, { method: 'DELETE' })
           .catch(err => console.log('API delete error', err));
         setEmployees(prev => prev.filter(e => e.id !== emp.id));
         if (selectedEmp?.id === emp.id) setSelectedEmp(null);
@@ -436,7 +436,7 @@ export default function EmployeeManagement() {
             {/* Piece-Rate & Incentive Earnings Section */}
             {(() => {
               const empEarnings = earningRecords.filter(r => r.employeeId === emp.id);
-              const totalEmpEarned = empEarnings.reduce((sum, r) => sum + Number(r.earnedAmount || 0), 0);
+              const totalEmpEarned = empEarnings.reduce((sum, r) => sum + Number(r.earnedAmountLAK || r.earnedAmount || 0), 0);
               const totalEmpImpressions = empEarnings.reduce((sum, r) => sum + Number(r.impressions || 0), 0) || Number(emp.impressionsProduced || 0);
 
               return (

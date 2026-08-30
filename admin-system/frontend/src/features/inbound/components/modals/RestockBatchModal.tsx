@@ -168,7 +168,7 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
         purchaseMultiplier: multiplier
       });
 
-      fetch('http://localhost:8080/api/inbound', {
+      fetch('/api/inbound', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(inboundLog)

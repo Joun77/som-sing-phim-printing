@@ -143,7 +143,7 @@ export default function InboundManagement() {
 
   const fetchInbound = async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/inbound');
+      const res = await fetch('/api/inbound');
       if (res.ok) {
         const data = await res.json();
         const deletedIds = getDeletedIds();
@@ -164,7 +164,7 @@ export default function InboundManagement() {
         if (missingFromDb.length > 0) {
           for (const item of missingFromDb) {
             try {
-              await fetch('http://localhost:8080/api/inbound', {
+              await fetch('/api/inbound', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -191,7 +191,7 @@ export default function InboundManagement() {
           }
 
           // Re-fetch after syncing all missing records to get full DB state
-          const reRes = await fetch('http://localhost:8080/api/inbound');
+          const reRes = await fetch('/api/inbound');
           if (reRes.ok) {
             const reData = await reRes.json();
             if (reData.status === 'success' && Array.isArray(reData.data)) {
@@ -470,7 +470,7 @@ export default function InboundManagement() {
       specs: item.specs || {}
     };
 
-    const url = isUpdate ? `http://localhost:8080/api/inbound/${item.id}` : 'http://localhost:8080/api/inbound';
+    const url = isUpdate ? `/api/inbound/${item.id}` : '/api/inbound';
     const method = isUpdate ? 'PUT' : 'POST';
 
     fetch(url, {
@@ -481,7 +481,7 @@ export default function InboundManagement() {
   };
 
   const deleteInboundFromBackend = (id: string) => {
-    fetch(`http://localhost:8080/api/inbound/${id}`, {
+    fetch(`/api/inbound/${id}`, {
       method: 'DELETE'
     }).catch(err => console.log('Inbound API delete error', err));
   };

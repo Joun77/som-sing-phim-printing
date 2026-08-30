@@ -127,8 +127,8 @@ export const PriceBreakdownTable: React.FC<PriceBreakdownTableProps> = ({
                       {item.ratePerUnit > 0 ? (
                         formatAmount(item.ratePerUnit)
                       ) : (
-                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-sans">
-                          {language === 'en' ? 'Included' : '✓ ລວມໃນຊຸດ'}
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-sans inline-flex items-center gap-1">
+                          <CheckIcon size={12} /> {language === 'en' ? 'Included' : 'ລວມໃນຊຸດ'}
                         </span>
                       )}
                     </td>
@@ -139,8 +139,8 @@ export const PriceBreakdownTable: React.FC<PriceBreakdownTableProps> = ({
                       {item.ratePerUnit > 0 ? (
                         formatAmount(item.ratePerUnit * quantity)
                       ) : (
-                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-sans">
-                          {language === 'en' ? 'Free' : '✓ ຟຣີ'}
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-sans inline-flex items-center gap-1">
+                          <CheckIcon size={12} /> {language === 'en' ? 'Free' : 'ຟຣີ'}
                         </span>
                       )}
                     </td>

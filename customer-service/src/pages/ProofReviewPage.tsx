@@ -58,6 +58,39 @@ export default function ProofReviewPage() {
     }
   }, [orderId, token]);
 
+  useEffect(() => {
+    if (!orderId) return;
+
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
+    const sseUrl = `${apiBase}/v1/orders/stream?tracking=${encodeURIComponent(orderId)}`;
+    let eventSource: EventSource | null = null;
+
+    try {
+      eventSource = new EventSource(sseUrl);
+      
+      const refreshProofData = () => {
+        if (orderId && token) {
+          fetch(`/api/v1/proof/${orderId}/${token}`)
+            .then(res => res.ok ? res.json() : null)
+            .then(json => {
+              if (json && json.data) setData(json.data);
+            }).catch(() => {});
+        }
+      };
+
+      eventSource.addEventListener('proof_update', refreshProofData);
+      eventSource.addEventListener('order_status_update', refreshProofData);
+    } catch (e) {
+      console.warn('Proof SSE stream notice:', e);
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [orderId, token]);
+
   const handleApprove = async () => {
     if (!window.confirm('ຢືນຢັນການອະນຸມັດໄຟລ໌ຕົວຢ່າງພິມນີ້ເພື່ອເຂົ້າສູ່ຂັ້ນຕອນການພິມຈິງ?')) return;
     setSubmitting(true);

@@ -227,3 +227,65 @@ func TestOrderHandler_VerifySlip_AntiFraud(t *testing.T) {
 		t.Fatalf("expected status 409 Conflict for duplicate trans_ref, got %d: %s", w2.Code, w2.Body.String())
 	}
 }
+
+func TestOrderHandler_CreateOrder_Idempotency(t *testing.T) {
+	r, _ := setupTestRouter()
+
+	orderReq := domain.Order{
+		ID:             "ORD-IDEM-001",
+		OrderNo:        "ORD-IDEM-001",
+		TrackingCode:   "TRK-IDEM-001",
+		CustomerName:   "Bounmy",
+		CustomerPhone:  "020 99887766",
+		TotalAmountLAK: 350000,
+		DepositLAK:     100000,
+		RemainingLAK:   250000,
+		IdempotencyKey: "idem-uuid-999-aaa",
+		Items: []domain.OrderItem{
+			{
+				ID:            "item-idem-1",
+				JobName:       "Business Cards",
+				ItemName:      "Business Cards",
+				Quantity:      5,
+				UnitPriceLAK:  70000,
+				TotalPriceLAK: 350000,
+			},
+		},
+	}
+
+	body, _ := json.Marshal(orderReq)
+
+	// First Request -> 201 Created
+	req1, _ := http.NewRequest(http.MethodPost, "/api/v1/orders", bytes.NewBuffer(body))
+	req1.Header.Set("Content-Type", "application/json")
+	req1.Header.Set("Idempotency-Key", "idem-uuid-999-aaa")
+	w1 := httptest.NewRecorder()
+	r.ServeHTTP(w1, req1)
+
+	if w1.Code != http.StatusCreated {
+		t.Fatalf("expected status 201 Created on first request, got %d: %s", w1.Code, w1.Body.String())
+	}
+
+	// Second Request with same Idempotency-Key -> 200 OK
+	req2, _ := http.NewRequest(http.MethodPost, "/api/v1/orders", bytes.NewBuffer(body))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("Idempotency-Key", "idem-uuid-999-aaa")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Fatalf("expected status 200 OK on idempotent retry, got %d: %s", w2.Code, w2.Body.String())
+	}
+
+	var res2 struct {
+		Status string                        `json:"status"`
+		Data   domain.PublicOrderTrackingDTO `json:"data"`
+	}
+	if err := json.Unmarshal(w2.Body.Bytes(), &res2); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if res2.Data.OrderNo != "ORD-IDEM-001" {
+		t.Errorf("expected order_no ORD-IDEM-001, got %s", res2.Data.OrderNo)
+	}
+}

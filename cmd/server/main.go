@@ -25,7 +25,7 @@ func main() {
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, Idempotency-Key")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, PATCH, DELETE")
 
 		if c.Request.Method == "OPTIONS" {
@@ -40,9 +40,20 @@ func main() {
 	orderHdr := handler.NewOrderHandler(pricingSvc, dbConn)
 	orderHdr.RegisterRoutes(r)
 
-	r.GET("/api/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "healthy"})
-	})
+	healthHandler := func(c *gin.Context) {
+		dbStatus := "disconnected"
+		if dbConn != nil {
+			if err := dbConn.Ping(); err == nil {
+				dbStatus = "connected"
+			}
+		}
+		c.JSON(200, gin.H{
+			"status":   "healthy",
+			"database": dbStatus,
+		})
+	}
+	r.GET("/api/health", healthHandler)
+	r.GET("/health", healthHandler)
 
 	port := os.Getenv("PORT")
 	if port == "" {

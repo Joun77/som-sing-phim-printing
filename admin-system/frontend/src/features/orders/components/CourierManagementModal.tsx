@@ -70,13 +70,13 @@ export const CourierManagementModal: React.FC<CourierManagementModalProps> = ({
     formData.append('file', file);
 
     try {
-      const res = await fetch('http://localhost:8080/api/v1/admin/couriers/upload-logo', {
+      const res = await fetch('/api/v1/admin/couriers/upload-logo', {
         method: 'POST',
         body: formData,
       });
       const data = await res.json();
       if (data.status === 'success' && data.fileUrl) {
-        setLogoUrl(`http://localhost:8080${data.fileUrl}`);
+        setLogoUrl(data.fileUrl);
         setPreviewError(false);
         showToast(
           currentLang === 'lo' ? 'ອັບໂຫລດຮູບສຳເລັດ!' : 'Logo uploaded successfully!',

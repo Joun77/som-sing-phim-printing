@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { Pause, Play } from 'lucide-react';
 
 export interface BoxModelViewerProps {
   lengthMM?: number; // X dimension in mm
@@ -399,7 +400,17 @@ export const BoxModelViewer: React.FC<BoxModelViewerProps> = ({
               : 'bg-black/70 border-white/10 text-slate-300 hover:text-white'
           }`}
         >
-          <span>{isRotating ? '⏸ Pause 360°' : '▶ 360° Spin'}</span>
+          {isRotating ? (
+            <>
+              <Pause className="w-3.5 h-3.5" />
+              <span>Pause 360°</span>
+            </>
+          ) : (
+            <>
+              <Play className="w-3.5 h-3.5" />
+              <span>360° Spin</span>
+            </>
+          )}
         </button>
       </div>
     </div>

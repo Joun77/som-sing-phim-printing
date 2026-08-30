@@ -14,6 +14,9 @@ import {
   CartIcon,
 } from './icons.tsx'
 import { CURRENCIES } from '../utils/currency.ts'
+import { User, ShoppingBag } from 'lucide-react'
+import { CustomerProfileModal } from './customer/CustomerProfileModal.tsx'
+import { CustomerOrderHistoryDrawer } from './customer/CustomerOrderHistoryDrawer.tsx'
 
 const SOCIALS = [
   { label: 'Facebook', href: 'https://www.facebook.com/', Icon: FacebookIcon },
@@ -44,7 +47,7 @@ function LanguageSwitcher() {
   const { language, setLanguage } = useShop()
   const next = language === 'lo' ? 'en' : 'lo'
   const label = language === 'lo' ? 'ລາວ' : 'EN'
-  const flag = language === 'lo' ? '🇱🇦' : '🇬🇧'
+  const badge = language === 'lo' ? 'LA' : 'EN'
 
   return (
     <button
@@ -54,7 +57,7 @@ function LanguageSwitcher() {
       aria-label={`Switch to ${next === 'lo' ? 'ພາສາລາວ' : 'English'}`}
       title={next === 'lo' ? 'ສ່ຽງໄປ ພາສາລາວ' : 'Switch to English'}
     >
-      <span className="lang-toggle-flag" aria-hidden="true">{flag}</span>
+      <span className="lang-toggle-flag text-[10px] font-black px-1 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400" aria-hidden="true">{badge}</span>
       <span className="lang-toggle-label">{label}</span>
     </button>
   )
@@ -131,6 +134,9 @@ export default function Header() {
   const navigate = useNavigate()
   const location = useLocation()
   const { t, language, openCart, cartCount, categories = [] } = useShop()
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const [isOrdersOpen, setIsOrdersOpen] = useState(false)
+  const [customerPhone, setCustomerPhone] = useState(localStorage.getItem('ssp_customer_phone') || '')
 
   // Close menu on route change
   useEffect(() => {
@@ -249,6 +255,26 @@ export default function Header() {
                 <span className="header-cart-badge">{cartCount}</span>
               )}
             </button>
+            <button
+              type="button"
+              className="lang-toggle-btn hidden-mobile"
+              onClick={() => setIsProfileOpen(true)}
+              title="ແກ້ໄຂຂໍ້ມູນທີ່ຢູ່"
+              style={{ padding: '8px' }}
+            >
+              <User className="w-5 h-5 text-slate-700" />
+            </button>
+            {customerPhone && (
+              <button
+                type="button"
+                className="lang-toggle-btn hidden-mobile"
+                onClick={() => setIsOrdersOpen(true)}
+                title="ປະຫວັດການສັ່ງຊື້"
+                style={{ padding: '8px' }}
+              >
+                <ShoppingBag className="w-5 h-5 text-slate-700" />
+              </button>
+            )}
           </div>
         </nav>
 
@@ -269,6 +295,26 @@ export default function Header() {
           </button>
           <button
             type="button"
+            className="header-cart-btn"
+            onClick={() => setIsProfileOpen(true)}
+            title="ແກ້ໄຂຂໍ້ມູນທີ່ຢູ່"
+            style={{ padding: '8px' }}
+          >
+            <User className="w-5 h-5 text-slate-700" />
+          </button>
+          {customerPhone && (
+            <button
+              type="button"
+              className="header-cart-btn"
+              onClick={() => setIsOrdersOpen(true)}
+              title="ປະຫວັດການສັ່ງຊື້"
+              style={{ padding: '8px' }}
+            >
+              <ShoppingBag className="w-5 h-5 text-slate-700" />
+            </button>
+          )}
+          <button
+            type="button"
             className="header-burger"
             aria-label="Toggle Menu"
             aria-expanded={menuOpen}
@@ -280,6 +326,17 @@ export default function Header() {
           </button>
         </div>
       </div>
+
+      <CustomerProfileModal 
+        isOpen={isProfileOpen} 
+        onClose={() => setIsProfileOpen(false)}
+        onLoginSuccess={(phone) => setCustomerPhone(phone)}
+      />
+      <CustomerOrderHistoryDrawer 
+        isOpen={isOrdersOpen} 
+        onClose={() => setIsOrdersOpen(false)}
+        phone={customerPhone}
+      />
     </header>
   )
 }

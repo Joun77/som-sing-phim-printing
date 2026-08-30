@@ -375,11 +375,39 @@ export default function CustomerManagement() {
     setActiveTab('calculator');
   };
 
+  // Fetch real order history for selected customer
+  const [customerOrders, setCustomerOrders] = useState<any[]>([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+
+  useEffect(() => {
+    if (!selectedDetailCustomerId) {
+      setCustomerOrders([]);
+      return;
+    }
+    const cust = customers.find(c => c.id === selectedDetailCustomerId);
+    setIsLoadingOrders(true);
+    fetch(`/api/customers/${selectedDetailCustomerId}/orders`)
+      .then(res => res.json())
+      .then(resData => {
+        if (resData && resData.status === 'success' && Array.isArray(resData.data)) {
+          setCustomerOrders(resData.data);
+        } else if (cust) {
+          setCustomerOrders(orders.filter(o => o.customerName === cust.name || o.customerId === cust.id));
+        }
+      })
+      .catch(() => {
+        if (cust) {
+          setCustomerOrders(orders.filter(o => o.customerName === cust.name || o.customerId === cust.id));
+        }
+      })
+      .finally(() => setIsLoadingOrders(false));
+  }, [selectedDetailCustomerId, customers, orders]);
+
   const getCustomerStats = (custName) => {
     const custOrders = orders.filter(o => o.customerName === custName);
     const totalOrders = custOrders.length;
-    const totalSpent = custOrders.reduce((sum, o) => sum + o.totalPriceCharged, 0);
-    const outstanding = custOrders.reduce((sum, o) => sum + o.remainingUnpaidBalance, 0);
+    const totalSpent = custOrders.reduce((sum, o) => sum + (o.totalPriceCharged || o.total_amount_lak || 0), 0);
+    const outstanding = custOrders.reduce((sum, o) => sum + (o.remainingUnpaidBalance || o.remaining_lak || 0), 0);
     return { totalOrders, totalSpent, outstanding, custOrders };
   };
 
@@ -389,9 +417,24 @@ export default function CustomerManagement() {
   );
 
   const selectedCustomerObj = customers.find(c => c.id === selectedDetailCustomerId);
-  const activeStats = selectedCustomerObj
-    ? getCustomerStats(selectedCustomerObj.name)
-    : { totalOrders: 0, totalSpent: 0, outstanding: 0, custOrders: [] };
+  
+  const activeStats = React.useMemo(() => {
+    if (!selectedCustomerObj) {
+      return { totalOrders: 0, totalSpent: 0, outstanding: 0, custOrders: [] };
+    }
+    const custOrdersList = customerOrders.length > 0
+      ? customerOrders
+      : orders.filter(o => o.customerName === selectedCustomerObj.name || o.customerId === selectedCustomerObj.id);
+
+    const totalOrders = custOrdersList.length;
+    const totalSpent = (selectedCustomerObj.totalSpentLAK && selectedCustomerObj.totalSpentLAK > 0)
+      ? selectedCustomerObj.totalSpentLAK
+      : custOrdersList.reduce((sum, o) => sum + (o.total_amount_lak || o.totalPriceCharged || o.total_price || 0), 0);
+
+    const outstanding = custOrdersList.reduce((sum, o) => sum + (o.remaining_lak || o.remainingUnpaidBalance || 0), 0);
+
+    return { totalOrders, totalSpent, outstanding, custOrders: custOrdersList };
+  }, [selectedCustomerObj, customerOrders, orders]);
 
   const getInitials = (n) =>
     n?.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';

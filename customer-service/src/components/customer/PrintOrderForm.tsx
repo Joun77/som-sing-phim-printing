@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Lock } from 'lucide-react';
 import { PrintOrderFormValues, ProductOption } from '../../types/pricing';
 import { useDynamicPriceCalculator } from '../../hooks/useDynamicPriceCalculator';
 import { DriveLinkInput } from './DriveLinkInput';
@@ -230,8 +231,8 @@ export const PrintOrderForm: React.FC = () => {
             ยืนยันการสั่งพิมพ์
           </button>
 
-          <p className="text-center text-xs text-slate-400">
-            🔒 ข้อมูลและไฟล์ของคุณจะถูกเข้ารหัสและปกป้องอย่างปลอดภัย
+          <p className="text-center text-xs text-slate-400 flex items-center justify-center gap-1.5">
+            <Lock className="w-3.5 h-3.5 inline text-slate-400" /> ข้อมูลและไฟล์ของคุณจะถูกเข้ารหัสและปกป้องอย่างปลอดภัย
           </p>
         </div>
       </div>

@@ -130,6 +130,7 @@ type Order struct {
 	ProofRejectedAt      *time.Time       `json:"proof_rejected_at,omitempty"`
 	ProofSignatureIP     string           `json:"proof_signature_ip,omitempty"`
 	ProofRejectionReason string           `json:"proof_rejection_reason,omitempty"`
+	IdempotencyKey       string           `json:"idempotency_key,omitempty"`
 	StockDeductedAt      *time.Time       `json:"stock_deducted_at,omitempty"`
 	Items                []OrderItem      `json:"items"`
 	CreatedAt            time.Time        `json:"created_at"`

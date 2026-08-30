@@ -93,6 +93,36 @@ export default function CheckoutPage() {
   const [failedQRUrls, setFailedQRUrls] = useState<Set<string>>(new Set())
   const [failedLogoUrls, setFailedLogoUrls] = useState<Set<string>>(new Set())
   const [locations, setLocations] = useState<LaoProvince[]>(LAO_LOCATIONS)
+  const [saveAddressBook, setSaveAddressBook] = useState(true)
+
+  useEffect(() => {
+    const storedPhone = localStorage.getItem('ssp_customer_phone');
+    if (storedPhone) {
+      const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
+      fetch(`${apiBase}/v1/public/customer/profile?phone=${encodeURIComponent(storedPhone)}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(json => {
+          if (json && json.status === 'success' && json.data) {
+            const p = json.data;
+            setBuyer(prev => ({
+              ...prev,
+              name: p.name || prev.name,
+              phone: p.phone ? p.phone.replace('+856 20 ', '').replace('020', '').trim() : prev.phone,
+              email: p.email || prev.email
+            }));
+            setRecipient(prev => ({
+              ...prev,
+              name: p.name || prev.name,
+              phone: p.phone ? p.phone.replace('+856 20 ', '').replace('020', '').trim() : prev.phone,
+              province: p.province || prev.province,
+              district: p.district || prev.district,
+              village: p.village || prev.village,
+              branchCode: p.branchCode || prev.branchCode
+            }));
+          }
+        }).catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     // Fetch locations live from PostgreSQL Database / Backend API
@@ -448,6 +478,40 @@ export default function CheckoutPage() {
         }
       }
 
+      if (saveAddressBook) {
+        const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
+        fetch(`${apiBase}/v1/public/customer/auth`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: fullBuyerPhone,
+            name: buyer.name
+          })
+        }).then(res => res.ok ? res.json() : null)
+          .then(json => {
+            if (json && json.status === 'success' && json.data) {
+              const p = json.data;
+              localStorage.setItem('ssp_customer_phone', p.phone);
+              localStorage.setItem('ssp_customer_id', p.id);
+              // Save shipping details
+              fetch(`${apiBase}/v1/public/customer/profile`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: p.id,
+                  name: buyer.name,
+                  phone: p.phone,
+                  province: recipient.province,
+                  district: recipient.district,
+                  village: recipient.village,
+                  address: sameAsBuyer ? `ບ້ານ ${recipient.village}, ເມືອງ ${recipient.district}, ແຂວງ ${recipient.province}` : `ບ້ານ ${recipient.village}, ເມືອງ ${recipient.district}, ແຂວງ ${recipient.province}`,
+                  branchCode: recipient.branchCode
+                })
+              }).catch(() => {});
+            }
+          }).catch(() => {});
+      }
+
       setSlipVerified(true)
       setIsVerifyingSlip(false)
       setAutoRedirectSeconds(3)
@@ -513,7 +577,7 @@ export default function CheckoutPage() {
                 </label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ padding: '10px 14px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '10px', fontWeight: 800, fontSize: '0.95rem', color: '#1e293b', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>🇱🇦</span>
+                    <span className="font-semibold text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">LA</span>
                     <span>+856 20</span>
                   </div>
                   <input
@@ -535,7 +599,7 @@ export default function CheckoutPage() {
               </div>
 
               <div className="field">
-                <label htmlFor="b-email">ອີເມວສຳລັບຮັບແຈ້ງເຕືອນສະຖານະ (Email Notification - ຖ້າມີ)</label>
+                <label htmlFor="b-email">ອີເມວສຳລັບຮັບແຈ້ງເຕືອນສະテナンス (Email Notification - ຖ້າມີ)</label>
                 <input
                   id="b-email"
                   type="email"
@@ -543,6 +607,19 @@ export default function CheckoutPage() {
                   value={buyer.email}
                   onChange={(e) => setBuyer({ ...buyer, email: e.target.value })}
                 />
+              </div>
+
+              <div className="field mt-3" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  id="save-address-checkbox"
+                  type="checkbox"
+                  checked={saveAddressBook}
+                  onChange={(e) => setSaveAddressBook(e.target.checked)}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <label htmlFor="save-address-checkbox" style={{ margin: 0, fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', color: '#334155' }}>
+                  ບັນທຶກຂໍ້ມູນນີ້ສຳລັບການສັ່ງຊື້ຄັ້ງຕໍ່ໄປ (ບັນທຶກລົງ Address Book)
+                </label>
               </div>
             </div>
 
@@ -655,7 +732,7 @@ export default function CheckoutPage() {
                             </label>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <div style={{ padding: '10px 14px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '10px', fontWeight: 800, fontSize: '0.95rem', color: '#1e293b', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span>🇱🇦</span>
+                                <span className="font-semibold text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">LA</span>
                                 <span>+856 20</span>
                               </div>
                               <input
@@ -786,7 +863,7 @@ export default function CheckoutPage() {
                 </div>
               ) : (
                 <div style={{ padding: '14px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '10px', color: '#64748b', textAlign: 'center', fontSize: '0.88rem', marginTop: '14px' }}>
-                  👈 ກະລຸນາເລືອກບໍລິສັດຂົນສົ່ງດ້ານເທິງກ່ອນ ເພື່ອກອກຂໍ້ມູນສາຂາປາຍທາງ ແລະ ທີ່ຢູ່ຈັດສົ່ງ
+                  <span className="font-bold text-amber-600">!</span> ກະລຸນາເລືອກບໍລິສັດຂົນສົ່ງດ້ານເທິງກ່ອນ ເພື່ອກອກຂໍ້ມູນສາຂາປາຍທາງ ແລະ ທີ່ຢູ່ຈັດສົ່ງ
                 </div>
               )}
             </div>
@@ -831,7 +908,7 @@ export default function CheckoutPage() {
                           <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
                             {bLogo && !failedLogoUrls.has(bLogo) ? (
                               <img
-                                src={bLogo.startsWith('http') || bLogo.startsWith('data:') ? bLogo : `http://localhost:8080${bLogo.startsWith('/') ? '' : '/'}${bLogo}`}
+                                src={bLogo.startsWith('http') || bLogo.startsWith('data:') ? bLogo : `${bLogo.startsWith('/') ? '' : '/'}${bLogo}`}
                                 alt={bName}
                                 style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                                 onError={() => {
@@ -899,8 +976,8 @@ export default function CheckoutPage() {
                         cursor: 'pointer',
                       }}
                     >
-                      <strong style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-main)' }}>
-                        ✓ ຊຳລະເຕັມ 100%
+                      <strong style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', color: 'var(--text-main)' }}>
+                        <Check className="w-4 h-4 text-amber-600 inline" /> ຊຳລະເຕັມ 100%
                       </strong>
                       <small style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
                         {formatMoney(totalDisplay, currency)} (ບໍ່ມີຍອດຄ້າງ)
@@ -919,8 +996,8 @@ export default function CheckoutPage() {
                         cursor: 'pointer',
                       }}
                     >
-                      <strong style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-main)' }}>
-                        ✓ ມັດຈຳ 50%
+                      <strong style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', color: 'var(--text-main)' }}>
+                        <Check className="w-4 h-4 text-amber-600 inline" /> ມັດຈຳ 50%
                       </strong>
                       <small style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
                         {formatMoney(amountToPayDisplay, currency)} (ຍອດຄ້າງ 50%)
@@ -938,7 +1015,7 @@ export default function CheckoutPage() {
                   <div className="payment-qr-canvas" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '180px' }}>
                     {activeBankAccount.qrCodeUrl && !failedQRUrls.has(activeBankAccount.qrCodeUrl) ? (
                       <img
-                        src={activeBankAccount.qrCodeUrl.startsWith('http') || activeBankAccount.qrCodeUrl.startsWith('data:') ? activeBankAccount.qrCodeUrl : `http://localhost:8080${activeBankAccount.qrCodeUrl.startsWith('/') ? '' : '/'}${activeBankAccount.qrCodeUrl}`}
+                        src={activeBankAccount.qrCodeUrl.startsWith('http') || activeBankAccount.qrCodeUrl.startsWith('data:') ? activeBankAccount.qrCodeUrl : `${activeBankAccount.qrCodeUrl.startsWith('/') ? '' : '/'}${activeBankAccount.qrCodeUrl}`}
                         alt="Bank QR Code"
                         style={{ width: '180px', height: '180px', objectFit: 'contain', borderRadius: '12px', background: '#fff' }}
                         onError={() => {
@@ -950,8 +1027,8 @@ export default function CheckoutPage() {
                     )}
                   </div>
                   <div style={{ marginTop: '8px', textAlign: 'center' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-main)', display: 'block' }}>
-                      🏪 {activeBankAccount.shopName || activeBankAccount.promptpayName || 'ຮ້ານ ສົມສິ່ງພິມ (Som-Sing Phim)'}
+                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                      <Store className="w-4 h-4 text-slate-500 inline" /> {activeBankAccount.shopName || activeBankAccount.promptpayName || 'ຮ້ານ ສົມສິ່ງພິມ (Som-Sing Phim)'}
                     </span>
                     <p className="payment-qr-amount" style={{ marginTop: '4px' }}>
                       ຍອດຊຳລະຕອນນີ້ {formatMoney(amountToPayDisplay, currency)}
@@ -963,7 +1040,7 @@ export default function CheckoutPage() {
                   <span className="payment-qr-badge" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {activeBankAccount.logoUrl && !failedLogoUrls.has(activeBankAccount.logoUrl) ? (
                       <img
-                        src={activeBankAccount.logoUrl.startsWith('http') || activeBankAccount.logoUrl.startsWith('data:') ? activeBankAccount.logoUrl : `http://localhost:8080${activeBankAccount.logoUrl.startsWith('/') ? '' : '/'}${activeBankAccount.logoUrl}`}
+                        src={activeBankAccount.logoUrl.startsWith('http') || activeBankAccount.logoUrl.startsWith('data:') ? activeBankAccount.logoUrl : `${activeBankAccount.logoUrl.startsWith('/') ? '' : '/'}${activeBankAccount.logoUrl}`}
                         alt={activeBankAccount.bankName || activeBankAccount.bank}
                         style={{ width: '18px', height: '18px', objectFit: 'contain' }}
                         onError={() => {
@@ -1093,7 +1170,7 @@ export default function CheckoutPage() {
                         ctx.fillText(`To: Som Sing Phim Atelier`, 50, 220)
                         ctx.fillStyle = '#10B981'
                         ctx.font = 'bold 16px sans-serif'
-                        ctx.fillText('✓ TRANSFER SUCCESSFUL', 50, 280)
+                        ctx.fillText('TRANSFER SUCCESSFUL', 50, 280)
                         const dataUrl = canvas.toDataURL('image/png')
                         setSlipPreview(dataUrl)
                         setPaymentSlipped(true)

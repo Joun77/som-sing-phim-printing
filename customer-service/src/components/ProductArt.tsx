@@ -144,8 +144,8 @@ export function CardArt() {
           
           <line x1="75" y1="68" x2="185" y2="68" stroke="url(#goldLuxuryG)" strokeWidth="1" opacity="0.6" />
           
-          <text x="25" y="102" fill="#E2E8F0" fontSize="8" fontWeight="700">✓ Soft-Touch Matte</text>
-          <text x="110" y="102" fill="#FCE794" fontSize="8" fontWeight="700">★ Hot Gold Foil</text>
+          <text x="25" y="102" fill="#E2E8F0" fontSize="8" fontWeight="700">Soft-Touch Matte</text>
+          <text x="110" y="102" fill="#FCE794" fontSize="8" fontWeight="700">Hot Gold Foil</text>
         </g>
       </g>
     </ArtShell>

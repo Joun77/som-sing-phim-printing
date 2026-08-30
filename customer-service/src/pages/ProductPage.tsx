@@ -609,7 +609,7 @@ export default function ProductPage() {
       if (!trimmed || ['doc', 'sticker', 'card', 'photos', 'album'].includes(trimmed.toLowerCase())) return null
       if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) return trimmed
       if (trimmed.startsWith('/uploads') || trimmed.startsWith('uploads/')) {
-        const base = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+        const base = import.meta.env.VITE_API_URL || ''
         return `${base.replace(/\/+$/, '')}/${trimmed.replace(/^\/+/, '')}`
       }
       return trimmed
@@ -837,7 +837,7 @@ export default function ProductPage() {
                   <div className="absolute top-3 left-3 flex flex-col gap-1.5 pointer-events-none">
                     {product?.bestseller && (
                       <span className="px-3 py-1 rounded-full text-xs font-black bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 shadow-md">
-                        ★ {language === 'en' ? 'Bestseller' : 'ສິນຄ້າຍອດນິຍົມ'}
+                        {language === 'en' ? 'Bestseller' : 'ສິນຄ້າຍອດນິຍົມ'}
                       </span>
                     )}
                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-900/80 text-amber-300 border border-amber-500/30 backdrop-blur-sm flex items-center gap-1">
@@ -889,7 +889,7 @@ export default function ProductPage() {
                           key={fIdx}
                           className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
                         >
-                          ✓ {f}
+                          {f}
                         </span>
                       ))}
                     </div>
@@ -937,7 +937,7 @@ export default function ProductPage() {
                   </div>
                 </div>
 
-                {/* 📤 UPLOAD STUDIO CARD (Allows 1 or Multiple Files) */}
+                {/* UPLOAD STUDIO CARD (Allows 1 or Multiple Files) */}
                 <UploadStudioCard
                   uploadMode={uploadMode}
                   setUploadMode={setUploadMode}
@@ -1604,7 +1604,7 @@ export default function ProductPage() {
             </div>
           )}
 
-          {/* 📑 BOTTOM SECTION: Comprehensive Product Knowledge & Dynamic Info Tabs Studio */}
+          {/* BOTTOM SECTION: Comprehensive Product Knowledge & Dynamic Info Tabs Studio */}
           <ProductInfoTabsSection
             product={product}
             productName={productName}
