@@ -53,8 +53,11 @@ func main() {
 	// General API Rate Limiting (180 req/min per IP)
 	router.Use(middleware.RateLimitMiddleware(180, time.Minute))
 
-	// Static file server for uploaded order files & preflight uploads
+	// Static file server for uploaded order files, artworks & preflight uploads
 	router.Static("/api/v1/orders/files", "./uploads")
+	router.Static("/uploads", "./uploads")
+	router.POST("/api/upload/artwork", orders.HandleArtworkUpload)
+	router.POST("/api/v1/upload/artwork", orders.HandleArtworkUpload)
 
 	// Server status health check
 	healthHandler := func(c *gin.Context) {
@@ -174,6 +177,8 @@ func main() {
 	router.POST("/api/v1/quotations/:id/reject", orders.HandleRejectQuotation)
 	router.POST("/api/quotations/:id/approve", orders.HandleApproveQuotation)
 	router.POST("/api/quotations/:id/reject", orders.HandleRejectQuotation)
+	router.POST("/api/v1/quotations/:id/convert", orders.HandleConvertQuotationToOrder)
+	router.POST("/api/quotations/:id/convert", orders.HandleConvertQuotationToOrder)
 	router.POST("/api/v1/orders/upload", orders.HandleUploadOrderFile)
 	router.PATCH("/api/v1/orders/items/:id/step", orders.HandleUpdateOrderItemStep)
 	router.GET("/api/v1/orders/track", orders.HandleTrackOrderQuery)

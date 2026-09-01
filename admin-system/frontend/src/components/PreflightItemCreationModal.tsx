@@ -143,6 +143,28 @@ export const PreflightItemCreationModal: React.FC<PreflightItemCreationModalProp
         analysisResult = await analyzePDFClient(file, options);
       }
 
+      // Background Upload Artwork File to server
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('type', 'artwork');
+        fetch('/api/upload/artwork', {
+          method: 'POST',
+          body: formData,
+        })
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (data && (data.fileUrl || data.url)) {
+              const uploadedUrl = data.fileUrl || data.url;
+              analysisResult.file_url = uploadedUrl;
+              setResult(prev => prev ? { ...prev, file_url: uploadedUrl } : prev);
+            }
+          })
+          .catch(e => console.warn('Background artwork upload warn:', e));
+      } catch (err) {
+        console.warn('Background upload trigger failed:', err);
+      }
+
       if (analysisResult.file_url) {
         setPreviewUrl(analysisResult.file_url);
       }

@@ -3,6 +3,7 @@ import { FileText, Download, ExternalLink, Eye, Image as ImageIcon, Sparkles } f
 
 interface ArtworkPreviewCardProps {
   orderIdDisplay: string;
+  order?: any;
   driveLink?: string;
   artworkThumbnailUrl?: string;
   currentLang: string;
@@ -13,6 +14,7 @@ interface ArtworkPreviewCardProps {
 
 export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
   orderIdDisplay,
+  order,
   driveLink,
   artworkThumbnailUrl,
   currentLang,
@@ -22,25 +24,38 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
 }) => {
   const fileName = driveLink ? driveLink.split('/').pop() || `artwork_SSP_${orderIdDisplay}_master.pdf` : `artwork_SSP_${orderIdDisplay}_master.pdf`;
 
+  const customerName = order?.customer_name || order?.customerName || order?.customer?.name || 'General Customer';
+  const customerPhone = order?.customer_phone || order?.customerPhone || order?.customer?.phone || order?.phone || '';
+  const customerAddress = order?.customer_address || order?.customerAddress || order?.customer?.address || order?.address || '';
+
   return (
     <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm space-y-4 flex flex-col justify-between">
       <div>
         {/* Title */}
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100">
               <ImageIcon className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] font-black uppercase text-purple-600 tracking-wider block">Artwork Asset</span>
+              <span className="text-[10px] font-black uppercase text-purple-600 tracking-wider block">Artwork Asset & Client</span>
               <h3 className="text-sm font-black text-slate-900">
-                {currentLang === 'lo' ? 'ໄຟລ໌ງານພິມຂອງລູກຄ້າ' : 'Customer Artwork Preview & File'}
+                {currentLang === 'lo' ? 'ໄຟລ໌ງານພິມ & ຂໍ້ມູນລູກຄ້າ' : 'Customer Artwork & Client Profile'}
               </h3>
             </div>
           </div>
           <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
             Approved (CMYK)
           </span>
+        </div>
+
+        {/* Customer Snapshot Box */}
+        <div className="mb-3.5 p-3 bg-purple-50/50 border border-purple-100 rounded-2xl flex items-center justify-between gap-3 text-xs">
+          <div className="truncate">
+            <span className="font-black text-slate-900 block truncate">{customerName}</span>
+            <span className="text-[11px] font-mono text-purple-700 font-bold block">{customerPhone || 'No Phone Number'}</span>
+            {customerAddress && <span className="text-[10px] text-slate-500 block truncate mt-0.5">{customerAddress}</span>}
+          </div>
         </div>
 
         {/* Interactive Artwork Preview Box */}

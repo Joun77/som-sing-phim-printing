@@ -315,7 +315,7 @@ export default function TrackingPage() {
             <SearchIcon size={22} />
             <input
               type="text"
-              placeholder="ປ້ອນເລກ Order ID ເຊັ່ນ: SSP-88291 ຫຼື ORD-2026-001..."
+              placeholder="ປ້ອນເລກ Order ID ເຊັ່ນ: SSP-82115, ORD-2026-001, ຫຼື ເບີໂທ..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -326,7 +326,7 @@ export default function TrackingPage() {
         </form>
 
         <p className="text-center field-hint">
-          ຕົວຢ່າງລອງຄົ້ນຫາ: SSP-00001, SSP-00002, ORD-2026-001
+          ຕົວຢ່າງລອງຄົ້ນຫາ: SSP-82115, SSP-00001, ORD-2026-001, ຫຼື ເບີໂທລະສັບ
         </p>
 
         {notFound && (
@@ -335,7 +335,7 @@ export default function TrackingPage() {
               <AlertCircleIcon size={32} />
             </div>
             <p>{t('trackNotFound')} "{query.trim()}"</p>
-            <p className="field-hint">ກະລຸນາກວດສອບ Order ID ອີກຄັ້ງ ຫຼື ຕິດຕໍ່ແອດມິນຜ່ານ WhatsApp</p>
+            <p className="field-hint">ກະລຸນາກວດສອບ Order ID ຫຼື ເບີໂທລະສັບອີກຄັ້ງ ຫຼື ຕິດຕໍ່ແອດມິນຜ່ານ WhatsApp</p>
           </div>
         )}
 

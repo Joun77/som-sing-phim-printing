@@ -436,6 +436,10 @@ export default function CreateOrderPage({
     const payload = {
       customer_name: finalCustomerName,
       customer_phone: finalPhone,
+      customer_address: finalAddress,
+      province: province,
+      district: district,
+      village: village,
       google_drive_link: artworkLink,
       items: items.map(it => {
         const paperItem = inventory ? inventory.find(p => p.id === it.paperId) : null;

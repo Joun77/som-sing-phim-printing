@@ -90,6 +90,10 @@ type Order struct {
 	CustomerName         string      `json:"customer_name"`
 	CustomerPhone        string      `json:"customer_phone"`
 	CustomerEmail        string      `json:"customer_email,omitempty"`
+	CustomerAddress      string      `json:"customer_address,omitempty"`
+	Province             string      `json:"province,omitempty"`
+	District             string      `json:"district,omitempty"`
+	Village              string      `json:"village,omitempty"`
 	TotalAmountLAK       float64     `json:"total_amount_lak"`
 	DepositLAK           float64     `json:"deposit_lak"`
 	RemainingLAK         float64     `json:"remaining_lak"`
@@ -169,6 +173,11 @@ type CreateOrderRequest struct {
 	CustomerID      string                 `json:"customer_id"`
 	CustomerName    string                 `json:"customer_name" binding:"required"`
 	CustomerPhone   string                 `json:"customer_phone"`
+	CustomerAddress string                 `json:"customer_address"`
+	CustomerEmail   string                 `json:"customer_email"`
+	Province        string                 `json:"province"`
+	District        string                 `json:"district"`
+	Village         string                 `json:"village"`
 	DepositLAK      float64                `json:"deposit_lak"`
 	DeliveryDate    string                 `json:"delivery_date"`
 	GoogleDriveLink string                 `json:"google_drive_link"`

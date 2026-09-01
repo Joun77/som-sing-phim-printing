@@ -294,6 +294,11 @@ func HandleCreateOrder(c *gin.Context) {
 		CustomerID:      req.CustomerID,
 		CustomerName:    req.CustomerName,
 		CustomerPhone:   req.CustomerPhone,
+		CustomerEmail:   req.CustomerEmail,
+		CustomerAddress: req.CustomerAddress,
+		Province:        req.Province,
+		District:        req.District,
+		Village:         req.Village,
 		TotalAmountLAK:  totalPriceFloat,
 		DepositLAK:      depositFloat,
 		RemainingLAK:    remainingFloat,
@@ -750,6 +755,9 @@ func getOrderByIDFromDB(orderID string) (Order, error) {
 	if db.DB == nil {
 		return o, fmt.Errorf("database connection is nil")
 	}
+	cleanQuery := strings.TrimSpace(orderID)
+	cleanQuery = strings.TrimPrefix(cleanQuery, "#")
+
 	query := `
 		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''), 
 		       COALESCE(overall_status, status::text), COALESCE(deposit_lak, deposit_amount), 
@@ -760,11 +768,16 @@ func getOrderByIDFromDB(orderID string) (Order, error) {
 		       COALESCE(idempotency_key, ''),
 		       created_at, updated_at
 		FROM orders
-		WHERE id = $1 OR order_no = $1 OR order_number = $1 OR idempotency_key = $1
+		WHERE id::text = $1 
+		   OR UPPER(REPLACE(COALESCE(order_no, ''), '#', '')) = UPPER($2)
+		   OR UPPER(REPLACE(COALESCE(order_number, ''), '#', '')) = UPPER($2)
+		   OR idempotency_key = $1
+		   OR COALESCE(tracking_code, '') = $1
+		   OR COALESCE(internal_tracking_code, '') = $1
 		LIMIT 1
 	`
 	var st string
-	err := db.DB.QueryRow(query, orderID).Scan(
+	err := db.DB.QueryRow(query, cleanQuery, cleanQuery).Scan(
 		&o.ID, &o.OrderNo, &o.CustomerName, &o.CustomerPhone, &st,
 		&o.DepositLAK, &o.TotalAmountLAK, &o.TotalCost, &o.GoogleDriveLink,
 		&o.CustomerID, &o.RemainingLAK, &o.DeliveryDate,
@@ -952,7 +965,17 @@ func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) string {
 	if o.CustomerID != "" {
 		err := tx.QueryRow("SELECT id FROM customers WHERE id = $1", o.CustomerID).Scan(&custID)
 		if err == nil && custID != "" {
-			_, _ = tx.Exec("UPDATE customers SET total_spent_lak = total_spent_lak + $1, total_orders_count = total_orders_count + 1, updated_at = NOW() WHERE id = $2", o.TotalAmountLAK, custID)
+			_, _ = tx.Exec(`
+				UPDATE customers 
+				SET total_spent_lak = total_spent_lak + $1, 
+				    total_orders_count = total_orders_count + 1, 
+				    address = COALESCE(NULLIF($3, ''), address),
+				    province = COALESCE(NULLIF($4, ''), province),
+				    district = COALESCE(NULLIF($5, ''), district),
+				    village = COALESCE(NULLIF($6, ''), village),
+				    updated_at = NOW() 
+				WHERE id = $2
+			`, o.TotalAmountLAK, custID, o.CustomerAddress, o.Province, o.District, o.Village)
 			return custID
 		}
 	}
@@ -961,7 +984,17 @@ func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) string {
 	if custID == "" && o.CustomerPhone != "" {
 		err := tx.QueryRow("SELECT id FROM customers WHERE phone = $1", o.CustomerPhone).Scan(&custID)
 		if err == nil && custID != "" {
-			_, _ = tx.Exec("UPDATE customers SET total_spent_lak = total_spent_lak + $1, total_orders_count = total_orders_count + 1, updated_at = NOW() WHERE id = $2", o.TotalAmountLAK, custID)
+			_, _ = tx.Exec(`
+				UPDATE customers 
+				SET total_spent_lak = total_spent_lak + $1, 
+				    total_orders_count = total_orders_count + 1, 
+				    address = COALESCE(NULLIF($3, ''), address),
+				    province = COALESCE(NULLIF($4, ''), province),
+				    district = COALESCE(NULLIF($5, ''), district),
+				    village = COALESCE(NULLIF($6, ''), village),
+				    updated_at = NOW() 
+				WHERE id = $2
+			`, o.TotalAmountLAK, custID, o.CustomerAddress, o.Province, o.District, o.Village)
 			return custID
 		}
 	}
@@ -970,7 +1003,17 @@ func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) string {
 	if custID == "" && o.CustomerEmail != "" {
 		err := tx.QueryRow("SELECT id FROM customers WHERE email = $1", o.CustomerEmail).Scan(&custID)
 		if err == nil && custID != "" {
-			_, _ = tx.Exec("UPDATE customers SET total_spent_lak = total_spent_lak + $1, total_orders_count = total_orders_count + 1, updated_at = NOW() WHERE id = $2", o.TotalAmountLAK, custID)
+			_, _ = tx.Exec(`
+				UPDATE customers 
+				SET total_spent_lak = total_spent_lak + $1, 
+				    total_orders_count = total_orders_count + 1, 
+				    address = COALESCE(NULLIF($3, ''), address),
+				    province = COALESCE(NULLIF($4, ''), province),
+				    district = COALESCE(NULLIF($5, ''), district),
+				    village = COALESCE(NULLIF($6, ''), village),
+				    updated_at = NOW() 
+				WHERE id = $2
+			`, o.TotalAmountLAK, custID, o.CustomerAddress, o.Province, o.District, o.Village)
 			return custID
 		}
 	}
@@ -983,11 +1026,14 @@ func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) string {
 	}
 
 	insertCustQuery := `
-		INSERT INTO customers (id, name, phone, email, credit_limit, payment_terms, total_spent_lak, total_orders_count, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, 2000000.00, 'Net 30', $5, 1, NOW(), NOW())
+		INSERT INTO customers (
+			id, name, phone, email, address, province, district, village,
+			credit_limit, payment_terms, total_spent_lak, total_orders_count, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 2000000.00, 'Net 30', $9, 1, NOW(), NOW())
 		ON CONFLICT (id) DO NOTHING
 	`
-	_, err := tx.Exec(insertCustQuery, custID, custName, o.CustomerPhone, o.CustomerEmail, o.TotalAmountLAK)
+	_, err := tx.Exec(insertCustQuery, custID, custName, o.CustomerPhone, o.CustomerEmail, o.CustomerAddress, o.Province, o.District, o.Village, o.TotalAmountLAK)
 	if err != nil {
 		log.Printf("[DB WARN] Failed to auto-create customer: %v", err)
 	}
@@ -1112,6 +1158,45 @@ func HandleUploadOrderFile(c *gin.Context) {
 		"order_no":  orderNo,
 		"item_id":   itemID,
 		"file_type": fileType,
+	})
+}
+
+// HandleArtworkUpload saves uploaded artwork/PDF files and returns standard asset info
+func HandleArtworkUpload(c *gin.Context) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing 'file' parameter", "details": err.Error()})
+		return
+	}
+
+	targetDir := "./uploads/artworks"
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create artwork storage directory"})
+		return
+	}
+
+	assetID := fmt.Sprintf("art-%d", time.Now().UnixNano()/1e6)
+	safeFileName := fmt.Sprintf("%s_%s", assetID, filepath.Base(file.Filename))
+	destinationPath := filepath.Join(targetDir, safeFileName)
+
+	if err := c.SaveUploadedFile(file, destinationPath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save artwork file", "details": err.Error()})
+		return
+	}
+
+	fileURL := fmt.Sprintf("/uploads/artworks/%s", safeFileName)
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":    "success",
+		"assetId":   assetID,
+		"asset_id":  assetID,
+		"fileName":  file.Filename,
+		"file_name": file.Filename,
+		"fileSize":  file.Size,
+		"file_size": file.Size,
+		"fileUrl":   fileURL,
+		"file_url":  fileURL,
+		"url":       fileURL,
 	})
 }
 
@@ -1255,14 +1340,18 @@ func HandleTrackOrderQuery(c *gin.Context) {
 	}
 
 	if q == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing search query parameter 'q'"})
+		c.JSON(http.StatusBadRequest, gin.H{"found": false, "error": "Missing search query parameter 'q'"})
 		return
 	}
 
-	// 1. Search by exact ID / OrderNo / IdempotencyKey first
+	cleanQ := strings.TrimPrefix(q, "#")
+
+	// 1. Search in-memory store by exact ID / OrderNo / IdempotencyKey
 	storeMutex.RLock()
 	for _, o := range ordersStore {
-		if strings.EqualFold(o.OrderNo, q) || strings.EqualFold(o.OrderNumber, q) || strings.EqualFold(o.ID, q) || strings.EqualFold(o.IdempotencyKey, q) {
+		cleanOrderNo := strings.TrimPrefix(o.OrderNo, "#")
+		cleanOrderNumber := strings.TrimPrefix(o.OrderNumber, "#")
+		if strings.EqualFold(o.OrderNo, q) || strings.EqualFold(o.OrderNumber, q) || strings.EqualFold(cleanOrderNo, cleanQ) || strings.EqualFold(cleanOrderNumber, cleanQ) || strings.EqualFold(o.ID, q) || strings.EqualFold(o.IdempotencyKey, q) || strings.EqualFold(o.TrackingCode, q) || strings.EqualFold(o.InternalTrackingCode, q) {
 			storeMutex.RUnlock()
 			c.JSON(http.StatusOK, o)
 			return
@@ -1271,14 +1360,14 @@ func HandleTrackOrderQuery(c *gin.Context) {
 	storeMutex.RUnlock()
 
 	if db.DB != nil {
-		order, err := getOrderByIDFromDB(q)
+		order, err := getOrderByIDFromDB(cleanQ)
 		if err == nil && order.ID != "" {
 			c.JSON(http.StatusOK, order)
 			return
 		}
 
 		// 2. Search by customer phone number
-		phoneOrders, err := GetOrdersByCustomer("", q)
+		phoneOrders, err := GetOrdersByCustomer("", cleanQ)
 		if err == nil && len(phoneOrders) > 0 {
 			// Return the latest order
 			c.JSON(http.StatusOK, phoneOrders[0])
@@ -1288,7 +1377,7 @@ func HandleTrackOrderQuery(c *gin.Context) {
 		// In-memory phone search fallback
 		storeMutex.RLock()
 		for _, o := range ordersStore {
-			if strings.EqualFold(o.CustomerPhone, q) {
+			if strings.EqualFold(o.CustomerPhone, cleanQ) {
 				storeMutex.RUnlock()
 				c.JSON(http.StatusOK, o)
 				return
@@ -1297,7 +1386,7 @@ func HandleTrackOrderQuery(c *gin.Context) {
 		storeMutex.RUnlock()
 	}
 
-	c.JSON(http.StatusNotFound, gin.H{"error": "Order not found for search query: " + q})
+	c.JSON(http.StatusNotFound, gin.H{"found": false, "error": "Order not found for search query: " + q, "message": "Order not found"})
 }
 
 // HandleGetOrderByOrderNo fetches order details by order_no for shop floor tracker

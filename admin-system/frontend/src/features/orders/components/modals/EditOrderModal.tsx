@@ -37,6 +37,7 @@ import {
 import { FormModalTemplate } from '../../../../components/common/FormModalTemplate';
 import ItemSpecConfigurator, { calculateItemCosting } from '../ItemSpecConfigurator';
 import { PreflightItemCreationModal } from '../../../../components/PreflightItemCreationModal';
+import { mapOrderToFormSpecs } from '../../../../utils/orderDataMapper';
 import { useApp } from '@store/AppContext';
 import type { PreflightResult } from '../../types';
 
@@ -128,51 +129,8 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
       setTotalPrice(total);
       setDepositAmount(deposit);
 
-      if (Array.isArray(order.items) && order.items.length > 0) {
-        setItems(order.items.map((it: any, idx: number) => {
-          const qty = Number(it.quantity || it.printVolume || 1);
-          const costing = calculateItemCosting(it, inventory, equipment);
-          return {
-            ...it,
-            id: it.id || `item-${idx + 1}`,
-            name: it.name || it.item_name || it.job_name || `Job #${idx + 1}`,
-            quantity: qty,
-            jobWidth: Number(it.jobWidth || it.width_mm || 210),
-            jobHeight: Number(it.jobHeight || it.height_mm || 297),
-            paperSize: it.paperSize || it.paper_size || 'A4',
-            paperId: it.paperId || it.paperSku || (inventory.length > 0 ? inventory[0].id : 'paper-a4-plain-70g'),
-            colorMode: it.colorMode || (it.colorPrintMode === 'MONO_K' ? 'Monochrome' : 'Color CMYK'),
-            colorPrintMode: it.colorPrintMode || 'COLOR_CMYK',
-            printerId: it.printerId || it.printer || (equipment.length > 0 ? equipment[0].id : 'KM-C6085'),
-            bindingMethod: it.bindingMethod || it.binding_type || 'none',
-            coating: it.coating || it.lamination || 'none',
-            unitPrice: it.unitPrice !== undefined ? Number(it.unitPrice) : costing.unitPrice,
-            totalPrice: it.totalPrice !== undefined ? Number(it.totalPrice) : costing.finalPrice,
-            targetMarginPercent: it.targetMarginPercent || it.profitMargin || 35,
-            profitMargin: it.profitMargin || it.targetMarginPercent || 35,
-          };
-        }));
-      } else {
-        const defaultItem = {
-          id: 'item-1',
-          name: order.jobName || order.product_name || 'ງານພິມດິຈິຕອນ (Print Job)',
-          quantity: Number(order.quantity || 1),
-          jobWidth: 210,
-          jobHeight: 297,
-          paperSize: 'A4',
-          paperId: inventory.length > 0 ? inventory[0].id : 'paper-a4-plain-70g',
-          colorMode: 'Color CMYK',
-          colorPrintMode: 'COLOR_CMYK',
-          printerId: equipment.length > 0 ? equipment[0].id : 'KM-C6085',
-          bindingMethod: 'none',
-          coating: 'none',
-          unitPrice: total || 15000,
-          totalPrice: total || 15000,
-          targetMarginPercent: 35,
-          profitMargin: 35,
-        };
-        setItems([defaultItem]);
-      }
+      const normalizedItems = mapOrderToFormSpecs(order, inventory, equipment);
+      setItems(normalizedItems);
       setActiveJobIndex(0);
       setActiveStep(1);
     }

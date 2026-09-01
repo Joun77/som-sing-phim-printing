@@ -151,6 +151,7 @@ export const ProductionTrackingPage: React.FC<ProductionTrackingPageProps> = ({
           <div className="lg:col-span-5">
             <ArtworkPreviewCard
               orderIdDisplay={orderIdDisplay}
+              order={order}
               driveLink={driveLink}
               artworkThumbnailUrl={artworkThumbnailUrl}
               currentLang={currentLang}

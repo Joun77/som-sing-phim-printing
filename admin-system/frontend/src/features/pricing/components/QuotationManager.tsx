@@ -146,6 +146,7 @@ export interface QuotationItem {
   discountPercent: number;
   spoilagePercent?: number;
   fileName?: string;
+  artworkUrl?: string;
 }
 
 export default function QuotationManager({ onConvertToOrder, onBack, prefilledSpecs }: any) {
@@ -409,6 +410,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       profitMargin: 40,
       discountPercent: 0,
       fileName: specs?.fileName,
+      artworkUrl: specs?.artworkUrl || specs?.file_url || specs?.fileUrl,
     };
   };
 
@@ -581,6 +583,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const newItem = createNewItem(cleanName, {
       jobName: cleanName,
       fileName: pfResult.file_name,
+      artworkUrl: pfResult.file_url,
       pageCount: pfResult.total_pages || 1,
       orderQuantity: 1,
       colorPages: pfResult.color_pages_count || 0,
@@ -1540,13 +1543,29 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   // 1-Click Convert accepted quotation to production order + job ticket
   const handleConvertToOrder = (quotation: any) => {
     const msg = currentLang === 'lo'
-      ? `ປ່ຽນໃບສະເໜີ ${quotation.quotationNumber} ເປັນອໍເດີ ແລະ ສ້າງ Job Ticket ບໍ?`
-      : `Convert quotation ${quotation.quotationNumber} to a production order with Job Ticket?`;
+      ? `ປ່ຽນໃບສະເໜີ ${quotation.quotationNumber || quotation.quotation_no || quotation.id} ເປັນອໍເດີ ແລະ ສ້າງ Job Ticket ບໍ?`
+      : `Convert quotation ${quotation.quotationNumber || quotation.quotation_no || quotation.id} to a production order with Job Ticket?`;
 
-    askConfirmation(msg, () => {
-      const orderId = convertQuotationToOrder(quotation.id);
-      if (orderId && onConvertToOrder) {
-        onConvertToOrder({ orderId, sourceQuotationId: quotation.id });
+    askConfirmation(msg, async () => {
+      let createdOrderId = quotation.id;
+      try {
+        const res = await fetch(`/api/v1/quotations/${quotation.id || quotation.quotationNumber || quotation.quotation_no}/convert`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          createdOrderId = data.orderId || data.order_id || createdOrderId;
+        }
+      } catch (err) {
+        console.warn('Backend conversion fallback to local store:', err);
+      }
+
+      const localOrderId = convertQuotationToOrder(quotation.id);
+      const finalOrderId = createdOrderId || localOrderId;
+
+      if (finalOrderId && onConvertToOrder) {
+        onConvertToOrder({ orderId: finalOrderId, sourceQuotationId: quotation.id });
       }
       showToast(
         currentLang === 'lo' ? 'ປ່ຽນເປັນອໍເດີສຳເລັດ! ສ້າງ Job Ticket ແລ້ວ.' : 'Converted to order! Job Ticket generated.',
@@ -1604,7 +1623,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       paymentTerms,
       notes: quotationNote,
       status: 'Draft',
-      version: 1
+      version: 1,
+      artworkUrl: items.find(it => it.artworkUrl)?.artworkUrl || '',
+      artwork_url: items.find(it => it.artworkUrl)?.artworkUrl || '',
+      fileName: items.find(it => it.fileName)?.fileName || '',
     };
 
     addQuotation(draftData);
