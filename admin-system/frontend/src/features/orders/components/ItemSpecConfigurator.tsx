@@ -41,8 +41,11 @@ import {
   User,
   Hash,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  UploadCloud,
+  Loader2
 } from 'lucide-react';
+import { apiFetch } from '../../../api/client';
 import ManualPrinterAllocator from './ManualPrinterAllocator';
 import { PrinterAllocation, ColorChannel } from '../types';
 import { 
@@ -182,10 +185,18 @@ export function calculateItemCosting(item: any, inventory: any[] = [], equipment
 
       const computeChannel = (channelName: string, covPct: number) => {
         if (covPct <= 0) return { ml: 0, cost: 0 };
-        let rateMlPerSheet = Number(prn?.inkConsumptionStandard || 0.05);
+        // ISO 100% full solid coverage standard for A4 is ~0.007 - 0.010 ml per page
+        // Standard ISO 5% text page uses ~0.00035 - 0.0005 ml
+        let rateMlPerSheet = Number(prn?.inkConsumptionStandard || 0.007);
         let costPerMl = Number(prn?.inkUnitCostMl || 500);
 
-        const ml = rateMlPerSheet * (covPct / 5) * areaFactor * allocPages * sideFactor;
+        // If inkConsumptionStandard was configured as bottle size or legacy rate > 0.1, normalize to standard per-sheet rate (0.007 ml at 100% coverage)
+        if (rateMlPerSheet > 0.05) {
+          rateMlPerSheet = 0.007;
+        }
+
+        // ml = (Coverage% / 100) * 0.007 ml * areaFactor * allocPages * sideFactor
+        const ml = (covPct / 100.0) * (rateMlPerSheet * (100.0 / 5.0) * 0.05) * areaFactor * allocPages * sideFactor;
         const cost = ml * costPerMl;
         return { ml, cost };
       };
@@ -309,7 +320,8 @@ export default function ItemSpecConfigurator({
   showToast,
   embeddedMode = false,
   mode = 'order',
-  customerData
+  customerData,
+  onPreflightComplete
 }: {
   item?: any;
   itemIndex?: number;
@@ -324,9 +336,11 @@ export default function ItemSpecConfigurator({
   embeddedMode?: boolean;
   mode?: 'quotation' | 'order';
   customerData?: any;
+  onPreflightComplete?: (result: any) => void;
 }) {
   const { i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
+  const [isPreflightUploading, setIsPreflightUploading] = useState(false);
 
   // Extract Available Papers
   const papers = useMemo(() => {
@@ -566,12 +580,112 @@ export default function ItemSpecConfigurator({
     return null;
   }, [inventory, tempItem.jobWidth, tempItem.jobHeight, tempItem.paperId, costing.parentSheetsNeeded]);
 
+  // Synchronize internal tempItem state when incoming item prop changes (e.g. from parent job switch or quantity change)
+  useEffect(() => {
+    if (item) {
+      setTempItem(prev => {
+        // Only update if key attributes or identity changed
+        if (
+          prev.id !== item.id ||
+          prev.quantity !== item.quantity ||
+          prev.paperId !== item.paperId ||
+          prev.printerId !== item.printerId ||
+          prev.profitMargin !== item.profitMargin ||
+          prev.targetMarginPercent !== item.targetMarginPercent ||
+          prev.useOffcut !== item.useOffcut
+        ) {
+          return {
+            ...prev,
+            ...item,
+            quantity: item.quantity !== undefined ? item.quantity : prev.quantity,
+            printerAllocations: item.printerAllocations || (prev.printerAllocations || []).map((a: any) => ({
+              ...a,
+              allocated_pages: item.quantity !== undefined ? item.quantity : a.allocated_pages
+            }))
+          };
+        }
+        return prev;
+      });
+    }
+  }, [item]);
+
   const updateField = (field: string, value: any) => {
     setTempItem(prev => {
       const updated = { ...prev, [field]: value };
       if (onChange) onChange(updated);
       return updated;
     });
+  };
+
+  const handlePreflightUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+
+    setIsPreflightUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
+      const res = await apiFetch('/api/preflight/analyze', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const covC = Number(data.avg_cov_c !== undefined ? data.avg_cov_c : (data.cCoverage || 15));
+        const covM = Number(data.avg_cov_m !== undefined ? data.avg_cov_m : (data.mCoverage || 15));
+        const covY = Number(data.avg_cov_y !== undefined ? data.avg_cov_y : (data.yCoverage || 15));
+        const covK = Number(data.avg_cov_k !== undefined ? data.avg_cov_k : (data.kCoverage || 15));
+        const isMono = (data.color_pages_count === 0 && (data.mono_pages_count || 0) > 0) || (covC === 0 && covM === 0 && covY === 0);
+        const colorMode = isMono ? 'MONO_K' : 'CMYK';
+
+        setTempItem(prev => {
+          const updatedAllocs = (prev.printerAllocations || []).map((alloc: any) => ({
+            ...alloc,
+            color_mode: colorMode,
+            average_density_pct: Math.round(isMono ? covK : (covC + covM + covY + covK) / 4),
+            color_channels: isMono
+              ? [{ channel_name: 'K', density_pct: covK, is_spot_color: false }]
+              : [
+                  { channel_name: 'C', density_pct: covC, is_spot_color: false },
+                  { channel_name: 'M', density_pct: covM, is_spot_color: false },
+                  { channel_name: 'Y', density_pct: covY, is_spot_color: false },
+                  { channel_name: 'K', density_pct: covK, is_spot_color: false },
+                ]
+          }));
+
+          const updated = {
+            ...prev,
+            cCoverage: covC,
+            mCoverage: covM,
+            yCoverage: covY,
+            kCoverage: covK,
+            colorPrintMode: colorMode,
+            artworkUrl: data.file_url || data.fileUrl,
+            fileName: data.file_name || selectedFile.name,
+            printerAllocations: updatedAllocs,
+          };
+          if (onChange) onChange(updated);
+          return updated;
+        });
+
+        if (onPreflightComplete) {
+          onPreflightComplete(data);
+        }
+
+        if (showToast) {
+          showToast(`ກວດສອບຄ່າສີໄຟລ໌ "${selectedFile.name}" ສຳເລັດ! (C:${covC}% M:${covM}% Y:${covY}% K:${covK}%)`, 'success');
+        }
+      } else {
+        if (showToast) showToast('ການວິເຄາະໄຟລ໌ Preflight ບໍ່ສຳເລັດ', 'error');
+      }
+    } catch (err) {
+      console.error('Preflight upload error:', err);
+      if (showToast) showToast('ເກີດຂໍ້ຜິດພາດໃນການອັບໂຫຼດໄຟລ໌', 'error');
+    } finally {
+      setIsPreflightUploading(false);
+    }
   };
 
   const handleApplyTemplate = (template: PricingTemplatePreset) => {
@@ -1281,6 +1395,44 @@ export default function ItemSpecConfigurator({
 
             {openPhases.phase4 && (
               <div className="p-4 sm:p-5 border-t border-slate-100 space-y-4 animate-fade-in">
+                {/* Instant CMYK Preflight File Scanner */}
+                <div className="p-3.5 bg-gradient-to-r from-indigo-900/95 to-slate-900 text-white rounded-2xl border border-indigo-500/30 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
+                      <span className="text-xs font-black tracking-wide uppercase text-white">
+                        {currentLang === 'lo' ? 'ກວດສອບຄ່າສີໄຟລ໌ຕົວຈິງ (Instant CMYK Preflight Scanner)' : 'Instant CMYK Preflight Scanner'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-slate-300">
+                      <span>{tempItem.fileName ? `ໄຟລ໌: ${tempItem.fileName}` : 'ຍັງບໍ່ໄດ້ແນບໄຟລ໌'}</span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 font-mono text-[10px]">
+                        C:{tempItem.cCoverage || 0}% M:{tempItem.mCoverage || 0}% Y:{tempItem.yCoverage || 0}% K:{tempItem.kCoverage || 0}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <label className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs shrink-0">
+                    {isPreflightUploading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <UploadCloud className="w-3.5 h-3.5" />
+                    )}
+                    <span>
+                      {isPreflightUploading
+                        ? (currentLang === 'lo' ? 'ກຳລັງວິເຄາະ...' : 'Analyzing...')
+                        : (currentLang === 'lo' ? 'ອັບໂຫຼດໄຟລ໌ກວດຄ່າສີ' : 'Upload & Analyze File')}
+                    </span>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif"
+                      onChange={handlePreflightUpload}
+                      disabled={isPreflightUploading}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
                 <ManualPrinterAllocator
                   targetQuantity={tempItem.quantity || 500}
                   allocations={tempItem.printerAllocations || []}

@@ -178,7 +178,7 @@ export default function EmployeeManagement() {
 
     earningRecords.forEach(rec => {
       if (earnerMap[rec.employeeId]) {
-        earnerMap[rec.employeeId].totalEarned += Number(rec.earnedAmountLAK || rec.earnedAmount || 0);
+        earnerMap[rec.employeeId].totalEarned += Number(rec.earnedAmount || (rec as any).earnedAmountLAK || 0);
         earnerMap[rec.employeeId].impressions += Number(rec.impressions || 0);
         earnerMap[rec.employeeId].jobsCount += 1;
       }
@@ -436,7 +436,7 @@ export default function EmployeeManagement() {
             {/* Piece-Rate & Incentive Earnings Section */}
             {(() => {
               const empEarnings = earningRecords.filter(r => r.employeeId === emp.id);
-              const totalEmpEarned = empEarnings.reduce((sum, r) => sum + Number(r.earnedAmountLAK || r.earnedAmount || 0), 0);
+              const totalEmpEarned = empEarnings.reduce((sum, r) => sum + Number(r.earnedAmount || (r as any).earnedAmountLAK || 0), 0);
               const totalEmpImpressions = empEarnings.reduce((sum, r) => sum + Number(r.impressions || 0), 0) || Number(emp.impressionsProduced || 0);
 
               return (

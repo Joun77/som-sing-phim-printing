@@ -12,6 +12,7 @@ interface PrinterSelectorModalProps {
   printers: Equipment[];
   formatCurrency: (amount: number) => string;
   getPrinterMachineRate?: (printer: Equipment) => number;
+  getPrinterActualInkCostPerPage?: (printer: Equipment) => number;
 }
 
 export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
@@ -21,7 +22,8 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
   selectedPrinterId,
   printers: propPrinters,
   formatCurrency,
-  getPrinterMachineRate
+  getPrinterMachineRate,
+  getPrinterActualInkCostPerPage
 }) => {
   const { equipment: appEquipment = [] } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
@@ -295,11 +297,21 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                      <div className="text-left">
-                        <div className="text-[10px] text-slate-400 font-medium">ຄ່າເສື່ອມເຄື່ອງຕໍ່ໜ້າ:</div>
-                        <div className="text-xs font-black text-slate-900 font-sans">
-                          {formatCurrency(rate)} <span className="text-[10px] text-slate-400 font-normal">/ ໜ້າ</span>
+                      <div className="text-left space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-400 font-medium">ຄ່າເສື່ອມເຄື່ອງ:</span>
+                          <span className="text-xs font-black text-slate-900 font-sans">
+                            {formatCurrency(rate)} <span className="text-[10px] text-slate-400 font-normal">/ໜ້າ</span>
+                          </span>
                         </div>
+                        {getPrinterActualInkCostPerPage && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-purple-600 font-medium">ຕົ້ນທຶນໝຶກພື້ນຖານ:</span>
+                            <span className="text-[11px] font-bold text-purple-700 font-sans">
+                              ~{formatCurrency(getPrinterActualInkCostPerPage(printer))} <span className="text-[9px] text-purple-400 font-normal">/ໜ້າ</span>
+                            </span>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1.5">

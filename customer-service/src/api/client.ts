@@ -163,6 +163,8 @@ export interface Order {
 
 export interface PricingPayload {
   quantity: number
+  paper_sku?: string
+  paper_type?: string
   paper_cost_per_unit?: number
   ink_coverage_percent?: number
   ink_cost_per_ml?: number
@@ -175,6 +177,7 @@ export interface PricingPayload {
   markup_margin?: number
   target_currency?: string
   job_name?: string
+  [key: string]: any
 }
 
 export interface PricingResult {
@@ -407,6 +410,8 @@ export async function calculatePrice(payload: PricingPayload): Promise<PricingRe
     }
   }
 }
+
+export const calculatePricing = calculatePrice;
 
 export async function submitOrder(order: Order): Promise<Order> {
   const idempotencyKey = (order as any).idempotency_key || `idem-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`

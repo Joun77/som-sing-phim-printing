@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
-
+	"os"
 	"time"
 
 	"backend/auth"
@@ -107,7 +107,11 @@ func main() {
 	router.GET("/api/catalog/products", catalog.HandlePublicGetProducts)
 	router.GET("/api/catalog/products/:slug", catalog.HandlePublicGetProductBySlug)
 
-	// PDF Preflight CMYK Extraction routes
+	// PDF & Image Preflight CMYK Extraction routes
+	router.POST("/api/preflight/analyze", preflight.HandlePreflightPDF)
+	router.POST("/api/preflight", preflight.HandlePreflightPDF)
+	router.POST("/api/orders/preflight", preflight.HandlePreflightPDF)
+	router.POST("/api/v1/preflight/analyze", preflight.HandlePreflightPDF)
 	router.POST("/api/v1/orders/preflight", preflight.HandlePreflightPDF)
 	router.POST("/api/v1/preflight", preflight.HandlePreflightPDF)
 
@@ -409,8 +413,12 @@ func main() {
 	// Start Daily Predictive Maintenance Background Cron
 	inventory.StartPPMDailyCron()
 
-	log.Println("Starting Go server on port 8080...")
-	if err := router.Run(":8080"); err != nil {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("Starting Go server on port %s...", port)
+	if err := router.Run(":" + port); err != nil {
 		log.Fatalf("Failed to run server: %v", err)
 	}
 }

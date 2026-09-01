@@ -16,7 +16,7 @@ import {
   TruckIcon,
   UploadIcon,
 } from '../components/icons.tsx'
-import { Zap } from 'lucide-react'
+import { Zap, Check, Store } from 'lucide-react'
 
 interface CopyButtonProps {
   text: string

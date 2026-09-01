@@ -42,6 +42,12 @@ export const useAuthStore = create<AuthState>()(
           rememberMe,
           isAuthenticated: true,
         });
+        if (token) {
+          localStorage.setItem('token', token);
+        }
+        if (refreshToken) {
+          localStorage.setItem('refresh_token', refreshToken);
+        }
       },
 
       silentRefreshToken: async (): Promise<string | null> => {
@@ -50,13 +56,14 @@ export const useAuthStore = create<AuthState>()(
 
         set({ isRefreshing: true });
         try {
+          const activeRefreshToken = state.refreshToken || localStorage.getItem('refresh_token');
           const res = await fetch('/api/v1/auth/refresh', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               ...(state.token ? { Authorization: `Bearer ${state.token}` } : {})
             },
-            body: JSON.stringify({ refresh_token: state.refreshToken })
+            body: JSON.stringify({ refresh_token: activeRefreshToken })
           });
 
           if (!res.ok) {
@@ -67,7 +74,7 @@ export const useAuthStore = create<AuthState>()(
                 'Content-Type': 'application/json',
                 ...(state.token ? { Authorization: `Bearer ${state.token}` } : {})
               },
-              body: JSON.stringify({ refresh_token: state.refreshToken })
+              body: JSON.stringify({ refresh_token: activeRefreshToken })
             });
 
             if (!resLegacy.ok) {
@@ -76,21 +83,29 @@ export const useAuthStore = create<AuthState>()(
             }
 
             const data = await resLegacy.json();
+            const newToken = data.token || state.token;
+            const newRefreshToken = data.refresh_token || state.refreshToken;
             set({
-              token: data.token || state.token,
-              refreshToken: data.refresh_token || state.refreshToken,
+              token: newToken,
+              refreshToken: newRefreshToken,
               isRefreshing: false
             });
-            return data.token;
+            if (newToken) localStorage.setItem('token', newToken);
+            if (newRefreshToken) localStorage.setItem('refresh_token', newRefreshToken);
+            return newToken;
           }
 
           const data = await res.json();
+          const newToken = data.token || state.token;
+          const newRefreshToken = data.refresh_token || state.refreshToken;
           set({
-            token: data.token || state.token,
-            refreshToken: data.refresh_token || state.refreshToken,
+            token: newToken,
+            refreshToken: newRefreshToken,
             isRefreshing: false
           });
-          return data.token;
+          if (newToken) localStorage.setItem('token', newToken);
+          if (newRefreshToken) localStorage.setItem('refresh_token', newRefreshToken);
+          return newToken;
         } catch {
           set({ isRefreshing: false });
           return state.token;
@@ -128,6 +143,8 @@ export const useAuthStore = create<AuthState>()(
           rememberMe: false,
           isAuthenticated: false,
         });
+        localStorage.removeItem('token');
+        localStorage.removeItem('refresh_token');
         localStorage.removeItem('auth-storage');
         sessionStorage.removeItem('auth-storage');
       },

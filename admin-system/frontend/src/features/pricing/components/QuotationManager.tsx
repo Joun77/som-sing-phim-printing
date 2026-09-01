@@ -208,70 +208,106 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   ];
 
   const getPrinterMachineRate = (p: any) => {
-    if (!p) return 7;
-    const prnPrice = Number(p.purchasePrice || p.purchaseCost || p.price || p.MachinePrice || 0);
-    const maintRate = Number(p.maintenanceRatePercent || p.maintenance_rate_percent || 15);
-    const lifePages = Number(p.expectedLifeA4Pages || p.printedPagesCapacity || p.TargetTotalPages || (Number(p.lifespanYears || 5) * 12 * Number(p.estMonthlyVolume || 50000)) || 3000000);
-    const machineCalc = calculateMachineUnitCost({
-      purchase_price_lak: prnPrice,
-      expected_life_pages: lifePages,
-      maintenance_rate_percent: maintRate
-    });
-    return machineCalc.totalMachineCost > 0 ? Math.round(machineCalc.totalMachineCost * 100) / 100 : Number(p.calculatedCostPerPage || p.costPerPage || 7);
+    if (!p) return 1.20;
+    const assetValue = Number(
+      p.MachinePrice ?? 
+      p.price ?? 
+      p.unitPrice ?? 
+      p.purchaseCost ?? 
+      p.purchasePrice ?? 
+      p.unitCost ?? 
+      0
+    );
+    const lifespanYears = Number(p.lifespanYears || p.specs?.lifespanYears || 5);
+    const estMonthlyVolume = Number(p.estMonthlyVolume || p.specs?.estMonthlyVolume || 50000);
+    const maintenanceRatePct = Number(p.maintenanceRatePercent || p.maintenance_rate_percent || p.specs?.maintenanceRatePercent || 15);
+    const maintCostPerPage = Number(p.specs?.fixedMaintenanceCostPerPage || 0);
+
+    const totalMonths = lifespanYears * 12;
+    const targetPages = Number(
+      p.TargetTotalPages || 
+      p.printedPagesCapacity || 
+      p.expectedLifeA4Pages || 
+      p.lifetimePagesA4 || 
+      (estMonthlyVolume * totalMonths) || 
+      3000000
+    );
+    const monthlyDepr = totalMonths > 0 ? (assetValue / totalMonths) : 0;
+    const baseCostPerUnit = (estMonthlyVolume > 0 && monthlyDepr > 0)
+      ? (monthlyDepr / estMonthlyVolume)
+      : (targetPages > 0 ? (assetValue / targetPages) : 0);
+
+    const wearAllowancePerUnit = Math.round(baseCostPerUnit * (maintenanceRatePct / 100) * 1000) / 1000 + maintCostPerPage;
+    const netCostPerUnit = Math.round((baseCostPerUnit + wearAllowancePerUnit) * 1000) / 1000;
+
+    return netCostPerUnit > 0 ? netCostPerUnit : Number(p.calculatedCostPerPage || p.costPerPage || 1.20);
   };
 
   const getPrinterActualInkCostPerPage = (p: any) => {
     if (!p) return 0;
+    const isPostPress = p.category && p.category !== 'Printer' && p.category !== 'PRINTER';
+    if (isPostPress) return 0;
+
     const activePrnLinks = printerColorLinks.filter((l: any) => l.assetId === p.id);
-    const oemSlots = (p.printerColorLinks && p.printerColorLinks.length > 0)
-      ? p.printerColorLinks
-      : (p.oemBaselineInks && p.oemBaselineInks.length > 0)
-        ? p.oemBaselineInks
-        : (p.specs?.printerColorLinks && p.specs?.printerColorLinks.length > 0)
-          ? p.specs.printerColorLinks
-          : (p.specs?.oemBaselineInks && p.specs?.oemBaselineInks.length > 0)
-            ? p.specs.oemBaselineInks
-            : [
-                { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500, oemPrice: 450000 },
-                { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
-                { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
-                { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 }
-              ];
+    const oemSlots = (p.oem_baseline_specs?.slots && p.oem_baseline_specs.slots.length > 0)
+      ? p.oem_baseline_specs.slots
+      : (p.specs?.oem_baseline_specs?.slots && p.specs.oem_baseline_specs.slots.length > 0)
+        ? p.specs.oem_baseline_specs.slots
+        : (p.printerColorLinks && p.printerColorLinks.length > 0)
+          ? p.printerColorLinks
+          : (p.oemBaselineInks && p.oemBaselineInks.length > 0)
+            ? p.oemBaselineInks
+            : (p.specs?.printerColorLinks && p.specs?.printerColorLinks.length > 0)
+              ? p.specs.printerColorLinks
+              : (p.specs?.oemBaselineInks && p.specs?.oemBaselineInks.length > 0)
+                ? p.specs.oemBaselineInks
+                : [
+                    { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500, oemPrice: 450000 },
+                    { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+                    { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+                    { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 }
+                  ];
 
-    let totalInkCost = 0;
-    oemSlots.forEach((slot: any) => {
-      const oemVol = Number(slot.oemStandardVolumeMl || 70);
-      const oemYield = Number(slot.oemStandardIsoYieldA4 || (slot.colorGroup === 'Black' ? 7500 : 6000));
-      const isoRate = oemYield > 0 ? (oemVol / oemYield) : 0.0169;
-      const oemPrice = Number(slot.oemPrice || (slot.colorGroup === 'Black' ? 450000 : 320000));
+    const totalInkRate = oemSlots.reduce((sum: number, oemSlot: any, idx: number) => {
+      const slotPos = oemSlot.slotPosition || `Slot ${idx + 1}`;
+      const isBlack = (oemSlot.colorGroup || '').toLowerCase().includes('black') || (oemSlot.colorGroup || '').toLowerCase().includes('k') || slotPos.toLowerCase().includes('black') || slotPos.toLowerCase().includes('slot 1');
+      const colorGroupName = isBlack ? 'Black' : (oemSlot.colorGroup || (idx === 1 ? 'Cyan' : idx === 2 ? 'Magenta' : idx === 3 ? 'Yellow' : `Color ${idx + 1}`));
+      const defaultYield = isBlack ? 7500 : 6000;
+      const defaultPrice = isBlack ? 450000 : 320000;
+      const defaultVol = isBlack ? 127 : 70;
 
-      const activeLink = activePrnLinks.find((l: any) => 
-        l.slotPosition === slot.slotPosition || 
-        l.colorGroup === slot.colorGroup || 
-        (slot.colorGroup && l.colorGroup && l.colorGroup.toLowerCase() === slot.colorGroup.toLowerCase())
+      const activeLink = activePrnLinks.find((lnk: any) => 
+        lnk.slotPosition === slotPos || 
+        (lnk.slotPosition && slotPos && (lnk.slotPosition.includes(slotPos) || slotPos.includes(lnk.slotPosition))) ||
+        (lnk.colorGroup && colorGroupName && lnk.colorGroup.toLowerCase() === colorGroupName.toLowerCase()) ||
+        (idx === 0 && (lnk.slotPosition?.includes('Slot 1') || lnk.colorGroup?.toLowerCase().includes('black') || lnk.colorGroup?.toLowerCase().includes('k'))) ||
+        (idx === 1 && (lnk.slotPosition?.includes('Slot 2') || lnk.colorGroup?.toLowerCase().includes('cyan') || lnk.colorGroup?.toLowerCase().includes('c'))) ||
+        (idx === 2 && (lnk.slotPosition?.includes('Slot 3') || lnk.colorGroup?.toLowerCase().includes('magenta') || lnk.colorGroup?.toLowerCase().includes('m'))) ||
+        (idx === 3 && (lnk.slotPosition?.includes('Slot 4') || lnk.colorGroup?.toLowerCase().includes('yellow') || lnk.colorGroup?.toLowerCase().includes('y')))
       );
-      const linkedInkItem = activeLink ? inventory.find(i => i.id === activeLink.inkCode || i.skuCode === activeLink.inkCode || i.sku === activeLink.inkCode) : null;
+      const ink = activeLink ? inventory.find(i => i.id === activeLink.inkCode || i.skuCode === activeLink.inkCode || i.sku === activeLink.inkCode) : null;
 
-      let actualCostPerPage = 0;
-      if (linkedInkItem) {
-        const actualPrice = Number(linkedInkItem.unitPrice || linkedInkItem.costPerPurchaseUnit || oemPrice);
-        const resolvedVol = Number(
-          linkedInkItem.volume || 
-          linkedInkItem.specs?.volume || 
-          linkedInkItem.specs?.volume_ml || 
-          linkedInkItem.specs?.oemStandardVolumeMl || 
-          140
-        );
-        const actualVol = resolvedVol > 1 ? resolvedVol : 140;
-        const costPerMl = actualVol > 0 ? (actualPrice / actualVol) : 0;
-        actualCostPerPage = costPerMl * isoRate;
-      } else {
-        actualCostPerPage = (oemVol > 0 ? (oemPrice / oemVol) : 0) * isoRate;
+      const oemVol = Number(oemSlot.oemStandardVolumeMl || oemSlot.volume || defaultVol);
+      const rawYield = Number(oemSlot.oemStandardIsoYieldA4 || (oemSlot.colorGroup === 'Black' ? (p.blackYieldPages || defaultYield) : (p.colorYieldPages || defaultYield)));
+      const yld = rawYield > 500 ? rawYield : defaultYield;
+      const isoRate = yld > 0 ? (oemVol / yld) : 0.0169;
+      
+      let slotCost = yld > 0 ? (Number(oemSlot.oemPrice || defaultPrice) / yld) : ((Number(oemSlot.oemPrice || defaultPrice) / oemVol) * isoRate);
+
+      if (ink) {
+        const bPrice = Number(ink.unitPrice || ink.costPerPurchaseUnit || defaultPrice);
+        const rawInkVol = Number(ink.volume || ink.specs?.volume || ink.specs?.volume_ml || defaultVol);
+        const actualVol = rawInkVol > 1 ? rawInkVol : defaultVol;
+
+        const rawInkYield = Number(ink.yield || ink.standard_page_yield || ink.specs?.yield || ink.specs?.isoYield || 0);
+        const inkYield = rawInkYield > 500 ? rawInkYield : yld;
+        slotCost = inkYield > 0 ? (bPrice / inkYield) : ((bPrice / actualVol) * isoRate);
       }
-      totalInkCost += actualCostPerPage;
-    });
+      
+      return sum + slotCost;
+    }, 0);
 
-    return Math.round(totalInkCost * 100) / 100;
+    return Math.round(totalInkRate * 1000) / 1000;
   };
 
   const createNewItem = (name = 'ລາຍການສິນຄ້າ 1', specs?: any): QuotationItem => {
@@ -280,10 +316,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const orderQty = Number(specs?.orderQuantity) || 1;
     const isBook = pageCount >= 4;
 
-    const covC = specs ? (isMono ? 0 : Number(specs.avgCovC) || 0) : 10;
-    const covM = specs ? (isMono ? 0 : Number(specs.avgCovM) || 0) : 10;
-    const covY = specs ? (isMono ? 0 : Number(specs.avgCovY) || 0) : 10;
-    const covK = specs ? Number(specs.avgCovK) || 0 : 10;
+    const covC = specs ? (isMono ? 0 : (specs.cCoverage !== undefined ? Number(specs.cCoverage) : (specs.avgCovC !== undefined ? Number(specs.avgCovC) : 10))) : 10;
+    const covM = specs ? (isMono ? 0 : (specs.mCoverage !== undefined ? Number(specs.mCoverage) : (specs.avgCovM !== undefined ? Number(specs.avgCovM) : 10))) : 10;
+    const covY = specs ? (isMono ? 0 : (specs.yCoverage !== undefined ? Number(specs.yCoverage) : (specs.avgCovY !== undefined ? Number(specs.avgCovY) : 10))) : 10;
+    const covK = specs ? (specs.kCoverage !== undefined ? Number(specs.kCoverage) : (specs.avgCovK !== undefined ? Number(specs.avgCovK) : 10)) : 10;
     const defaultPrinter = printers[0] || { id: 'PRN-DEFAULT', name: 'Default Printer' };
     const defaultPaper = papers[0]?.id || '';
     const defaultPostPress = postPressEquipment.length > 0 ? [postPressEquipment[0].id] : [];
@@ -299,58 +335,19 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       { channel_name: 'K', density_pct: covK, is_spot_color: false },
     ];
 
-    let initialAllocations: any[] = [];
-    const colorPages = Number(specs?.colorPages || 0);
-    const monoPages = Number(specs?.monoPages || 0);
-
-    if (colorPages > 0 && monoPages > 0) {
-      initialAllocations = [
-        {
-          printer_id: defaultPrinter.id,
-          printer_name: `${defaultPrinter.name || defaultPrinter.id} (ໜ້າສີ ${colorPages} ໜ້າ)`,
-          allocated_pages: colorPages,
-          cost_per_page: rate,
-          ink_cost_per_page: inkBaseRate,
-          subtotal_cost: colorPages * rate,
-          color_mode: 'CMYK',
-          average_density_pct: Math.round((covC + covM + covY + covK) / 4),
-          color_channels: [
-            { channel_name: 'C', density_pct: covC, is_spot_color: false },
-            { channel_name: 'M', density_pct: covM, is_spot_color: false },
-            { channel_name: 'Y', density_pct: covY, is_spot_color: false },
-            { channel_name: 'K', density_pct: covK, is_spot_color: false },
-          ],
-        },
-        {
-          printer_id: defaultPrinter.id,
-          printer_name: `${defaultPrinter.name || defaultPrinter.id} (ໜ້າຂາວດຳ ${monoPages} ໜ້າ)`,
-          allocated_pages: monoPages,
-          cost_per_page: Math.round(rate * 0.5),
-          ink_cost_per_page: Math.round(inkBaseRate * 0.35),
-          subtotal_cost: monoPages * Math.round(rate * 0.5),
-          color_mode: 'MONO_K',
-          average_density_pct: Number(specs?.monoPagesAvgK) || 6.5,
-          color_channels: [
-            { channel_name: 'C', density_pct: 0, is_spot_color: false },
-            { channel_name: 'M', density_pct: 0, is_spot_color: false },
-            { channel_name: 'Y', density_pct: 0, is_spot_color: false },
-            { channel_name: 'K', density_pct: Number(specs?.monoPagesAvgK) || 6.5, is_spot_color: false },
-          ],
-        }
-      ];
-    } else {
-      initialAllocations = [{
-        printer_id: defaultPrinter.id,
-        printer_name: defaultPrinter.name || defaultPrinter.id,
-        allocated_pages: pageCount,
-        cost_per_page: rate,
-        ink_cost_per_page: inkBaseRate,
-        subtotal_cost: pageCount * rate,
-        color_mode: isMono ? 'MONO_K' : 'CMYK',
-        average_density_pct: Math.round((covC + covM + covY + covK) / (isMono ? 1 : 4)),
-        color_channels: channels,
-      }];
-    }
+    const totalJobSheets = Math.ceil(pageCount / (isBook ? 2 : 1)) * orderQty;
+    const initialAllocations: PrinterAllocation[] = [{
+      printer_id: defaultPrinter.id,
+      printer_name: defaultPrinter.name || defaultPrinter.id,
+      allocated_pages: totalJobSheets,
+      cost_per_page: rate,
+      ink_cost_per_page: inkBaseRate,
+      subtotal_cost: totalJobSheets * rate,
+      color_mode: isMono ? 'MONO_K' : 'CMYK',
+      average_density_pct: Math.round((covC + covM + covY + covK) / (isMono ? 1 : 4)),
+      color_channels: channels,
+      is_double_sided: isBook
+    }];
 
     const defaultCoverPaper = papers.find(p => p.name?.includes('260') || p.name?.includes('300') || p.name?.includes('Art'))?.id || defaultPaper;
 
@@ -421,6 +418,44 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   ]);
   const [activeItemIndex, setActiveItemIndex] = useState(0);
   const activeItem = items[activeItemIndex] || items[0];
+
+  // Auto-sync when prefilledOrderSpecs or prefilledSpecs arrives dynamically
+  useEffect(() => {
+    if (incomingSpecs && (incomingSpecs.avgCovC !== undefined || incomingSpecs.cCoverage !== undefined)) {
+      const isMono = (incomingSpecs.colorPages === 0 && (incomingSpecs.monoPages || 0) > 0) || incomingSpecs.colorMode === 'MONO_K';
+      const c = Number(incomingSpecs.cCoverage !== undefined ? incomingSpecs.cCoverage : (incomingSpecs.avgCovC || 0));
+      const m = Number(incomingSpecs.mCoverage !== undefined ? incomingSpecs.mCoverage : (incomingSpecs.avgCovM || 0));
+      const y = Number(incomingSpecs.yCoverage !== undefined ? incomingSpecs.yCoverage : (incomingSpecs.avgCovY || 0));
+      const k = Number(incomingSpecs.kCoverage !== undefined ? incomingSpecs.kCoverage : (incomingSpecs.avgCovK || 0));
+
+      updateActiveItem({
+        name: incomingSpecs.jobName || activeItem.name,
+        cCoverage: c,
+        mCoverage: m,
+        yCoverage: y,
+        kCoverage: k,
+        colorPrintMode: isMono ? 'MONO_K' : 'CMYK',
+        pagesPerBook: incomingSpecs.pageCount || activeItem.pagesPerBook,
+        jobWidth: incomingSpecs.jobWidth || activeItem.jobWidth,
+        jobHeight: incomingSpecs.jobHeight || activeItem.jobHeight,
+        fileName: incomingSpecs.fileName || activeItem.fileName,
+        artworkUrl: incomingSpecs.fileUrl || incomingSpecs.artworkUrl || activeItem.artworkUrl,
+        printerAllocations: (activeItem.printerAllocations || []).map(alloc => ({
+          ...alloc,
+          color_mode: isMono ? 'MONO_K' : 'CMYK',
+          average_density_pct: Math.round(isMono ? k : (c + m + y + k) / 4),
+          color_channels: isMono
+            ? [{ channel_name: 'K', density_pct: k, is_spot_color: false }]
+            : [
+                { channel_name: 'C', density_pct: c, is_spot_color: false },
+                { channel_name: 'M', density_pct: m, is_spot_color: false },
+                { channel_name: 'Y', density_pct: y, is_spot_color: false },
+                { channel_name: 'K', density_pct: k, is_spot_color: false },
+              ]
+        }))
+      });
+    }
+  }, [incomingSpecs]);
 
   const [isPreflightModalOpen, setIsPreflightModalOpen] = useState(false);
 
@@ -580,6 +615,13 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const isMonoOnly = (pfResult.color_pages_count || 0) === 0 && (pfResult.mono_pages_count || 0) > 0;
     const detectedColorMode = isMonoOnly ? 'MONO_K' : 'CMYK';
 
+    const covC = pfResult.color_pages_avg_c !== undefined ? pfResult.color_pages_avg_c : (pfResult.avg_cov_c ?? 0);
+    const covM = pfResult.color_pages_avg_m !== undefined ? pfResult.color_pages_avg_m : (pfResult.avg_cov_m ?? 0);
+    const covY = pfResult.color_pages_avg_y !== undefined ? pfResult.color_pages_avg_y : (pfResult.avg_cov_y ?? 0);
+    const covK = (pfResult.color_pages_count || 0) > 0
+      ? (pfResult.color_pages_avg_k !== undefined ? pfResult.color_pages_avg_k : (pfResult.avg_cov_k ?? 0))
+      : (pfResult.mono_pages_avg_k !== undefined ? pfResult.mono_pages_avg_k : (pfResult.avg_cov_k ?? 0));
+
     const newItem = createNewItem(cleanName, {
       jobName: cleanName,
       fileName: pfResult.file_name,
@@ -588,15 +630,15 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       orderQuantity: 1,
       colorPages: pfResult.color_pages_count || 0,
       monoPages: pfResult.mono_pages_count || 0,
-      monoPagesAvgK: pfResult.mono_pages_avg_k || 6.5,
+      monoPagesAvgK: pfResult.mono_pages_avg_k || covK,
       jobWidth: pfResult.target_width_mm || 210,
       jobHeight: pfResult.target_height_mm || 297,
       suggestedPaper: pfResult.target_paper_size || 'A4',
       colorPrintMode: detectedColorMode,
-      cCoverage: pfResult.color_pages_avg_c || pfResult.avg_cov_c || 5,
-      mCoverage: pfResult.color_pages_avg_m || pfResult.avg_cov_m || 5,
-      yCoverage: pfResult.color_pages_avg_y || pfResult.avg_cov_y || 5,
-      kCoverage: (pfResult.color_pages_count || 0) > 0 ? (pfResult.color_pages_avg_k || 15) : (pfResult.mono_pages_avg_k || pfResult.avg_cov_k || 10),
+      cCoverage: covC,
+      mCoverage: covM,
+      yCoverage: covY,
+      kCoverage: covK,
     });
 
     setItems(prev => [...prev, newItem]);
@@ -1345,6 +1387,37 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       items.forEach((item, idx) => {
         const calc = calculatedItems[idx];
         const paperItem = inventory.find(p => p.id === item.paperId);
+        
+        // 1. Primary Finished Product Item (with artwork & full specs for production floor)
+        orderItems.push({
+          id: item.id || `job-item-${idx + 1}`,
+          name: item.name || `Job #${idx + 1}`,
+          item_name: item.name,
+          quantity: item.printVolume || 1,
+          unitCost: Math.round(calc?.netCost || 0),
+          unit_price_lak: Math.round(calc?.unitPrice || 0),
+          total_price_lak: Math.round(calc?.sellingPrice || 0),
+          page_count: item.pagesPerBook || 1,
+          paper_size: item.jobSizePreset || 'A4',
+          cover_file_url: item.includeCover ? (item.artworkUrl || item.fileName) : undefined,
+          inner_file_url: item.artworkUrl || item.fileName,
+          drive_link: item.artworkUrl,
+          avg_cov_c: item.cCoverage || 0,
+          avg_cov_m: item.mCoverage || 0,
+          avg_cov_y: item.yCoverage || 0,
+          avg_cov_k: item.kCoverage || 0,
+          specs: {
+            pages: item.pagesPerBook || 1,
+            paperName: paperItem?.name || 'Standard Paper',
+            colorMode: item.colorPrintMode || 'CMYK',
+            isDoubleSided: item.isDoubleSided,
+            printerAllocations: item.printerAllocations,
+            fileName: item.fileName,
+            artworkUrl: item.artworkUrl
+          }
+        });
+
+        // 2. Paper inventory raw material consumed
         if (paperItem) {
           orderItems.push({
             id: item.paperId,
@@ -1354,7 +1427,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
           });
         }
 
-        // Add machinery items
+        // 3. Add machinery items
         (item.selectedPostPressIds || []).forEach(machId => {
           const mach = equipment.find(e => e.id === machId);
           if (mach) {
@@ -1369,6 +1442,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         });
       });
 
+      const firstArtwork = items.find(i => i.artworkUrl)?.artworkUrl;
+      const firstFileName = items.find(i => i.fileName)?.fileName;
+
       // Pass autoDeduct = false to enforce stock deduction only at IN_PRODUCTION stage
       addOrder({
         customerName: selectedCustomerId,
@@ -1382,6 +1458,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         status: 'Received',
         shippingFee: Number(shippingFee || 0),
         shippingMethod: shippingMethod,
+        artworkLink: firstArtwork || firstFileName || '',
         notes: `Multi-Item Quotation Order (${items.length} items): ${items.map(i => `${i.name} (${i.printVolume} units)`).join(', ')}. Shipping: ${shippingMethod} (${formatCurrency(shippingFee)}). Payment terms: ${paymentTerms}. ${quotationNote ? `Note: ${quotationNote}` : ''}`,
       }, false);
 
@@ -2889,6 +2966,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         printers={printers}
         formatCurrency={formatCurrency}
         getPrinterMachineRate={getPrinterMachineRate}
+        getPrinterActualInkCostPerPage={getPrinterActualInkCostPerPage}
       />
 
       {/* 🌟 POST-PRESS MACHINERY SEARCH MODAL */}

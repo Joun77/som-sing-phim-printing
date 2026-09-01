@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: somsin_postgres_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: somsing_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./admin-system/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d somsing_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: somsin_redis_dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  # Optional Adminer UI for local DB management
+  adminer:
+    image: adminer:latest
+    container_name: somsin_adminer_dev
+    restart: unless-stopped
+    ports:
+      - "8088:8080"
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_dev_data:

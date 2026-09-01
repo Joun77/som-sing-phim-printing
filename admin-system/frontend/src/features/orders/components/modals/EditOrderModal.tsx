@@ -700,7 +700,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
                   <div>
                     <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider block">Live Cost & Pricing Breakdown</span>
                     <h4 className="text-sm font-black text-slate-100">
-                      ສະຫຼຸບຕົ້ນທຶນ & ລາຄາຂາຍລວມ ({items.length} Jobs)
+                      Job #{activeJobIndex + 1}: {items[activeJobIndex]?.name || 'Custom Print'} <span className="text-cyan-300 font-mono">x{items[activeJobIndex]?.quantity || 1}</span> {items.length > 1 && `(ທັງໝົດ ${items.length} Jobs)`}
                     </h4>
                   </div>
                 </div>

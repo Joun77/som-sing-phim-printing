@@ -211,17 +211,31 @@ export const PreflightItemCreationModal: React.FC<PreflightItemCreationModalProp
 
   const handleConfirm = () => {
     if (result) {
+      // Determine which coverage set to pass based on user selection or active tab
+      const isColorTabActive = activeCoverageTab === 'color_pages' || customerPrintMode === 'COLOR';
+      
+      const passedC = customerPrintMode === 'MONO_ALL' ? 0 : (isColorTabActive ? rawColorC : combinedC);
+      const passedM = customerPrintMode === 'MONO_ALL' ? 0 : (isColorTabActive ? rawColorM : combinedM);
+      const passedY = customerPrintMode === 'MONO_ALL' ? 0 : (isColorTabActive ? rawColorY : combinedY);
+      const passedK = customerPrintMode === 'MONO_ALL' 
+        ? effectiveMonoK 
+        : (isColorTabActive ? rawColorK : combinedK);
+
       onConfirm({
         ...result,
         file_url: previewUrl || result.file_url,
         color_mode: customerPrintMode === 'MONO_ALL' ? 'MONO_K' : 'CMYK',
         color_pages_count: colorPages,
         mono_pages_count: monoPages,
-        color_pages_avg_c: combinedC,
-        color_pages_avg_m: combinedM,
-        color_pages_avg_y: combinedY,
-        color_pages_avg_k: combinedK,
+        color_pages_avg_c: rawColorC,
+        color_pages_avg_m: rawColorM,
+        color_pages_avg_y: rawColorY,
+        color_pages_avg_k: rawColorK,
         mono_pages_avg_k: effectiveMonoK,
+        avg_cov_c: passedC,
+        avg_cov_m: passedM,
+        avg_cov_y: passedY,
+        avg_cov_k: passedK,
         target_paper_size: targetPaperSize,
         target_width_mm: customWidth,
         target_height_mm: customHeight,
