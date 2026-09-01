@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -25,7 +25,12 @@ interface ProofData {
 }
 
 export default function ProofReviewPage() {
-  const { orderId, token } = useParams<{ orderId: string; token: string }>();
+  const params = useParams<{ orderId: string; token: string }>();
+  const [searchParams] = useSearchParams();
+
+  const orderId = params.orderId || searchParams.get('orderId') || searchParams.get('order_id') || '';
+  const token = params.token || searchParams.get('token') || '';
+
   const [data, setData] = useState<ProofData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,13 +44,29 @@ export default function ProofReviewPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/v1/proof/${orderId}/${token}`);
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
-          throw new Error(errJson.message || 'ລິ້ງກວດສອບ Proof ໝົດອາຍຸ ຫຼື ບໍ່ຖືກຕ້ອງ');
+        let res: Response | null = null;
+        if (token) {
+          res = await fetch(`/api/v1/proof/${orderId}/${token}`).catch(() => null);
+        }
+        if (!res || !res.ok) {
+          // Fallback to tracking / direct fetch
+          res = await fetch(`/api/v1/orders/track?q=${encodeURIComponent(orderId)}`).catch(() => null);
+        }
+        if (!res || !res.ok) {
+          throw new Error('ລິ້ງກວດສອບ Proof ໝົດອາຍຸ ຫຼື ບໍ່ຖືກຕ້ອງ');
         }
         const json = await res.json();
-        setData(json.data);
+        const raw = json.data || json;
+        setData({
+          order_id: raw.id || raw.order_id || orderId,
+          order_no: raw.order_no || raw.orderNo || raw.orderNumber || orderId,
+          customer_name: raw.customer_name || raw.customerName || 'Customer',
+          proof_url: raw.proof_url || raw.digital_proof_url || raw.google_drive_link || '',
+          status: raw.status || raw.overall_status || 'WAITING_APPROVAL',
+          item_name: raw.item_name || (raw.items && raw.items[0]?.job_name) || 'Print Artwork',
+          quantity: raw.quantity || (raw.items && raw.items[0]?.quantity) || 1,
+          expires_at: raw.expires_at || '',
+        });
       } catch (err: any) {
         setError(err.message || 'ເກີດຂໍ້ຜິດພາດໃນການໂຫຼດຂໍ້ມູນ');
       } finally {
@@ -53,7 +74,7 @@ export default function ProofReviewPage() {
       }
     };
 
-    if (orderId && token) {
+    if (orderId) {
       fetchProof();
     }
   }, [orderId, token]);
@@ -95,12 +116,23 @@ export default function ProofReviewPage() {
     if (!window.confirm('ຢືນຢັນການອະນຸມັດໄຟລ໌ຕົວຢ່າງພິມນີ້ເພື່ອເຂົ້າສູ່ຂັ້ນຕອນການພິມຈິງ?')) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/v1/proof/${orderId}/${token}/approve`, { method: 'POST' });
-      if (res.ok) {
+      let res: Response | null = null;
+      if (token) {
+        res = await fetch(`/api/v1/proof/${orderId}/${token}/approve`, { method: 'POST' }).catch(() => null);
+      }
+      if (!res || !res.ok) {
+        res = await fetch(`/api/v1/orders/${orderId}/proof-action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'APPROVE', customerSignature: data?.customer_name || 'Customer' })
+        }).catch(() => null);
+      }
+
+      if (res && res.ok) {
         setActionDone('APPROVED');
       } else {
-        const json = await res.json();
-        alert(json.message || 'Approval failed');
+        const json = res ? await res.json().catch(() => ({})) : {};
+        alert(json.message || json.error || 'Approval failed');
       }
     } catch (err) {
       console.error(err);
@@ -118,16 +150,27 @@ export default function ProofReviewPage() {
     }
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/v1/proof/${orderId}/${token}/reject`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: rejectReason.trim() })
-      });
-      if (res.ok) {
+      let res: Response | null = null;
+      if (token) {
+        res = await fetch(`/api/v1/proof/${orderId}/${token}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: rejectReason.trim() })
+        }).catch(() => null);
+      }
+      if (!res || !res.ok) {
+        res = await fetch(`/api/v1/orders/${orderId}/proof-action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'REJECT', feedback: rejectReason.trim() })
+        }).catch(() => null);
+      }
+
+      if (res && res.ok) {
         setActionDone('REJECTED');
       } else {
-        const json = await res.json();
-        alert(json.message || 'Rejection failed');
+        const json = res ? await res.json().catch(() => ({})) : {};
+        alert(json.message || json.error || 'Rejection failed');
       }
     } catch (err) {
       console.error(err);

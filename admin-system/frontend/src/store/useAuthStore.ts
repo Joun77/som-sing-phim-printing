@@ -103,8 +103,11 @@ export const useAuthStore = create<AuthState>()(
           const roleLabels: Record<string, string> = {
             owner: 'ສົມສິ່ງພິມ (Owner)',
             admin: 'ສົມສິ່ງພິມ (Super Admin)',
+            manager: 'ຜູ້ຈັດການທົ່ວໄປ (General Manager)',
+            prepress: 'ກຽມໄຟລ໌ພິມ (Prepress Specialist)',
             sales: 'ພະນັກງານຂາຍ (Sales)',
             production: 'ຊ່າງພິມ (Operator)',
+            finance: 'ພະນັກງານບັນຊີ (Finance)',
             accountant: 'ພະນັກງານບັນຊີ (Accountant)'
           };
           set({

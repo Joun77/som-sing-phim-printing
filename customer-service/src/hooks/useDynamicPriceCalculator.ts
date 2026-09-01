@@ -5,6 +5,7 @@ import {
   FileScanStatus,
   ProductOption,
 } from '../types/pricing';
+import { calculatePricing } from '../api/client';
 
 interface UseDynamicPriceCalculatorProps {
   values: PrintOrderFormValues;
@@ -120,13 +121,55 @@ export function useDynamicPriceCalculator({
 
     setIsLoading(true);
 
-    debounceTimerRef.current = setTimeout(() => {
+    debounceTimerRef.current = setTimeout(async () => {
       const trimmedUrl = values.driveUrl?.trim();
       if (trimmedUrl && isValidDriveUrl(trimmedUrl) && !scanStatus && !isScanning) {
         triggerDriveScan(trimmedUrl);
       }
 
       const effectivePages = detectedPages || values.pageCount || 1;
+      const qty = Math.max(1, values.quantity);
+
+      try {
+        // Attempt backend calculation
+        const selectedPaper = paperOptions.find((p) => p.id === values.paperType);
+        const selectedBinding = bindingOptions.find((b) => b.id === values.bindingType);
+        const selectedFinishing = finishingOptions.find((f) => f.id === values.finishingType);
+
+        const backendRes = await calculatePricing({
+          job_name: values.productId || 'Custom Print',
+          quantity: qty,
+          paper_sku: selectedPaper?.id || 'standard-paper',
+          paper_cost_per_unit: selectedPaper?.pricePerUnit || 150,
+          paper_format: 'A4',
+          unfolded_width_mm: 210,
+          unfolded_height_mm: 297,
+          lamination_type: selectedFinishing?.id !== 'none' ? selectedFinishing?.id : undefined,
+          lamination_cost: selectedFinishing?.pricePerUnit || 0,
+          binding_type: selectedBinding?.id !== 'none' ? selectedBinding?.id : undefined,
+          binding_cost: selectedBinding?.pricePerUnit || 0,
+          ink_coverage_percent: 15,
+          markup_margin: 0.35,
+        });
+
+        if (backendRes && backendRes.sale_price) {
+          const totalUnitPrice = Math.round((backendRes.sale_price / qty) * 100) / 100;
+          const unitPricePerPage = Math.round((totalUnitPrice / effectivePages) * 100) / 100;
+          setQuote({
+            unitPricePerPage,
+            totalUnitPrice,
+            quantity: qty,
+            subtotal: backendRes.sale_price,
+            badge: scanStatus === 'AUTO_VERIFIED' ? 'AUTO_VERIFIED' : 'PENDING_VERIFICATION',
+            pageCount: effectivePages,
+          });
+          setIsLoading(false);
+          return;
+        }
+      } catch {
+        // Offline or network fallback
+      }
+
       const calculated = calculateLocalQuote(values, scanStatus, effectivePages);
       setQuote(calculated);
       setIsLoading(false);
@@ -135,7 +178,7 @@ export function useDynamicPriceCalculator({
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
-  }, [values, scanStatus, detectedPages, calculateLocalQuote, isValidDriveUrl, triggerDriveScan, isScanning]);
+  }, [values, scanStatus, detectedPages, calculateLocalQuote, isValidDriveUrl, triggerDriveScan, isScanning, paperOptions, bindingOptions, finishingOptions]);
 
   const recalculate = useCallback(() => {
     const effectivePages = detectedPages || values.pageCount || 1;

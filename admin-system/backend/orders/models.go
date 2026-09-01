@@ -102,6 +102,12 @@ type Order struct {
 	GoogleDriveLink      string      `json:"google_drive_link"`
 	StockDeductedAt      *time.Time  `json:"stock_deducted_at,omitempty"`
 	ProofURL             string      `json:"proof_url,omitempty"`
+	DigitalProofURL      string      `json:"digital_proof_url,omitempty"`
+	ProofVersion         int         `json:"proof_version,omitempty"`
+	ProofStatus          string      `json:"proof_status,omitempty"` // NOT_SUBMITTED, PENDING_CUSTOMER, APPROVED, REJECTED
+	ProofFeedback        string      `json:"proof_feedback,omitempty"`
+	ProofActionAt        *time.Time  `json:"proof_action_at,omitempty"`
+	PrepressNotes        string      `json:"prepress_notes,omitempty"`
 	ProofApprovedAt      *time.Time  `json:"proof_approved_at,omitempty"`
 	ProofRejectedAt      *time.Time  `json:"proof_rejected_at,omitempty"`
 	ProofSignatureIP     string      `json:"proof_signature_ip,omitempty"`
@@ -278,6 +284,17 @@ type UploadProofRequest struct {
 	ProofURL string `json:"proof_url" binding:"required"`
 }
 
+type SendProofRequest struct {
+	ProofURL      string `json:"proofUrl" binding:"required"`
+	PrepressNotes string `json:"prepressNotes"`
+}
+
+type ProofActionRequest struct {
+	Action            string `json:"action" binding:"required"` // "APPROVE" | "REJECT"
+	Feedback          string `json:"feedback"`
+	CustomerSignature string `json:"customerSignature"`
+}
+
 type ApproveProofRequest struct {
 	SignatureName string `json:"signature_name"`
 	ClientIP      string `json:"client_ip"`
@@ -292,6 +309,11 @@ type ProofStatusResponse struct {
 	OrderNo         string     `json:"order_no,omitempty"`
 	CustomerName    string     `json:"customer_name,omitempty"`
 	ProofURL        string     `json:"proof_url"`
+	DigitalProofURL string     `json:"digital_proof_url,omitempty"`
+	ProofVersion    int        `json:"proof_version,omitempty"`
+	ProofStatus     string     `json:"proof_status,omitempty"`
+	ProofFeedback   string     `json:"proof_feedback,omitempty"`
+	PrepressNotes   string     `json:"prepress_notes,omitempty"`
 	ProofToken      string     `json:"proof_token,omitempty"`
 	PublicProofURL  string     `json:"public_proof_url,omitempty"`
 	IsApproved      bool       `json:"is_approved"`

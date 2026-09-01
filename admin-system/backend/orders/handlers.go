@@ -382,7 +382,8 @@ func HandleRecordDeposit(c *gin.Context) {
 }
 
 type UpdateStatusRequest struct {
-	Status OrderStatus `json:"status" binding:"required"`
+	Status             OrderStatus `json:"status" binding:"required"`
+	AllowNegativeStock bool        `json:"allow_negative_stock"`
 }
 
 // ValidateOrderStatusTransition validates that status transitions adhere to strict workflow rules.
@@ -492,10 +493,11 @@ func HandleUpdateOrderStatus(c *gin.Context) {
 
 	if req.Status == StatusInProduction && oldStatus != StatusInProduction {
 		log.Printf("[FIFO Stock Deductions] Order %s shifted to IN_PRODUCTION. Deducting resources.", order.ID)
-		if err := dischargeFIFOStockForOrder(order); err != nil {
+		if err := dischargeFIFOStockForOrder(order, req.AllowNegativeStock); err != nil {
 			log.Printf("[FIFO STOCK ERROR] Failed to discharge inventory for order %s: %v", order.ID, err)
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":   "Insufficient inventory stock for FIFO discharge",
+				"code":    "INSUFFICIENT_STOCK",
 				"details": err.Error(),
 			})
 			return
@@ -553,7 +555,36 @@ func HandleUpdateOrderStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, order)
 }
 
-func dischargeFIFOStockForOrder(o Order) error {
+// HandleReverseOrderStock reverses deducted stock for cancelled or reverted orders
+func HandleReverseOrderStock(c *gin.Context) {
+	orderID := c.Param("id")
+
+	user := "ADMIN"
+	if u, exists := c.Get("username"); exists {
+		user = fmt.Sprintf("%v", u)
+	}
+
+	if db.DB != nil {
+		err := db.RunInTransaction(func(tx *sql.Tx) error {
+			return inventory.ReverseInventoryForOrder(tx, orderID, user)
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reverse stock", "details": err.Error()})
+			return
+		}
+	}
+
+	storeMutex.Lock()
+	if o, exists := ordersStore[orderID]; exists {
+		o.StockDeductedAt = nil
+		ordersStore[orderID] = o
+	}
+	storeMutex.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Stock deduction reversed and materials restored", "order_id": orderID})
+}
+
+func dischargeFIFOStockForOrder(o Order, allowNegativeStock bool) error {
 	if o.StockDeductedAt != nil {
 		log.Printf("[FIFO STOCK INFO] Stock already deducted for order %s at %v. Skipping.", o.ID, *o.StockDeductedAt)
 		return nil
@@ -601,20 +632,22 @@ func dischargeFIFOStockForOrder(o Order) error {
 
 			// Deduct Paper and Ink using inventory.DeductInventoryForJob inside DB transaction
 			err := inventory.DeductInventoryForJob(tx, inventory.JobDeductionSpec{
-				OrderID:        o.ID,
-				OrderItemID:    item.ID,
-				PaperSKU:       paperSku,
-				Quantity:       item.Quantity,
-				PageCount:      item.PageCount,
-				CoverPaperID:   item.CoverPaperID,
-				InnerPaperID:   item.InnerPaperID,
-				ColorMode:      colorMode,
-				MachineID:      item.MachineID,
-				AvgCovC:        item.AvgCovC,
-				AvgCovM:        item.AvgCovM,
-				AvgCovY:        item.AvgCovY,
-				AvgCovK:        item.AvgCovK,
-				InkCoveragePct: inkCov,
+				OrderID:            o.ID,
+				OrderItemID:        item.ID,
+				PaperSKU:           paperSku,
+				Quantity:           item.Quantity,
+				PageCount:          item.PageCount,
+				CoverPaperID:       item.CoverPaperID,
+				InnerPaperID:       item.InnerPaperID,
+				ColorMode:          colorMode,
+				MachineID:          item.MachineID,
+				AvgCovC:            item.AvgCovC,
+				AvgCovM:            item.AvgCovM,
+				AvgCovY:            item.AvgCovY,
+				AvgCovK:            item.AvgCovK,
+				InkCoveragePct:     inkCov,
+				AllowNegativeStock: allowNegativeStock,
+				CreatedBy:          "PRODUCTION_TRIGGER",
 			})
 			if err != nil {
 				log.Printf("[INVENTORY DEDUCTION ERROR] %v", err)
@@ -1203,6 +1236,68 @@ func HandleUpdateOrderItemStep(c *gin.Context) {
 		"item_id":      itemID,
 		"current_step": req.CurrentStep,
 	})
+}
+
+// HandleTrackOrderQuery handles GET /api/orders/track?q=:query or /api/v1/orders/track?q=:query
+func HandleTrackOrderQuery(c *gin.Context) {
+	q := strings.TrimSpace(c.Query("q"))
+	if q == "" {
+		q = strings.TrimSpace(c.Query("order"))
+	}
+	if q == "" {
+		q = strings.TrimSpace(c.Query("order_id"))
+	}
+	if q == "" {
+		q = strings.TrimSpace(c.Query("phone"))
+	}
+	if q == "" {
+		q = strings.TrimSpace(c.Param("order_no"))
+	}
+
+	if q == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing search query parameter 'q'"})
+		return
+	}
+
+	// 1. Search by exact ID / OrderNo / IdempotencyKey first
+	storeMutex.RLock()
+	for _, o := range ordersStore {
+		if strings.EqualFold(o.OrderNo, q) || strings.EqualFold(o.OrderNumber, q) || strings.EqualFold(o.ID, q) || strings.EqualFold(o.IdempotencyKey, q) {
+			storeMutex.RUnlock()
+			c.JSON(http.StatusOK, o)
+			return
+		}
+	}
+	storeMutex.RUnlock()
+
+	if db.DB != nil {
+		order, err := getOrderByIDFromDB(q)
+		if err == nil && order.ID != "" {
+			c.JSON(http.StatusOK, order)
+			return
+		}
+
+		// 2. Search by customer phone number
+		phoneOrders, err := GetOrdersByCustomer("", q)
+		if err == nil && len(phoneOrders) > 0 {
+			// Return the latest order
+			c.JSON(http.StatusOK, phoneOrders[0])
+			return
+		}
+	} else {
+		// In-memory phone search fallback
+		storeMutex.RLock()
+		for _, o := range ordersStore {
+			if strings.EqualFold(o.CustomerPhone, q) {
+				storeMutex.RUnlock()
+				c.JSON(http.StatusOK, o)
+				return
+			}
+		}
+		storeMutex.RUnlock()
+	}
+
+	c.JSON(http.StatusNotFound, gin.H{"error": "Order not found for search query: " + q})
 }
 
 // HandleGetOrderByOrderNo fetches order details by order_no for shop floor tracker

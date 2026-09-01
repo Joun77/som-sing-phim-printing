@@ -451,9 +451,16 @@ export async function trackOrder(orderId?: string | number | null): Promise<Orde
   if (!id) return null
 
   try {
-    const raw = await request<RawOrder>(`/v1/orders/track/${encodeURIComponent(id)}`)
-    setDemo(false)
-    return normalizeRemoteOrder(raw)
+    let raw: RawOrder | null = null
+    try {
+      raw = await request<RawOrder>(`/v1/orders/track?q=${encodeURIComponent(id)}`)
+    } catch {
+      raw = await request<RawOrder>(`/v1/orders/track/${encodeURIComponent(id)}`)
+    }
+    if (raw) {
+      setDemo(false)
+      return normalizeRemoteOrder(raw)
+    }
   } catch (err: any) {
     // Check local store
     const localOrders = readLocalOrders()
@@ -461,6 +468,7 @@ export async function trackOrder(orderId?: string | number | null): Promise<Orde
       (o) =>
         o.order_id === id ||
         o.order_number === id ||
+        o.phone === id ||
         String(o.id || '') === id ||
         String(o.order_id || '').toUpperCase() === id.toUpperCase()
     )
@@ -472,6 +480,7 @@ export async function trackOrder(orderId?: string | number | null): Promise<Orde
         (o) =>
           o.order_id === id ||
           o.order_number === id ||
+          o.phone === id ||
           String(o.id || '') === id ||
           String(o.order_id || '').toUpperCase() === id.toUpperCase()
       )
@@ -480,6 +489,11 @@ export async function trackOrder(orderId?: string | number | null): Promise<Orde
 
     return null
   }
+  return null
+}
+
+export async function fetchCatalogProducts(category?: string): Promise<RemoteProduct[]> {
+  return fetchPublicProducts(category)
 }
 
 interface RawOrder {
