@@ -49,12 +49,23 @@ export const PrintJobItemsCard: React.FC<PrintJobItemsCardProps> = ({
       <div className="space-y-3.5 divide-y divide-slate-100">
         {displayItems.map((it: any, idx: number) => {
           const qty = it.quantity || it.qty || 1;
-          const paper = it.paperType || it.paper || it.material || 'Art Card 260g';
-          const size = it.paperSize || it.size || 'A4';
-          const pages = it.pages || it.pageCount || '-';
-          const binding = it.binding || it.bindingType || 'ຫຍິບມຸງ / ຕັດກົງ';
-          const lamination = it.lamination || it.coating || 'ເຄືອບດ້ານ (Matte)';
-          const machine = it.machine || 'Digital Press Color';
+          const paper = it.paperType || it.paper || it.material || it.specifications?.paperType || 'Art Card 260g';
+          const size = it.paperSize || it.size || it.specifications?.paperSize || 'A4';
+          const pages = it.pages || it.pageCount || it.specifications?.pages || '-';
+          
+          // Binding: hide if none, empty or not configured
+          const rawBinding = it.binding || it.bindingType || it.bindingMethod || it.specifications?.binding;
+          const hasBinding = Boolean(rawBinding && rawBinding !== 'none' && rawBinding !== 'None' && rawBinding !== 'ບໍ່ເຂົ້າເລ່ມ' && rawBinding !== 'N/A');
+          const binding = hasBinding ? rawBinding : null;
+
+          // Coating: hide if none, empty or not configured
+          const rawCoating = it.lamination || it.coating || it.specifications?.coating;
+          const hasCoating = Boolean(rawCoating && rawCoating !== 'none' && rawCoating !== 'None' && rawCoating !== 'ບໍ່ເຄືອບ' && rawCoating !== 'N/A');
+          const lamination = hasCoating ? rawCoating : null;
+
+          const colorMode = it.colorPrintMode || it.colorMode || it.specifications?.color_mode;
+          const colorModeText = colorMode === 'MONO_K' || colorMode === 'Monochrome' ? 'ຂາວດຳ (Mono K)' : colorMode ? 'ສີ (CMYK)' : null;
+          const machine = it.machine || it.printerId || 'Digital Press Color';
 
           return (
             <div key={idx} className={`pt-3.5 space-y-2.5 ${idx === 0 ? 'pt-0' : ''}`}>
@@ -75,27 +86,38 @@ export const PrintJobItemsCard: React.FC<PrintJobItemsCardProps> = ({
                 </div>
               </div>
 
-              {/* Spec Badges Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+              {/* Spec Badges Grid - Dynamic and Conditional */}
+              <div className="flex flex-wrap gap-2 text-xs">
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 min-w-[130px] flex-1">
                   <span className="text-[10px] text-slate-400 font-bold uppercase block">ເນື້ອເຈ້ຍ (Paper)</span>
-                  <strong className="text-slate-800 text-xs font-semibold block truncate mt-0.5">{paper}</strong>
+                  <strong className="text-slate-800 text-xs font-semibold block truncate mt-0.5" title={paper}>{paper}</strong>
                 </div>
 
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 min-w-[110px] flex-1">
                   <span className="text-[10px] text-slate-400 font-bold uppercase block">ຂະໜາດ (Size)</span>
-                  <strong className="text-slate-800 text-xs font-semibold block truncate mt-0.5">{size}</strong>
+                  <strong className="text-slate-800 text-xs font-semibold block truncate mt-0.5" title={size}>{size}</strong>
                 </div>
 
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase block">ການເຂົ້າເລ່ມ (Binding)</span>
-                  <strong className="text-slate-800 text-xs font-semibold block truncate mt-0.5">{binding}</strong>
-                </div>
+                {colorModeText && (
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 min-w-[110px] flex-1">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">ລະບົບສີ (Color)</span>
+                    <strong className="text-slate-800 text-xs font-semibold block truncate mt-0.5">{colorModeText}</strong>
+                  </div>
+                )}
 
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase block">ການເຄືອບ (Coating)</span>
-                  <strong className="text-slate-800 text-xs font-semibold block truncate mt-0.5">{lamination}</strong>
-                </div>
+                {hasBinding && (
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 min-w-[130px] flex-1">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">ການເຂົ້າເລ່ມ (Binding)</span>
+                    <strong className="text-slate-800 text-xs font-semibold block truncate mt-0.5" title={binding}>{binding}</strong>
+                  </div>
+                )}
+
+                {hasCoating && (
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 min-w-[130px] flex-1">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">ການເຄືອບ (Coating)</span>
+                    <strong className="text-slate-800 text-xs font-semibold block truncate mt-0.5" title={lamination}>{lamination}</strong>
+                  </div>
+                )}
               </div>
             </div>
           );

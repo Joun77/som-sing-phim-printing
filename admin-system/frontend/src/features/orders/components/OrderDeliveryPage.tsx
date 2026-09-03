@@ -21,7 +21,10 @@ import {
   Image as ImageIcon,
   Settings,
   Plus,
-  Edit3
+  Edit3,
+  RotateCcw,
+  Save,
+  Tag
 } from 'lucide-react';
 import { useApp } from '@store/AppContext';
 import { CourierManagementModal } from './CourierManagementModal';
@@ -39,6 +42,8 @@ interface OrderDeliveryPageProps {
   showToast: (msg: string, type?: string) => void;
   setLightbox?: (v: { src: string; title: string } | null) => void;
   onEditOrder?: (order: any) => void;
+  askConfirmation?: (msg: string, onConfirm: () => void) => void;
+  onUpdateOrder?: (order: any) => void;
 }
 
 export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
@@ -52,6 +57,8 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
   showToast,
   setLightbox,
   onEditOrder,
+  askConfirmation,
+  onUpdateOrder,
 }) => {
   if (!order) return null;
 
@@ -61,18 +68,30 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
   const deliveryAddress = order.address || order.delivery_address || 'Saysettha, Vientiane';
   const totalAmountLAK = Number(order.totalPriceCharged || order.totalAmount || order.total_amount_lak || 86250);
 
-  const { couriers, updateOrderTracking, addDelivery } = useApp();
+  const village = order.village || '';
+  const district = order.district || '';
+  const province = order.province || '';
+
+  const { couriers = [], customerCategories = [], customers = [], updateOrderTracking, addDelivery } = useApp();
+
+  const customerTier = order.customerTier || order.customer_tier || order.tier || 
+    customers.find(c => (order.customerId && c.id === order.customerId) || c.name === customerName)?.tier || 'RETAIL';
+  const categoryObj = customerCategories.find((c: any) => c.id === customerTier);
+  const categoryLabel = categoryObj ? categoryObj.name : customerTier;
+
   const [isCourierModalOpen, setIsCourierModalOpen] = useState(false);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+  const [isEditingDelivery, setIsEditingDelivery] = useState(false);
 
   const [courier, setCourier] = useState(order.deliveryMethod || 'Anousith Express');
   const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber || '');
   const [shippingFee, setShippingFee] = useState<number>(order.shippingFee || 15000);
+  const [enableProofImage, setEnableProofImage] = useState<boolean>(Boolean(order.courierProofUrl));
   const [courierProofImage, setCourierProofImage] = useState<string | null>(
     order.courierProofUrl || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&q=80&w=600'
   );
 
-  // Strict Sequential Delivery Lifecycle States (Default to NOT completed unless explicitly done)
+  // Strict Sequential Delivery Lifecycle States
   const [isPacked, setIsPacked] = useState<boolean>(
     Boolean(order.isPacked === true || order.packing_status === 'PACKED')
   );
@@ -80,7 +99,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
     Boolean(order.isDispatched === true || order.dispatch_status === 'DISPATCHED')
   );
   const [isDelivered, setIsDelivered] = useState<boolean>(
-    Boolean(order.isCustomerReceived === true)
+    Boolean(order.isCustomerReceived === true || order.status === 'Delivered' || order.status === 'COMPLETED')
   );
 
   // Payment Settlement State
@@ -196,8 +215,12 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
     handleStatusChange(order.id, 'Delivered');
     if (order) {
       order.status = 'Delivered';
+      order.isCustomerReceived = true;
       order.deliveryMethod = courier;
       order.trackingNumber = trackingNumber;
+    }
+    if (onUpdateOrder) {
+      onUpdateOrder({ ...order, status: 'Delivered', isCustomerReceived: true, deliveryMethod: courier, trackingNumber });
     }
     showToast(
       currentLang === 'lo' 
@@ -210,6 +233,64 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
     }, 600);
   };
 
+  // 4. Action: Save Delivery Updates (In-Place Edit)
+  const handleSaveDeliveryUpdates = () => {
+    if (updateOrderTracking) {
+      updateOrderTracking(order.id, courier, trackingNumber, shippingFee);
+    }
+    if (order) {
+      order.deliveryMethod = courier;
+      order.trackingNumber = trackingNumber;
+      order.shippingFee = shippingFee;
+      if (enableProofImage) {
+        order.courierProofUrl = courierProofImage;
+      }
+    }
+    if (onUpdateOrder) {
+      onUpdateOrder({ 
+        ...order, 
+        deliveryMethod: courier, 
+        trackingNumber, 
+        shippingFee, 
+        courierProofUrl: enableProofImage ? courierProofImage : null 
+      });
+    }
+    setIsEditingDelivery(false);
+    showToast(currentLang === 'lo' ? 'ບັນທຶກການແກ້ໄຂຂໍ້ມູນຈັດສົ່ງສຳເລັດ!' : 'Delivery info updated!', 'success');
+  };
+
+  // 5. Action: Revert to Dispatched / In-Transit Status
+  const handleRevertToDispatched = () => {
+    const doRevert = () => {
+      setIsDelivered(false);
+      handleStatusChange(order.id, 'Dispatched');
+      if (order) {
+        order.status = 'Dispatched';
+        order.isCustomerReceived = false;
+      }
+      if (onUpdateOrder) {
+        onUpdateOrder({ ...order, status: 'Dispatched', isCustomerReceived: false });
+      }
+      showToast(
+        currentLang === 'lo' 
+          ? 'ຍ້ອນສະຖານະກັບມາຂັ້ນຕອນການຈັດສົ່ງ (In-Transit) ສຳເລັດ!' 
+          : 'Reverted status to In-Transit delivery!', 
+        'info'
+      );
+    };
+
+    if (askConfirmation) {
+      askConfirmation(
+        currentLang === 'lo'
+          ? 'ທ່ານຕ້ອງການຍ້ອນສະຖານະອໍເດີນີ້ກັບໄປຂັ້ນຕອນການຈັດສົ່ງແທ້ ຫຼື ບໍ່? (ລະບົບຈະປົດລັອກໃຫ້ແກ້ໄຂການຈັດສົ່ງໄດ້)'
+          : 'Revert this order back to In-Transit delivery stage?',
+        doRevert
+      );
+    } else {
+      doRevert();
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 lg:p-8 space-y-6 animate-fade-in font-sans">
       
@@ -219,56 +300,37 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
           <button
             type="button"
             onClick={onBack}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-2xl text-xs sm:text-sm font-black transition active:scale-95 shadow-xs cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-xl text-xs sm:text-sm font-black transition active:scale-95 shadow-xs cursor-pointer"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>{currentLang === 'lo' ? '← ກັບຄືນຕາຕະລາງ' : '← Back to Orders'}</span>
+            <ArrowLeft className="w-4 h-4 text-slate-600" />
+            <span>{currentLang === 'lo' ? 'ກັບຄືນ' : 'Back'}</span>
           </button>
           <div>
             <div className="flex items-center gap-2 text-xs font-mono font-bold text-slate-400 uppercase">
-              <span className="text-amber-600 font-black">#{orderIdDisplay}</span>
+              <span className="text-sky-600 font-black">#{orderIdDisplay}</span>
               <span>•</span>
-              <span className="text-sky-700 font-bold">Step 3: Fulfillment & Logistics</span>
+              <span className="text-sky-800 font-bold">Step 3: Fulfillment & Logistics</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5 tracking-tight">
-              {currentLang === 'lo' ? 'ຂັ້ນຕອນການແພັກກິ້ງ, ຈັດສົ່ງ & ມອບຮັບສິນຄ້າ' : 'Step 3: Packaging, Dispatch & Handover'}
+              {currentLang === 'lo' ? 'ການຈັດສົ່ງ & ມອບຮັບ (Step 3: Delivery)' : 'Step 3: Delivery & Handover'}
             </h1>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          {onEditOrder && (
-            <button
-              type="button"
-              onClick={() => onEditOrder(order)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-2xl text-xs font-black transition active:scale-95 cursor-pointer shadow-xs"
-              title={currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ & ສະເປກ' : 'Edit Order Specs & Details'}
-            >
-              <Edit3 className="w-3.5 h-3.5 text-amber-700" />
-              <span>{currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ' : 'Edit Order'}</span>
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setIsInvoiceModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 rounded-2xl text-xs font-black transition active:scale-95 cursor-pointer shadow-2xs"
-            title="Customer Payment Invoice / Receipt"
-          >
-            <CreditCard className="w-3.5 h-3.5 text-blue-600" />
-            <span>{currentLang === 'lo' ? 'ໃບບິນລູກຄ້າ' : 'Invoice'}</span>
-          </button>
-
-          <span className={`px-3.5 py-1.5 rounded-2xl text-xs font-black border uppercase flex items-center gap-1.5 shadow-xs ${
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Status Badge (Pill with soft border) */}
+          <div className={`px-3 py-1 rounded-full text-[11px] font-bold border uppercase flex items-center gap-1.5 select-none ${
             isDelivered 
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+              ? 'bg-emerald-50/90 text-emerald-800 border-emerald-300/80' 
               : isDispatched
-              ? 'bg-purple-50 text-purple-700 border-purple-200'
+              ? 'bg-sky-50/90 text-sky-800 border-sky-300/80'
               : isPacked
-              ? 'bg-sky-50 text-sky-700 border-sky-200'
-              : 'bg-slate-100 text-slate-700 border-slate-200'
+              ? 'bg-sky-50/90 text-sky-800 border-sky-300/80'
+              : 'bg-slate-100 text-slate-700 border-slate-300/80'
           }`}>
-            <Truck className="w-4 h-4" />
+            <span className={`w-2 h-2 rounded-full ${
+              isDelivered ? 'bg-emerald-500' : isDispatched ? 'bg-sky-500' : isPacked ? 'bg-sky-500' : 'bg-slate-400'
+            }`} />
             <span>
               {isDelivered 
                 ? (currentLang === 'lo' ? 'ລູກຄ້າໄດ້ຮັບແລ້ວ (Delivered)' : 'Delivered') 
@@ -278,7 +340,35 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
                 ? (currentLang === 'lo' ? 'ແພັກແລ້ວ (ລໍຖ້າສົ່ງ)' : 'Packed / Ready')
                 : (currentLang === 'lo' ? 'ລໍຖ້າແພັກກິ້ງ (Pending)' : 'Pending Packaging')}
             </span>
-          </span>
+          </div>
+
+          {/* Vertical Divider */}
+          <div className="hidden sm:block w-px h-6 bg-slate-200" />
+
+          {/* Action Buttons (Elevated Clickable) */}
+          <div className="flex items-center gap-2">
+            {onEditOrder && (
+              <button
+                type="button"
+                onClick={() => onEditOrder(order)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white font-black rounded-xl text-xs transition-all duration-150 shadow-sm shadow-sky-500/25 active:scale-95 cursor-pointer border-none"
+                title={currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ & ສະເປກ' : 'Edit Order Specs & Details'}
+              >
+                <Edit3 className="w-3.5 h-3.5 text-white" />
+                <span>{currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ' : 'Edit Order'}</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsInvoiceModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-xs transition-all duration-150 shadow-sm shadow-blue-600/25 active:scale-95 cursor-pointer border-none"
+              title={currentLang === 'lo' ? 'ໃບບິນລູກຄ້າ (Invoice / Receipt)' : 'Customer Invoice / Receipt'}
+            >
+              <CreditCard className="w-3.5 h-3.5 text-white" />
+              <span>{currentLang === 'lo' ? 'ໃບບິນລູກຄ້າ' : 'Customer Invoice'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -313,19 +403,42 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
               </span>
             </div>
 
-            {/* Customer Delivery Details */}
+            {/* Customer Delivery Details & Category */}
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2 text-xs">
-              <div className="flex items-center gap-2 font-bold text-slate-800">
-                <User className="w-4 h-4 text-slate-500" />
-                <span className="text-sm">{customerName}</span>
-                <span className="text-slate-400">•</span>
-                <a href={`tel:${customerPhone}`} className="text-blue-600 font-mono hover:underline">
-                  {customerPhone}
-                </a>
+              <div className="flex items-center justify-between font-bold text-slate-800">
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-slate-500" />
+                  <span className="text-sm font-black">{customerName}</span>
+                  <span className="text-slate-400">•</span>
+                  <a href={`tel:${customerPhone}`} className="text-blue-600 font-mono hover:underline">
+                    {customerPhone}
+                  </a>
+                </div>
+                {categoryLabel && (
+                  <span className="px-2.5 py-1 rounded-xl text-[10.5px] font-black uppercase bg-sky-50 text-sky-700 border border-sky-200 flex items-center gap-1">
+                    <Tag className="w-3 h-3 text-sky-500" />
+                    <span>{categoryLabel}</span>
+                  </span>
+                )}
               </div>
-              <div className="flex items-start gap-2 text-slate-600 pt-1">
-                <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                <span>{deliveryAddress}</span>
+
+              {/* Structured Address: ບ້ານ / ເມືອງ / ແຂວງ */}
+              <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
+                <div className="flex items-start gap-1.5 text-slate-600">
+                  <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1 w-full">
+                    {(village || district || province) ? (
+                      <div className="flex flex-wrap gap-1.5 text-[11px] font-bold text-slate-700">
+                        {village && <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200">ບ້ານ: {village}</span>}
+                        {district && <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200">ເມືອງ: {district}</span>}
+                        {province && <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200">ແຂວງ: {province.replace('ແຂວງ', '').replace('ນະຄອນຫຼວງ', '').trim()}</span>}
+                      </div>
+                    ) : null}
+                    {deliveryAddress && (
+                      <span className="text-[11px] text-slate-500 block leading-relaxed">{deliveryAddress}</span>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -444,44 +557,72 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
                 </div>
               </div>
 
-              {/* Courier Handover Proof Photo Box */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+              {/* Courier Handover Proof Photo Box with Toggle Switch (ດັອກກີ້) */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                  <span className="flex items-center gap-1.5">
-                    <Camera className="w-4 h-4 text-sky-600" />
-                    <span>ຫຼັກຖານການມອບໃຫ້ຂົນສົ່ງ (Courier Slip / Photo)</span>
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono">JPG, PNG</span>
+                  <div className="space-y-0.5">
+                    <span className="flex items-center gap-1.5 font-black text-slate-800">
+                      <Camera className="w-4 h-4 text-sky-600" />
+                      <span>ແນບຮູບຫຼັກຖານການມອບໃຫ້ຂົນສົ່ງ (Handover Photo)</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-semibold block">
+                      {enableProofImage ? 'ເປີດໃຊ້ງານ (ແນບຮູບໃບສົ່ງ / ພັດສະດຸ)' : 'ປິດໃຊ້ງານ (ບໍ່ຈຳເປັນຕ້ອງແນບຮູບ - Optional)'}
+                    </span>
+                  </div>
+
+                  {/* Toggle Switch (ດັອກກີ້) */}
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={enableProofImage}
+                    onClick={() => setEnableProofImage(!enableProofImage)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      enableProofImage ? 'bg-sky-600' : 'bg-slate-300'
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                        enableProofImage ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
                 </div>
 
-                <div 
-                  onClick={() => {
-                    if (courierProofImage && setLightbox) {
-                      setLightbox({ src: courierProofImage, title: `Courier Proof - #${orderIdDisplay}` });
-                    }
-                  }}
-                  className="w-full h-24 rounded-xl bg-white border border-dashed border-slate-300 hover:border-sky-400 transition flex items-center justify-center cursor-pointer relative group overflow-hidden"
-                >
-                  {courierProofImage ? (
-                    <>
-                      <img src={courierProofImage} alt="Courier Proof" className="max-h-20 max-w-full object-contain rounded-lg shadow-xs" />
-                      <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-xs font-bold text-white gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-                        <span>ຄລິກເພື່ອເບິ່ງຮູບເຕັມ</span>
+                {enableProofImage ? (
+                  <div 
+                    onClick={() => {
+                      if (courierProofImage && setLightbox) {
+                        setLightbox({ src: courierProofImage, title: `Courier Proof - #${orderIdDisplay}` });
+                      }
+                    }}
+                    className="w-full h-24 rounded-xl bg-white border border-dashed border-slate-300 hover:border-sky-400 transition flex items-center justify-center cursor-pointer relative group overflow-hidden"
+                  >
+                    {courierProofImage ? (
+                      <>
+                        <img src={courierProofImage} alt="Courier Proof" className="max-h-20 max-w-full object-contain rounded-lg shadow-xs" />
+                        <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-xs font-bold text-white gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+                          <span>ຄລິກເພື່ອເບິ່ງຮູບເຕັມ</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-2 text-xs text-slate-400">
+                        <ImageIcon className="w-5 h-5 text-slate-400" />
+                        <span>ອັບໂຫຼດຮູບຖ່າຍຕອນມອບໃຫ້ຂົນສົ່ງ</span>
                       </div>
-                    </>
-                  ) : (
-                    <div className="flex items-center gap-2 text-xs text-slate-400">
-                      <ImageIcon className="w-5 h-5 text-slate-400" />
-                      <span>ອັບໂຫຼດຮູບຖ່າຍຕອນມອບໃຫ້ຂົນສົ່ງ</span>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-xl bg-white border border-slate-200 text-center text-slate-400 text-[11px] font-semibold">
+                    <span>ບໍ່ມີຮູບຫຼັກຖານ (Optional - ຂ້າມຂັ້ນຕອນນີ້ໄດ້)</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Action: Dispatch Confirmation Button */}
+          {/* Action: Dispatch Confirmation Button & In-Place Editing */}
           <div className="pt-3 border-t border-slate-100 space-y-2">
             <button
               type="button"
@@ -496,9 +637,32 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
             </button>
 
             {isDispatched ? (
-              <div className="p-3.5 rounded-2xl bg-purple-50 border border-purple-200 text-purple-900 text-xs font-black flex items-center justify-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-purple-600" />
-                <span>{currentLang === 'lo' ? 'ມອບໃຫ້ຂົນສົ່ງຮຽບຮ້ອຍແລ້ວ (ກຳລັງນຳສົ່ງຮອດລູກຄ້າ)' : 'Dispatched / In Transit'}</span>
+              <div className="space-y-2">
+                <div className="p-3.5 rounded-2xl bg-purple-50 border border-purple-200 text-purple-900 text-xs font-black flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-purple-600" />
+                    <span>{currentLang === 'lo' ? 'ມອບໃຫ້ຂົນສົ່ງຮຽບຮ້ອຍແລ້ວ (ກຳລັງນຳສົ່ງຮອດລູກຄ້າ)' : 'Dispatched / In Transit'}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingDelivery(!isEditingDelivery)}
+                    className="px-3 py-1 rounded-xl bg-white hover:bg-purple-100 text-purple-800 text-[11px] font-black border border-purple-300 flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <Edit3 className="w-3 h-3 text-purple-600" />
+                    <span>{isEditingDelivery ? 'ປິດແກ້ໄຂ' : 'ແກ້ໄຂຂໍ້ມູນຈັດສົ່ງ'}</span>
+                  </button>
+                </div>
+
+                {isEditingDelivery && (
+                  <button
+                    type="button"
+                    onClick={handleSaveDeliveryUpdates}
+                    className="w-full py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-black flex items-center justify-center gap-2 shadow-sm transition active:scale-95 cursor-pointer border-none"
+                  >
+                    <Save className="w-4 h-4 text-white" />
+                    <span>{currentLang === 'lo' ? 'ບັນທຶກການແກ້ໄຂຂໍ້ມູນຈັດສົ່ງ' : 'Save Delivery Updates'}</span>
+                  </button>
+                )}
               </div>
             ) : (
               <button
@@ -604,12 +768,25 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
             )}
           </div>
 
-          {/* Action 3: Customer Received Confirmation (Gateway to Step 4) */}
+          {/* Action 3: Customer Received Confirmation (Gateway to Step 4) & Revert Action */}
           <div className="pt-3 border-t border-slate-100">
             {isDelivered ? (
-              <div className="p-4 rounded-2xl bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-black flex items-center justify-center gap-2 shadow-xs">
-                <CheckCircle2 className="w-5 h-5 text-emerald-700" />
-                <span>{currentLang === 'lo' ? 'ລູກຄ້າໄດ້ຮັບສິນຄ້າແລ້ວ (ອໍເດີສຳເລັດ)' : 'Delivered & Completed'}</span>
+              <div className="space-y-3">
+                <div className="p-4 rounded-2xl bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-black flex items-center justify-between shadow-xs">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-700" />
+                    <span>{currentLang === 'lo' ? 'ລູກຄ້າໄດ້ຮັບສິນຄ້າແລ້ວ (ອໍເດີສຳເລັດ)' : 'Delivered & Completed'}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRevertToDispatched}
+                    className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-black transition border border-amber-300 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    title="ຍ້ອນສະຖານະກັບສູ່ຂັ້ນຕອນການຈັດສົ່ງ"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
+                    <span>{currentLang === 'lo' ? 'ຍ້ອນສະຖານະ (Revert)' : 'Revert'}</span>
+                  </button>
+                </div>
               </div>
             ) : !isDispatched ? (
               <div className="p-4 rounded-2xl bg-slate-100 border border-slate-200 text-slate-500 text-xs font-bold text-center flex items-center justify-center gap-2">

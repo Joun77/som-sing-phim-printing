@@ -81,8 +81,29 @@ type OrderItem struct {
 	ArtworkURL         string                 `json:"artwork_url,omitempty"`
 	ArtworkFileName    string                 `json:"artwork_file_name,omitempty"`
 	ArtworkFileSize    int64                  `json:"artwork_file_size,omitempty"`
+	Artwork            *ItemArtwork           `json:"artwork,omitempty"`
+	Specifications     map[string]interface{} `json:"specifications,omitempty"`
 	CreatedAt         time.Time              `json:"created_at"`
 	UpdatedAt         time.Time              `json:"updated_at"`
+}
+
+type ItemArtwork struct {
+	FileURL             string `json:"file_url"`
+	FileName            string `json:"file_name"`
+	FileSizeBytes       int64  `json:"file_size_bytes,omitempty"`
+	PreviewThumbnailURL string `json:"preview_thumbnail_url,omitempty"`
+	PageCount           int    `json:"page_count,omitempty"`
+}
+
+type OrderPrintItem struct {
+	ID             string                 `json:"id"`
+	ItemIndex      int                    `json:"item_index"`
+	JobName        string                 `json:"job_name"`
+	Artwork        ItemArtwork            `json:"artwork"`
+	Specifications map[string]interface{} `json:"specifications"`
+	Quantity       int                    `json:"quantity"`
+	UnitPrice      float64                `json:"unit_price"`
+	TotalPrice     float64                `json:"total_price"`
 }
 
 type Order struct {
@@ -231,6 +252,8 @@ type CreateItemRequest struct {
 	UnitPriceLAK       float64                  `json:"unit_price_lak"`
 	TotalPriceLAK      float64                  `json:"total_price_lak"`
 	Specs              map[string]interface{}   `json:"specs"`
+	Artwork            *ItemArtwork             `json:"artwork,omitempty"`
+	Specifications     map[string]interface{}   `json:"specifications,omitempty"`
 	// Extended fields for multi-printer and finishing
 	QuantityRequired   int                      `json:"quantity_required,omitempty"`
 	UnfoldedWidthMM    float64                  `json:"unfolded_width_mm,omitempty"`

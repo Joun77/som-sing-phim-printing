@@ -5,7 +5,6 @@ import {
   CheckCircle2, 
   X, 
   DollarSign, 
-  AlertCircle, 
   Upload, 
   Image as ImageIcon,
   Eye,
@@ -61,6 +60,38 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
 
   const activeSlip = localSlip || paymentSlipUrl;
 
+  // Dynamic Custom Deposit State
+  const [customDepositPercent, setCustomDepositPercent] = useState<number>(
+    depositAmountPaid && totalAmountLAK > 0 
+      ? Math.round((depositAmountPaid / totalAmountLAK) * 100) 
+      : 50
+  );
+  const [customDepositAmount, setCustomDepositAmount] = useState<number>(
+    depositAmountPaid || Math.round(totalAmountLAK * 0.5)
+  );
+  const [isRoundDeposit, setIsRoundDeposit] = useState<boolean>(true);
+
+  // Sync when percent changes
+  const handlePercentChange = (pct: number) => {
+    setCustomDepositPercent(pct);
+    let raw = (totalAmountLAK * pct) / 100;
+    if (isRoundDeposit) {
+      raw = Math.round(raw / 1000) * 1000;
+    } else {
+      raw = Math.round(raw);
+    }
+    setCustomDepositAmount(raw);
+  };
+
+  // Sync when direct amount changes
+  const handleAmountChange = (amt: number) => {
+    setCustomDepositAmount(amt);
+    if (totalAmountLAK > 0) {
+      const pct = Math.round((amt / totalAmountLAK) * 100);
+      setCustomDepositPercent(pct);
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -88,16 +119,16 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
   };
 
   return (
-    <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm flex flex-col justify-between space-y-5">
+    <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-7 shadow-sm space-y-5 flex flex-col justify-between">
       <div>
         {/* Card Title */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
+            <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center border border-sky-100">
               <CreditCard className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] font-black uppercase text-amber-600 tracking-wider block">Step 1</span>
+              <span className="text-[10px] font-black uppercase text-sky-600 tracking-wider block">Step 1</span>
               <h3 className="text-sm font-black text-slate-900">
                 {currentLang === 'lo' ? '1. ກວດສອບສະລິບໂອນເງິນຜ່ານທະນາຄານ' : '1. Bank Transfer Slip Verification'}
               </h3>
@@ -129,14 +160,13 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
 
         {/* Slip Preview or Upload Box */}
         {activeSlip ? (
-          /* Mode 1: Slip Attached - Zoomable View */
           <div 
             onClick={() => {
               if (activeSlip && setLightbox) {
                 setLightbox({ src: activeSlip, title: `Bank Transfer Slip - Order #${orderIdDisplay}` });
               }
             }}
-            className="w-full min-h-[200px] max-h-[240px] rounded-2xl bg-slate-50 border-2 border-slate-200 flex flex-col items-center justify-center p-3 overflow-hidden cursor-pointer hover:border-amber-400 hover:bg-amber-50/20 transition relative group shadow-inner"
+            className="w-full min-h-[200px] max-h-[240px] rounded-2xl bg-slate-50 border-2 border-slate-200 flex flex-col items-center justify-center p-3 overflow-hidden cursor-pointer hover:border-sky-400 hover:bg-sky-50/20 transition relative group shadow-inner"
             title={currentLang === 'lo' ? 'ຄລິກເພື່ອເບິ່ງຮູບສະລິບເຕັມຈໍ' : 'Click to view full slip image'}
           >
             <img 
@@ -145,7 +175,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
               className="max-h-[190px] max-w-full object-contain rounded-xl shadow-md border border-slate-200"
             />
             <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition rounded-2xl flex items-center justify-center gap-2 text-xs font-black text-white">
-              <Eye className="w-4 h-4 text-amber-400" />
+              <Eye className="w-4 h-4 text-sky-400" />
               <span>{currentLang === 'lo' ? 'ຄລິກເພື່ອຂະຫຍາຍຮູບສະລິບ' : 'Click to Zoom'}</span>
             </div>
             <button
@@ -158,13 +188,12 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
             </button>
           </div>
         ) : (
-          /* Mode 2: No Slip Yet - Upload Dropzone & Bank Notice */
           <div 
             onClick={() => fileInputRef.current?.click()}
-            className="w-full min-h-[200px] max-h-[240px] rounded-2xl bg-slate-50 border-2 border-dashed border-slate-300 hover:border-amber-500 hover:bg-amber-50/30 flex flex-col items-center justify-center p-4 text-center cursor-pointer transition group shadow-inner"
+            className="w-full min-h-[200px] max-h-[240px] rounded-2xl bg-slate-50 border-2 border-dashed border-slate-300 hover:border-sky-500 hover:bg-sky-50/30 flex flex-col items-center justify-center p-4 text-center cursor-pointer transition group shadow-inner"
           >
-            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto border border-amber-200 shadow-xs mb-2 group-hover:scale-105 transition">
-              <Upload className="w-5 h-5 text-amber-700" />
+            <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center mx-auto border border-sky-200 shadow-xs mb-2 group-hover:scale-105 transition">
+              <Upload className="w-5 h-5 text-sky-700" />
             </div>
             <p className="text-xs font-black text-slate-800">
               {currentLang === 'lo' ? 'ອັບໂຫລດສະລິບ ຫຼື ແນບຫຼັກຖານການໂອນ' : 'Upload Bank Transfer Slip'}
@@ -172,8 +201,8 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
             <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
               {currentLang === 'lo' ? 'ຮອງຮັບທຸກທະນາຄານ (BCEL, JDB, LDB, APB, ຯລຯ)' : 'Supports all bank transfer slips'}
             </p>
-            <span className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-[11px] font-bold text-slate-700 shadow-xs group-hover:border-amber-400 group-hover:text-amber-700 transition">
-              <ImageIcon className="w-3.5 h-3.5 text-amber-600" />
+            <span className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-[11px] font-bold text-slate-700 shadow-xs group-hover:border-sky-400 group-hover:text-sky-700 transition">
+              <ImageIcon className="w-3.5 h-3.5 text-sky-600" />
               <span>{currentLang === 'lo' ? 'ເລືອກຟາຍສະລິບ / ອັບໂຫລດຮູບ' : 'Choose Slip Image'}</span>
             </span>
           </div>
@@ -188,11 +217,11 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
 
           {isDeposit && (
             <>
-              <div className="flex justify-between text-amber-700 font-bold border-t border-slate-200/80 pt-1">
+              <div className="flex justify-between text-sky-800 font-bold border-t border-slate-200/80 pt-1">
                 <span>{currentLang === 'lo' ? 'ຍອດມັດຈຳທີ່ຮັບແລ້ວ:' : 'Deposit Received:'}</span>
                 <span className="font-mono">{formatLAK(effectiveDepositPaid)}</span>
               </div>
-              <div className="flex justify-between text-red-600 font-black border-t border-slate-200/80 pt-1">
+              <div className="flex justify-between text-slate-700 font-black border-t border-slate-200/80 pt-1">
                 <span>{currentLang === 'lo' ? 'ຍອດຄ້າງຊຳລະ (ປິດຍອດຕອນສົ່ງ):' : 'Remaining to Settle:'}</span>
                 <span className="font-mono">{formatLAK(effectiveRemaining)}</span>
               </div>
@@ -201,8 +230,8 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
 
           {!isDeposit && (
             <div className="flex justify-between text-slate-900 font-black border-t border-slate-200 pt-1.5">
-              <span className="text-amber-600">{currentLang === 'lo' ? 'ຍອດທີ່ຕ້ອງຊຳລະ (LAK):' : 'Total Amount (LAK):'}</span>
-              <span className="text-base font-mono text-amber-600">{formatLAK(totalAmountLAK)}</span>
+              <span className="text-sky-700">{currentLang === 'lo' ? 'ຍອດທີ່ຕ້ອງຊຳລະ (LAK):' : 'Total Amount (LAK):'}</span>
+              <span className="text-base font-mono text-sky-700">{formatLAK(totalAmountLAK)}</span>
             </div>
           )}
 
@@ -231,7 +260,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
                 <span>
                   {isPaidFull 
                     ? (currentLang === 'lo' ? 'ຊຳລະເຕັມ 100% ສຳເລັດແລ້ວ' : 'Fully Paid 100%') 
-                    : (currentLang === 'lo' ? `ຮັບມັດຈຳ ${formatLAK(effectiveDepositPaid)} ແລ້ວ` : `Deposit ${formatLAK(effectiveDepositPaid)} Verified`)}
+                    : (currentLang === 'lo' ? `ຮັບມັດຈຳ ${formatLAK(effectiveDepositPaid)} (${Math.round((effectiveDepositPaid / (totalAmountLAK || 1)) * 100)}%) ແລ້ວ` : `Deposit ${formatLAK(effectiveDepositPaid)} Verified`)}
                 </span>
               </div>
               <button
@@ -245,26 +274,108 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
             </div>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
+            {/* Dynamic Custom Deposit Box */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5 text-sky-600" />
+                  <span>ກຳນົດຍອດມັດຈຳ (Custom Deposit % / Amount)</span>
+                </span>
+                <span className="text-xs font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-lg border border-sky-200">
+                  {customDepositPercent}%
+                </span>
+              </div>
+
+              {/* Preset Buttons */}
+              <div className="grid grid-cols-4 gap-1.5">
+                {[30, 50, 70, 100].map((pct) => (
+                  <button
+                    key={pct}
+                    type="button"
+                    onClick={() => handlePercentChange(pct)}
+                    className={`py-1.5 rounded-xl text-xs font-black transition cursor-pointer border ${
+                      customDepositPercent === pct
+                        ? 'bg-sky-500 text-white border-sky-600 shadow-xs font-black'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+
+              {/* Direct Inputs: % and Kip */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <label className="text-[10.5px] font-bold text-slate-500 block mb-1">
+                    ລະບຸ % ມັດຈຳ:
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={customDepositPercent || ''}
+                      onChange={(e) => handlePercentChange(Number(e.target.value) || 0)}
+                      className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold focus:border-sky-500 outline-hidden"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">%</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10.5px] font-bold text-slate-500 block mb-1">
+                    ຍອດເງິນມັດຈຳ (LAK):
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1000}
+                    value={customDepositAmount || ''}
+                    onChange={(e) => handleAmountChange(Number(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold focus:border-sky-500 outline-hidden"
+                  />
+                </div>
+              </div>
+
+              {/* Rounding Checkbox */}
+              <label className="flex items-center gap-2 cursor-pointer select-none text-[11px] font-bold text-slate-600 pt-1">
+                <input
+                  type="checkbox"
+                  checked={isRoundDeposit}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setIsRoundDeposit(checked);
+                    let raw = (totalAmountLAK * customDepositPercent) / 100;
+                    if (checked) raw = Math.round(raw / 1000) * 1000;
+                    setCustomDepositAmount(raw);
+                  }}
+                  className="w-3.5 h-3.5 rounded text-sky-600 border-slate-300 focus:ring-sky-500"
+                />
+                <span>ປັດເປັນຕົວເລກຖ້ວນ (ຫຼັກພັນກີບ)</span>
+              </label>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {/* Option 1: Full Payment */}
+              {/* Option 1: Full Payment (100%) */}
               <button
                 type="button"
                 onClick={onConfirmFullPayment}
-                className="py-3.5 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border-none"
+                className="py-3 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border-none"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>{currentLang === 'lo' ? 'ຢືນຢັນຊຳລະ 100%' : 'Confirm Full 100%'}</span>
               </button>
 
-              {/* Option 2: Deposit Payment (50%) */}
+              {/* Option 2: Dynamic Deposit Payment */}
               <button
                 type="button"
-                onClick={() => onConfirmDepositPayment(Math.round(totalAmountLAK / 2))}
-                className="py-3.5 px-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border-none"
+                onClick={() => onConfirmDepositPayment(customDepositAmount)}
+                className="py-3 px-3 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-black shadow-md shadow-sky-500/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border-none"
               >
-                <DollarSign className="w-4 h-4" />
-                <span>{currentLang === 'lo' ? 'ຢືນຢັນມັດຈຳ (50%)' : 'Confirm Deposit (50%)'}</span>
+                <CheckCircle2 className="w-4 h-4" />
+                <span>ຢືນຢັນມັດຈຳ ({formatLAK(customDepositAmount)})</span>
               </button>
             </div>
 

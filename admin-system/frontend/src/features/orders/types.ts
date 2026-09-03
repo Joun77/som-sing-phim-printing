@@ -143,7 +143,44 @@ export interface OrderItem {
   artwork_file_size?: number;
   mimeType?: string;
   mime_type?: string;
+  artwork?: {
+    file_url: string;
+    file_name: string;
+    file_size_bytes?: number;
+    preview_thumbnail_url?: string;
+    page_count?: number;
+  };
+  specifications?: any;
   specs?: any;
+}
+
+export interface OrderPrintItem {
+  id: string;
+  item_index: number;
+  job_name: string;
+  artwork: {
+    file_url: string;
+    file_name: string;
+    file_size_bytes?: number;
+    preview_thumbnail_url?: string;
+    page_count?: number;
+  };
+  specifications: {
+    printer_id: string;
+    printer_name: string;
+    paper_id: string;
+    paper_name: string;
+    paper_weight_gsm: number;
+    paper_size: string;
+    print_color_mode: string;
+    print_sides: 'single' | 'double';
+    coating?: string;
+    binding?: string;
+    finishing_options?: string[];
+  };
+  quantity: number;
+  unit_price: number;
+  total_price: number;
 }
 
 export interface OrderPreflightVersion {
@@ -230,6 +267,7 @@ export type WorkflowStepCategory = 'PRE_PRESS' | 'PRESS' | 'POST_PRESS' | 'FINIS
 
 export interface ProductionWorkflowStep {
   id: string;
+  jobId?: string;
   name: string;
   nameLao?: string;
   category: WorkflowStepCategory;
@@ -240,6 +278,9 @@ export interface ProductionWorkflowStep {
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
   completedAt?: string | null;
   completedBy?: string | null;
+  completed_by_id?: string;
+  completed_by_name?: string;
+  completed_by_role?: string;
   notes?: string;
   estimatedMinutes?: number;
   machineId?: string;

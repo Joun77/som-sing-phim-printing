@@ -247,15 +247,21 @@ func main() {
 	router.GET("/api/customers/:id", crmAuth, customers.HandleGetCustomerByID)
 	router.GET("/api/customers/:id/orders", crmAuth, customers.HandleGetCustomerOrders)
 	router.POST("/api/customers", crmAuth, customers.HandleCreateCustomer)
+	router.POST("/api/customers/bulk-delete", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), customers.HandleBulkDeleteCustomers)
 	router.PUT("/api/customers/:id", crmAuth, customers.HandleUpdateCustomer)
 	router.DELETE("/api/customers/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), customers.HandleDeleteCustomer)
 
-	router.GET("/api/v1/customers", crmAuth, customers.HandleGetCustomers)
-	router.GET("/api/v1/customers/:id", crmAuth, customers.HandleGetCustomerByID)
-	router.GET("/api/v1/customers/:id/orders", crmAuth, customers.HandleGetCustomerOrders)
-	router.POST("/api/v1/customers", crmAuth, customers.HandleCreateCustomer)
-	router.PUT("/api/v1/customers/:id", crmAuth, customers.HandleUpdateCustomer)
-	router.DELETE("/api/v1/customers/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), customers.HandleDeleteCustomer)
+	// Customer Categories (Dynamic Tiers)
+	router.GET("/api/customers/categories", crmAuth, customers.HandleGetCustomerCategories)
+	router.POST("/api/customers/categories", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), customers.HandleCreateCustomerCategory)
+	router.PUT("/api/customers/categories/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), customers.HandleUpdateCustomerCategory)
+	router.DELETE("/api/customers/categories/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), customers.HandleDeleteCustomerCategory)
+
+	router.GET("/api/v1/customers/categories", crmAuth, customers.HandleGetCustomerCategories)
+	router.POST("/api/v1/customers/categories", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), customers.HandleCreateCustomerCategory)
+	router.PUT("/api/v1/customers/categories/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), customers.HandleUpdateCustomerCategory)
+	router.DELETE("/api/v1/customers/categories/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), customers.HandleDeleteCustomerCategory)
+
 
 	// Spoilage audit log routes
 	router.GET("/api/spoilage", prodAuth, spoilage.HandleGetSpoilageLogs)

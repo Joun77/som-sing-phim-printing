@@ -84,7 +84,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
             </>
           ) : (
             <div className="text-center space-y-2">
-              <div className="w-12 h-12 rounded-2xl bg-purple-500/20 text-purple-300 flex items-center justify-center mx-auto border border-purple-500/30">
+              <div className="w-12 h-12 rounded-2xl bg-sky-500/20 text-sky-300 flex items-center justify-center mx-auto border border-sky-500/30">
                 <FileText className="w-6 h-6" />
               </div>
               <div>
@@ -95,7 +95,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
                   Vector PDF • CMYK 300 DPI • Bleed 3mm
                 </span>
               </div>
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-300 bg-sky-500/10 px-2.5 py-1 rounded-full border border-sky-500/20">
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>ພ້ອມຍິງອອກແທ່ນພິມ (Press Ready)</span>
               </span>
@@ -126,7 +126,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
               onOpenDriveLink();
             }
           }}
-          className="py-3 px-3 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-purple-600/20 text-center border-none"
+          className="py-3 px-3 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-black transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-sky-500/25 text-center border-none"
         >
           <Download className="w-3.5 h-3.5" />
           <span>{currentLang === 'lo' ? 'ດາວໂຫຼດໄຟລ໌ພິມ' : 'Download File'}</span>

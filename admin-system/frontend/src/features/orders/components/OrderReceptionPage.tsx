@@ -216,6 +216,10 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
             customerName={customerName}
             customerPhone={customerPhone}
             deliveryAddress={deliveryAddress}
+            customerTier={order.customerTier || order.customer_tier || order.tier}
+            village={order.village}
+            district={order.district}
+            province={order.province}
             driveLink={driveLink}
             artworkFileName={artworkFileName}
             artworkFileSize={artworkFileSize}
@@ -290,20 +294,20 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
 
       {/* 4. Bottom Action Banner: Unlock Send to Production button when Step 1 is ready */}
       {isReadyToAdvance && (
-        <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 border border-blue-500/30 rounded-3xl p-6 text-white shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in">
+        <div className="bg-gradient-to-r from-slate-900 via-sky-950 to-slate-900 border border-sky-500/30 rounded-3xl p-6 text-white shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in">
           <div className="flex items-center gap-3 text-left">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 rounded-2xl bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center justify-center shrink-0">
               <CheckCircle2 className="w-6 h-6" />
             </div>
             <div>
               <h4 className="text-base font-black text-slate-100 flex items-center gap-2">
                 <span>{currentLang === 'lo' ? 'ກວດສອບສະລິບ & ໄຟລ໌ພິມຮຽບຮ້ອຍແລ້ວ' : 'Order Slip & Artwork Verified'}</span>
-                <Sparkles className="w-4 h-4 text-amber-400" />
+                <Sparkles className="w-4 h-4 text-sky-400" />
               </h4>
               <p className="text-xs text-slate-400 mt-0.5">
                 {currentLang === 'lo' 
-                  ? 'ພ້ອມສົ່ງຕໍ່ເຂົ້າສາຍການຜະລິດແທ່ນພິມ (Step 2: Production Tracker)' 
-                  : 'Ready to advance to press machine queue and finishings'}
+                  ? 'ພ້ອມສົ່ງຕໍ່ເຂົ້າຂະບວນການຜະລິດ (Step 2: Production Process)' 
+                  : 'Ready to advance to production process and finishings'}
               </p>
             </div>
           </div>
@@ -311,9 +315,9 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
           <button
             type="button"
             onClick={() => onSelectStep(2)}
-            className="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 text-sm font-black shadow-lg shadow-amber-500/25 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2.5 border-none"
+            className="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white text-sm font-black shadow-lg shadow-sky-500/30 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2.5 border-none"
           >
-            <span>{currentLang === 'lo' ? 'ສົ່ງເຂົ້າສາຍການຜະລິດ (Advance to Step 2)' : 'Advance to Production Tracker'}</span>
+            <span>{currentLang === 'lo' ? 'ສົ່ງເຂົ້າຂະບວນການຜະລິດ (Step 2)' : 'Advance to Production Process'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>

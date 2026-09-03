@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ArrowLeft, 
   User, 
@@ -29,7 +29,8 @@ import {
   Send,
   MapPin,
   Building2,
-  Calendar
+  Calendar,
+  Tag
 } from 'lucide-react';
 
 import ItemSpecConfigurator, { calculateItemCosting } from './ItemSpecConfigurator';
@@ -66,9 +67,11 @@ export default function CreateOrderPage({
   const [village, setVillage] = useState('');
   const [district, setDistrict] = useState('');
   const [province, setProvince] = useState('ນະຄອນຫຼວງວຽງຈັນ');
+  const [customerTier, setCustomerTier] = useState<string>('RETAIL');
+  const [autoSaveToCrm, setAutoSaveToCrm] = useState<boolean>(true); // Default ON: ສ່ວນດີຟອລ ເຮົາຕ້ອງເປີດໄວ້ຢູ່ແລ້ວ
 
   // STEP 2: DELIVERY & LOGISTICS SELECTION
-  const { couriers = [], printerColorLinks = [] } = useApp();
+  const { couriers = [], printerColorLinks = [], customerCategories = [], updateCustomer } = useApp();
   const [deliveryMethod, setDeliveryMethod] = useState<'Pickup' | 'Courier' | 'Direct'>('Pickup');
   const [selectedCourierId, setSelectedCourierId] = useState<string>(() => couriers?.[0]?.id || 'anousith');
   const [courierBranchCode, setCourierBranchCode] = useState('');
@@ -79,18 +82,27 @@ export default function CreateOrderPage({
     new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0]
   );
 
+  const selectedCustomerObj = useMemo(() => {
+    if (customerType !== 'existing' || !selectedCustomerId) return null;
+    return customers.find(c => c.id === selectedCustomerId || c.name === selectedCustomerId) || null;
+  }, [customerType, selectedCustomerId, customers]);
+
   useEffect(() => {
     if (customerType === 'existing' && selectedCustomerId) {
       const cust = customers.find(c => c.id === selectedCustomerId || c.name === selectedCustomerId);
       if (cust) {
         setPhone(cust.phone || '');
         setAddress(cust.address || '');
+        setCustomerTier(cust.tier || 'RETAIL');
+        setVillage(cust.village || '');
+        setDistrict(cust.district || '');
+        setProvince(cust.province || 'ນະຄອນຫຼວງວຽງຈັນ');
       }
-    } else {
-      setPhone('');
-      setAddress('');
+    } else if (customerType === 'new') {
+      const defaultCat = customerCategories.find((c: any) => c.isDefault) || customerCategories[0];
+      setCustomerTier(defaultCat ? defaultCat.id : 'RETAIL');
     }
-  }, [selectedCustomerId, customerType, customers]);
+  }, [selectedCustomerId, customerType, customers, customerCategories]);
 
   // Offcut warehouse inventory integration
   const offcuts = useInventoryStore((state) => state.offcuts);
@@ -446,17 +458,35 @@ export default function CreateOrderPage({
       finalPhone = newCustPhone;
       finalAddress = newCustAddress;
 
-      addCustomer({
-        name: newCustName,
-        phone: newCustPhone,
-        address: newCustAddress,
-        creditLimit: 1000000
-      });
+      if (autoSaveToCrm) {
+        addCustomer({
+          name: newCustName,
+          phone: newCustPhone,
+          address: newCustAddress,
+          village,
+          district,
+          province,
+          tier: customerTier,
+          creditLimit: 1000000
+        });
+      }
     } else {
       const cust = customers.find(c => c.id === selectedCustomerId || c.name === selectedCustomerId);
       finalCustomerName = cust ? cust.name : selectedCustomerId;
       finalPhone = cust ? cust.phone : phone;
       finalAddress = cust ? cust.address : address;
+
+      // Option A: Auto-sync updated tier and address to CRM customer profile if toggle is ON
+      if (autoSaveToCrm && cust && updateCustomer) {
+        updateCustomer(cust.id, { 
+          tier: customerTier,
+          village: village || cust.village,
+          district: district || cust.district,
+          province: province || cust.province,
+          address: address || cust.address,
+          phone: phone || cust.phone
+        });
+      }
     }
 
     const firstItemArtwork = items.find(it => (it as any).artworkUrl)?.artworkUrl || artworkLink;
@@ -467,6 +497,8 @@ export default function CreateOrderPage({
       customer_name: finalCustomerName,
       customer_phone: finalPhone,
       customer_address: finalAddress,
+      customer_tier: customerTier,
+      customerTier: customerTier,
       province: province,
       district: district,
       village: village,
@@ -808,43 +840,178 @@ export default function CreateOrderPage({
       {/* STEP 1: CUSTOMER SELECTION & DELIVERY OPTIONS (COMBINED) */}
       {currentStep === 1 && (
         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-100 shadow-sm space-y-8 animate-fade-in">
-          {/* Section 1: Customer Selection */}
+          {/* Section 1: Customer Selection & CRM Profile (2-Column Balanced Grid) */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-              <User className="w-5 h-5 text-accent-sky" />
-              <h4 className="font-black text-slate-800 text-base">
-                1. ຂໍ້ມູນລູກຄ້າ (Customer Information)
-              </h4>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <User className="w-5 h-5 text-accent-sky" />
+                <h4 className="font-black text-slate-800 text-base">
+                  1. ຂໍ້ມູນລູກຄ້າ & ໂປຣໄຟລ໌ CRM (Customer Information)
+                </h4>
+              </div>
+              <span className={`text-xs font-bold px-3 py-1 rounded-xl border ${
+                customerType === 'existing' 
+                  ? 'bg-sky-50 text-accent-sky border-sky-100' 
+                  : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+              }`}>
+                {customerType === 'existing' ? 'ລູກຄ້າເກົ່າໃນລະບົບ' : 'ລົງທະບຽນລູກຄ້າໃໝ່'}
+              </span>
             </div>
 
-            <div className="max-w-3xl">
-              <CustomerCombobox
-                customers={customers}
-                valueName={customerType === 'existing' ? selectedCustomerId : newCustName}
-                valuePhone={customerType === 'existing' ? phone : newCustPhone}
-                valueAddress={customerType === 'existing' ? address : newCustAddress}
-                onChange={(data) => {
-                  if (data.isNew) {
-                    setCustomerType('new');
-                    setNewCustName(data.name);
-                    setNewCustPhone(data.phone);
-                    setNewCustAddress(data.address);
-                    setVillage(data.village || '');
-                    setDistrict(data.district || '');
-                    setProvince(data.province || 'ນະຄອນຫຼວງວຽງຈັນ');
-                    setSelectedCustomerId('');
-                  } else {
-                    setCustomerType('existing');
-                    setSelectedCustomerId(data.customerId || data.name);
-                    setPhone(data.phone);
-                    setAddress(data.address);
-                    setVillage(data.village || '');
-                    setDistrict(data.district || '');
-                    setProvince(data.province || 'ນະຄອນຫຼວງວຽງຈັນ');
-                  }
-                }}
-                currentLang={currentLang}
-              />
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Left Column (7 Cols): Main Combobox & Address Details */}
+              <div className="lg:col-span-7 xl:col-span-8 space-y-4">
+                <CustomerCombobox
+                  customers={customers}
+                  valueName={customerType === 'existing' ? selectedCustomerId : newCustName}
+                  valuePhone={customerType === 'existing' ? phone : newCustPhone}
+                  valueAddress={customerType === 'existing' ? address : newCustAddress}
+                  hideSaveToCrmCheckbox={true}
+                  onChange={(data) => {
+                    if (data.isNew) {
+                      setCustomerType('new');
+                      setNewCustName(data.name);
+                      setNewCustPhone(data.phone);
+                      setNewCustAddress(data.address);
+                      setVillage(data.village || '');
+                      setDistrict(data.district || '');
+                      setProvince(data.province || 'ນະຄອນຫຼວງວຽງຈັນ');
+                      setSelectedCustomerId('');
+                    } else {
+                      setCustomerType('existing');
+                      setSelectedCustomerId(data.customerId || data.name);
+                      setPhone(data.phone);
+                      setAddress(data.address);
+                      setVillage(data.village || '');
+                      setDistrict(data.district || '');
+                      setProvince(data.province || 'ນະຄອນຫຼວງວຽງຈັນ');
+                      const c = customers.find(cust => (cust.id && cust.id === data.customerId) || cust.name === data.name);
+                      if (c && c.tier) {
+                        setCustomerTier(c.tier);
+                      }
+                    }
+                  }}
+                  currentLang={currentLang}
+                />
+              </div>
+
+              {/* Right Column (5 Cols): Customer Category, Doggy Toggle & Overview Card */}
+              <div className="lg:col-span-5 xl:col-span-4 space-y-4">
+                {/* Card 1: Category & Auto-Sync Toggle Switch */}
+                <div className="bg-slate-50/80 border border-slate-200/80 rounded-3xl p-5 space-y-4 shadow-xs">
+                  <div className="flex items-center gap-2 border-b border-slate-200/60 pb-3">
+                    <Tag className="w-4 h-4 text-accent-sky" />
+                    <span className="text-xs font-black uppercase text-slate-700 tracking-wide">
+                      ປະເພດລູກຄ້າ & ການເຊື່ອມໂຍງ CRM
+                    </span>
+                  </div>
+
+                  {/* Customer Category Select */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-600 uppercase block">
+                      ໝວດໝູ່ / ປະເພດລູກຄ້າ (Customer Category) *
+                    </label>
+                    <select
+                      value={customerTier}
+                      onChange={(e) => {
+                        const newTier = e.target.value;
+                        setCustomerTier(newTier);
+                        if (autoSaveToCrm && customerType === 'existing' && selectedCustomerId && updateCustomer) {
+                          const cust = customers.find(c => c.id === selectedCustomerId || c.name === selectedCustomerId);
+                          if (cust) {
+                            updateCustomer(cust.id, { tier: newTier });
+                          }
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-800 text-xs focus:outline-none focus:border-accent-sky shadow-xs"
+                    >
+                      {customerCategories.map((cat: any) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name} ({cat.id})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* CRM Auto-Sync Doggy Toggle (Toggle Switch) */}
+                  <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-black text-slate-800 block">
+                        ບັນທຶກເຂົ້າຖານຂໍ້ມູນ CRM ອັດຕະໂນມັດ
+                      </span>
+                      <p className="text-[10px] text-slate-500 font-semibold leading-tight">
+                        {customerType === 'existing'
+                          ? 'ອັບເດດໂປຣໄຟລ໌ລູກຄ້າ ແລະ ທີ່ຢູ່ລົງ CRM'
+                          : 'ລົງທະບຽນລູກຄ້າໃໝ່ລົງຖານຂໍ້ມູນ CRM'}
+                      </p>
+                    </div>
+
+                    {/* Doggy Toggle Switch */}
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={autoSaveToCrm}
+                      onClick={() => setAutoSaveToCrm(!autoSaveToCrm)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none shadow-inner ${
+                        autoSaveToCrm ? 'bg-accent-sky' : 'bg-slate-300'
+                      }`}
+                      title={autoSaveToCrm ? 'ເປີດໃຊ້ງານຢູ່ (Enabled)' : 'ປິດໃຊ້ງານ (Disabled)'}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                          autoSaveToCrm ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Card 2: Selected Customer Quick Overview / Badge */}
+                {selectedCustomerObj ? (
+                  <div className="bg-white border border-slate-200/80 rounded-3xl p-5 space-y-3 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider">
+                        ໂປຣໄຟລ໌ລູກຄ້າ
+                      </span>
+                      <span className="font-mono text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                        ID: {selectedCustomerObj.id}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-sky-50 text-accent-sky flex items-center justify-center font-black text-sm border border-sky-100 shrink-0">
+                        <User className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <h5 className="font-black text-slate-900 text-xs sm:text-sm truncate">{selectedCustomerObj.name}</h5>
+                        <p className="text-[11px] text-slate-500 font-mono mt-0.5">{selectedCustomerObj.phone || 'ບໍ່ມີເບີໂທ'}</p>
+                      </div>
+                    </div>
+
+                    {selectedCustomerObj.preferredCourier && (
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                        <span className="text-slate-400 font-bold text-[10px]">ຂົນສົ່ງປະຈຳ:</span>
+                        <span className="font-bold text-amber-800 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-lg text-[10px]">
+                          {selectedCustomerObj.preferredCourier}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-white border border-dashed border-slate-200 rounded-3xl p-5 text-center space-y-1.5">
+                    <div className="w-9 h-9 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center mx-auto">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-700 block">
+                      {newCustName.trim() ? `ລູກຄ້າໃໝ່: ${newCustName.trim()}` : 'ກຳລັງສັ່ງພິມໃຫ້ລູກຄ້າໃໝ່'}
+                    </span>
+                    <p className="text-[10px] text-slate-400 font-semibold">
+                      {autoSaveToCrm ? 'ລະບົບຈະບັນທຶກລົງ CRM ອັດຕະໂນມັດ' : 'ບໍ່ບັນທຶກໂປຣໄຟລ໌ລົງ CRM'}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

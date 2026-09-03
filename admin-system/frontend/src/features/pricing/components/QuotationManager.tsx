@@ -7,6 +7,9 @@ import ManualPrinterAllocator from '@features/orders/components/ManualPrinterAll
 import { PrinterAllocation } from '@features/orders/types';
 import { calculateMachineUnitCost } from '@utils/machineCostCalculator';
 import { QuotationCustomerView } from './QuotationCustomerView';
+import { QuotationCustomerModal } from './QuotationCustomerModal';
+import { ArtworkColorPreviewModal } from './ArtworkColorPreviewModal';
+import { CustomerCategoryModal } from '@features/customers/components/CustomerCategoryModal';
 import { QuotationMarginApprovalModal } from './QuotationMarginApprovalModal';
 import { QuotationSaveTemplateModal } from './QuotationSaveTemplateModal';
 import { QuotationCostSummarySidebar } from './QuotationCostSummarySidebar';
@@ -82,7 +85,13 @@ import {
   ToggleRight,
   Search,
   Phone,
-  Edit3
+  Edit3,
+  Eye,
+  FolderPlus,
+  UserPlus,
+  UserCheck,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 import { FormModalTemplate, FormSection } from '@components/common/FormModalTemplate';
 
@@ -149,6 +158,7 @@ export interface QuotationItem {
   artworkUrl?: string;
   fileSize?: number;
   mimeType?: string;
+  preflightData?: PreflightResult;
 }
 
 export default function QuotationManager({ onConvertToOrder, onBack, prefilledSpecs }: any) {
@@ -158,6 +168,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     getFIFOCostPerSheet, 
     checkCreditLimit, 
     customers, 
+    customerCategories = [],
     addCustomer,
     addOrder,
     showToast,
@@ -313,15 +324,17 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   };
 
   const createNewItem = (name = 'ລາຍການສິນຄ້າ 1', specs?: any): QuotationItem => {
-    const isMono = specs?.colorMode === 'MONO_K';
+    const isMono = (specs?.colorPrintMode || specs?.colorMode) === 'MONO_K';
     const pageCount = Number(specs?.pageCount) || (specs ? 1 : 1);
     const orderQty = Number(specs?.orderQuantity) || 1;
     const isBook = pageCount >= 4;
 
-    const covC = specs ? (isMono ? 0 : (specs.cCoverage !== undefined ? Number(specs.cCoverage) : (specs.avgCovC !== undefined ? Number(specs.avgCovC) : 10))) : 10;
-    const covM = specs ? (isMono ? 0 : (specs.mCoverage !== undefined ? Number(specs.mCoverage) : (specs.avgCovM !== undefined ? Number(specs.avgCovM) : 10))) : 10;
-    const covY = specs ? (isMono ? 0 : (specs.yCoverage !== undefined ? Number(specs.yCoverage) : (specs.avgCovY !== undefined ? Number(specs.avgCovY) : 10))) : 10;
-    const covK = specs ? (specs.kCoverage !== undefined ? Number(specs.kCoverage) : (specs.avgCovK !== undefined ? Number(specs.avgCovK) : 10)) : 10;
+    const covC = specs ? (isMono ? 0 : (specs.cCoverage !== undefined ? Number(specs.cCoverage) : (specs.avgCovC !== undefined ? Number(specs.avgCovC) : 15))) : 15;
+    const covM = specs ? (isMono ? 0 : (specs.mCoverage !== undefined ? Number(specs.mCoverage) : (specs.avgCovM !== undefined ? Number(specs.avgCovM) : 15))) : 15;
+    const covY = specs ? (isMono ? 0 : (specs.yCoverage !== undefined ? Number(specs.yCoverage) : (specs.avgCovY !== undefined ? Number(specs.avgCovY) : 15))) : 15;
+    const covK = specs ? (specs.kCoverage !== undefined ? Number(specs.kCoverage) : (specs.avgCovK !== undefined ? Number(specs.avgCovK) : 15)) : 15;
+    const avgCov = Math.round((covC + covM + covY + covK) / (isMono ? 1 : 4));
+
     const defaultPrinter = printers[0] || { id: 'PRN-DEFAULT', name: 'Default Printer' };
     const defaultPaper = papers[0]?.id || '';
     const defaultPostPress = postPressEquipment.length > 0 ? [postPressEquipment[0].id] : [];
@@ -346,7 +359,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       ink_cost_per_page: inkBaseRate,
       subtotal_cost: totalJobSheets * rate,
       color_mode: isMono ? 'MONO_K' : 'CMYK',
-      average_density_pct: Math.round((covC + covM + covY + covK) / (isMono ? 1 : 4)),
+      average_density_pct: avgCov,
       color_channels: channels,
       is_double_sided: isBook
     }];
@@ -370,11 +383,16 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       coverPagesCount: 4,
       colorPrintMode: isMono ? 'MONO_K' : 'CMYK',
       coverageMode: specs ? 'advanced' : 'default',
-      avgCoverage: 15,
+      avgCoverage: avgCov,
       cCoverage: covC,
       mCoverage: covM,
       yCoverage: covY,
       kCoverage: covK,
+      fileName: specs?.fileName,
+      artworkUrl: specs?.artworkUrl,
+      fileSize: specs?.fileSize,
+      mimeType: specs?.mimeType,
+      preflightData: specs?.preflightData,
       selectedPrinterId: defaultPrinter.id,
       selectedInkSet: 'Konica C6085 OEM Set',
       printerAllocations: initialAllocations,
@@ -408,8 +426,6 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       laborCostManual: 50000,
       profitMargin: 40,
       discountPercent: 0,
-      fileName: specs?.fileName,
-      artworkUrl: specs?.artworkUrl || specs?.file_url || specs?.fileUrl,
     };
   };
 
@@ -460,6 +476,36 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   }, [incomingSpecs]);
 
   const [isPreflightModalOpen, setIsPreflightModalOpen] = useState(false);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [previewColorItem, setPreviewColorItem] = useState<QuotationItem | null>(null);
+  const [activeProductionTab, setActiveProductionTab] = useState<'specs' | 'print' | 'postpress'>('specs');
+
+  const handleSyncColorsToActivePrinter = (colors: { c: number; m: number; y: number; k: number }) => {
+    const isMono = activeItem.colorPrintMode === 'MONO_K';
+    const channels = isMono ? [
+      { channel_name: 'K', density_pct: colors.k, is_spot_color: false }
+    ] : [
+      { channel_name: 'C', density_pct: colors.c, is_spot_color: false },
+      { channel_name: 'M', density_pct: colors.m, is_spot_color: false },
+      { channel_name: 'Y', density_pct: colors.y, is_spot_color: false },
+      { channel_name: 'K', density_pct: colors.k, is_spot_color: false },
+    ];
+    const avg = Math.round((colors.c + colors.m + colors.y + colors.k) / (isMono ? 1 : 4));
+
+    updateActiveItem({
+      cCoverage: colors.c,
+      mCoverage: colors.m,
+      yCoverage: colors.y,
+      kCoverage: colors.k,
+      avgCoverage: avg,
+      printerAllocations: (activeItem.printerAllocations || []).map(a => ({
+        ...a,
+        average_density_pct: avg,
+        color_channels: channels,
+      }))
+    });
+    if (showToast) showToast('ຊິງຄ໌ຄ່າສີ CMYK ເຂົ້າເຄື່ອງພິມຮຽບຮ້ອຍ!', 'success');
+  };
 
   // Paper Substrate Inventory Search Modal State
   const [isPaperModalOpen, setIsPaperModalOpen] = useState(false);
@@ -498,11 +544,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         ]);
 
     const avgDensity = firstAlloc?.average_density_pct || activeItem.avgCoverage || 15;
-    const totalJobPages = (Number(activeItem.printVolume) || 1) * Math.max(1, Number(activeItem.pagesPerBook || 1));
+    const totalJobSheets = (Number(activeItem.printVolume) || 1) * Math.ceil(Math.max(1, Number(activeItem.pagesPerBook || 1)) / (isDuplex ? 2 : 1));
 
     if (mode === 'add' && (activeItem.printerAllocations || []).length > 0) {
-      // Split load mode: Add new printer and distribute pages
-      const totalPages = totalJobPages;
+      // Split load mode: Add new printer and distribute sheets
+      const totalPages = totalJobSheets;
       const currentAllocations = activeItem.printerAllocations || [];
       const newCount = currentAllocations.length + 1;
       const pagesPerEngine = Math.floor(totalPages / newCount);
@@ -539,10 +585,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       const newAlloc: PrinterAllocation = {
         printer_id: printer.id,
         printer_name: printer.name || printer.id,
-        allocated_pages: totalJobPages,
+        allocated_pages: totalJobSheets,
         cost_per_page: rate,
         ink_cost_per_page: inkBaseRate,
-        subtotal_cost: totalJobPages * rate,
+        subtotal_cost: totalJobSheets * rate,
         color_mode: isMono ? 'MONO_K' : 'CMYK',
         average_density_pct: avgDensity,
         color_channels: channels,
@@ -581,22 +627,24 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       if (idx !== activeItemIndex) return it;
       let updated = { ...it, ...patch };
 
-      // If print volume or pagesPerBook changed, sync total production pages
-      const totalPages = (Number(updated.printVolume) || 1) * Math.max(1, Number(updated.pagesPerBook || 1));
-      if ((patch.printVolume !== undefined || patch.pagesPerBook !== undefined) && updated.printerAllocations && updated.printerAllocations.length === 1) {
-        updated.printerAllocations = [{
-          ...updated.printerAllocations[0],
-          allocated_pages: totalPages,
-          subtotal_cost: totalPages * (updated.printerAllocations[0].cost_per_page || 50)
-        }];
-      }
-
       // If printer allocations changed, sync top-level double-sided and color mode flags
+      let isAnyDuplex = updated.isDoubleSided;
       if (patch.printerAllocations) {
-        const isAnyDuplex = patch.printerAllocations.some(a => a.is_double_sided);
+        isAnyDuplex = patch.printerAllocations.some(a => a.is_double_sided);
         const isAllMono = patch.printerAllocations.length > 0 && patch.printerAllocations.every(a => a.color_mode === 'MONO_K');
         updated.isDoubleSided = isAnyDuplex;
         updated.colorPrintMode = isAllMono ? 'MONO_K' : 'CMYK';
+      }
+
+      // Sync total production sheets (cut in half when double-sided)
+      const totalSheets = (Number(updated.printVolume) || 1) * Math.ceil(Math.max(1, Number(updated.pagesPerBook || 1)) / (isAnyDuplex ? 2 : 1));
+      if ((patch.printVolume !== undefined || patch.pagesPerBook !== undefined || patch.isDoubleSided !== undefined) && updated.printerAllocations && updated.printerAllocations.length === 1) {
+        updated.printerAllocations = [{
+          ...updated.printerAllocations[0],
+          is_double_sided: isAnyDuplex,
+          allocated_pages: totalSheets,
+          subtotal_cost: totalSheets * (updated.printerAllocations[0].cost_per_page || 50)
+        }];
       }
 
       return updated;
@@ -641,6 +689,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       mCoverage: covM,
       yCoverage: covY,
       kCoverage: covK,
+      preflightData: pfResult,
     });
 
     setItems(prev => [...prev, newItem]);
@@ -933,6 +982,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   }, [incomingSpecs]);
 
   const [currentStep, setCurrentStep] = useState<'calc' | 'quote'>('calc');
+  const [wizardStep, setWizardStep] = useState<'intake' | 'specs' | 'summary'>('intake');
   const [quotationTitle, setQuotationTitle] = useState('ໃບສະເໜີລາຄາງານພິມ');
   const [quotationProfitMargin, setQuotationProfitMargin] = useState<number>(40);
   const [quotationDiscountPercent, setQuotationDiscountPercent] = useState<number>(0);
@@ -942,6 +992,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   const [selectedCustomerId, setSelectedCustomerId] = useState(customers[0]?.name || '');
   const [customerPhone, setCustomerPhone] = useState(customers[0]?.phone || '');
   const [customerAddress, setCustomerAddress] = useState(customers[0]?.address || '');
+  const [selectedCustomerCategory, setSelectedCustomerCategory] = useState<string>(() => {
+    return (customers[0] as any)?.category || (customers[0] as any)?.tier || 'RETAIL';
+  });
+  const [isCustomerCategoryModalOpen, setIsCustomerCategoryModalOpen] = useState(false);
+  const [autoSaveCustomerToCRM, setAutoSaveCustomerToCRM] = useState(true);
   const [bleedMargin, setBleedMargin] = useState(2);
   const [taxEnabled, setTaxEnabled] = useState(true);
   const [taxRate, setTaxRate] = useState(7);
@@ -976,12 +1031,19 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     setCustomerPhone(data.phone);
     setCustomerAddress(data.address);
 
-    if (data.isNew && data.saveToCrm && data.name.trim() && addCustomer) {
+    const foundCust = customers.find(c => c.name.toLowerCase() === data.name.trim().toLowerCase()) as any;
+    if (foundCust && (foundCust.category || foundCust.tier)) {
+      setSelectedCustomerCategory(foundCust.category || foundCust.tier);
+    }
+
+    if (data.isNew && (data.saveToCrm || autoSaveCustomerToCRM) && data.name.trim() && addCustomer) {
       addCustomer({
         id: `cust-${Date.now()}`,
         name: data.name.trim(),
         phone: data.phone || '020 55889900',
         address: data.address || 'Vientiane',
+        category: selectedCustomerCategory,
+        tier: selectedCustomerCategory,
         creditLimit: 5000000,
         unpaidBalance: 0
       });
@@ -1081,7 +1143,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     let machDepr = 0;
     let electricityCost = 0;
 
-    const totalJobProductionPages = (Number(item.printVolume) || 1) * Math.max(1, Number(item.pagesPerBook || 1));
+    const totalJobProductionSheets = (Number(item.printVolume) || 1) * Math.ceil(Math.max(1, Number(item.pagesPerBook || 1)) / (item.isDoubleSided ? 2 : 1));
 
     const allocations = (item.printerAllocations && item.printerAllocations.length > 0)
       ? item.printerAllocations
@@ -1089,7 +1151,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
           {
             printer_id: item.selectedPrinterId || 'default',
             printer_name: 'Default Printer',
-            allocated_pages: totalJobProductionPages,
+            allocated_pages: totalJobProductionSheets,
             cost_per_page: 50,
             is_double_sided: item.isDoubleSided || false,
             color_mode: item.colorPrintMode || 'CMYK',
@@ -1104,10 +1166,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         ];
 
     allocations.forEach(alloc => {
-      const allocPages = allocations.length === 1 
-        ? totalJobProductionPages 
-        : Number(alloc.allocated_pages ?? totalJobProductionPages);
       const isDuplex = alloc.is_double_sided !== undefined ? alloc.is_double_sided : (item.isDoubleSided || false);
+      const allocPages = allocations.length === 1 
+        ? totalJobProductionSheets 
+        : Number(alloc.allocated_pages ?? totalJobProductionSheets);
 
       const sideFactor = isDuplex ? 2 : 1;
       const mode = alloc.color_mode || (item.colorPrintMode === 'MONO_K' ? 'MONO_K' : 'CMYK');
@@ -1390,7 +1452,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         const calc = calculatedItems[idx];
         const paperItem = inventory.find(p => p.id === item.paperId);
         
-        // 1. Primary Finished Product Item (with artwork & full specs for production floor)
+        // 1. Primary Finished Product Item (1 Quotation Item = 1 Order Job Item)
+        // Nested specifications contain materials, paper cutting ticket, and machinery allocations
         orderItems.push({
           id: item.id || `job-item-${idx + 1}`,
           name: item.name || `Job #${idx + 1}`,
@@ -1409,11 +1472,55 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
           artwork_file_name: item.fileName,
           artworkFileSize: item.fileSize,
           artwork_file_size: item.fileSize,
+          artwork: {
+            file_url: item.artworkUrl || '',
+            file_name: item.fileName || (item.artworkUrl ? item.artworkUrl.split('/').pop()?.split('?')[0] : ''),
+            file_size_bytes: item.fileSize || 0,
+            preview_thumbnail_url: item.artworkUrl || '',
+            page_count: item.pagesPerBook || 1
+          },
           drive_link: item.artworkUrl,
           avg_cov_c: item.cCoverage || 0,
           avg_cov_m: item.mCoverage || 0,
           avg_cov_y: item.yCoverage || 0,
           avg_cov_k: item.kCoverage || 0,
+          specifications: {
+            pages: item.pagesPerBook || 1,
+            paper_id: item.paperId,
+            paper_name: paperItem?.name || 'Standard Paper',
+            paper_cutting_ticket: paperItem ? {
+              parent_paper_id: item.paperId,
+              parent_paper_name: paperItem.name,
+              total_parent_sheets: calc?.totalParentSheets || 1,
+              cuts_per_parent: calc?.cutsPerSheet || 1,
+              wasted_sheets: calc?.wastedSheets || 0,
+              paper_unit_cost: calc?.paperUnitCost || 0
+            } : null,
+            materials: {
+              paper: paperItem ? {
+                id: item.paperId,
+                name: paperItem.name,
+                total_parent_sheets: calc?.totalParentSheets || 1,
+                unit_cost: calc?.paperUnitCost || 0
+              } : null,
+              machinery: (item.selectedPostPressIds || []).map(machId => {
+                const mach = equipment.find(e => e.id === machId);
+                const rate = Number((mach as any)?.costPerPage) || Number((mach as any)?.calculatedCostPerPage) || 300;
+                return {
+                  id: machId,
+                  name: mach?.name || machId,
+                  quantity: item.printVolume,
+                  unit_cost: rate
+                };
+              })
+            },
+            color_mode: item.colorPrintMode || 'CMYK',
+            is_double_sided: item.isDoubleSided,
+            printer_allocations: item.printerAllocations,
+            file_name: item.fileName,
+            artwork_url: item.artworkUrl,
+            file_size: item.fileSize
+          },
           specs: {
             pages: item.pagesPerBook || 1,
             paperName: paperItem?.name || 'Standard Paper',
@@ -1422,31 +1529,33 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
             printerAllocations: item.printerAllocations,
             fileName: item.fileName,
             artworkUrl: item.artworkUrl,
-            fileSize: item.fileSize
-          }
-        });
-
-        // 2. Paper inventory raw material consumed
-        if (paperItem) {
-          orderItems.push({
-            id: item.paperId,
-            name: `[${item.name}] ${paperItem.name} (Parent Sheets)`,
-            quantity: calc.totalParentSheets,
-            unitCost: calc.paperUnitCost
-          });
-        }
-
-        // 3. Add machinery items
-        (item.selectedPostPressIds || []).forEach(machId => {
-          const mach = equipment.find(e => e.id === machId);
-          if (mach) {
-            const rate = Number((mach as any).costPerPage) || Number((mach as any).calculatedCostPerPage) || 300;
-            orderItems.push({
-              id: mach.id,
-              name: `[${item.name}] ${mach.name}`,
-              quantity: item.printVolume,
-              unitCost: rate
-            });
+            fileSize: item.fileSize,
+            paper_cutting_ticket: paperItem ? {
+              parent_paper_id: item.paperId,
+              parent_paper_name: paperItem.name,
+              total_parent_sheets: calc?.totalParentSheets || 1,
+              cuts_per_parent: calc?.cutsPerSheet || 1,
+              wasted_sheets: calc?.wastedSheets || 0,
+              paper_unit_cost: calc?.paperUnitCost || 0
+            } : null,
+            materials: {
+              paper: paperItem ? {
+                id: item.paperId,
+                name: paperItem.name,
+                total_parent_sheets: calc?.totalParentSheets || 1,
+                unit_cost: calc?.paperUnitCost || 0
+              } : null,
+              machinery: (item.selectedPostPressIds || []).map(machId => {
+                const mach = equipment.find(e => e.id === machId);
+                const rate = Number((mach as any)?.costPerPage) || Number((mach as any)?.calculatedCostPerPage) || 300;
+                return {
+                  id: machId,
+                  name: mach?.name || machId,
+                  quantity: item.printVolume,
+                  unit_cost: rate
+                };
+              })
+            }
           }
         });
       });
@@ -1884,344 +1993,835 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   return (
     <div className="space-y-3 animate-fade-in text-slate-800 print:bg-white print:p-0 print:text-black">
       
-      {/* Unified Top Bar: Large Step Tabs + Currency + Saved Quotations */}
-      <div className="flex items-center justify-between gap-3 bg-white px-3.5 py-2.5 rounded-2xl border border-slate-200/90 shadow-xs print:hidden flex-wrap">
-        {/* Back button (if available) */}
-        {onBack && (
-          <button
-            onClick={onBack}
-            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition shrink-0 active:scale-95 cursor-pointer"
-            title="Back"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-        )}
+      {/* ========================================================================= */}
+      {/* UNIFIED HEADER & PIPELINE STEPPER BAR                                     */}
+      {/* ========================================================================= */}
+      <div className="bg-white px-4 py-3 rounded-3xl border border-slate-200/90 shadow-xs mb-4 print:hidden flex flex-wrap items-center justify-between gap-4">
+        {/* Left: Back button + Quotation Title + Items Badge */}
+        <div className="flex items-center gap-3 min-w-[200px]">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition shrink-0 active:scale-95 cursor-pointer"
+              title="Back"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          )}
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-primary-navy/10 text-primary-navy flex items-center justify-center font-bold shrink-0">
+              <FileText className="w-5 h-5 text-primary-navy" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-black text-sm text-slate-900 truncate max-w-[200px]">
+                  {quotationTitle || (currentLang === 'lo' ? 'ໃບສະເໜີລາຄາງານພິມ' : 'Printing Quotation')}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsSaveModalOpen(true)}
+                  className="p-1 hover:bg-slate-100 text-accent-sky rounded-md transition cursor-pointer text-[11px] font-bold"
+                  title="Rename quotation"
+                >
+                  ({currentLang === 'lo' ? 'ປ່ຽນຊື່' : 'Rename'})
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider font-sans">
+                {items.length} {currentLang === 'lo' ? 'ລາຍການ' : 'Items'} • {formatCurrency(finalGrandTotal)}
+              </p>
+            </div>
+          </div>
+        </div>
 
-        {/* Large Easy-to-Read Step Tabs */}
-        <div className="flex items-center gap-2 flex-1 min-w-[320px]">
+        {/* Center: 3-Step Pipeline Stepper */}
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-2xl border border-slate-200/80">
+          {/* Step 1 */}
           <button
             type="button"
-            onClick={() => setCurrentStep('calc')}
-            className={`flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl text-sm sm:text-base font-black transition-all cursor-pointer shadow-xs ${
-              currentStep === 'calc'
-                ? 'bg-primary-navy text-white shadow-md'
-                : 'text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200/70'
+            onClick={() => {
+              setWizardStep('intake');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`py-1.5 px-3 rounded-xl flex items-center gap-2 text-xs font-black transition cursor-pointer ${
+              wizardStep === 'intake'
+                ? 'bg-primary-navy text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
             }`}
           >
-            <Calculator className="w-5 h-5 shrink-0 text-emerald-400" />
-            <span>1. {currentLang === 'lo' ? 'ກຳນົດສະເປກ & ຄຳນວນ' : 'Specs & Cost'}</span>
+            <span className={`w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 ${
+              wizardStep === 'intake' ? 'bg-white text-primary-navy' : 'bg-slate-200 text-slate-700'
+            }`}>
+              1
+            </span>
+            <span className="truncate">{currentLang === 'lo' ? 'ລູກຄ້າ & ລາຍການ' : 'Customer & Items'}</span>
+            <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono font-bold shrink-0 ${
+              wizardStep === 'intake' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
+            }`}>
+              {items.length}
+            </span>
           </button>
 
+          {/* Step 2 */}
           <button
             type="button"
-            onClick={() => setCurrentStep('quote')}
-            className={`flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl text-sm sm:text-base font-black transition-all cursor-pointer shadow-xs ${
-              currentStep === 'quote'
-                ? 'bg-primary-navy text-white shadow-md'
-                : 'text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200/70'
+            onClick={() => {
+              setWizardStep('specs');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`py-1.5 px-3 rounded-xl flex items-center gap-2 text-xs font-black transition cursor-pointer ${
+              wizardStep === 'specs'
+                ? 'bg-primary-navy text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
             }`}
           >
-            <Layers className="w-5 h-5 shrink-0 text-accent-sky" />
-            <span>2. {currentLang === 'lo' ? 'ໃບສະເໜີລູກຄ້າ' : 'Client Quotation'}</span>
-            <span className="px-2.5 py-0.5 rounded-lg text-xs bg-emerald-500/20 text-emerald-700 font-sans font-black">
+            <span className={`w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 ${
+              wizardStep === 'specs' ? 'bg-white text-primary-navy' : 'bg-slate-200 text-slate-700'
+            }`}>
+              2
+            </span>
+            <span className="truncate">{currentLang === 'lo' ? 'ກຳນົດສະເປັກ' : 'Specs Studio'}</span>
+            <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold shrink-0 ${
+              wizardStep === 'specs' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
+            }`}>
+              #{activeItemIndex + 1}
+            </span>
+          </button>
+
+          {/* Step 3 */}
+          <button
+            type="button"
+            onClick={() => {
+              setWizardStep('summary');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`py-1.5 px-3 rounded-xl flex items-center gap-2 text-xs font-black transition cursor-pointer ${
+              wizardStep === 'summary'
+                ? 'bg-primary-navy text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+            }`}
+          >
+            <span className={`w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 ${
+              wizardStep === 'summary' ? 'bg-white text-primary-navy' : 'bg-slate-200 text-slate-700'
+            }`}>
+              3
+            </span>
+            <span className="truncate">{currentLang === 'lo' ? 'ສະຫຼຸບຕົ້ນທຶນ' : 'Summary & Quote'}</span>
+            <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono font-bold shrink-0 ${
+              wizardStep === 'summary' ? 'bg-emerald-500/30 text-emerald-200' : 'bg-slate-200 text-slate-600'
+            }`}>
               {formatCurrency(finalGrandTotal)}
             </span>
           </button>
         </div>
 
-        {/* Right Section: Currency Selector + History Button */}
+        {/* Right: History + Save Draft */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Currency Selector */}
-          <div className="flex items-center gap-0.5 p-1 bg-slate-100 border border-slate-200 rounded-xl">
-            {['LAK', 'THB', 'USD'].map(code => (
-              <button
-                key={code}
-                type="button"
-                onClick={() => setCurrency(code)}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition ${
-                  currency === code
-                    ? 'bg-white text-primary-navy shadow-xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                {code === 'LAK' ? '₭' : code === 'THB' ? '฿' : '$'} {code}
-              </button>
-            ))}
-          </div>
-
           <button
             type="button"
             onClick={() => setIsQuotationListOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-extrabold transition cursor-pointer shadow-2xs active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition cursor-pointer shadow-2xs active:scale-95"
             title="ປະຫວັດໃບສະເໜີ"
           >
             <Layers3 className="w-4 h-4 shrink-0 text-accent-sky" />
-            <span className="hidden sm:inline">{currentLang === 'lo' ? 'ປະຫວັດໃບສະເໜີ' : 'History'}</span>
+            <span className="hidden sm:inline">{currentLang === 'lo' ? 'ປະຫວັດ' : 'History'}</span>
             <span className="bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded-md text-[10px] font-mono font-bold">
               {quotations.length}
             </span>
           </button>
 
-          {currentStep === 'calc' ? (
-            <button
-              type="button"
-              onClick={() => {
-                setCurrentStep('quote');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-sm active:scale-95"
-            >
-              <span>{currentLang === 'lo' ? 'ອອກໃບສະເໜີ' : 'Generate'}</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setCurrentStep('calc')}
-              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition cursor-pointer shrink-0"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>{currentLang === 'lo' ? 'ແກ້ໄຂ' : 'Edit'}</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleSaveDraft}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer active:scale-95"
+            title="Save draft"
+          >
+            <Save className="w-3.5 h-3.5 text-slate-600" />
+            <span className="hidden md:inline">{currentLang === 'lo' ? 'ບັນທຶກສະບັບຮ່າງ' : 'Save Draft'}</span>
+          </button>
         </div>
       </div>
 
+      {/* ========================================================================= */}
+      {/* STEP 1: CUSTOMER (LEFT) & ITEMS TABLE (RIGHT)                             */}
+      {/* ========================================================================= */}
+      {wizardStep === 'intake' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start animate-fade-in print:hidden">
+          
+          {/* Left Column: Customer Information Card (40% width) */}
+          <div className="lg:col-span-5 xl:col-span-5 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                  <User className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                    {currentLang === 'lo' ? 'ຂໍ້ມູນລູກຄ້າ' : 'Customer Information'}
+                  </h3>
+                  <p className="text-xs text-slate-400 font-medium">
+                    {currentLang === 'lo' ? 'ເລືອກລູກຄ້າ ຫຼື ເພີ່ມລູກຄ້າໃໝ່' : 'Select existing customer or add new.'}
+                  </p>
+                </div>
+              </div>
+              {selectedCustomerId && (
+                <span className="text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-200 font-sans flex items-center gap-1.5 max-w-[140px] truncate">
+                  <span className="truncate">{selectedCustomerId}</span>
+                </span>
+              )}
+            </div>
 
-      {/* Credit warning banner (Hide on print) */}
-      {creditStatus.exceeded && (
-        <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-3xl shadow-sm flex items-start gap-4 animate-pulse print:hidden">
-          <AlertTriangle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-900 font-semibold space-y-1">
-            <p className="font-extrabold text-base">{currentLang === 'lo' ? 'ວົງເງິນສິນເຊື່ອເກີນກຳນົດ!' : 'Credit Limit Exceeded Alert'}</p>
-            <p className="leading-relaxed">
-              {currentLang === 'lo'
-                ? `ລູກຄ້າ ${selectedCustomerId} ມີຈຳກັດສິນເຊື່ອ ${formatCurrency(creditStatus.limit)}. ຍອດຄ້າງຊຳຣະປັດຈຸບັນ ${formatCurrency(creditStatus.currentUnpaid)} ລວມກັບໃບບິນນີ້ຈະເປັນ ${formatCurrency(creditStatus.totalPotential)}.`
-                : `Customer ${selectedCustomerId} has a credit limit of ${formatCurrency(creditStatus.limit)}. Outstanding balance is ${formatCurrency(creditStatus.currentUnpaid)}. Total exposure would reach ${formatCurrency(creditStatus.totalPotential)}.`
-              }
-            </p>
+            <CustomerCombobox
+              customers={customers}
+              valueName={selectedCustomerId}
+              valuePhone={customerPhone}
+              valueAddress={customerAddress}
+              onChange={handleCustomerComboboxChange}
+              hideSaveToCrmCheckbox={true}
+              currentLang={currentLang}
+            />
+
+            {/* Customer Category / Tier Selector */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between text-xs">
+                <label className="font-bold text-slate-700 flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>{currentLang === 'lo' ? 'ກຸ່ມ / ປະເພດລູກຄ້າ' : 'Customer Category / Tier'}</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsCustomerCategoryModalOpen(true)}
+                  className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer transition hover:underline"
+                >
+                  <FolderPlus className="w-3 h-3" />
+                  <span>{currentLang === 'lo' ? '+ ເພີ່ມກຸ່ມໃໝ່' : '+ New Category'}</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {((customerCategories && customerCategories.length > 0) ? customerCategories : [
+                  { id: 'RETAIL', nameLao: 'ລູກຄ້າທົ່ວໄປ (Retail)', name: 'Retail' },
+                  { id: 'CORPORATE', nameLao: 'ອົງກອນ / ບໍລິສັດ (Corporate)', name: 'Corporate' },
+                  { id: 'AGENCY', nameLao: 'ຕົວແທນ / ນາຍໜ້າ (Agency)', name: 'Agency' },
+                  { id: 'VIP', nameLao: 'ລູກຄ້າ VIP', name: 'VIP' },
+                  { id: 'WHOLESALE', nameLao: 'ຂາຍສົ່ງ (Wholesale)', name: 'Wholesale' },
+                ]).map((cat: any) => {
+                  const isSelected = selectedCustomerCategory === cat.id || selectedCustomerCategory === cat.name;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setSelectedCustomerCategory(cat.id)}
+                      className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition flex items-center justify-between cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-50 border-indigo-300 text-indigo-900 shadow-2xs'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="truncate">{cat.nameLao || cat.name}</span>
+                      {isSelected && <Check className="w-3 h-3 text-indigo-600 shrink-0 ml-1" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Auto-save to CRM Toggle Switch (ດັອກກີ້) */}
+            <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200/80 rounded-2xl">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0">
+                  <UserPlus className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-800">
+                    {currentLang === 'lo' ? 'ບັນທຶກເຂົ້າຖານຂໍ້ມູນ CRM ອັດຕະໂນມັດ' : 'Auto-save to CRM'}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-medium">
+                    {currentLang === 'lo' ? 'ເພີ່ມຂໍ້ມູນລູກຄ້ານີ້ເຂົ້າລະບົບ CRM ທັນທີເມື່ອບັນທຶກໃບສະເໜີ' : 'Save new customer profile into CRM upon saving quotation'}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAutoSaveCustomerToCRM(!autoSaveCustomerToCRM)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  autoSaveCustomerToCRM ? 'bg-indigo-600' : 'bg-slate-300'
+                }`}
+                role="switch"
+                aria-checked={autoSaveCustomerToCRM}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                    autoSaveCustomerToCRM ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Credit warning banner if exceeded */}
+            {creditStatus.exceeded && (
+              <div className="bg-amber-50 border-2 border-amber-200 p-3.5 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900 font-semibold">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-bold">{currentLang === 'lo' ? 'ວົງເງິນສິນເຊື່ອເກີນກຳນົດ!' : 'Credit Limit Exceeded!'}</p>
+                  <p className="text-[11px] leading-relaxed text-amber-800 font-normal">
+                    {currentLang === 'lo'
+                      ? `ລູກຄ້າ ${selectedCustomerId} ມີຈຳກັດສິນເຊື່ອ ${formatCurrency(creditStatus.limit)}. ຍອດຄ້າງ ${formatCurrency(creditStatus.currentUnpaid)}.`
+                      : `Customer credit limit: ${formatCurrency(creditStatus.limit)}.`
+                    }
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Right Column: Items Table Card (60% width) */}
+          <div className="lg:col-span-7 xl:col-span-7 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-xs space-y-4">
+            
+            {/* Header: Title + Preflight & New Item buttons */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                    <span>{currentLang === 'lo' ? 'ລາຍການສິນຄ້າໃນໃບສະເໜີ' : 'Quotation Line Items'}</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-800 font-sans font-black">
+                      {items.length}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 font-medium">
+                    {currentLang === 'lo' ? 'ລາຍການງານພິມທັງໝົດໃນໃບສະເໜີລາຄານີ້' : 'All items in this quotation.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPreflightModalOpen(true)}
+                  className="px-3 py-2 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-xs shadow-indigo-500/20"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                  <span>{currentLang === 'lo' ? 'Preflight (ກວດຟາຍ)' : 'Preflight'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAddItem}
+                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{currentLang === 'lo' ? 'ລາຍການໃໝ່' : 'New Item'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Items Table View */}
+            <div className="overflow-x-auto rounded-2xl border border-slate-200/80">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-bold">
+                    <th className="py-2.5 px-3 w-10 text-center">#</th>
+                    <th className="py-2.5 px-3 min-w-[150px]">{currentLang === 'lo' ? 'ຊື່ລາຍການ' : 'Item Name'}</th>
+                    <th className="py-2.5 px-3">{currentLang === 'lo' ? 'ສະເປັກ' : 'Specifications'}</th>
+                    <th className="py-2.5 px-3 text-right">{currentLang === 'lo' ? 'ຈຳນວນ' : 'Quantity'}</th>
+                    <th className="py-2.5 px-3 text-right">{currentLang === 'lo' ? 'ລາຄາລວມ' : 'Total'}</th>
+                    <th className="py-2.5 px-3 w-16 text-center">{currentLang === 'lo' ? 'ຈັດການ' : 'Actions'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {items.map((item, idx) => {
+                    const calc: any = calculatedItems[idx] || {};
+                    const unitPrice = calc.unitPrice || calc.effectiveSellingPrice || calc.sellingPrice || 0;
+                    const totalLine = unitPrice * (Number(item.printVolume) || 1);
+                    const paperItem = inventory.find(p => p.id === item.paperId);
+                    const coverPaperItem = item.includeCover && item.coverPaperId ? inventory.find(p => p.id === item.coverPaperId) : null;
+                    const printerItem = equipment.find(e => e.id === item.selectedPrinterId);
+
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-50/70 transition">
+                        <td className="py-2.5 px-3 text-center">
+                          <span className="w-5 h-5 rounded-md bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-[10px] mx-auto">
+                            {idx + 1}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <input
+                            type="text"
+                            value={item.name}
+                            onChange={(e) => {
+                              const newItems = [...items];
+                              newItems[idx] = { ...newItems[idx], name: e.target.value };
+                              setItems(newItems);
+                            }}
+                            placeholder="ລະບຸຊື່ລາຍການ..."
+                            className="font-bold text-slate-800 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-500 focus:outline-none px-1 py-0.5 transition w-full text-xs"
+                          />
+                          {item.fileName && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-sky-600 font-medium mt-0.5 truncate max-w-[180px]">
+                              <FileText className="w-2.5 h-2.5 shrink-0" />
+                              <span className="truncate">{item.fileName}</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="space-y-1 text-[11px]">
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-bold font-sans">
+                                {item.jobSizePreset || 'A4'}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium font-sans">
+                                {item.pagesPerBook ? `${item.pagesPerBook} ໜ້າ` : '1 ໜ້າ'}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-bold">
+                                {item.colorPrintMode === 'MONO_K' ? 'Mono' : 'CMYK'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setPreviewColorItem(item)}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200/60 cursor-pointer transition text-[10px]"
+                                title="ກວດສອບຄ່າສີ & Preview ໄຟລ໌"
+                              >
+                                <Palette className="w-2.5 h-2.5 text-indigo-600" />
+                                <span>C{Math.round(item.cCoverage ?? 15)} M{Math.round(item.mCoverage ?? 15)} Y{Math.round(item.yCoverage ?? 15)} K{Math.round(item.kCoverage ?? 15)}</span>
+                              </button>
+                            </div>
+                            <div className="text-[10px] text-slate-500 truncate max-w-[220px]">
+                              <span>{paperItem?.name || item.paperId || 'A4 ທົ່ວໄປ'}</span>
+                              {item.includeCover && coverPaperItem && (
+                                <span className="text-amber-700 font-semibold"> • ປົກ: {coverPaperItem.name}</span>
+                              )}
+                              {printerItem?.name && (
+                                <span> • {printerItem.name}</span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-bold text-slate-700 font-sans">
+                          {item.printVolume || 1} {item.unitName || 'ຊຸດ'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <div className="font-mono font-black text-emerald-700 text-xs">
+                            {formatCurrency(totalLine)}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-sans">
+                            {formatCurrency(unitPrice)}/ຊຸດ
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setPreviewColorItem(item)}
+                              className="p-1 hover:bg-indigo-100 text-indigo-500 hover:text-indigo-700 rounded-lg transition cursor-pointer"
+                              title="ກວດສອບຄ່າສີ & Preview ໄຟລ໌"
+                            >
+                              <Palette className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDuplicateItem(idx)}
+                              className="p-1 hover:bg-slate-200 text-slate-400 hover:text-slate-700 rounded-lg transition cursor-pointer"
+                              title="Duplicate"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                            {items.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(idx)}
+                                className="p-1 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded-lg transition cursor-pointer"
+                                title="Delete"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer Summary Strip & Next Button */}
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-slate-100">
+              <div className="text-xs text-slate-500 font-medium flex items-center gap-3">
+                <span>{currentLang === 'lo' ? 'ລວມລາຍການ:' : 'Items:'} <strong className="text-slate-800 font-black">{items.length}</strong></span>
+                <span>•</span>
+                <span>{currentLang === 'lo' ? 'ຈຳນວນພິມ:' : 'Qty:'} <strong className="text-slate-800 font-black">{grandTotalUnits}</strong></span>
+                <span>•</span>
+                <span>{currentLang === 'lo' ? 'ປະເມີນລວມ:' : 'Est. Total:'} <strong className="text-emerald-700 font-black font-mono">{formatCurrency(finalGrandTotal)}</strong></span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setWizardStep('specs');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="px-6 py-2.5 bg-gradient-to-r from-primary-navy to-indigo-700 hover:from-primary-navy/90 hover:to-indigo-600 text-white rounded-xl text-xs font-black flex items-center gap-2 transition active:scale-95 cursor-pointer shadow-md shadow-indigo-600/20 ml-auto"
+              >
+                <span>{currentLang === 'lo' ? 'ຕໍ່ໄປ: ກຳນົດສະເປັກການພິມ' : 'Next: Configure Specs'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+
+          </div>
+
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* STEP 1: JOB SPECIFICATIONS & INTERNAL PRICING STUDIO                   */}
+      {/* STEP 2: ITEMIZED PRODUCTION SPEC STUDIO (ກຳນົດສະເປັກແຕ່ລະລາຍການ)           */}
       {/* ========================================================================= */}
-      {currentStep === 'calc' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start print:hidden animate-fade-in">
-          
-          {/* Left Column: Job Specifications Panel - Independent Scroll */}
-          <div className="lg:col-span-7 bg-white p-5 sm:p-7 lg:p-6 xl:p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6 min-w-0 lg:sticky lg:top-[5.5rem] lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto scrollbar-thin">
-            <div className="flex items-center justify-between border-b pb-4">
-              <div>
-                <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2">
-                  <Calculator className="w-6 h-6 text-accent-sky" />
-                  <span>{currentLang === 'lo' ? 'ກຳນົດລາຍລະອຽດງານພິມ (Specs)' : 'Job Specifications'}</span>
-                </h3>
-                <p className="text-[11px] font-bold text-slate-400 mt-1 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-slate-500" />
-                  <span className="text-slate-600 font-semibold">{quotationTitle || (currentLang === 'lo' ? 'ໃບສະເໜີລາຄາງານພິມ' : 'Quotation')}</span>
-                  <button 
-                    type="button" 
-                    onClick={() => setIsSaveModalOpen(true)}
-                    className="text-accent-sky hover:underline text-[10px] font-bold cursor-pointer"
-                  >
-                    ({currentLang === 'lo' ? 'ປ່ຽນຊື່' : 'Edit'})
-                  </button>
-                </p>
-              </div>
-              <span className="text-xs font-black px-3 py-1 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-200">
-                ລາຍການທີ {activeItemIndex + 1} / {items.length}
-              </span>
-            </div>
-
-            <div className="space-y-6">
-
-              {/* ITEM TABS & MULTI-ITEM MANAGER (ແຖບລາຍການສິນຄ້າໃນໃບສະເໜີ) */}
-              <div className="p-4 bg-white border border-slate-200 rounded-3xl space-y-3 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-emerald-600" />
-                    <span>ລາຍການສິນຄ້າ ({items.length} ລາຍການ)</span>
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsPreflightModalOpen(true)}
-                      className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-sm"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                      <span>+ ເພີ່ມຈາກ Preflight</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAddItem}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-md"
-                    >
-                      <span>+ ລາຍການໃໝ່</span>
-                    </button>
+      {wizardStep === 'specs' && (
+        <div className="space-y-4 animate-fade-in print:hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            
+            {/* Left: Items Selector Sidebar (~25-30% width) */}
+            <div className="lg:col-span-4 xl:col-span-3 bg-white p-4 rounded-3xl border border-slate-200/90 shadow-xs space-y-3 lg:sticky lg:top-[5.5rem] lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto scrollbar-thin">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                    <Layers className="w-3.5 h-3.5" />
                   </div>
+                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>{currentLang === 'lo' ? 'ເລືອກລາຍການ' : 'Select Item'}</span>
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-100 text-emerald-800 font-sans font-black">
+                      {items.length}
+                    </span>
+                  </h3>
                 </div>
+              </div>
 
-                {/* Item Tabs Pill List */}
-                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
-                  {items.map((item, idx) => {
-                    const isActive = idx === activeItemIndex;
-                    return (
-                      <div
-                        key={item.id}
-                        onClick={() => setActiveItemIndex(idx)}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-2xl cursor-pointer transition border text-xs font-bold shrink-0 select-none ${
-                          isActive
-                            ? 'bg-primary-navy text-white border-primary-navy shadow-md'
-                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        <FileText className="w-3.5 h-3.5 shrink-0" />
-                        <span>{idx + 1}. {item.name || `ລາຍການ ${idx + 1}`}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-sans font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                          {item.printVolume} {item.unitName || 'ຊຸດ'}{item.pagesPerBook ? ` (${item.pagesPerBook} ໜ້າ)` : ''}
-                        </span>
-                        {items.length > 1 && (
+              {/* Action Buttons: Preflight & New Item */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPreflightModalOpen(true)}
+                  className="px-2 py-2 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer shadow-xs shadow-indigo-500/20"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse shrink-0" />
+                  <span className="truncate">Preflight</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAddItem}
+                  className="px-2 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{currentLang === 'lo' ? 'ລາຍການໃໝ່' : 'New Item'}</span>
+                </button>
+              </div>
+
+              {/* Items Vertical Stack */}
+              <div className="space-y-2.5 max-h-[calc(100vh-18rem)] overflow-y-auto pr-0.5 scrollbar-thin">
+                {items.map((item, idx) => {
+                  const isActive = idx === activeItemIndex;
+                  const calc: any = calculatedItems[idx] || {};
+                  const unitPrice = calc.unitPrice || calc.effectiveSellingPrice || calc.sellingPrice || 0;
+                  const totalLine = unitPrice * (Number(item.printVolume) || 1);
+
+                  // Extract specs metadata for clear row-by-row display
+                  const paperItem = inventory.find(p => p.id === item.paperId);
+                  const coverPaperItem = item.includeCover && item.coverPaperId ? inventory.find(p => p.id === item.coverPaperId) : null;
+                  const printerItem = equipment.find(e => e.id === item.selectedPrinterId);
+                  const postPressNames = (item.selectedPostPressIds || [])
+                    .map(mId => equipment.find(e => e.id === mId)?.name)
+                    .filter(Boolean);
+                  const matNames = (item.finishingMaterials || [])
+                    .map(m => m.name)
+                    .filter(Boolean);
+
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setActiveItemIndex(idx)}
+                      className={`p-3 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between space-y-2.5 ${
+                        isActive
+                          ? 'bg-white border-primary-navy shadow-sm ring-2 ring-primary-navy/15'
+                          : 'bg-slate-50/80 border-slate-200/80 hover:bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      {/* Card Header: #No + Name + Actions */}
+                      <div className="flex items-start justify-between gap-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className={`w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 ${
+                            isActive ? 'bg-primary-navy text-white' : 'bg-slate-200 text-slate-700'
+                          }`}>
+                            #{idx + 1}
+                          </span>
+                          <span className={`text-xs font-black truncate ${isActive ? 'text-slate-900' : 'text-slate-700'}`}>
+                            {item.name || `ລາຍການ ${idx + 1}`}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateItem(idx)}
+                            className="p-1 hover:bg-slate-200 text-slate-400 hover:text-slate-700 rounded-md transition cursor-pointer"
+                            title="Duplicate item"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                          {items.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItem(idx)}
+                              className="p-1 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded-md transition cursor-pointer"
+                              title="Remove item"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Structured Specifications Breakdown (Rows / ລົງແຖວ) */}
+                      <div className="space-y-1.5 text-[11px] bg-slate-50/70 p-2 rounded-xl border border-slate-200/60">
+                        {/* Row 1: Volume & Pages & Size */}
+                        <div className="flex items-center gap-1.5 text-slate-700 font-bold">
+                          <Layers className="w-3 h-3 text-indigo-500 shrink-0" />
+                          <span className="truncate">
+                            {item.printVolume || 1} {item.unitName || 'ຊຸດ'} • {item.pagesPerBook ? `${item.pagesPerBook} ໜ້າ` : '1 ໜ້າ'} • {item.jobSizePreset || 'A4'}
+                          </span>
+                        </div>
+
+                        {/* Row 2: Inner Paper */}
+                        <div className="flex items-center gap-1.5 text-slate-600">
+                          <FileText className="w-3 h-3 text-sky-500 shrink-0" />
+                          <span className="truncate">
+                            ເຈ້ຍ: <strong className="text-slate-800 font-semibold">{paperItem?.name || item.paperId || 'A4 ທົ່ວໄປ'}</strong>
+                          </span>
+                        </div>
+
+                        {/* Row 3: Cover Paper (Only if cover is enabled) */}
+                        {item.includeCover && (
+                          <div className="flex items-center gap-1.5 text-amber-800 bg-amber-50/80 px-1.5 py-0.5 rounded border border-amber-200/60">
+                            <BookOpen className="w-3 h-3 text-amber-600 shrink-0" />
+                            <span className="truncate">
+                              ປົກ: <strong>{coverPaperItem?.name || 'ເຈ້ຍປົກ'}</strong> ({item.coverPagesCount || 4} ໜ້າ)
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Row 4: Printer & Color Mode */}
+                        <div className="flex items-center gap-1.5 text-slate-600">
+                          <Printer className="w-3 h-3 text-purple-500 shrink-0" />
+                          <span className="truncate">
+                            {printerItem?.name || 'ຈັກພິມດິຈິຕອນ'} • <span className="font-bold text-purple-700">{item.colorPrintMode === 'MONO_K' ? 'Mono K' : 'CMYK'}</span>
+                          </span>
+                        </div>
+
+                        {/* Row 5: Color Info & Preview Button */}
+                        <div className="flex items-center justify-between text-[10px] bg-indigo-50/70 px-1.5 py-1 rounded border border-indigo-100">
+                          <span className="font-bold text-indigo-900 flex items-center gap-1 truncate">
+                            <Palette className="w-3 h-3 text-indigo-600 shrink-0" />
+                            <span className="truncate">C{Math.round(item.cCoverage ?? 15)} M{Math.round(item.mCoverage ?? 15)} Y{Math.round(item.yCoverage ?? 15)} K{Math.round(item.kCoverage ?? 15)}</span>
+                          </span>
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleRemoveItem(idx);
+                              setPreviewColorItem(item);
                             }}
-                            className={`hover:text-red-500 transition p-0.5 ${isActive ? 'text-white/70' : 'text-slate-400'}`}
-                            title="Remove item"
+                            className="px-1.5 py-0.5 bg-white hover:bg-indigo-100 text-indigo-700 rounded font-black border border-indigo-200 cursor-pointer shadow-2xs text-[9px] shrink-0 ml-1"
                           >
-                            <X className="w-3.5 h-3.5" />
+                            Preview ໄຟລ໌
                           </button>
+                        </div>
+
+                        {/* Row 6: Post-Press & Finishing Materials (Only if selected) */}
+                        {((postPressNames.length > 0) || (matNames.length > 0) || item.bindingOption) && (
+                          <div className="flex items-start gap-1.5 text-slate-600 bg-white px-1.5 py-1 rounded border border-slate-200/60">
+                            <Scissors className="w-3 h-3 text-rose-500 shrink-0 mt-0.5" />
+                            <span className="truncate leading-tight text-[10px]">
+                              {[item.bindingOption, ...postPressNames, ...matNames].filter(Boolean).join(', ')}
+                            </span>
+                          </div>
                         )}
                       </div>
-                    );
-                  })}
+
+                      {/* Card Footer: Subtotal Unit Price & Total Line */}
+                      <div className="flex items-center justify-between border-t border-slate-100 pt-1.5 text-xs">
+                        <span className="text-[10px] text-slate-400 font-sans">
+                          {formatCurrency(unitPrice)}/ຊຸດ
+                        </span>
+                        <span className="font-mono font-black text-emerald-700 text-xs">
+                          {formatCurrency(totalLine)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right: Active Item Production Spec Studio (~70-75% width) */}
+            <div className="lg:col-span-8 xl:col-span-9 bg-white p-5 sm:p-7 rounded-3xl border border-slate-100 shadow-sm space-y-5 min-w-0">
+              
+              {/* Active Item Title & Spec Header */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                <div className="flex-1 min-w-[240px]">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs font-black px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-200 whitespace-nowrap shrink-0 inline-flex items-center justify-center font-mono">
+                      #{activeItemIndex + 1} / {items.length}
+                    </span>
+                    <input
+                      type="text"
+                      value={activeItem.name}
+                      onChange={(e) => updateActiveItem({ name: e.target.value })}
+                      placeholder="ລະບຸຊື່ສິນຄ້າ..."
+                      className="font-extrabold text-base sm:text-lg text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-accent-sky focus:outline-none px-1 py-0.5 transition w-full"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-medium mt-1 flex items-center gap-2">
+                    <span>{activeItem.printVolume || 1} {activeItem.unitName || 'ຊຸດ'}</span>
+                    <span>•</span>
+                    <span>{activeItem.jobSizePreset || 'A4'}</span>
+                    <span>•</span>
+                    <span>{activeItem.pagesPerBook || 1} ໜ້າ</span>
+                  </p>
                 </div>
 
-                {/* Active Item Name Field */}
-                <div className="pt-2 border-t border-slate-200 flex items-center gap-2">
-                  <span className="text-[11px] font-bold text-slate-500 shrink-0">ຊື່ສິນຄ້ານີ້:</span>
-                  <input
-                    type="text"
-                    value={activeItem.name}
-                    onChange={(e) => updateActiveItem({ name: e.target.value })}
-                    placeholder="ລະບຸຊື່ສິນຄ້າ ເຊັ່ນ: ປຶ້ມພາສາລາວ A4..."
-                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-500"
-                  />
+                {/* Template Badge & Actions */}
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => handleDuplicateItem(activeItemIndex)}
-                    className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-[11px] font-bold shrink-0 border border-slate-700 transition cursor-pointer"
-                    title="Duplicate this item"
+                    onClick={() => setPreviewColorItem(activeItem)}
+                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    title="ກວດສອບຄ່າສີ & Preview ໄຟລ໌"
                   >
-                    ສຳເນົາ
-                  </button>
-                </div>
-              </div>
-
-              {/* ========================================================= */}
-              {/* DYNAMIC PRICING TEMPLATES & MODULAR CONTROL STUDIO     */}
-              {/* ========================================================= */}
-              <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 space-y-4 shadow-xs">
-                
-                {/* Top Row: Template Presets Selector + Open Full Modal & Save as Template */}
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-accent-sky/10 text-accent-sky flex items-center justify-center font-bold">
-                      <Bookmark className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                        {currentLang === 'lo' ? 'ແມ່ແບບສູດຄຳນວນ (Pricing Templates)' : 'Pricing Preset Templates'}
-                      </h4>
-                      <p className="text-[10px] text-slate-500 font-medium">
-                        {currentLang === 'lo' ? 'ເລືອກແມ່ແບບສຳເລັດຮູບ ຫຼື ປັບແຕ່ງໂມດູນເອງ' : 'Select quick presets or customize dynamic modules.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsTemplateModalOpen(true)}
-                      className="px-3.5 py-2 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
-                    >
-                      <Bookmark className="w-3.5 h-3.5" />
-                      <span>{currentLang === 'lo' ? `ເລືອກ & ຈັດການແມ່ແບບ (${allAvailableTemplates.length})` : `Manage Templates (${allAvailableTemplates.length})`}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsNewTemplateModalOpen(true)}
-                      className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>{currentLang === 'lo' ? 'ບັນທຶກເປັນແມ່ແບບໃໝ່' : 'Save As Template'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Active Selected Template Badge Bar */}
-                <div className="flex items-center justify-between bg-slate-50 border border-slate-200/80 px-4 py-2.5 rounded-2xl text-xs">
-                  <div className="flex items-center gap-2">
-                    <Bookmark className="w-4 h-4 text-accent-sky shrink-0" />
-                    <span className="text-slate-500 font-bold">{currentLang === 'lo' ? 'ແມ່ແບບທີ່ກຳລັງໃຊ້:' : 'Active Template:'}</span>
-                    <span className="font-black text-primary-navy">
-                      {allAvailableTemplates.find(t => t.id === activeItem.selectedTemplateId)?.nameLao || 
-                       allAvailableTemplates.find(t => t.id === activeItem.selectedTemplateId)?.nameEn || 
-                       (currentLang === 'lo' ? 'ກຳນົດເອງ (Custom Spec)' : 'Custom Spec')}
+                    <Palette className="w-3.5 h-3.5 text-indigo-600" />
+                    <span className="truncate max-w-[140px]">
+                      {activeItem.fileName ? activeItem.fileName : (currentLang === 'lo' ? 'ກວດຄ່າສີ & ໄຟລ໌' : 'Color & File')}
                     </span>
-                  </div>
+                  </button>
 
                   <button
                     type="button"
                     onClick={() => setIsTemplateModalOpen(true)}
-                    className="text-xs font-black text-accent-sky hover:text-sky-700 transition cursor-pointer flex items-center gap-1"
+                    className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
                   >
-                    <span>{currentLang === 'lo' ? 'ປ່ຽນແມ່ແບບ →' : 'Change Template →'}</span>
+                    <Bookmark className="w-3.5 h-3.5 text-accent-sky" />
+                    <span className="truncate max-w-[140px]">
+                      {allAvailableTemplates.find(t => t.id === activeItem.selectedTemplateId)?.nameLao || 
+                       allAvailableTemplates.find(t => t.id === activeItem.selectedTemplateId)?.nameEn || 
+                       (currentLang === 'lo' ? 'ແມ່ແບບ' : 'Template')}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDuplicateItem(activeItemIndex)}
+                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                    title="Duplicate this item"
+                  >
+                    {currentLang === 'lo' ? 'ສຳເນົາ' : 'Duplicate'}
                   </button>
                 </div>
+              </div>
 
-                {/* 8 Full Dynamic & Fixed Cost Modules Grid */}
-                <div className="pt-2 border-t border-slate-100 space-y-2">
-                  <div className="flex justify-between items-center text-[11px] font-bold text-slate-500">
-                    <span>{currentLang === 'lo' ? 'ໂມດູນຕົ້ນທຶນທັງໝົດ 1-8 (Active Cost Modules):' : 'All 8 Cost & Spec Modules:'}</span>
-                    <span className="text-[10px] text-slate-400">1-2 ບັງຄັບໃຊ້ (Fixed), 3-8 ເປີດ/ປິດ ຕາມຕ້ອງການ</span>
+              {/* 3-Stage Production Step Tabs */}
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100/80 rounded-2xl border border-slate-200 text-xs font-black">
+                <button
+                  type="button"
+                  onClick={() => setActiveProductionTab('specs')}
+                  className={`py-2.5 px-2 sm:px-3 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    activeProductionTab === 'specs'
+                      ? 'bg-white text-indigo-700 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Sliders className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span className="truncate">{currentLang === 'lo' ? '1. ຂະໜາດ & ຈຳນວນ' : '1. Specs & Volume'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveProductionTab('print')}
+                  className={`py-2.5 px-2 sm:px-3 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    activeProductionTab === 'print'
+                      ? 'bg-white text-purple-700 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                <span className="truncate">{currentLang === 'lo' ? '2. ເຈ້ຍ & ການພິມ' : '2. Paper & Print'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveProductionTab('postpress')}
+                className={`py-2.5 px-2 sm:px-3 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                  activeProductionTab === 'postpress'
+                    ? 'bg-white text-amber-700 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Wrench className="w-4 h-4 text-amber-600 shrink-0" />
+                <span className="truncate">{currentLang === 'lo' ? '3. ຫຼັງພິມ & ວັດຖຸດິບ' : '3. Post-Press'}</span>
+              </button>
+            </div>
+
+            {/* TAB CONTENT 1: Specs & Volume */}
+            {activeProductionTab === 'specs' && (
+              <div className="space-y-4 animate-fade-in">
+                {/* Job Overview & Production Quantity */}
+                <JobQuantityAndPagesSection
+                  activeItem={activeItem}
+                  updateActiveItem={updateActiveItem}
+                  activeCalc={activeCalc}
+                  isOpen={true}
+                  onToggle={() => {}}
+                  currentLang={currentLang}
+                />
+
+                {/* Pricing Templates & Dynamic Modules Studio */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Bookmark className="w-4 h-4 text-accent-sky" />
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                        {currentLang === 'lo' ? 'ແມ່ແບບສູດຄຳນວນ (Pricing Templates)' : 'Pricing Preset Templates'}
+                      </h4>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsTemplateModalOpen(true)}
+                        className="px-3 py-1.5 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+                      >
+                        <Bookmark className="w-3.5 h-3.5" />
+                        <span>{currentLang === 'lo' ? `ຈັດການແມ່ແບບ (${allAvailableTemplates.length})` : `Manage (${allAvailableTemplates.length})`}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsNewTemplateModalOpen(true)}
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>{currentLang === 'lo' ? 'ບັນທຶກແມ່ແບບ' : 'Save Preset'}</span>
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {/* Fixed Module 1: Customer */}
-                    <div className="p-2.5 rounded-xl border border-indigo-200 bg-indigo-50/40 text-slate-900 flex items-center justify-between text-xs font-bold shadow-2xs">
-                      <div className="flex items-center gap-1.5 truncate">
-                        <User className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        <span className="truncate text-[11px] font-black text-slate-900">
-                          {currentLang === 'lo' ? '1. ຂໍ້ມູນລູກຄ້າ' : '1. Customer'}
-                        </span>
-                      </div>
-                      <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded text-[9px] font-black shrink-0">FIXED</span>
-                    </div>
-
-                    {/* Fixed Module 2: Production Quantity */}
-                    <div className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/40 text-slate-900 flex items-center justify-between text-xs font-bold shadow-2xs">
-                      <div className="flex items-center gap-1.5 truncate">
-                        <Hash className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span className="truncate text-[11px] font-black text-slate-900">
-                          {currentLang === 'lo' ? '2. ຈຳນວນຜະລິດ' : '2. Quantity'}
-                        </span>
-                      </div>
-                      <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[9px] font-black shrink-0">FIXED</span>
-                    </div>
-
-                    {/* Dynamic Modules 3 to 8 */}
+                  {/* Modules Toggles */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
                     {[
-                      { key: 'paper' as const, label: currentLang === 'lo' ? '3. ເຈ້ຍ (Paper)' : '3. Paper', icon: FileText, color: 'sky' },
-                      { key: 'printEngine' as const, label: currentLang === 'lo' ? '4. ເຄື່ອງພິມ & ໝຶກ' : '4. Print & Ink', icon: Printer, color: 'purple' },
-                      { key: 'postPressMachinery' as const, label: currentLang === 'lo' ? '5. ເຄື່ອງຈັກຫຼັງພິມ' : '5. Post-Press Mach.', icon: Wrench, color: 'amber' },
-                      { key: 'finishingMaterials' as const, label: currentLang === 'lo' ? '6. ວັດຖຸດິບຫຼັງພິມ' : '6. Consumables', icon: Package, color: 'emerald' },
-                      { key: 'laborAndSetup' as const, label: currentLang === 'lo' ? '7. ຄ່າແຮງ & ຕັ້ງເຄື່ອງ' : '7. Labor & Setup', icon: Zap, color: 'blue' },
-                      { key: 'packagingDelivery' as const, label: currentLang === 'lo' ? '8. ບັນຈຸພັນ & ຂົນສົ່ງ' : '8. Packaging & Delivery', icon: Truck, color: 'slate' },
+                      { key: 'paper' as const, label: currentLang === 'lo' ? 'ເຈ້ຍ (Paper)' : 'Paper', icon: FileText },
+                      { key: 'printEngine' as const, label: currentLang === 'lo' ? 'ເຄື່ອງພິມ & ໝຶກ' : 'Print & Ink', icon: Printer },
+                      { key: 'postPressMachinery' as const, label: currentLang === 'lo' ? 'ເຄື່ອງຫຼັງພິມ' : 'Post-Press', icon: Wrench },
+                      { key: 'finishingMaterials' as const, label: currentLang === 'lo' ? 'ວັດຖຸດິບຫຼັງພິມ' : 'Consumables', icon: Package },
+                      { key: 'laborAndSetup' as const, label: currentLang === 'lo' ? 'ຄ່າແຮງ' : 'Labor', icon: Zap },
+                      { key: 'packagingDelivery' as const, label: currentLang === 'lo' ? 'ຂົນສົ່ງ' : 'Delivery', icon: Truck },
                     ].map((mod) => {
                       const isActive = activeItem.activeModules ? activeItem.activeModules[mod.key] : true;
                       return (
@@ -2229,7 +2829,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                           key={mod.key}
                           type="button"
                           onClick={() => handleToggleModule(mod.key)}
-                          className={`p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-between ${
+                          className={`p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-between ${
                             isActive
                               ? 'bg-white border-slate-300 text-slate-900 shadow-2xs'
                               : 'bg-slate-100/70 border-slate-200 text-slate-400 opacity-60'
@@ -2245,155 +2845,80 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                     })}
                   </div>
                 </div>
-
               </div>
+            )}
 
-              {/* Quick Phase Jump Navigation & Expand/Collapse All */}
-              <div className="flex items-center justify-between gap-2 p-2 bg-slate-50 border border-slate-200/80 rounded-2xl">
-                <div className="flex items-center gap-1 overflow-x-auto scrollbar-none py-0.5">
-                  {[
-                    { key: 'phase1', label: '1. ລູກຄ້າ', icon: User },
-                    { key: 'phase2', label: '2. ຈຳນວນ', icon: Hash },
-                    { key: 'phase3', label: '3. ເຈ້ຍ', icon: FileText },
-                    { key: 'phase4', label: '4. ພິມ', icon: Printer },
-                    { key: 'phase5', label: '5. ເຄື່ອງຈັກ', icon: Wrench },
-                    { key: 'phase6', label: '6. ວັດຖຸດິບຫຼັງພິມ', icon: Package },
-                    { key: 'phase7', label: '7. ຄ່າແຮງ', icon: Zap },
-                    { key: 'phase8', label: '8. ຂົນສົ່ງ', icon: Truck },
-                  ].map(p => (
-                    <button
-                      key={p.key}
-                      type="button"
-                      onClick={() => {
-                        setOpenPhases(prev => ({ ...prev, [p.key]: true }));
-                        document.getElementById(`sec-${p.key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                      }}
-                      className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition flex items-center gap-1 cursor-pointer shrink-0 ${
-                        openPhases[p.key]
-                          ? 'bg-primary-navy text-white shadow-xs'
-                          : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
-                      }`}
-                    >
-                      <p.icon className="w-3 h-3" />
-                      <span>{p.label}</span>
-                    </button>
-                  ))}
-                </div>
+            {/* TAB CONTENT 2: Paper & Print */}
+            {activeProductionTab === 'print' && (
+              <div className="space-y-5 animate-fade-in">
+                {/* Paper Selection */}
+                <PaperAndCoverSection
+                  activeItem={activeItem}
+                  updateActiveItem={updateActiveItem}
+                  activeCalc={activeCalc}
+                  papers={papers}
+                  isOpen={true}
+                  onToggle={() => {}}
+                  onOpenPaperSearch={(target) => {
+                    setPaperModalTarget(target);
+                    setIsPaperModalOpen(true);
+                  }}
+                  formatCurrency={formatCurrency}
+                  getFIFOCostPerSheet={getFIFOCostPerSheet}
+                  currentLang={currentLang}
+                  t={t}
+                />
 
-                <div className="flex items-center gap-1 shrink-0 pl-1 border-l border-slate-200">
-                  <button
-                    type="button"
-                    onClick={() => toggleAllPhases(true)}
-                    className="text-[10px] font-bold text-slate-600 hover:text-slate-900 px-2 py-1 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition cursor-pointer"
-                  >
-                    {currentLang === 'lo' ? 'ເປີດໝົດ' : 'Expand'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => toggleAllPhases(false)}
-                    className="text-[10px] font-bold text-slate-600 hover:text-slate-900 px-2 py-1 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition cursor-pointer"
-                  >
-                    {currentLang === 'lo' ? 'ພັບໝົດ' : 'Collapse'}
-                  </button>
-                </div>
-              </div>
-              
-              {/* PHASE 1: Customer Information (ຂໍ້ມູນລູກຄ້າ) */}
-              <div id="sec-phase1" className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition">
-                <button
-                  type="button"
-                  onClick={() => togglePhase('phase1')}
-                  className="w-full p-3.5 bg-slate-50/80 hover:bg-slate-100/80 flex items-center justify-between transition cursor-pointer"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">1</span>
-                    <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                      {t('estimator.sec_customer', 'Customer Information')}
-                    </span>
-                    {selectedCustomerId && (
-                      <span className="text-[11px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-200 font-sans flex items-center gap-1">
-                        <User className="w-3 h-3" />
-                        <span>{selectedCustomerId}</span>
+                {/* Printing Process & Ink Setup */}
+                <div id="sec-phase4" className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs">
+                  <div className="p-3.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-lg bg-purple-600 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">4</span>
+                      <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                        {currentLang === 'lo' ? 'ເຄື່ອງພິມ & ລະບົບສີ (Printers & Ink)' : 'Printing Process & Ink'}
                       </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <span className="text-[11px] font-medium hidden sm:inline">{openPhases.phase1 ? 'ພັບເກັບ' : 'ເປີດເບິ່ງ'}</span>
-                    {openPhases.phase1 ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </div>
-                </button>
-
-                {openPhases.phase1 && (
-                  <div className="p-4 sm:p-5 border-t border-slate-100 space-y-3 animate-fade-in">
-                    <CustomerCombobox
-                      customers={customers}
-                      valueName={selectedCustomerId}
-                      valuePhone={customerPhone}
-                      valueAddress={customerAddress}
-                      onChange={handleCustomerComboboxChange}
-                      currentLang={currentLang}
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* PHASE 2: Job Overview & Production Quantity (ສະຫຼຸບງານ & ຈຳນວນຜະລິດ) */}
-              <JobQuantityAndPagesSection
-                activeItem={activeItem}
-                updateActiveItem={updateActiveItem}
-                activeCalc={activeCalc}
-                isOpen={openPhases.phase2}
-                onToggle={() => togglePhase('phase2')}
-                currentLang={currentLang}
-              />
-
-              {/* PHASE 3: Inventory Paper Selection (ການເລືອກເຈ້强ຈາກຄັງ & ໜ້າປົກ) */}
-              <PaperAndCoverSection
-                activeItem={activeItem}
-                updateActiveItem={updateActiveItem}
-                activeCalc={activeCalc}
-                papers={papers}
-                isOpen={openPhases.phase3}
-                onToggle={() => togglePhase('phase3')}
-                onOpenPaperSearch={(target) => {
-                  setPaperModalTarget(target);
-                  setIsPaperModalOpen(true);
-                }}
-                formatCurrency={formatCurrency}
-                getFIFOCostPerSheet={getFIFOCostPerSheet}
-                currentLang={currentLang}
-                t={t}
-              />
-
-              {/* PHASE 4: Printing Process & Ink Setup (ເຄື່ອງພິມ & ລະບົບສີ) */}
-              <div id="sec-phase4" className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition">
-                <button
-                  type="button"
-                  onClick={() => togglePhase('phase4')}
-                  className="w-full p-3.5 bg-slate-50/80 hover:bg-slate-100/80 flex items-center justify-between transition cursor-pointer"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-6 h-6 rounded-lg bg-purple-600 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">4</span>
-                    <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                      {currentLang === 'lo' ? 'ເຄື່ອງພິມ & ລະບົບສີ (Printers & Ink)' : 'Printing Process & Ink'}
-                    </span>
+                    </div>
                     <span className="text-[11px] font-bold px-2 py-0.5 bg-purple-50 text-purple-700 rounded-lg border border-purple-200 font-sans flex items-center gap-1">
                       <Printer className="w-3 h-3" />
-                      {activeItem.printerAllocations.length || 1} ເຄື່ອງ • {activeItem.colorPrintMode === 'MONO_K' ? 'Mono K' : 'CMYK'} • {activeItem.isDoubleSided ? '2 ໜ້າ' : '1 ໜ້າ'}
+                      {activeItem.printerAllocations?.length || 1} ເຄື່ອງ • {activeItem.colorPrintMode === 'MONO_K' ? 'Mono K' : 'CMYK'}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <span className="text-[11px] font-medium hidden sm:inline">{openPhases.phase4 ? 'ພັບເກັບ' : 'ເປີດເບິ່ງ'}</span>
-                    {openPhases.phase4 ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </div>
-                </button>
 
-                {openPhases.phase4 && (
-                  <div className="p-4 sm:p-5 border-t border-slate-100 space-y-4 animate-fade-in">
+                  <div className="p-4 sm:p-5 space-y-4">
+                    {/* Artwork & Preflight Status Strip */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-gradient-to-r from-indigo-50/90 to-sky-50/90 border border-indigo-200/80 rounded-2xl">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <Palette className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-slate-900 truncate">
+                              {activeItem.fileName || (activeItem.preflightData ? 'ໄຟລ໌ກວດສອບ Preflight' : 'ຄ່າສີມາດຕະຖານ')}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded-md bg-indigo-100 text-indigo-900 text-[10px] font-black font-mono">
+                              C:{Math.round(activeItem.cCoverage ?? 15)}% M:{Math.round(activeItem.mCoverage ?? 15)}% Y:{Math.round(activeItem.yCoverage ?? 15)}% K:{Math.round(activeItem.kCoverage ?? 15)}%
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 font-medium">
+                            {currentLang === 'lo' ? 'ຄ່າສີນີ້ຖືກຊິງຄ໌ກັບແຖບສີຂອງເຄື່ອງພິມໂດຍອັດຕະໂນມັດ' : 'CMYK coverage automatically synced with printer'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setPreviewColorItem(activeItem)}
+                        className="px-3 py-1.5 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>{currentLang === 'lo' ? 'ກວດສອບໄຟລ໌ & ສີ' : 'Inspect Colors'}</span>
+                      </button>
+                    </div>
+
                     <ManualPrinterAllocator
-                      targetQuantity={(Number(activeItem.printVolume) || 1) * Math.max(1, Number(activeItem.pagesPerBook || 1))}
+                      targetQuantity={(Number(activeItem.printVolume) || 1) * Math.ceil(Math.max(1, Number(activeItem.pagesPerBook || 1)) / ((activeItem.isDoubleSided || activeItem.printerAllocations?.some(a => a.is_double_sided)) ? 2 : 1))}
                       allocations={activeItem.printerAllocations}
-
                       availablePrinters={printers.map(p => ({
                         id: p.id,
                         name: p.name || p.id,
@@ -2413,7 +2938,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                           <span>ສະຫຼຸບຕົ້ນທຶນການພິມ & ໝຶກ ({activeItem.name})</span>
                         </span>
                         <span className="px-2.5 py-0.5 bg-purple-100 text-purple-900 rounded-md font-bold font-sans">
-                          {activeItem.printerAllocations.length || 1} ເຄື່ອງພິມ
+                          {activeItem.printerAllocations?.length || 1} ເຄື່ອງພິມ
                         </span>
                       </div>
                       
@@ -2423,7 +2948,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                           <div className="text-right">
                             <span className="font-sans font-bold text-slate-900">{formatCurrency(activeCalc.inkCost)}</span>
                             <span className="text-[10px] text-slate-400 block font-sans">
-                              (C:{activeCalc.cyanMl.toFixed(1)}ml M:{activeCalc.magentaMl.toFixed(1)}ml Y:{activeCalc.yellowMl.toFixed(1)}ml K:{activeCalc.blackMl.toFixed(1)}ml)
+                              (C:{activeCalc.cyanMl?.toFixed(1)}ml M:{activeCalc.magentaMl?.toFixed(1)}ml Y:{activeCalc.yellowMl?.toFixed(1)}ml K:{activeCalc.blackMl?.toFixed(1)}ml)
                             </span>
                           </div>
                         </div>
@@ -2444,34 +2969,29 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                       </div>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
+            )}
 
-              {/* PHASE 5: Post-Press Machinery (ວຽກຫຼັງການພິມ) */}
-              <div id="sec-phase5" className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition">
-                <button
-                  type="button"
-                  onClick={() => togglePhase('phase5')}
-                  className="w-full p-3.5 bg-slate-50/80 hover:bg-slate-100/80 flex items-center justify-between transition cursor-pointer"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-6 h-6 rounded-lg bg-amber-600 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">5</span>
-                    <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                      {currentLang === 'lo' ? 'ວຽກຫຼັງພິມ & ເຄື່ອງຈັກ (Post-Press)' : 'Post-Press Machinery'}
-                    </span>
+            {/* TAB CONTENT 3: Post-Press & Consumables */}
+            {activeProductionTab === 'postpress' && (
+              <div className="space-y-5 animate-fade-in">
+                {/* Post-Press Machinery */}
+                <div id="sec-phase5" className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs">
+                  <div className="p-3.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-lg bg-amber-600 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">5</span>
+                      <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                        {currentLang === 'lo' ? 'ວຽກຫຼັງພິມ & ເຄື່ອງຈັກ (Post-Press)' : 'Post-Press Machinery'}
+                      </span>
+                    </div>
                     <span className="text-[11px] font-bold px-2 py-0.5 bg-amber-50 text-amber-800 rounded-lg border border-amber-200 font-sans flex items-center gap-1">
                       <Wrench className="w-3 h-3" />
                       {activeItem.selectedPostPressIds?.length || 0} ວຽກ • {formatCurrency(activeCalc.postPressCost)}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <span className="text-[11px] font-medium hidden sm:inline">{openPhases.phase5 ? 'ພັບເກັບ' : 'ເປີດເບິ່ງ'}</span>
-                    {openPhases.phase5 ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </div>
-                </button>
 
-                {openPhases.phase5 && (
-                  <div className="p-4 sm:p-5 border-t border-slate-100 space-y-3 animate-fade-in">
+                  <div className="p-4 sm:p-5 space-y-3">
                     <div className="flex justify-between items-center text-xs text-slate-500 font-medium pb-1">
                       <span>ກົດເລືອກເຄື່ອງຈັກທີ່ຕ້ອງໃຊ້ສຳລັບງານນີ້:</span>
                       <button
@@ -2532,38 +3052,27 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                       )}
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
 
-              {/* PHASE 6: Finishing Materials & Consumables (ວັດຖຸດິບຫຼັງການພິມ: ລວດເຢັບ/ກາວ/ຟິມ/ຫ່ວງ) */}
-              <div id="sec-phase6" className={`border rounded-2xl overflow-hidden bg-white shadow-xs transition ${
-                activeItem.activeModules?.finishingMaterials ? 'border-emerald-200/80' : 'border-slate-200 opacity-60'
-              }`}>
-                <button
-                  type="button"
-                  onClick={() => togglePhase('phase6')}
-                  className="w-full p-3.5 bg-slate-50/80 hover:bg-slate-100/80 flex items-center justify-between transition cursor-pointer"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">6</span>
-                    <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                      {currentLang === 'lo' ? 'ວັດຖຸດິບຫຼັງພິມ & ອຸປະກອນສິ້ນເປືອງ (Consumables)' : 'Finishing Materials & Consumables'}
-                    </span>
+                {/* Finishing Materials & Consumables */}
+                <div id="sec-phase6" className={`border rounded-2xl overflow-hidden bg-white shadow-xs transition ${
+                  activeItem.activeModules?.finishingMaterials ? 'border-emerald-200/80' : 'border-slate-200 opacity-60'
+                }`}>
+                  <div className="p-3.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">6</span>
+                      <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                        {currentLang === 'lo' ? 'ວັດຖຸດິບຫຼັງພິມ & ອຸປະກອນສິ້ນເປືອງ (Consumables)' : 'Finishing Materials & Consumables'}
+                      </span>
+                    </div>
                     <span className="text-[11px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200 font-sans flex items-center gap-1">
                       <Package className="w-3 h-3" />
                       {(activeItem.finishingMaterials || []).length} ລາຍການ • {formatCurrency(activeCalc.finishingMaterialsCost)}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <span className="text-[11px] font-medium hidden sm:inline">{openPhases.phase6 ? 'ພັບເກັບ' : 'ເປີດເບິ່ງ'}</span>
-                    {openPhases.phase6 ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </div>
-                </button>
 
-                {openPhases.phase6 && (
-                  <div className="p-4 sm:p-5 border-t border-slate-100 space-y-4 animate-fade-in">
-                    
-                    {/* Quick Preset Materials Pills + Search in Inventory Button */}
+                  <div className="p-4 sm:p-5 space-y-4">
+                    {/* Quick Add Consumables Pills */}
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <label className="text-[11px] font-bold text-slate-500 block">
@@ -2575,7 +3084,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                           className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
                         >
                           <Search className="w-3.5 h-3.5" />
-                          <span>ຄົ້ນຫາວັດຖຸດິບໃນຄັງ (Inventory Search)</span>
+                          <span>ຄົ້ນຫາວັດຖຸດິບໃນຄັງ</span>
                         </button>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
@@ -2617,7 +3126,6 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
                           return (
                             <div key={mat.id || mIdx} className="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2.5 shadow-xs">
-                              
                               {/* Row Header: Name & Calculation Mode Switch */}
                               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
                                 <div className="flex-1 min-w-[200px] flex items-center gap-2">
@@ -2680,11 +3188,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
                               {/* Calculation Fields Grid */}
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                                
                                 {isBoxMode ? (
                                   <>
                                     <div className="space-y-0.5">
-                                      <label className="text-[10px] font-bold text-slate-500 block">ລາຄາຕໍ່ກ່ອງ/ແພັກ (LAK):</label>
+                                      <label className="text-[10px] font-bold text-slate-500 block">ລາຄາຕໍ່ກ່ອງ (LAK):</label>
                                       <input
                                         type="number"
                                         min="0"
@@ -2707,14 +3214,14 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                                     </div>
 
                                     <div className="space-y-0.5">
-                                      <label className="text-[10px] font-bold text-slate-500 block">ຈຳນວນໃນ 1 ກ່ອງ:</label>
+                                      <label className="text-[10px] font-bold text-slate-500 block">ຈຳນວນຕໍ່ 1 ກ່ອງ:</label>
                                       <input
                                         type="number"
                                         min="1"
                                         value={mat.unitsPerPackage || 1000}
                                         onChange={(e) => {
                                           const uPkg = Math.max(1, Number(e.target.value));
-                                          const pPrice = Number(mat.packagePrice || 50000);
+                                          const pPrice = Number(mat.packagePrice || 0);
                                           const calculatedUnitCost = Math.round(pPrice / uPkg);
                                           const updated = [...(activeItem.finishingMaterials || [])];
                                           updated[mIdx] = { 
@@ -2724,12 +3231,12 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                                           };
                                           updateActiveItem({ finishingMaterials: updated });
                                         }}
-                                        className="w-full px-2 py-1 border border-slate-200 rounded-lg text-center font-mono font-bold text-xs bg-slate-50"
+                                        className="w-full px-2 py-1 border border-slate-200 rounded-lg text-right font-mono font-bold text-xs bg-slate-50"
                                       />
                                     </div>
                                   </>
                                 ) : (
-                                  <div className="col-span-2 space-y-0.5">
+                                  <div className="space-y-0.5 col-span-2">
                                     <label className="text-[10px] font-bold text-slate-500 block">ຕົ້ນທຶນຕໍ່ໜ່ວຍ (LAK/Unit):</label>
                                     <input
                                       type="number"
@@ -2768,7 +3275,6 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                                     {formatCurrency(totalMatCost)}
                                   </span>
                                 </div>
-
                               </div>
                             </div>
                           );
@@ -2782,109 +3288,872 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                       className="px-3 py-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>{currentLang === 'lo' ? '+ ເພີ່ມວັດຖຸດິບໃໝ່' : '+ Add Custom Material'}</span>
+                      <span>{currentLang === 'lo' ? 'ເພີ່ມວັດຖຸດິບໃໝ່' : 'Add Custom Material'}</span>
                     </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* FUNCTION-BY-FUNCTION DETAILED FINANCIAL BREAKDOWN (ສະຫຼຸບຕົ້ນທຶນແຕ່ລະຟັງຊັນຍ່ອຍ) */}
+            {(() => {
+              const activePostPressNames = (activeItem.selectedPostPressIds || [])
+                .map(id => equipment.find(e => e.id === id)?.name)
+                .filter(Boolean);
+              const activeMatNames = (activeItem.finishingMaterials || [])
+                .map(m => m.name)
+                .filter(Boolean);
+
+              return (
+                <div className="p-4 sm:p-5 bg-gradient-to-br from-slate-50 to-indigo-50/30 border border-slate-200/90 rounded-2xl space-y-3.5 mt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/70 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold">
+                        <Calculator className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                          {currentLang === 'lo' ? `ສະຫຼຸບຕົ້ນທຶນແຍກຕາມຟັງຊັນ #${activeItemIndex + 1} (${activeItem.name || 'ສິນຄ້າ'})` : `Function-by-Function Cost Breakdown #${activeItemIndex + 1}`}
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-medium block">
+                          {activeItem.printVolume || 1} {activeItem.unitName || 'ຊຸດ'} • {activeItem.pagesPerBook || 1} ໜ້າ • {activeItem.jobSizePreset || 'A4'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-500 font-sans">
+                        ຕົ້ນທຶນຜະລິດລວມ:
+                      </span>
+                      <span className="font-mono font-black text-indigo-700 text-sm">
+                        {formatCurrency(activeCalc.netCost || 0)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Function Breakdown Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs">
+                    {/* 1. Paper Function */}
+                    <div className="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1 shadow-2xs">
+                      <div className="flex justify-between items-center text-slate-600 font-bold">
+                        <span className="flex items-center gap-1 text-sky-700">
+                          <FileText className="w-3.5 h-3.5 text-sky-500" />
+                          <span>1. ຕົ້ນທຶນເຈ້ຍ (Paper)</span>
+                        </span>
+                        <span className="font-mono font-black text-slate-900 text-xs">
+                          {formatCurrency(activeCalc.paperCost || 0)}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-medium truncate">
+                        {activeCalc.totalInnerSheets || 0} ແຜ່ນ {activeItem.includeCover ? `(ປົກ: ${formatCurrency(activeCalc.coverPaperCost || 0)})` : ''}
+                      </p>
+                    </div>
+
+                    {/* 2. Ink Function */}
+                    <div className="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1 shadow-2xs">
+                      <div className="flex justify-between items-center text-slate-600 font-bold">
+                        <span className="flex items-center gap-1 text-pink-700">
+                          <Palette className="w-3.5 h-3.5 text-pink-500" />
+                          <span>2. ຕົ້ນທຶນໝຶກພິມ (Ink)</span>
+                        </span>
+                        <span className="font-mono font-black text-slate-900 text-xs">
+                          {formatCurrency(activeCalc.inkCost || 0)}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-medium font-mono truncate">
+                        C:{activeCalc.cyanMl?.toFixed(1) || '0.0'}ml M:{activeCalc.magentaMl?.toFixed(1) || '0.0'}ml Y:{activeCalc.yellowMl?.toFixed(1) || '0.0'}ml K:{activeCalc.blackMl?.toFixed(1) || '0.0'}ml
+                      </p>
+                    </div>
+
+                    {/* 3. Printer & Electricity Function */}
+                    <div className="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1 shadow-2xs">
+                      <div className="flex justify-between items-center text-slate-600 font-bold">
+                        <span className="flex items-center gap-1 text-purple-700">
+                          <Printer className="w-3.5 h-3.5 text-purple-500" />
+                          <span>3. ຈັກພິມ & ໄຟຟ້າ (Machine)</span>
+                        </span>
+                        <span className="font-mono font-black text-slate-900 text-xs">
+                          {formatCurrency(activeCalc.machineOverhead || ((activeCalc.machDepr || 0) + (activeCalc.electricityCost || 0)))}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-medium truncate">
+                        ຄ່າເສື່ອມ {formatCurrency(activeCalc.machDepr || 0)} + ໄຟຟ້າ {formatCurrency(activeCalc.electricityCost || 0)}
+                      </p>
+                    </div>
+
+                    {/* 4. Post-Press Machinery Function */}
+                    <div className="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1 shadow-2xs">
+                      <div className="flex justify-between items-center text-slate-600 font-bold">
+                        <span className="flex items-center gap-1 text-rose-700">
+                          <Scissors className="w-3.5 h-3.5 text-rose-500" />
+                          <span>4. ວຽກຫຼັງພິມ (Post-Press)</span>
+                        </span>
+                        <span className="font-mono font-black text-slate-900 text-xs">
+                          {formatCurrency(activeCalc.postPressCost || 0)}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-medium truncate">
+                        {activePostPressNames.join(', ') || 'ບໍ່ມີເຄື່ອງຫຼັງພິມ'}
+                      </p>
+                    </div>
+
+                    {/* 5. Finishing Consumables Function */}
+                    <div className="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1 shadow-2xs">
+                      <div className="flex justify-between items-center text-slate-600 font-bold">
+                        <span className="flex items-center gap-1 text-emerald-700">
+                          <Package className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>5. ວັດຖຸດິບເສີມ (Consumables)</span>
+                        </span>
+                        <span className="font-mono font-black text-slate-900 text-xs">
+                          {formatCurrency(activeCalc.finishingMaterialsCost || 0)}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-medium truncate">
+                        {activeMatNames.join(', ') || 'ບໍ່ມີວັດຖຸດິບເສີມ'}
+                      </p>
+                    </div>
+
+                    {/* 6. Pricing Summary (Unit Price & Total Line) */}
+                    <div className="p-3 bg-emerald-50/90 rounded-xl border border-emerald-200 space-y-1 shadow-2xs">
+                      <div className="flex justify-between items-center text-emerald-900 font-bold">
+                        <span>ລາຄາຂາຍ/ຊຸດ:</span>
+                        <span className="font-mono font-black text-emerald-800 text-xs">
+                          {formatCurrency(activeCalc.unitPrice || 0)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-emerald-950 font-black pt-0.5 border-t border-emerald-200 text-xs">
+                        <span>ລວມຍອດຂາຍ:</span>
+                        <span className="font-mono text-emerald-900">
+                          {formatCurrency((activeCalc.unitPrice || 0) * (Number(activeItem.printVolume) || 1))}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Navigation Buttons: Back to Customer, Next to Summary */}
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setWizardStep('intake');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>{currentLang === 'lo' ? 'ຍ້ອນກັບ: ຂໍ້ມູນລູກຄ້າ' : 'Back: Customer & Items'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setWizardStep('summary');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="px-6 py-3 bg-gradient-to-r from-primary-navy to-indigo-700 hover:from-primary-navy/90 hover:to-indigo-600 text-white rounded-2xl text-xs font-black flex items-center gap-2 transition active:scale-95 cursor-pointer shadow-md shadow-indigo-600/20"
+              >
+                <span>{currentLang === 'lo' ? 'ຕໍ່ໄປ: ສະຫຼຸບຕົ້ນທຶນ & ອອກໃບສະເໜີລາຄາ' : 'Next: Summary & Quotation'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    )}
+
+      {/* ========================================================================= */}
+      {/* STEP 3: FINAL COMMERCIAL SUMMARY & OFFICIAL QUOTATION                      */}
+      {/* ========================================================================= */}
+      {wizardStep === 'summary' && (
+        <div className="space-y-6 animate-fade-in print:hidden">
+          
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            
+            {/* ================================================================= */}
+            {/* LEFT COLUMN: COMMERCIAL COST & MARGIN INPUTS (6 Cols / 50%)       */}
+            {/* ================================================================= */}
+            <div className="lg:col-span-6 xl:col-span-6 space-y-4">
+              
+              {/* Card 1: ຄ່າແຮງງານ & ຄ່າກຽມເຄື່ອງ (Labor & Machine Setup) */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                      <Zap className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                        {currentLang === 'lo' ? 'ຄ່າແຮງງານ & ຄ່າກຽມເຄື່ອງ' : 'Labor & Machine Setup'}
+                      </h4>
+                      <p className="text-[10px] text-slate-400 font-medium">
+                        {currentLang === 'lo' ? 'ກຳນົດຄ່າແຮງງານຊ່າງ ແລະ ຄ່າຕັ້ງເຄື່ອງຈັກ' : 'Configure labor rates and machine setup fees.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Mode switcher: % vs Manual */}
+                  <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 gap-1 text-[10px] font-bold shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => updateActiveItem({ laborMode: 'percent' })}
+                      className={`px-2 py-1 rounded-md transition cursor-pointer ${
+                        (activeItem.laborMode || 'percent') === 'percent'
+                          ? 'bg-blue-600 text-white shadow-xs font-black'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      % ຕົ້ນທຶນ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateActiveItem({ laborMode: 'manual' })}
+                      className={`px-2 py-1 rounded-md transition cursor-pointer ${
+                        (activeItem.laborMode || 'percent') === 'manual'
+                          ? 'bg-blue-600 text-white shadow-xs font-black'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      ກຳນົດ LAK
+                    </button>
+                  </div>
+                </div>
+
+                {/* Labor Input */}
+                {(activeItem.laborMode || 'percent') === 'percent' ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-600 font-bold">ອັດຕາຄ່າແຮງງານ (% ຂອງວັດສະດຸ/ເຄື່ອງຈັກ):</span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={activeItem.laborPercent !== undefined ? activeItem.laborPercent : 15}
+                          onChange={(e) => updateActiveItem({ laborPercent: Math.max(0, Number(e.target.value)) })}
+                          className="w-16 px-2 py-1 bg-white border border-blue-300 rounded-lg text-right font-black font-sans text-blue-950 text-xs shadow-2xs focus:outline-none focus:border-blue-500"
+                        />
+                        <span className="font-bold text-blue-900">%</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: '5% (ເບົາໆ)', val: 5 },
+                        { label: '10% (ມາດຕະຖານ)', val: 10 },
+                        { label: '15% (ແນະນຳ)', val: 15 },
+                        { label: '20% (ງານລະອຽດ)', val: 20 },
+                        { label: '25% (ພຣີມຽມ)', val: 25 },
+                      ].map((chip) => (
+                        <button
+                          key={chip.val}
+                          type="button"
+                          onClick={() => updateActiveItem({ laborPercent: chip.val })}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                            (activeItem.laborPercent ?? 15) === chip.val
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'bg-white text-blue-900 border border-blue-200 hover:bg-blue-100'
+                          }`}
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-600 font-bold">ກຳນົດຄ່າແຮງງານເອງ (LAK):</span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          step="1000"
+                          min="0"
+                          value={activeItem.laborCostManual || 50000}
+                          onChange={(e) => updateActiveItem({ laborCostManual: Math.max(0, Number(e.target.value)) })}
+                          className="w-28 px-2 py-1 bg-white border border-blue-300 rounded-lg text-right font-black font-mono text-blue-950 text-xs shadow-2xs focus:outline-none focus:border-blue-500"
+                        />
+                        <span className="font-bold text-blue-900">₭</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[10000, 25000, 50000, 100000, 200000].map((cash) => (
+                        <button
+                          key={cash}
+                          type="button"
+                          onClick={() => updateActiveItem({ laborCostManual: cash })}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                            (activeItem.laborCostManual || 50000) === cash
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {cash.toLocaleString()} ₭
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Setup fee */}
+                <div className="pt-3 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-700 font-bold flex items-center gap-1">
+                      <Wrench className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>ຄ່າກຽມເຄື່ອງ & ຕັ້ງງານ (Setup Fee):</span>
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        step="1000"
+                        min="0"
+                        value={quotationSetupFee}
+                        onChange={(e) => setQuotationSetupFee(Math.max(0, Number(e.target.value)))}
+                        className="w-28 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-mono font-bold text-xs"
+                      />
+                      <span className="font-bold text-slate-600">₭</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[0, 10000, 20000, 50000, 100000].map((fee) => (
+                      <button
+                        key={fee}
+                        type="button"
+                        onClick={() => setQuotationSetupFee(fee)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
+                          quotationSetupFee === fee
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {fee === 0 ? 'ບໍ່ຄິດ' : `${fee.toLocaleString()} ₭`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: ກ່ອງບັນຈຸພັນ & ຂົນສົ່ງ (Packaging & Logistics) */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-3.5">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                  <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                    <Package className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                      {currentLang === 'lo' ? 'ກ່ອງບັນຈຸພັນ & ຂົນສົ່ງ' : 'Packaging & Shipping'}
+                    </h4>
+                    <p className="text-[10px] text-slate-400 font-medium">
+                      {currentLang === 'lo' ? 'ຄ່າກ່ອງບັນຈຸສິນຄ້າ ແລະ ຄ່າຈັດສົ່ງເຖິງລູກຄ້າ' : 'Set box material cost and logistics.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1.5">
+                    <span className="text-slate-600 font-bold block">ຄ່າກ່ອງ / ວັດສະດຸຫຸ້ມຫໍ່:</span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1000"
+                        value={quotationPackagingCost}
+                        onChange={(e) => setQuotationPackagingCost(Math.max(0, Number(e.target.value)))}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-right font-mono font-bold text-xs"
+                      />
+                      <span className="font-bold text-slate-600">₭</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1.5">
+                    <span className="text-slate-600 font-bold block flex items-center gap-1">
+                      <Truck className="w-3.5 h-3.5 text-slate-500" />
+                      <span>ຄ່າຈັດສົ່ງ (Courier Fee):</span>
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        step="5000"
+                        value={shippingFee}
+                        onChange={(e) => setShippingFee(Math.max(0, Number(e.target.value)))}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-right font-mono font-bold text-xs"
+                      />
+                      <span className="font-bold text-slate-600">₭</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: ອັດຕາກຳໄລ & ສ່ວນຫຼຸດ (Profit Margin & Discount) */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                      <Sliders className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                        {currentLang === 'lo' ? 'ອັດຕາກຳໄລ & ສ່ວນຫຼຸດ' : 'Profit Margin & Discount'}
+                      </h4>
+                      <p className="text-[10px] text-slate-400 font-medium">
+                        {currentLang === 'lo' ? 'ປັບອັດຕາກຳໄລລວມ ແລະ ສ່ວນຫຼຸດພິເສດສຳລັບລູກຄ້າ' : 'Set overall target margin and customer discount.'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`text-xs font-black px-2.5 py-1 rounded-xl font-sans ${
+                    quotationProfitMargin >= 35 ? 'bg-emerald-100 text-emerald-800' : quotationProfitMargin >= 25 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                  }`}>
+                    {quotationProfitMargin}% Margin
+                  </span>
+                </div>
+
+                {/* Profit Margin slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600 font-bold">ອັດຕາກຳໄລລວມ (Target Profit Margin):</span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="90"
+                        value={quotationProfitMargin}
+                        onChange={(e) => setQuotationProfitMargin(Math.max(0, Math.min(95, Number(e.target.value))))}
+                        className="w-16 px-2 py-1 bg-white border border-emerald-300 rounded-lg text-right font-black font-sans text-emerald-950 text-xs shadow-2xs focus:outline-none focus:border-emerald-500"
+                      />
+                      <span className="font-bold text-emerald-900">%</span>
+                    </div>
+                  </div>
+
+                  <input
+                    type="range"
+                    min="0"
+                    max="80"
+                    step="1"
+                    value={quotationProfitMargin}
+                    onChange={(e) => setQuotationProfitMargin(Number(e.target.value))}
+                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                  />
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {[20, 30, 40, 50, 60].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setQuotationProfitMargin(m)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                          quotationProfitMargin === m
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-slate-50 text-slate-700 border border-slate-200 hover:bg-emerald-50'
+                        }`}
+                      >
+                        {m}%
+                      </button>
+                    ))}
+                  </div>
+
+                  {quotationProfitMargin < 25 && (
+                    <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-rose-800 text-[11px]">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>ອັດຕາກຳໄລຕ່ຳກວ່າ 25% ຕ້ອງໄດ້ຮັບການອະນຸມັດພິເສດຈາກຫົວໜ້າ</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Discount */}
+                <div className="pt-3 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600 font-bold flex items-center gap-1">
+                      <Tag className="w-3.5 h-3.5 text-amber-500" />
+                      <span>ສ່ວນຫຼຸດລູກຄ້າລວມ (Discount):</span>
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="50"
+                        value={quotationDiscountPercent}
+                        onChange={(e) => setQuotationDiscountPercent(Math.max(0, Math.min(50, Number(e.target.value))))}
+                        className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black font-sans text-slate-800 text-xs shadow-2xs focus:outline-none focus:border-amber-500"
+                      />
+                      <span className="font-bold text-slate-600">%</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {[0, 5, 10, 15, 20].map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setQuotationDiscountPercent(d)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                          quotationDiscountPercent === d
+                            ? 'bg-amber-500 text-white shadow-xs font-black'
+                            : 'bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {d}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 4: ພາສີມູນຄ່າເພີ່ມ (Tax / VAT) */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                    {currentLang === 'lo' ? 'ພາສີມູນຄ່າເພີ່ມ (VAT / Tax)' : 'Value Added Tax (VAT)'}
+                  </span>
+                  <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 gap-1 text-[10px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setTaxEnabled(false)}
+                      className={`px-2 py-1 rounded-md transition cursor-pointer ${
+                        !taxEnabled
+                          ? 'bg-primary-navy text-white font-black'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      ບໍ່ຄິດ (0%)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTaxEnabled(true);
+                        setTaxMode('percent');
+                      }}
+                      className={`px-2 py-1 rounded-md transition cursor-pointer ${
+                        taxEnabled && taxMode === 'percent'
+                          ? 'bg-primary-navy text-white font-black'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      ຄິດ % VAT
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTaxEnabled(true);
+                        setTaxMode('override');
+                      }}
+                      className={`px-2 py-1 rounded-md transition cursor-pointer ${
+                        taxEnabled && taxMode === 'override'
+                          ? 'bg-primary-navy text-white font-black'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      ກຳນົດເອງ LAK
+                    </button>
+                  </div>
+                </div>
+
+                {taxEnabled && taxMode === 'percent' && (
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    <span className="text-slate-600 font-bold">ອັດຕາພາສີ (Tax Rate %):</span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="30"
+                        value={taxRate}
+                        onChange={(e) => setTaxRate(Math.max(0, Number(e.target.value)))}
+                        className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black font-sans text-xs"
+                      />
+                      <span className="font-bold text-slate-600">%</span>
+                    </div>
+                  </div>
+                )}
+
+                {taxEnabled && taxMode === 'override' && (
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    <span className="text-slate-600 font-bold">ຍອດພາສີກຳນົດເອງ (LAK):</span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1000"
+                        value={taxOverrideAmount}
+                        onChange={(e) => setTaxOverrideAmount(Math.max(0, Number(e.target.value)))}
+                        className="w-28 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-mono font-bold text-xs"
+                      />
+                      <span className="font-bold text-slate-600">₭</span>
+                    </div>
                   </div>
                 )}
               </div>
 
             </div>
-          </div>
 
-          {/* Right Column: Sticky Internal Cost Studio, Profit Margin & Pricing Dashboard */}
-          <div className="lg:col-span-5 lg:sticky lg:top-[5.5rem] space-y-5 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto scrollbar-thin min-w-0 pr-0.5">
-            <QuotationCostSummarySidebar
-              items={items}
-              calculatedItems={calculatedItems}
-              activeItemIndex={activeItemIndex}
-              setActiveItemIndex={setActiveItemIndex}
-              activeItem={activeItem}
-              updateActiveItem={updateActiveItem}
-              selectedCustomerId={selectedCustomerId}
-              grandTotalUnits={grandTotalUnits}
-              grandNetCost={grandNetCost}
-              grandNetProfit={grandNetProfit}
-              grandProfitMargin={grandProfitMargin}
-              grandPaperCost={grandPaperCost}
-              grandInkCost={grandInkCost}
-              grandMachCost={grandMachCost}
-              grandPostPressCost={grandPostPressCost}
-              grandFinishingCost={grandFinishingCost}
-              grandLaborCost={grandLaborCost}
-              grandPackagingCost={grandPackagingCost}
-              finalGrandTotal={finalGrandTotal}
-              quotationLaborMode={activeItem.laborMode || 'percent'}
-              setQuotationLaborMode={(mode) => updateActiveItem({ laborMode: mode })}
-              quotationLaborPercent={activeItem.laborPercent !== undefined ? activeItem.laborPercent : 15}
-              setQuotationLaborPercent={(pct) => updateActiveItem({ laborPercent: pct })}
-              quotationLaborCostManual={activeItem.laborCostManual || 50000}
-              setQuotationLaborCostManual={(cash) => updateActiveItem({ laborCostManual: cash })}
-              quotationProfitMargin={quotationProfitMargin}
-              setQuotationProfitMargin={setQuotationProfitMargin}
-              quotationDiscountPercent={quotationDiscountPercent}
-              setQuotationDiscountPercent={setQuotationDiscountPercent}
-              grandBaseSellingPrice={grandBaseSellingPrice}
-              grandDiscountAmount={grandDiscountAmount}
-              grandSubtotal={grandSubtotal}
-              quotationSetupFee={quotationSetupFee}
-              setQuotationSetupFee={setQuotationSetupFee}
-              quotationPackagingCost={quotationPackagingCost}
-              setQuotationPackagingCost={setQuotationPackagingCost}
-              taxMode={taxMode}
-              setTaxMode={setTaxMode}
-              taxRate={taxRate}
-              setTaxRate={setTaxRate}
-              shippingMethod={shippingMethod}
-              setShippingMethod={setShippingMethod}
-              shippingFee={shippingFee}
-              setShippingFee={setShippingFee}
-              currentLang={currentLang}
-              formatCurrency={formatCurrency}
-              onSaveDraft={handleSaveDraft}
-              onProceedToQuote={() => {
-                setCurrentStep('quote');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-            />
-          </div>
+            {/* ================================================================= */}
+            {/* RIGHT COLUMN: GRAND COST BREAKDOWN, CURRENCY & ACTIONS (6 Cols)   */}
+            {/* ================================================================= */}
+            <div className="lg:col-span-6 xl:col-span-6 space-y-4">
+              
+              {/* Currency Selector Bar at Top of Right Column */}
+              <div className="bg-white p-3.5 rounded-3xl border border-slate-200 shadow-xs flex items-center justify-between gap-3">
+                <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                  <Coins className="w-4 h-4 text-amber-500" />
+                  <span>{currentLang === 'lo' ? 'ເລືອກສະກຸນເງິນໃບສະເໜີ:' : 'Quotation Currency:'}</span>
+                </span>
+                
+                <div className="flex items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-xl">
+                  {['LAK', 'THB', 'USD'].map(code => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => setCurrency(code)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                        currency === code
+                          ? 'bg-primary-navy text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {code === 'LAK' ? '₭' : code === 'THB' ? '฿' : '$'} {code}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
+              {/* Grand Total Hero Card */}
+              <div className="bg-gradient-to-br from-primary-navy to-slate-900 text-white p-6 rounded-3xl space-y-4 shadow-md">
+                <div className="flex justify-between items-start">
+                  <span className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                    <Calculator className="w-4 h-4 text-amber-400" />
+                    <span>ລາຄາຂາຍລວມທັງໝົດ (Grand Total):</span>
+                  </span>
+                  <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${
+                    grandProfitMargin >= 25 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/30 text-rose-300'
+                  }`}>
+                    + {formatCurrency(grandNetProfit)} ({grandProfitMargin.toFixed(1)}%)
+                  </span>
+                </div>
+
+                <div className="text-3xl sm:text-4xl font-black font-sans text-white tracking-tight">
+                  {formatCurrency(finalGrandTotal)}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/10 text-xs font-sans">
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">ຕົ້ນທຶນລວມ (Net Cost):</span>
+                    <span className="font-bold text-slate-100 text-sm">{formatCurrency(grandNetCost)}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-slate-400 block text-[11px]">ກຳໄລສຸດທິ (Net Profit):</span>
+                    <span className="font-bold text-emerald-400 text-sm">{formatCurrency(grandNetProfit)}</span>
+                  </div>
+                </div>
+
+                {/* Cost Composition Multi-Segment Bar */}
+                {(() => {
+                  const rawPaper = Math.max(0, grandPaperCost || 0);
+                  const rawInk = Math.max(0, grandInkCost || 0);
+                  const rawMach = Math.max(0, grandMachCost || 0);
+                  const rawPostPress = Math.max(0, grandPostPressCost || 0);
+                  const rawFinishing = Math.max(0, grandFinishingCost || 0);
+                  const rawLabor = Math.max(0, grandLaborCost || 0);
+                  const rawPkgSetup = Math.max(0, (grandPackagingCost || 0) + (quotationSetupFee || 0));
+                  const rawProfit = Math.max(0, grandNetProfit || 0);
+
+                  const totalVal = rawPaper + rawInk + rawMach + rawPostPress + rawFinishing + rawLabor + rawPkgSetup + rawProfit;
+                  if (totalVal <= 0) return null;
+
+                  return (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="w-full bg-white/20 h-2.5 rounded-full overflow-hidden flex">
+                        {rawPaper > 0 && <div style={{ width: `${(rawPaper / totalVal) * 100}%` }} className="bg-sky-400 h-full" title="Paper" />}
+                        {rawInk > 0 && <div style={{ width: `${(rawInk / totalVal) * 100}%` }} className="bg-purple-400 h-full" title="Ink" />}
+                        {rawMach > 0 && <div style={{ width: `${(rawMach / totalVal) * 100}%` }} className="bg-amber-400 h-full" title="Machine" />}
+                        {rawPostPress > 0 && <div style={{ width: `${(rawPostPress / totalVal) * 100}%` }} className="bg-rose-400 h-full" title="Post-press" />}
+                        {rawFinishing > 0 && <div style={{ width: `${(rawFinishing / totalVal) * 100}%` }} className="bg-emerald-400 h-full" title="Finishing" />}
+                        {rawLabor > 0 && <div style={{ width: `${(rawLabor / totalVal) * 100}%` }} className="bg-blue-400 h-full" title="Labor" />}
+                        {rawProfit > 0 && <div style={{ width: `${(rawProfit / totalVal) * 100}%` }} className="bg-emerald-300 h-full" title="Profit" />}
+                      </div>
+                      <div className="flex justify-between text-[10px] text-slate-400">
+                        <span>{items.length} ລາຍການສິນຄ້າ</span>
+                        <span>{grandTotalUnits.toLocaleString()} ໜ່ວຍລວມ</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* 8-Category Cost Breakdown */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-primary-navy" />
+                    <span>{currentLang === 'lo' ? 'ລາຍລະອຽດຕົ້ນທຶນ 8 ໝວດ' : '8-Category Cost Breakdown'}</span>
+                  </h4>
+                  <span className="text-xs font-mono font-bold text-slate-500">
+                    {formatCurrency(grandNetCost)}
+                  </span>
+                </div>
+
+                <div className="divide-y divide-slate-100 text-xs">
+                  {[
+                    { label: '1. ເຈ້ຍ (Paper)', val: grandPaperCost, dot: 'bg-sky-500' },
+                    { label: '2. ນ້ຳມຶກ (Ink)', val: grandInkCost, dot: 'bg-purple-500' },
+                    { label: '3. ຈັກພິມ & ໄຟຟ້າ (Machine & Power)', val: grandMachCost, dot: 'bg-amber-500' },
+                    { label: '4. ງານຫຼັງພິມ (Post-Press Machinery)', val: grandPostPressCost, dot: 'bg-rose-500' },
+                    { label: '5. ວັດຖຸດິບເສີມ (Finishing Supplies)', val: grandFinishingCost, dot: 'bg-emerald-500' },
+                    { label: '6. ຄ່າແຮງງານຊ່າງ (Labor Cost)', val: grandLaborCost, dot: 'bg-blue-500' },
+                    { label: '7. ຄ່າກຽມເຄື່ອງ (Machine Setup)', val: quotationSetupFee, dot: 'bg-indigo-500' },
+                    { label: '8. ກ່ອງ & ຂົນສົ່ງ (Packaging & Logistics)', val: grandPackagingCost + shippingFee, dot: 'bg-slate-500' },
+                  ].map((row, rIdx) => (
+                    <div key={rIdx} className="flex justify-between items-center py-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${row.dot}`} />
+                        <span className="text-slate-700 font-medium">{row.label}</span>
+                      </div>
+                      <span className="font-mono font-bold text-slate-800">{formatCurrency(row.val)}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Subtotal & Final Summary strip */}
+                <div className="pt-3 border-t border-slate-200/80 space-y-1.5 text-xs bg-slate-50/80 p-3 rounded-2xl">
+                  <div className="flex justify-between text-slate-600">
+                    <span>ລາຄາຂາຍກ່ອນຫຼຸດ:</span>
+                    <span className="font-mono font-bold">{formatCurrency(grandBaseSellingPrice)}</span>
+                  </div>
+                  {grandDiscountAmount > 0 && (
+                    <div className="flex justify-between text-amber-600 font-semibold">
+                      <span>ສ່ວນຫຼຸດ ({quotationDiscountPercent}%):</span>
+                      <span className="font-mono font-bold">- {formatCurrency(grandDiscountAmount)}</span>
+                    </div>
+                  )}
+                  {taxAmount > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>ພາສີ ({taxRate}%):</span>
+                      <span className="font-mono font-bold">+ {formatCurrency(taxAmount)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-slate-900 font-black border-t border-slate-200 pt-2 text-sm">
+                    <span>ຍອດລວມສຸດທິ:</span>
+                    <span className="font-mono text-emerald-700 font-black">{formatCurrency(finalGrandTotal)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons: Preview Modal + Save + Confirm */}
+              <div className="space-y-2.5 pt-1">
+                {/* Primary Button: Preview Modal */}
+                <button
+                  type="button"
+                  onClick={() => setIsCustomerModalOpen(true)}
+                  className="w-full py-3.5 bg-gradient-to-r from-accent-sky to-sky-600 hover:from-sky-500 hover:to-sky-700 text-white rounded-2xl font-black text-sm transition shadow-md shadow-sky-500/20 active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Eye className="w-4 h-4" />
+                  <span>{currentLang === 'lo' ? 'ເບິ່ງຕົວຢ່າງໃບສະເໜີລາຄາ (Preview Quotation)' : 'Preview Quotation'}</span>
+                </button>
+
+                {/* Secondary Buttons Row */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleSaveQuotation}
+                    className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-98"
+                  >
+                    <Save className="w-4 h-4 text-slate-600" />
+                    <span>{currentLang === 'lo' ? 'ບັນທຶກໃບສະເໜີ' : 'Save Quotation'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleConfirmOrder}
+                    className="py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm active:scale-98"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{currentLang === 'lo' ? 'ຢືນຢັນສັ່ງຜະລິດ' : 'Confirm Order'}</span>
+                  </button>
+                </div>
+
+                {/* Back Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWizardStep('specs');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="w-full py-2 text-slate-400 hover:text-slate-700 text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>{currentLang === 'lo' ? 'ຍ້ອນກັບ: ກຳນົດສະເປັກ' : 'Back to Specs'}</span>
+                </button>
+              </div>
+
+            </div>
+
+          </div>
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* STEP 2: OFFICIAL CUSTOMER QUOTATION DOCUMENT & ACTIONS                 */}
-      {/* ========================================================================= */}
-      {currentStep === 'quote' && (
-        <QuotationCustomerView
-          items={items}
-          calculatedItems={calculatedItems}
-          selectedCustomerId={selectedCustomerId}
-          customerPhone={customerPhone}
-          customerAddress={customerAddress}
-          customers={customers}
-          quotationExpiry={quotationExpiry}
-          paymentTerms={paymentTerms}
-          shippingMethod={shippingMethod}
-          shippingFee={shippingFee}
-          quotationNote={quotationNote}
-          grandBaseSellingPrice={grandBaseSellingPrice}
-          grandDiscountAmount={grandDiscountAmount}
-          quotationDiscountPercent={quotationDiscountPercent}
-          grandSubtotal={grandSubtotal}
-          taxEnabled={taxEnabled}
-          taxMode={taxMode}
-          taxRate={taxRate}
-          taxAmount={taxAmount}
-          finalGrandTotal={finalGrandTotal}
-          currentLang={currentLang}
-          formatCurrency={formatCurrency}
-          onBackToCalc={() => setCurrentStep('calc')}
-          onSaveQuotation={handleSaveQuotation}
-          onShareQuotation={() => setIsShareModalOpen(true)}
-          onExportPDF={handleExportPDF}
-          onConfirmOrder={handleConfirmOrder}
-        />
-      )}
+      {/* CUSTOMER QUOTATION POP-UP MODAL */}
+      <QuotationCustomerModal
+        isOpen={isCustomerModalOpen}
+        onClose={() => setIsCustomerModalOpen(false)}
+        items={items}
+        calculatedItems={calculatedItems}
+        inventory={inventory}
+        equipment={equipment}
+        selectedCustomerId={selectedCustomerId}
+        customerPhone={customerPhone}
+        customerAddress={customerAddress}
+        customers={customers}
+        quotationExpiry={quotationExpiry}
+        paymentTerms={paymentTerms}
+        shippingMethod={shippingMethod}
+        shippingFee={shippingFee}
+        quotationNote={quotationNote}
+        grandBaseSellingPrice={grandBaseSellingPrice}
+        grandDiscountAmount={grandDiscountAmount}
+        quotationDiscountPercent={quotationDiscountPercent}
+        grandSubtotal={grandSubtotal}
+        taxEnabled={taxEnabled}
+        taxMode={taxMode}
+        taxRate={taxRate}
+        taxAmount={taxAmount}
+        finalGrandTotal={finalGrandTotal}
+        currentLang={currentLang}
+        formatCurrency={formatCurrency}
+        onConfirmOrder={handleConfirmOrder}
+      />
+
+      {/* ARTWORK PREFLIGHT & COLOR PREVIEW MODAL */}
+      <ArtworkColorPreviewModal
+        isOpen={!!previewColorItem}
+        onClose={() => setPreviewColorItem(null)}
+        item={previewColorItem}
+        onSyncColorsToPrinter={handleSyncColorsToActivePrinter}
+        onUpdateArtwork={(data) => {
+          updateActiveItem({
+            artworkUrl: data.artworkUrl,
+            fileName: data.fileName,
+            mimeType: data.mimeType,
+            fileSize: data.fileSize,
+          });
+          if (previewColorItem) {
+            setPreviewColorItem({
+              ...previewColorItem,
+              artworkUrl: data.artworkUrl,
+              fileName: data.fileName,
+              mimeType: data.mimeType,
+              fileSize: data.fileSize,
+            });
+          }
+          if (showToast) showToast('ອັບໂຫຼດໄຟລ໌ອາດເວິກສຳເລັດ!', 'success');
+        }}
+        currentLang={currentLang}
+      />
+
+      {/* CUSTOMER CATEGORY MANAGEMENT MODAL */}
+      <CustomerCategoryModal
+        isOpen={isCustomerCategoryModalOpen}
+        onClose={() => setIsCustomerCategoryModalOpen(false)}
+      />
 
       {/* QUOTATION HISTORY & SAVED TEMPLATES MODAL */}
       <QuotationHistoryModal

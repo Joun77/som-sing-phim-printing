@@ -129,7 +129,17 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
   const handleToggleDoubleSided = (uniquePrinterId: string) => {
     const updated = allocations.map((a) => {
       if (a.printer_id === uniquePrinterId) {
-        return { ...a, is_double_sided: !a.is_double_sided };
+        const nextDuplex = !a.is_double_sided;
+        let newPages = a.allocated_pages;
+        if (allocations.length === 1) {
+          newPages = nextDuplex ? Math.ceil(a.allocated_pages / 2) : a.allocated_pages * 2;
+        }
+        return {
+          ...a,
+          is_double_sided: nextDuplex,
+          allocated_pages: newPages,
+          subtotal_cost: newPages * (a.cost_per_page || 0)
+        };
       }
       return a;
     });

@@ -42,6 +42,7 @@ import {
   Hash,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   UploadCloud,
   Loader2
 } from 'lucide-react';
@@ -878,15 +879,17 @@ export default function ItemSpecConfigurator({
         {/* Left Column: Phases 1 to 6 Modular Sections */}
         <div className="lg:col-span-8 space-y-4">
 
-          {/* Top Templates & Modules Bar (Exact Copy of QuotationManager) */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+          {/* Top Templates & Modules Bar (Refined Modern UI/UX) */}
+          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+            
+            {/* Header with Template Actions */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
               <div>
                 <h4 className="font-black text-sm text-slate-800 flex items-center gap-2">
-                  <Bookmark className="w-4 h-4 text-accent-sky" />
+                  <Bookmark className="w-4 h-4 text-sky-600" />
                   <span>ແມ່ແບບສິນຄ້າ & ໂມດູນຄຳນວນ (Product Templates & Modules)</span>
                 </h4>
-                <p className="text-[11px] font-bold text-slate-400 mt-0.5">
+                <p className="text-[11px] font-medium text-slate-500 mt-0.5">
                   ເລືອກແມ່ແບບສຳເລັດຮູບ, ບັນທຶກແມ່ແບບໃໝ່ ຫຼື ເປີດ/ປິດ ໂມດູນຕົ້ນທຶນ
                 </p>
               </div>
@@ -895,16 +898,16 @@ export default function ItemSpecConfigurator({
                 <button
                   type="button"
                   onClick={() => setIsTemplateModalOpen(true)}
-                  className="px-3.5 py-2 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+                  className="px-3.5 py-2 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95"
                 >
-                  <Bookmark className="w-3.5 h-3.5" />
-                  <span>ເລືອກ & ຈັດການແມ່ແບບ ({allAvailableTemplates.length})</span>
+                  <Bookmark className="w-3.5 h-3.5 text-sky-600" />
+                  <span>ເລືອກແມ່ແບບ ({allAvailableTemplates.length})</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setIsNewTemplateModalOpen(true)}
-                  className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95"
+                  className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95"
                 >
                   <Plus className="w-3.5 h-3.5 text-emerald-400" />
                   <span>ບັນທຶກເປັນແມ່ແບບໃໝ່</span>
@@ -913,23 +916,28 @@ export default function ItemSpecConfigurator({
             </div>
 
             {/* Active Selected Template Badge Bar */}
-            <div className="flex items-center justify-between bg-slate-50 border border-slate-200/80 px-4 py-2.5 rounded-2xl text-xs">
-              <div className="flex items-center gap-2">
-                <Bookmark className="w-4 h-4 text-accent-sky shrink-0" />
-                <span className="text-slate-500 font-bold">ແມ່ແບບທີ່ໃຊ້:</span>
-                <span className="font-black text-primary-navy">
-                  {allAvailableTemplates.find(t => t.id === tempItem.selectedTemplateId)?.nameLao || 
-                   allAvailableTemplates.find(t => t.id === tempItem.selectedTemplateId)?.nameEn || 
-                   'ກຳນົດເອງ (Custom Spec)'}
-                </span>
+            <div className="flex items-center justify-between bg-sky-50/60 border border-sky-200/80 px-4 py-2.5 rounded-2xl text-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-6 h-6 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                  <Bookmark className="w-3.5 h-3.5" />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-500 font-bold">ແມ່ແບບທີ່ໃຊ້:</span>
+                  <span className="font-black text-sky-950">
+                    {allAvailableTemplates.find(t => t.id === tempItem.selectedTemplateId)?.nameLao || 
+                     allAvailableTemplates.find(t => t.id === tempItem.selectedTemplateId)?.nameEn || 
+                     'ກຳນົດເອງ (Custom Spec)'}
+                  </span>
+                </div>
               </div>
 
               <button
                 type="button"
                 onClick={() => setIsTemplateModalOpen(true)}
-                className="text-xs font-black text-accent-sky hover:text-sky-700 transition cursor-pointer flex items-center gap-1"
+                className="text-xs font-black text-sky-700 hover:text-sky-900 bg-white hover:bg-sky-100 px-3 py-1 rounded-xl border border-sky-200 transition cursor-pointer flex items-center gap-1 shadow-2xs"
               >
-                <span>ປ່ຽນແມ່ແບບ →</span>
+                <span>ປ່ຽນແມ່ແບບ</span>
+                <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
@@ -937,24 +945,24 @@ export default function ItemSpecConfigurator({
             <div className="pt-2 border-t border-slate-100 space-y-2">
               <div className="flex justify-between items-center text-[11px] font-bold text-slate-500">
                 <span>ໂມດູນຕົ້ນທຶນ 1-6 (Active Cost Modules):</span>
-                <span className="text-[10px] text-slate-400">1-2 ບັງຄັບໃຊ້ (Fixed), 3-6 ເປີດ/ປິດ ຕາມຕ້ອງການ</span>
+                <span className="text-[10px] text-slate-400 font-medium">1-2 ບັງຄັບໃຊ້ (Fixed), 3-6 ເປີດ/ປິດ ຕາມຕ້ອງການ</span>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {/* Fixed Module 1: Customer Info */}
-                <div className="p-2.5 rounded-xl border border-indigo-200 bg-indigo-50/40 text-slate-900 flex items-center justify-between text-xs font-bold shadow-2xs">
+                <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 flex items-center justify-between text-xs font-bold shadow-2xs">
                   <div className="flex items-center gap-1.5 truncate">
-                    <User className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <User className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                     <span className="truncate text-[11px] font-black">1. ຂໍ້ມູນສິນຄ້າ & ລູກຄ້າ</span>
                   </div>
-                  <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded text-[9px] font-black shrink-0">FIXED</span>
+                  <span className="px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded text-[9px] font-black shrink-0">FIXED</span>
                 </div>
 
                 {/* Fixed Module 2: Production Quantity */}
-                <div className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/40 text-slate-900 flex items-center justify-between text-xs font-bold shadow-2xs">
+                <div className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/50 text-slate-900 flex items-center justify-between text-xs font-bold shadow-2xs">
                   <div className="flex items-center gap-1.5 truncate">
                     <Hash className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span className="truncate text-[11px] font-black">2. ຈຳນວນຜະລິດ</span>
+                    <span className="truncate text-[11px] font-black text-emerald-950">2. ຈຳນວນຜະລິດ</span>
                   </div>
                   <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[9px] font-black shrink-0">FIXED</span>
                 </div>
@@ -974,15 +982,15 @@ export default function ItemSpecConfigurator({
                       onClick={() => handleToggleModule(mod.key)}
                       className={`p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-between ${
                         isActive
-                          ? 'bg-white border-slate-300 text-slate-900 shadow-2xs'
+                          ? 'bg-white border-sky-300 text-slate-900 ring-1 ring-sky-500/20 shadow-2xs'
                           : 'bg-slate-100/70 border-slate-200 text-slate-400 opacity-60'
                       }`}
                     >
                       <div className="flex items-center gap-1.5 truncate">
-                        <mod.icon className="w-3.5 h-3.5 shrink-0" />
+                        <mod.icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-sky-600' : 'text-slate-400'}`} />
                         <span className="truncate text-[11px] font-black">{mod.label}</span>
                       </div>
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${isActive ? 'bg-emerald-500 shadow-xs' : 'bg-slate-300'}`} />
+                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isActive ? 'bg-emerald-500 shadow-xs' : 'bg-slate-300'}`} />
                     </button>
                   );
                 })}

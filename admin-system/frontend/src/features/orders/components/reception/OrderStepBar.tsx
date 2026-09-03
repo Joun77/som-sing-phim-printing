@@ -27,7 +27,7 @@ export const OrderStepBar: React.FC<OrderStepBarProps> = ({
   const steps = [
     {
       num: 1 as const,
-      title: currentLang === 'lo' ? '1. ຮັບອໍເດີ & ປຼູຟໄຟລ໌' : '1. Reception & Proof',
+      title: currentLang === 'lo' ? '1. ຮັບອໍເດີ' : '1. Order Reception',
       desc: currentLang === 'lo' ? 'ກວດສະລິບ & ກວດໄຟລ໌' : 'Slip & Artwork check',
       icon: Clock,
       isDone: step1Ready,
@@ -35,7 +35,7 @@ export const OrderStepBar: React.FC<OrderStepBarProps> = ({
     },
     {
       num: 2 as const,
-      title: currentLang === 'lo' ? '2. ຕິດຕາມການຜະລິດ' : '2. Production Tracker',
+      title: currentLang === 'lo' ? '2. ຂະບວນການຜະລິດ' : '2. Production Process',
       desc: currentLang === 'lo' ? 'ພິມ, ຕັດ & ກວດ QC' : 'Print, Finish & QC',
       icon: Printer,
       isDone: step2Ready,
@@ -43,7 +43,7 @@ export const OrderStepBar: React.FC<OrderStepBarProps> = ({
     },
     {
       num: 3 as const,
-      title: currentLang === 'lo' ? '3. ຈັດສົ່ງ & ມອບຮັບ' : '3. Delivery & Handover',
+      title: currentLang === 'lo' ? '3. ການຈັດສົ່ງ & ມອບຮັບ' : '3. Delivery & Handover',
       desc: currentLang === 'lo' ? 'ແພັກ, ຂົນສົ່ງ & ມອບຮັບ' : 'Pack, Dispatch & Handover',
       icon: Truck,
       isDone: step3Ready && currentStep > 3,
@@ -76,7 +76,7 @@ export const OrderStepBar: React.FC<OrderStepBarProps> = ({
               onClick={() => onSelectStep(st.num)}
               className={`flex items-center gap-3 p-3.5 rounded-2xl border transition-all text-left cursor-pointer ${
                 isActive
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-md scale-[1.01]'
+                  ? 'bg-slate-900 text-white border-sky-500/80 shadow-md ring-1 ring-sky-500/30 scale-[1.01]'
                   : isDone
                   ? 'bg-emerald-50/80 text-emerald-950 border-emerald-200/80 hover:bg-emerald-100/70'
                   : isUnlocked
@@ -87,7 +87,7 @@ export const OrderStepBar: React.FC<OrderStepBarProps> = ({
               <div
                 className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 font-black text-xs transition ${
                   isActive
-                    ? 'bg-amber-400 text-slate-950 shadow-xs'
+                    ? 'bg-sky-500 text-white shadow-xs'
                     : isDone
                     ? 'bg-emerald-600 text-white'
                     : isUnlocked

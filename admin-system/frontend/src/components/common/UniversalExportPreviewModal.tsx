@@ -158,30 +158,30 @@ export const UniversalExportPreviewModal: React.FC<UniversalExportPreviewModalPr
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-6xl h-[94vh] flex flex-col shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/60 backdrop-blur-md animate-fade-in">
+      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-[1700px] h-[96vh] flex flex-col shadow-2xl overflow-hidden">
         
         {/* Header Bar */}
-        <div className="px-6 py-4 bg-gradient-to-r from-slate-900 via-indigo-950/50 to-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
+        <div className="px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 shadow-xs">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+            <div className="w-10 h-10 rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-600">
               <Eye className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-white tracking-wide">{title}</h3>
-                <span className="px-2 py-0.5 text-xs font-mono font-medium rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                <h3 className="text-lg font-black text-slate-900 tracking-wide">{title}</h3>
+                <span className="px-2.5 py-0.5 text-xs font-mono font-bold rounded-lg bg-sky-50 text-sky-700 border border-sky-200">
                   {documentNumber}
                 </span>
               </div>
-              <p className="text-xs text-slate-400">ສະແດງຕົວຢ່າງ ແລະ ສົ່ງອອກເອກະສານຄວາມລະອຽດສູງ (High-DPI Export)</p>
+              <p className="text-xs text-slate-500 font-medium">ສະແດງຕົວຢ່າງ ແລະ ສົ່ງອອກເອກະສານຄວາມລະອຽດສູງ (High-DPI Export)</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors"
               title="Close"
             >
               <X className="w-5 h-5" />
@@ -190,30 +190,30 @@ export const UniversalExportPreviewModal: React.FC<UniversalExportPreviewModalPr
         </div>
 
         {/* Action Toolbar */}
-        <div className="px-6 py-3 bg-slate-950/60 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
           
           {/* Zoom Controls */}
-          <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 shadow-xs">
             <button
               onClick={() => setZoomScale(prev => Math.max(0.4, Number((prev - 0.1).toFixed(1))))}
-              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+              className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
               title="Zoom Out"
             >
               <ZoomOut className="w-4 h-4" />
             </button>
-            <span className="text-xs font-mono text-slate-300 px-2 min-w-[50px] text-center">
+            <span className="text-xs font-mono font-bold text-slate-700 px-2 min-w-[50px] text-center">
               {Math.round(zoomScale * 100)}%
             </span>
             <button
               onClick={() => setZoomScale(prev => Math.min(1.6, Number((prev + 0.1).toFixed(1))))}
-              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+              className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
               title="Zoom In"
             >
               <ZoomIn className="w-4 h-4" />
             </button>
             <button
               onClick={() => setZoomScale(0.9)}
-              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors ml-1"
+              className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors ml-1 cursor-pointer"
               title="Reset Zoom"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -227,9 +227,9 @@ export const UniversalExportPreviewModal: React.FC<UniversalExportPreviewModalPr
             <button
               onClick={handleCopyToClipboard}
               disabled={isExporting}
-              className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700/80 border border-slate-700 rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-50"
+              className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
             >
-              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-slate-400" />}
+              {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-500" />}
               <span>{copied ? 'ກັອບປີ້ຮູບແລ້ວ!' : 'ກັອບປີ້ຮູບ (Clipboard)'}</span>
             </button>
 
@@ -237,12 +237,12 @@ export const UniversalExportPreviewModal: React.FC<UniversalExportPreviewModalPr
             <button
               onClick={handleExportPNG}
               disabled={isExporting}
-              className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-emerald-300 hover:text-emerald-200 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-50"
+              className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
             >
               {isExporting && exportType === 'PNG' ? (
-                <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
               ) : (
-                <ImageIcon className="w-4 h-4 text-emerald-400" />
+                <ImageIcon className="w-4 h-4 text-emerald-600" />
               )}
               <span>ດາວໂຫຼດຮູບ PNG</span>
             </button>
@@ -251,12 +251,12 @@ export const UniversalExportPreviewModal: React.FC<UniversalExportPreviewModalPr
             <button
               onClick={handleExportJPEG}
               disabled={isExporting}
-              className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-amber-300 hover:text-amber-200 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/30 rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-50"
+              className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-sky-800 hover:text-sky-900 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
             >
               {isExporting && exportType === 'JPEG' ? (
-                <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                <Loader2 className="w-4 h-4 animate-spin text-sky-600" />
               ) : (
-                <ImageIcon className="w-4 h-4 text-amber-400" />
+                <ImageIcon className="w-4 h-4 text-sky-600" />
               )}
               <span>ດາວໂຫຼດຮູບ JPEG</span>
             </button>
@@ -265,7 +265,7 @@ export const UniversalExportPreviewModal: React.FC<UniversalExportPreviewModalPr
             <button
               onClick={handleExportPDF}
               disabled={isExporting}
-              className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 rounded-xl transition-all shadow-lg shadow-indigo-600/30 active:scale-95 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 text-xs font-black text-white bg-sky-500 hover:bg-sky-600 rounded-xl transition-all shadow-md shadow-sky-500/25 active:scale-95 disabled:opacity-50 cursor-pointer border-none"
             >
               {isExporting && exportType === 'PDF' ? (
                 <Loader2 className="w-4 h-4 animate-spin text-white" />
@@ -279,16 +279,16 @@ export const UniversalExportPreviewModal: React.FC<UniversalExportPreviewModalPr
             <button
               onClick={handlePrint}
               disabled={isExporting}
-              className="p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors active:scale-95"
+              className="p-2 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors active:scale-95 shadow-xs cursor-pointer"
               title="ສັ່ງພິມທັນທີ (Print)"
             >
-              <Printer className="w-4 h-4" />
+              <Printer className="w-4 h-4 text-sky-600" />
             </button>
           </div>
         </div>
 
         {/* Live Document Preview Canvas Area */}
-        <div className="flex-1 overflow-auto bg-slate-950/90 p-4 sm:p-8 flex justify-center items-start custom-scrollbar">
+        <div className="flex-1 overflow-auto bg-slate-100/90 p-4 sm:p-8 flex justify-center items-start custom-scrollbar">
           <div 
             style={{ 
               transform: `scale(${zoomScale})`, 
@@ -300,7 +300,7 @@ export const UniversalExportPreviewModal: React.FC<UniversalExportPreviewModalPr
             {/* The Document Surface */}
             <div 
               ref={documentRef}
-              className="bg-white text-slate-900 shadow-2xl rounded-sm overflow-hidden border border-slate-300"
+              className="bg-white text-slate-900 shadow-xl rounded-sm overflow-hidden border border-slate-200"
               style={{
                 width: paperOrientation === 'landscape' ? '297mm' : '210mm',
                 minHeight: paperOrientation === 'landscape' ? '210mm' : '297mm',
@@ -313,9 +313,9 @@ export const UniversalExportPreviewModal: React.FC<UniversalExportPreviewModalPr
         </div>
 
         {/* Footer info */}
-        <div className="px-6 py-2.5 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 shrink-0">
+        <div className="px-6 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 shrink-0">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <Sparkles className="w-3.5 h-3.5 text-sky-500" />
             <span>ຄຸນນະພາບການ Export: 300 DPI Ultra Clear Rendering</span>
           </div>
           <div>

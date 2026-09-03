@@ -30,6 +30,7 @@ export interface CustomerComboboxProps {
     customerId?: string;
   }) => void;
   currentLang?: string;
+  hideSaveToCrmCheckbox?: boolean;
 }
 
 const LAO_PROVINCES = [
@@ -112,6 +113,7 @@ export default function CustomerCombobox({
   valueAddress = '',
   onChange,
   currentLang = 'lo',
+  hideSaveToCrmCheckbox = false,
 }: CustomerComboboxProps) {
   const { t } = useTranslation();
   const isLao = currentLang === 'lo';
@@ -451,54 +453,49 @@ export default function CustomerCombobox({
         />
       </div>
 
-      {/* Structured Address Breakdown: ບ້ານ (Village), ເມືອງ (District), ແຂວງ (Province) */}
-      <div className="space-y-2 p-3 bg-slate-50/80 rounded-2xl border border-slate-200/80">
-        <div className="flex items-center justify-between">
-          <label className="text-slate-700 font-bold text-xs flex items-center gap-1.5">
-            <MapPin className="w-3.5 h-3.5 text-accent-sky" />
-            <span>{isLao ? 'ສະຖານທີ່ຈັດສົ່ງ (Delivery Address):' : 'Delivery Address:'}</span>
-          </label>
-          <span className="text-[10px] text-slate-400 font-medium">
-            {isLao ? 'ແຍກເກັບ: ບ້ານ, ເມືອງ, ແຂວງ' : 'Separated by Village, District, Province'}
-          </span>
-        </div>
+      {/* Delivery Address — ไม่มีกรอบซ้อน เป็นเนื้อเดียวกับฟิลด์อื่น */}
+      <div className="space-y-2">
+        <label className="text-slate-600 font-bold text-xs flex items-center gap-1.5">
+          <MapPin className="w-3.5 h-3.5 text-accent-sky" />
+          <span>{isLao ? 'ສະຖານທີ່ຈັດສົ່ງ (Delivery Address):' : 'Delivery Address:'}</span>
+        </label>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {/* 1. ບ້ານ (Village) */}
           <div>
-            <label className="block text-[11px] text-slate-500 font-bold mb-1 flex items-center gap-1">
-              <Home className="w-3 h-3 text-slate-400" />
-              <span>{isLao ? 'ບ້ານ (Village):' : 'Village (Ban):'}</span>
+            <label className="block text-[11px] text-slate-400 font-bold mb-1 flex items-center gap-1">
+              <Home className="w-3 h-3 text-slate-300" />
+              <span>{isLao ? 'ບ້ານ:' : 'Village:'}</span>
             </label>
             <input
               type="text"
-              placeholder="e.g. ດົງປ່າລານ, ໂພນສະຫວັນ"
+              placeholder={isLao ? 'ດົງປ່າລານ...' : 'Village name...'}
               value={village}
               onChange={(e) => handleVillageChange(e.target.value)}
-              className="w-full px-3 py-1.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-800 text-xs focus:outline-none focus:border-sky-500"
+              className="w-full px-3 py-1.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-800 text-xs focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-200"
             />
           </div>
 
           {/* 2. ເມືອງ (District) */}
           <div>
-            <label className="block text-[11px] text-slate-500 font-bold mb-1 flex items-center gap-1">
-              <Building2 className="w-3 h-3 text-slate-400" />
-              <span>{isLao ? 'ເມືອງ (District):' : 'District (Muang):'}</span>
+            <label className="block text-[11px] text-slate-400 font-bold mb-1 flex items-center gap-1">
+              <Building2 className="w-3 h-3 text-slate-300" />
+              <span>{isLao ? 'ເມືອງ:' : 'District:'}</span>
             </label>
             <input
               type="text"
-              placeholder="e.g. ສີສັດຕະນາກ, ໄຊເສດຖາ"
+              placeholder={isLao ? 'ສີສັດຕະນາກ...' : 'District...'}
               value={district}
               onChange={(e) => handleDistrictChange(e.target.value)}
-              className="w-full px-3 py-1.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-800 text-xs focus:outline-none focus:border-sky-500"
+              className="w-full px-3 py-1.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-800 text-xs focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-200"
             />
           </div>
 
           {/* 3. ແຂວງ (Province) */}
           <div>
-            <label className="block text-[11px] text-slate-500 font-bold mb-1 flex items-center gap-1">
-              <Globe className="w-3 h-3 text-slate-400" />
-              <span>{isLao ? 'ແຂວງ (Province):' : 'Province (Khoueng):'}</span>
+            <label className="block text-[11px] text-slate-400 font-bold mb-1 flex items-center gap-1">
+              <Globe className="w-3 h-3 text-slate-300" />
+              <span>{isLao ? 'ແຂວງ:' : 'Province:'}</span>
             </label>
             <select
               value={province}
@@ -506,38 +503,22 @@ export default function CustomerCombobox({
               className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-800 text-xs focus:outline-none focus:border-sky-500"
             >
               {LAO_PROVINCES.map((prov) => (
-                <option key={prov} value={prov}>
-                  {prov}
-                </option>
+                <option key={prov} value={prov}>{prov}</option>
               ))}
             </select>
           </div>
         </div>
 
-        {/* 4. ລາຍລະອຽດເພີ່ມເຕີມ / ຖະໜົນ / ຮ່ອມ (Optional) */}
-        <div>
-          <input
-            type="text"
-            placeholder={isLao ? 'ລາຍລະອຽດເພີ່ມເຕີມ (ເຊັ່ນ: ຮ່ອມ 5, ຕິດກັບວັດ, ຖະໜົນ 23 ສິງຫາ...)' : 'Street / Alley / Extra directions...'}
-            value={addressDetail}
-            onChange={(e) => handleDetailChange(e.target.value)}
-            className="w-full px-3 py-1.5 rounded-xl border border-slate-200/80 bg-white text-[11px] font-medium text-slate-700 focus:outline-none focus:border-sky-500"
-          />
-        </div>
+        <input
+          type="text"
+          placeholder={isLao ? 'ລາຍລະອຽດເພີ່ມເຕີມ (ຮ່ອມ, ຖະໜົນ...)' : 'Street / Alley / Extra directions...'}
+          value={addressDetail}
+          onChange={(e) => handleDetailChange(e.target.value)}
+          className="w-full px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-[11px] font-medium text-slate-700 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-200"
+        />
       </div>
 
-      {/* Auto Save to CRM Checkbox */}
-      {!selectedCustId && (
-        <label className="flex items-center gap-2 cursor-pointer pt-1 text-slate-600 font-bold text-xs">
-          <input
-            type="checkbox"
-            checked={saveToCrm}
-            onChange={(e) => handleToggleSaveToCrm(e.target.checked)}
-            className="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 cursor-pointer"
-          />
-          <span>{isLao ? 'ບັນທຶກເຂົ້າຖານຂໍ້ມູນ CRM ອັດຕະໂນມັດ' : 'Save customer to CRM database automatically'}</span>
-        </label>
-      )}
+      {/* CRM checkbox removed — toggle is handled by parent QuotationManager */}
     </div>
   );
 }

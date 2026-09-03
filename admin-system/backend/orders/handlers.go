@@ -244,6 +244,23 @@ func HandleCreateOrder(c *gin.Context) {
 			specs["mime_type"] = itemReq.MimeType
 		}
 
+		var itemArtwork *ItemArtwork
+		if itemReq.Artwork != nil {
+			itemArtwork = itemReq.Artwork
+		} else if itemArtworkURL != "" {
+			itemArtwork = &ItemArtwork{
+				FileURL:       itemArtworkURL,
+				FileName:      itemArtworkFileName,
+				FileSizeBytes: itemReq.ArtworkFileSize,
+				PageCount:     pageCount,
+			}
+		}
+
+		itemSpecs := itemReq.Specifications
+		if itemSpecs == nil {
+			itemSpecs = specs
+		}
+
 		orderItem := OrderItem{
 			ID:                fmt.Sprintf("item-%s-%d", orderID, idx+1),
 			OrderID:           orderID,
@@ -259,6 +276,8 @@ func HandleCreateOrder(c *gin.Context) {
 			ArtworkURL:         itemArtworkURL,
 			ArtworkFileName:    itemArtworkFileName,
 			ArtworkFileSize:    itemReq.ArtworkFileSize,
+			Artwork:            itemArtwork,
+			Specifications:     itemSpecs,
 			BindingType:       BindingType(itemReq.BindingType),
 			SpineWidthMM:      spineWidth,
 			CurrentStep:       StepPending,

@@ -1,6 +1,7 @@
 package customers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -29,6 +30,8 @@ type Customer struct {
 	Village          string    `json:"village"`
 	BranchCode       string    `json:"branchCode"`
 	TaxID            string    `json:"taxId"`
+	Tier             string    `json:"tier"`             // RETAIL, ONLINE, CORPORATE, CONTRACT_PARTNER
+	PreferredCourier string    `json:"preferredCourier"` // Courier ID or name
 	Notes            string    `json:"notes"`
 	TotalSpentLAK    float64   `json:"totalSpentLAK"`
 	TotalOrdersCount int       `json:"totalOrdersCount"`
@@ -132,6 +135,9 @@ func HandleCreateCustomer(c *gin.Context) {
 	if cust.ID == "" {
 		cust.ID = "cust-" + time.Now().Format("150405")
 	}
+	if cust.Tier == "" {
+		cust.Tier = "RETAIL"
+	}
 	cust.CreatedAt = time.Now()
 	cust.UpdatedAt = time.Now()
 
@@ -159,6 +165,9 @@ func HandleUpdateCustomer(c *gin.Context) {
 	}
 
 	cust.ID = id
+	if cust.Tier == "" {
+		cust.Tier = "RETAIL"
+	}
 	cust.UpdatedAt = time.Now()
 
 	if db.DB != nil {
@@ -175,11 +184,38 @@ func HandleUpdateCustomer(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": cust})
 }
 
-// HandleDeleteCustomer deletes a customer by ID
+// HandleDeleteCustomer deletes a customer by ID with strict Block Delete enforcement
 func HandleDeleteCustomer(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Customer ID is required"})
+		return
+	}
+
+	// 1. Fetch current info to check order linkage
+	var phone, name string
+	if db.DB != nil {
+		_ = db.DB.QueryRow("SELECT COALESCE(phone, ''), COALESCE(name, '') FROM customers WHERE id = $1", id).Scan(&phone, &name)
+	}
+	if phone == "" || name == "" {
+		storeMutex.RLock()
+		if cust, ok := customerStore[id]; ok {
+			phone = cust.Phone
+			name = cust.Name
+		}
+		storeMutex.RUnlock()
+	}
+
+	// 2. Block Delete Policy: Cannot delete customer if they have order history
+	custOrders, _ := orders.GetOrdersByCustomer(id, phone)
+	if len(custOrders) > 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"status":     "error",
+			"error":      "CANNOT_DELETE_HAS_ORDERS",
+			"message":    fmt.Sprintf("ບໍ່ສາມາດລຶບລູກຄ້າ \"%s\" ໄດ້ ເນື່ອງຈາກມີປະຫວັດການສັ່ງຊື້ %d ອໍເດີ (ກະລຸນາລຶບອໍເດີອອກກ່ອນ)", name, len(custOrders)),
+			"orderCount": len(custOrders),
+			"customerId": id,
+		})
 		return
 	}
 
@@ -199,13 +235,99 @@ func HandleDeleteCustomer(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Customer deleted successfully", "id": id})
 }
 
+type BulkDeleteRequest struct {
+	IDs []string `json:"ids"`
+}
+
+type BlockedCustomerInfo struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	OrderCount int    `json:"orderCount"`
+	Reason     string `json:"reason"`
+}
+
+// HandleBulkDeleteCustomers deletes multiple customers while protecting customers with orders
+func HandleBulkDeleteCustomers(c *gin.Context) {
+	var req BulkDeleteRequest
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: customer IDs array required"})
+		return
+	}
+
+	deleted := make([]string, 0)
+	blocked := make([]BlockedCustomerInfo, 0)
+
+	for _, id := range req.IDs {
+		var phone, name string
+		if db.DB != nil {
+			_ = db.DB.QueryRow("SELECT COALESCE(phone, ''), COALESCE(name, '') FROM customers WHERE id = $1", id).Scan(&phone, &name)
+		}
+		if phone == "" || name == "" {
+			storeMutex.RLock()
+			if cust, ok := customerStore[id]; ok {
+				phone = cust.Phone
+				name = cust.Name
+			}
+			storeMutex.RUnlock()
+		}
+
+		custOrders, _ := orders.GetOrdersByCustomer(id, phone)
+		if len(custOrders) > 0 {
+			blocked = append(blocked, BlockedCustomerInfo{
+				ID:         id,
+				Name:       name,
+				OrderCount: len(custOrders),
+				Reason:     fmt.Sprintf("ມີປະຫວັດການສັ່ງຊື້ %d ອໍເດີ", len(custOrders)),
+			})
+			continue
+		}
+
+		if db.DB != nil {
+			_, err := db.DB.Exec("DELETE FROM customers WHERE id = $1", id)
+			if err != nil {
+				log.Printf("[DB ERROR] Failed to bulk delete customer %s: %v", id, err)
+				continue
+			}
+		}
+
+		storeMutex.Lock()
+		delete(customerStore, id)
+		storeMutex.Unlock()
+
+		deleted = append(deleted, id)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"deleted": deleted,
+		"blocked": blocked,
+		"message": fmt.Sprintf("ລຶບສຳເລັດ %d ຄົນ, ຖືກບລັອກ %d ຄົນ", len(deleted), len(blocked)),
+	})
+}
+
+var ensureColumnsOnce sync.Once
+
+func ensureCustomerColumns() {
+	ensureColumnsOnce.Do(func() {
+		if db.DB != nil {
+			_, _ = db.DB.Exec(`
+				ALTER TABLE customers 
+				  ADD COLUMN IF NOT EXISTS tier VARCHAR(50) DEFAULT 'RETAIL',
+				  ADD COLUMN IF NOT EXISTS preferred_courier VARCHAR(100);
+			`)
+		}
+	})
+}
+
 func getCustomersFromDB() ([]Customer, error) {
+	ensureCustomerColumns()
 	query := `
 		SELECT id, name, COALESCE(phone, ''), COALESCE(email, ''), COALESCE(address, ''),
 		       COALESCE(credit_limit, 1000000.00), COALESCE(payment_terms, 'Net 30'),
 		       COALESCE(instagram, ''), COALESCE(line_id, ''), COALESCE(facebook, ''),
 		       COALESCE(whatsapp, ''), COALESCE(province, ''), COALESCE(district, ''),
 		       COALESCE(village, ''), COALESCE(branch_code, ''), COALESCE(tax_id, ''),
+		       COALESCE(tier, 'RETAIL'), COALESCE(preferred_courier, ''),
 		       COALESCE(notes, ''), COALESCE(total_spent_lak, 0), COALESCE(total_orders_count, 0),
 		       created_at, updated_at
 		FROM customers
@@ -226,6 +348,7 @@ func getCustomersFromDB() ([]Customer, error) {
 			&cust.Instagram, &cust.LineID, &cust.Facebook,
 			&cust.WhatsApp, &cust.Province, &cust.District,
 			&cust.Village, &cust.BranchCode, &cust.TaxID,
+			&cust.Tier, &cust.PreferredCourier,
 			&cust.Notes, &cust.TotalSpentLAK, &cust.TotalOrdersCount,
 			&cust.CreatedAt, &cust.UpdatedAt,
 		)
@@ -244,6 +367,7 @@ func getCustomersFromDB() ([]Customer, error) {
 }
 
 func getCustomerByIDFromDB(id string) (Customer, error) {
+	ensureCustomerColumns()
 	var cust Customer
 	query := `
 		SELECT id, name, COALESCE(phone, ''), COALESCE(email, ''), COALESCE(address, ''),
@@ -251,6 +375,7 @@ func getCustomerByIDFromDB(id string) (Customer, error) {
 		       COALESCE(instagram, ''), COALESCE(line_id, ''), COALESCE(facebook, ''),
 		       COALESCE(whatsapp, ''), COALESCE(province, ''), COALESCE(district, ''),
 		       COALESCE(village, ''), COALESCE(branch_code, ''), COALESCE(tax_id, ''),
+		       COALESCE(tier, 'RETAIL'), COALESCE(preferred_courier, ''),
 		       COALESCE(notes, ''), COALESCE(total_spent_lak, 0), COALESCE(total_orders_count, 0),
 		       created_at, updated_at
 		FROM customers
@@ -262,6 +387,7 @@ func getCustomerByIDFromDB(id string) (Customer, error) {
 		&cust.Instagram, &cust.LineID, &cust.Facebook,
 		&cust.WhatsApp, &cust.Province, &cust.District,
 		&cust.Village, &cust.BranchCode, &cust.TaxID,
+		&cust.Tier, &cust.PreferredCourier,
 		&cust.Notes, &cust.TotalSpentLAK, &cust.TotalOrdersCount,
 		&cust.CreatedAt, &cust.UpdatedAt,
 	)
@@ -269,14 +395,18 @@ func getCustomerByIDFromDB(id string) (Customer, error) {
 }
 
 func saveCustomerToDB(cust Customer) error {
+	ensureCustomerColumns()
+	if cust.Tier == "" {
+		cust.Tier = "RETAIL"
+	}
 	query := `
 		INSERT INTO customers (
 			id, name, phone, email, address, credit_limit, payment_terms,
 			instagram, line_id, facebook, whatsapp, province, district, village,
-			branch_code, tax_id, notes, total_spent_lak, total_orders_count,
+			branch_code, tax_id, tier, preferred_courier, notes, total_spent_lak, total_orders_count,
 			created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW(), NOW())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, NOW(), NOW())
 		ON CONFLICT (id) DO UPDATE SET
 			name = EXCLUDED.name,
 			phone = EXCLUDED.phone,
@@ -293,6 +423,8 @@ func saveCustomerToDB(cust Customer) error {
 			village = EXCLUDED.village,
 			branch_code = EXCLUDED.branch_code,
 			tax_id = EXCLUDED.tax_id,
+			tier = EXCLUDED.tier,
+			preferred_courier = EXCLUDED.preferred_courier,
 			notes = EXCLUDED.notes,
 			total_spent_lak = EXCLUDED.total_spent_lak,
 			total_orders_count = EXCLUDED.total_orders_count,
@@ -305,6 +437,7 @@ func saveCustomerToDB(cust Customer) error {
 		cust.Instagram, cust.LineID, cust.Facebook,
 		cust.WhatsApp, cust.Province, cust.District,
 		cust.Village, cust.BranchCode, cust.TaxID,
+		cust.Tier, cust.PreferredCourier,
 		cust.Notes, cust.TotalSpentLAK, cust.TotalOrdersCount,
 	)
 	return err

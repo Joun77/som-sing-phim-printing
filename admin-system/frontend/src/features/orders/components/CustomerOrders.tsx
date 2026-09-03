@@ -724,6 +724,13 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             showToast={showToast}
             setLightbox={setLightbox}
             onEditOrder={(ord) => setEditModalOrder(ord)}
+            askConfirmation={askConfirmation}
+            onUpdateOrder={(updated) => {
+              if (updateOrderDetails) {
+                updateOrderDetails(updated.id, updated);
+              }
+              setSelectedOrder(updated);
+            }}
           />
         )}
         {activeOrderStep === 4 && (
@@ -735,6 +742,15 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             currentLang={currentLang}
             setLightbox={setLightbox}
             onEditOrder={(ord) => setEditModalOrder(ord)}
+            handleStatusChange={handleStatusChange}
+            askConfirmation={askConfirmation}
+            showToast={showToast}
+            onUpdateOrder={(updated) => {
+              if (updateOrderDetails) {
+                updateOrderDetails(updated.id, updated);
+              }
+              setSelectedOrder(updated);
+            }}
           />
         )}
       </>
@@ -852,16 +868,16 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
           </div>
         </div>
 
-        {/* Total Revenue & Unpaid */}
-        <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-md flex flex-col justify-between space-y-2">
+        {/* Total Revenue & Unpaid (Bright Sky Blue Theme) */}
+        <div className="bg-sky-500 text-white p-4 rounded-2xl shadow-md shadow-sky-500/20 flex flex-col justify-between space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-black text-amber-400 uppercase">{currentLang === 'lo' ? 'ຍອດຂາຍລວມ' : 'Revenue'}</span>
-            <span className="p-1.5 rounded-xl bg-slate-800 text-amber-400"><Wallet className="w-3.5 h-3.5" /></span>
+            <span className="text-[11px] font-black text-sky-100 uppercase">{currentLang === 'lo' ? 'ຍອດຂາຍລວມ' : 'Revenue'}</span>
+            <span className="p-1.5 rounded-xl bg-sky-400/50 text-white"><Wallet className="w-3.5 h-3.5" /></span>
           </div>
           <div>
             <span className="text-base sm:text-lg font-black text-white font-mono block truncate">{formatLAK(summaryMetrics.totalRevenue)}</span>
             {summaryMetrics.totalUnpaid > 0 && (
-              <span className="text-[10px] text-red-400 font-black block mt-0.5">
+              <span className="text-[10px] text-sky-100 bg-sky-600/60 px-2 py-0.5 rounded-md font-bold block mt-1 w-fit">
                 ຄ້າງຊຳຣະ: {formatLAK(summaryMetrics.totalUnpaid)}
               </span>
             )}

@@ -9,6 +9,7 @@ import {
   Edit3,
   Trash2
 } from 'lucide-react';
+import OrderIdCopyButton from './common/OrderIdCopyButton';
 
 interface OrderRowProps {
   ord: any;
@@ -166,7 +167,9 @@ const OrderRow = React.memo<OrderRowProps>(({
 
       {/* 1. Order ID & Date */}
       <td className="px-5 py-4 whitespace-nowrap">
-        <span className="font-mono font-black text-slate-900 block text-sm lg:text-base">#{orderIdentifier}</span>
+        <div className="flex items-center gap-1.5">
+          <OrderIdCopyButton orderId={orderIdentifier} showHash={true} />
+        </div>
         <span className="text-xs text-slate-400 block font-sans mt-1">Due: {ord.promisedDeliveryDate || ord.delivery_date || '24-48h'}</span>
         {renderSLATimer()}
       </td>
@@ -182,22 +185,22 @@ const OrderRow = React.memo<OrderRowProps>(({
         <span className="font-semibold text-slate-800 line-clamp-1">{itemsSummary()}</span>
       </td>
 
-      {/* 4. Payment Status */}
+      {/* 4. Payment Status (Distinct Pill Badge) */}
       <td className="px-6 py-4 whitespace-nowrap">
-        <span className={`inline-flex px-2.5 py-1 rounded-[8px] text-[10px] sm:text-xs font-extrabold uppercase border ${getPaymentStatusBadge(paymentStatus)}`}>
-          {getPaymentStatusIcon(paymentStatus)}
-          <span className="ml-1">{paymentStatus === 'Paid' ? (currentLang === 'lo' ? 'ຊຳລະແລ້ວ' : 'Paid') : paymentStatus === 'Deposit' ? (currentLang === 'lo' ? 'ມັດຈຳແລ້ວ' : 'Deposit') : (currentLang === 'lo' ? 'ຍັງບໍ່ຊຳລະ' : 'Unpaid')}</span>
+        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border uppercase select-none ${getPaymentStatusBadge(paymentStatus)}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${paymentStatus === 'Paid' ? 'bg-emerald-500' : paymentStatus === 'Deposit' ? 'bg-amber-500' : 'bg-slate-400'}`} />
+          <span>{paymentStatus === 'Paid' ? (currentLang === 'lo' ? 'ຊຳລະແລ້ວ' : 'Paid') : paymentStatus === 'Deposit' ? (currentLang === 'lo' ? 'ມັດຈຳແລ້ວ' : 'Deposit') : (currentLang === 'lo' ? 'ຍັງບໍ່ຊຳລະ' : 'Unpaid')}</span>
         </span>
       </td>
 
-      {/* 5. Production Status */}
+      {/* 5. Production Status (Distinct Pill Badge) */}
       <td className="px-6 py-4 whitespace-nowrap">
-        <span className={`inline-flex px-2.5 py-1 rounded-[8px] text-[10px] sm:text-xs font-extrabold uppercase border ${getStatusBadgeClass(statusRaw)}`}>
+        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border uppercase select-none ${getStatusBadgeClass(statusRaw)}`}>
           {getStatusIcon(statusRaw)}
-          <span className="ml-1">{statusDisplay}</span>
+          <span>{statusDisplay}</span>
         </span>
         {ord.stockDeducted && (
-          <span className="block text-[10px] font-black text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 mt-1">
+          <span className="block text-[10px] font-black text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-100 mt-1 w-fit">
             ຕັດສະຕັອກແລ້ວ
           </span>
         )}
@@ -208,7 +211,7 @@ const OrderRow = React.memo<OrderRowProps>(({
         {formatLAK(totalAmountLAK)}
       </td>
 
-      {/* 7. Quick Actions: ໃບປະໜ້າ, ເບິ່ງລາຍລະອຽດ, ແກ້ໄຂ, ລົບ */}
+      {/* 7. Quick Actions: ໃບປະໜ້າ, ເບິ່ງລາຍລະອຽດ, ແກ້ໄຂ, ລົບ (Clickable Action Buttons) */}
       <td className="px-6 py-4 whitespace-nowrap text-center">
         <div className="flex items-center justify-center gap-2 max-w-xs mx-auto">
           {/* 1. Print Shipping Label */}
@@ -219,7 +222,7 @@ const OrderRow = React.memo<OrderRowProps>(({
                 e.stopPropagation();
                 onPrintShippingLabel(ord);
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-bold transition border border-slate-200 active:scale-95 cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-bold transition border border-slate-200 active:scale-95 cursor-pointer shadow-xs"
               title={currentLang === 'lo' ? 'ພິມໃບປະໜ້າພັດສະດຸ' : 'Print Shipping Label'}
             >
               <PackageCheck className="w-3.5 h-3.5 text-sky-600" />
@@ -231,10 +234,10 @@ const OrderRow = React.memo<OrderRowProps>(({
           <button
             type="button"
             onClick={() => onViewDetails(ord)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 hover:text-slate-950 rounded-xl text-xs font-bold transition shadow-xs border border-slate-200 active:scale-95 cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 hover:text-sky-900 rounded-xl text-xs font-bold transition border border-sky-200 active:scale-95 cursor-pointer shadow-xs"
             title={currentLang === 'lo' ? 'ເບິ່ງລາຍລະອຽດ' : 'View Details'}
           >
-            <Eye className="w-3.5 h-3.5 text-slate-600" />
+            <Eye className="w-3.5 h-3.5 text-sky-600" />
             <span>{currentLang === 'lo' ? 'ເບິ່ງລາຍລະອຽດ' : 'Details'}</span>
           </button>
 
@@ -246,10 +249,10 @@ const OrderRow = React.memo<OrderRowProps>(({
                 e.stopPropagation();
                 onEditOrder(ord);
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 hover:text-amber-950 rounded-xl text-xs font-bold transition border border-amber-200 active:scale-95 cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-xs font-black transition active:scale-95 cursor-pointer shadow-xs border-none"
               title={currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ' : 'Edit Order'}
             >
-              <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+              <Edit3 className="w-3.5 h-3.5 text-white" />
               <span>{currentLang === 'lo' ? 'ແກ້ໄຂ' : 'Edit'}</span>
             </button>
           )}

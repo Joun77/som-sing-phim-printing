@@ -92,7 +92,7 @@ export const CustomerInvoiceTemplate: React.FC<CustomerInvoiceTemplateProps> = (
       <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6 mb-6">
         <div>
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-xl shadow-xs">
+            <div className="w-12 h-12 rounded-2xl bg-sky-500 text-white flex items-center justify-center font-black text-xl shadow-xs">
               SSP
             </div>
             <div>
@@ -123,11 +123,11 @@ export const CustomerInvoiceTemplate: React.FC<CustomerInvoiceTemplateProps> = (
 
         {/* Invoice Top Right Meta */}
         <div className="text-right space-y-2">
-          <div className="inline-block px-4 py-1.5 rounded-xl bg-slate-900 text-white text-right">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400 block">
+          <div className="inline-block px-4 py-1.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-950 text-right shadow-xs">
+            <span className="text-[10px] font-black uppercase tracking-widest text-sky-600 block">
               OFFICIAL INVOICE
             </span>
-            <span className="text-sm font-black font-mono tracking-wider">
+            <span className="text-sm font-black font-mono tracking-wider text-slate-900">
               {invoiceNo}
             </span>
           </div>
@@ -297,47 +297,47 @@ export const CustomerInvoiceTemplate: React.FC<CustomerInvoiceTemplateProps> = (
           </div>
         </div>
 
-        {/* Right: Subtotal & Balance Breakdown */}
-        <div className="sm:col-span-5 bg-slate-900 text-white rounded-2xl p-4.5 space-y-2.5 shadow-sm">
-          <div className="flex justify-between text-xs text-slate-300">
+        {/* Right: Subtotal & Balance Breakdown (Bright Sky Theme) */}
+        <div className="sm:col-span-5 bg-sky-50 border border-sky-200 text-slate-900 rounded-2xl p-4.5 space-y-2.5 shadow-xs">
+          <div className="flex justify-between text-xs text-slate-600 font-semibold">
             <span>{currentLang === 'lo' ? 'ມູນຄ່າລວມສິນຄ້າ (Subtotal):' : 'Subtotal:'}</span>
-            <span className="font-mono font-bold">{formatLAK(subtotalLAK)}</span>
+            <span className="font-mono font-bold text-slate-800">{formatLAK(subtotalLAK)}</span>
           </div>
 
           {discountAmount > 0 && (
-            <div className="flex justify-between text-xs text-rose-300">
+            <div className="flex justify-between text-xs text-rose-600 font-semibold">
               <span>{currentLang === 'lo' ? 'ສ່ວນຫຼຸດ (Discount):' : 'Discount:'}</span>
               <span className="font-mono font-bold">-{formatLAK(discountAmount)}</span>
             </div>
           )}
 
           {shippingFee > 0 && (
-            <div className="flex justify-between text-xs text-slate-300">
+            <div className="flex justify-between text-xs text-slate-600 font-semibold">
               <span>{currentLang === 'lo' ? 'ຄ່າຈັດສົ່ງ (Shipping Fee):' : 'Shipping:'}</span>
-              <span className="font-mono font-bold">+{formatLAK(shippingFee)}</span>
+              <span className="font-mono font-bold text-slate-800">+{formatLAK(shippingFee)}</span>
             </div>
           )}
 
-          <div className="border-t border-slate-700 pt-2 flex justify-between items-center">
-            <span className="text-xs font-black text-amber-400 uppercase tracking-wider">
+          <div className="border-t border-sky-200 pt-2 flex justify-between items-center">
+            <span className="text-xs font-black text-sky-800 uppercase tracking-wider">
               {currentLang === 'lo' ? 'ຍອດລວມສຸດທິ (Grand Total):' : 'Grand Total:'}
             </span>
-            <strong className="text-base font-black font-mono text-amber-400">
+            <strong className="text-base font-black font-mono text-sky-700">
               {formatLAK(totalAmountLAK)}
             </strong>
           </div>
 
-          <div className="border-t border-slate-800 pt-2 flex justify-between text-xs text-emerald-400">
+          <div className="border-t border-sky-200 pt-2 flex justify-between text-xs text-emerald-700 font-bold">
             <span>{currentLang === 'lo' ? 'ຊຳລະແລ້ວ / ມັດຈຳ (Paid):' : 'Deposit / Paid:'}</span>
             <span className="font-mono font-bold">{formatLAK(depositPaid)}</span>
           </div>
 
-          <div className="flex justify-between items-center pt-1 border-t border-slate-800">
-            <span className="text-xs font-bold text-slate-200">
+          <div className="flex justify-between items-center pt-1 border-t border-sky-200">
+            <span className="text-xs font-bold text-slate-700">
               {currentLang === 'lo' ? 'ຍອດຄ້າງຊຳລະ (Remaining):' : 'Remaining Balance:'}
             </span>
             <span className={`font-mono font-black text-sm ${
-              remainingLAK === 0 ? 'text-emerald-400' : 'text-amber-400'
+              remainingLAK === 0 ? 'text-emerald-700' : 'text-slate-900'
             }`}>
               {formatLAK(remainingLAK)}
             </span>

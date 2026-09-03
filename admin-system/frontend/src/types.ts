@@ -185,6 +185,12 @@ export interface AppContextValue {
   addCustomer: (...args: any[]) => any;
   updateCustomer: (...args: any[]) => any;
   deleteCustomer: (...args: any[]) => any;
+  bulkDeleteCustomers?: (...args: any[]) => any;
+  customerCategories?: any[];
+  fetchCustomerCategories?: () => Promise<void>;
+  addCustomerCategory?: (category: any) => Promise<any>;
+  updateCustomerCategory?: (id: string, category: any) => Promise<any>;
+  deleteCustomerCategory?: (id: string) => Promise<any>;
   addOffcut: (...args: any[]) => any;
   consumeOffcut: (...args: any[]) => any;
   deleteOffcut?: (...args: any[]) => any;

@@ -30,7 +30,8 @@ import {
   Edit3,
   Save,
   Copy,
-  PackageCheck
+  PackageCheck,
+  Tag
 } from 'lucide-react';
 import ShippingLabelModal from './modals/ShippingLabelModal';
 import CustomerInvoiceModal from './modals/CustomerInvoiceModal';
@@ -93,11 +94,22 @@ export default function OrderDetailsPage({
 
   const { 
     couriers = [], 
+    customerCategories = [],
+    customers = [],
     updateOrderTracking: contextUpdateOrderTracking, 
     updateOrderDetails: contextUpdateOrderDetails,
     inventory: contextInventory = [],
     equipment: contextEquipment = []
   } = useApp();
+
+  const customerTier = order.customerTier || order.customer_tier || order.tier || 
+    customers.find(c => (order.customerId && c.id === order.customerId) || c.name === order.customerName)?.tier || 'RETAIL';
+  const categoryObj = customerCategories.find((c: any) => c.id === customerTier);
+  const categoryLabel = categoryObj ? categoryObj.name : customerTier;
+
+  const village = order.village || '';
+  const district = order.district || '';
+  const province = order.province || '';
 
   const [isShippingLabelOpen, setIsShippingLabelOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -289,10 +301,10 @@ export default function OrderDetailsPage({
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-2xl text-xs sm:text-sm font-black transition active:scale-95 shadow-sm cursor-pointer"
+          className="flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-xl text-xs sm:text-sm font-black transition active:scale-95 shadow-xs cursor-pointer"
         >
-          <ArrowLeft className="w-4 h-4" />
-          <span>{currentLang === 'lo' ? '← ກັບຄືນ' : '← Back'}</span>
+          <ArrowLeft className="w-4 h-4 text-slate-600" />
+          <span>{currentLang === 'lo' ? 'ກັບຄືນ' : 'Back'}</span>
         </button>
         <div>
           <div className="flex items-center gap-2 text-xs font-mono font-bold text-slate-400 uppercase">
@@ -307,63 +319,65 @@ export default function OrderDetailsPage({
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <span className={`px-3 py-1.5 rounded-xl text-xs font-black border uppercase flex items-center gap-1.5 ${getStatusBadgeClass(order.status)}`}>
-          {getStatusIcon(order.status)}
-          <span>{t(`status.${order.status}`)}</span>
-        </span>
-        <span className={`px-3 py-1.5 rounded-xl text-xs font-black border uppercase flex items-center gap-1.5 ${getPaymentStatusBadge(order.paymentStatus)}`}>
-          {getPaymentStatusIcon(order.paymentStatus)}
-          <span>{t(`payment.${order.paymentStatus}`)}</span>
-        </span>
-        {viewMode === 'production' && (
+        {/* Status Badges (Pills) */}
+        <div className="flex items-center gap-2">
+          <span className={`px-3 py-1 rounded-full text-[11px] font-bold border uppercase flex items-center gap-1.5 select-none ${getStatusBadgeClass(order.status)}`}>
+            {getStatusIcon(order.status)}
+            <span>{t(`status.${order.status}`)}</span>
+          </span>
+          <span className={`px-3 py-1 rounded-full text-[11px] font-bold border uppercase flex items-center gap-1.5 select-none ${getPaymentStatusBadge(order.paymentStatus)}`}>
+            {getPaymentStatusIcon(order.paymentStatus)}
+            <span>{t(`payment.${order.paymentStatus}`)}</span>
+          </span>
+        </div>
+
+        {/* Vertical Divider */}
+        <div className="hidden sm:block w-px h-6 bg-slate-200" />
+
+        {/* Action Buttons (Elevated Clickable) */}
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => { showToast(currentLang === 'lo' ? 'ກຳລັງພິມໃບສັ່ງຜະລິດ...' : 'Printing Job Ticket...', 'info'); window.print(); }}
-            className="flex items-center gap-1.5 px-3 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer"
+            onClick={() => {
+              if (onEditOrder) {
+                onEditOrder(order);
+              } else {
+                setIsEditModalOpen(true);
+              }
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white font-black rounded-xl text-xs transition-all duration-150 shadow-sm shadow-sky-500/25 active:scale-95 cursor-pointer border-none"
+            title={currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ & ສະເປກ' : 'Edit Order'}
           >
-            <Printer className="w-4 h-4" />
-            <span>{currentLang === 'lo' ? 'ພິມໃບສັ່ງຜະລິດ' : 'Print Job Ticket'}</span>
+            <Edit3 className="w-3.5 h-3.5 text-white" />
+            <span>{currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ' : 'Edit Order'}</span>
           </button>
-        )}
-        <button
-          type="button"
-          onClick={() => setIsInvoiceModalOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer shadow-2xs"
-          title="Customer Payment Invoice / Receipt"
-        >
-          <CreditCard className="w-4 h-4 text-blue-600" />
-          <span>{currentLang === 'lo' ? 'ໃບບິນລູກຄ້າ' : 'Invoice'}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (onEditOrder) {
-              onEditOrder(order);
-            } else {
-              setIsEditModalOpen(true);
-            }
-          }}
-          className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer"
-          title={currentLang === 'lo' ? 'ແກ້ໄຂລາຍລະອຽດອໍເດີ' : 'Edit Order'}
-        >
-          <Edit3 className="w-4 h-4 text-amber-700" />
-          <span>{currentLang === 'lo' ? 'ແກ້ໄຂ' : 'Edit'}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const msg = currentLang === 'lo' ? 'ທ່ານຕ້ອງການລຶບອໍເດີນີ້ແທ້ ຫຼື ບໍ່?' : 'Delete this order permanently?';
-            askConfirmation(msg, () => {
-              deleteOrder(order.id);
-              onBack();
-              showToast(currentLang === 'lo' ? 'ລຶບອໍເດີສຳເລັດ!' : 'Order deleted successfully!', 'success');
-            });
-          }}
-          className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer"
-        >
-          <Trash2 className="w-4 h-4" />
-          <span>{currentLang === 'lo' ? 'ລຶບ' : 'Delete'}</span>
-        </button>
+
+          <button
+            type="button"
+            onClick={() => setIsInvoiceModalOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-xs transition-all duration-150 shadow-sm shadow-blue-600/25 active:scale-95 cursor-pointer border-none"
+            title={currentLang === 'lo' ? 'ໃບບິນລູກຄ້າ (Invoice / Receipt)' : 'Customer Invoice / Receipt'}
+          >
+            <CreditCard className="w-3.5 h-3.5 text-white" />
+            <span>{currentLang === 'lo' ? 'ໃບບິນລູກຄ້າ' : 'Customer Invoice'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const msg = currentLang === 'lo' ? 'ທ່ານຕ້ອງການລຶບອໍເດີນີ້ແທ້ ຫຼື ບໍ່?' : 'Delete this order permanently?';
+              askConfirmation(msg, () => {
+                deleteOrder(order.id);
+                onBack();
+                showToast(currentLang === 'lo' ? 'ລຶບອໍເດີສຳເລັດ!' : 'Order deleted successfully!', 'success');
+              });
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer border border-rose-200"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>{currentLang === 'lo' ? 'ລຶບ' : 'Delete'}</span>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -922,16 +936,31 @@ export default function OrderDetailsPage({
                 <div className="space-y-4">
                   <div className="space-y-1">
                     <span className="text-[10px] uppercase font-black text-slate-400 block">{currentLang === 'lo' ? 'ຊື່ຜູ້ຮັບສິນຄ້າ' : 'Recipient Name'}</span>
-                    <span className="font-extrabold text-slate-800">{order.customerName}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-slate-800 text-sm">{order.customerName}</span>
+                      {categoryLabel && (
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
+                          <Tag className="w-2.5 h-2.5 text-blue-600" />
+                          <span>{categoryLabel}</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <span className="text-[10px] uppercase font-black text-slate-400 block">{currentLang === 'lo' ? 'ເບີໂທລະສັບ' : 'Phone'}</span>
                     <a href={`tel:${order.phone}`} className="font-black text-sky-600 text-sm hover:underline">{order.phone}</a>
                   </div>
                 </div>
-                <div className="space-y-1 bg-slate-50 p-4 border border-slate-200 rounded-2xl">
+                <div className="space-y-2 bg-slate-50 p-4 border border-slate-200 rounded-2xl">
                   <span className="text-[10px] uppercase font-black text-slate-400 block">{currentLang === 'lo' ? 'ທີ່ຢູ່ສົ່ງເຄື່ອງຢ່າງລະອຽດ' : 'Full Delivery Address'}</span>
-                  <p className="font-semibold text-slate-700 mt-1.5 italic leading-relaxed">
+                  {(village || district || province) ? (
+                    <div className="flex flex-wrap gap-1.5 text-[11px] font-bold text-slate-700">
+                      {village && <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200">ບ້ານ: {village}</span>}
+                      {district && <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200">ເມືອງ: {district}</span>}
+                      {province && <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200">ແຂວງ: {province.replace('ແຂວງ', '').replace('ນະຄອນຫຼວງ', '').trim()}</span>}
+                    </div>
+                  ) : null}
+                  <p className="font-semibold text-slate-700 mt-1 italic leading-relaxed text-xs">
                     {order.address || (currentLang === 'lo' ? 'ບໍ່ມີຂໍ້ມູນທີ່ຢູ່ (ຮັບເອງທີ່ຮ້ານ)' : 'No address provided (Self-pickup)')}
                   </p>
                 </div>
@@ -1206,12 +1235,26 @@ export default function OrderDetailsPage({
               <div className="space-y-3">
                 <div className="space-y-1">
                   <span className="text-[10px] font-black uppercase text-slate-400 block">Recipient Client</span>
-                  <span className="text-slate-800 font-bold block">{order.customerName}</span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-slate-800 font-bold block">{order.customerName}</span>
+                    {categoryLabel && (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-blue-50 text-blue-700 border border-blue-200">
+                        {categoryLabel}
+                      </span>
+                    )}
+                  </div>
                   <span className="text-slate-500 font-mono block mt-0.5">{order.phone}</span>
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1 pt-1 border-t border-slate-100">
                   <span className="text-[10px] font-black uppercase text-slate-400 block">Delivery Address</span>
-                  <p className="text-slate-700 italic block">{order.address || 'Self-pickup'}</p>
+                  {(village || district || province) ? (
+                    <div className="flex flex-wrap gap-1 text-[10.5px] font-bold text-slate-700 mt-0.5">
+                      {village && <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200">ບ້ານ {village}</span>}
+                      {district && <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200">ເມືອງ {district}</span>}
+                      {province && <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200">{province.replace('ແຂວງ', '').replace('ນະຄອນຫຼວງ', '').trim()}</span>}
+                    </div>
+                  ) : null}
+                  <p className="text-slate-700 italic block mt-0.5">{order.address || 'Self-pickup'}</p>
                 </div>
               </div>
             </div>
@@ -1556,7 +1599,14 @@ export default function OrderDetailsPage({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 mb-4">
                     <div>
                       <span className="text-slate-400 block text-[10.5px]">{currentLang === 'lo' ? 'ຊື່ລູກຄ້າ:' : 'Customer Name:'}</span>
-                      <strong className="text-slate-100 block text-sm">{customerName}</strong>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <strong className="text-slate-100 block text-sm">{customerName}</strong>
+                        {categoryLabel && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-blue-900/60 text-blue-300 border border-blue-700">
+                            {categoryLabel}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[10.5px]">{currentLang === 'lo' ? 'ເບີໂທຕິດຕໍ່:' : 'Phone:'}</span>
@@ -1564,9 +1614,16 @@ export default function OrderDetailsPage({
                         {customerPhone}
                       </a>
                     </div>
-                    <div className="sm:col-span-2 border-t border-slate-800/80 pt-2 mt-1">
+                    <div className="sm:col-span-2 border-t border-slate-800/80 pt-2 mt-1 space-y-1">
                       <span className="text-slate-400 block text-[10.5px]">{currentLang === 'lo' ? 'ສະຖານທີ່ຈັດສົ່ງ:' : 'Delivery Address:'}</span>
-                      <span className="text-slate-200 block font-medium">{deliveryAddress}</span>
+                      {(village || district || province) ? (
+                        <div className="flex flex-wrap gap-1.5 text-[10.5px] font-bold text-slate-300">
+                          {village && <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700">ບ້ານ: {village}</span>}
+                          {district && <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700">ເມືອງ: {district}</span>}
+                          {province && <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700">ແຂວງ: {province.replace('ແຂວງ', '').replace('ນະຄອນຫຼວງ', '').trim()}</span>}
+                        </div>
+                      ) : null}
+                      <span className="text-slate-300 block font-medium mt-0.5">{deliveryAddress}</span>
                     </div>
                   </div>
 

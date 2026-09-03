@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Printer, 
   Scissors, 
@@ -82,6 +82,10 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
     },
   ];
 
+  // Support Multi-Job Itemized Pipelines & All-In-One view
+  const orderItems: any[] = Array.isArray(order?.items) ? order.items : [];
+  const [activeJobTab, setActiveJobTab] = useState<string>('ALL');
+
   const currentWorkflowSteps = productionWorkflow?.steps && productionWorkflow.steps.length > 0
     ? productionWorkflow.steps
     : defaultSteps;
@@ -94,6 +98,12 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
     }
   }, [productionWorkflow]);
 
+  // Filter steps according to active job tab
+  const displayedSteps = useMemo(() => {
+    if (activeJobTab === 'ALL') return steps;
+    return steps.filter(s => !s.jobId || s.jobId === activeJobTab);
+  }, [steps, activeJobTab]);
+
   const completedStepsCount = steps.filter((s) => s.status === 'COMPLETED').length;
   const isAllProductionCompleted = steps.length > 0 && completedStepsCount === steps.length;
   const progressPercent = steps.length > 0 ? Math.round((completedStepsCount / steps.length) * 100) : 0;
@@ -102,16 +112,42 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
     let completedStepItem: ProductionWorkflowStep | null = null;
     let isNowDone = false;
 
+    // Retrieve active logged-in user or technician context
+    let currentUser = {
+      id: 'usr_admin',
+      name: 'Admin / Supervisor',
+      role: 'Production Supervisor'
+    };
+    try {
+      const stored = localStorage.getItem('user') || localStorage.getItem('currentUser') || localStorage.getItem('auth_user');
+      if (stored) {
+        const u = JSON.parse(stored);
+        currentUser = {
+          id: u.id || u.userId || 'usr_current',
+          name: u.name || u.full_name || u.username || 'Current User',
+          role: u.role || 'Operator'
+        };
+      }
+    } catch {}
+
     const updatedSteps = steps.map((step) => {
       if (step.id === stepId) {
         const isDone = step.status === 'COMPLETED';
         const nextStatus: 'PENDING' | 'COMPLETED' = isDone ? 'PENDING' : 'COMPLETED';
         isNowDone = nextStatus === 'COMPLETED';
-        const updatedStep = {
+        
+        const operatorName = step.assignedStaffName || currentUser.name;
+        const operatorRole = step.assignedStaffRole || currentUser.role;
+        const operatorId = step.assignedTo || currentUser.id;
+
+        const updatedStep: ProductionWorkflowStep = {
           ...step,
           status: nextStatus,
           completedAt: nextStatus === 'COMPLETED' ? new Date().toISOString() : null,
-          completedBy: nextStatus === 'COMPLETED' ? (step.assignedStaffName || 'Operator') : null,
+          completedBy: nextStatus === 'COMPLETED' ? operatorName : null,
+          completed_by_id: nextStatus === 'COMPLETED' ? operatorId : undefined,
+          completed_by_name: nextStatus === 'COMPLETED' ? operatorName : undefined,
+          completed_by_role: nextStatus === 'COMPLETED' ? operatorRole : undefined,
         };
         completedStepItem = updatedStep;
         return updatedStep;
@@ -212,7 +248,7 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
     if (!isoString) return '';
     try {
       const d = new Date(isoString);
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     } catch {
       return '';
     }
@@ -263,6 +299,47 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
         </div>
       </div>
 
+      {/* Itemized Job Selector Tabs (Task 3.4) */}
+      {orderItems.length > 1 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <button
+            type="button"
+            onClick={() => setActiveJobTab('ALL')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer shrink-0 ${
+              activeJobTab === 'ALL'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            ພາບລວມທັງໝົດ ({steps.length} ຂັ້ນຕອນ)
+          </button>
+          {orderItems.map((job, jIdx) => {
+            const jId = job.id || `job_${jIdx}`;
+            const jName = job.name || job.item_name || `Job #${jIdx + 1}`;
+            const jobStepsCount = steps.filter(s => s.jobId === jId).length;
+            return (
+              <button
+                key={jId}
+                type="button"
+                onClick={() => setActiveJobTab(jId)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                  activeJobTab === jId
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                <span>Job {jIdx + 1}: {jName}</span>
+                {jobStepsCount > 0 && (
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${activeJobTab === jId ? 'bg-blue-800 text-blue-100' : 'bg-white text-slate-600'}`}>
+                    {jobStepsCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Progress Bar */}
       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
         <div className="flex justify-between items-center text-xs">
@@ -283,8 +360,10 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
 
       {/* Dynamic Workflow Steps Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
-        {steps.map((step, idx) => {
+        {displayedSteps.map((step, idx) => {
           const isDone = step.status === 'COMPLETED';
+          const whoCompleted = step.completed_by_name || step.completedBy || step.assignedStaffName || 'Operator';
+          const roleCompleted = step.completed_by_role || step.assignedStaffRole || 'Technician';
 
           return (
             <div
@@ -336,14 +415,22 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
                   )}
                 </div>
 
-                {/* Completion Timestamp */}
-                {isDone && step.completedAt && (
-                  <div className="mt-1 flex items-center justify-between text-[10px] text-emerald-700 font-mono">
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      <span>{formatStepTime(step.completedAt)}</span>
-                    </span>
-                    <span>{step.completedBy ? `by ${step.completedBy}` : '✓'}</span>
+                {/* Completion Timestamp & Technician Audit Log (Task 3.4) */}
+                {isDone && (
+                  <div className="mt-2 p-2 rounded-xl bg-emerald-100/60 border border-emerald-200/70 text-[10.5px] text-emerald-900 font-medium space-y-1 animate-fade-in">
+                    <div className="flex items-center gap-1 font-bold text-emerald-800">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>✓ ສຳເລັດແລ້ວ ໂດຍ:</span>
+                    </div>
+                    <div className="pl-4 text-[10px] font-semibold text-emerald-950">
+                      <strong>{whoCompleted}</strong> <span className="text-emerald-700">({roleCompleted})</span>
+                    </div>
+                    {step.completedAt && (
+                      <div className="pl-4 flex items-center gap-1 text-[9.5px] font-mono text-emerald-700">
+                        <Clock className="w-3 h-3 shrink-0" />
+                        <span>{formatStepTime(step.completedAt)}</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -361,7 +448,7 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
                 {isDone ? (
                   <>
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>{currentLang === 'lo' ? 'ສຳເລັດແລ້ວ' : 'Completed'}</span>
+                    <span>{currentLang === 'lo' ? 'ສຳເລັດແລ້ວ (ຄລິກເພື່ອຍົກເລີກ)' : 'Completed (Click to undo)'}</span>
                   </>
                 ) : (
                   <>

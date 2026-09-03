@@ -84,8 +84,8 @@ export const ArtworkViewerModal: React.FC<ArtworkViewerModalProps> = ({
   if (Array.isArray(order.items) && order.items.length > 0) {
     order.items.forEach((item: any, idx: number) => {
       const jName = item.name || item.item_name || item.job_name || item.product_name || `Job #${idx + 1}`;
-      const fUrl = item.file_url || item.fileUrl || item.specs?.file_url || item.specs?.fileUrl || '';
-      const fName = item.file_name || item.fileName || item.specs?.file_name || item.specs?.fileName || (fUrl ? fUrl.split('/').pop()?.split('?')[0] : '');
+      const fUrl = item.artwork?.file_url || item.artworkUrl || item.artwork_url || item.file_url || item.fileUrl || item.specs?.file_url || item.specs?.fileUrl || '';
+      const fName = item.artwork?.file_name || item.artworkFileName || item.artwork_file_name || item.file_name || item.fileName || item.specs?.file_name || item.specs?.fileName || (fUrl ? fUrl.split('/').pop()?.split('?')[0] : '');
       const dLink = item.google_drive_link || item.drive_url || item.driveUrl || item.drive_link || (fUrl.includes('drive.google.com') ? fUrl : order.driveLink || order.googleDriveLink || order.artworkLink);
       const isDrive = Boolean(dLink) || fUrl.includes('drive.google.com') || fUrl.includes('docs.google.com') || fUrl.includes('canva.com');
 

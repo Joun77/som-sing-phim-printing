@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Plus,
@@ -20,7 +21,17 @@ import {
   FileText,
   Search,
   CheckCircle2,
-  FolderPlus
+  FolderPlus,
+  Box,
+  ChevronRight,
+  Maximize2,
+  Sliders,
+  Sparkle,
+  CopyCheck,
+  CheckCircle,
+  FileCheck2,
+  HelpCircle,
+  UserCheck
 } from 'lucide-react';
 import { ProductionWorkflow, ProductionWorkflowStep, WorkflowTemplate, WorkflowStepCategory } from '../../types';
 import { useApp } from '@store/AppContext';
@@ -137,27 +148,81 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
     }
   });
 
-  // All templates
   const allTemplates = useMemo(() => {
     return [...BUILT_IN_WORKFLOW_TEMPLATES, ...customTemplates];
   }, [customTemplates]);
 
+  // Order items list
+  const orderItems: any[] = useMemo(() => {
+    if (!order?.items || !Array.isArray(order.items) || order.items.length === 0) {
+      return [{ id: 'item_default', name: 'Main Print Job', quantity: 1 }];
+    }
+    return order.items;
+  }, [order]);
+
+  // Active Job Selector state (default to first item)
+  const [activeJobId, setActiveJobId] = useState<string>(() => {
+    return order?.items?.[0]?.id || 'item_default';
+  });
+
+  // Track which template is assigned to each job item: Record<jobId, templateId>
+  const [jobTemplates, setJobTemplates] = useState<Record<string, string>>({});
+
+  // Modal/Drawer state for selecting template for a specific job or applying to all
+  const [templatePickerTargetJobId, setTemplatePickerTargetJobId] = useState<string | null>(null);
+
+  // Search & Filter templates
+  const [templateSearchQuery, setTemplateSearchQuery] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+
+  const filteredTemplates = useMemo(() => {
+    return allTemplates.filter(tpl => {
+      const matchesSearch = !templateSearchQuery.trim() || 
+        (tpl.name && tpl.name.toLowerCase().includes(templateSearchQuery.toLowerCase().trim())) ||
+        (tpl.nameLao && tpl.nameLao.toLowerCase().includes(templateSearchQuery.toLowerCase().trim())) ||
+        (tpl.description && tpl.description.toLowerCase().includes(templateSearchQuery.toLowerCase().trim())) ||
+        (tpl.category && tpl.category.toLowerCase().includes(templateSearchQuery.toLowerCase().trim()));
+      
+      const matchesCat = selectedCategory === 'ALL' || tpl.category.toLowerCase() === selectedCategory.toLowerCase();
+      return matchesSearch && matchesCat;
+    });
+  }, [allTemplates, templateSearchQuery, selectedCategory]);
+
   // Selected Template ID & Steps
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('tpl_booklet_catalog');
-  const [currentTemplateName, setCurrentTemplateName] = useState<string>('Booklet & Catalog');
-  const [currentTemplateNameLao, setCurrentTemplateNameLao] = useState<string>('ປຶ້ມເຂົ້າເລ່ມໄສກາວ / ສັນຫ່ວງ');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('custom_itemized');
+  const [currentTemplateName, setCurrentTemplateName] = useState<string>('Itemized Production Workflow');
+  const [currentTemplateNameLao, setCurrentTemplateNameLao] = useState<string>('ສາຍງານການຜະລິດແຍກຕາມລາຍການສິນຄ້າ');
   const [steps, setSteps] = useState<ProductionWorkflowStep[]>([]);
   const [showSaveTemplateInput, setShowSaveTemplateInput] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState('');
   const [technicianSearchQuery, setTechnicianSearchQuery] = useState<Record<string, string>>({});
   const [activeDropdownStepId, setActiveDropdownStepId] = useState<string | null>(null);
+  const [showAssignAllDropdown, setShowAssignAllDropdown] = useState(false);
+  const [assignAllSearchQuery, setAssignAllSearchQuery] = useState('');
 
-  // Auto detect template based on order items
+  // Heuristic auto-detect function for an item
+  const detectTemplateForItem = (item: any): WorkflowTemplate => {
+    const itemName = `${item?.name || ''} ${item?.item_name || ''} ${item?.bindingMethod || ''} ${item?.binding_type || ''}`.toLowerCase();
+    if (itemName.includes('sticker') || itemName.includes('label') || itemName.includes('kiss')) {
+      return BUILT_IN_WORKFLOW_TEMPLATES[1];
+    } else if (itemName.includes('calendar') || itemName.includes('ປະຕິທິນ')) {
+      return BUILT_IN_WORKFLOW_TEMPLATES[3];
+    } else if (itemName.includes('box') || itemName.includes('packaging') || itemName.includes('card') || itemName.includes('ນາມບັດ')) {
+      return BUILT_IN_WORKFLOW_TEMPLATES[4];
+    } else if (itemName.includes('photo') || itemName.includes('poster') || itemName.includes('leaflet') || itemName.includes('ໃບປິວ')) {
+      return BUILT_IN_WORKFLOW_TEMPLATES[2];
+    }
+    return BUILT_IN_WORKFLOW_TEMPLATES[0];
+  };
+
+  // Initial load
   useEffect(() => {
     if (!isOpen) return;
 
+    const firstJobId = orderItems[0]?.id || 'item_default';
+    setActiveJobId(firstJobId);
+
     if (order?.productionWorkflow?.steps && order.productionWorkflow.steps.length > 0) {
-      // Load existing workflow
       setSelectedTemplateId(order.productionWorkflow.templateId || 'custom');
       setCurrentTemplateName(order.productionWorkflow.templateName || 'Custom Workflow');
       setCurrentTemplateNameLao(order.productionWorkflow.templateNameLao || order.productionWorkflow.templateName || 'ຂະບວນການຜະລິດ');
@@ -165,55 +230,109 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
       return;
     }
 
-    // Heuristic detection based on items
-    let matchedTpl = BUILT_IN_WORKFLOW_TEMPLATES[0];
-    const items = order?.items || [];
-    const itemNames = items.map((i: any) => `${i.name || ''} ${i.item_name || ''} ${i.bindingMethod || ''} ${i.binding_type || ''}`).join(' ').toLowerCase();
+    // Default: assign steps tagged by jobId per item
+    const allItemSteps: ProductionWorkflowStep[] = [];
+    const initialJobTpls: Record<string, string> = {};
 
-    if (itemNames.includes('sticker') || itemNames.includes('label') || itemNames.includes('kiss')) {
-      matchedTpl = BUILT_IN_WORKFLOW_TEMPLATES[1];
-    } else if (itemNames.includes('calendar') || itemNames.includes('ປະຕິທິນ')) {
-      matchedTpl = BUILT_IN_WORKFLOW_TEMPLATES[3];
-    } else if (itemNames.includes('box') || itemNames.includes('packaging') || itemNames.includes('card') || itemNames.includes('ນາມບັດ')) {
-      matchedTpl = BUILT_IN_WORKFLOW_TEMPLATES[4];
-    } else if (itemNames.includes('photo') || itemNames.includes('poster') || itemNames.includes('leaflet') || itemNames.includes('ໃບປິວ')) {
-      matchedTpl = BUILT_IN_WORKFLOW_TEMPLATES[2];
-    }
+    orderItems.forEach((item, itIdx) => {
+      const tpl = detectTemplateForItem(item);
+      const jId = item.id || `item_${itIdx + 1}`;
+      initialJobTpls[jId] = tpl.id;
 
-    setSelectedTemplateId(matchedTpl.id);
-    setCurrentTemplateName(matchedTpl.name);
-    setCurrentTemplateNameLao(matchedTpl.nameLao);
-    setSteps(
-      matchedTpl.steps.map((st) => ({
-        ...st,
-        status: 'PENDING',
-      }))
-    );
+      tpl.steps.forEach((st) => {
+        allItemSteps.push({
+          ...st,
+          id: `${jId}_${st.id}_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          jobId: jId,
+          name: st.name,
+          nameLao: st.nameLao,
+          status: 'PENDING',
+        });
+      });
+    });
+
+    setJobTemplates(initialJobTpls);
+    setSelectedTemplateId('custom_itemized');
+    setCurrentTemplateName('Itemized Production Workflow');
+    setCurrentTemplateNameLao('ສາຍງານການຜະລິດແຍກຕາມລາຍການສິນຄ້າ');
+    setSteps(allItemSteps);
   }, [isOpen, order]);
 
-  // When user selects a different template
-  const handleSelectTemplate = (tpl: WorkflowTemplate) => {
+  // Apply template to a target job
+  const handleApplyTemplateToJob = (targetJobId: string, tpl: WorkflowTemplate) => {
+    setJobTemplates(prev => ({ ...prev, [targetJobId]: tpl.id }));
+    
+    // Replace steps for this specific job
+    const nonJobSteps = steps.filter(s => s.jobId && s.jobId !== targetJobId);
+    const newJobSteps = tpl.steps.map(st => ({
+      ...st,
+      id: `${targetJobId}_${st.id}_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      jobId: targetJobId,
+      name: st.name,
+      nameLao: st.nameLao,
+      status: 'PENDING' as const,
+    }));
+
+    setSteps([...nonJobSteps, ...newJobSteps]);
+    setTemplatePickerTargetJobId(null);
+  };
+
+  // Apply template to ALL items
+  const handleApplyTemplateToAll = (tpl: WorkflowTemplate) => {
+    const allJobTpls: Record<string, string> = {};
+    const allItemSteps: ProductionWorkflowStep[] = [];
+
+    orderItems.forEach((item, itIdx) => {
+      const jId = item.id || `item_${itIdx + 1}`;
+      allJobTpls[jId] = tpl.id;
+      tpl.steps.forEach((st) => {
+        allItemSteps.push({
+          ...st,
+          id: `${jId}_${st.id}_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          jobId: jId,
+          name: st.name,
+          nameLao: st.nameLao,
+          status: 'PENDING',
+        });
+      });
+    });
+
+    setJobTemplates(allJobTpls);
+    setSteps(allItemSteps);
     setSelectedTemplateId(tpl.id);
     setCurrentTemplateName(tpl.name);
     setCurrentTemplateNameLao(tpl.nameLao);
-    setSteps(
-      tpl.steps.map((st) => ({
-        ...st,
-        status: 'PENDING',
-      }))
-    );
+    setTemplatePickerTargetJobId(null);
   };
 
-  // Reordering steps
-  const handleMoveStep = (index: number, direction: 'up' | 'down') => {
-    if (direction === 'up' && index === 0) return;
-    if (direction === 'down' && index === steps.length - 1) return;
+  // Active Job Details
+  const activeJobItem = useMemo(() => {
+    return orderItems.find(i => (i.id || 'item_default') === activeJobId) || orderItems[0];
+  }, [orderItems, activeJobId]);
 
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+  // Steps filtered by active job view
+  const visibleSteps = useMemo(() => {
+    if (!activeJobId) return steps;
+    return steps.filter(s => !s.jobId || s.jobId === activeJobId);
+  }, [steps, activeJobId]);
+
+  // Reordering steps within current view
+  const handleMoveStep = (stepId: string, direction: 'up' | 'down') => {
+    const currentViewIds = visibleSteps.map(s => s.id);
+    const viewIdx = currentViewIds.indexOf(stepId);
+    if (viewIdx === -1) return;
+    if (direction === 'up' && viewIdx === 0) return;
+    if (direction === 'down' && viewIdx === currentViewIds.length - 1) return;
+
+    const targetStepId = currentViewIds[direction === 'up' ? viewIdx - 1 : viewIdx + 1];
+    const globalIdx1 = steps.findIndex(s => s.id === stepId);
+    const globalIdx2 = steps.findIndex(s => s.id === targetStepId);
+    if (globalIdx1 === -1 || globalIdx2 === -1) return;
+
     const newSteps = [...steps];
-    const temp = newSteps[index];
-    newSteps[index] = newSteps[targetIndex];
-    newSteps[targetIndex] = temp;
+    const temp = newSteps[globalIdx1];
+    newSteps[globalIdx1] = newSteps[globalIdx2];
+    newSteps[globalIdx2] = temp;
     setSteps(newSteps);
   };
 
@@ -227,6 +346,7 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
     const newId = `step_custom_${Date.now()}`;
     const newStep: ProductionWorkflowStep = {
       id: newId,
+      jobId: activeJobId || orderItems[0]?.id || 'item_default',
       name: preset ? preset.name : 'Custom Finishing Step',
       nameLao: preset ? preset.nameLao : 'ຂັ້ນຕອນແປຮູບພິເສດ',
       category: preset ? preset.category : 'FINISHING',
@@ -246,31 +366,62 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
   const handleAssignStaff = (stepId: string, employee: any) => {
     setSteps(
       steps.map((s) => {
-        if (s.id === stepId) {
-          if (!employee) {
-            return {
-              ...s,
-              assignedTo: undefined,
-              assignedStaffName: undefined,
-              assignedStaffRole: undefined,
-              assignedStaffAvatar: undefined,
-            };
-          }
+        if (s.id !== stepId) return s;
+        if (!employee) {
           return {
             ...s,
-            assignedTo: employee.id,
-            assignedStaffName: employee.name || employee.full_name || 'Staff',
-            assignedStaffRole: employee.role || employee.department || 'Technician',
-            assignedStaffAvatar: employee.avatar,
+            assignedTo: undefined,
+            assignedStaffName: undefined,
+            assignedStaffRole: undefined,
+            assignedStaffAvatar: undefined,
           };
         }
-        return s;
+        return {
+          ...s,
+          assignedTo: employee.id,
+          assignedStaffName: employee.name || employee.full_name,
+          assignedStaffRole: employee.role || employee.department,
+          assignedStaffAvatar: employee.avatar || employee.photo_url,
+        };
       })
     );
     setActiveDropdownStepId(null);
   };
 
-  // Save as Custom Template
+  // Assign ONE technician to ALL steps of the CURRENT item
+  const handleAssignTechnicianToCurrentItemSteps = (employee: any) => {
+    if (!employee) return;
+    setSteps(
+      steps.map((s) => {
+        if (s.jobId && s.jobId !== activeJobId) return s;
+        return {
+          ...s,
+          assignedTo: employee.id,
+          assignedStaffName: employee.name || employee.full_name,
+          assignedStaffRole: employee.role || employee.department,
+          assignedStaffAvatar: employee.avatar || employee.photo_url,
+        };
+      })
+    );
+    setShowAssignAllDropdown(false);
+  };
+
+  // Assign ONE technician to ALL steps across the ENTIRE order
+  const handleAssignTechnicianToAllOrderSteps = (employee: any) => {
+    if (!employee) return;
+    setSteps(
+      steps.map((s) => ({
+        ...s,
+        assignedTo: employee.id,
+        assignedStaffName: employee.name || employee.full_name,
+        assignedStaffRole: employee.role || employee.department,
+        assignedStaffAvatar: employee.avatar || employee.photo_url,
+      }))
+    );
+    setShowAssignAllDropdown(false);
+  };
+
+  // Save current pipeline as custom template
   const handleSaveAsCustomTemplate = () => {
     if (!newTemplateName.trim()) return;
 
@@ -278,10 +429,14 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
       id: `tpl_custom_${Date.now()}`,
       name: newTemplateName.trim(),
       nameLao: newTemplateName.trim(),
-      description: `${steps.length} steps tailored workflow`,
+      description: visibleSteps.map((s) => s.nameLao || s.name).join(' ➔ '),
       category: 'Custom',
-      isCustom: true,
-      steps: steps.map(({ status, completedAt, completedBy, ...rest }) => rest),
+      steps: visibleSteps.map((s) => ({
+        id: s.id,
+        name: s.name,
+        nameLao: s.nameLao,
+        category: s.category,
+      })),
     };
 
     const updatedCustom = [newTpl, ...customTemplates];
@@ -291,9 +446,6 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
     } catch (e) {
       console.error(e);
     }
-    setSelectedTemplateId(newTpl.id);
-    setCurrentTemplateName(newTpl.name);
-    setCurrentTemplateNameLao(newTpl.nameLao);
     setShowSaveTemplateInput(false);
     setNewTemplateName('');
   };
@@ -331,152 +483,359 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in font-sans">
-      <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+  const modalElement = (
+    <div className="fixed inset-0 top-0 left-0 right-0 bottom-0 w-screen h-screen z-[99999] flex items-center justify-center p-3 sm:p-5 bg-slate-950/60 backdrop-blur-md animate-fade-in font-sans">
+      <div className="w-[98vw] max-w-[1600px] h-[95vh] flex flex-col bg-slate-50 rounded-3xl shadow-2xl overflow-hidden border border-slate-200/90 animate-scale-up">
         
-        {/* Modal Header */}
-        <div className="p-5 sm:px-7 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-900 via-slate-850 to-blue-950 text-white">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-400/30 flex items-center justify-center text-amber-400">
-              <Layers className="w-5 h-5" />
+        {/* Rich Navy Gradient Header with Process Step Breadcrumb */}
+        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white px-6 sm:px-8 py-4 flex items-center justify-between shrink-0 border-b border-slate-800 shadow-md">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-sky-500/20 text-sky-400 border border-sky-400/30 flex items-center justify-center shadow-lg shadow-sky-500/20">
+              <Layers className="w-5.5 h-5.5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10.5px] font-mono uppercase tracking-widest text-amber-400 font-black">
-                  Production Workflow Engine
+              {/* Process Step Breadcrumb */}
+              <div className="flex items-center gap-2 mb-1">
+                <span className="flex items-center gap-1 text-[11px] font-bold text-slate-400">
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{currentLang === 'lo' ? 'ຂັ້ນຕອນ 1: ຮັບອໍເດີ' : 'Step 1: Order Reception'}</span>
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                <span className="text-slate-600">➔</span>
+                <span className="flex items-center gap-1 text-[11px] font-black text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-400/30">
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>{currentLang === 'lo' ? 'ຂັ້ນຕອນ 2: ຂະບວນການຜະລິດ' : 'Step 2: Production Process'}</span>
+                </span>
+                <span className="px-2 py-0.5 rounded-md text-[10.5px] font-mono bg-white/10 text-white border border-white/20 font-bold ml-1">
                   {order?.orderNo || order?.order_no || order?.id || 'JOB'}
                 </span>
               </div>
-              <h2 className="text-lg sm:text-xl font-black text-slate-100">
-                {currentLang === 'lo' ? 'ກຳນົດສາຍງານການຜະລິດ & ມອບໝາຍຊ່າງ' : 'Configure Production Workflow & Assign Technicians'}
+              <h2 className="text-lg sm:text-xl font-black text-white tracking-wide">
+                {currentLang === 'lo' ? 'ຂະບວນການຜະລິດ' : 'Production Process'}
               </h2>
             </div>
           </div>
+
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
+            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
+            aria-label="Close"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-6">
+        {/* Modal Body: Two-Column Split Layout */}
+        <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-0 min-h-0 bg-slate-100/50">
           
-          {/* 1. Built-in & Custom Template Selector */}
-          <div>
-            <div className="flex items-center justify-between mb-2.5">
-              <label className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-2">
-                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                <span>{currentLang === 'lo' ? '1. ເລືອກ Template ຂະບວນການຜະລິດມາດຕະຖານ:' : '1. Choose Workflow Template:'}</span>
-              </label>
-              <span className="text-[11px] text-slate-400 font-medium">
-                {allTemplates.length} {currentLang === 'lo' ? 'ແບບພ້ອມໃຊ້' : 'Templates available'}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-              {allTemplates.map((tpl) => {
-                const isSelected = selectedTemplateId === tpl.id;
-                return (
-                  <button
-                    key={tpl.id}
-                    type="button"
-                    onClick={() => handleSelectTemplate(tpl)}
-                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer relative flex flex-col justify-between ${
-                      isSelected
-                        ? 'bg-blue-50/70 border-blue-500 ring-2 ring-blue-500/20 shadow-xs'
-                        : 'bg-slate-50/70 hover:bg-slate-100 border-slate-200'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-1.5 mb-1">
-                        <strong className={`text-xs font-black ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}>
-                          {tpl.nameLao || tpl.name}
-                        </strong>
-                        {isSelected && (
-                          <div className="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0">
-                            <Check className="w-2.5 h-2.5 stroke-[3]" />
-                          </div>
-                        )}
-                      </div>
-                      <p className="text-[10.5px] text-slate-500 line-clamp-2 leading-relaxed">
-                        {tpl.description}
-                      </p>
-                    </div>
-
-                    <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[10px]">
-                      <span className="font-mono font-bold text-slate-500">
-                        {tpl.steps.length} {currentLang === 'lo' ? 'ຂັ້ນຕອນ' : 'steps'}
-                      </span>
-                      <span className="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600 font-bold">
-                        {tpl.category}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 2. Interactive Steps Editor & Technician Assignment */}
-          <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+          {/* Left Column (5 of 12 cols): PRINT JOB ITEMS LIST (Priority 1) */}
+          <div className="lg:col-span-5 border-r border-slate-200 bg-slate-50 p-5 sm:p-6 overflow-y-auto space-y-4">
+            
+            {/* Column Header & Actions */}
+            <div className="flex items-center justify-between pb-1 border-b border-slate-200">
               <div>
-                <span className="text-[10px] font-black uppercase text-blue-600 tracking-wider block">
-                  Workflow Pipeline ({steps.length} Steps)
-                </span>
-                <h3 className="text-sm font-black text-slate-900">
-                  {currentLang === 'lo' ? 'ລຳດັບຂັ້ນຕອນການຜະລິດ & ຊ່າງຜູ້ຮັບຜິດຊອບ' : 'Production Steps & Assigned Technicians'}
-                </h3>
+                <label className="text-xs font-black uppercase text-slate-800 tracking-wider flex items-center gap-1.5">
+                  <Box className="w-4 h-4 text-sky-600" />
+                  <span>{currentLang === 'lo' ? 'ລາຍການສິນຄ້າສັ່ງພິມ (ເລືອກເພື່ອຕັ້ງຄ່າ):' : 'Print Job Items (Select to Configure):'}</span>
+                </label>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {currentLang === 'lo' ? 'ເລືອກລາຍການເພື່ອປັບ Template ຫຼື ມອບໝາຍຊ່າງ' : 'Select an item to change its workflow or assign staff'}
+                </p>
               </div>
 
-              {/* Quick Save Template Button */}
-              {!showSaveTemplateInput ? (
+              {/* Apply To All Button */}
+              {orderItems.length > 1 && (
                 <button
                   type="button"
-                  onClick={() => setShowSaveTemplateInput(true)}
-                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  onClick={() => setTemplatePickerTargetJobId('ALL')}
+                  className="px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  title="Apply same template to all items"
                 >
-                  <FolderPlus className="w-3.5 h-3.5 text-blue-600" />
-                  <span>{currentLang === 'lo' ? 'ບັນທຶກເປັນ Template ໃໝ່' : 'Save as Template'}</span>
+                  <CopyCheck className="w-3.5 h-3.5" />
+                  <span>{currentLang === 'lo' ? 'ຕັ້ງຄ່າຄືກັນທຸກລາຍການ' : 'Apply to All'}</span>
                 </button>
-              ) : (
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={newTemplateName}
-                    onChange={(e) => setNewTemplateName(e.target.value)}
-                    placeholder={currentLang === 'lo' ? 'ຕັ້ງຊື່ Template ໃໝ່...' : 'Template Name...'}
-                    className="px-2.5 py-1 text-xs border border-slate-300 rounded-lg bg-white font-medium w-44"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSaveAsCustomTemplate}
-                    disabled={!newTemplateName.trim()}
-                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 cursor-pointer"
-                  >
-                    <Save className="w-3 h-3 inline mr-1" />
-                    <span>{currentLang === 'lo' ? 'ບັນທຶກ' : 'Save'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowSaveTemplateInput(false)}
-                    className="p-1 text-slate-400 hover:text-slate-700 text-xs"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
               )}
             </div>
 
-            {/* List of Steps */}
-            <div className="space-y-2.5">
-              {steps.map((step, idx) => {
+            {/* Print Items Cards List */}
+            <div className="space-y-3">
+              {orderItems.map((item, itIdx) => {
+                const jId = item.id || `item_${itIdx + 1}`;
+                const isSelected = activeJobId === jId;
+                const itemSteps = steps.filter(s => s.jobId === jId);
+                const assignedCount = itemSteps.filter(s => !!s.assignedStaffName).length;
+                const assignedTplId = jobTemplates[jId];
+                const currentTpl = allTemplates.find(t => t.id === assignedTplId) || detectTemplateForItem(item);
+
+                return (
+                  <div
+                    key={jId}
+                    onClick={() => setActiveJobId(jId)}
+                    className={`p-4 rounded-2xl border transition-all cursor-pointer relative ${
+                      isSelected
+                        ? 'bg-white border-sky-500 ring-2 ring-sky-500/20 shadow-md'
+                        : 'bg-white/80 hover:bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
+                    }`}
+                  >
+                    {/* Header: Item Index, Name & Selection badge */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-7 h-7 rounded-xl font-mono text-xs font-black flex items-center justify-center shrink-0 ${
+                          isSelected ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-700 border border-slate-200'
+                        }`}>
+                          {itIdx + 1}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-black text-slate-900 truncate">
+                            {item.name || item.item_name || `Print Job #${itIdx + 1}`}
+                          </h4>
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium mt-0.5">
+                            <span className="font-bold text-slate-700">x{item.quantity || 1} {item.unit || 'pcs'}</span>
+                            <span>•</span>
+                            <span>{item.paperType || item.paper_type || 'Standard Paper'}</span>
+                            {item.paperGram && <span>({item.paperGram}g)</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {isSelected && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-sky-100 text-sky-800 border border-sky-200 shrink-0">
+                          {currentLang === 'lo' ? 'ກຳລັງເລືອກ' : 'Active'}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Specifications Pill Bar */}
+                    {(item.size || item.pages || item.bindingMethod) && (
+                      <div className="mt-2.5 flex flex-wrap gap-1 text-[10px]">
+                        {item.size && (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 font-bold">
+                            {item.size}
+                          </span>
+                        )}
+                        {item.pages && (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 font-bold">
+                            {item.pages} {currentLang === 'lo' ? 'ໜ້າ' : 'pages'}
+                          </span>
+                        )}
+                        {item.bindingMethod && (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 font-bold">
+                            {item.bindingMethod}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Template Selection Box & Status for this Item */}
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-bold text-slate-400 block uppercase">Template ປັດຈຸບັນ:</span>
+                        <div className="flex items-center gap-1 text-xs font-black text-slate-800 truncate">
+                          <Sparkles className="w-3 h-3 text-amber-500 shrink-0" />
+                          <span className="truncate">{currentTpl.nameLao || currentTpl.name}</span>
+                        </div>
+                      </div>
+
+                      {/* Button to Open Template Picker Popover for THIS Item */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTemplatePickerTargetJobId(jId);
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-sky-50 border border-slate-200 hover:border-sky-300 text-slate-700 hover:text-sky-700 text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        <Sliders className="w-3 h-3 text-sky-600" />
+                        <span>{currentLang === 'lo' ? 'ປ່ຽນ Template' : 'Change Template'}</span>
+                      </button>
+                    </div>
+
+                    {/* Step Count and Assigned Technician Summary */}
+                    <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
+                      <span className="font-bold text-slate-700 flex items-center gap-1">
+                        <Layers className="w-3 h-3 text-slate-400" />
+                        <span>{itemSteps.length} {currentLang === 'lo' ? 'ຂັ້ນຕອນ' : 'steps'}</span>
+                      </span>
+                      <span className={`font-bold flex items-center gap-1 ${assignedCount === itemSteps.length && itemSteps.length > 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        <User className="w-3 h-3" />
+                        <span>{assignedCount}/{itemSteps.length} {currentLang === 'lo' ? 'ມອບໝາຍແລ້ວ' : 'assigned'}</span>
+                      </span>
+                    </div>
+
+                  </div>
+                );
+              })}
+            </div>
+
+          </div>
+
+          {/* Right Column (7 of 12 cols): WORKFLOW PIPELINE OF SELECTED ITEM */}
+          <div className="lg:col-span-7 bg-white p-5 sm:p-6 overflow-y-auto space-y-4 flex flex-col">
+            
+            {/* Header: Currently active item info & quick actions */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3 shrink-0">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10.5px] font-black uppercase text-sky-600 tracking-wider">
+                    {currentLang === 'lo' ? 'ສາຍງານການຜະລິດສຳລັບ' : 'Workflow Pipeline for'}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md text-[11px] font-black bg-sky-100 text-sky-800 border border-sky-200">
+                    {activeJobItem.name || `Item ${activeJobId}`}
+                  </span>
+                </div>
+                <h3 className="text-sm font-black text-slate-900 mt-0.5">
+                  {currentLang === 'lo' ? 'ລຳດັບຂັ້ນຕອນການຜະລິດ & ມອບໝາຍຊ່າງປະຈຳຈຸດ' : 'Production Steps & Assigned Technicians'}
+                </h3>
+              </div>
+
+              {/* Actions Toolbar: Assign Technician to All Steps + Save Template */}
+              <div className="flex items-center gap-2">
+                {/* 1. Assign All Steps to Same Technician Button */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowAssignAllDropdown(!showAssignAllDropdown)}
+                    className="px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 border border-sky-300 text-sky-800 text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    title="Assign same technician to all steps"
+                  >
+                    <UserCheck className="w-3.5 h-3.5 text-sky-600" />
+                    <span>{currentLang === 'lo' ? 'ມອບຊ່າງຄົນດຽວທຸກຂັ້ນຕອນ' : 'Assign Same Tech to All'}</span>
+                  </button>
+
+                  {/* Dropdown for Picking Single Technician for All Steps */}
+                  {showAssignAllDropdown && (
+                    <div className="absolute right-0 top-full mt-1.5 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl p-2.5 z-30 space-y-2 animate-fade-in">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                        <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                          <UserCheck className="w-3.5 h-3.5 text-sky-600" />
+                          <span>{currentLang === 'lo' ? 'ເລືອກຊ່າງຄົນດຽວທຸກຂັ້ນຕອນ:' : 'Assign One Tech to All Steps:'}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowAssignAllDropdown(false)}
+                          className="p-1 text-slate-400 hover:text-slate-600 rounded-md"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder={currentLang === 'lo' ? 'ຄົ້ນຫາຊື່ຊ່າງ...' : 'Search technician...'}
+                          value={assignAllSearchQuery}
+                          onChange={(e) => setAssignAllSearchQuery(e.target.value)}
+                          className="w-full pl-8 pr-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-hidden focus:bg-white"
+                          autoFocus
+                        />
+                      </div>
+
+                      <div className="max-h-56 overflow-y-auto space-y-1">
+                        {employees
+                          .filter((emp: any) => {
+                            if (!assignAllSearchQuery.trim()) return true;
+                            const q = assignAllSearchQuery.toLowerCase();
+                            const name = (emp.name || emp.full_name || '').toLowerCase();
+                            const role = (emp.role || emp.department || '').toLowerCase();
+                            return name.includes(q) || role.includes(q);
+                          })
+                          .map((emp: any) => (
+                            <div
+                              key={emp.id}
+                              className="p-2 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200 flex items-center justify-between gap-2 transition"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-7 h-7 rounded-full bg-sky-100 text-sky-700 font-bold text-[10px] flex items-center justify-center shrink-0 overflow-hidden">
+                                  {emp.avatar || emp.photo_url ? (
+                                    <img src={emp.avatar || emp.photo_url} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    (emp.name || emp.full_name || 'U').substring(0, 2).toUpperCase()
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="text-xs font-bold text-slate-900 block truncate">
+                                    {emp.name || emp.full_name}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 block truncate">
+                                    {emp.role || emp.department || 'Staff'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                {/* Option A: Apply to Current Item */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleAssignTechnicianToCurrentItemSteps(emp)}
+                                  className="px-2 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-bold transition cursor-pointer shadow-2xs"
+                                  title="Assign to all steps of this item"
+                                >
+                                  {currentLang === 'lo' ? 'ສະເພາະລາຍການນີ້' : 'This Item'}
+                                </button>
+
+                                {/* Option B: Apply to Entire Order (if multiple items) */}
+                                {orderItems.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAssignTechnicianToAllOrderSteps(emp)}
+                                    className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold transition cursor-pointer shadow-2xs"
+                                    title="Assign to all steps of all items in this order"
+                                  >
+                                    {currentLang === 'lo' ? 'ທຸກລາຍການ' : 'All Items'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Quick Save Custom Template Button */}
+                {!showSaveTemplateInput ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowSaveTemplateInput(true)}
+                    className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  >
+                    <FolderPlus className="w-3.5 h-3.5 text-sky-600" />
+                    <span>{currentLang === 'lo' ? 'ບັນທຶກເປັນ Template' : 'Save as Template'}</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={newTemplateName}
+                      onChange={(e) => setNewTemplateName(e.target.value)}
+                      placeholder={currentLang === 'lo' ? 'ຕັ້ງຊື່ Template ໃໝ່...' : 'Template Name...'}
+                      className="px-2.5 py-1 text-xs border border-slate-300 rounded-lg bg-white font-medium w-40"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveAsCustomTemplate}
+                      disabled={!newTemplateName.trim()}
+                      className="px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 cursor-pointer"
+                    >
+                      <Save className="w-3 h-3 inline mr-1" />
+                      <span>{currentLang === 'lo' ? 'ບັນທຶກ' : 'Save'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowSaveTemplateInput(false)}
+                      className="p-1 text-slate-400 hover:text-slate-700 text-xs"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Steps List for the active item */}
+            <div className="space-y-2.5 flex-1">
+              {visibleSteps.map((step, idx) => {
                 const searchQ = (technicianSearchQuery[step.id] || '').toLowerCase();
                 const filteredStaff = employees.filter((emp: any) => {
                   if (!searchQ) return true;
@@ -488,11 +847,11 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
                 return (
                   <div
                     key={step.id}
-                    className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs hover:border-slate-300 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    className="bg-slate-50/80 rounded-2xl border border-slate-200 p-3 shadow-2xs hover:border-slate-300 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                   >
                     {/* Left: Step Index & Title */}
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 text-xs font-black flex items-center justify-center shrink-0">
+                      <div className="w-7 h-7 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-black flex items-center justify-center shrink-0 shadow-2xs">
                         {idx + 1}
                       </div>
 
@@ -502,7 +861,7 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
                             type="text"
                             value={step.nameLao || step.name}
                             onChange={(e) => handleUpdateStepName(step.id, e.target.value)}
-                            className="text-xs font-black text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:bg-slate-50 px-1 py-0.5 rounded outline-hidden w-full max-w-sm"
+                            className="text-xs font-black text-slate-900 bg-white/80 border border-slate-200 hover:border-slate-300 focus:border-sky-500 focus:bg-white px-2.5 py-1 rounded-xl outline-hidden w-full max-w-sm shadow-2xs"
                           />
                           {getCategoryBadge(step.category)}
                         </div>
@@ -512,9 +871,9 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
                     {/* Middle: Assigned Technician Selector */}
                     <div className="relative shrink-0 sm:w-64">
                       {step.assignedStaffName ? (
-                        <div className="flex items-center justify-between p-1.5 pl-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                        <div className="flex items-center justify-between p-1.5 pl-2.5 rounded-xl bg-white border border-slate-200 text-xs shadow-2xs">
                           <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-bold text-[10px] flex items-center justify-center shrink-0 overflow-hidden">
+                            <div className="w-6 h-6 rounded-full bg-sky-100 text-sky-700 font-bold text-[10px] flex items-center justify-center shrink-0 overflow-hidden">
                               {step.assignedStaffAvatar ? (
                                 <img src={step.assignedStaffAvatar} alt="" className="w-full h-full object-cover" />
                               ) : (
@@ -544,11 +903,11 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
                           <button
                             type="button"
                             onClick={() => setActiveDropdownStepId(activeDropdownStepId === step.id ? null : step.id)}
-                            className="w-full py-1.5 px-2.5 rounded-xl border border-dashed border-slate-300 hover:border-blue-400 bg-slate-50 hover:bg-blue-50/50 text-slate-500 hover:text-blue-700 text-xs font-bold transition flex items-center justify-between cursor-pointer"
+                            className="w-full py-1.5 px-2.5 rounded-xl border border-dashed border-slate-300 hover:border-sky-400 bg-white hover:bg-sky-50/50 text-slate-500 hover:text-sky-700 text-xs font-bold transition flex items-center justify-between cursor-pointer shadow-2xs"
                           >
                             <span className="flex items-center gap-1.5">
                               <User className="w-3.5 h-3.5 text-slate-400" />
-                              <span className="text-[11px]">{currentLang === 'lo' ? '+ ມອບໝາຍຊ່າງ' : '+ Assign Staff'}</span>
+                              <span className="text-[11px]">{currentLang === 'lo' ? 'ມອບໝາຍຊ່າງ' : 'Assign Staff'}</span>
                             </span>
                             <Search className="w-3 h-3 text-slate-400" />
                           </button>
@@ -560,67 +919,47 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
                                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                                 <input
                                   type="text"
-                                  placeholder={currentLang === 'lo' ? 'ຄົ້ນຫາຊ່າງ ຫຼື ພະແນກ...' : 'Search staff...'}
+                                  placeholder={currentLang === 'lo' ? 'ຄົ້ນຫາຊື່ຊ່າງ...' : 'Search staff...'}
                                   value={technicianSearchQuery[step.id] || ''}
                                   onChange={(e) =>
-                                    setTechnicianSearchQuery({
-                                      ...technicianSearchQuery,
-                                      [step.id]: e.target.value,
-                                    })
+                                    setTechnicianSearchQuery({ ...technicianSearchQuery, [step.id]: e.target.value })
                                   }
-                                  className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-hidden focus:border-blue-500"
+                                  className="w-full pl-8 pr-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-hidden focus:bg-white"
                                   autoFocus
                                 />
                               </div>
 
-                              <div className="max-h-48 overflow-y-auto space-y-1 divide-y divide-slate-100">
+                              <div className="max-h-48 overflow-y-auto space-y-1">
                                 {filteredStaff.length > 0 ? (
                                   filteredStaff.map((emp: any) => (
                                     <button
                                       key={emp.id}
                                       type="button"
                                       onClick={() => handleAssignStaff(step.id, emp)}
-                                      className="w-full text-left p-1.5 rounded-lg hover:bg-blue-50 transition flex items-center justify-between gap-2 cursor-pointer pt-2"
+                                      className="w-full p-1.5 rounded-xl hover:bg-slate-100 flex items-center gap-2 text-left transition cursor-pointer"
                                     >
-                                      <div className="flex items-center gap-2 min-w-0">
-                                        <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold flex items-center justify-center shrink-0">
-                                          {(emp.name || emp.full_name || 'E').substring(0, 2).toUpperCase()}
-                                        </div>
-                                        <div className="min-w-0">
-                                          <span className="text-xs font-bold text-slate-800 block truncate">
-                                            {emp.name || emp.full_name}
-                                          </span>
-                                          <span className="text-[10px] text-slate-400 block truncate">
-                                            {emp.role || emp.department || 'Staff'}
-                                          </span>
-                                        </div>
+                                      <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px] flex items-center justify-center shrink-0 overflow-hidden">
+                                        {emp.avatar || emp.photo_url ? (
+                                          <img src={emp.avatar || emp.photo_url} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                          (emp.name || emp.full_name || 'U').substring(0, 2).toUpperCase()
+                                        )}
                                       </div>
-                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
-                                        Select
-                                      </span>
+                                      <div className="min-w-0 flex-1">
+                                        <span className="text-xs font-bold text-slate-900 block truncate">
+                                          {emp.name || emp.full_name}
+                                        </span>
+                                        <span className="text-[10px] text-slate-400 block truncate">
+                                          {emp.role || emp.department || 'Staff'}
+                                        </span>
+                                      </div>
                                     </button>
                                   ))
                                 ) : (
-                                  <div className="p-3 text-center text-xs text-slate-400">
-                                    {currentLang === 'lo' ? 'ບໍ່ພົບຊື່ພະນັກງານ' : 'No staff found'}
+                                  <div className="p-3 text-center text-xs text-slate-400 font-bold">
+                                    {currentLang === 'lo' ? 'ບໍ່ພົບລາຍຊື່ຊ່າງ' : 'No staff found'}
                                   </div>
                                 )}
-                              </div>
-
-                              {/* Manual Quick Add Technician */}
-                              <div className="pt-1.5 border-t border-slate-100">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const customName = prompt(currentLang === 'lo' ? 'ພິມຊື່ຊ່າງຜູ້ຮັບຜິດຊອບ:' : 'Enter technician name:');
-                                    if (customName) {
-                                      handleAssignStaff(step.id, { id: `custom_${Date.now()}`, name: customName, role: 'Operator' });
-                                    }
-                                  }}
-                                  className="w-full py-1 text-center text-[10.5px] font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-                                >
-                                  {currentLang === 'lo' ? '+ ພິມຊື່ຊ່າງແບບດ່ວນ' : '+ Type custom name'}
-                                </button>
                               </div>
                             </div>
                           )}
@@ -628,22 +967,22 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
                       )}
                     </div>
 
-                    {/* Right: Move & Delete Actions */}
-                    <div className="flex items-center gap-1 shrink-0 justify-end">
+                    {/* Right: Step Action Buttons */}
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
                         type="button"
-                        onClick={() => handleMoveStep(idx, 'up')}
+                        onClick={() => handleMoveStep(step.id, 'up')}
                         disabled={idx === 0}
-                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 disabled:opacity-30 cursor-pointer"
+                        className="p-1.5 rounded-lg bg-white hover:bg-slate-200 text-slate-600 disabled:opacity-30 disabled:hover:bg-white transition cursor-pointer shadow-2xs"
                         title="Move Up"
                       >
                         <ArrowUp className="w-3.5 h-3.5" />
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleMoveStep(idx, 'down')}
-                        disabled={idx === steps.length - 1}
-                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 disabled:opacity-30 cursor-pointer"
+                        onClick={() => handleMoveStep(step.id, 'down')}
+                        disabled={idx === visibleSteps.length - 1}
+                        className="p-1.5 rounded-lg bg-white hover:bg-slate-200 text-slate-600 disabled:opacity-30 disabled:hover:bg-white transition cursor-pointer shadow-2xs"
                         title="Move Down"
                       >
                         <ArrowDown className="w-3.5 h-3.5" />
@@ -651,7 +990,7 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleDeleteStep(step.id)}
-                        className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                        className="p-1.5 rounded-lg bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer shadow-2xs"
                         title="Delete Step"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -662,10 +1001,10 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
               })}
             </div>
 
-            {/* Quick Add Custom Step Buttons */}
-            <div className="pt-2">
+            {/* Quick Add Custom Step Presets */}
+            <div className="pt-3 border-t border-slate-100 shrink-0">
               <span className="text-[10px] font-black uppercase text-slate-400 block mb-1.5">
-                {currentLang === 'lo' ? '+ ເພີ່ມຂັ້ນຕອນພິເສດ (Quick Add Presets):' : '+ Add Special Process Steps:'}
+                {currentLang === 'lo' ? '+ ເພີ່ມຂັ້ນຕອນພິເສດສຳລັບລາຍການນີ້:' : '+ Add Special Process Steps for this Item:'}
               </span>
               <div className="flex flex-wrap gap-1.5">
                 {QUICK_ADD_PRESETS.map((preset, pIdx) => (
@@ -673,31 +1012,32 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
                     key={pIdx}
                     type="button"
                     onClick={() => handleAddCustomStep(preset)}
-                    className="px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-slate-700 hover:text-blue-700 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                    className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-sky-50 border border-slate-200 hover:border-sky-300 text-slate-700 hover:text-sky-700 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
                   >
-                    <Plus className="w-3 h-3 text-blue-600" />
+                    <Plus className="w-3 h-3 text-sky-600" />
                     <span>{currentLang === 'lo' ? preset.nameLao : preset.name}</span>
                   </button>
                 ))}
                 <button
                   type="button"
                   onClick={() => handleAddCustomStep()}
-                  className="px-2.5 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-[11px] font-black transition flex items-center gap-1 cursor-pointer"
+                  className="px-2.5 py-1 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-[11px] font-black transition flex items-center gap-1 cursor-pointer"
                 >
                   <Plus className="w-3 h-3" />
                   <span>{currentLang === 'lo' ? '+ ຂັ້ນຕອນກຳນົດເອງ' : '+ Custom Step'}</span>
                 </button>
               </div>
             </div>
+
           </div>
 
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 sm:px-7 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="p-4 sm:px-8 border-t border-slate-200 bg-white flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
           <div className="text-xs text-slate-500">
             <span className="font-bold text-slate-700">
-              {steps.length} {currentLang === 'lo' ? 'ຂັ້ນຕອນໃນສາຍການຜະລິດ' : 'steps configured'}
+              {steps.length} {currentLang === 'lo' ? 'ຂັ້ນຕອນໃນສາຍການຜະລິດທັງໝົດ' : 'total production steps'}
             </span>
             <span className="mx-2">•</span>
             <span className="text-amber-700 font-bold">
@@ -709,14 +1049,14 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 sm:flex-none px-5 py-2.5 rounded-2xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
+              className="flex-1 sm:flex-none px-5 py-2.5 rounded-2xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
             >
               {currentLang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
             </button>
             <button
               type="button"
               onClick={handleConfirm}
-              className="flex-1 sm:flex-none px-6 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 text-xs font-black shadow-md shadow-amber-500/25 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2 border-none"
+              className="flex-1 sm:flex-none px-6 py-2.5 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-black shadow-md shadow-sky-500/25 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2 border-none"
             >
               <Printer className="w-4 h-4" />
               <span>{currentLang === 'lo' ? 'ຢືນຢັນເລີ່ມຜະລິດ & ສົ່ງເຂົ້າແທ່ນພິມ' : 'Confirm & Release to Production'}</span>
@@ -725,8 +1065,126 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
         </div>
 
       </div>
+
+      {/* Popover Modal for Picking Workflow Template for a specific Item or ALL Items */}
+      {templatePickerTargetJobId && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-scale-up">
+            
+            {/* Template Picker Header */}
+            <div className="p-5 border-b border-slate-200 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-400/30 flex items-center justify-center">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white">
+                    {templatePickerTargetJobId === 'ALL'
+                      ? (currentLang === 'lo' ? 'ເລືອກ Template ສຳລັບທຸກລາຍການສິນຄ້າ' : 'Select Template for All Items')
+                      : (currentLang === 'lo' ? `ເລືອກ Template: ${orderItems.find(i => i.id === templatePickerTargetJobId)?.name || 'ລາຍການສິນຄ້າ'}` : `Select Template for Item`)}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {templatePickerTargetJobId === 'ALL'
+                      ? (currentLang === 'lo' ? 'ຂັ້ນຕອນການຜະລິດຈະຖືກນຳໃຊ້ກັບທຸກລາຍການໃນອໍເດີນີ້' : 'This template will be applied across all print jobs in this order')
+                      : (currentLang === 'lo' ? 'ປ່ຽນຂັ້ນຕອນການຜະລິດສະເພາະລາຍການນີ້' : 'Customize production pipeline for this item only')}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTemplatePickerTargetJobId(null)}
+                className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Template Search & Filter */}
+            <div className="p-4 border-b border-slate-200 bg-slate-50 space-y-3">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={templateSearchQuery}
+                  onChange={(e) => setTemplateSearchQuery(e.target.value)}
+                  placeholder={currentLang === 'lo' ? 'ຄົ້ນຫາ Template (ປຶ້ມ, ສະຕິກເກີ, ໂປສເຕີ)...' : 'Search templates...'}
+                  className="w-full pl-10 pr-4 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold focus:border-sky-500 outline-hidden"
+                />
+              </div>
+
+              {/* Category Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto text-[11px]">
+                {['ALL', 'Books', 'Stickers', 'Sheets', 'Calendars', 'Packaging', 'Custom'].map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer shrink-0 ${
+                      selectedCategory === cat
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Templates List */}
+            <div className="p-4 overflow-y-auto space-y-2.5 flex-1 max-h-[50vh]">
+              {filteredTemplates.map(tpl => (
+                <div
+                  key={tpl.id}
+                  onClick={() => {
+                    if (templatePickerTargetJobId === 'ALL') {
+                      handleApplyTemplateToAll(tpl);
+                    } else if (templatePickerTargetJobId) {
+                      handleApplyTemplateToJob(templatePickerTargetJobId, tpl);
+                    }
+                  }}
+                  className="p-3.5 rounded-2xl border border-slate-200 hover:border-sky-500 hover:bg-sky-50/50 transition cursor-pointer flex flex-col justify-between gap-2 shadow-2xs group"
+                >
+                  <div className="flex items-center justify-between">
+                    <strong className="text-xs font-black text-slate-900 group-hover:text-sky-900">
+                      {tpl.nameLao || tpl.name}
+                    </strong>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                      {tpl.category}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 line-clamp-2">
+                    {tpl.description}
+                  </p>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium pt-1 border-t border-slate-100">
+                    <span>{tpl.steps.length} {currentLang === 'lo' ? 'ຂັ້ນຕອນ' : 'steps'}</span>
+                    <span className="text-sky-600 font-bold group-hover:underline flex items-center gap-0.5">
+                      <span>{currentLang === 'lo' ? 'ເລືອກໃຊ້ນີ້' : 'Select'}</span>
+                      <ChevronRight className="w-3 h-3" />
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Template Picker Footer */}
+            <div className="p-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setTemplatePickerTargetJobId(null)}
+                className="px-4 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-100"
+              >
+                {currentLang === 'lo' ? 'ປິດ' : 'Close'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
+
+  return createPortal(modalElement, document.body);
 };
 
 export default ConfigureWorkflowModal;

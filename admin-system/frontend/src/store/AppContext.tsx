@@ -1500,6 +1500,24 @@ export const AppProvider = ({ children }) => {
     }
     return initialCustomers;
   });
+
+  const defaultCustomerCategories = [
+    { id: 'RETAIL', name: 'ລູກຄ້າໜ້າຮ້ານ (Walk-in)', description: 'ລູກຄ້າທົ່ວໄປທີ່ມາຕິດຕໍ່ໜ້າຮ້ານ', color: 'sky', isDefault: true, isSystem: true },
+    { id: 'ONLINE', name: 'ລູກຄ້າຊ່ອງທາງອອນລາຍ (Online)', description: 'ລູກຄ້າທີ່ສັ່ງຊື້ຜ່ານ Facebook, Line, WhatsApp, Website', color: 'violet', isDefault: false, isSystem: true },
+    { id: 'CORPORATE', name: 'ລູກຄ້າອົງກອນ / ບໍລິສັດ (Corporate)', description: 'ບໍລິສັດ, ອົງການຈັດຕັ້ງ, ໂຮງຮຽນ ຫຼື ໜ່ວຍງານລັດ', color: 'emerald', isDefault: false, isSystem: true },
+    { id: 'CONTRACT_PARTNER', name: 'ລູກຄ້າຄູ່ສັນຍາ (Contract Partner)', description: 'ຄູ່ຄ້າທີ່ມີສັນຍາຮ່ວມມືພິເສດ ຫຼື MOU', color: 'amber', isDefault: false, isSystem: true },
+  ];
+
+  const [customerCategories, setCustomerCategories] = useState<any[]>(() => {
+    const saved = localStorage.getItem('ss_print_customer_categories_v1');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return defaultCustomerCategories;
+  });
   const [linkedInboundEntries, setLinkedInboundEntries] = useState(() => {
     const saved = localStorage.getItem('ss_print_inbound_entries_v6');
     if (saved !== null) {
@@ -3726,6 +3744,23 @@ export const AppProvider = ({ children }) => {
         artworkFileName: itArtworkFileName,
         artwork_file_size: itArtworkFileSize,
         artworkFileSize: itArtworkFileSize,
+        artwork: {
+          file_url: itArtworkUrl,
+          file_name: itArtworkFileName,
+          file_size_bytes: itArtworkFileSize,
+          preview_thumbnail_url: itArtworkUrl,
+          page_count: Number(item.pageCount || item.pages || 1)
+        },
+        specifications: {
+          ...(item.specifications || item.specs || item),
+          paper_id: item.paperId || item.id,
+          paper_name: item.name || invItem?.name,
+          color_mode: item.colorPrintMode || item.colorMode,
+          printer_id: item.printerId,
+          binding: item.bindingMethod || item.binding,
+          coating: item.coating || item.lamination,
+          pages: Number(item.pageCount || item.pages || 1)
+        },
         specs: {
           ...(item.specs || item),
           artworkUrl: itArtworkUrl,
@@ -3994,11 +4029,148 @@ export const AppProvider = ({ children }) => {
     }));
   };
 
-  const deleteCustomer = (customerId) => {
-    setCustomers(prev => prev.filter(c => c.id !== customerId));
-    fetch(`/api/customers/${customerId}`, {
-      method: 'DELETE'
-    }).catch(err => console.warn('Delete customer API notice:', err));
+  const deleteCustomer = async (customerId: string) => {
+    try {
+      const res = await fetch(`/api/customers/${customerId}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'Failed to delete customer');
+      }
+      setCustomers(prev => prev.filter(c => c.id !== customerId));
+      return { success: true };
+    } catch (err: any) {
+      console.warn('Delete customer error:', err);
+      throw err;
+    }
+  };
+
+  const bulkDeleteCustomers = async (customerIds: string[]) => {
+    try {
+      const res = await fetch('/api/customers/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: customerIds })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.deleted && Array.isArray(data.deleted)) {
+        const deletedSet = new Set(data.deleted);
+        setCustomers(prev => prev.filter(c => !deletedSet.has(c.id)));
+      } else {
+        // Local fallback: delete only those without orders
+        const eligible = customerIds.filter(id => {
+          const cust = customers.find(c => c.id === id);
+          const hasOrders = orders.some(o => o.customerName === cust?.name || o.customerId === id);
+          return !hasOrders;
+        });
+        const eligibleSet = new Set(eligible);
+        setCustomers(prev => prev.filter(c => !eligibleSet.has(c.id)));
+      }
+      return data;
+    } catch (err) {
+      console.warn('Bulk delete customer notice:', err);
+      const eligible = customerIds.filter(id => {
+        const cust = customers.find(c => c.id === id);
+        const hasOrders = orders.some(o => o.customerName === cust?.name || o.customerId === id);
+        return !hasOrders;
+      });
+      const eligibleSet = new Set(eligible);
+      setCustomers(prev => prev.filter(c => !eligibleSet.has(c.id)));
+      return { deleted: eligible, blocked: [] };
+    }
+  };
+
+  const fetchCustomerCategories = async () => {
+    try {
+      const res = await fetch('/api/customers/categories');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'success' && Array.isArray(data.data) && data.data.length > 0) {
+          setCustomerCategories(data.data);
+          safeSetItem('ss_print_customer_categories_v1', data.data);
+        }
+      }
+    } catch (e) {
+      console.warn('Fetch customer categories error:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchCustomerCategories();
+  }, []);
+
+  const addCustomerCategory = async (category: any) => {
+    try {
+      const res = await fetch('/api/customers/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(category)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'Failed to add category');
+      }
+      const newCat = data.data || { ...category, id: category.id || `CAT_${Date.now()}` };
+      setCustomerCategories(prev => {
+        const updated = [...prev, newCat];
+        safeSetItem('ss_print_customer_categories_v1', updated);
+        return updated;
+      });
+      return newCat;
+    } catch (err: any) {
+      const newCat = {
+        ...category,
+        id: category.id || `CAT_${Date.now()}`,
+        isSystem: false,
+        createdAt: new Date().toISOString()
+      };
+      setCustomerCategories(prev => {
+        const updated = [...prev, newCat];
+        safeSetItem('ss_print_customer_categories_v1', updated);
+        return updated;
+      });
+      return newCat;
+    }
+  };
+
+  const updateCustomerCategory = async (id: string, category: any) => {
+    try {
+      const res = await fetch(`/api/customers/categories/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(category)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'Failed to update category');
+      }
+    } catch (err) {
+      console.warn('Update customer category network notice:', err);
+    }
+    setCustomerCategories(prev => {
+      const updated = prev.map(c => c.id === id ? { ...c, ...category, updatedAt: new Date().toISOString() } : c);
+      safeSetItem('ss_print_customer_categories_v1', updated);
+      return updated;
+    });
+  };
+
+  const deleteCustomerCategory = async (id: string) => {
+    try {
+      const res = await fetch(`/api/customers/categories/${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'Failed to delete category');
+      }
+      setCustomerCategories(prev => {
+        const updated = prev.filter(c => c.id !== id);
+        safeSetItem('ss_print_customer_categories_v1', updated);
+        return updated;
+      });
+    } catch (err: any) {
+      console.warn('Delete customer category error:', err);
+      throw err;
+    }
   };
 
   const updateInboundEntry = (updatedEntry: any) => {
@@ -4416,6 +4588,12 @@ export const AppProvider = ({ children }) => {
       addCustomer,
       updateCustomer,
       deleteCustomer,
+      bulkDeleteCustomers,
+      customerCategories,
+      fetchCustomerCategories,
+      addCustomerCategory,
+      updateCustomerCategory,
+      deleteCustomerCategory,
       addOffcut,
       consumeOffcut,
       deleteOffcut,

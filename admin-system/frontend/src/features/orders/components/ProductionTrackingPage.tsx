@@ -75,61 +75,57 @@ export const ProductionTrackingPage: React.FC<ProductionTrackingPageProps> = ({
             <button
               type="button"
               onClick={onBack}
-              className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-2xl text-xs sm:text-sm font-black transition active:scale-95 shadow-xs cursor-pointer"
+              className="flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-xl text-xs sm:text-sm font-black transition active:scale-95 shadow-xs cursor-pointer"
             >
-              <ArrowLeft className="w-4 h-4" />
-              <span>{currentLang === 'lo' ? '← ກັບຄືນຕາຕະລາງ' : '← Back to Orders'}</span>
+              <ArrowLeft className="w-4 h-4 text-slate-600" />
+              <span>{currentLang === 'lo' ? 'ກັບຄືນ' : 'Back'}</span>
             </button>
             <div>
               <div className="flex items-center gap-2 text-xs font-mono font-bold text-slate-400 uppercase">
-                <span className="text-amber-600 font-black">#{orderIdDisplay}</span>
+                <span className="text-sky-600 font-black">#{orderIdDisplay}</span>
                 <span>•</span>
-                <span className="text-purple-700 font-bold">Step 2: Press & Finishing Tracking</span>
+                <span className="text-sky-800 font-bold">Step 2: Press & Finishing Tracking</span>
               </div>
               <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5 tracking-tight">
-                {currentLang === 'lo' ? 'ຕິດຕາມຂະບວນການຜະລິດ & ແປຮູບ (Step 2: Production)' : 'Step 2: Production & Finishing Tracker'}
+                {currentLang === 'lo' ? 'ຂະບວນການຜະລິດ (Step 2: Production)' : 'Step 2: Production Process'}
               </h1>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            {onEditOrder && (
-              <button
-                type="button"
-                onClick={() => onEditOrder(order)}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-2xl text-xs font-black transition active:scale-95 cursor-pointer shadow-xs"
-                title={currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ & ສະເປກ' : 'Edit Order Specs & Details'}
-              >
-                <Edit3 className="w-3.5 h-3.5 text-amber-700" />
-                <span>{currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ' : 'Edit Order'}</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setIsInvoiceModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 rounded-2xl text-xs font-black transition active:scale-95 cursor-pointer shadow-2xs"
-              title="Customer Payment Invoice / Receipt"
-            >
-              <CreditCard className="w-3.5 h-3.5 text-blue-600" />
-              <span>{currentLang === 'lo' ? 'ໃບບິນລູກຄ້າ' : 'Invoice'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                showToast(currentLang === 'lo' ? 'ກຳລັງພິມໃບສັ່ງຜະລິດ...' : 'Printing Job Ticket...', 'info');
-                window.print();
-              }}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black transition active:scale-95 cursor-pointer shadow-sm"
-            >
-              <Printer className="w-4 h-4 text-amber-400" />
-              <span>{currentLang === 'lo' ? 'ພິມໃບສັ່ງຜະລິດ' : 'Print Job Ticket'}</span>
-            </button>
-            <span className={`px-3.5 py-1.5 rounded-2xl text-xs font-black border uppercase flex items-center gap-1.5 shadow-xs ${getStatusBadgeClass(order.status)}`}>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Status Badge (Pill with soft border) */}
+            <div className={`px-3 py-1 rounded-full text-[11px] font-bold border uppercase flex items-center gap-1.5 select-none ${getStatusBadgeClass(order.status)}`}>
               {getStatusIcon(order.status)}
               <span>{order.status}</span>
-            </span>
+            </div>
+
+            {/* Vertical Divider */}
+            <div className="hidden sm:block w-px h-6 bg-slate-200" />
+
+            {/* Action Buttons (Elevated Clickable) */}
+            <div className="flex items-center gap-2">
+              {onEditOrder && (
+                <button
+                  type="button"
+                  onClick={() => onEditOrder(order)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white font-black rounded-xl text-xs transition-all duration-150 shadow-sm shadow-sky-500/25 active:scale-95 cursor-pointer border-none"
+                  title={currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ & ສະເປກ' : 'Edit Order Specs & Details'}
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-white" />
+                  <span>{currentLang === 'lo' ? 'ແກ້ໄຂອໍເດີ' : 'Edit Order'}</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setIsInvoiceModalOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-xs transition-all duration-150 shadow-sm shadow-blue-600/25 active:scale-95 cursor-pointer border-none"
+                title={currentLang === 'lo' ? 'ໃບບິນລູກຄ້າ (Invoice / Receipt)' : 'Customer Invoice / Receipt'}
+              >
+                <CreditCard className="w-3.5 h-3.5 text-white" />
+                <span>{currentLang === 'lo' ? 'ໃບບິນລູກຄ້າ' : 'Customer Invoice'}</span>
+              </button>
+            </div>
           </div>
         </div>
 

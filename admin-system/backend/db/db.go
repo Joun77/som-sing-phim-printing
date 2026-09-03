@@ -115,6 +115,10 @@ func RunMigrations(db *sql.DB) error {
 		"migrations/024_idempotency_and_order_persistence.sql",
 		"../migrations/025_shop_floor_and_incentives.sql",
 		"migrations/025_shop_floor_and_incentives.sql",
+		"../migrations/028_add_customer_tier_and_courier.sql",
+		"migrations/028_add_customer_tier_and_courier.sql",
+		"../migrations/029_customer_categories.sql",
+		"migrations/029_customer_categories.sql",
 		"../schema.sql",
 		"schema.sql",
 	}
