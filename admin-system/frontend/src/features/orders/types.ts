@@ -132,10 +132,18 @@ export interface OrderItem {
   avg_cov_c?: number;
   avg_cov_m?: number;
   avg_cov_y?: number;
-  avg_cov_k?: number;
   unit_cost_lak?: number;
   unit_price_lak?: number;
   total_price_lak?: number;
+  artworkUrl?: string;
+  artwork_url?: string;
+  artworkFileName?: string;
+  artwork_file_name?: string;
+  artworkFileSize?: number;
+  artwork_file_size?: number;
+  mimeType?: string;
+  mime_type?: string;
+  specs?: any;
 }
 
 export interface OrderPreflightVersion {
@@ -185,6 +193,19 @@ export interface Order {
   overall_status?: string;
   delivery_date?: string;
   artworkLink?: string;
+  artworkUrl?: string;
+  artwork_url?: string;
+  artworkFileName?: string;
+  artwork_file_name?: string;
+  artworkFileSize?: number;
+  artwork_file_size?: number;
+  mimeType?: string;
+  mime_type?: string;
+  googleDriveLink?: string;
+  google_drive_link?: string;
+  driveLink?: string;
+  proofUrl?: string;
+  proof_url?: string;
   deliveryMethod?: string;
   notes?: string;
   createdTime: string;

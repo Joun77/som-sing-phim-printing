@@ -634,8 +634,9 @@ export default function EmployeeManagement() {
             </div>
           </div>
 
-          <span className="px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 text-xs font-black rounded-xl">
-            🏆 Top 5 Technicians
+          <span className="px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 text-xs font-black rounded-xl inline-flex items-center gap-1.5">
+            <Trophy className="w-3.5 h-3.5 text-amber-600" />
+            <span>Top 5 Technicians</span>
           </span>
         </div>
 

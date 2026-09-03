@@ -2735,6 +2735,10 @@ export const AppProvider = ({ children }) => {
       };
     });
 
+    const resolvedArtworkUrl = orderData.artworkUrl || orderData.artwork_url || orderData.artworkLink || (orderData.items && orderData.items[0]?.artworkUrl) || (orderData.items && orderData.items[0]?.inner_file_url) || '';
+    const resolvedArtworkFileName = orderData.artworkFileName || orderData.artwork_file_name || (orderData.items && orderData.items[0]?.artworkFileName) || (resolvedArtworkUrl ? resolvedArtworkUrl.split('/').pop()?.split('?')[0] : '');
+    const resolvedArtworkFileSize = orderData.artworkFileSize || orderData.artwork_file_size || (orderData.items && orderData.items[0]?.artworkFileSize) || 0;
+
     const newOrder = {
       id: `ord-${Date.now().toString().slice(-4)}`,
       date: new Date().toISOString().split('T')[0],
@@ -2743,13 +2747,22 @@ export const AppProvider = ({ children }) => {
       productionEndTime: null,
       actualDeliveryTime: null,
       onTimeStatus: null,
+      artworkUrl: resolvedArtworkUrl,
+      artwork_url: resolvedArtworkUrl,
+      artworkFileName: resolvedArtworkFileName,
+      artwork_file_name: resolvedArtworkFileName,
+      artworkFileSize: resolvedArtworkFileSize,
+      artwork_file_size: resolvedArtworkFileSize,
+      artworkLink: resolvedArtworkUrl || orderData.artworkLink,
+      googleDriveLink: resolvedArtworkUrl || orderData.artworkLink || orderData.googleDriveLink,
+      driveLink: resolvedArtworkUrl || orderData.artworkLink || orderData.driveLink,
       preflight: {
         cmyk: 'Not Checked',
         bleed: 'Not Checked',
         resolution: 'Not Checked',
         approvedTimestamp: null,
         versions: [
-          { url: orderData.artworkLink || 'https://drive.google.com/som-sing-proof.pdf', version: 1, uploadedAt: formatDateTime() }
+          { url: resolvedArtworkUrl || orderData.artworkLink || 'https://drive.google.com/som-sing-proof.pdf', version: 1, uploadedAt: formatDateTime() }
         ]
       },
       activityLog: [
@@ -3686,8 +3699,15 @@ export const AppProvider = ({ children }) => {
     const quotation = quotations.find(q => q.id === quotationId || q.quotationNumber === quotationId);
     if (!quotation) return null;
 
+    const qArtworkUrl = quotation.artworkUrl || quotation.artwork_url || quotation.artworkLink || (quotation.items && quotation.items.find((it: any) => it.artworkUrl || it.fileUrl)?.artworkUrl) || '';
+    const qArtworkFileName = quotation.artworkFileName || quotation.artwork_file_name || quotation.fileName || (quotation.items && quotation.items.find((it: any) => it.fileName)?.fileName) || (qArtworkUrl ? qArtworkUrl.split('/').pop()?.split('?')[0] : '');
+    const qArtworkFileSize = quotation.artworkFileSize || quotation.artwork_file_size || (quotation.items && quotation.items.find((it: any) => it.fileSize)?.fileSize) || 0;
+
     const orderItems = (quotation.items || []).map((item: any, idx: number) => {
       const invItem = inventory.find(i => i.id === item.id || i.name === item.name);
+      const itArtworkUrl = item.artworkUrl || item.artwork_url || item.fileUrl || item.file_url || qArtworkUrl;
+      const itArtworkFileName = item.fileName || item.file_name || (itArtworkUrl ? itArtworkUrl.split('/').pop()?.split('?')[0] : '');
+      const itArtworkFileSize = item.fileSize || item.file_size || 0;
       return {
         id: `item-${quotation.id}-${idx + 1}`,
         job_name: item.name || invItem?.name || item.jobName || 'Custom Print Job',
@@ -3698,7 +3718,20 @@ export const AppProvider = ({ children }) => {
         unit_price_lak: Number(item.unitPrice || item.unitPriceSnapshot || item.unitCost || 0),
         total_price_lak: Number(item.totalPrice || (Number(item.quantity || 1) * Number(item.unitPrice || 0))),
         unit_cost_lak: Number(item.unitCost || item.costPriceSnapshot || 0),
-        specs: item.specs || item
+        cover_file_url: itArtworkUrl,
+        inner_file_url: itArtworkUrl,
+        artwork_url: itArtworkUrl,
+        artworkUrl: itArtworkUrl,
+        artwork_file_name: itArtworkFileName,
+        artworkFileName: itArtworkFileName,
+        artwork_file_size: itArtworkFileSize,
+        artworkFileSize: itArtworkFileSize,
+        specs: {
+          ...(item.specs || item),
+          artworkUrl: itArtworkUrl,
+          artworkFileName: itArtworkFileName,
+          artworkFileSize: itArtworkFileSize
+        }
       };
     });
 
@@ -3717,8 +3750,14 @@ export const AppProvider = ({ children }) => {
       total_amount_lak: totalPrice,
       total_price: totalPrice,
       delivery_date: quotation.expiryDate || quotation.expiresAt || new Date().toISOString().split('T')[0],
-      artwork_link: quotation.artworkLink || '',
-      google_drive_link: quotation.artworkLink || '',
+      artwork_url: qArtworkUrl,
+      artworkUrl: qArtworkUrl,
+      artwork_file_name: qArtworkFileName,
+      artworkFileName: qArtworkFileName,
+      artwork_file_size: qArtworkFileSize,
+      artworkFileSize: qArtworkFileSize,
+      artwork_link: qArtworkUrl || quotation.artworkLink || '',
+      google_drive_link: qArtworkUrl || quotation.artworkLink || '',
       status: 'WAITING_DEPOSIT',
       overall_status: 'WAITING_DEPOSIT',
       notes: `ແປງມາຈາກໃບສະເໜີລາຄາ #${quotation.quotationNumber || quotation.quotation_no || quotation.id}. ${quotation.notes || ''}`,
@@ -3757,7 +3796,12 @@ export const AppProvider = ({ children }) => {
           id: it.id,
           name: it.item_name,
           quantity: it.quantity,
-          unitCost: it.unit_price_lak
+          unitCost: it.unit_price_lak,
+          artworkUrl: it.artwork_url,
+          artworkFileName: it.artwork_file_name,
+          artworkFileSize: it.artwork_file_size,
+          inner_file_url: it.artwork_url,
+          cover_file_url: it.artwork_url
         })),
         totalPriceCharged: totalPrice,
         depositAmountPaid: depositAmt,
@@ -3766,7 +3810,13 @@ export const AppProvider = ({ children }) => {
         paymentStatus: 'Deposit Paid',
         status: 'Received',
         promisedDeliveryDate: orderPayload.delivery_date,
-        artworkLink: orderPayload.artwork_link,
+        artworkLink: qArtworkUrl || orderPayload.artwork_link,
+        artworkUrl: qArtworkUrl,
+        artwork_url: qArtworkUrl,
+        artworkFileName: qArtworkFileName,
+        artwork_file_name: qArtworkFileName,
+        artworkFileSize: qArtworkFileSize,
+        artwork_file_size: qArtworkFileSize,
         sourceQuotationId: quotation.id
       };
 

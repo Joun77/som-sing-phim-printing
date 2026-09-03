@@ -147,6 +147,8 @@ export interface QuotationItem {
   spoilagePercent?: number;
   fileName?: string;
   artworkUrl?: string;
+  fileSize?: number;
+  mimeType?: string;
 }
 
 export default function QuotationManager({ onConvertToOrder, onBack, prefilledSpecs }: any) {
@@ -1401,6 +1403,12 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
           paper_size: item.jobSizePreset || 'A4',
           cover_file_url: item.includeCover ? (item.artworkUrl || item.fileName) : undefined,
           inner_file_url: item.artworkUrl || item.fileName,
+          artworkUrl: item.artworkUrl,
+          artwork_url: item.artworkUrl,
+          artworkFileName: item.fileName,
+          artwork_file_name: item.fileName,
+          artworkFileSize: item.fileSize,
+          artwork_file_size: item.fileSize,
           drive_link: item.artworkUrl,
           avg_cov_c: item.cCoverage || 0,
           avg_cov_m: item.mCoverage || 0,
@@ -1413,7 +1421,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
             isDoubleSided: item.isDoubleSided,
             printerAllocations: item.printerAllocations,
             fileName: item.fileName,
-            artworkUrl: item.artworkUrl
+            artworkUrl: item.artworkUrl,
+            fileSize: item.fileSize
           }
         });
 
@@ -1444,6 +1453,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
       const firstArtwork = items.find(i => i.artworkUrl)?.artworkUrl;
       const firstFileName = items.find(i => i.fileName)?.fileName;
+      const firstFileSize = items.find(i => i.fileSize)?.fileSize;
 
       // Pass autoDeduct = false to enforce stock deduction only at IN_PRODUCTION stage
       addOrder({
@@ -1459,6 +1469,12 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         shippingFee: Number(shippingFee || 0),
         shippingMethod: shippingMethod,
         artworkLink: firstArtwork || firstFileName || '',
+        artworkUrl: firstArtwork || '',
+        artwork_url: firstArtwork || '',
+        artworkFileName: firstFileName || '',
+        artwork_file_name: firstFileName || '',
+        artworkFileSize: firstFileSize || 0,
+        artwork_file_size: firstFileSize || 0,
         notes: `Multi-Item Quotation Order (${items.length} items): ${items.map(i => `${i.name} (${i.printVolume} units)`).join(', ')}. Shipping: ${shippingMethod} (${formatCurrency(shippingFee)}). Payment terms: ${paymentTerms}. ${quotationNote ? `Note: ${quotationNote}` : ''}`,
       }, false);
 
@@ -1470,7 +1486,34 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       );
 
       if (onConvertToOrder) {
-        onConvertToOrder();
+        const primaryItem = items[0];
+        const primaryCalc = calculatedItems[0];
+        onConvertToOrder({
+          paperId: primaryItem?.paperId,
+          paperName: primaryItem?.name,
+          quantity: primaryItem?.printVolume,
+          unitCost: primaryCalc?.unitPrice,
+          artworkUrl: firstArtwork,
+          artwork_url: firstArtwork,
+          artworkFileName: firstFileName,
+          artwork_file_name: firstFileName,
+          artworkFileSize: firstFileSize,
+          artwork_file_size: firstFileSize,
+          artworkLink: firstArtwork,
+          items: items.map((it, idx) => ({
+            name: it.name,
+            paperId: it.paperId,
+            quantity: it.printVolume,
+            unitCost: calculatedItems[idx]?.unitPrice,
+            artworkUrl: it.artworkUrl,
+            fileName: it.fileName,
+            fileSize: it.fileSize,
+            jobSizePreset: it.jobSizePreset,
+            jobWidth: it.jobWidth,
+            jobHeight: it.jobHeight,
+            pagesPerBook: it.pagesPerBook
+          }))
+        });
       }
       if (setActiveTab) {
         setActiveTab('orders');
@@ -1651,7 +1694,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     });
   };
 
-  // 🌟 Quick Save as Draft with Customer & Specs Snapshot
+  // Quick Save as Draft with Customer & Specs Snapshot
   const handleSaveDraft = () => {
     const quoteItems = items.map((item, idx) => {
       const calc = calculatedItems[idx];
@@ -1962,7 +2005,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       )}
 
       {/* ========================================================================= */}
-      {/* 🌟 STEP 1: JOB SPECIFICATIONS & INTERNAL PRICING STUDIO                   */}
+      {/* STEP 1: JOB SPECIFICATIONS & INTERNAL PRICING STUDIO                   */}
       {/* ========================================================================= */}
       {currentStep === 'calc' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start print:hidden animate-fade-in">
@@ -2079,7 +2122,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
               </div>
 
               {/* ========================================================= */}
-              {/* 🌟 DYNAMIC PRICING TEMPLATES & MODULAR CONTROL STUDIO     */}
+              {/* DYNAMIC PRICING TEMPLATES & MODULAR CONTROL STUDIO     */}
               {/* ========================================================= */}
               <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 space-y-4 shadow-xs">
                 
@@ -2809,7 +2852,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       )}
 
       {/* ========================================================================= */}
-      {/* 🌟 STEP 2: OFFICIAL CUSTOMER QUOTATION DOCUMENT & ACTIONS                 */}
+      {/* STEP 2: OFFICIAL CUSTOMER QUOTATION DOCUMENT & ACTIONS                 */}
       {/* ========================================================================= */}
       {currentStep === 'quote' && (
         <QuotationCustomerView
@@ -2885,7 +2928,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         onClose={() => { setApprovalModalQuote(null); setApprovalReason(''); }}
       />
 
-      {/* 🌟 SAVE QUOTATION & PRICING SCHEME POPUP MODAL */}
+      {/* SAVE QUOTATION & PRICING SCHEME POPUP MODAL */}
       <QuotationSaveModal
         isOpen={isSaveModalOpen}
         onClose={() => setIsSaveModalOpen(false)}
@@ -2903,7 +2946,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         formatCurrency={formatCurrency}
       />
 
-      {/* 🌟 DIGITAL CUSTOMER SHAREABLE QUOTATION MODAL */}
+      {/* DIGITAL CUSTOMER SHAREABLE QUOTATION MODAL */}
       <QuotationShareModal
         isOpen={isShareModalOpen}
         onClose={() => { setIsShareModalOpen(false); setIsCopiedLink(false); }}
@@ -2924,7 +2967,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         formatCurrency={formatCurrency}
       />
 
-      {/* 🌟 SAVE AS NEW PRICING TEMPLATE MODAL */}
+      {/* SAVE AS NEW PRICING TEMPLATE MODAL */}
       <QuotationSaveTemplateModal
         isOpen={isNewTemplateModalOpen}
         onClose={() => setIsNewTemplateModalOpen(false)}
@@ -2935,7 +2978,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         currentLang={currentLang}
       />
 
-      {/* 🌟 PREFLIGHT ITEM CREATION MODAL */}
+      {/* PREFLIGHT ITEM CREATION MODAL */}
       <PreflightItemCreationModal
         isOpen={isPreflightModalOpen}
         onClose={() => setIsPreflightModalOpen(false)}
@@ -2944,7 +2987,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         currentLang={currentLang}
       />
 
-      {/* 🌟 PAPER SUBSTRATE INVENTORY SEARCH MODAL */}
+      {/* PAPER SUBSTRATE INVENTORY SEARCH MODAL */}
       <PaperMaterialSelectorModal
         isOpen={isPaperModalOpen}
         onClose={() => setIsPaperModalOpen(false)}
@@ -2957,7 +3000,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         getFIFOCostPerSheet={getFIFOCostPerSheet}
       />
 
-      {/* 🌟 PRINTER FLEET SEARCH MODAL */}
+      {/* PRINTER FLEET SEARCH MODAL */}
       <PrinterSelectorModal
         isOpen={isPrinterModalOpen}
         onClose={() => setIsPrinterModalOpen(false)}
@@ -2969,7 +3012,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         getPrinterActualInkCostPerPage={getPrinterActualInkCostPerPage}
       />
 
-      {/* 🌟 POST-PRESS MACHINERY SEARCH MODAL */}
+      {/* POST-PRESS MACHINERY SEARCH MODAL */}
       <PostPressSelectorModal
         isOpen={isPostPressModalOpen}
         onClose={() => setIsPostPressModalOpen(false)}
@@ -2979,7 +3022,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         formatCurrency={formatCurrency}
       />
 
-      {/* 🌟 FINISHING MATERIALS & CONSUMABLES INVENTORY SEARCH MODAL */}
+      {/* FINISHING MATERIALS & CONSUMABLES INVENTORY SEARCH MODAL */}
       <MaterialInventorySearchModal
         isOpen={isMaterialModalOpen}
         onClose={() => setIsMaterialModalOpen(false)}

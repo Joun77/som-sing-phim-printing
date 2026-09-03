@@ -5,6 +5,7 @@ import {
   Clock, 
   Printer, 
   Trash2,
+  Download,
   Truck,
   Package,
   Scissors,
@@ -405,23 +406,69 @@ export default function OrderDetailsPage({
                 <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[10px] font-black border border-purple-200 uppercase">Art Safe</span>
               </h3>
               
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-purple-100 text-purple-800 border border-purple-200 rounded-2xl flex items-center justify-center font-black text-xs uppercase font-mono shadow-inner">
-                    PDF
+              {(() => {
+                const resolvedUrl = order.artworkUrl || order.artwork_url || order.artworkLink || order.driveLink || order.googleDriveLink || (order.items && order.items[0]?.artworkUrl) || (order.items && order.items[0]?.inner_file_url) || '';
+                const resolvedFileName = order.artworkFileName || order.artwork_file_name || (order.items && order.items[0]?.artworkFileName) || (resolvedUrl ? resolvedUrl.split('/').pop()?.split('?')[0] : '') || `artwork_order_${order.id}_cmyk.pdf`;
+                const resolvedSize = order.artworkFileSize || order.artwork_file_size || (order.items && order.items[0]?.artworkFileSize) || 0;
+                const formattedSize = resolvedSize > 0 ? `${(resolvedSize / (1024 * 1024)).toFixed(2)} MB • ` : '';
+                const isPdf = resolvedFileName.toLowerCase().endsWith('.pdf') || resolvedUrl.toLowerCase().includes('pdf');
+                const isImage = /\.(jpe?g|png|webp|gif|svg)$/i.test(resolvedFileName) || /\.(jpe?g|png|webp|gif|svg)/i.test(resolvedUrl);
+
+                const handleDownload = () => {
+                  if (!resolvedUrl) {
+                    showToast(currentLang === 'lo' ? 'ບໍ່ພົບລິ້ງດາວໂຫຼດໄຟລ໌' : 'No file link available to download', 'warning');
+                    return;
+                  }
+                  try {
+                    const link = document.createElement('a');
+                    link.href = resolvedUrl;
+                    link.download = resolvedFileName;
+                    link.target = '_blank';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    showToast(currentLang === 'lo' ? 'ດາວໂຫຼດໄຟລ໌ສຳເລັດ!' : 'Artwork file downloaded!', 'success');
+                  } catch (err) {
+                    window.open(resolvedUrl, '_blank');
+                  }
+                };
+
+                return (
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-12 h-12 bg-purple-100 text-purple-800 border border-purple-200 rounded-2xl flex items-center justify-center font-black text-xs uppercase font-mono shadow-inner shrink-0">
+                        {isPdf ? 'PDF' : isImage ? 'IMG' : 'FILE'}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-xs font-extrabold text-slate-800 leading-snug font-mono truncate" title={resolvedFileName}>
+                          {resolvedFileName}
+                        </h4>
+                        <p className="text-[10px] text-slate-400 font-bold mt-0.5 truncate">
+                          {formattedSize}High-Resolution Vector Format • 300 DPI • CMYK Embedded Profile
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {resolvedUrl && (
+                        <button
+                          type="button"
+                          onClick={() => window.open(resolvedUrl, '_blank')}
+                          className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer shadow-xs"
+                        >
+                          {currentLang === 'lo' ? 'ເປີດໄຟລ໌' : 'View File'}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleDownload}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition active:scale-95 cursor-pointer shadow-sm shadow-purple-600/10 shrink-0"
+                      >
+                        {currentLang === 'lo' ? 'ດາວໂຫຼດໄຟລ໌' : 'Download File'}
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-xs font-extrabold text-slate-800 leading-snug font-mono">artwork_order_{order.id}_cmyk.pdf</h4>
-                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">High-Resolution Vector Format • 300 DPI • Embedded Profile</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => showToast(currentLang === 'lo' ? 'ດາວໂຫຼດໄຟລ໌ສຳເລັດ!' : 'Artwork file downloaded!', 'success')}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition active:scale-95 cursor-pointer shadow-sm shadow-purple-600/10 shrink-0"
-                >
-                  {currentLang === 'lo' ? 'ດາວໂຫຼດໄຟລ໌' : 'Download File'}
-                </button>
-              </div>
+                );
+              })()}
 
               {/* Pre-flight Interactive Control Panel */}
               <div className="space-y-4">
@@ -1535,31 +1582,70 @@ export default function OrderDetailsPage({
                       </span>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-900/90 p-3 rounded-lg border border-slate-800">
-                      <div className="min-w-0 flex-1">
-                        <span className="text-xs font-bold text-slate-200 block truncate font-mono">
-                          {order.driveLink || order.googleDriveLink || `artwork_SSP_${orderIdDisplay}_master.pdf`}
-                        </span>
-                        <span className="text-[10.5px] text-slate-400 block mt-0.5">
-                          Google Drive / Canva Print Ready Vector • CMYK Profile
-                        </span>
-                      </div>
+                    {(() => {
+                      const resolvedUrl = order.artworkUrl || order.artwork_url || order.artworkLink || order.driveLink || order.googleDriveLink || (order.items && order.items[0]?.artworkUrl) || (order.items && order.items[0]?.inner_file_url) || "";
+                      const resolvedFileName = order.artworkFileName || order.artwork_file_name || (order.items && order.items[0]?.artworkFileName) || (resolvedUrl ? resolvedUrl.split("/").pop()?.split("?")[0] : "") || `artwork_SSP_${orderIdDisplay}_master.pdf`;
 
-                      <a
-                        href={order.driveLink || order.googleDriveLink || '#'}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => {
-                          if (!order.driveLink && !order.googleDriveLink) {
-                            e.preventDefault();
-                            showToast(currentLang === 'lo' ? 'ເປີດໄຟລ໌ຕົວຢ່າງ Artwork ສຳເລັດ' : 'Opened artwork file', 'info');
-                          }
-                        }}
-                        className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black transition active:scale-95 cursor-pointer flex items-center gap-1.5 shrink-0 shadow-md border-none"
-                      >
-                        <span>{currentLang === 'lo' ? 'ເປີດໄຟລ໌ງານ' : 'Open Artwork'}</span>
-                      </a>
-                    </div>
+                      const handleDownload = (e: React.MouseEvent) => {
+                        e.preventDefault();
+                        if (!resolvedUrl) {
+                          showToast(currentLang === "lo" ? "ບໍ່ພົບລິ້ງດາວໂຫຼດ" : "No download link available", "warning");
+                          return;
+                        }
+                        try {
+                          const link = document.createElement("a");
+                          link.href = resolvedUrl;
+                          link.download = resolvedFileName;
+                          link.target = "_blank";
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          showToast(currentLang === "lo" ? "ດາວໂຫຼດໄຟລ໌ສຳເລັດ!" : "Artwork downloaded!", "success");
+                        } catch {
+                          window.open(resolvedUrl, "_blank");
+                        }
+                      };
+
+                      return (
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-900/90 p-3 rounded-lg border border-slate-800">
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs font-bold text-slate-200 block truncate font-mono" title={resolvedFileName}>
+                              {resolvedFileName}
+                            </span>
+                            <span className="text-[10.5px] text-slate-400 block mt-0.5 truncate">
+                              {resolvedUrl || "Google Drive / Canva Print Ready Vector • CMYK Profile"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {resolvedUrl && (
+                              <button
+                                type="button"
+                                onClick={handleDownload}
+                                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center gap-1.5 border border-slate-700 cursor-pointer"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>{currentLang === "lo" ? "ດາວໂຫຼດ" : "Download"}</span>
+                              </button>
+                            )}
+                            <a
+                              href={resolvedUrl || "#"}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => {
+                                if (!resolvedUrl) {
+                                  e.preventDefault();
+                                  showToast(currentLang === "lo" ? "ເປີດໄຟລ໌ຕົວຢ່າງ Artwork ສຳເລັດ" : "Opened artwork file", "info");
+                                }
+                              }}
+                              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black transition active:scale-95 cursor-pointer flex items-center gap-1.5 shrink-0 shadow-md border-none"
+                            >
+                              <span>{currentLang === "lo" ? "ເປີດໄຟລ໌ງານ" : "Open Artwork"}</span>
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 

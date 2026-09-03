@@ -69,7 +69,9 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
   const promisedDate = order.promisedDeliveryDate || order.delivery_date;
   const deliveryMethod = order.deliveryMethod || order.shippingCourier || 'Anousith Express';
   const paymentSlipUrl = order.paymentSlipUrl || order.payment_slip_url || order.slipUrl || order.slipImage;
-  const driveLink = order.driveLink || order.googleDriveLink;
+  const driveLink = order.artworkUrl || order.artwork_url || order.driveLink || order.googleDriveLink || order.artworkLink || (order.items && order.items[0]?.artworkUrl) || (order.items && order.items[0]?.inner_file_url) || (order.items && order.items[0]?.cover_file_url) || '';
+  const artworkFileName = order.artworkFileName || order.artwork_file_name || (order.items && order.items[0]?.artworkFileName) || (driveLink ? driveLink.split('/').pop()?.split('?')[0] : '');
+  const artworkFileSize = order.artworkFileSize || order.artwork_file_size || (order.items && order.items[0]?.artworkFileSize) || 0;
 
   const isPaymentConfirmed = 
     order.paymentStatus === 'Paid' || 
@@ -215,6 +217,8 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
             customerPhone={customerPhone}
             deliveryAddress={deliveryAddress}
             driveLink={driveLink}
+            artworkFileName={artworkFileName}
+            artworkFileSize={artworkFileSize}
             proofUrl={order.proofUrl || order.proof_url}
             proofApprovedAt={order.proofApprovedAt || order.proof_approved_at}
             proofRejectedAt={order.proofRejectedAt || order.proof_rejected_at}

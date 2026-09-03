@@ -14,7 +14,8 @@ import {
   Wrench,
   Sliders,
   AlertTriangle,
-  Tag
+  Tag,
+  Save
 } from 'lucide-react';
 
 export interface QuotationCostSummarySidebarProps {
@@ -195,115 +196,151 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
           </div>
 
           {/* Cost & Profit Composition Multi-Segment Bar */}
-          <div className="space-y-2 pt-1">
-            <div className="w-full bg-white/20 h-2.5 rounded-full overflow-hidden flex">
-              {grandPaperCost > 0 && (
-                <div 
-                  style={{ width: `${Math.min(100, (grandPaperCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                  className="bg-sky-400 h-full transition-all duration-300" 
-                  title={`${currentLang === 'lo' ? 'ຕົ້ນທຶນເຈ້ຍ' : 'Paper Cost'}: ${formatCurrency(grandPaperCost)}`}
-                />
-              )}
-              {grandInkCost > 0 && (
-                <div 
-                  style={{ width: `${Math.min(100, (grandInkCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                  className="bg-purple-400 h-full transition-all duration-300" 
-                  title={`${currentLang === 'lo' ? 'ຕົ້ນທຶນໝຶກ' : 'Ink Cost'}: ${formatCurrency(grandInkCost)}`}
-                />
-              )}
-              {grandMachCost > 0 && (
-                <div 
-                  style={{ width: `${Math.min(100, (grandMachCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                  className="bg-amber-400 h-full transition-all duration-300" 
-                  title={`${currentLang === 'lo' ? 'ຄ່າຫຼຸ້ຍຫ້ຽນເຄື່ອງຈັກ' : 'Machine Depreciation'}: ${formatCurrency(grandMachCost)}`}
-                />
-              )}
-              {grandPostPressCost > 0 && (
-                <div 
-                  style={{ width: `${Math.min(100, (grandPostPressCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                  className="bg-rose-400 h-full transition-all duration-300" 
-                  title={`${currentLang === 'lo' ? 'ເຄື່ອງຈັກຫຼັງພິມ' : 'Post-Press Machinery'}: ${formatCurrency(grandPostPressCost)}`}
-                />
-              )}
-              {grandFinishingCost > 0 && (
-                <div 
-                  style={{ width: `${Math.min(100, (grandFinishingCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                  className="bg-teal-400 h-full transition-all duration-300" 
-                  title={`${currentLang === 'lo' ? 'ວັດສະດຸສິ້ນເປືອງ' : 'Consumables'}: ${formatCurrency(grandFinishingCost)}`}
-                />
-              )}
-              {grandLaborCost > 0 && (
-                <div 
-                  style={{ width: `${Math.min(100, (grandLaborCost / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                  className="bg-blue-400 h-full transition-all duration-300" 
-                  title={`${currentLang === 'lo' ? 'ຄ່າແຮງງານ' : 'Labor Cost'}: ${formatCurrency(grandLaborCost)}`}
-                />
-              )}
-              {(grandPackagingCost + quotationSetupFee) > 0 && (
-                <div 
-                  style={{ width: `${Math.min(100, ((grandPackagingCost + quotationSetupFee) / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                  className="bg-orange-400 h-full transition-all duration-300" 
-                  title={`${currentLang === 'lo' ? 'ຄ່າຕັ້ງຄ່າ & ບັນຈຸພັນ' : 'Setup & Packaging'}: ${formatCurrency(grandPackagingCost + quotationSetupFee)}`}
-                />
-              )}
-              {grandNetProfit > 0 && (
-                <div 
-                  style={{ width: `${Math.min(100, (grandNetProfit / Math.max(1, finalGrandTotal)) * 100)}%` }} 
-                  className="bg-emerald-400 h-full transition-all duration-300" 
-                  title={`${currentLang === 'lo' ? 'ກຳໄລສຸດທິ' : 'Net Profit Margin'}: ${formatCurrency(grandNetProfit)}`}
-                />
-              )}
-            </div>
+          {(() => {
+            const rawPaper = Math.max(0, grandPaperCost || 0);
+            const rawInk = Math.max(0, grandInkCost || 0);
+            const rawMach = Math.max(0, grandMachCost || 0);
+            const rawPostPress = Math.max(0, grandPostPressCost || 0);
+            const rawFinishing = Math.max(0, grandFinishingCost || 0);
+            const rawLabor = Math.max(0, grandLaborCost || 0);
+            const rawPkgSetup = Math.max(0, (grandPackagingCost || 0) + (quotationSetupFee || 0));
+            const rawProfit = Math.max(0, grandNetProfit || 0);
 
-            {/* Mini Legend for Composition Tabs */}
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-slate-300 font-medium">
-              {grandPaperCost > 0 && (
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-sky-400"></span> ເຈ້ຍ ({((grandPaperCost / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
-                </span>
-              )}
-              {grandInkCost > 0 && (
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-purple-400"></span> ໝຶກ ({((grandInkCost / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
-                </span>
-              )}
-              {grandMachCost > 0 && (
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-amber-400"></span> ເຄື່ອງພິມ ({((grandMachCost / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
-                </span>
-              )}
-              {grandPostPressCost > 0 && (
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-rose-400"></span> ຫຼັງພິມ ({((grandPostPressCost / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
-                </span>
-              )}
-              {grandFinishingCost > 0 && (
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-teal-400"></span> ສິ້ນເປືອງ ({((grandFinishingCost / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
-                </span>
-              )}
-              {grandLaborCost > 0 && (
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-blue-400"></span> ແຮງງານ ({((grandLaborCost / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
-                </span>
-              )}
-              {(grandPackagingCost + quotationSetupFee) > 0 && (
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-orange-400"></span> ຕັ້ງຄ່າ/ຫຸ້ມຫໍ່ ({(((grandPackagingCost + quotationSetupFee) / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
-                </span>
-              )}
-              {grandNetProfit > 0 && (
-                <span className="flex items-center gap-1 font-bold text-emerald-300">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span> ກຳໄລ ({((grandNetProfit / Math.max(1, finalGrandTotal)) * 100).toFixed(0)}%)
-                </span>
-              )}
-            </div>
-          </div>
+            const totalSegmentsValue = rawPaper + rawInk + rawMach + rawPostPress + rawFinishing + rawLabor + rawPkgSetup + rawProfit;
+
+            let paperPercent = 0;
+            let inkPercent = 0;
+            let machPercent = 0;
+            let postPressPercent = 0;
+            let finishingPercent = 0;
+            let laborPercent = 0;
+            let pkgSetupPercent = 0;
+            let profitPercent = 0;
+
+            if (totalSegmentsValue > 0) {
+              paperPercent = (rawPaper / totalSegmentsValue) * 100;
+              inkPercent = (rawInk / totalSegmentsValue) * 100;
+              machPercent = (rawMach / totalSegmentsValue) * 100;
+              postPressPercent = (rawPostPress / totalSegmentsValue) * 100;
+              finishingPercent = (rawFinishing / totalSegmentsValue) * 100;
+              laborPercent = (rawLabor / totalSegmentsValue) * 100;
+              pkgSetupPercent = (rawPkgSetup / totalSegmentsValue) * 100;
+              const nonProfitTotal = paperPercent + inkPercent + machPercent + postPressPercent + finishingPercent + laborPercent + pkgSetupPercent;
+              profitPercent = rawProfit > 0 ? Math.max(0, 100 - nonProfitTotal) : 0;
+            }
+
+            return (
+              <div className="space-y-2 pt-1">
+                <div className="w-full bg-white/20 h-2.5 rounded-full overflow-hidden flex">
+                  {rawPaper > 0 && (
+                    <div 
+                      style={{ width: `${paperPercent}%` }} 
+                      className="bg-sky-400 h-full transition-all duration-300" 
+                      title={`${currentLang === 'lo' ? 'ຕົ້ນທຶນເຈ້ຍ' : 'Paper Cost'}: ${formatCurrency(grandPaperCost)} (${paperPercent.toFixed(1)}%)`}
+                    />
+                  )}
+                  {rawInk > 0 && (
+                    <div 
+                      style={{ width: `${inkPercent}%` }} 
+                      className="bg-purple-400 h-full transition-all duration-300" 
+                      title={`${currentLang === 'lo' ? 'ຕົ້ນທຶນໝຶກ' : 'Ink Cost'}: ${formatCurrency(grandInkCost)} (${inkPercent.toFixed(1)}%)`}
+                    />
+                  )}
+                  {rawMach > 0 && (
+                    <div 
+                      style={{ width: `${machPercent}%` }} 
+                      className="bg-amber-400 h-full transition-all duration-300" 
+                      title={`${currentLang === 'lo' ? 'ຄ່າຫຼຸ້ຍຫ້ຽນເຄື່ອງຈັກ' : 'Machine Depreciation'}: ${formatCurrency(grandMachCost)} (${machPercent.toFixed(1)}%)`}
+                    />
+                  )}
+                  {rawPostPress > 0 && (
+                    <div 
+                      style={{ width: `${postPressPercent}%` }} 
+                      className="bg-rose-400 h-full transition-all duration-300" 
+                      title={`${currentLang === 'lo' ? 'ເຄື່ອງຈັກຫຼັງພິມ' : 'Post-Press Machinery'}: ${formatCurrency(grandPostPressCost)} (${postPressPercent.toFixed(1)}%)`}
+                    />
+                  )}
+                  {rawFinishing > 0 && (
+                    <div 
+                      style={{ width: `${finishingPercent}%` }} 
+                      className="bg-teal-400 h-full transition-all duration-300" 
+                      title={`${currentLang === 'lo' ? 'ວັດສະດຸສິ້ນເປືອງ' : 'Consumables'}: ${formatCurrency(grandFinishingCost)} (${finishingPercent.toFixed(1)}%)`}
+                    />
+                  )}
+                  {rawLabor > 0 && (
+                    <div 
+                      style={{ width: `${laborPercent}%` }} 
+                      className="bg-blue-400 h-full transition-all duration-300" 
+                      title={`${currentLang === 'lo' ? 'ຄ່າແຮງງານ' : 'Labor Cost'}: ${formatCurrency(grandLaborCost)} (${laborPercent.toFixed(1)}%)`}
+                    />
+                  )}
+                  {rawPkgSetup > 0 && (
+                    <div 
+                      style={{ width: `${pkgSetupPercent}%` }} 
+                      className="bg-orange-400 h-full transition-all duration-300" 
+                      title={`${currentLang === 'lo' ? 'ຄ່າຕັ້ງຄ່າ & ບັນຈຸພັນ' : 'Setup & Packaging'}: ${formatCurrency(grandPackagingCost + quotationSetupFee)} (${pkgSetupPercent.toFixed(1)}%)`}
+                    />
+                  )}
+                  {rawProfit > 0 && (
+                    <div 
+                      style={{ width: `${profitPercent}%` }} 
+                      className="bg-emerald-400 h-full transition-all duration-300" 
+                      title={`${currentLang === 'lo' ? 'ກຳໄລສຸດທິ' : 'Net Profit Margin'}: ${formatCurrency(grandNetProfit)} (${profitPercent.toFixed(1)}%)`}
+                    />
+                  )}
+                </div>
+
+                {/* Mini Legend for Composition Tabs */}
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-slate-300 font-medium">
+                  {rawPaper > 0 && (
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-sky-400"></span> ເຈ້ຍ ({paperPercent.toFixed(0)}%)
+                    </span>
+                  )}
+                  {rawInk > 0 && (
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-purple-400"></span> ໝຶກ ({inkPercent.toFixed(0)}%)
+                    </span>
+                  )}
+                  {rawMach > 0 && (
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-amber-400"></span> ເຄື່ອງພິມ ({machPercent.toFixed(0)}%)
+                    </span>
+                  )}
+                  {rawPostPress > 0 && (
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-rose-400"></span> ຫຼັງພິມ ({postPressPercent.toFixed(0)}%)
+                    </span>
+                  )}
+                  {rawFinishing > 0 && (
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-teal-400"></span> ສິ້ນເປືອງ ({finishingPercent.toFixed(0)}%)
+                    </span>
+                  )}
+                  {rawLabor > 0 && (
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-blue-400"></span> ແຮງງານ ({laborPercent.toFixed(0)}%)
+                    </span>
+                  )}
+                  {rawPkgSetup > 0 && (
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-orange-400"></span> ຕັ້ງຄ່າ/ຫຸ້ມຫໍ່ ({pkgSetupPercent.toFixed(0)}%)
+                    </span>
+                  )}
+                  {rawProfit > 0 && (
+                    <span className="flex items-center gap-1 font-bold text-emerald-300">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400"></span> ກຳໄລ ({profitPercent.toFixed(0)}%)
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
         </div>
 
         {/* ========================================================================= */}
-        {/* 🌟 1. ตารางต้นทุนและราคาขายแต่ละรายการ (Multi-Items Breakdown Table)       */}
+        {/* 1. ตารางต้นทุนและราคาขายแต่ละรายการ (Multi-Items Breakdown Table)       */}
         {/* ========================================================================= */}
         <div className="space-y-2">
           <div className="flex justify-between items-center">
@@ -351,7 +388,7 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
         </div>
 
         {/* ========================================================================= */}
-        {/* 🌟 2. ລາຍລະອຽດຕົ້ນທຶນແຍກໝວດ (Detailed Cost Breakdown)                      */}
+        {/* 2. ລາຍລະອຽດຕົ້ນທຶນແຍກໝວດ (Detailed Cost Breakdown)                      */}
         {/* ========================================================================= */}
         <div className="rounded-2xl border border-slate-200 overflow-hidden">
           <button
@@ -519,7 +556,7 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
         </div>
 
         {/* ========================================================================= */}
-        {/* 🌟 3. ຄ່າແຮງງານຊ່າງ (Labor Cost - Segmented % vs Custom LAK)                */}
+        {/* 3. ຄ່າແຮງງານຊ່າງ (Labor Cost - Segmented % vs Custom LAK)                */}
         {/* ========================================================================= */}
         <div className="p-4 bg-blue-50/60 border border-blue-200 rounded-2xl space-y-3">
           <div className="flex items-center justify-between">
@@ -635,7 +672,7 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
         </div>
 
         {/* ========================================================================= */}
-        {/* 🌟 3.1 ค่าตั้งเครื่องและเตรียมงานรวม (Machine Setup Fee - Toggle Switch) */}
+        {/* 3.1 ค่าตั้งเครื่องและเตรียมงานรวม (Machine Setup Fee - Toggle Switch) */}
         {/* ========================================================================= */}
         <div className="p-3.5 bg-indigo-50/50 border border-indigo-200/80 rounded-2xl space-y-2.5">
           <div className="flex items-center justify-between">
@@ -709,7 +746,7 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
         </div>
 
         {/* ========================================================================= */}
-        {/* 🌟 4. กล่องบรรจุภัณฑ์ & ค่าขนส่งรวม (Packaging & Logistics)               */}
+        {/* 4. กล่องบรรจุภัณฑ์ & ค่าขนส่งรวม (Packaging & Logistics)               */}
         {/* ========================================================================= */}
         <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
           <div className="flex items-center justify-between">
@@ -791,7 +828,7 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
         </div>
 
         {/* ========================================================================= */}
-        {/* 🌟 5. ອັດຕາກຳໄລ & ສ່ວນຫຼຸດລວມ (Combined Profit Margin & Discount)        */}
+        {/* 5. ອັດຕາກຳໄລ & ສ່ວນຫຼຸດລວມ (Combined Profit Margin & Discount)        */}
         {/* ========================================================================= */}
         <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-3.5">
           <div className="flex items-center justify-between">
@@ -958,9 +995,10 @@ export const QuotationCostSummarySidebar: React.FC<QuotationCostSummarySidebarPr
           <button
             type="button"
             onClick={onSaveDraft}
-            className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition cursor-pointer"
+            className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
           >
-            💾 ບັນທຶກສະບັບຮ່າງ (Save Draft)
+            <Save className="w-3.5 h-3.5 text-slate-600" />
+            <span>ບັນທຶກສະບັບຮ່າງ (Save Draft)</span>
           </button>
         </div>
 

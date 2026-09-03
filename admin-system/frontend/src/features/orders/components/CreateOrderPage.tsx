@@ -151,6 +151,9 @@ export default function CreateOrderPage({
     pagesPerBook: 1,
     colorPrintMode: 'CMYK',
     fileName: '',
+    artworkUrl: '',
+    fileSize: 0,
+    mimeType: '',
     cCoverage: 5,
     mCoverage: 5,
     yCoverage: 5,
@@ -166,12 +169,35 @@ export default function CreateOrderPage({
 
   // Pre-fill specs if passed from QuotationManager
   useEffect(() => {
-    if (prefilledSpecs && prefilledSpecs.paperId) {
-      const newItem = createDefaultItem(prefilledSpecs.paperName || 'ໃບສະເໜີລາຄາ (Quotation Job)', true);
-      newItem.paperId = prefilledSpecs.paperId;
-      if (prefilledSpecs.quantity) newItem.quantity = prefilledSpecs.quantity;
-      if (prefilledSpecs.unitCost) newItem.manualUnitPrice = prefilledSpecs.unitCost;
-      setItems([newItem]);
+    if (prefilledSpecs) {
+      if (prefilledSpecs.artworkUrl || prefilledSpecs.artworkLink) {
+        setArtworkLink(prefilledSpecs.artworkUrl || prefilledSpecs.artworkLink);
+      }
+      if (Array.isArray(prefilledSpecs.items) && prefilledSpecs.items.length > 0) {
+        const configuredItems = prefilledSpecs.items.map((it: any) => {
+          const item = createDefaultItem(it.name || 'ໃບສະເໜີລາຄາ (Quotation Job)', true);
+          if (it.paperId) item.paperId = it.paperId;
+          if (it.quantity) item.quantity = it.quantity;
+          if (it.unitCost) item.manualUnitPrice = it.unitCost;
+          if (it.artworkUrl) (item as any).artworkUrl = it.artworkUrl;
+          if (it.fileName) item.fileName = it.fileName;
+          if (it.fileSize) (item as any).fileSize = it.fileSize;
+          if (it.jobWidth) item.jobWidth = it.jobWidth;
+          if (it.jobHeight) item.jobHeight = it.jobHeight;
+          if (it.pagesPerBook) item.pagesPerBook = it.pagesPerBook;
+          return item;
+        });
+        setItems(configuredItems);
+      } else if (prefilledSpecs.paperId) {
+        const newItem = createDefaultItem(prefilledSpecs.paperName || 'ໃບສະເໜີລາຄາ (Quotation Job)', true);
+        newItem.paperId = prefilledSpecs.paperId;
+        if (prefilledSpecs.quantity) newItem.quantity = prefilledSpecs.quantity;
+        if (prefilledSpecs.unitCost) newItem.manualUnitPrice = prefilledSpecs.unitCost;
+        if (prefilledSpecs.artworkUrl) (newItem as any).artworkUrl = prefilledSpecs.artworkUrl;
+        if (prefilledSpecs.artworkFileName) newItem.fileName = prefilledSpecs.artworkFileName;
+        if (prefilledSpecs.artworkFileSize) (newItem as any).fileSize = prefilledSpecs.artworkFileSize;
+        setItems([newItem]);
+      }
     }
   }, [prefilledSpecs]);
 
@@ -433,6 +459,10 @@ export default function CreateOrderPage({
       finalAddress = cust ? cust.address : address;
     }
 
+    const firstItemArtwork = items.find(it => (it as any).artworkUrl)?.artworkUrl || artworkLink;
+    const firstItemFileName = items.find(it => it.fileName)?.fileName || (firstItemArtwork ? firstItemArtwork.split('/').pop()?.split('?')[0] : '');
+    const firstItemFileSize = (items.find(it => (it as any).fileSize) as any)?.fileSize || 0;
+
     const payload = {
       customer_name: finalCustomerName,
       customer_phone: finalPhone,
@@ -440,7 +470,10 @@ export default function CreateOrderPage({
       province: province,
       district: district,
       village: village,
-      google_drive_link: artworkLink,
+      google_drive_link: artworkLink || firstItemArtwork,
+      artwork_url: artworkLink || firstItemArtwork,
+      artwork_file_name: firstItemFileName,
+      artwork_file_size: firstItemFileSize,
       items: items.map(it => {
         const paperItem = inventory ? inventory.find(p => p.id === it.paperId) : null;
         const paperCost = paperItem ? (paperItem.costPerConsumptionUnit || paperItem.costPerSheet || 90) : 100;
@@ -548,12 +581,20 @@ export default function CreateOrderPage({
           estimated_hours: 0.5,
           overhead_percent: Number(it.overheadPercent !== undefined ? it.overheadPercent : 15) / 100.0,
           target_margin_percent: (Number(it.targetMarginPercent) || 35) / 100.0,
+          cover_file_url: (it as any).artworkUrl || (it as any).fileUrl || artworkLink || '',
+          inner_file_url: (it as any).artworkUrl || (it as any).fileUrl || artworkLink || '',
+          artwork_url: (it as any).artworkUrl || (it as any).fileUrl || artworkLink || '',
+          artwork_file_name: it.fileName || ((it as any).artworkUrl ? (it as any).artworkUrl.split('/').pop()?.split('?')[0] : ''),
+          artwork_file_size: (it as any).fileSize || 0,
           specs: {
             dimensions: `${it.jobWidth}x${it.jobHeight}mm`,
             double_sided: it.isDoubleSided,
             paper_setup: paperSetup,
             printing_processes: printingProcesses,
             finishing_processes: finishingProcesses,
+            artwork_url: (it as any).artworkUrl || (it as any).fileUrl || artworkLink || '',
+            artwork_file_name: it.fileName || ((it as any).artworkUrl ? (it as any).artworkUrl.split('/').pop()?.split('?')[0] : ''),
+            artwork_file_size: (it as any).fileSize || 0
           }
         };
       })
@@ -582,12 +623,17 @@ export default function CreateOrderPage({
             orderNumber: updatedOrder.order_number,
             customerName: updatedOrder.customer_name,
             phone: updatedOrder.customer_phone,
-            items: updatedOrder.items.map(it => ({
+            items: (updatedOrder.items || []).map((it: any) => ({
               id: it.id,
-              name: it.job_name,
+              name: it.job_name || it.name,
               quantity: it.quantity,
-              unitCost: it.unit_price_snapshot,
-              specs: 'Synced'
+              unitCost: it.unit_price_snapshot || it.unit_price_lak,
+              specs: 'Synced',
+              artworkUrl: it.artwork_url || it.inner_file_url || it.cover_file_url || firstItemArtwork,
+              artworkFileName: it.artwork_file_name || firstItemFileName,
+              artworkFileSize: it.artwork_file_size || firstItemFileSize,
+              inner_file_url: it.inner_file_url || firstItemArtwork,
+              cover_file_url: it.cover_file_url || firstItemArtwork
             })),
             totalPriceCharged: updatedOrder.total_price,
             depositAmountPaid: updatedOrder.deposit_amount,
@@ -596,7 +642,10 @@ export default function CreateOrderPage({
             status: 'Received',
             promisedDeliveryDate: promisedDeliveryDate,
             deliveryMethod: deliveryMethod,
-            artworkLink: updatedOrder.google_drive_link
+            artworkLink: updatedOrder.artwork_url || updatedOrder.google_drive_link || firstItemArtwork,
+            artworkUrl: updatedOrder.artwork_url || updatedOrder.google_drive_link || firstItemArtwork,
+            artworkFileName: updatedOrder.artwork_file_name || firstItemFileName,
+            artworkFileSize: updatedOrder.artwork_file_size || firstItemFileSize
           });
         });
       } else {
@@ -605,12 +654,17 @@ export default function CreateOrderPage({
           orderNumber: orderData.order_number,
           customerName: orderData.customer_name,
           phone: orderData.customer_phone,
-          items: orderData.items.map(it => ({
+          items: (orderData.items || []).map((it: any) => ({
             id: it.id,
-            name: it.job_name,
+            name: it.job_name || it.name,
             quantity: it.quantity,
-            unitCost: it.unit_price_snapshot,
-            specs: 'Synced'
+            unitCost: it.unit_price_snapshot || it.unit_price_lak,
+            specs: 'Synced',
+            artworkUrl: it.artwork_url || it.inner_file_url || it.cover_file_url || firstItemArtwork,
+            artworkFileName: it.artwork_file_name || firstItemFileName,
+            artworkFileSize: it.artwork_file_size || firstItemFileSize,
+            inner_file_url: it.inner_file_url || firstItemArtwork,
+            cover_file_url: it.cover_file_url || firstItemArtwork
           })),
           totalPriceCharged: orderData.total_price,
           depositAmountPaid: orderData.deposit_amount,
@@ -619,7 +673,10 @@ export default function CreateOrderPage({
           status: 'Received',
           promisedDeliveryDate: promisedDeliveryDate,
           deliveryMethod: deliveryMethod,
-          artworkLink: orderData.google_drive_link
+          artworkLink: orderData.artwork_url || orderData.google_drive_link || firstItemArtwork,
+          artworkUrl: orderData.artwork_url || orderData.google_drive_link || firstItemArtwork,
+          artworkFileName: orderData.artwork_file_name || firstItemFileName,
+          artworkFileSize: orderData.artwork_file_size || firstItemFileSize
         });
       }
     })
@@ -635,7 +692,12 @@ export default function CreateOrderPage({
         name: it.name,
         quantity: it.quantity,
         unitCost: 15000,
-        specs: `${it.jobWidth}x${it.jobHeight}mm`
+        specs: `${it.jobWidth}x${it.jobHeight}mm`,
+        artworkUrl: (it as any).artworkUrl || firstItemArtwork,
+        artworkFileName: it.fileName || firstItemFileName,
+        artworkFileSize: (it as any).fileSize || firstItemFileSize,
+        inner_file_url: (it as any).artworkUrl || firstItemArtwork,
+        cover_file_url: (it as any).artworkUrl || firstItemArtwork
       }));
       const selectedCourierObj = couriers?.find(c => c.id === selectedCourierId);
       const deliveryMethodLabel = deliveryMethod === 'Pickup' 
@@ -660,7 +722,10 @@ export default function CreateOrderPage({
         paymentMethod: 'BCEL One',
         bankName: 'BCEL',
         paymentStatus: paymentStatus,
-        artworkLink: artworkLink,
+        artworkLink: firstItemArtwork,
+        artworkUrl: firstItemArtwork,
+        artworkFileName: firstItemFileName,
+        artworkFileSize: firstItemFileSize,
         promisedDeliveryDate: promisedDeliveryDate || new Date().toISOString().split('T')[0],
         deliveryMethod: deliveryMethodLabel,
         delivery_type: deliveryMethod,

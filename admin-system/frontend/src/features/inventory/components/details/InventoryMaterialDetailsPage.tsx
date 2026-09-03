@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Trash2, Edit3, ShieldAlert, Package, Calendar, Truck, Layers, AlertTriangle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit3, ShieldAlert, Package, Calendar, Truck, Layers, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import { calculatePaperUnitCost } from '@utils/costCalculator';
@@ -351,8 +351,9 @@ export default function InventoryMaterialDetailsPage({
               {(() => {
                 if (effectiveStock <= 0) {
                   return (
-                    <span className="px-3 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-full text-xs font-black">
-                      🔴 {currentLang === 'lo' ? 'ໝົດສະຕ໋ອກ (Out of Stock)' : 'Out of Stock'}
+                    <span className="px-3 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-full text-xs font-black inline-flex items-center gap-1">
+                      <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                      {currentLang === 'lo' ? 'ໝົດສະຕ໋ອກ (Out of Stock)' : 'Out of Stock'}
                     </span>
                   );
                 }

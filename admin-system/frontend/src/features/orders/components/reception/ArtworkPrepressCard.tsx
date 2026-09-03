@@ -25,6 +25,8 @@ interface ArtworkPrepressCardProps {
   customerPhone: string;
   deliveryAddress: string;
   driveLink?: string;
+  artworkFileName?: string;
+  artworkFileSize?: number;
   proofUrl?: string;
   proofApprovedAt?: string;
   proofRejectedAt?: string;
@@ -48,6 +50,8 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
   customerPhone,
   deliveryAddress,
   driveLink,
+  artworkFileName,
+  artworkFileSize,
   proofUrl,
   proofApprovedAt,
   proofRejectedAt,
@@ -311,27 +315,67 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
           </div>
 
           {driveLink ? (
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs">
-              <div className="min-w-0 flex-1">
-                <span className="text-xs font-bold text-slate-900 block truncate font-mono">
-                  {driveLink}
-                </span>
-                <span className="text-[10.5px] text-slate-500 block mt-0.5 font-medium">
-                  Google Drive / Canva Print Ready Vector • CMYK 300 DPI
-                </span>
-              </div>
+            (() => {
+              const displayFileName = artworkFileName || driveLink.split('/').pop()?.split('?')[0] || `artwork_${orderIdDisplay}.pdf`;
+              const isPdf = displayFileName.toLowerCase().endsWith('.pdf') || driveLink.toLowerCase().includes('pdf');
+              const isImage = /\.(jpe?g|png|webp|gif|svg)$/i.test(displayFileName) || /\.(jpe?g|png|webp|gif|svg)/i.test(driveLink);
+              const formattedSize = artworkFileSize && artworkFileSize > 0
+                ? `${(artworkFileSize / (1024 * 1024)).toFixed(2)} MB`
+                : '';
 
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={onOpenDriveLink}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black transition active:scale-95 cursor-pointer flex items-center gap-1.5 shadow-sm border-none"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>{currentLang === 'lo' ? 'ເປີດໄຟລ໌ງານ' : 'Open Artwork'}</span>
-                </button>
-              </div>
-            </div>
+              const handleDownload = (e: React.MouseEvent) => {
+                e.stopPropagation();
+                try {
+                  const link = document.createElement('a');
+                  link.href = driveLink;
+                  link.download = displayFileName;
+                  link.target = '_blank';
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                } catch (err) {
+                  window.open(driveLink, '_blank');
+                }
+              };
+
+              return (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-800 border border-purple-200 flex items-center justify-center font-black text-xs uppercase font-mono shadow-xs shrink-0">
+                      {isPdf ? 'PDF' : isImage ? 'IMG' : 'FILE'}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-bold text-slate-900 block truncate font-mono" title={displayFileName}>
+                        {displayFileName}
+                      </span>
+                      <span className="text-[10.5px] text-slate-500 block mt-0.5 font-medium truncate">
+                        {formattedSize ? `${formattedSize} • ` : ''}Print Ready Vector • CMYK 300 DPI
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+                    <button
+                      type="button"
+                      onClick={handleDownload}
+                      className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition active:scale-95 cursor-pointer flex items-center gap-1.5 border border-slate-200"
+                      title={currentLang === 'lo' ? 'ດາວໂຫຼດໄຟລ໌' : 'Download File'}
+                    >
+                      <Download className="w-3.5 h-3.5 text-slate-600" />
+                      <span>{currentLang === 'lo' ? 'ດາວໂຫຼດ' : 'Download'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onOpenDriveLink}
+                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black transition active:scale-95 cursor-pointer flex items-center gap-1.5 shadow-sm border-none"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>{currentLang === 'lo' ? 'ເປີດໄຟລ໌ງານ' : 'Open Artwork'}</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()
           ) : (
             <div className="bg-white p-3.5 rounded-xl border border-dashed border-slate-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>

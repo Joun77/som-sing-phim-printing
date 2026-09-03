@@ -225,6 +225,25 @@ func HandleCreateOrder(c *gin.Context) {
 		unitPrice, _ := dUnitPrice.Float64()
 		itemTotalPrice, _ := dSalePriceItem.Float64()
 
+		itemArtworkURL := itemReq.ArtworkURL
+		if itemArtworkURL == "" {
+			itemArtworkURL = itemReq.InnerFileURL
+		}
+		if itemArtworkURL == "" {
+			itemArtworkURL = itemReq.CoverFileURL
+		}
+		itemArtworkFileName := itemReq.ArtworkFileName
+		if itemArtworkFileName == "" && itemArtworkURL != "" {
+			itemArtworkFileName = filepath.Base(itemArtworkURL)
+		}
+
+		if itemArtworkURL != "" {
+			specs["artwork_url"] = itemArtworkURL
+			specs["artwork_file_name"] = itemArtworkFileName
+			specs["artwork_file_size"] = itemReq.ArtworkFileSize
+			specs["mime_type"] = itemReq.MimeType
+		}
+
 		orderItem := OrderItem{
 			ID:                fmt.Sprintf("item-%s-%d", orderID, idx+1),
 			OrderID:           orderID,
@@ -237,6 +256,9 @@ func HandleCreateOrder(c *gin.Context) {
 			InnerPaperID:      itemReq.InnerPaperID,
 			CoverFileURL:      itemReq.CoverFileURL,
 			InnerFileURL:      itemReq.InnerFileURL,
+			ArtworkURL:         itemArtworkURL,
+			ArtworkFileName:    itemArtworkFileName,
+			ArtworkFileSize:    itemReq.ArtworkFileSize,
 			BindingType:       BindingType(itemReq.BindingType),
 			SpineWidthMM:      spineWidth,
 			CurrentStep:       StepPending,
@@ -287,6 +309,36 @@ func HandleCreateOrder(c *gin.Context) {
 		log.Printf("[MARGIN GUARD] Order %s margin %s%% < 25%%. Status set to REQUIRES_MANAGER_APPROVAL", orderID, dGrossMarginPercent.String())
 	}
 
+	orderArtworkURL := req.ArtworkURL
+	if orderArtworkURL == "" {
+		orderArtworkURL = req.GoogleDriveLink
+	}
+	if orderArtworkURL == "" && len(itemsList) > 0 {
+		for _, it := range itemsList {
+			if it.ArtworkURL != "" {
+				orderArtworkURL = it.ArtworkURL
+				break
+			}
+		}
+	}
+	orderArtworkFileName := req.ArtworkFileName
+	if orderArtworkFileName == "" && len(itemsList) > 0 {
+		for _, it := range itemsList {
+			if it.ArtworkFileName != "" {
+				orderArtworkFileName = it.ArtworkFileName
+				break
+			}
+		}
+	}
+	if orderArtworkFileName == "" && orderArtworkURL != "" {
+		orderArtworkFileName = filepath.Base(orderArtworkURL)
+	}
+
+	driveLink := req.GoogleDriveLink
+	if driveLink == "" {
+		driveLink = orderArtworkURL
+	}
+
 	newOrder := Order{
 		ID:              orderID,
 		OrderNo:         orderNo,
@@ -308,7 +360,11 @@ func HandleCreateOrder(c *gin.Context) {
 		DepositAmount:   depositFloat,
 		TotalPrice:      totalPriceFloat,
 		TotalCost:       totalCostFloat,
-		GoogleDriveLink: req.GoogleDriveLink,
+		GoogleDriveLink: driveLink,
+		ArtworkURL:      orderArtworkURL,
+		ArtworkFileName: orderArtworkFileName,
+		ArtworkFileSize: req.ArtworkFileSize,
+		MimeType:        req.MimeType,
 		IdempotencyKey:  req.IdempotencyKey,
 		Items:           itemsList,
 		CreatedAt:       time.Now(),
@@ -742,6 +798,20 @@ func getOrdersFromDB() ([]Order, error) {
 		o.DepositAmount = o.DepositLAK
 		o.TotalPrice = o.TotalAmountLAK
 		o.Items, _ = getOrderItemsFromDB(o.ID)
+		if o.ArtworkURL == "" {
+			for _, it := range o.Items {
+				if it.ArtworkURL != "" {
+					o.ArtworkURL = it.ArtworkURL
+					o.ArtworkFileName = it.ArtworkFileName
+					o.ArtworkFileSize = it.ArtworkFileSize
+					break
+				}
+			}
+			if o.ArtworkURL == "" && o.GoogleDriveLink != "" {
+				o.ArtworkURL = o.GoogleDriveLink
+				o.ArtworkFileName = filepath.Base(o.GoogleDriveLink)
+			}
+		}
 		list = append(list, o)
 	}
 	if err := rows.Err(); err != nil {
@@ -795,6 +865,20 @@ func getOrderByIDFromDB(orderID string) (Order, error) {
 	o.DepositAmount = o.DepositLAK
 	o.TotalPrice = o.TotalAmountLAK
 	o.Items, _ = getOrderItemsFromDB(o.ID)
+	if o.ArtworkURL == "" {
+		for _, it := range o.Items {
+			if it.ArtworkURL != "" {
+				o.ArtworkURL = it.ArtworkURL
+				o.ArtworkFileName = it.ArtworkFileName
+				o.ArtworkFileSize = it.ArtworkFileSize
+				break
+			}
+		}
+		if o.ArtworkURL == "" && o.GoogleDriveLink != "" {
+			o.ArtworkURL = o.GoogleDriveLink
+			o.ArtworkFileName = filepath.Base(o.GoogleDriveLink)
+		}
+	}
 	return o, nil
 }
 
@@ -887,7 +971,29 @@ func getOrderItemsFromDB(orderID string) ([]OrderItem, error) {
 
 		if len(specsJSON) > 0 {
 			json.Unmarshal(specsJSON, &item.Specs)
+			if item.Specs != nil {
+				if u, ok := item.Specs["artwork_url"].(string); ok && u != "" {
+					item.ArtworkURL = u
+				}
+				if n, ok := item.Specs["artwork_file_name"].(string); ok && n != "" {
+					item.ArtworkFileName = n
+				}
+				if s, ok := item.Specs["artwork_file_size"].(float64); ok && s > 0 {
+					item.ArtworkFileSize = int64(s)
+				}
+			}
 		}
+		if item.ArtworkURL == "" {
+			if item.InnerFileURL != "" {
+				item.ArtworkURL = item.InnerFileURL
+			} else if item.CoverFileURL != "" {
+				item.ArtworkURL = item.CoverFileURL
+			}
+		}
+		if item.ArtworkFileName == "" && item.ArtworkURL != "" {
+			item.ArtworkFileName = filepath.Base(item.ArtworkURL)
+		}
+
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {

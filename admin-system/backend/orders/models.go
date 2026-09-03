@@ -78,6 +78,9 @@ type OrderItem struct {
 	MachineID          string                 `json:"machine_id,omitempty"`
 	ColorMode          string                 `json:"color_mode,omitempty"`
 	Specs              map[string]interface{} `json:"specs"`
+	ArtworkURL         string                 `json:"artwork_url,omitempty"`
+	ArtworkFileName    string                 `json:"artwork_file_name,omitempty"`
+	ArtworkFileSize    int64                  `json:"artwork_file_size,omitempty"`
 	CreatedAt         time.Time              `json:"created_at"`
 	UpdatedAt         time.Time              `json:"updated_at"`
 }
@@ -104,6 +107,10 @@ type Order struct {
 	TotalPrice           float64     `json:"total_price"`
 	TotalCost            float64     `json:"total_cost"`
 	GoogleDriveLink      string      `json:"google_drive_link"`
+	ArtworkURL           string      `json:"artwork_url,omitempty"`
+	ArtworkFileName      string      `json:"artwork_file_name,omitempty"`
+	ArtworkFileSize      int64       `json:"artwork_file_size,omitempty"`
+	MimeType             string      `json:"mime_type,omitempty"`
 	StockDeductedAt      *time.Time  `json:"stock_deducted_at,omitempty"`
 	ProofURL             string      `json:"proof_url,omitempty"`
 	DigitalProofURL      string      `json:"digital_proof_url,omitempty"`
@@ -181,6 +188,10 @@ type CreateOrderRequest struct {
 	DepositLAK      float64                `json:"deposit_lak"`
 	DeliveryDate    string                 `json:"delivery_date"`
 	GoogleDriveLink string                 `json:"google_drive_link"`
+	ArtworkURL      string                 `json:"artwork_url"`
+	ArtworkFileName string                 `json:"artwork_file_name"`
+	ArtworkFileSize int64                  `json:"artwork_file_size"`
+	MimeType        string                 `json:"mime_type"`
 	IdempotencyKey  string                 `json:"idempotency_key,omitempty"`
 	Items           []CreateItemRequest    `json:"items" binding:"required,dive,required"`
 }
@@ -195,6 +206,10 @@ type CreateItemRequest struct {
 	InnerPaperID       string                   `json:"inner_paper_id"`
 	CoverFileURL       string                   `json:"cover_file_url"`
 	InnerFileURL       string                   `json:"inner_file_url"`
+	ArtworkURL         string                   `json:"artwork_url"`
+	ArtworkFileName    string                   `json:"artwork_file_name"`
+	ArtworkFileSize    int64                    `json:"artwork_file_size"`
+	MimeType           string                   `json:"mime_type"`
 	PaperSku           string                   `json:"paper_sku"`
 	PaperCostPerUnit   float64                  `json:"paper_cost_per_unit"`
 	PaperFormat        string                   `json:"paper_format"`

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bookmark, Save } from 'lucide-react';
+import { Bookmark, Save, Check } from 'lucide-react';
 import { FormModalTemplate, FormSection } from '@components/common/FormModalTemplate';
 
 export interface QuotationSaveTemplateModalProps {
@@ -111,12 +111,12 @@ export const QuotationSaveTemplateModal: React.FC<QuotationSaveTemplateModalProp
         <div className="p-3.5 bg-sky-50/70 border border-sky-200 rounded-2xl text-xs space-y-1.5">
           <span className="font-bold text-sky-950 block">ໂຄງສ້າງໂມດູນທີ່ຈະຖືກບັນທຶກ:</span>
           <div className="flex flex-wrap gap-1.5 pt-1">
-            {activeItem.activeModules?.paper && <span className="px-2 py-0.5 bg-sky-100 text-sky-900 rounded font-bold text-[10px]">✓ ເຈ້ຍ</span>}
-            {activeItem.activeModules?.printEngine && <span className="px-2 py-0.5 bg-purple-100 text-purple-900 rounded font-bold text-[10px]">✓ ເຄື່ອງພິມ</span>}
-            {activeItem.activeModules?.postPressMachinery && <span className="px-2 py-0.5 bg-amber-100 text-amber-900 rounded font-bold text-[10px]">✓ ເຄື່ອງຈັກຫຼັງພິມ</span>}
-            {activeItem.activeModules?.finishingMaterials && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-900 rounded font-bold text-[10px]">✓ ວັດຖຸດິບ ({(activeItem.finishingMaterials || []).length} ລາຍການ)</span>}
-            {activeItem.activeModules?.laborAndSetup && <span className="px-2 py-0.5 bg-blue-100 text-blue-900 rounded font-bold text-[10px]">✓ ຄ່າແຮງ {activeItem.laborPercent}%</span>}
-            {activeItem.activeModules?.packagingDelivery && <span className="px-2 py-0.5 bg-slate-200 text-slate-900 rounded font-bold text-[10px]">✓ ຂົນສົ່ງ</span>}
+            {activeItem.activeModules?.paper && <span className="inline-flex items-center px-2 py-0.5 bg-sky-100 text-sky-900 rounded font-bold text-[10px]"><Check className="w-3 h-3 mr-0.5" /> ເຈ້ຍ</span>}
+            {activeItem.activeModules?.printEngine && <span className="inline-flex items-center px-2 py-0.5 bg-purple-100 text-purple-900 rounded font-bold text-[10px]"><Check className="w-3 h-3 mr-0.5" /> ເຄື່ອງພິມ</span>}
+            {activeItem.activeModules?.postPressMachinery && <span className="inline-flex items-center px-2 py-0.5 bg-amber-100 text-amber-900 rounded font-bold text-[10px]"><Check className="w-3 h-3 mr-0.5" /> ເຄື່ອງຈັກຫຼັງພິມ</span>}
+            {activeItem.activeModules?.finishingMaterials && <span className="inline-flex items-center px-2 py-0.5 bg-emerald-100 text-emerald-900 rounded font-bold text-[10px]"><Check className="w-3 h-3 mr-0.5" /> ວັດຖຸດິບ ({(activeItem.finishingMaterials || []).length} ລາຍການ)</span>}
+            {activeItem.activeModules?.laborAndSetup && <span className="inline-flex items-center px-2 py-0.5 bg-blue-100 text-blue-900 rounded font-bold text-[10px]"><Check className="w-3 h-3 mr-0.5" /> ຄ່າແຮງ {activeItem.laborPercent}%</span>}
+            {activeItem.activeModules?.packagingDelivery && <span className="inline-flex items-center px-2 py-0.5 bg-slate-200 text-slate-900 rounded font-bold text-[10px]"><Check className="w-3 h-3 mr-0.5" /> ຂົນສົ່ງ</span>}
           </div>
         </div>
       </div>
