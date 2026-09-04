@@ -117,8 +117,18 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
 
   const vipDiscountPercent = useMemo(() => {
-    return customerProfile?.discountPercent || 0
-  }, [customerProfile])
+    if (customerProfile?.discountPercent) return customerProfile.discountPercent
+    if (customerProfile?.discount_percent) return customerProfile.discount_percent
+    if (customerProfile?.tier) {
+      const match = customerTiers.find((t) => t.id.toUpperCase() === customerProfile.tier?.toUpperCase())
+      if (match && match.discount_percent > 0) return match.discount_percent
+      const upperTier = customerProfile.tier.toUpperCase()
+      if (upperTier === 'GOLD') return 10
+      if (upperTier === 'SILVER') return 5
+      if (upperTier === 'PLATINUM') return 15
+    }
+    return 0
+  }, [customerProfile, customerTiers])
 
   const isLoggedIn = Boolean(customerProfile?.phone || localStorage.getItem('ssp_customer_phone'))
 
@@ -487,10 +497,17 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         const json = await res.json()
         if (json.status === 'success' && json.data) {
-          setCustomerProfile(json.data)
-          localStorage.setItem('ssp_customer_phone', json.data.phone)
-          localStorage.setItem('ssp_customer_id', json.data.id)
-          if (json.data.name) localStorage.setItem('ssp_customer_name', json.data.name)
+          const profile = json.data
+          if (!profile.discountPercent && profile.tier) {
+            const upperTier = profile.tier.toUpperCase()
+            if (upperTier === 'GOLD') profile.discountPercent = 10
+            else if (upperTier === 'SILVER') profile.discountPercent = 5
+            else if (upperTier === 'PLATINUM') profile.discountPercent = 15
+          }
+          setCustomerProfile(profile)
+          localStorage.setItem('ssp_customer_phone', profile.phone)
+          localStorage.setItem('ssp_customer_id', profile.id)
+          if (profile.name) localStorage.setItem('ssp_customer_name', profile.name)
         }
       }
     } catch (e) {

@@ -7,7 +7,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'logo.png', 'apple-touch-icon.png', 'icons/*.png'],
+      devOptions: {
+        enabled: false, // ปิดการทำงานของ Service Worker ในโหมด dev เพื่อไม่ให้ดักแคชไฟล์โค้ด
+      },
       manifest: {
         name: 'ສົມສິ່ງພິມ | Som Sing Phim Luxury Printing',
         short_name: 'SomSingPhim',
@@ -33,6 +35,9 @@ export default defineConfig({
         ]
       },
       workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         runtimeCaching: [
@@ -70,6 +75,19 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
+    // เปิด HMR อย่างชัดเจน ไม่ต้อง Cmd+Shift+R
+    hmr: {
+      overlay: true,  // แสดง error overlay บน browser
+    },
+    watch: {
+      // บังคับ watch ทุกไฟล์ รองรับ macOS FSEvents
+      usePolling: false,
+    },
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:8080',

@@ -10,7 +10,8 @@ import SuccessPage from './pages/SuccessPage.tsx'
 import TrackingPage from './pages/TrackingPage.tsx'
 import PrintGuidePage from './pages/PrintGuidePage.tsx'
 import ProofReviewPage from './pages/ProofReviewPage.tsx'
-import { useShop } from './context/ShopContext.tsx'
+import ProfilePage from './pages/ProfilePage.tsx'
+import OrdersPage from './pages/OrdersPage.tsx'
 import InstallPromptBanner from './components/InstallPromptBanner.tsx'
 import ConciergeDock from './components/ConciergeDock.tsx'
 import BottomNavigation from './components/BottomNavigation.tsx'
@@ -53,6 +54,8 @@ export default function App() {
       <main>
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/orders" element={<OrdersPage />} />
           <Route path="/category/:slug" element={<CategoryPage />} />
           <Route path="/product/:slug" element={<ProductPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
@@ -72,4 +75,3 @@ export default function App() {
     </>
   )
 }
-
