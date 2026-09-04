@@ -161,6 +161,16 @@ export interface QuotationItem {
   preflightData?: PreflightResult;
 }
 
+export const getPresetDimensions = (preset: string, currentW: number = 210, currentH: number = 297) => {
+  switch (preset) {
+    case 'A3': return { w: 297, h: 420 };
+    case 'A4': return { w: 210, h: 297 };
+    case 'A5': return { w: 148, h: 210 };
+    case 'A6': return { w: 105, h: 148 };
+    default: return { w: currentW || 210, h: currentH || 297 };
+  }
+};
+
 export default function QuotationManager({ onConvertToOrder, onBack, prefilledSpecs }: any) {
   const { 
     inventory, 
@@ -439,39 +449,78 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   // Auto-sync when prefilledOrderSpecs or prefilledSpecs arrives dynamically
   useEffect(() => {
-    if (incomingSpecs && (incomingSpecs.avgCovC !== undefined || incomingSpecs.cCoverage !== undefined)) {
+    if (incomingSpecs && (incomingSpecs.avgCovC !== undefined || incomingSpecs.cCoverage !== undefined || incomingSpecs.jobName || incomingSpecs.pageCount || incomingSpecs.jobWidth || incomingSpecs.suggestedPaper)) {
       const isMono = (incomingSpecs.colorPages === 0 && (incomingSpecs.monoPages || 0) > 0) || incomingSpecs.colorMode === 'MONO_K';
       const c = Number(incomingSpecs.cCoverage !== undefined ? incomingSpecs.cCoverage : (incomingSpecs.avgCovC || 0));
       const m = Number(incomingSpecs.mCoverage !== undefined ? incomingSpecs.mCoverage : (incomingSpecs.avgCovM || 0));
       const y = Number(incomingSpecs.yCoverage !== undefined ? incomingSpecs.yCoverage : (incomingSpecs.avgCovY || 0));
       const k = Number(incomingSpecs.kCoverage !== undefined ? incomingSpecs.kCoverage : (incomingSpecs.avgCovK || 0));
+      const pages = Number(incomingSpecs.pageCount) || activeItem.pagesPerBook || 1;
+      const orderQty = Number(incomingSpecs.orderQuantity) || activeItem.printVolume || 1;
+      const isBook = pages >= 4;
+
+      const targetPreset = incomingSpecs.suggestedPaper || incomingSpecs.jobSizePreset || activeItem.jobSizePreset || 'A4';
+      const defaultDimensions = getPresetDimensions(targetPreset, Number(incomingSpecs.jobWidth) || activeItem.jobWidth || 210, Number(incomingSpecs.jobHeight) || activeItem.jobHeight || 297);
+      const targetW = Number(incomingSpecs.jobWidth) || defaultDimensions.w;
+      const targetH = Number(incomingSpecs.jobHeight) || defaultDimensions.h;
+
+      const isDuplex = isBook ? true : activeItem.isDoubleSided;
+      const totalJobSheets = orderQty * Math.ceil(pages / (isDuplex ? 2 : 1));
+
+      const selectedPrinter = printers.find(p => p.id === activeItem.selectedPrinterId) || printers[0] || { id: 'PRN-DEFAULT', name: 'Default Printer' };
+      const rate = getPrinterMachineRate(selectedPrinter);
+      const inkBaseRate = getPrinterActualInkCostPerPage(selectedPrinter);
+
+      const channels = isMono ? [
+        { channel_name: 'K', density_pct: k, is_spot_color: false }
+      ] : [
+        { channel_name: 'C', density_pct: c, is_spot_color: false },
+        { channel_name: 'M', density_pct: m, is_spot_color: false },
+        { channel_name: 'Y', density_pct: y, is_spot_color: false },
+        { channel_name: 'K', density_pct: k, is_spot_color: false },
+      ];
+      const avgDensity = Math.round(isMono ? k : (c + m + y + k) / 4);
 
       updateActiveItem({
         name: incomingSpecs.jobName || activeItem.name,
+        pagesPerBook: pages,
+        printVolume: orderQty,
+        unitName: isBook ? 'ຊຸດ' : 'ແຜ່ນ',
+        isDoubleSided: isDuplex,
+        includeCover: isBook,
+        colorPrintMode: isMono ? 'MONO_K' : 'CMYK',
+        coverageMode: 'advanced',
         cCoverage: c,
         mCoverage: m,
         yCoverage: y,
         kCoverage: k,
-        colorPrintMode: isMono ? 'MONO_K' : 'CMYK',
-        pagesPerBook: incomingSpecs.pageCount || activeItem.pagesPerBook,
-        jobWidth: incomingSpecs.jobWidth || activeItem.jobWidth,
-        jobHeight: incomingSpecs.jobHeight || activeItem.jobHeight,
+        avgCoverage: avgDensity,
+        jobSizePreset: targetPreset,
+        jobWidth: targetW,
+        jobHeight: targetH,
         fileName: incomingSpecs.fileName || activeItem.fileName,
         artworkUrl: incomingSpecs.fileUrl || incomingSpecs.artworkUrl || activeItem.artworkUrl,
-        printerAllocations: (activeItem.printerAllocations || []).map(alloc => ({
-          ...alloc,
+        preflightData: incomingSpecs.preflightData || activeItem.preflightData,
+        printerAllocations: [{
+          printer_id: selectedPrinter.id,
+          printer_name: selectedPrinter.name || selectedPrinter.id,
+          allocated_pages: totalJobSheets,
+          cost_per_page: rate,
+          ink_cost_per_page: inkBaseRate,
+          subtotal_cost: totalJobSheets * rate,
           color_mode: isMono ? 'MONO_K' : 'CMYK',
-          average_density_pct: Math.round(isMono ? k : (c + m + y + k) / 4),
-          color_channels: isMono
-            ? [{ channel_name: 'K', density_pct: k, is_spot_color: false }]
-            : [
-                { channel_name: 'C', density_pct: c, is_spot_color: false },
-                { channel_name: 'M', density_pct: m, is_spot_color: false },
-                { channel_name: 'Y', density_pct: y, is_spot_color: false },
-                { channel_name: 'K', density_pct: k, is_spot_color: false },
-              ]
-        }))
+          average_density_pct: avgDensity,
+          color_channels: channels,
+          is_double_sided: isDuplex
+        }]
       });
+
+      if (showToast) {
+        showToast(`ດຶງຂໍ້ມູນສີ (${isMono ? `K:${k}%` : `C:${c}% M:${m}% Y:${y}% K:${k}%`}), ຂະໜາດ ${targetPreset} (${targetW}×${targetH}mm) ແລະ ຈຳນວນໜ້າ (${pages} ໜ້າ) ເຂົ້າຮຽບຮ້ອຍ!`, 'success');
+      }
+      if (setPrefilledOrderSpecs) {
+        setPrefilledOrderSpecs(null);
+      }
     }
   }, [incomingSpecs]);
 
@@ -926,61 +975,6 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     });
   };
 
-  useEffect(() => {
-    if (incomingSpecs) {
-      const isMono = incomingSpecs.colorMode === 'MONO_K';
-      const pages = Number(incomingSpecs.pageCount) || 1;
-      const orderQty = Number(incomingSpecs.orderQuantity) || 1;
-      const totalJobPages = pages * orderQty;
-      const isBook = pages >= 4;
-      const covC = isMono ? 0 : Number(incomingSpecs.avgCovC) || 0;
-      const covM = isMono ? 0 : Number(incomingSpecs.avgCovM) || 0;
-      const covY = isMono ? 0 : Number(incomingSpecs.avgCovY) || 0;
-      const covK = Number(incomingSpecs.avgCovK) || 0;
-
-      updateActiveItem({
-        name: incomingSpecs.jobName || activeItem.name,
-        pagesPerBook: pages,
-        printVolume: orderQty,
-        unitName: isBook ? 'ຊຸດ' : 'ແຜ່ນ',
-        isDoubleSided: isBook ? true : activeItem.isDoubleSided,
-        includeCover: isBook,
-        colorPrintMode: isMono ? 'MONO_K' : 'CMYK',
-        coverageMode: 'advanced',
-        cCoverage: covC,
-        mCoverage: covM,
-        yCoverage: covY,
-        kCoverage: covK,
-        jobSizePreset: incomingSpecs.suggestedPaper || activeItem.jobSizePreset,
-        fileName: incomingSpecs.fileName,
-        printerAllocations: [{
-          printer_id: activeItem.selectedPrinterId || printers[0]?.id || 'PRN-DEFAULT',
-          printer_name: printers.find(p => p.id === activeItem.selectedPrinterId)?.name || 'Default Printer',
-          allocated_pages: totalJobPages,
-          cost_per_page: 50,
-          subtotal_cost: totalJobPages * 50,
-          color_mode: isMono ? 'MONO_K' : 'CMYK',
-          average_density_pct: Math.round((covC + covM + covY + covK) / (isMono ? 1 : 4)),
-          color_channels: isMono ? [
-            { channel_name: 'K', density_pct: covK, is_spot_color: false }
-          ] : [
-            { channel_name: 'C', density_pct: covC, is_spot_color: false },
-            { channel_name: 'M', density_pct: covM, is_spot_color: false },
-            { channel_name: 'Y', density_pct: covY, is_spot_color: false },
-            { channel_name: 'K', density_pct: covK, is_spot_color: false },
-          ]
-        }]
-      });
-
-      if (showToast) {
-        showToast(`ດຶງຂໍ້ມູນສີ (${isMono ? `K:${covK}%` : `C:${covC}% M:${covM}% Y:${covY}% K:${covK}%`}) ແລະ ຈຳນວນໜ້າ (${pages} ໜ້າ) ເຂົ້າ "${activeItem.name}" ຮຽບຮ້ອຍ!`, 'success');
-      }
-      if (setPrefilledOrderSpecs) {
-        setPrefilledOrderSpecs(null);
-      }
-    }
-  }, [incomingSpecs]);
-
   const [currentStep, setCurrentStep] = useState<'calc' | 'quote'>('calc');
   const [wizardStep, setWizardStep] = useState<'intake' | 'specs' | 'summary'>('intake');
   const [quotationTitle, setQuotationTitle] = useState('ໃບສະເໜີລາຄາງານພິມ');
@@ -1047,16 +1041,6 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         creditLimit: 5000000,
         unpaidBalance: 0
       });
-    }
-  };
-
-  const getPresetDimensions = (preset: string, currentW: number, currentH: number) => {
-    switch (preset) {
-      case 'A3': return { w: 297, h: 420 };
-      case 'A4': return { w: 210, h: 297 };
-      case 'A5': return { w: 148, h: 210 };
-      case 'A6': return { w: 105, h: 148 };
-      default: return { w: currentW, h: currentH };
     }
   };
 
@@ -2929,6 +2913,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                       }))}
                       onAllocationsChange={(newAllocations) => updateActiveItem({ printerAllocations: newAllocations })}
                       onOpenPrinterModal={() => setIsPrinterModalOpen(true)}
+                      activeCalc={activeCalc}
+                      jobSizePreset={activeItem.jobSizePreset || 'A4'}
                     />
 
                     <div className="p-4 bg-purple-50/90 border border-purple-200 rounded-2xl text-xs space-y-2.5">

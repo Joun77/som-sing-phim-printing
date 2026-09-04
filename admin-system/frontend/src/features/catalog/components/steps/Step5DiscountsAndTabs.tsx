@@ -766,96 +766,96 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
           </div>
         </div>
 
-        {/* Global Profit Margin Simulator Card (Dual Color & Mono Result) */}
-        <div className="p-6 bg-slate-900 text-white rounded-3xl space-y-6 shadow-xl border border-slate-800">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+        {/* Global Profit Margin Simulator Card (Dual Color & Mono Result) - LIGHT MODE */}
+        <div className="bg-white border border-slate-200/90 rounded-3xl p-6 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-lg text-xs font-mono font-bold border border-emerald-500/30">
+                <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-mono font-bold">
                   Margin {targetMarginPercent}%
                 </span>
-                <h4 className="text-sm font-black text-white">
+                <h4 className="text-base font-black text-slate-900">
                   ຕາຕະລາງລາຄາຂາຍໜ້າເວັບ (Selling Price Simulator)
                 </h4>
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-500">
                 ລາຄາຂາຍໜ້າເວັບທີ່ລູກຄ້າເຫັນ ຖືກຄຳນວອນຈາກ (ຕົ້ນທຶນລວມ ÷ (1 - Margin%)) ອັດຕະໂນມັດ
               </p>
             </div>
 
             <div className="flex items-center gap-2">
-              <label className="text-xs font-bold text-slate-300">ປັບ Margin ລວມ (%):</label>
+              <label className="text-xs font-bold text-slate-600">ປັບ Margin ລວມ (%):</label>
               <input
                 type="number"
                 min="0"
                 max="90"
                 value={targetMarginPercent}
                 onChange={(e) => setTargetMarginPercent(parseFloat(e.target.value) || 0)}
-                className="w-20 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-sm font-mono font-black text-center text-emerald-400 outline-none focus:border-emerald-500"
+                className="w-20 px-3 py-1.5 bg-slate-50 border border-slate-300 text-slate-900 font-black rounded-xl text-sm font-mono text-center outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
           </div>
 
-          {/* Dual Selling Price Display Grid */}
+          {/* Dual Selling Price Display Grid (Light Mode) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Color Selling Price Card */}
-            <div className="p-4 bg-gradient-to-tr from-sky-950/80 to-indigo-950/80 rounded-2xl space-y-2 border border-sky-500/30 shadow-md">
+            {/* Color Selling Price Card (Primary) */}
+            <div className="bg-gradient-to-br from-sky-50 to-indigo-50/60 border border-sky-200/90 rounded-2xl p-5 shadow-xs space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-sky-200 flex items-center gap-1.5">
-                  <Palette className="w-3.5 h-3.5 text-sky-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-sky-800 flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5 text-sky-600" />
                   <span>1. ລາຄາຂາຍພິມ 4 ສີ (Color Selling Price)</span>
                 </span>
-                <span className="px-2 py-0.5 bg-sky-500/20 text-sky-300 rounded-md text-[10px] font-mono font-bold">
+                <span className="px-2 py-0.5 bg-emerald-100/80 text-emerald-800 rounded-md text-xs font-mono font-bold">
                   Margin {targetMarginPercent}%
                 </span>
               </div>
               <div className="flex items-baseline justify-between pt-1">
-                <span className="text-2xl font-mono font-black tracking-tight text-white">
+                <span className="text-2xl sm:text-3xl font-mono font-black tracking-tight text-sky-950">
                   {suggestedColorSellingPrice.toLocaleString()} ₭
                 </span>
-                <span className="text-xs font-mono text-emerald-400 font-bold">
+                <span className="text-xs font-mono text-emerald-700 font-bold">
                   (ກຳໄລ +{colorUnitProfit.toLocaleString()} ₭)
                 </span>
               </div>
-              <div className="text-[10px] text-sky-100 font-mono pt-1 border-t border-white/15 flex justify-between">
+              <div className="text-[11px] text-slate-600 font-mono pt-2 border-t border-sky-100 flex justify-between">
                 <span>ຕົ້ນທຶນ: {totalColorBaseCost.toLocaleString()} ₭</span>
-                <span>{defaultOptionIsColor ? '✓ ເປັນລາຄາເລີ່ມຕົ້ນ (Base)' : `ສ່ວນຕ່າງ +${Math.max(0, suggestedColorSellingPrice - suggestedMonoSellingPrice).toLocaleString()} ₭`}</span>
+                <span>{defaultOptionIsColor ? 'ເປັນລາຄາເລີ່ມຕົ້ນ (Base)' : `ສ່ວນຕ່າງ +${Math.max(0, suggestedColorSellingPrice - suggestedMonoSellingPrice).toLocaleString()} ₭`}</span>
               </div>
             </div>
 
-            {/* Mono Selling Price Card */}
-            <div className="p-4 bg-slate-800 text-white rounded-2xl space-y-2 shadow-md border border-slate-700">
+            {/* Mono Selling Price Card (Alternative) */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 shadow-xs space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-slate-500" />
                   <span>2. ລາຄາຂາຍພິມຂາວດຳ (Mono Selling Price)</span>
                 </span>
-                <span className="px-2 py-0.5 bg-white/10 rounded-md text-[10px] font-mono font-bold">
+                <span className="px-2 py-0.5 bg-slate-200/80 text-slate-700 rounded-md text-xs font-mono font-bold">
                   Margin {targetMarginPercent}%
                 </span>
               </div>
               <div className="flex items-baseline justify-between pt-1">
-                <span className="text-2xl font-mono font-black tracking-tight text-white">
+                <span className="text-2xl sm:text-3xl font-mono font-black tracking-tight text-slate-900">
                   {suggestedMonoSellingPrice.toLocaleString()} ₭
                 </span>
-                <span className="text-xs font-mono text-emerald-400 font-bold">
+                <span className="text-xs font-mono text-emerald-700 font-bold">
                   (ກຳໄລ +{monoUnitProfit.toLocaleString()} ₭)
                 </span>
               </div>
-              <div className="text-[10px] text-slate-300 font-mono pt-1 border-t border-slate-700 flex justify-between">
+              <div className="text-[11px] text-slate-500 font-mono pt-2 border-t border-slate-200 flex justify-between">
                 <span>ຕົ້ນທຶນ: {totalMonoBaseCost.toLocaleString()} ₭</span>
-                <span>{!defaultOptionIsColor ? '✓ ເປັນລາຄາເລີ່ມຕົ້ນ (Base)' : `ສ່ວນຕ່າງ -${Math.max(0, suggestedColorSellingPrice - suggestedMonoSellingPrice).toLocaleString()} ₭`}</span>
+                <span>{!defaultOptionIsColor ? 'ເປັນລາຄາເລີ່ມຕົ້ນ (Base)' : `ສ່ວນຕ່າງ -${Math.max(0, suggestedColorSellingPrice - suggestedMonoSellingPrice).toLocaleString()} ₭`}</span>
               </div>
             </div>
           </div>
 
           {breakdownMode === 'auto' ? (
-            /* BREAKDOWN TABLE: AUTO MODE */
-            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+            /* BREAKDOWN TABLE: AUTO MODE (LIGHT MODE) */
+            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs bg-white">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-700 font-bold">
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold text-xs">
                   <th className="py-3 px-4">ລາຍການຕົ້ນທຶນ (Cost Component)</th>
                   <th className="py-3 px-4 text-center">ຕົວເລືອກທີ່ເລືອກ (Selected Spec)</th>
                   <th className="py-3 px-4 text-right">ຕົ້ນທຶນ/ຊິ້ນ (Cost)</th>
@@ -866,7 +866,7 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {/* Print Engine Rate */}
-                <tr>
+                <tr className="hover:bg-slate-50/50 transition">
                   <td className="py-3.5 px-4 font-bold text-slate-900">
                     <div className="flex flex-col">
                       <span className="text-xs font-black">1. ລະບົບພິມ (Print Engine Base)</span>
@@ -900,7 +900,7 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
 
                   {/* Material / Paper Groups Rates (Dynamic N Groups) */}
                   {defaultMaterialItems.map((mat, idx) => (
-                    <tr key={mat.groupId || idx}>
+                    <tr key={mat.groupId || idx} className="hover:bg-slate-50/50 transition">
                       <td className="py-3.5 px-4 font-bold text-slate-900">
                         <div className="flex flex-col">
                           <span className="text-xs font-black">{mat.groupTitle}</span>
@@ -931,7 +931,7 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
 
                   {/* Finishing / Post-press Rates (Dynamic N Groups) */}
                   {finishingItems.map((fin, idx) => (
-                    <tr key={fin.groupId || idx}>
+                    <tr key={fin.groupId || idx} className="hover:bg-slate-50/50 transition">
                       <td className="py-3.5 px-4 font-bold text-slate-900">
                         <div className="flex flex-col">
                           <span className="text-xs font-black">{fin.groupTitle}</span>
@@ -949,13 +949,13 @@ export const Step5DiscountsAndTabs: React.FC<Step5DiscountsAndTabsProps> = ({
                         {fin.cost > 0 ? `${fin.cost.toLocaleString()} ₭` : '0 ₭'}
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono font-bold text-purple-700">
-                        {fin.cost > 0 ? `${Math.round(fin.cost / marginFactor).toLocaleString()} ₭` : <span className="text-emerald-600 font-sans font-bold">✓ ຟຣີ / ລວມໃນຊຸດ</span>}
+                        {fin.cost > 0 ? `${Math.round(fin.cost / marginFactor).toLocaleString()} ₭` : <span className="text-emerald-600 font-sans font-bold">ຟຣີ / ລວມໃນຊຸດ</span>}
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono text-slate-600">
                         {previewQuantity} ຊິ້ນ
                       </td>
                       <td className="py-3.5 px-4 text-right font-bold font-mono text-slate-900">
-                        {fin.cost > 0 ? `${(Math.round(fin.cost / marginFactor) * previewQuantity).toLocaleString()} ₭` : <span className="text-emerald-600 font-sans font-bold">✓ ຟຣີ</span>}
+                        {fin.cost > 0 ? `${(Math.round(fin.cost / marginFactor) * previewQuantity).toLocaleString()} ₭` : <span className="text-emerald-600 font-sans font-bold">ຟຣີ</span>}
                       </td>
                     </tr>
                   ))}

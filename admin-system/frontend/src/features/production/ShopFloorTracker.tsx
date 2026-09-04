@@ -555,7 +555,7 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
                   >
                     <CheckCircle2 className="w-6 h-6 text-white shrink-0" />
                     <div className="text-left">
-                      <div className="leading-tight">{isComplete ? '✓ ສຳເລັດແລ້ວ' : 'ພິມສຳເລັດ (Complete)'}</div>
+                      <div className="leading-tight">{isComplete ? 'ສຳເລັດແລ້ວ' : 'ພິມສຳເລັດ (Complete)'}</div>
                       <div className="text-[10px] font-bold text-indigo-200">QC & ສະຫຼຸບຈຳນວນເສຍ</div>
                     </div>
                   </button>

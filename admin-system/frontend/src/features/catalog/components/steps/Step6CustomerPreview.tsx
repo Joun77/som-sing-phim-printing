@@ -444,7 +444,7 @@ export const Step6CustomerPreview: React.FC<Step6CustomerPreviewProps> = ({
 
                 {bestseller && (
                   <div className="absolute top-3 left-3 px-3 py-1 rounded-xl bg-amber-500 text-white text-xs font-black shadow-lg uppercase tracking-wider flex items-center gap-1">
-                    ★ Bestseller
+                    Bestseller
                   </div>
                 )}
               </div>
@@ -498,7 +498,7 @@ export const Step6CustomerPreview: React.FC<Step6CustomerPreviewProps> = ({
                           <span>{simulatedFile}</span>
                         </div>
                         <p className="text-[10px] text-slate-500 font-mono">
-                          ✓ 300 DPI • Bleed 2mm • CMYK Color Profile • Print Ready
+                          300 DPI • Bleed 2mm • CMYK Color Profile • Print Ready
                         </p>
                       </div>
                     ) : (
@@ -523,7 +523,7 @@ export const Step6CustomerPreview: React.FC<Step6CustomerPreviewProps> = ({
                       key={idx}
                       className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-xl text-xs font-medium border border-slate-200"
                     >
-                      ✓ {f}
+                      {f}
                     </span>
                   ))}
                 </div>
@@ -731,7 +731,7 @@ export const Step6CustomerPreview: React.FC<Step6CustomerPreviewProps> = ({
                     <span>ຕາຕະລາງສະຫຼຸບຄ່າບໍລິການ (Quotation Breakdown):</span>
                   </span>
                   <span className="text-[10.5px] font-mono text-slate-500">
-                    {featuresConfig?.breakdownMode === 'custom' ? '🟣 Custom Formula' : '🟢 Standard'}
+                    {featuresConfig?.breakdownMode === 'custom' ? 'Custom Formula' : 'Standard'}
                   </span>
                 </div>
                 <div className="overflow-x-auto">
@@ -754,10 +754,10 @@ export const Step6CustomerPreview: React.FC<Step6CustomerPreviewProps> = ({
                             {r.spec}
                           </td>
                           <td className="py-2 px-3 text-right text-sky-700 font-bold">
-                            {r.unitRate > 0 ? `${r.unitRate.toLocaleString()} ₭` : '✓ ລວມໃນຊຸດ'}
+                            {r.unitRate > 0 ? `${r.unitRate.toLocaleString()} ₭` : 'ລວມໃນຊຸດ'}
                           </td>
                           <td className="py-2 px-3 text-right font-bold text-slate-900">
-                            {r.unitRate > 0 ? `${r.subtotal.toLocaleString()} ₭` : '✓ ຟຣີ'}
+                            {r.unitRate > 0 ? `${r.subtotal.toLocaleString()} ₭` : 'ຟຣີ'}
                           </td>
                         </tr>
                       ))}

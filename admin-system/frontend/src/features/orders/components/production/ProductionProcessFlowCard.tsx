@@ -420,7 +420,7 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
                   <div className="mt-2 p-2 rounded-xl bg-emerald-100/60 border border-emerald-200/70 text-[10.5px] text-emerald-900 font-medium space-y-1 animate-fade-in">
                     <div className="flex items-center gap-1 font-bold text-emerald-800">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span>✓ ສຳເລັດແລ້ວ ໂດຍ:</span>
+                      <span>ສຳເລັດແລ້ວ ໂດຍ:</span>
                     </div>
                     <div className="pl-4 text-[10px] font-semibold text-emerald-950">
                       <strong>{whoCompleted}</strong> <span className="text-emerald-700">({roleCompleted})</span>

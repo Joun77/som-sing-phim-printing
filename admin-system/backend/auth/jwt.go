@@ -345,3 +345,11 @@ func RequireRoles(allowedRoles ...string) gin.HandlerFunc {
 func AuthMiddleware(allowedRoles ...string) gin.HandlerFunc {
 	return RequireAuth(allowedRoles...)
 }
+
+// HandleLogout handles user logout session termination
+func HandleLogout(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Logged out successfully",
+	})
+}

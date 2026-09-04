@@ -101,6 +101,8 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
   const ensurePrintModeGroup = (initialOptions?: PublicProductOption[]) => {
     setSpecGroups(prev => {
       const idx = prev.findIndex(g => g.id === 'group_print_mode' || g.groupType === 'printing_mode');
+      const existingGroup = idx >= 0 ? prev[idx] : undefined;
+
       const defaultPrinter = dynamicPrinters[0] || {
         id: 'PRN-FUJI-V180',
         name: 'Fuji Xerox Versant 180 Press',
@@ -108,38 +110,59 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
         totalBwCost: 280,
       };
 
-      const options: PublicProductOption[] = initialOptions || [
-        {
-          optionType: 'printing_mode',
-          machineId: defaultPrinter.id,
-          machineName: defaultPrinter.name,
-          label: 'ພິມ 4 ສີ (Full Color CMYK)',
-          labelLo: 'ພິມ 4 ສີ (Full Color CMYK)',
-          labelEn: 'Full Color CMYK',
-          value: 'cmyk_4c',
-          isDefault: true,
-          extraCostRate: defaultPrinter.totalColorCost,
-          addPrice: 0,
-        },
-        {
-          optionType: 'printing_mode',
-          machineId: defaultPrinter.id,
-          machineName: defaultPrinter.name,
-          label: 'ພິມຂາວດຳ (Monochrome K)',
-          labelLo: 'ພິມຂາວດຳ (Monochrome K)',
-          labelEn: 'Monochrome Black & White',
-          value: 'mono_k',
-          isDefault: false,
-          extraCostRate: defaultPrinter.totalBwCost,
-          addPrice: 0,
-        }
-      ];
+      // If existing options exist, preserve them rather than overwriting with hardcoded defaults
+      let options: PublicProductOption[];
+      if (initialOptions) {
+        options = initialOptions;
+      } else if (existingGroup && existingGroup.options && existingGroup.options.length > 0) {
+        options = existingGroup.options.map(opt => {
+          // If option has a bound machine or extraCostRate already set, keep them
+          if (opt.extraCostRate !== undefined && opt.extraCostRate > 0) {
+            return opt;
+          }
+          const isColorMode = opt.value === 'cmyk_4c' || opt.labelLo?.includes('ສີ') || opt.label?.toLowerCase().includes('color');
+          const matchedPrinter = dynamicPrinters.find(p => p.id === opt.machineId) || defaultPrinter;
+          return {
+            ...opt,
+            machineId: opt.machineId || matchedPrinter.id,
+            machineName: opt.machineName || matchedPrinter.name,
+            extraCostRate: opt.extraCostRate ?? (isColorMode ? matchedPrinter.totalColorCost : matchedPrinter.totalBwCost),
+          };
+        });
+      } else {
+        options = [
+          {
+            optionType: 'printing_mode',
+            machineId: defaultPrinter.id,
+            machineName: defaultPrinter.name,
+            label: 'ພິມ 4 ສີ (Full Color CMYK)',
+            labelLo: 'ພິມ 4 ສີ (Full Color CMYK)',
+            labelEn: 'Full Color CMYK',
+            value: 'cmyk_4c',
+            isDefault: true,
+            extraCostRate: defaultPrinter.totalColorCost,
+            addPrice: 0,
+          },
+          {
+            optionType: 'printing_mode',
+            machineId: defaultPrinter.id,
+            machineName: defaultPrinter.name,
+            label: 'ພິມຂາວດຳ (Monochrome K)',
+            labelLo: 'ພິມຂາວດຳ (Monochrome K)',
+            labelEn: 'Monochrome Black & White',
+            value: 'mono_k',
+            isDefault: false,
+            extraCostRate: defaultPrinter.totalBwCost,
+            addPrice: 0,
+          }
+        ];
+      }
 
       const newGroup: SpecGroup = {
         id: 'group_print_mode',
-        titleLo: 'ໂໝດສີການພິມ (Print Color Mode)',
-        titleEn: 'Print Color Mode',
-        displayType: 'cards',
+        titleLo: existingGroup?.titleLo || 'ໂໝດສີການພິມ (Print Color Mode)',
+        titleEn: existingGroup?.titleEn || 'Print Color Mode',
+        displayType: existingGroup?.displayType || 'cards',
         groupType: 'printing_mode',
         options,
       };
@@ -555,7 +578,7 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
             className="px-3.5 py-2 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>+ ເພີ່ມໂໝດການພິມໃໝ່</span>
+            <span>ເພີ່ມໂໝດການພິມໃໝ່</span>
           </button>
         </div>
 
@@ -698,7 +721,7 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
                       </span>
                       {isUsedInProduct && (
                         <span className="px-2 py-0.5 bg-sky-100 text-sky-800 text-[9px] font-bold rounded-full">
-                          ✓ ຖືກໃຊ້ໃນສິນຄ້ານີ້
+                          ຖືກໃຊ້ໃນສິນຄ້ານີ້
                         </span>
                       )}
                     </div>

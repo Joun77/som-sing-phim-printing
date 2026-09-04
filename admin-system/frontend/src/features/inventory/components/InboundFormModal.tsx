@@ -439,7 +439,7 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
               <div className="pt-2 border-t border-blue-200/60 text-xs flex items-center justify-between text-blue-900">
                 <span>ต้นทุนเดิม: <strong>{Number(selectedMat.cost_per_consumption_unit || 0).toFixed(2)} LAK</strong> / {selectedMat.consumption_unit}</span>
                 <span className="font-bold text-emerald-700">
-                  ➔ ต้นทุนเฉลี่ยใหม่: {estimatedNewUnitCost.toFixed(2)} LAK / {selectedMat.consumption_unit}
+                  &rarr; ต้นทุนเฉลี่ยใหม่: {estimatedNewUnitCost.toFixed(2)} LAK / {selectedMat.consumption_unit}
                 </span>
               </div>
             )}

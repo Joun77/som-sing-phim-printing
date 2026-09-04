@@ -198,17 +198,25 @@ type OrderItemRequest struct {
 
 type CreateOrderRequest struct {
 	OrderNo         string                 `json:"order_no"`
+	OrderID         string                 `json:"order_id,omitempty"`
+	OrderNumber     string                 `json:"order_number,omitempty"`
 	CustomerID      string                 `json:"customer_id"`
 	CustomerName    string                 `json:"customer_name" binding:"required"`
 	CustomerPhone   string                 `json:"customer_phone"`
+	Phone           string                 `json:"phone,omitempty"`
 	CustomerAddress string                 `json:"customer_address"`
+	Address         string                 `json:"address,omitempty"`
 	CustomerEmail   string                 `json:"customer_email"`
+	Email           string                 `json:"email,omitempty"`
 	Province        string                 `json:"province"`
 	District        string                 `json:"district"`
 	Village         string                 `json:"village"`
 	DepositLAK      float64                `json:"deposit_lak"`
+	TotalAmountLAK  float64                `json:"total_amount_lak,omitempty"`
+	TotalPrice      float64                `json:"total_price,omitempty"`
 	DeliveryDate    string                 `json:"delivery_date"`
 	GoogleDriveLink string                 `json:"google_drive_link"`
+	DriveLink       string                 `json:"drive_link,omitempty"`
 	ArtworkURL      string                 `json:"artwork_url"`
 	ArtworkFileName string                 `json:"artwork_file_name"`
 	ArtworkFileSize int64                  `json:"artwork_file_size"`
@@ -218,8 +226,11 @@ type CreateOrderRequest struct {
 }
 
 type CreateItemRequest struct {
+	ProductID          string                   `json:"product_id,omitempty"`
+	ProductName        string                   `json:"product_name,omitempty"`
 	JobName            string                   `json:"job_name"`
 	ItemName           string                   `json:"item_name"`
+	Name               string                   `json:"name,omitempty"`
 	Quantity           int                      `json:"quantity" binding:"required,gt=0"`
 	PageCount          int                      `json:"page_count"`
 	PaperSize          string                   `json:"paper_size"`
@@ -251,6 +262,11 @@ type CreateItemRequest struct {
 	UnitCostLAK        float64                  `json:"unit_cost_lak"`
 	UnitPriceLAK       float64                  `json:"unit_price_lak"`
 	TotalPriceLAK      float64                  `json:"total_price_lak"`
+	UnitPrice          float64                  `json:"unit_price,omitempty"`
+	TotalPrice         float64                  `json:"total_price,omitempty"`
+	UnitPriceTHB       float64                  `json:"unit_price_thb,omitempty"`
+	TotalPriceTHB      float64                  `json:"total_price_thb,omitempty"`
+	DriveLink          string                   `json:"drive_link,omitempty"`
 	Specs              map[string]interface{}   `json:"specs"`
 	Artwork            *ItemArtwork             `json:"artwork,omitempty"`
 	Specifications     map[string]interface{}   `json:"specifications,omitempty"`

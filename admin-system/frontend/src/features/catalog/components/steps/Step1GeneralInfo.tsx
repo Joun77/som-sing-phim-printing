@@ -257,7 +257,7 @@ export const Step1GeneralInfo: React.FC<Step1GeneralInfoProps> = ({
               <option value="">-- ເລືອກໝວດໝູ່ --</option>
               {categories.map((cat) => (
                 <option key={cat.id} value={cat.id}>
-                  {cat.icon || '📁'} {cat.nameLo || cat.nameEn || cat.slug} ({cat.slug})
+                  {cat.icon || ''} {cat.nameLo || cat.nameEn || cat.slug} ({cat.slug})
                 </option>
               ))}
             </select>
@@ -466,7 +466,7 @@ export const Step1GeneralInfo: React.FC<Step1GeneralInfoProps> = ({
           >
             <Plus className="w-6 h-6 text-slate-400 group-hover:text-sky-600 mb-1 transition" />
             <span className="text-[11px] font-bold text-slate-600 group-hover:text-sky-700">
-              + ເພີ່ມຮູບອີກ
+              ເພີ່ມຮູບອີກ
             </span>
           </button>
         </div>
@@ -726,7 +726,7 @@ export const Step1GeneralInfo: React.FC<Step1GeneralInfoProps> = ({
               className="w-4 h-4 text-sky-600 rounded focus:ring-accent-sky"
             />
             <span className="text-xs font-bold text-emerald-600">
-              ✓ ເປີດສະແດງໜ້າເວັບ (Active on Storefront)
+              ເປີດສະແດງໜ້າເວັບ (Active on Storefront)
             </span>
           </label>
         </div>
@@ -773,7 +773,7 @@ export const Step1GeneralInfo: React.FC<Step1GeneralInfoProps> = ({
               onClick={handleAddFeature}
               className="px-4 py-2 bg-accent-sky hover:bg-sky-600 text-white rounded-xl text-xs font-bold transition shadow-sm"
             >
-              + ເພີ່ມແທັກ
+              ເພີ່ມແທັກ
             </button>
           </div>
         </div>

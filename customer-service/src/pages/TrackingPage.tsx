@@ -146,7 +146,8 @@ export default function TrackingPage() {
     const id = order.order_id || order.id
     if (!id) return
 
-    const apiBase = import.meta.env.VITE_API_BASE_URL || '/api'
+    const rawBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '')
+    const apiBase = rawBase ? (rawBase.endsWith('/api') ? rawBase : rawBase + '/api') : '/api'
     const sseUrl = `${apiBase}/v1/orders/stream?tracking=${encodeURIComponent(id)}`
     let eventSource: EventSource | null = null
 

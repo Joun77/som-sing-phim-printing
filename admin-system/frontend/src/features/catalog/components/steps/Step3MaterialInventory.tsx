@@ -16,7 +16,9 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   FileText,
-  Tag
+  Tag,
+  PackageSearch,
+  Boxes
 } from 'lucide-react';
 import { SpecGroup, PublicProductOption, FeaturesConfig } from '../../types';
 import { useApp } from '@store/AppContext';
@@ -407,7 +409,7 @@ export const Step3MaterialInventory: React.FC<Step3MaterialInventoryProps> = ({
           className="p-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/25 transition cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>+ ສ້າງກຸ່ມວັດສະດຸໃໝ່ເອງ</span>
+          <span>ສ້າງກຸ່ມວັດສະດຸໃໝ່ເອງ</span>
         </button>
       </div>
 
@@ -640,7 +642,7 @@ export const Step3MaterialInventory: React.FC<Step3MaterialInventoryProps> = ({
                   className="w-full py-2.5 border-2 border-dashed border-emerald-200 hover:border-emerald-400 rounded-2xl text-xs font-bold text-emerald-700 flex items-center justify-center gap-1.5 hover:bg-emerald-50/50 transition cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  + ເພີ່ມແຖວຕົວເລືອກວັດສະດຸໃນກຸ່ມນີ້ (Add Material Row)
+                  ເພີ່ມແຖວຕົວເລືອກວັດສະດຸໃນກຸ່ມນີ້ (Add Material Row)
                 </button>
               </div>
             </div>
@@ -648,21 +650,21 @@ export const Step3MaterialInventory: React.FC<Step3MaterialInventoryProps> = ({
         </div>
       )}
 
-      {/* Material Finder Modal */}
+      {/* Universal Material Finder Modal */}
       {pickerTarget.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-3xl max-h-[85vh] shadow-2xl flex flex-col overflow-hidden">
             {/* Modal Header */}
             <div className="p-5 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-xs">
-                  <Search className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-xs border border-indigo-100">
+                  <PackageSearch className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-slate-900">
                     ຄົ້ນຫາ & ເລືອກວັດສະດຸຈາກຄັງ (Material Finder)
                   </h3>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500">
                     ເລືອກ SKU ວັດສະດຸເພື່ອຜູກກັບຕົວເລືອກ ແລະ ຄຳນວອນຕົ້ນທຶນອັດຕະໂນມັດ
                   </p>
                 </div>
@@ -685,9 +687,18 @@ export const Step3MaterialInventory: React.FC<Step3MaterialInventoryProps> = ({
                   value={pickerTarget.search}
                   onChange={(e) => setPickerTarget(prev => ({ ...prev, search: e.target.value }))}
                   placeholder="ພິມຊື່ວັດສະດຸ ຫຼື SKU ເຊັ່ນ: Art 260g, MAT-STK-PP..."
-                  className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-accent-sky/30 focus:border-accent-sky"
+                  className="w-full pl-10 pr-10 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-accent-sky/30 focus:border-accent-sky"
                   autoFocus
                 />
+                {pickerTarget.search && (
+                  <button
+                    type="button"
+                    onClick={() => setPickerTarget(prev => ({ ...prev, search: '' }))}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
               {/* Category Pills */}
@@ -699,7 +710,7 @@ export const Step3MaterialInventory: React.FC<Step3MaterialInventoryProps> = ({
                     onClick={() => setPickerTarget(prev => ({ ...prev, categoryTab: cat }))}
                     className={`px-3 py-1 rounded-xl font-bold transition whitespace-nowrap cursor-pointer ${
                       pickerTarget.categoryTab === cat
-                        ? 'bg-emerald-600 text-white shadow-xs'
+                        ? 'bg-indigo-600 text-white shadow-xs'
                         : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                     }`}
                   >
@@ -716,38 +727,55 @@ export const Step3MaterialInventory: React.FC<Step3MaterialInventoryProps> = ({
                   ບໍ່ພົບລາຍການວັດສະດຸທີ່ກົງກັບຄຳຄົ້ນຫາ
                 </div>
               ) : (
-                filteredPickerMaterials.map((mat) => (
-                  <div
-                    key={mat.sku}
-                    onClick={() => handleApplyMaterial(pickerTarget.groupId, pickerTarget.optIdx, mat)}
-                    className="p-3.5 bg-white border border-slate-200 hover:border-emerald-500 rounded-2xl flex items-center justify-between cursor-pointer transition group shadow-xs"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 font-mono text-[10px] font-bold text-slate-700">
-                          {mat.sku}
-                        </span>
-                        <span className="text-xs font-bold text-slate-900 group-hover:text-emerald-600 transition">
-                          {mat.name}
-                        </span>
+                filteredPickerMaterials.map((mat) => {
+                  const isLowStock = mat.stock_qty <= 100;
+                  return (
+                    <div
+                      key={mat.sku}
+                      onClick={() => handleApplyMaterial(pickerTarget.groupId, pickerTarget.optIdx, mat)}
+                      className="p-3.5 bg-white border border-slate-200 hover:border-indigo-500 rounded-2xl flex items-center justify-between cursor-pointer transition group shadow-xs hover:shadow-md"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 font-mono text-[10px] font-bold text-slate-700">
+                            {mat.sku}
+                          </span>
+                          <span className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition">
+                            {mat.name}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-mono text-[10px] font-bold">
+                            {mat.category}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono">
+                          <span>ສະຕັອກ:</span>
+                          <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
+                            isLowStock
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-emerald-50 text-emerald-700'
+                          }`}>
+                            {mat.stock_qty.toLocaleString()} {mat.consumption_unit || 'ແຜ່ນ'}
+                            {isLowStock && ' (ໃກ້ໝົດ)'}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 text-[11px] text-slate-400 font-mono">
-                        <span>ໝວດ: {mat.category}</span>
-                        <span>•</span>
-                        <span>ສະຕັອກ: <strong className="text-emerald-600">{mat.stock_qty.toLocaleString()} {mat.consumption_unit || 'ແຜ່ນ'}</strong></span>
-                      </div>
-                    </div>
 
-                    <div className="text-right">
-                      <span className="text-sm font-mono font-black text-slate-900 block">
-                        {mat.cost_per_consumption_unit?.toLocaleString()} ₭
-                      </span>
-                      <span className="text-[10px] text-emerald-600 font-bold group-hover:underline">
-                        ເລືອກ SKU ນີ້ →
-                      </span>
+                      <div className="text-right flex items-center gap-4">
+                        <div>
+                          <span className="text-sm font-mono font-black text-slate-900 block">
+                            {mat.cost_per_consumption_unit?.toLocaleString()} ₭
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono block">
+                            / {mat.consumption_unit || 'ແຜ່ນ'}
+                          </span>
+                        </div>
+                        <span className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-xs group-hover:bg-indigo-600 group-hover:text-white transition">
+                          ເລືອກ →
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

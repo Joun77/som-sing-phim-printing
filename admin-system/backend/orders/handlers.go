@@ -32,6 +32,23 @@ func init() {
 	orderSeq = 0
 }
 
+func cleanPhoneNumber(phone string) string {
+	var digits strings.Builder
+	for _, r := range phone {
+		if r >= '0' && r <= '9' {
+			digits.WriteRune(r)
+		}
+	}
+	d := digits.String()
+	if strings.HasPrefix(d, "856") {
+		d = strings.TrimPrefix(d, "856")
+	}
+	if strings.HasPrefix(d, "0") {
+		d = strings.TrimPrefix(d, "0")
+	}
+	return d
+}
+
 // HandleGetOrders lists all orders from PostgreSQL DB or memory fallback
 func HandleGetOrders(c *gin.Context) {
 	if db.DB != nil {
@@ -62,6 +79,26 @@ func HandleCreateOrder(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input payload", "details": err.Error()})
 		return
+	}
+
+	if req.OrderNo == "" {
+		if req.OrderID != "" {
+			req.OrderNo = req.OrderID
+		} else if req.OrderNumber != "" {
+			req.OrderNo = req.OrderNumber
+		}
+	}
+	if req.CustomerPhone == "" && req.Phone != "" {
+		req.CustomerPhone = req.Phone
+	}
+	if req.CustomerEmail == "" && req.Email != "" {
+		req.CustomerEmail = req.Email
+	}
+	if req.CustomerAddress == "" && req.Address != "" {
+		req.CustomerAddress = req.Address
+	}
+	if req.GoogleDriveLink == "" && req.DriveLink != "" {
+		req.GoogleDriveLink = req.DriveLink
 	}
 
 	if req.IdempotencyKey == "" {
@@ -225,6 +262,27 @@ func HandleCreateOrder(c *gin.Context) {
 		unitPrice, _ := dUnitPrice.Float64()
 		itemTotalPrice, _ := dSalePriceItem.Float64()
 
+		if unitPrice == 0 {
+			if itemReq.UnitPriceLAK > 0 {
+				unitPrice = itemReq.UnitPriceLAK
+			} else if itemReq.UnitPrice > 0 {
+				unitPrice = itemReq.UnitPrice
+			} else if itemReq.UnitPriceTHB > 0 {
+				unitPrice = itemReq.UnitPriceTHB * 630.5
+			}
+		}
+		if itemTotalPrice == 0 {
+			if itemReq.TotalPriceLAK > 0 {
+				itemTotalPrice = itemReq.TotalPriceLAK
+			} else if itemReq.TotalPrice > 0 {
+				itemTotalPrice = itemReq.TotalPrice
+			} else if itemReq.TotalPriceTHB > 0 {
+				itemTotalPrice = itemReq.TotalPriceTHB * 630.5
+			} else if unitPrice > 0 {
+				itemTotalPrice = unitPrice * float64(qty)
+			}
+		}
+
 		itemArtworkURL := itemReq.ArtworkURL
 		if itemArtworkURL == "" {
 			itemArtworkURL = itemReq.InnerFileURL
@@ -302,7 +360,21 @@ func HandleCreateOrder(c *gin.Context) {
 
 	orderNo := req.OrderNo
 	if orderNo == "" {
-		orderNo = fmt.Sprintf("ORD-%s-%03d", time.Now().Format("200601"), orderSeq)
+		if req.OrderID != "" {
+			orderNo = req.OrderID
+		} else if req.OrderNumber != "" {
+			orderNo = req.OrderNumber
+		} else {
+			orderNo = fmt.Sprintf("ORD-%s-%03d", time.Now().Format("200601"), orderSeq)
+		}
+	}
+
+	if totalPrice == 0 {
+		if req.TotalAmountLAK > 0 {
+			totalPrice = req.TotalAmountLAK
+		} else if req.TotalPrice > 0 {
+			totalPrice = req.TotalPrice
+		}
 	}
 
 	dTotalPrice := decimal.NewFromFloat(totalPrice).Round(2)
@@ -846,6 +918,7 @@ func getOrderByIDFromDB(orderID string) (Order, error) {
 	}
 	cleanQuery := strings.TrimSpace(orderID)
 	cleanQuery = strings.TrimPrefix(cleanQuery, "#")
+	digits := cleanPhoneNumber(cleanQuery)
 
 	query := `
 		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''), 
@@ -863,10 +936,15 @@ func getOrderByIDFromDB(orderID string) (Order, error) {
 		   OR idempotency_key = $1
 		   OR COALESCE(tracking_code, '') = $1
 		   OR COALESCE(internal_tracking_code, '') = $1
+		   OR (LENGTH($3) >= 7 AND (
+		       REGEXP_REPLACE(customer_phone, '[^0-9]', '', 'g') LIKE '%' || $3
+		       OR customer_phone = $1
+		   ))
+		ORDER BY created_at DESC
 		LIMIT 1
 	`
 	var st string
-	err := db.DB.QueryRow(query, cleanQuery, cleanQuery).Scan(
+	err := db.DB.QueryRow(query, cleanQuery, cleanQuery, digits).Scan(
 		&o.ID, &o.OrderNo, &o.CustomerName, &o.CustomerPhone, &st,
 		&o.DepositLAK, &o.TotalAmountLAK, &o.TotalCost, &o.GoogleDriveLink,
 		&o.CustomerID, &o.RemainingLAK, &o.DeliveryDate,
@@ -1023,12 +1101,15 @@ func getOrderItemsFromDB(orderID string) ([]OrderItem, error) {
 
 // GetOrdersByCustomer retrieves orders matching customer_id or customer_phone
 func GetOrdersByCustomer(customerID, phone string) ([]Order, error) {
+	cleanDigits := cleanPhoneNumber(phone)
 	if db.DB == nil {
 		storeMutex.RLock()
 		defer storeMutex.RUnlock()
 		var list []Order
 		for _, o := range ordersStore {
-			if (customerID != "" && o.CustomerID == customerID) || (phone != "" && o.CustomerPhone == phone) {
+			phoneDigits := cleanPhoneNumber(o.CustomerPhone)
+			isPhoneMatch := len(cleanDigits) >= 7 && (phoneDigits == cleanDigits || strings.HasSuffix(phoneDigits, cleanDigits) || strings.HasSuffix(cleanDigits, phoneDigits))
+			if (customerID != "" && o.CustomerID == customerID) || (phone != "" && (o.CustomerPhone == phone || isPhoneMatch)) {
 				list = append(list, o)
 			}
 		}
@@ -1045,10 +1126,13 @@ func GetOrdersByCustomer(customerID, phone string) ([]Order, error) {
 		       created_at, updated_at
 		FROM orders
 		WHERE (NULLIF($1, '') IS NOT NULL AND customer_id = $1)
-		   OR (NULLIF($2, '') IS NOT NULL AND customer_phone = $2)
+		   OR (NULLIF($2, '') IS NOT NULL AND (
+		       customer_phone = $2
+		       OR (LENGTH($3) >= 7 AND REGEXP_REPLACE(customer_phone, '[^0-9]', '', 'g') LIKE '%' || $3)
+		   ))
 		ORDER BY created_at DESC
 	`
-	rows, err := db.DB.Query(query, customerID, phone)
+	rows, err := db.DB.Query(query, customerID, phone, cleanDigits)
 	if err != nil {
 		return nil, err
 	}
@@ -1470,13 +1554,16 @@ func HandleTrackOrderQuery(c *gin.Context) {
 	}
 
 	cleanQ := strings.TrimPrefix(q, "#")
+	cleanDigits := cleanPhoneNumber(cleanQ)
 
-	// 1. Search in-memory store by exact ID / OrderNo / IdempotencyKey
+	// 1. Search in-memory store by exact ID / OrderNo / IdempotencyKey / Phone
 	storeMutex.RLock()
 	for _, o := range ordersStore {
 		cleanOrderNo := strings.TrimPrefix(o.OrderNo, "#")
 		cleanOrderNumber := strings.TrimPrefix(o.OrderNumber, "#")
-		if strings.EqualFold(o.OrderNo, q) || strings.EqualFold(o.OrderNumber, q) || strings.EqualFold(cleanOrderNo, cleanQ) || strings.EqualFold(cleanOrderNumber, cleanQ) || strings.EqualFold(o.ID, q) || strings.EqualFold(o.IdempotencyKey, q) || strings.EqualFold(o.TrackingCode, q) || strings.EqualFold(o.InternalTrackingCode, q) {
+		phoneDigits := cleanPhoneNumber(o.CustomerPhone)
+		isPhoneMatch := len(cleanDigits) >= 7 && (phoneDigits == cleanDigits || strings.HasSuffix(phoneDigits, cleanDigits) || strings.HasSuffix(cleanDigits, phoneDigits))
+		if strings.EqualFold(o.OrderNo, q) || strings.EqualFold(o.OrderNumber, q) || strings.EqualFold(cleanOrderNo, cleanQ) || strings.EqualFold(cleanOrderNumber, cleanQ) || strings.EqualFold(o.ID, q) || strings.EqualFold(o.IdempotencyKey, q) || strings.EqualFold(o.TrackingCode, q) || strings.EqualFold(o.InternalTrackingCode, q) || isPhoneMatch {
 			storeMutex.RUnlock()
 			c.JSON(http.StatusOK, o)
 			return

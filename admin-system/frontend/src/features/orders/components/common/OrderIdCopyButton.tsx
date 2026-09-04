@@ -55,7 +55,7 @@ export const OrderIdCopyButton: React.FC<OrderIdCopyButtonProps> = ({
       {copied ? (
         <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-bold font-sans">
           <Check className="w-3 h-3 text-emerald-600 stroke-[3]" />
-          <span>✓ ຄັດລອກແລ້ວ</span>
+          <span>ຄັດລອກແລ້ວ</span>
         </span>
       ) : (
         <Copy className="w-3 h-3 text-slate-400 hover:text-slate-600 transition" />

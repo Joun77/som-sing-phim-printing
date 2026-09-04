@@ -120,8 +120,10 @@ export default function CartDrawer() {
             {/* Item list */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {cart.map((item) => {
-                const itemTotalTHB = item.price?.totalTHB || item.price?.total || 0
-                const itemTotalDisplay = convertTo(itemTotalTHB)
+                const itemTotal = item.price?.total || item.price?.totalTHB || 0
+                const itemTotalDisplay = (itemTotal >= 500 || currency === 'LAK' || !currency)
+                  ? (currency === 'LAK' || !currency ? itemTotal : convertTo(itemTotal / 630.5))
+                  : convertTo(itemTotal)
 
                 return (
                   <div
@@ -205,7 +207,7 @@ export default function CartDrawer() {
                           </div>
                           {currency !== 'THB' && (
                             <div className="text-[10px] text-slate-400">
-                              ≈ {formatMoney(itemTotalTHB, 'THB')}
+                              ≈ {formatMoney(itemTotal >= 500 ? Math.round(itemTotal / 630.5) : itemTotal, 'THB')}
                             </div>
                           )}
                         </div>
@@ -231,11 +233,16 @@ export default function CartDrawer() {
                 </span>
                 <div className="text-right">
                   <div className="text-lg font-black text-amber-600 dark:text-amber-400">
-                    {formatMoney(convertTo(selectedTotalTHB), currency)}
+                    {formatMoney(
+                      selectedTotalTHB >= 500 || currency === 'LAK' || !currency
+                        ? (currency === 'LAK' || !currency ? selectedTotalTHB : convertTo(selectedTotalTHB / 630.5))
+                        : convertTo(selectedTotalTHB),
+                      currency
+                    )}
                   </div>
                   {currency !== 'THB' && (
                     <div className="text-[10.5px] font-bold text-slate-400">
-                      ≈ {formatMoney(selectedTotalTHB, 'THB')}
+                      ≈ {formatMoney(selectedTotalTHB >= 500 ? Math.round(selectedTotalTHB / 630.5) : selectedTotalTHB, 'THB')}
                     </div>
                   )}
                 </div>

@@ -96,7 +96,8 @@ export const PriceBreakdownTable: React.FC<PriceBreakdownTableProps> = ({
 
       {/* Table Content */}
       <div className="p-6">
-        <div className="overflow-x-auto">
+        {/* Desktop View: Full 5-column Table */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-xs text-left">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 uppercase text-[10.5px]">
@@ -198,6 +199,63 @@ export const PriceBreakdownTable: React.FC<PriceBreakdownTableProps> = ({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile View: Clean Responsive Stacked Cards */}
+        <div className="block sm:hidden space-y-2.5">
+          {specItems && specItems.length > 0 ? (
+            specItems.map((item, idx) => (
+              <div
+                key={item.id || idx}
+                className="p-3 bg-slate-50 dark:bg-slate-850/90 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="text-xs font-black text-slate-900 dark:text-slate-100 block">
+                      {item.title}
+                    </span>
+                    {item.hint && (
+                      <span className="text-[10px] text-slate-500 block">
+                        ({item.hint})
+                      </span>
+                    )}
+                  </div>
+                  <span className="inline-block px-2.5 py-0.5 rounded-full font-mono text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
+                    {item.label}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-slate-200/60 dark:border-slate-800">
+                  <span className="text-slate-500">
+                    {item.ratePerUnit > 0 ? `${formatAmount(item.ratePerUnit)} × ${quantity} ຊິ້ນ` : (language === 'en' ? 'Included' : 'ລວມໃນຊຸດ')}
+                  </span>
+                  <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                    {item.ratePerUnit > 0 ? formatAmount(item.ratePerUnit * quantity) : (language === 'en' ? 'Free' : 'ຟຣີ')}
+                  </span>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="p-3 bg-slate-50 dark:bg-slate-850/90 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2">
+              <div className="flex justify-between items-start">
+                <span className="text-xs font-black text-slate-900 dark:text-slate-100">
+                  {language === 'en' ? 'Base Printing & Production' : 'ຄ່າພິມ ແລະ ການຜະລິດພື້ນຖານ'}
+                </span>
+                <span className="text-xs font-mono font-bold text-amber-600">
+                  {formatAmount(baseUnit * quantity)}
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-500 block">
+                {formatAmount(baseUnit)} × {quantity} ຊິ້ນ
+              </span>
+            </div>
+          )}
+
+          {discountPercent > 0 && (
+            <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-between text-xs font-bold text-emerald-600 dark:text-emerald-400">
+              <span>{language === 'en' ? `Tier Discount (-${discountPercent}%)` : `ສ່ວນຫຼຸດ Tier (-${discountPercent}%)`}</span>
+              <span className="font-mono">-{formatAmount(discountSavings)}</span>
+            </div>
+          )}
         </div>
 
         {/* Total Summary Footer Box */}

@@ -12,7 +12,7 @@ import { fetchPublicProducts, RemoteProduct } from '../api/client.ts'
 gsap.registerPlugin(ScrollTrigger)
 
 export default function BestSellers() {
-  const { currency, convertTo, t, language, products } = useShop()
+  const { currency, rates, convertTo, t, language, products } = useShop()
   const isLao = language === 'lo'
 
   // Pick top 4 products (bestsellers first)
@@ -79,7 +79,10 @@ export default function BestSellers() {
         {/* Product Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {items.map((p, i) => {
-            const price = convertTo(p.basePrice)
+            const rawBase = p.basePrice || 0
+            const price = (!currency || currency === 'LAK')
+              ? rawBase
+              : rawBase / (rates?.THB || 630.5)
             return (
               <Link 
                 key={p.id} 

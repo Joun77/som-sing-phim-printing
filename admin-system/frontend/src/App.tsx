@@ -80,16 +80,35 @@ function AppContent() {
                     <PreflightPage
                       onSendToQuotation={(res) => {
                         if (setPrefilledOrderSpecs) {
+                          const isMono = (res.color_pages_count || 0) === 0 && (res.mono_pages_count || 0) > 0;
+                          const covC = res.color_pages_avg_c !== undefined ? res.color_pages_avg_c : (res.avg_cov_c ?? 0);
+                          const covM = res.color_pages_avg_m !== undefined ? res.color_pages_avg_m : (res.avg_cov_m ?? 0);
+                          const covY = res.color_pages_avg_y !== undefined ? res.color_pages_avg_y : (res.avg_cov_y ?? 0);
+                          const covK = (res.color_pages_count || 0) > 0
+                            ? (res.color_pages_avg_k !== undefined ? res.color_pages_avg_k : (res.avg_cov_k ?? 0))
+                            : (res.mono_pages_avg_k !== undefined ? res.mono_pages_avg_k : (res.avg_cov_k ?? 0));
+                          const targetSize = res.target_paper_size || res.suggested_paper || 'A4';
                           setPrefilledOrderSpecs({
                             jobName: res.file_name.replace(/\.[^/.]+$/, ''),
                             pageCount: res.total_pages,
-                            avgCovC: res.avg_cov_c,
-                            avgCovM: res.avg_cov_m,
-                            avgCovY: res.avg_cov_y,
-                            avgCovK: res.avg_cov_k,
-                            colorMode: res.color_mode || 'CMYK',
+                            colorPages: res.color_pages_count || 0,
+                            monoPages: res.mono_pages_count || 0,
+                            jobWidth: res.target_width_mm || 210,
+                            jobHeight: res.target_height_mm || 297,
+                            suggestedPaper: targetSize,
+                            jobSizePreset: targetSize,
+                            avgCovC: covC,
+                            avgCovM: covM,
+                            avgCovY: covY,
+                            avgCovK: covK,
+                            cCoverage: covC,
+                            mCoverage: covM,
+                            yCoverage: covY,
+                            kCoverage: covK,
+                            colorMode: isMono ? 'MONO_K' : (res.color_mode || 'CMYK'),
                             fileUrl: res.file_url,
                             fileName: res.file_name,
+                            preflightData: res,
                           });
                         }
                         setActiveTab('quotation');

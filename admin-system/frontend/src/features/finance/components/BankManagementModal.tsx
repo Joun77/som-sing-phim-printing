@@ -82,7 +82,7 @@ export const BankManagementModal: React.FC<BankManagementModalProps> = ({
       if (data.status === 'success' && data.fileUrl) {
         setQrCodeUrl(data.fileUrl);
         showToast(
-          currentLang === 'lo' ? '✓ ອັບໂຫລດຮູບ QR Code ສຳເລັດ!' : 'QR Code uploaded successfully!',
+          currentLang === 'lo' ? 'ອັບໂຫລດຮູບ QR Code ສຳເລັດ!' : 'QR Code uploaded successfully!',
           'success'
         );
       } else {
@@ -116,7 +116,7 @@ export const BankManagementModal: React.FC<BankManagementModalProps> = ({
       if (data.status === 'success' && data.fileUrl) {
         setLogoUrl(data.fileUrl);
         showToast(
-          currentLang === 'lo' ? '✓ ອັບໂຫລດໂລໂກ້ທະນາຄານສຳເລັດ!' : 'Bank logo uploaded successfully!',
+          currentLang === 'lo' ? 'ອັບໂຫລດໂລໂກ້ທະນາຄານສຳເລັດ!' : 'Bank logo uploaded successfully!',
           'success'
         );
       } else {
@@ -152,7 +152,7 @@ export const BankManagementModal: React.FC<BankManagementModalProps> = ({
         promptpayName: shopName.trim() || promptpayName.trim() || 'Som-Sing Phim',
       });
       showToast(
-        currentLang === 'lo' ? '✓ ອັບເດດຂໍ້ມູນບັນຊີທະນາຄານສຳເລັດ!' : 'Bank account updated successfully!',
+        currentLang === 'lo' ? 'ອັບເດດຂໍ້ມູນບັນຊີທະນາຄານສຳເລັດ!' : 'Bank account updated successfully!',
         'success'
       );
     } else {
@@ -170,7 +170,7 @@ export const BankManagementModal: React.FC<BankManagementModalProps> = ({
         isActive: true,
       });
       showToast(
-        currentLang === 'lo' ? '✓ ເພີ່ມບັນຊີທະນາຄານໃໝ່ຮຽບຮ້ອຍ!' : 'New bank account added successfully!',
+        currentLang === 'lo' ? 'ເພີ່ມບັນຊີທະນາຄານໃໝ່ຮຽບຮ້ອຍ!' : 'New bank account added successfully!',
         'success'
       );
     }

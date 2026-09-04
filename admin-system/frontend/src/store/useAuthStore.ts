@@ -23,15 +23,11 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
-      token: 'preview-token',
-      refreshToken: 'preview-refresh-token',
-      user: {
-        username: 'admin',
-        role: 'owner',
-        fullName: 'ສົມສິ່ງພິມ (Owner)',
-      },
-      rememberMe: true,
-      isAuthenticated: true,
+      token: null,
+      refreshToken: null,
+      user: null,
+      rememberMe: false,
+      isAuthenticated: false,
       isRefreshing: false,
 
       login: (token: string, user: UserProfile, rememberMe: boolean, refreshToken?: string) => {
@@ -136,6 +132,11 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        try {
+          fetch('/api/v1/auth/logout', { method: 'POST' }).catch(() => {});
+        } catch {
+          // ignore network error
+        }
         set({
           token: null,
           refreshToken: null,

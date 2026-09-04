@@ -521,7 +521,7 @@ export const PreflightItemCreationModal: React.FC<PreflightItemCreationModalProp
               ) : result && !isScanning ? (
                 <div className="space-y-4 animate-fade-in">
                   
-                  {/* 🌟 1. Interactive Artwork Thumbnail Preview Card */}
+                  {/*  1. Interactive Artwork Thumbnail Preview Card */}
                   <div className="p-4 bg-white border border-slate-200/90 rounded-2xl shadow-xs flex items-center gap-4">
                     {/* Thumbnail Container with Click to Enlarge / Inspect */}
                     <div 
@@ -594,7 +594,7 @@ export const PreflightItemCreationModal: React.FC<PreflightItemCreationModalProp
                     </div>
                   </div>
 
-                  {/* 🌟 2. Preflight Color & Ink Studio (Dark Elevation Panel) */}
+                  {/*  2. Preflight Color & Ink Studio (Dark Elevation Panel) */}
                   <div className="p-5 bg-gradient-to-br from-primary-navy to-slate-900 text-white rounded-3xl space-y-4 shadow-md">
                     
                     {/* Header */}
@@ -724,7 +724,7 @@ export const PreflightItemCreationModal: React.FC<PreflightItemCreationModalProp
         </div>
       </FormModalTemplate>
 
-      {/* 🌟 3. Lightbox / Fullscreen Artwork Inspector Modal */}
+      {/*  3. Lightbox / Fullscreen Artwork Inspector Modal */}
       {isInspectorOpen && previewUrl && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden">

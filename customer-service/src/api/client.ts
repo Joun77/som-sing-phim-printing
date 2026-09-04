@@ -9,9 +9,10 @@
 import { round2 } from '../utils/pricing.ts'
 import { generateOrderId } from '../utils/orderId.ts'
 
-// API base URL. Defaults to the Go backend directly (CORS-enabled).
-// Override in production with VITE_API_BASE_URL, e.g. https://api.somsingphim.com/api
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
+// API base URL. Ensures /api is always present.
+const rawApiBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '')
+const API_BASE = rawApiBase ? (rawApiBase.endsWith('/api') ? rawApiBase : rawApiBase + '/api') : '/api'
+
 const TIMEOUT_MS = 5000
 const MOCK_STORAGE_KEY = 'ssp_orders_v1'
 
@@ -460,35 +461,56 @@ export async function trackOrder(orderId?: string | number | null): Promise<Orde
     try {
       raw = await request<RawOrder>(`/v1/orders/track?q=${encodeURIComponent(id)}`)
     } catch {
-      raw = await request<RawOrder>(`/v1/orders/track/${encodeURIComponent(id)}`)
+      try {
+        raw = await request<RawOrder>(`/v1/orders/track/${encodeURIComponent(id)}`)
+      } catch {
+        raw = await request<RawOrder>(`/orders/track?q=${encodeURIComponent(id)}`)
+      }
     }
-    if (raw) {
+    if (raw && (raw.order_no || raw.order_number || raw.id)) {
       setDemo(false)
       return normalizeRemoteOrder(raw)
     }
   } catch (err: any) {
-    // Check local store
+    // Check local store with normalized phone matching
+    const cleanDigits = id.replace(/\D/g, '')
     const localOrders = readLocalOrders()
-    const match = localOrders.find(
-      (o) =>
+    const match = localOrders.find((o) => {
+      const pDigits = (o.phone || '').replace(/\D/g, '')
+      const isPhoneMatch = cleanDigits.length >= 7 && (
+        pDigits === cleanDigits ||
+        pDigits.endsWith(cleanDigits) ||
+        cleanDigits.endsWith(pDigits)
+      )
+      return (
         o.order_id === id ||
         o.order_number === id ||
         o.phone === id ||
         String(o.id || '') === id ||
-        String(o.order_id || '').toUpperCase() === id.toUpperCase()
-    )
+        String(o.order_id || '').toUpperCase() === id.toUpperCase() ||
+        isPhoneMatch
+      )
+    })
     if (match) return match
 
     // Check demo orders only in demo mode
     if (DEMO_MODE.enabled) {
-      const demoMatch = seedDemoOrders().find(
-        (o) =>
+      const demoMatch = seedDemoOrders().find((o) => {
+        const pDigits = (o.phone || '').replace(/\D/g, '')
+        const isPhoneMatch = cleanDigits.length >= 7 && (
+          pDigits === cleanDigits ||
+          pDigits.endsWith(cleanDigits) ||
+          cleanDigits.endsWith(pDigits)
+        )
+        return (
           o.order_id === id ||
           o.order_number === id ||
           o.phone === id ||
           String(o.id || '') === id ||
-          String(o.order_id || '').toUpperCase() === id.toUpperCase()
-      )
+          String(o.order_id || '').toUpperCase() === id.toUpperCase() ||
+          isPhoneMatch
+        )
+      })
       if (demoMatch) return demoMatch
     }
 
@@ -502,14 +524,20 @@ export async function fetchCatalogProducts(category?: string): Promise<RemotePro
 }
 
 interface RawOrder {
+  order_no?: string
   order_number?: string
   id?: string
   customer_name?: string
   customer_phone?: string
+  phone?: string
+  customer_address?: string
+  address?: string
   items?: { specs?: OrderSpecs; quantity?: number }[]
   total_price?: number
+  total_amount_lak?: number
   currency?: string
   status?: string
+  overall_status?: string
   created_at?: string
   timeline?: TimelineEntry[]
   tracking_number?: string
@@ -555,16 +583,25 @@ function normalizeRemoteOrder(o: RawOrder): Order {
     COMPLETED: 'DELIVERED',
     CANCELLED: 'CANCELLED',
   }
+  const effectiveId = o.order_no || o.order_number || o.id || ''
+  const effectivePhone = o.customer_phone || o.phone || ''
+  const effectiveAddress = o.customer_address || o.address || ''
+  const effectivePrice = typeof o.total_price === 'number' && o.total_price > 0
+    ? o.total_price
+    : (typeof o.total_amount_lak === 'number' ? o.total_amount_lak : 0)
+  const rawStatus = o.status || o.overall_status || 'PENDING_SLIP_CHECK'
+
   return {
-    order_id: o.order_number || o.id || '',
-    order_number: o.order_number,
+    order_id: effectiveId,
+    order_number: effectiveId,
     customer_name: o.customer_name || '',
-    phone: o.customer_phone,
+    phone: effectivePhone,
+    address: effectiveAddress,
     specs: (o.items && o.items[0] && o.items[0].specs) || {},
     quantity: o.items && o.items[0] ? o.items[0].quantity : 1,
-    total_price: o.total_price || 0,
+    total_price: effectivePrice,
     currency: o.currency || 'LAK',
-    status: (o.status && statusMap[o.status]) || o.status || 'PENDING_SLIP_CHECK',
+    status: statusMap[rawStatus] || rawStatus || 'PENDING_SLIP_CHECK',
     created_at: o.created_at,
     timeline: o.timeline || [],
     tracking_number: o.tracking_number || o.tracking,

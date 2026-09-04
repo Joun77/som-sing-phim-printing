@@ -297,7 +297,7 @@ export function ProfileSettingsPage() {
                     }
                   `}
                 >
-                  <span className="text-base">🇱🇦</span>
+                  <span className="text-base">LA</span>
                   <span>ພາສາລາວ (Lao)</span>
                 </button>
 
@@ -312,7 +312,7 @@ export function ProfileSettingsPage() {
                     }
                   `}
                 >
-                  <span className="text-base">🇬🇧</span>
+                  <span className="text-base">EN</span>
                   <span>English (EN)</span>
                 </button>
               </div>

@@ -305,7 +305,7 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                 </h3>
               </div>
               <span className="px-3 py-1 rounded-xl text-xs font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                <span>✓ ຊຳລະຄົບຖ້ວນ 100% (100% PAID)</span>
+                <span>ຊຳລະຄົບຖ້ວນ 100% (100% PAID)</span>
               </span>
             </div>
 
@@ -398,7 +398,7 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
 
           <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex justify-between items-center font-mono">
             <span>Ref: SSP-PAY-{orderIdDisplay}</span>
-            <span className="text-emerald-700 font-black">✓ ບັນຊີປິດຍອດສົມບູນ</span>
+            <span className="text-emerald-700 font-black">ບັນຊີປິດຍອດສົມບູນ</span>
           </div>
         </div>
 

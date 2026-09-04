@@ -373,7 +373,7 @@ export const IndustrialJobTicket: React.FC<JobTicketProps> = ({
             <span>ຂັ້ນຕອນການກວດສອບຄຸນນະພາບ & ເຊັນຮັບຮອງ (Sign-Off & QA Matrix)</span>
           </span>
           <span className="text-[10px] font-bold text-slate-500">
-            ກະລຸນາໝາຍ [✓] ແລະ ເຊັນຊື່ທຸກຂັ້ນຕອນ
+            ກະລຸນາໝາຍ [x] ແລະ ເຊັນຊື່ທຸກຂັ້ນຕອນ
           </span>
         </div>
 

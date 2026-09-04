@@ -262,7 +262,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   const convertedMonoAllK = Math.round((rawColorK + 0.299 * rawColorC + 0.587 * rawColorM + 0.114 * rawColorY) * 100) / 100;
   const effectiveMonoK = customerPrintMode === 'MONO_ALL' ? Math.max(convertedMonoAllK, rawMonoK) : rawMonoK;
 
-  // 🌟 Mathematical Model for ALL PAGES COMBINED Tab (Weighted Average):
+  //  Mathematical Model for ALL PAGES COMBINED Tab (Weighted Average):
   const combinedC = customerPrintMode === 'MONO_ALL' ? 0 : Math.round(((rawColorC * colorPages) / totalPages) * 100) / 100;
   const combinedM = customerPrintMode === 'MONO_ALL' ? 0 : Math.round(((rawColorM * colorPages) / totalPages) * 100) / 100;
   const combinedY = customerPrintMode === 'MONO_ALL' ? 0 : Math.round(((rawColorY * colorPages) / totalPages) * 100) / 100;
@@ -788,12 +788,12 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                       </div>
 
                       <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-800 font-bold">
-                        ✓ ໜ້າຂາວດຳ {monoPages} ໜ້າ ຈະຖືກຄິດສະເພາະຕົ້ນທຶນຕະລັບໝຶກດຳ (Mono K) ບໍ່ຄິດຄ່າສີ C, M, Y
+                        ໜ້າຂາວດຳ {monoPages} ໜ້າ ຈະຖືກຄິດສະເພາະຕົ້ນທຶນຕະລັບໝຶກດຳ (Mono K) ບໍ່ຄິດຄ່າສີ C, M, Y
                       </div>
                     </div>
                   )}
 
-                  {/* TAB 3: 🌟 ALL PAGES COMBINED */}
+                  {/* TAB 3:  ALL PAGES COMBINED */}
                   {activeCoverageTab === 'all_pages' && (
                     <div className="space-y-3 animate-fade-in">
                       

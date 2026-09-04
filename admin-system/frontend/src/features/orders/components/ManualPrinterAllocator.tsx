@@ -18,6 +18,8 @@ interface Props {
   availablePrinters: AvailablePrinter[];
   onAllocationsChange: (newAllocations: PrinterAllocation[]) => void;
   onOpenPrinterModal?: () => void;
+  activeCalc?: any;
+  jobSizePreset?: string;
 }
 
 const DEFAULT_CMYK_CHANNELS: ColorChannel[] = [
@@ -45,6 +47,8 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
   availablePrinters,
   onAllocationsChange,
   onOpenPrinterModal,
+  activeCalc,
+  jobSizePreset,
 }) => {
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
@@ -263,6 +267,9 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
             const allocatedPct = targetQuantity > 0 ? Math.round(((item.allocated_pages || 0) / targetQuantity) * 100) : 100;
             const inkCost = item.ink_cost_per_page || 0;
             const machCost = item.cost_per_page || 0;
+            const realInkPerSheet = (activeCalc && activeCalc.inkCost !== undefined && targetQuantity > 0)
+              ? Math.round(activeCalc.inkCost / targetQuantity)
+              : inkCost;
 
             return (
               <div
@@ -284,16 +291,21 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
                           {allocatedPct}% ຂອງງານທັງໝົດ
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-500 font-medium">
-                        <span className="text-indigo-900 font-bold font-sans">
-                          ໝຶກ: LAK {inkCost.toLocaleString()} / ແຜ່ນ (@5%)
+                      <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[10px] text-slate-500 font-medium">
+                        <span className="text-indigo-900 font-bold font-sans bg-indigo-50/80 px-2 py-0.5 rounded border border-indigo-100">
+                          ໝຶກຈິງ: LAK {realInkPerSheet.toLocaleString()} / ແຜ່ນ ({jobSizePreset || 'A4'})
                         </span>
                         <span>•</span>
                         <span>ຄ່າເສື່ອມ & ໄຟ: LAK {machCost.toLocaleString()} / ແຜ່ນ</span>
                         <span>•</span>
-                        <span className="text-purple-700 font-black font-sans bg-purple-50 px-1.5 py-0.2 rounded">
-                          ລວມ: LAK {(inkCost + machCost).toLocaleString()} / ແຜ່ນ
+                        <span className="text-purple-700 font-black font-sans bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                          ລວມ: LAK {(realInkPerSheet + machCost).toLocaleString()} / ແຜ່ນ
                         </span>
+                        {inkCost > 0 && inkCost !== realInkPerSheet && (
+                          <span className="text-slate-400 text-[9px] font-sans">
+                            (ມາດຕະຖານ A4 @5%: LAK {inkCost.toLocaleString()})
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

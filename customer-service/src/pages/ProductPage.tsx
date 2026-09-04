@@ -465,6 +465,14 @@ export default function ProductPage() {
     setTempPreviewUrl(newArtworks[0]?.previewUrl || '')
     setPreflightReport(newArtworks[0]?.report || null)
     setShowUploadProgress(false)
+
+    // Smooth auto-scroll to configurator / artwork studio
+    setTimeout(() => {
+      const el = document.querySelector('.configurator') || document.querySelector('#artwork-studio') || document.querySelector('form')
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }, 150)
   }
 
   const handleFileUpload = async (file: File) => {
@@ -757,6 +765,84 @@ export default function ProductPage() {
     setOrderDraft(item)
     navigate('/checkout')
   }
+
+  const computeSingleArtworkFinancials = (art: ArtworkBatchItem) => {
+    if (!product) return { unitPrice: 0, total: 0, discountPct: 0 };
+
+    if (product.specGroups && product.specGroups.length > 0) {
+      let unitAdd = 0;
+      const isCustomBreakdown = product.featuresConfig?.breakdownMode === 'custom';
+      if (isCustomBreakdown && product.featuresConfig?.customBreakdownRows && product.featuresConfig.customBreakdownRows.length > 0) {
+        const printGroup = product.specGroups.find(g => g.id === 'group_print_mode' || (g as any).groupType === 'printing_mode');
+        const printOptId = printGroup ? (art.selectedGroupOptions?.[printGroup.id] || printGroup.options[0]?.id) : null;
+        const printOpt = printGroup?.options.find(o => o.id === printOptId) || printGroup?.options[0];
+        const printRate = (product.basePrice || 0) + Number(printOpt?.add || 0);
+
+        const materialGroups = product.specGroups.filter(g => g.id.includes('material') || g.id.includes('paper') || (g as any).groupType === 'material' || g.titleLo?.includes('ເຈ້ຍ') || g.titleLo?.includes('ວັດສະດຸ'));
+        const materialRate = materialGroups.reduce((s, mg) => {
+          const optId = art.selectedGroupOptions?.[mg.id] || mg.options[0]?.id;
+          const opt = mg.options.find(o => o.id === optId) || mg.options[0];
+          return s + Number(opt?.add || 0);
+        }, 0);
+
+        const finishingGroups = product.specGroups.filter(g => g !== printGroup && !materialGroups.some(mg => mg.id === g.id));
+        const finishingRate = finishingGroups.reduce((s, fg) => {
+          const optId = art.selectedGroupOptions?.[fg.id] || fg.options[0]?.id;
+          const opt = fg.options.find(o => o.id === optId) || fg.options[0];
+          return s + Number(opt?.add || 0);
+        }, 0);
+
+        product.featuresConfig.customBreakdownRows.forEach((r: any) => {
+          let rowRate = 0;
+          if (r.includePrintCost) rowRate += printRate;
+          if (r.includeMaterialCost) rowRate += materialRate;
+          if (r.includeFinishingCost) rowRate += finishingRate;
+          if (r.extraFixedCost) rowRate += Number(r.extraFixedCost);
+          unitAdd += rowRate;
+        });
+      } else {
+        product.specGroups.forEach((g) => {
+          const selectedId = art.selectedGroupOptions?.[g.id] || g.options[0]?.id;
+          const opt = g.options.find((o) => o.id === selectedId);
+          if (opt && typeof opt.add === 'number') {
+            unitAdd += opt.add;
+          }
+        });
+      }
+
+      const baseFloor = product.basePrice || 0;
+      const rawUnitWithAddons = baseFloor + unitAdd;
+      const effectiveUnit = Math.max(rawUnitWithAddons, baseFloor);
+      const subtotal = effectiveUnit * art.quantity;
+      let discountPct = 0;
+      const tiers = product.discountTiers || remoteProduct?.discountTiers || [];
+      if (tiers && tiers.length > 0) {
+        for (const tier of tiers) {
+          if (art.quantity >= tier.minQuantity && tier.discountPercentage > discountPct) {
+            discountPct = tier.discountPercentage;
+          }
+        }
+      }
+      const discountAmount = Math.round(subtotal * (discountPct / 100));
+      return {
+        unitPrice: effectiveUnit,
+        total: subtotal - discountAmount,
+        discountPct,
+      };
+    }
+
+    const p = computePrice(product, {
+      sizeId: art.sizeId,
+      materialId: art.materialId,
+      finishingId: art.finishingId,
+      quantity: art.quantity,
+    });
+    return {
+      unitPrice: p?.unitPrice || 0,
+      total: p?.total || 0,
+      discountPct: p?.discount || 0,
+    };
+  };
 
   const totalDisplay = currency === 'LAK' || !currency ? (price?.total || 0) : convertTo((price?.total || 0) / 630.5)
   const productName = language === 'en' && product?.nameEn ? product.nameEn : (product?.name || '')
@@ -1357,7 +1443,27 @@ export default function ProductPage() {
                             });
                           }
 
-                          const unitTotal = (product.basePrice || 0) + optionsAddPerUnit;
+                          // Floor Price Calculation: effective unit price = max(calculatedComponentsRate, baseFloorPrice)
+                          const rawCalculatedUnitPrice = specItems.length > 0
+                            ? specItems.reduce((sum, it) => sum + (it.ratePerUnit || 0), 0)
+                            : (product.basePrice || 0) + optionsAddPerUnit;
+
+                          const baseFloorPrice = product.basePrice || 0;
+                          const effectiveUnitPrice = Math.max(rawCalculatedUnitPrice, baseFloorPrice);
+
+                          // If calculated rate is below floor price, add a clear floor adjustment line item so table sum matches effectiveUnitPrice 100%
+                          if (rawCalculatedUnitPrice < baseFloorPrice && baseFloorPrice > 0) {
+                            const floorDelta = baseFloorPrice - rawCalculatedUnitPrice;
+                            specItems.push({
+                              id: 'floor_price_adjustment',
+                              title: language === 'en' ? 'Minimum Base Price Floor Adjustment' : 'ປັບເຂົ້າເກນລາຄາເລີ່ມຕົ້ນຂັ້ນຕ່ຳ (Base Floor Price)',
+                              label: language === 'en' ? 'Base Floor Applied' : 'ມາດຕະຖານຂັ້ນຕ່ຳ',
+                              ratePerUnit: floorDelta,
+                              hint: language === 'en' ? 'Product base starting price applied' : 'ຄິດໄລ່ຕາມເກນລາຄາເລີ່ມຕົ້ນຂັ້ນຕ່ຳຂອງສິນຄ້າ',
+                            });
+                          }
+
+                          const unitTotal = effectiveUnitPrice;
                           const subtotal = unitTotal * activeArtwork.quantity;
                           const tiers = product.discountTiers || remoteProduct?.discountTiers || [];
                           if (tiers && tiers.length > 0) {
@@ -1415,15 +1521,47 @@ export default function ProductPage() {
                                 const grandTotalLAK = uploadedArtworks.reduce((sum, art) => {
                                   if (product.specGroups && product.specGroups.length > 0) {
                                     let unitAdd = 0;
-                                    product.specGroups.forEach((g) => {
-                                      const selectedId = art.selectedGroupOptions?.[g.id] || g.options[0]?.id;
-                                      const opt = g.options.find((o) => o.id === selectedId);
-                                      if (opt && typeof opt.add === 'number') {
-                                        unitAdd += opt.add;
-                                      }
-                                    });
-                                    const unitTotal = (product.basePrice || 0) + unitAdd;
-                                    const subtotal = unitTotal * art.quantity;
+                                    const isCustomBreakdown = product.featuresConfig?.breakdownMode === 'custom';
+                                    if (isCustomBreakdown && product.featuresConfig?.customBreakdownRows && product.featuresConfig.customBreakdownRows.length > 0) {
+                                      const printGroup = product.specGroups.find(g => g.id === 'group_print_mode' || (g as any).groupType === 'printing_mode');
+                                      const printOptId = printGroup ? (art.selectedGroupOptions?.[printGroup.id] || printGroup.options[0]?.id) : null;
+                                      const printOpt = printGroup?.options.find(o => o.id === printOptId) || printGroup?.options[0];
+                                      const printRate = (product.basePrice || 0) + Number(printOpt?.add || 0);
+
+                                      const materialGroups = product.specGroups.filter(g => g.id.includes('material') || g.id.includes('paper') || (g as any).groupType === 'material' || g.titleLo?.includes('ເຈ້ຍ') || g.titleLo?.includes('ວັດສະດຸ'));
+                                      const materialRate = materialGroups.reduce((s, mg) => {
+                                        const optId = art.selectedGroupOptions?.[mg.id] || mg.options[0]?.id;
+                                        const opt = mg.options.find(o => o.id === optId) || mg.options[0];
+                                        return s + Number(opt?.add || 0);
+                                      }, 0);
+
+                                      const finishingGroups = product.specGroups.filter(g => g !== printGroup && !materialGroups.some(mg => mg.id === g.id));
+                                      const finishingRate = finishingGroups.reduce((s, fg) => {
+                                        const optId = art.selectedGroupOptions?.[fg.id] || fg.options[0]?.id;
+                                        const opt = fg.options.find(o => o.id === optId) || fg.options[0];
+                                        return s + Number(opt?.add || 0);
+                                      }, 0);
+
+                                      product.featuresConfig.customBreakdownRows.forEach((r: any) => {
+                                        let rowRate = 0;
+                                        if (r.includePrintCost) rowRate += printRate;
+                                        if (r.includeMaterialCost) rowRate += materialRate;
+                                        if (r.includeFinishingCost) rowRate += finishingRate;
+                                        if (r.extraFixedCost) rowRate += Number(r.extraFixedCost);
+                                        unitAdd += rowRate;
+                                      });
+                                    } else {
+                                      product.specGroups.forEach((g) => {
+                                        const selectedId = art.selectedGroupOptions?.[g.id] || g.options[0]?.id;
+                                        const opt = g.options.find((o) => o.id === selectedId);
+                                        if (opt && typeof opt.add === 'number') {
+                                          unitAdd += opt.add;
+                                        }
+                                      });
+                                    }
+                                    const baseFloor = product.basePrice || 0;
+                                    const effectiveUnit = Math.max(baseFloor + unitAdd, baseFloor);
+                                    const subtotal = effectiveUnit * art.quantity;
                                     let discountPct = 0;
                                     const tiers = product.discountTiers || remoteProduct?.discountTiers || [];
                                     if (tiers && tiers.length > 0) {
@@ -1460,38 +1598,7 @@ export default function ProductPage() {
                                 const count = uploadedArtworks.length || 1
                                 setAddedBatchCount(count)
                                 uploadedArtworks.forEach((art) => {
-                                  let artTotal = 0;
-                                  if (product.specGroups && product.specGroups.length > 0) {
-                                    let unitAdd = 0;
-                                    product.specGroups.forEach((g) => {
-                                      const selectedId = art.selectedGroupOptions?.[g.id] || g.options[0]?.id;
-                                      const opt = g.options.find((o) => o.id === selectedId);
-                                      if (opt && typeof opt.add === 'number') {
-                                        unitAdd += opt.add;
-                                      }
-                                    });
-                                    const unitTotal = (product.basePrice || 0) + unitAdd;
-                                    const subtotal = unitTotal * art.quantity;
-                                    let discountPct = 0;
-                                    const tiers = product.discountTiers || remoteProduct?.discountTiers || [];
-                                    if (tiers && tiers.length > 0) {
-                                      for (const tier of tiers) {
-                                        if (art.quantity >= tier.minQuantity && tier.discountPercentage > discountPct) {
-                                          discountPct = tier.discountPercentage;
-                                        }
-                                      }
-                                    }
-                                    artTotal = subtotal - Math.round(subtotal * (discountPct / 100));
-                                  } else {
-                                    const p = computePrice(product, {
-                                      sizeId: art.sizeId,
-                                      materialId: art.materialId,
-                                      finishingId: art.finishingId,
-                                      quantity: art.quantity,
-                                    });
-                                    artTotal = p?.total || 0;
-                                  }
-
+                                  const fin = computeSingleArtworkFinancials(art);
                                   addToCart({
                                     product,
                                     config: {
@@ -1509,11 +1616,11 @@ export default function ProductPage() {
                                     permissionConfirmed: true,
                                     specialNotes: art.specialNotes,
                                     price: {
-                                      unitPrice: Math.round(artTotal / Math.max(1, art.quantity)),
-                                      total: artTotal,
-                                      totalTHB: artTotal,
+                                      unitPrice: fin.unitPrice,
+                                      total: fin.total,
+                                      totalTHB: fin.total,
                                       qty: art.quantity,
-                                      discount: 0,
+                                      discount: fin.discountPct,
                                     },
                                   })
                                 })
@@ -1530,38 +1637,7 @@ export default function ProductPage() {
                               type="button"
                               onClick={() => {
                                 uploadedArtworks.forEach((art) => {
-                                  let artTotal = 0;
-                                  if (product.specGroups && product.specGroups.length > 0) {
-                                    let unitAdd = 0;
-                                    product.specGroups.forEach((g) => {
-                                      const selectedId = art.selectedGroupOptions?.[g.id] || g.options[0]?.id;
-                                      const opt = g.options.find((o) => o.id === selectedId);
-                                      if (opt && typeof opt.add === 'number') {
-                                        unitAdd += opt.add;
-                                      }
-                                    });
-                                    const unitTotal = (product.basePrice || 0) + unitAdd;
-                                    const subtotal = unitTotal * art.quantity;
-                                    let discountPct = 0;
-                                    const tiers = product.discountTiers || remoteProduct?.discountTiers || [];
-                                    if (tiers && tiers.length > 0) {
-                                      for (const tier of tiers) {
-                                        if (art.quantity >= tier.minQuantity && tier.discountPercentage > discountPct) {
-                                          discountPct = tier.discountPercentage;
-                                        }
-                                      }
-                                    }
-                                    artTotal = subtotal - Math.round(subtotal * (discountPct / 100));
-                                  } else {
-                                    const p = computePrice(product, {
-                                      sizeId: art.sizeId,
-                                      materialId: art.materialId,
-                                      finishingId: art.finishingId,
-                                      quantity: art.quantity,
-                                    });
-                                    artTotal = p?.total || 0;
-                                  }
-
+                                  const fin = computeSingleArtworkFinancials(art);
                                   addToCart({
                                     product,
                                     config: {
@@ -1579,11 +1655,11 @@ export default function ProductPage() {
                                     permissionConfirmed: true,
                                     specialNotes: art.specialNotes,
                                     price: {
-                                      unitPrice: Math.round(artTotal / Math.max(1, art.quantity)),
-                                      total: artTotal,
-                                      totalTHB: artTotal,
+                                      unitPrice: fin.unitPrice,
+                                      total: fin.total,
+                                      totalTHB: fin.total,
                                       qty: art.quantity,
-                                      discount: 0,
+                                      discount: fin.discountPct,
                                     },
                                   })
                                 })

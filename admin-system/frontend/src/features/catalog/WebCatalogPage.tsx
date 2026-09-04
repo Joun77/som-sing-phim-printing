@@ -1427,7 +1427,7 @@ export function WebCatalogPage() {
                         </span>
                         {p.bestseller && (
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/90 backdrop-blur-sm text-white shadow-sm">
-                            ★ Bestseller
+                            Bestseller
                           </span>
                         )}
                       </div>

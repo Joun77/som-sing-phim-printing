@@ -80,6 +80,8 @@ func main() {
 	router.POST("/api/v1/auth/login", auth.HandleLogin)
 	router.POST("/api/auth/refresh", auth.HandleRefreshToken)
 	router.POST("/api/v1/auth/refresh", auth.HandleRefreshToken)
+	router.POST("/api/auth/logout", auth.HandleLogout)
+	router.POST("/api/v1/auth/logout", auth.HandleLogout)
 
 	// Web Product Catalog & Categories routes (Admin & Public)
 	router.GET("/api/v1/admin/catalog/categories", catalog.HandleGetCategories)

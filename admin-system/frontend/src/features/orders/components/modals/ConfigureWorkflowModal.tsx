@@ -49,7 +49,7 @@ export const BUILT_IN_WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     id: 'tpl_booklet_catalog',
     name: 'Booklet & Catalog (Hot Glue / Wire-O)',
     nameLao: 'ປຶ້ມເຂົ້າເລ່ມໄສກາວ / ສັນຫ່ວງ (Booklet & Catalog)',
-    description: 'ຕັດເຈ້ຍ ➔ ພິມເນື້ອໃນ ➔ ພິມປົກ ➔ ເຄືອບ ➔ ພັບຍົກ ➔ ໄສກາວ ➔ ຕັດ 3 ດ້ານ ➔ QC',
+    description: 'ຕັດເຈ້ຍ -> ພິມເນື້ອໃນ -> ພິມປົກ -> ເຄືອບ -> ພັບຍົກ -> ໄສກາວ -> ຕັດ 3 ດ້ານ -> QC',
     category: 'Books',
     steps: [
       { id: 'step_cut_raw', name: 'Raw Paper Cutting', nameLao: 'ຕັດເຈ້ຍແຜ່ນໃຫຍ່', category: 'PRE_PRESS' },
@@ -66,7 +66,7 @@ export const BUILT_IN_WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     id: 'tpl_stickers_labels',
     name: 'Stickers & Labels (Kiss-Cut)',
     nameLao: 'ສະຕິກເກີ / ສະຫຼາກສິນຄ້າໄດຄັດ (Stickers & Labels)',
-    description: 'ພິມສະຕິກເກີ ➔ ເຄືອບກັນນ້ຳ ➔ ຕັດໄດຄັດ ➔ ລອກເສດ ➔ QC',
+    description: 'ພິມສະຕິກເກີ -> ເຄືອບກັນນ້ຳ -> ຕັດໄດຄັດ -> ລອກເສດ -> QC',
     category: 'Stickers',
     steps: [
       { id: 'step_print_sticker', name: 'Sticker Printing', nameLao: 'ພິມສະຕິກເກີ (Digital / Latex)', category: 'PRESS' },
@@ -80,7 +80,7 @@ export const BUILT_IN_WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     id: 'tpl_photo_poster_leaflet',
     name: 'Photo, Poster & Leaflet',
     nameLao: 'ຮູບພາບ / ໂປສເຕີ / ໃບປິວ (Photo, Poster & Leaflet)',
-    description: 'ຕັດເຈ້ຍ ➔ ພິມລະອຽດສູງ ➔ ເຄືອບ ➔ ຕັດເຈຽນ ➔ QC',
+    description: 'ຕັດເຈ້ຍ -> ພິມລະອຽດສູງ -> ເຄືອບ -> ຕັດເຈຽນ -> QC',
     category: 'Sheets',
     steps: [
       { id: 'step_cut_sheet', name: 'Paper Sizing', nameLao: 'ຕັດເຈ້ຍຕາມຂະໜາດ', category: 'PRE_PRESS' },
@@ -94,7 +94,7 @@ export const BUILT_IN_WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     id: 'tpl_desk_calendar',
     name: 'Desk Calendar (Wire-O Stand)',
     nameLao: 'ປະຕິທິນຕັ້ງໂຕະ (Desk Calendar)',
-    description: 'ພິມໃບເດືອນ ➔ ຂຶ້ນໂຄງຈົ່ວ ➔ ເຈາະຮູ ➔ ໃສ່ສັນ Wire-O ➔ QC',
+    description: 'ພິມໃບເດືອນ -> ຂຶ້ນໂຄງຈົ່ວ -> ເຈາະຮູ -> ໃສ່ສັນ Wire-O -> QC',
     category: 'Calendars',
     steps: [
       { id: 'step_print_cal_pages', name: 'Monthly Pages Printing', nameLao: 'ພິມໃບເດືອນ 13-14 ໃບ', category: 'PRESS' },
@@ -108,7 +108,7 @@ export const BUILT_IN_WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     id: 'tpl_namecard_packaging',
     name: 'Name Card & Packaging Box',
     nameLao: 'ນາມບັດ / ກ່ອງບັນຈຸພັນ (Name Card & Packaging)',
-    description: 'ພິມ Art Card ➔ ເຄືອບ ➔ ປ້ຳໄດຄັດ/ເສັ້ນພັບ ➔ ຕິດກາວ ➔ QC',
+    description: 'ພິມ Art Card -> ເຄືອບ -> ປ້ຳໄດຄັດ/ເສັ້ນພັບ -> ຕິດກາວ -> QC',
     category: 'Packaging',
     steps: [
       { id: 'step_print_artcard', name: 'Art Card Printing', nameLao: 'ພິມ Art Card 300g-350g', category: 'PRESS' },
@@ -429,7 +429,7 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
       id: `tpl_custom_${Date.now()}`,
       name: newTemplateName.trim(),
       nameLao: newTemplateName.trim(),
-      description: visibleSteps.map((s) => s.nameLao || s.name).join(' ➔ '),
+      description: visibleSteps.map((s) => s.nameLao || s.name).join(' -> '),
       category: 'Custom',
       steps: visibleSteps.map((s) => ({
         id: s.id,
@@ -500,7 +500,7 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
                   <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                   <span>{currentLang === 'lo' ? 'ຂັ້ນຕອນ 1: ຮັບອໍເດີ' : 'Step 1: Order Reception'}</span>
                 </span>
-                <span className="text-slate-600">➔</span>
+                <span className="text-slate-600">&rarr;</span>
                 <span className="flex items-center gap-1 text-[11px] font-black text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-400/30">
                   <Sliders className="w-3.5 h-3.5" />
                   <span>{currentLang === 'lo' ? 'ຂັ້ນຕອນ 2: ຂະບວນການຜະລິດ' : 'Step 2: Production Process'}</span>

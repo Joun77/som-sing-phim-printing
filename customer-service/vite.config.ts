@@ -70,8 +70,16 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
-    // NOTE: API calls go directly to http://localhost:8080 (CORS-enabled on the
-    // Go backend), so no dev proxy is required. Use VITE_API_BASE_URL to override.
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      '/uploads': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     chunkSizeWarningLimit: 1000,

@@ -6,7 +6,7 @@ import { ArrowRightIcon } from '../components/icons.tsx'
 
 export default function CategoryPage() {
   const { slug } = useParams()
-  const { currency, convertTo, t, language, getCategory, getProductsByCategory } = useShop()
+  const { currency, rates, convertTo, t, language, getCategory, getProductsByCategory } = useShop()
   const category = getCategory(slug)
   const isLao = language === 'lo'
 
@@ -41,7 +41,10 @@ export default function CategoryPage() {
         ) : (
           <div className="product-grid">
             {categoryProducts.map((p) => {
-              const price = convertTo(p.basePrice)
+              const rawBase = p.basePrice || 0
+              const price = (!currency || currency === 'LAK')
+                ? rawBase
+                : rawBase / (rates?.THB || 630.5)
               const pName = !isLao && p.nameEn ? p.nameEn : p.name
               const pShort = !isLao && p.shortEn ? p.shortEn : (p.short || p.description)
 

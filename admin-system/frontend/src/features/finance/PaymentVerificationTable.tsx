@@ -166,7 +166,7 @@ export const PaymentVerificationTable: React.FC = () => {
                 onClick={() => setSelectedSlip(null)}
                 className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition"
               >
-                ✕
+                ×
               </button>
             </div>
 

@@ -278,9 +278,9 @@ export const OrderDetailVerificationPage: React.FC = () => {
                   <strong>ເຫດຜົນ:</strong> {history.reason}
                 </div>
                 <div className="text-slate-600 flex space-x-4">
-                  <span>ໜ້າ: {history.previousPageCount} ➔ {history.newPageCount}</span>
-                  <span>TAC: {history.previousTAC}% ➔ {history.newTAC}%</span>
-                  <span>ລາຄາ/ຫົວ: ₭{history.previousUnitPrice.toLocaleString()} ➔ ₭{history.newUnitPrice.toLocaleString()}</span>
+                  <span>ໜ້າ: {history.previousPageCount} &rarr; {history.newPageCount}</span>
+                  <span>TAC: {history.previousTAC}% &rarr; {history.newTAC}%</span>
+                  <span>ລາຄາ/ຫົວ: ₭{history.previousUnitPrice.toLocaleString()} &rarr; ₭{history.newUnitPrice.toLocaleString()}</span>
                 </div>
               </div>
             ))}

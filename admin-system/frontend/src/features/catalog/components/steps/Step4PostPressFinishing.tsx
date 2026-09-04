@@ -486,9 +486,13 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-900 flex items-center gap-2">
                 <Scissors className="w-4 h-4 text-purple-600" />
-                <span>[✓] ໃຊ້ງານຫຼັງພິມ & ງານຕັດ (Enable Post-Press & Cutting)</span>
+                <span>ໃຊ້ງານຫຼັງພິມ & ງານຕັດ (Enable Post-Press & Cutting)</span>
               </span>
-              {hasFinishing && <Check className="w-4 h-4 text-purple-600" />}
+              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                hasFinishing ? 'bg-purple-100 text-purple-700' : 'bg-slate-200 text-slate-600'
+              }`}>
+                {hasFinishing ? 'ເປີດໃຊ້ງານ / Active' : 'ປິດ / Off'}
+              </span>
             </div>
             <p className="text-[11px] text-slate-500">
               ສຳລັບສະຕິກເກີໄດຄັດ, ໂປສເຕີເຄືອບຟິล์ມ, ປຶ້ມເຂົ້າເລັ້ມ, ນາມບັດ
@@ -508,9 +512,13 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-900 flex items-center gap-2">
                 <FileCheck className="w-4 h-4 text-emerald-600" />
-                <span>[—] ບໍ່ມີງານຫຼັງພິມ (No Post-Press / Raw Document)</span>
+                <span>ບໍ່ມີງານຫຼັງພິມ (No Post-Press / Raw Document)</span>
               </span>
-              {!hasFinishing && <Check className="w-4 h-4 text-emerald-600" />}
+              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                !hasFinishing ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+              }`}>
+                {!hasFinishing ? 'ພິມແລ້ວສົ່ງມອບເລີຍ' : 'ບໍ່ເລືອກ'}
+              </span>
             </div>
             <p className="text-[11px] text-slate-500">
               ສຳລັບເອກະສານທົ່ວໄປ, ໃບປິວ, ບົດລາຍງານ (ພິມແລ້ວສົ່ງມອບເລີຍ)
@@ -539,7 +547,7 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
             onClick={() => handleToggleFinishing(true)}
             className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
           >
-            + ເປີດໃຊ້ງານຫຼັງພິມ & ງານຕັດ (Enable Post-Press)
+            ເປີດໃຊ້ງານຫຼັງພິມ & ງານຕັດ (Enable Post-Press)
           </button>
         </div>
       ) : (
@@ -841,7 +849,7 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
                       className="w-full py-2.5 border-2 border-dashed border-purple-200 hover:border-purple-400 rounded-2xl text-xs font-bold text-purple-700 flex items-center justify-center gap-1.5 hover:bg-purple-50/50 transition cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      + ເພີ່ມແຖວຕົວເລືອກງານຫຼັງພິມໃນກຸ່ມນີ້ (Add Finishing Row)
+                      ເພີ່ມແຖວຕົວເລືອກງານຫຼັງພິມໃນກຸ່ມນີ້ (Add Finishing Row)
                     </button>
                   </div>
                 </div>

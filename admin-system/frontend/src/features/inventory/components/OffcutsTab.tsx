@@ -372,7 +372,7 @@ export const OffcutsTab: React.FC<OffcutsTabProps> = ({ onOpenAddModal }) => {
                 onClick={() => setSelectedOffcutForConsume(null)}
                 className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer"
               >
-                ✕
+                ×
               </button>
             </div>
 

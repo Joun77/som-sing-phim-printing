@@ -207,7 +207,9 @@ export default function CheckoutPage() {
   )
   const courier = couriersList.find((c) => c.id === courierId) || couriersList[0] || COURIERS[0]
   
-  const subtotalDisplay = currency === 'LAK' ? convertTo(subtotal) : subtotal
+  const subtotalDisplay = (subtotal >= 500 || currency === 'LAK' || !currency)
+    ? (currency === 'LAK' || !currency ? subtotal : convertTo(subtotal / 630.5))
+    : convertTo(subtotal)
   const freeThreshold = currency === 'LAK' ? (courier.freeAbove || 300000) : Math.round((courier.freeAbove || 300000) / 630.5)
   const isFreeShipping = (courier.freeAbove || 0) > 0 && subtotalDisplay >= freeThreshold
   const shippingFeeInLAK = isFreeShipping ? 0 : Number(courier.fee || 0)
@@ -381,10 +383,14 @@ export default function CheckoutPage() {
 
     const order: any = {
       order_id: orderId,
+      order_no: orderId,
+      order_number: orderId,
       customer_name: buyer.name.trim(),
+      customer_phone: fullBuyerPhone,
       phone: fullBuyerPhone,
-      email: buyer.email.trim(),
       customer_email: buyer.email.trim(),
+      email: buyer.email.trim(),
+      customer_address: fullAddress,
       address: fullAddress,
       delivery_address_details: {
         recipient_name: finalRecipientName,
@@ -423,7 +429,7 @@ export default function CheckoutPage() {
               spine: `${b.spineThicknessMm}mm`,
               pages: `${b.innerPageCount}pp`,
               color_mode: b.colorMode || 'cmyk',
-            },
+            } as Record<string, any>,
             unit_price: b.unitPriceThb || 0,
             total_price: b.totalPriceThb || 0,
             drive_link: b.innerFileUrl || b.coverFileUrl || i.driveLink,
@@ -434,11 +440,18 @@ export default function CheckoutPage() {
             product_id: i.product?.id || 'custom-print',
             product_name: i.product?.name || 'Print Item',
             job_name: i.product?.name || 'Print Item',
+            item_name: i.product?.name || 'Print Item',
             name: i.product?.name || 'Print Item',
             quantity: i.config?.quantity || 1,
-            specs: i.config?.specLabels,
+            page_count: 1,
+            spine_width_mm: 0,
+            cover_file_url: i.coverFileUrl || '',
+            inner_file_url: i.innerFileUrl || '',
+            specs: (i.config?.specLabels || {}) as Record<string, any>,
             unit_price: i.price?.unitPrice || 0,
             total_price: i.price?.total || 0,
+            unit_price_lak: currency === 'LAK' ? (i.price?.unitPrice || 0) : Math.round((i.price?.unitPrice || 0) * 630.5),
+            total_price_lak: currency === 'LAK' ? (i.price?.total || 0) : Math.round((i.price?.total || 0) * 630.5),
             drive_link: i.driveLink,
           },
         ]
@@ -449,6 +462,7 @@ export default function CheckoutPage() {
       shipping_courier_id: courierId,
       shipping_fee: shippingFeeInLAK,
       total_price: currency === 'LAK' ? totalDisplay : Math.round(totalDisplay * 630.5),
+      total_amount_lak: currency === 'LAK' ? totalDisplay : Math.round(totalDisplay * 630.5),
       currency: 'LAK',
       payment_slip_url: slipPreview,
       status: 'PAID_PREPRESS',
@@ -593,7 +607,7 @@ export default function CheckoutPage() {
                   />
                 </div>
                 <small style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '4px', display: 'block' }}>
-                  ໃສ່ສະເພາະຕົວເລກເບີໂທຫຼັງ 20 (ເຊັ່ນ 55123456, 77889900, 99112233)
+                  ໃສ່ສະເພາະຕົວເລກ 8 ຫຼັກ (ເຊັ່ນ 55123456, 77889900, 99112233)
                 </small>
                 {errors.buyerPhone && <p className="field-error">{errors.buyerPhone}</p>}
               </div>
@@ -747,6 +761,9 @@ export default function CheckoutPage() {
                                 style={{ flex: 1 }}
                               />
                             </div>
+                            <small style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '4px', display: 'block' }}>
+                              ໃສ່ສະເພາະຕົວເລກ 8 ຫຼັກ (ເຊັ່ນ 55123456, 77889900, 99112233)
+                            </small>
                             {errors.recipientPhone && <p className="field-error">{errors.recipientPhone}</p>}
                           </div>
                         </div>
@@ -1254,7 +1271,7 @@ export default function CheckoutPage() {
               <div className="checkout-lines">
                 <div className="checkout-line">
                   <span>ຍອດລວມສິນຄ້າ</span>
-                  <strong>{formatMoney(convertTo(subtotal), currency)}</strong>
+                  <strong>{formatMoney(subtotalDisplay, currency)}</strong>
                 </div>
                 <div className="checkout-line">
                   <span>ຄ່າຈັດສົ່ງ ({courier.name})</span>
