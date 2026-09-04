@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Joun77/som-sing-phim-printing/backend/db"
+	"somsing.local/backend/db"
 
 	"github.com/gin-gonic/gin"
 )

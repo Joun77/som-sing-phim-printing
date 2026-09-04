@@ -1,4 +1,4 @@
-module github.com/Joun77/som-sing-phim-printing/backend
+module somsing.local/backend
 
 go 1.21
 
