@@ -92,6 +92,16 @@ export default function InventoryManagement() {
   // Category tabs for Inventory (Excludes Machinery: Printer, Cutter, Laminator)
   const categoryTabs = ['All', 'Paper', 'Offcut', 'Ink', 'Hardware', 'Finishing', 'Packaging'];
 
+  const categoryTabLabels: Record<string, { lo: string; en: string }> = {
+    All: { lo: 'ທັງໝົດ', en: 'All Items' },
+    Paper: { lo: 'ເຈ້ຍ & ວັດສະດຸ', en: 'Paper & Substrates' },
+    Offcut: { lo: 'ເສດເຈ້ຍ', en: 'Offcuts' },
+    Ink: { lo: 'ນ້ຳໝຶກ & ໂທເນີ', en: 'Ink & Toner' },
+    Hardware: { lo: 'ອຸປະກອນ & ອາໄຫຼ່', en: 'Hardware & Parts' },
+    Finishing: { lo: 'ງານຫຼັງພິມ & ເຄືອບ', en: 'Finishing' },
+    Packaging: { lo: 'ກ່ອງ & ບັນຈຸພັນ', en: 'Packaging' },
+  };
+
   // Filter logic for legacy / local items
   const filteredItems = inventory.filter(item => {
     if (!item) return false;
@@ -263,7 +273,7 @@ export default function InventoryManagement() {
                           : 'text-slate-500 hover:text-slate-800'
                       }`}
                     >
-                      {tab === 'All' ? (currentLang === 'lo' ? 'ທັງໝົດ' : 'All Items') : tab}
+                      {categoryTabLabels[tab]?.[currentLang === 'en' ? 'en' : 'lo'] || tab}
                     </button>
                   ))}
                 </div>

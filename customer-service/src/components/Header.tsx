@@ -255,24 +255,35 @@ export default function Header() {
                 <span className="header-cart-badge">{cartCount}</span>
               )}
             </button>
-            <button
-              type="button"
-              className="lang-toggle-btn hidden-mobile"
-              onClick={() => setIsProfileOpen(true)}
-              title="ແກ້ໄຂຂໍ້ມູນທີ່ຢູ່"
-              style={{ padding: '8px' }}
-            >
-              <User className="w-5 h-5 text-slate-700" />
-            </button>
-            {customerPhone && (
+            {customerPhone ? (
+              <div className="flex items-center gap-1.5 hidden-mobile">
+                <button
+                  type="button"
+                  className="px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 font-bold text-xs flex items-center gap-1.5 hover:bg-amber-500/20 transition cursor-pointer"
+                  onClick={() => setIsProfileOpen(true)}
+                  title="ຂໍ້ມູນສະມາຊິກ & ທີ່ຢູ່ຈັດສົ່ງ"
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span className="font-mono text-[11px]">{customerPhone}</span>
+                </button>
+                <button
+                  type="button"
+                  className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition cursor-pointer"
+                  onClick={() => setIsOrdersOpen(true)}
+                  title="ປະຫວັດການສັ່ງຊື້ (Order History)"
+                >
+                  <ShoppingBag className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
               <button
                 type="button"
-                className="lang-toggle-btn hidden-mobile"
-                onClick={() => setIsOrdersOpen(true)}
-                title="ປະຫວັດການສັ່ງຊື້"
-                style={{ padding: '8px' }}
+                className="px-3.5 py-1.5 rounded-full bg-slate-100 hover:bg-amber-500 hover:text-slate-950 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer hidden-mobile"
+                onClick={() => setIsProfileOpen(true)}
+                title="ເຂົ້າສູ່ລະບົບສະມາຊິກ"
               >
-                <ShoppingBag className="w-5 h-5 text-slate-700" />
+                <User className="w-3.5 h-3.5" />
+                <span>{language === 'en' ? 'Sign In' : 'ເຂົ້າສູ່ລະບົບ'}</span>
               </button>
             )}
           </div>
@@ -297,7 +308,7 @@ export default function Header() {
             type="button"
             className="header-cart-btn"
             onClick={() => setIsProfileOpen(true)}
-            title="ແກ້ໄຂຂໍ້ມູນທີ່ຢູ່"
+            title="ເຂົ້າສູ່ລະບົບ / ທີ່ຢູ່"
             style={{ padding: '8px' }}
           >
             <User className="w-5 h-5 text-slate-700" />

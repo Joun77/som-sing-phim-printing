@@ -100,16 +100,6 @@ export default function Footer() {
               <a href="#how-it-works">{t('navHowItWorks')}</a>
             </li>
             <li>
-              <a 
-                href="https://som-sing-phim-admin.web.app" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-amber-600 font-bold flex items-center gap-1.5"
-              >
-                <Lock className="w-3.5 h-3.5 inline" /> {isLao ? 'ລະບົບຈັດການຫຼັງຮ້ານ (Admin ERP)' : 'Staff / Admin Portal'}
-              </a>
-            </li>
-            <li>
               <span className="text-muted text-xs flex items-center gap-1.5">
                 <Check className="w-3.5 h-3.5 text-emerald-500 inline" /> {isLao ? 'ຮັບໄຟລ໌ຜ່ານ Google Drive & PDF' : 'Accepts Google Drive & Print-Ready PDF'}
               </span>

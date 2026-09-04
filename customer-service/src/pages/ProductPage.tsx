@@ -56,8 +56,8 @@ export default function ProductPage() {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    if (slug) {
-      setIsLoading(true)
+    if (!slug) return
+    const loadProduct = () => {
       fetchPublicProductBySlug(slug)
         .then((res) => {
           if (res) {
@@ -69,6 +69,42 @@ export default function ProductPage() {
         .finally(() => {
           setIsLoading(false)
         })
+    }
+
+    setIsLoading(true)
+    loadProduct()
+
+    // Real-Time Cross-Tab synchronization
+    let channel: BroadcastChannel | null = null
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        channel = new BroadcastChannel('ssp_catalog_sync')
+        channel.onmessage = (event) => {
+          if (event.data && (event.data.type === 'CATALOG_UPDATED' || event.data.type === 'PRODUCT_UPDATED')) {
+            loadProduct()
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'ssp_catalog_last_updated' || e.key === 'ssp_catalog_updated_at') {
+        loadProduct()
+      }
+    }
+    window.addEventListener('storage', handleStorage)
+
+    const handleFocus = () => {
+      loadProduct()
+    }
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      if (channel) channel.close()
+      window.removeEventListener('storage', handleStorage)
+      window.removeEventListener('focus', handleFocus)
     }
   }, [slug])
 
@@ -1017,7 +1053,9 @@ export default function ProductPage() {
                       {language === 'en' ? 'Base Price Starts' : 'ລາຄາເລີ່ມຕົ້ນ'}
                     </span>
                     <span className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400 font-mono">
-                      {currency === 'LAK' || !currency ? formatMoney(product.basePrice, 'LAK') : formatMoney(convertTo(product.basePrice / 630.5), currency)}
+                      {(!currency || currency === 'LAK')
+                        ? formatMoney(product.basePrice, 'LAK')
+                        : formatMoney((product.basePrice || 0) / (rates?.THB || 630.5), currency)}
                     </span>
                     <span className="text-xs text-slate-500 ml-1">/ {product.unit || 'ຊິ້ນ'}</span>
                   </div>

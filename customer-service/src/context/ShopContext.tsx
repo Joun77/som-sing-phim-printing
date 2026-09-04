@@ -343,8 +343,47 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     // Fetch dynamic catalog on mount
     refreshCatalog()
 
+    // Real-Time Cross-Tab Catalog Synchronization via BroadcastChannel & Storage Event
+    let channel: BroadcastChannel | null = null
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        channel = new BroadcastChannel('ssp_catalog_sync')
+        channel.onmessage = (event) => {
+          if (event.data && (event.data.type === 'CATALOG_UPDATED' || event.data.type === 'PRODUCT_UPDATED')) {
+            refreshCatalog()
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'ssp_catalog_last_updated' || e.key === 'ssp_catalog_updated_at') {
+        refreshCatalog()
+      }
+    }
+    window.addEventListener('storage', handleStorage)
+
+    // Auto-revalidate when customer returns to tab
+    const handleFocus = () => {
+      refreshCatalog()
+    }
+    window.addEventListener('focus', handleFocus)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshCatalog()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
     return () => {
       alive = false
+      if (channel) channel.close()
+      window.removeEventListener('storage', handleStorage)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [])
 

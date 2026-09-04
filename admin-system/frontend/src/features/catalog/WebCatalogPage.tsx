@@ -330,6 +330,19 @@ export function WebCatalogPage() {
     },
   });
 
+  const broadcastCatalogUpdate = () => {
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('ssp_catalog_sync');
+        bc.postMessage({ type: 'CATALOG_UPDATED', timestamp: Date.now() });
+        bc.close();
+      }
+      localStorage.setItem('ssp_catalog_last_updated', String(Date.now()));
+    } catch {
+      // ignore
+    }
+  };
+
   // Toggle Mutation
   const toggleMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
@@ -343,6 +356,7 @@ export function WebCatalogPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-catalog-products'] });
+      broadcastCatalogUpdate();
       showToast('ອັບເດດສະຖານະສິນຄ້າສຳເລັດ', 'success');
     },
     onError: (err: any) => {
@@ -361,6 +375,7 @@ export function WebCatalogPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-catalog-products'] });
+      broadcastCatalogUpdate();
       showToast('ເກັບສິນຄ້າເຂົ້າ Archive ຮຽບຮ້ອຍ', 'success');
     },
     onError: (err: any) => {
@@ -390,6 +405,7 @@ export function WebCatalogPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-catalog-products'] });
+      broadcastCatalogUpdate();
       showToast(editingProduct ? 'ອັບເດດສິນຄ້າສຳເລັດ' : 'ສ້າງສິນຄ້າໃໝ່ສຳເລັດ', 'success');
       handleCloseModal();
     },
@@ -1420,30 +1436,29 @@ export function WebCatalogPage() {
                         </div>
                       )}
 
-                      {/* Top-left: Category badge */}
-                      <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
-                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-600/90 backdrop-blur-sm text-white shadow-sm">
-                          {cat ? cat.nameLo : p.category}
-                        </span>
-                        {p.bestseller && (
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/90 backdrop-blur-sm text-white shadow-sm">
-                            Bestseller
+                      {/* Top Bar: Category badge & Active toggle badge without overlap */}
+                      <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between gap-1.5 z-10 pointer-events-none">
+                        <div className="flex items-center gap-1 min-w-0 pointer-events-auto">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-600/90 backdrop-blur-sm text-white shadow-xs truncate max-w-[130px]">
+                            {cat ? cat.nameLo : p.category}
                           </span>
-                        )}
-                      </div>
+                          {p.bestseller && (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/90 backdrop-blur-sm text-white shadow-xs shrink-0">
+                              Bestseller
+                            </span>
+                          )}
+                        </div>
 
-                      {/* Top-right: Active toggle badge */}
-                      <div className="absolute top-3 right-3">
                         <button
                           onClick={() => toggleMutation.mutate({ id: p.id, isActive: !p.isActive })}
-                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold shadow-sm flex items-center gap-1 transition-all cursor-pointer backdrop-blur-sm ${
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold shadow-xs flex items-center gap-1 transition-all cursor-pointer backdrop-blur-sm shrink-0 pointer-events-auto ${
                             p.isActive
                               ? 'bg-emerald-500/90 text-white hover:bg-emerald-600'
                               : 'bg-slate-700/80 text-slate-200 hover:bg-slate-600'
                           }`}
                         >
                           {p.isActive ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                          {p.isActive ? 'ສະແດງໜ້າເວັບ' : 'ເຊື່ອງໄວ້'}
+                          <span>{p.isActive ? 'ສະແດງໜ້າເວັບ' : 'ເຊື່ອງໄວ້'}</span>
                         </button>
                       </div>
                     </div>

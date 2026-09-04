@@ -120,15 +120,31 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
   const formatLAK = formatCurrency;
 
   const renderDualUnitQuantity = (currentQty, category, purchaseUnit, consumptionUnit, itemsPerPurchaseUnit = 500) => {
-    if (category === 'Paper') {
-      const reams = Math.floor(currentQty / itemsPerPurchaseUnit);
+    if (category === 'Paper' || category?.toLowerCase() === 'paper') {
+      const reams = itemsPerPurchaseUnit > 0 ? (currentQty / itemsPerPurchaseUnit) : 0;
+      const displayReams = Number.isInteger(reams) ? reams : reams.toFixed(1);
       return (
         <div>
           <span className="text-2xl font-black text-slate-900 font-mono">
-            {currentQty.toLocaleString()} <span className="text-sm font-bold text-slate-600">แผ่น</span>
+            {currentQty.toLocaleString()} <span className="text-sm font-bold text-slate-600">ແຜ່ນ</span>
           </span>
           <span className="text-xs font-bold text-slate-400 block">
-            ({reams} {purchaseUnit || 'รีม'})
+            (~{displayReams} {purchaseUnit || 'ແພັກ/ຣີມ'})
+          </span>
+        </div>
+      );
+    }
+    if (category === 'Ink' || category?.toLowerCase() === 'ink') {
+      const vol = Number(targetItem?.volume || targetItem?.specs?.volume || targetItem?.specs?.volume_ml || 70);
+      const bottles = vol > 0 ? (currentQty / vol) : 1;
+      const displayBottles = Number.isInteger(bottles) ? bottles : bottles.toFixed(1);
+      return (
+        <div>
+          <span className="text-2xl font-black text-slate-900 font-mono">
+            {currentQty.toLocaleString()} <span className="text-sm font-bold text-slate-600">ml</span>
+          </span>
+          <span className="text-xs font-bold text-slate-400 block">
+            (~{displayBottles} {purchaseUnit || 'ຂວດ'})
           </span>
         </div>
       );
@@ -218,7 +234,7 @@ export default function MaterialDetailsPage({ lotId, parentSkuId, onBack }) {
             </span>
             <span className="text-xl font-black text-emerald-600 font-mono block mt-1">
               {formatLAK(lotData.costPerSheet || targetItem.costPerConsumptionUnit)}
-              <span className="text-xs text-slate-400 font-bold ml-1">/{targetItem.consumptionUnit || 'แผ่น'}</span>
+              <span className="text-xs text-slate-400 font-bold ml-1">/{isSheetPaper ? 'ແຜ່ນ' : (isInkCategory ? 'ml' : (targetItem.consumptionUnit || 'ໜ່ວຍ'))}</span>
             </span>
           </div>
           <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">

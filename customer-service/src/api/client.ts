@@ -638,8 +638,13 @@ export async function fetchPublicCategories(): Promise<RemoteCategory[]> {
 
 export async function fetchPublicProducts(category?: string): Promise<RemoteProduct[]> {
   try {
-    const qs = category ? `?category=${encodeURIComponent(category)}` : ''
-    const res = await fetch(`${API_BASE}/v1/public/products${qs}`).catch(() => null)
+    const params = new URLSearchParams()
+    if (category) params.set('category', category)
+    params.set('_t', String(Date.now()))
+    const qs = `?${params.toString()}`
+    const res = await fetch(`${API_BASE}/v1/public/products${qs}`, {
+      cache: 'no-store',
+    }).catch(() => null)
     if (!res || !res.ok) return []
     const json = await res.json()
     if (Array.isArray(json)) return json
@@ -652,7 +657,9 @@ export async function fetchPublicProducts(category?: string): Promise<RemoteProd
 
 export async function fetchPublicProductBySlug(slug: string): Promise<RemoteProduct | null> {
   try {
-    const res = await fetch(`${API_BASE}/v1/public/products/${encodeURIComponent(slug)}`).catch(() => null)
+    const res = await fetch(`${API_BASE}/v1/public/products/${encodeURIComponent(slug)}?_t=${Date.now()}`, {
+      cache: 'no-store',
+    }).catch(() => null)
     if (!res || !res.ok) return null
     const json = await res.json()
     return json.data || null

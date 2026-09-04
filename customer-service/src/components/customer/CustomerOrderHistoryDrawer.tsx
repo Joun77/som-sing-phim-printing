@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useShop } from '../../context/ShopContext.tsx';
 import { ShoppingBag, X, RefreshCw, FileText, CheckCircle, Clock, Truck, PlayCircle } from 'lucide-react';
 import { formatMoney } from '../../utils/currency.ts';
@@ -118,8 +119,8 @@ export const CustomerOrderHistoryDrawer: React.FC<CustomerOrderHistoryDrawerProp
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs animate-fade-in">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex justify-end bg-black/60 backdrop-blur-xs animate-fade-in">
       <div className="bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 w-full max-w-md h-full shadow-2xl flex flex-col">
         
         {/* Header */}
@@ -208,6 +209,7 @@ export const CustomerOrderHistoryDrawer: React.FC<CustomerOrderHistoryDrawerProp
           ))}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

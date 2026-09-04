@@ -22,11 +22,13 @@ import {
   CheckCircle2,
   Palette,
   FileText,
-  RefreshCw
+  RefreshCw,
+  Search
 } from 'lucide-react';
 import { useApp } from '@store/AppContext';
 import { SpecGroup, PublicProductOption, FeaturesConfig } from '../../types';
 import { calculateMachineFullCost, CalculatedMachineCost } from '@utils/machineCostCalculator';
+import { PrinterSelectorModal } from '../../../pricing/components/PrinterSelectorModal';
 
 export interface Step2PrintEngineProps {
   defaultMachineId: string;
@@ -61,6 +63,7 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
 }) => {
   const { equipment, printerColorLinks, inventory, formatCurrency } = useApp();
   const formatLAK = formatCurrency;
+  const [searchingRowIdx, setSearchingRowIdx] = React.useState<number | null>(null);
 
   // Dynamically calculate and format all registered printers from real Equipment system with active Baseline Coverage %
   const dynamicPrinters: CalculatedMachineCost[] = useMemo(() => {
@@ -261,6 +264,24 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
 
   // Link specific printer to a specific option row
   const handleLinkMachineToOption = (oIdx: number, machineId: string, costType: 'color' | 'mono') => {
+    if (!machineId) {
+      setSpecGroups(prev => {
+        const gIdx = prev.findIndex(g => g.id === 'group_print_mode' || g.groupType === 'printing_mode');
+        if (gIdx < 0) return prev;
+
+        const next = [...prev];
+        const opt = next[gIdx].options[oIdx];
+        if (!opt) return prev;
+
+        opt.machineId = '';
+        opt.machineName = '';
+        opt.extraCostRate = 0;
+        return next;
+      });
+      showToast('ຍົກເລີກການຜູກເຄື່ອງພິມສຳເລັດ', 'info');
+      return;
+    }
+
     const mach = dynamicPrinters.find(p => p.id === machineId);
     if (!mach) return;
 
@@ -285,7 +306,7 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
       return next;
     });
 
-    showToast(`ຜູກ ${mach.name} (${costType === 'color' ? '4 ສີ' : 'ຂາວດຳ'}: ${costType === 'color' ? mach.totalColorCost : mach.totalBwCost} ₭/ແຜ່ນ) ສຳເລັດ`, 'success');
+    showToast(`ຜູກ ${mach.name} (${costType === 'color' ? '4 ສີ' : 'ຂາວດຳ'}: ${(costType === 'color' ? mach.totalColorCost : mach.totalBwCost).toLocaleString()} ₭/ແຜ່ນ) ສຳເລັດ`, 'success');
   };
 
   // Toggle option default
@@ -630,7 +651,7 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
                   </div>
                 </div>
 
-                {/* 2. Machine Linker Dropdown */}
+                {/* 2. Machine Linker Dropdown & Search Button */}
                 <div className="lg:col-span-5 space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
@@ -641,31 +662,48 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
                       {isColorMode ? 'ສູດຄິດໄລ່: 4-Color (CMYK)' : 'ສູດຄິດໄລ່: Mono (K)'}
                     </span>
                   </div>
-                  <select
-                    value={opt.machineId || ''}
-                    onChange={(e) => handleLinkMachineToOption(oIdx, e.target.value, isColorMode ? 'color' : 'mono')}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl font-bold text-slate-800 truncate cursor-pointer shadow-2xs focus:ring-2 focus:ring-accent-sky/30 focus:border-accent-sky"
-                  >
-                    <option value="">-- ເລືອກເຄື່ອງພິມຕົວຈິງໃນຮ້ານ --</option>
-                    {dynamicPrinters.map((printer) => {
-                      const costForMode = isColorMode ? printer.totalColorCost : printer.totalBwCost;
-                      return (
-                        <option key={printer.id} value={printer.id}>
-                          {printer.name} [{printer.brand || 'Printer'}] - ຕົ້ນທຶນ {costForMode.toLocaleString()} ₭/ແຜ່ນ
-                        </option>
-                      );
-                    })}
-                  </select>
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={opt.machineId || ''}
+                      onChange={(e) => handleLinkMachineToOption(oIdx, e.target.value, isColorMode ? 'color' : 'mono')}
+                      className="flex-1 px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl font-bold text-slate-800 truncate cursor-pointer shadow-2xs focus:ring-2 focus:ring-accent-sky/30 focus:border-accent-sky"
+                    >
+                      <option value="">-- ເລືອກເຄື່ອງພິມຕົວຈິງໃນຮ້ານ --</option>
+                      {dynamicPrinters.map((printer) => {
+                        const costForMode = isColorMode ? printer.totalColorCost : printer.totalBwCost;
+                        return (
+                          <option key={printer.id} value={printer.id}>
+                            {printer.name} [{printer.brand || 'Printer'}] - ຕົ້ນທຶນ {costForMode.toLocaleString()} ₭/ແຜ່ນ
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setSearchingRowIdx(oIdx)}
+                      className="px-3 py-2 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow-2xs"
+                      title="ຄົ້ນຫາ & ເລືອກເຄື່ອງພິມ (Live Fleet Search)"
+                    >
+                      <Search className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">ຄົ້ນຫາ</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* 3. Cost Preview Pill */}
                 <div className="lg:col-span-2">
-                  <div className="p-2.5 bg-sky-50 border border-sky-200 rounded-xl text-right">
+                  <div className={`p-2.5 rounded-xl text-right border ${
+                    opt.machineId ? 'bg-sky-50 border-sky-200' : 'bg-slate-50 border-dashed border-slate-200'
+                  }`}>
                     <span className="text-[9px] text-slate-500 block">ຕົ້ນທຶນແທ້ຈິງ ({baselineCoveragePercent}%):</span>
-                    <span className="text-xs font-mono font-black text-sky-700">
-                      {(opt.extraCostRate || 0).toLocaleString()} ₭
+                    <span className={`text-xs font-mono font-black ${
+                      opt.machineId ? 'text-sky-700' : 'text-slate-400'
+                    }`}>
+                      {opt.machineId ? `${(opt.extraCostRate || 0).toLocaleString()} ₭` : 'ຍັງບໍ່ໄດ້ເລືອກ'}
                     </span>
-                    <span className="text-[9px] text-slate-400 block">/ແຜ່ນ</span>
+                    <span className="text-[9px] text-slate-400 block">
+                      {opt.machineId ? '/ແຜ່ນ' : 'ກະລຸນາເລືອກເຄື່ອງ'}
+                    </span>
                   </div>
                 </div>
 
@@ -860,6 +898,33 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
           </div>
         </div>
       </div>
+
+      {/* PRINTER SELECTOR MODAL */}
+      {searchingRowIdx !== null && (
+        <PrinterSelectorModal
+          isOpen={true}
+          onClose={() => setSearchingRowIdx(null)}
+          onSelect={(printer) => {
+            const opt = printModeGroup?.options[searchingRowIdx];
+            const isColorMode = opt?.value === 'cmyk_4c' || opt?.labelLo?.includes('ສີ') || opt?.label?.toLowerCase().includes('color');
+            handleLinkMachineToOption(searchingRowIdx, printer.id, isColorMode ? 'color' : 'mono');
+            setSearchingRowIdx(null);
+          }}
+          selectedPrinterId={printModeGroup?.options[searchingRowIdx]?.machineId}
+          printers={equipment || []}
+          formatCurrency={formatLAK}
+          getPrinterMachineRate={(printer) => {
+            const p = dynamicPrinters.find(dp => dp.id === printer.id);
+            return p ? p.deprPerPage + p.maintenancePerPage : 50;
+          }}
+          getPrinterActualInkCostPerPage={(printer) => {
+            const opt = printModeGroup?.options[searchingRowIdx];
+            const isColorMode = opt?.value === 'cmyk_4c' || opt?.labelLo?.includes('ສີ') || opt?.label?.toLowerCase().includes('color');
+            const p = dynamicPrinters.find(dp => dp.id === printer.id);
+            return p ? (isColorMode ? p.colorInkCost : p.bwInkCost) : 100;
+          }}
+        />
+      )}
 
     </div>
   );
