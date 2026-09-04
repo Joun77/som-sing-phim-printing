@@ -1,0 +1,30 @@
+[
+  {
+    "id": "anousith_express",
+    "name": "Anousith Express (ອະນຸສິດ ເອັກສະເປຣັສ)",
+    "shortName": "Anousith",
+    "logoUrl": "http://localhost:8080/api/v1/orders/files/logo_1787469269594481000.png",
+    "fee": 15000,
+    "eta": "1-2 ວັນ (1-2 Days)",
+    "freeAbove": 300000,
+    "color": "#d97706",
+    "isActive": true,
+    "isDefault": true,
+    "createdAt": "0001-01-01T00:00:00Z",
+    "updatedAt": "0001-01-01T00:00:00Z"
+  },
+  {
+    "id": "hal_logistics",
+    "name": "HAL Logistics (ຮົງອາລຸນ ຂົນສົ່ງ)",
+    "shortName": "HAL",
+    "logoUrl": "http://localhost:8080/api/v1/orders/files/logo_1787469280059372000.png",
+    "fee": 20000,
+    "eta": "1-2 ວັນ (1-2 Days)",
+    "freeAbove": 350000,
+    "color": "#2563eb",
+    "isActive": true,
+    "isDefault": false,
+    "createdAt": "0001-01-01T00:00:00Z",
+    "updatedAt": "0001-01-01T00:00:00Z"
+  }
+]

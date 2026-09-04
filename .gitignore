@@ -18,8 +18,10 @@ dist-ssr
 !.env.example
 
 # Go backend artifacts
-admin-system/backend/backend
-**/backend
+admin-system/backend/somsing-app
+admin-system/backend/tmp
+admin-system/backend/uploads
+admin-system/backend/bin
 backend/server
 *.exe
 *.test

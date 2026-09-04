@@ -1,0 +1,32 @@
+# Tygo configuration for auto-generating TypeScript interfaces from Go structs
+# Usage: npx tygo generate (or tygo generate)
+
+packages:
+  - path: "backend/inventory"
+    output_path: "../frontend/src/types/generated/inventory.ts"
+    type_mappings:
+      "time.Time": "string"
+  - path: "backend/orders"
+    output_path: "../frontend/src/types/generated/orders.ts"
+    type_mappings:
+      "time.Time": "string"
+  - path: "backend/pricing"
+    output_path: "../frontend/src/types/generated/pricing.ts"
+    type_mappings:
+      "time.Time": "string"
+  - path: "backend/customers"
+    output_path: "../frontend/src/types/generated/customers.ts"
+    type_mappings:
+      "time.Time": "string"
+  - path: "backend/hr"
+    output_path: "../frontend/src/types/generated/hr.ts"
+    type_mappings:
+      "time.Time": "string"
+  - path: "backend/inbound"
+    output_path: "../frontend/src/types/generated/inbound.ts"
+    type_mappings:
+      "time.Time": "string"
+  - path: "backend/orders"
+    output_path: "../../customer-service/src/types/generated/orders.ts"
+    type_mappings:
+      "time.Time": "string"

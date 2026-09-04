@@ -1,0 +1,32 @@
+[
+  {
+    "id": "bcel_one",
+    "bankName": "BCEL (ທະນາຄານການຄ້າຕ່າງປະເທດລາວ ມະຫາຊົນ)",
+    "accountName": "Som-Sing Phim Printing Shop",
+    "accountNumber": "160-12-00-01234567-001",
+    "branch": "Vientiane Head Office",
+    "qrCodeUrl": "/assets/images/bcel-qr-placeholder.png",
+    "logoUrl": "",
+    "promptpayName": "Som-Sing Phim",
+    "shopName": "",
+    "isActive": true,
+    "isDefault": true,
+    "createdAt": "0001-01-01T00:00:00Z",
+    "updatedAt": "0001-01-01T00:00:00Z"
+  },
+  {
+    "id": "ldb_trust",
+    "bankName": "LDB (ທະນາຄານ ພັດທະນາລາວ)",
+    "accountName": "Som-Sing Phim Printing Shop",
+    "accountNumber": "010-00-11-98765432-001",
+    "branch": "Lane Xang Branch",
+    "qrCodeUrl": "/assets/images/bcel-qr-placeholder.png",
+    "logoUrl": "",
+    "promptpayName": "Som-Sing Phim",
+    "shopName": "",
+    "isActive": true,
+    "isDefault": false,
+    "createdAt": "0001-01-01T00:00:00Z",
+    "updatedAt": "0001-01-01T00:00:00Z"
+  }
+]
