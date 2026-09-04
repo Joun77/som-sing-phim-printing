@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
   FileTextIcon,
   LayersIcon,
@@ -19,7 +20,7 @@ interface PaperItem {
   id: string
   name: string
   nameEn: string
-  category: 'art' | 'uncoated' | 'kraft' | 'specialty' | 'sticker'
+  category: 'art' | 'uncoated' | 'kraft' | 'specialty' | 'sticker' | string
   categoryName: string
   categoryNameEn: string
   gsm: number
@@ -40,247 +41,109 @@ interface PaperItem {
   productTitle: string
 }
 
-const PAPER_DATA: PaperItem[] = [
-  {
-    id: '1',
-    name: 'ເຈ້ຍອາດກາດ 2 ໜ້າ (Art Card)',
-    nameEn: 'Double-Sided Coated Art Card',
-    category: 'art',
-    categoryName: 'Art Paper (ເຈ້ຍອາດ)',
-    categoryNameEn: 'Art Paper & Card',
-    gsm: 300,
-    finish: 'ຜິວກຶ່ງມັນກຶ່ງດ້ານ ລຽບນຽນພິເສດ',
-    finishEn: 'Semi-matte ultra-smooth multi-coated stock',
-    textureClass: 'texture-artcard',
-    description: 'ເນື້ອເຈ້ຍແໜ້ນ ໜາແຂງແຮງ ພິມສີສັນສົດໃສຄົມຊັດສູງສຸດ ນິຍົມເຄືອບ PVC ເງົາ ຫຼື ດ້ານ ເພື່ອເພີ່ມຄວາມຫຼູຫຼາ',
-    descriptionEn: 'Rigid, high-density art board engineered for vibrant color reproduction and luxury finishes.',
-    pros: 'ຮອງຮັບການປ້ຳນູນ (Emboss), ປ້ຳຟອຍຄຳ (Hot Foil), ເຄືອບ Spot UV ແລະ ບໍ່ຫັກແຕກເມື່ອກົດຮອຍພັບ (Creasing)',
-    prosEn: 'Supports Embossing, Gold Foil, Spot UV, and creasing lines for crack-free folding.',
-    cons: 'ຕ້ອງເຮັດຮອຍພັບ (Crease) ກ່ອນດັດພັບ ເພື່ອປ້ອງກັນຮອຍແຕກທີ່ສັນພັບ',
-    consEn: 'Requires creasing line before folding to avoid cracking on the spine.',
-    finishingCompat: 'ເຄືອບ PVC ເງົາ/ດ້ານ, Spot UV 3D, ປ້ຳຟອຍຄຳ/ເງິນ, ໄດຄັດຕາມຊົງ',
-    finishingCompatEn: 'Gloss/Matte PVC, 3D Spot UV, Hot Foil Stamping, Custom Die-cut',
-    suitableFor: ['ນາມບັດ VIP', 'ກ່ອງບັນຈຸພັນ', 'ປົກປຶ້ມ/ລາຍງານ', 'ບັດເຊີນງານດອງ'],
-    suitableForEn: ['VIP Business Cards', 'Packaging Boxes', 'Book Covers', 'Wedding Invitations'],
-    productLink: '/product/photo-print-card?paper=art-350',
-    productTitle: 'ງານນາມບັດ & ການ໌ດ',
-  },
-  {
-    id: '2',
-    name: 'ເຈ້ຍອາດເງົາ (Glossy Art Paper)',
-    nameEn: 'Glossy Art Paper',
-    category: 'art',
-    categoryName: 'Art Paper (ເຈ້ຍອາດ)',
-    categoryNameEn: 'Art Paper & Card',
-    gsm: 130,
-    finish: 'ຜິວເງົາສະທ້ອນແສງ ສີສົດໃສ',
-    finishEn: 'High-gloss dual coated sheen for radiant color depth',
-    textureClass: 'texture-glossy',
-    description: 'ເຈ້ຍເນື້ອລຽບເງົາ ສະທ້ອນແສງໄດ້ດີ ຊຶມຊັບນ້ຳມຶກຕ່ຳ ເຮັດໃຫ້ງານພິມສີສົດ ຄົມຊັດ ລາຄາຄຸ້ມຄ່າ',
-    descriptionEn: 'High-gloss coated paper reflecting ambient light brilliantly, delivering saturated colors and sharp details.',
-    pros: 'ສີສັນສົດໃສ ລາຄາປະຢັດ ນ້ຳໜັກເບົາ ເໝາະສຳລັບແຈກຈ່າຍຈຳນວນຫຼາຍ',
-    prosEn: 'Vibrant graphics, economical for bulk printing, lightweight for easy distribution.',
-    cons: 'ຂຽນທັບດ້ວຍບິກລູກລື່ນຍາກ ເນື່ອງຈາກຜິວເຄືອບມັນລື່ນ',
-    consEn: 'Difficult to write on with ballpoint pens due to smooth glossy surface.',
-    finishingCompat: 'ພັບແຜ່ນພັບ 2-3 ຕອນ, ເຄືອບວານິດເງົາ, ເຢັບແມັກເລັ້ມ',
-    finishingCompatEn: 'Bi-fold / Tri-fold, Gloss Varnish, Saddle Stitch',
-    suitableFor: ['ໃບປິວໂຄສະນາ', 'ໂບຣຊົວ', 'ແຜ່ນພັບ 3 ຕອນ', 'ແຄັດຕາລັອກ'],
-    suitableForEn: ['Flyers', 'Brochures', 'Tri-fold Leaflets', 'Catalogs'],
-    productLink: '/product/doc-copy-binding?paper=art-130',
-    productTitle: 'ງານໃບປິວ & ແຜ່ນພັບ',
-  },
-  {
-    id: '2b',
-    name: 'ເຈ້ຍອາດດ້ານ (Matte Art Paper)',
-    nameEn: 'Matte Art Paper',
-    category: 'art',
-    categoryName: 'Art Paper (ເຈ້ຍອາດ)',
-    categoryNameEn: 'Art Paper & Card',
-    gsm: 160,
-    finish: 'ຜິວດ້ານນຽນນຸ່ມ ບໍ່ສະທ້ອນແສງ',
-    finishEn: 'Silky glare-free matte texture with high print contrast',
-    textureClass: 'texture-matte',
-    description: 'ເນື້ອເຈ້ຍນຽນນຸ່ມ ສະບາຍຕາ ຫຼຸດແສງສະທ້ອນ ເໝາະກັບງານພິມທີ່ເນັ້ນການອ່ານງ່າຍ ແລະ ລຸກພຣີມ້ຽມ',
-    descriptionEn: 'Gentle on the eyes with reduced glare, delivering high clarity and contemporary aesthetic appeal.',
-    pros: 'ອ່ານສະບາຍຕາ ຜິວສຳຜັດລະມຸນ ໃຫ້ຄວາມຮູ້ສຶກທັນສະໄໝ ເບິ່ງເປັນມືອາຊີບ',
-    prosEn: 'Comfortable to read, premium soft touch, modern professional appearance.',
-    cons: 'ຄວາມສົດຂອງສີຈະດູຊອບກວ່າອາດເງົາເລັກນ້ອຍ',
-    consEn: 'Color saturation is slightly softer than high-gloss finishes.',
-    finishingCompat: 'ເຄືອບ PVC ດ້ານ, Spot UV, ເຢັບແມັກເລັ້ມ, ສັນກາວ',
-    finishingCompatEn: 'Matte PVC, Spot UV, Saddle Stitch, Perfect Binding',
-    suitableFor: ['ແຄັດຕາລັອກພຣີມ້ຽມ', 'ເມນູອາຫານ', 'ໂບຣຊົວອົງກອນ', 'ວາລະສານ'],
-    suitableForEn: ['Luxury Catalogs', 'Restaurant Menus', 'Corporate Brochures', 'Magazines'],
-    productLink: '/product/doc-catalog-staple?paper=art-160',
-    productTitle: 'ງານແຄັດຕາລັອກ & ເອກະສານ',
-  },
-  {
-    id: '3',
-    name: 'ເຈ້ຍປອນຂາວ 80g (A4 Standard Bond)',
-    nameEn: 'Standard White Bond Woodfree 80 GSM',
-    category: 'uncoated',
-    categoryName: 'Woodfree (ເຈ້ຍປອນ/A4)',
-    categoryNameEn: 'Woodfree & Uncoated',
-    gsm: 80,
-    finish: 'ຜິວດ້ານ ລຽບນຽນທຳມະຊາດ (A4 ມາດຕະຖານ)',
-    finishEn: 'Smooth uncoated natural matte surface',
-    textureClass: 'texture-woodfree',
-    description: 'ເຈ້ຍບໍ່ເຄືອບສານເຄມີ ເນື້ອຂາວສະອາດ ດູດຊຶມນ້ຳມຶກໄດ້ດີ ຂຽນງ່າຍ ມາດຕະຖານເອກະສານສາກົນ',
-    descriptionEn: 'Pure white uncoated stock with high ink absorbency, perfect for writing, stamping, and photocopying.',
-    pros: 'ຂຽນທັບດ້ວຍປາກກາ ຫຼື ປ້ຳຕາປະທັບໄດ້ງ່າຍ ອ່ານສະບາຍຕາ ຄຸ້ມຄ່າທີ່ສຸດ',
-    prosEn: 'Superb writability with fountain pens and official stamps; unbeatable value.',
-    cons: 'ຫາກພິມສີເຂັ້ມຫຼາຍໆ ສີອາດຈະດູດຊຶມລົງເນື້ອເຈ້ຍ ເຮັດໃຫ້ສີດຣັອບລົງເລັກນ້ອຍ',
-    consEn: 'Heavy ink coverage can penetrate slightly into the fibers.',
-    finishingCompat: 'ເຢັບແມັກ, ເຂົ້າເລັ້ມໄສ້ໃນ, ເຂົ້າເລັ້ມສັນຫ່ວງ',
-    finishingCompatEn: 'Saddle Stitch, Perfect Glue, Wire-O Spiral',
-    suitableFor: ['ຫົວຈົດໝາຍ', 'ໄສ້ໃນປຶ້ມ', 'ໃບຮັບເງິນ & ແບບຟອມ', 'ເອກະສານ A4 ທົ່ວໄປ'],
-    suitableForEn: ['Letterheads', 'Book Pages & Syllabi', 'Invoices & Receipts', 'Office Documents'],
-    productLink: '/product/doc-copy-binding?paper=bond-80',
-    productTitle: 'ງານເອກະສານ & ປອນຂາວ',
-  },
-  {
-    id: '3b',
-    name: 'ເຈ້ຍປອນພຣີມ້ຽມ 120g (Premium Woodfree)',
-    nameEn: 'Premium Woodfree 120 GSM',
-    category: 'uncoated',
-    categoryName: 'Woodfree (ເຈ້ຍປອນ/A4)',
-    categoryNameEn: 'Woodfree & Uncoated',
-    gsm: 120,
-    finish: 'ຜິວດ້ານ ໜາແໜ້ນນຸ່ມມື',
-    finishEn: 'Heavyweight smooth uncoated matte finish',
-    textureClass: 'texture-woodfree',
-    description: 'ເຈ້ຍປອນຄວາມໜາພິເສດ ໃຫ້ຄວາມຕຶງ ແລະ ແຂງແຮງກວ່າເຈ້ຍ A4 ທົ່ວໄປ ເໝາະກັບເອກະສານສຳຄັນ',
-    descriptionEn: 'Heavyweight uncoated stock with excellent rigidity and formal presence.',
-    pros: 'ນ້ຳມຶກບໍ່ຊຶມທະລຸຫຼັງງ່າຍ ໃຫ້ຄວາມໜ້າເຊື່ອຖືສູງ',
-    prosEn: 'Prevents ink bleed-through; projects prestige and authenticity.',
-    cons: 'ລາຄາສູງກວ່າປອນ 80g ເລັກນ້ອຍ',
-    consEn: 'Slightly higher cost than standard 80g paper.',
-    finishingCompat: 'ພັບແຜ່ນພັບ, ປ້ຳຈົມ, ພິມຕາປະທັບ',
-    finishingCompatEn: 'Folding, Debossing, Rubber Stamping',
-    suitableFor: ['ເອກະສານສັນຍາສຳຄັນ', 'ຊອງຈົດໝາຍພຣີມ້ຽມ', 'ໃບປະກາດສະນີຍະບັດ'],
-    suitableForEn: ['Legal Contracts', 'Premium Envelopes', 'Certificates of Merit'],
-    productLink: '/product/doc-copy-binding?paper=bond-100',
-    productTitle: 'ງານເອກະສານພຣີມ້ຽມ & ໃບປະກາດ',
-  },
-  {
-    id: '4',
-    name: 'ເຈ້ຍຄຣາຟສີນ້ຳຕານ (Eco Brown Kraft)',
-    nameEn: 'Eco Brown Kraft Stock',
-    category: 'kraft',
-    categoryName: 'Kraft (ເຈ້ຍຄຣາຟ)',
-    categoryNameEn: 'Kraft Eco Stock',
-    gsm: 250,
-    finish: 'ຜິວສາກສີນ້ຳຕານ ເສັ້ນໃຍໄມ້ທຳມະຊາດ (Vintage Look)',
-    finishEn: 'Textured earthy brown recycled wood fiber',
-    textureClass: 'texture-kraft',
-    description: 'ເຈ້ຍຣີໄຊເຄິລเหนຽວພິເສດ ໃຫ້ລຸກຮັກສິ່ງແວດລ້ອມ (Eco-friendly) ສາຍຄາເຟ ແລະ ແບຣນອໍແກນິກ',
-    descriptionEn: 'High-tensile organic wood fiber sheet providing an authentic rustic, eco-conscious presentation.',
-    pros: 'ທົນທານ เหนຽວ ໃຫ້ຄວາມຮູ້ສຶກວິນເທຈ ຮັກໂລກ ມີເອກະລັກ',
-    prosEn: 'High tear resistance, organic vintage charm, biodegradable.',
-    cons: 'ພິມສີພາດສະເທລຍາກ ເນື່ອງຈາກພື້ນເຈ້ຍເປັນສີນ້ຳຕານ',
-    consEn: 'Pastel and light tints may shift hue due to brown substrate.',
-    finishingCompat: 'ປ້ຳຈົມ, ປ້ຳຟອຍສີດຳ/ສີທອງ, ໄດຄັດເຈາະຮູ',
-    finishingCompatEn: 'Deboss, Black/Gold Foil, Die-cut Hole Punching',
-    suitableFor: ['ຖົງເຈ້ຍ', 'ປ້າຍແທັກສິນຄ້າ', 'ກ່ອງສິນຄ້າອໍແກນິກ', 'ເມນູຄາເຟ'],
-    suitableForEn: ['Apparel Hangtags', 'Eco Shopping Bags', 'Cafe Menus', 'Organic Packaging'],
-    productLink: '/product/sticker-kraft?paper=kraft',
-    productTitle: 'ງານປ້າຍແທັກ & ຄຣາຟ',
-  },
-  {
-    id: '5',
-    name: 'ອາດກາດເຄືອບກຳມະຫຍີ່ Soft-Touch (Velvet)',
-    nameEn: 'Velvet Soft-Touch Luxury Card',
-    category: 'specialty',
-    categoryName: 'Specialty Card (ເຈ້ຍພິເສດ)',
-    categoryNameEn: 'Specialty & Luxury Cards',
-    gsm: 350,
-    finish: 'ຜິວດ້ານນຸ່ມນວນຄືກຳມະຫຍີ່ (Ultra Luxury)',
-    finishEn: 'Ultra-plush velvet suede texture with zero reflection',
-    textureClass: 'texture-velvet',
-    description: 'ເຈ້ຍອາດກາດໜາພິເສດ ເຄືອບຟີມ Soft-Touch ສຳຜັດນຸ່ມເລິກ ບໍ່ສະທ້ອນແສງ ໃຫ້ຄວາມຮູ້ສຶກຫຼູຫຼາລະດັບໄຮເອນ',
-    descriptionEn: 'Heavyweight art card wrapped in soft-touch velvet film for an unforgettable tactile impression.',
-    pros: 'ສຳຜັດພຣີມ້ຽມ ນຸ່ມນວນ ໂດດເດັ່ນສູງສຸດເມື່ອເຮັດ Spot UV 3D ຫຼື ປ້ຳຟອຍທອງ',
-    prosEn: 'Unrivaled suede tactile feel, breathtaking contrast when paired with 3D Spot UV and gold stamping.',
-    cons: 'ຕົ້ນທຶນສູງກວ່າການເຄືອບ PVC ດ້ານທົ່ວໄປ',
-    consEn: 'Higher production cost compared to standard matte laminations.',
-    finishingCompat: 'Spot UV 3D, ປ້ຳຟອຍທອງ/ເງິນ/Rose Gold, ໄດຄັດມຸມມົນ',
-    finishingCompatEn: '3D Spot UV, Hot Foil (Gold/Silver/Rose), Rounded Corners',
-    suitableFor: ['ນາມບັດ VIP ຜູ້ບໍລິຫານ', 'ບັດເຊີນຫຼູ', 'ກ່ອງນ້ຳຫອມ/ເຄື່ອງສຳອາງ'],
-    suitableForEn: ['Executive VIP Cards', 'Gala Invitations', 'Luxury Perfume Boxes'],
-    productLink: '/product/photo-print-card?paper=art-350',
-    productTitle: 'ງານນາມບັດ VIP & ກ່ອງຫຼູ',
-  },
-  {
-    id: '6',
-    name: 'ສະຕິກເກີ PP Vinyl ຂາວເງົາ/ດ້ານ (PP Sticker)',
-    nameEn: '100% Waterproof PP Vinyl Sticker',
-    category: 'sticker',
-    categoryName: 'Sticker (ສະຕິກເກີ)',
-    categoryNameEn: 'Stickers & Labels',
-    gsm: 120,
-    finish: 'ຜິວພລາສຕິກກັນນ້ຳ 100% ທົນທານສູງ',
-    finishEn: '100% waterproof tear-proof synthetic PP vinyl film',
-    textureClass: 'texture-sticker',
-    description: 'ສະຕິກເກີເນື້ອພລາສຕິກ PP ສີຂາວເງົາ/ດ້ານ ຫຼື ເນື້ອໃສ (Clear) ສີບໍ່ຫຼຸດລອກ ແຊ່ຕູ້ເຢັນ ແລະ ແຊ່ນ້ຳກ້ອນໄດ້',
-    descriptionEn: 'Tear-proof waterproof synthetic film with food-grade industrial adhesive, freezer, oil, and microwave proof.',
-    pros: 'ກັນນ້ຳ 100% ແຊ່ເຢັນ/ນ້ຳກ້ອນໄດ້ ກາວຕິດແໜ້ນ ໄດຄັດລອກງ່າຍ',
-    prosEn: '100% Waterproof, freezer & ice safe, peel-and-stick die-cut precision.',
-    cons: 'ລາຄາສູງກວ່າສະຕິກເກີເຈ້ຍທົ່ວໄປ',
-    consEn: 'Slightly higher cost than standard paper labels.',
-    finishingCompat: 'ໄດຄັດຕາມຊົງ 100%, ເຄືອບກັນຮອຍຂູດຂີດ',
-    finishingCompatEn: 'Custom Shape Kiss-cut, Scratch-resistant Lamination',
-    suitableFor: ['ສະຫຼາກສິນຄ້າຕິດແກ້ວ/ຂວດ', 'ອາຫານແຊ່ເຢັນ & ເຄື່ອງດື່ມ', 'ສະຕິກເກີຕິດແກ້ວກາເຟ'],
-    suitableForEn: ['Cosmetic & Bottle Labels', 'Frozen Foods & Cold Drinks', 'Cafe Tumbler Decals'],
-    productLink: '/product/sticker-pp-waterproof?paper=pp-gloss',
-    productTitle: 'ງານສະຕິກເກີ & ສະຫຼາກສິນຄ້າ',
-  },
-  {
-    id: '7',
-    name: 'ເຈ້ຍກາດເດີນລາຍຜ້າ (Linen Textured Card)',
-    nameEn: 'Linen Classic Fabric Texture Card',
-    category: 'specialty',
-    categoryName: 'Specialty Card (ເຈ້ຍພິເສດ)',
-    categoryNameEn: 'Specialty & Luxury Cards',
-    gsm: 260,
-    finish: 'ຜິວເດີນລາຍເສັ້ນຜ້າບາງໆ ຊົງຄຸນຄ່າ',
-    finishEn: 'Embossed woven linen texture with timeless elegance',
-    textureClass: 'texture-linen',
-    description: 'ເຈ້ຍກາດນຳເຂົ້າທີ່ມີ Texture ລາຍເສັ້ນຜ້າຄລາສສິກ ໃຫ້ສຳຜັດມີເອກະລັກ ບໍ່ລື່ນມື',
-    descriptionEn: 'Imported fine art card featuring subtle woven fabric embossing for sophisticated tactile appeal.',
-    pros: 'ໃຫ້ຄວາມຮູ້ສຶກເປັນທາງການ ຫຼູຫຼາ ມີມິຕິ ບໍ່ຕ້ອງເຄືອບຟີມ',
-    prosEn: 'Formal prestige feel, distinctive woven depth without needing plastic film coating.',
-    cons: 'ບໍ່ເໝາະກັບການເຄືອບຟີມ PVC ທັບ ເພາະຈະບັງລາຍເສັ້ນຜ້າ',
-    consEn: 'Not recommended for film lamination as it masks the delicate linen texture.',
-    finishingCompat: 'ປ້ຳທອງ (Hot Foil), ປ້ຳນູນ (Emboss), ໄດຄັດ',
-    finishingCompatEn: 'Hot Foil Stamping, Blind Embossing, Die-cut',
-    suitableFor: ['ກາດແຕ່ງດອງ', 'ໃບປະກາດສະນີຍະບັດ', 'ນາມບັດຜູ້ບໍລິຫານ', 'ບັດເຊີນ'],
-    suitableForEn: ['Wedding Invitations', 'Certificates of Merit', 'Doctor/Attorney Cards'],
-    productLink: '/product/photo-print-card?paper=art-350',
-    productTitle: 'ງານກາດລາຍຜ້າ & ບັດເຊີນ',
-  },
-  {
-    id: '8',
-    name: 'ເຈ້ຍກາດເຫຼືອບມຸກ (Pearl Metallic Card)',
-    nameEn: 'Pearl Metallic Card',
-    category: 'specialty',
-    categoryName: 'Specialty Card (ເຈ້ຍພິເສດ)',
-    categoryNameEn: 'Specialty & Luxury Cards',
-    gsm: 280,
-    finish: 'ປະກາຍມຸກແວວວາວ ສະທ້ອນແສງລະຍິບລະຍັບ',
-    finishEn: 'Iridescent pearl luster shifting elegantly under light',
-    textureClass: 'texture-pearl',
-    description: 'ເຈ້ຍກາດເຄືອບຜິວມຸກລະຍິບລະຍັບ ເພີ່ມຄວາມໂດດເດັ່ນສະດຸດຕາເມື່ອຖືກແສງໄຟ ຫຼື ແສງແດດ',
-    descriptionEn: 'Shimmering metallic mica coating that catches ambient illumination with ethereal multi-tone shine.',
-    pros: 'ສະທ້ອນແສງສວຍງາມ ເພີ່ມມູນຄ່າໃຫ້ຊິ້ນງານ ຫຼູຫຼາ',
-    prosEn: 'Captivating luster, boosts product prestige and emotional value.',
-    cons: 'ແຫ້ງຊ້າກວ່າເຈ້ຍທົ່ວໄປເລັກນ້ອຍ (ອົບແຫ້ງດ້ວຍລະບົບ UV)',
-    consEn: 'Requires specialized UV curing for fastest drying speed.',
-    finishingCompat: 'ປ້ຳຟອຍ, ປ້ຳຈົມ, ໄດຄັດມຸມມົນ',
-    finishingCompatEn: 'Hot Foil (Gold/Rose), Debossing, Die-cut',
-    suitableFor: ['ກາດເຊີນ VIP', 'ຄູປອງສ່ວນຫຼຸດພິເສດ', 'ປ້າຍສິນຄ້າພຣີມ້ຽມ'],
-    suitableForEn: ['VIP Wedding Invitations', 'Exclusive Gift Vouchers', 'Jewelry Tags'],
-    productLink: '/product/photo-print-card?paper=pearl-300',
-    productTitle: 'ງານກາດມຸກ & ບັດເຊີນ VIP',
-  },
+interface APIProductMaterial {
+  id: string
+  category: string
+  categoryNameLo: string
+  categoryNameEn: string
+  nameLo: string
+  nameEn: string
+  gsm: number
+  finishLo: string
+  finishEn: string
+  textureClass: string
+  descriptionLo: string
+  descriptionEn: string
+  prosLo: string
+  prosEn: string
+  consLo: string
+  consEn: string
+  finishingCompatLo: string
+  finishingCompatEn: string
+  suitableForLo: string[]
+  suitableForEn: string[]
+  productLink: string
+  productTitle: string
+  sortOrder: number
+  isActive: boolean
+}
+
+interface APIProductFAQ {
+  id: string
+  questionLo: string
+  questionEn: string
+  answerLo: string
+  answerEn: string
+  sortOrder: number
+  isActive: boolean
+}
+
+interface APIMaterialCategory {
+  id: string
+  key: string
+  nameLo: string
+  nameEn: string
+  icon: string
+  sortOrder: number
+  isActive: boolean
+}
+
+function mapAPIMaterialToPaperItem(m: APIProductMaterial): PaperItem {
+  return {
+    id: m.id,
+    category: m.category,
+    categoryName: m.categoryNameLo,
+    categoryNameEn: m.categoryNameEn,
+    name: m.nameLo,
+    nameEn: m.nameEn,
+    gsm: m.gsm,
+    finish: m.finishLo,
+    finishEn: m.finishEn,
+    textureClass: m.textureClass,
+    description: m.descriptionLo,
+    descriptionEn: m.descriptionEn,
+    pros: m.prosLo,
+    prosEn: m.prosEn,
+    cons: m.consLo,
+    consEn: m.consEn,
+    finishingCompat: m.finishingCompatLo,
+    finishingCompatEn: m.finishingCompatEn,
+    suitableFor: m.suitableForLo ?? [],
+    suitableForEn: m.suitableForEn ?? [],
+    productLink: m.productLink,
+    productTitle: m.productTitle,
+  }
+}
+
+const API_BASE = import.meta.env.VITE_API_URL || ''
+
+async function fetchMaterials(): Promise<PaperItem[]> {
+  const res = await fetch(`${API_BASE}/api/v1/materials`)
+  if (!res.ok) throw new Error('Failed to fetch materials')
+  const json = await res.json()
+  return (json.data ?? []).map(mapAPIMaterialToPaperItem)
+}
+
+async function fetchFAQs(): Promise<APIProductFAQ[]> {
+  const res = await fetch(`${API_BASE}/api/v1/faqs`)
+  if (!res.ok) throw new Error('Failed to fetch FAQs')
+  const json = await res.json()
+  return json.data ?? []
+}
+
+async function fetchMaterialCategories(): Promise<APIMaterialCategory[]> {
+  const res = await fetch(`${API_BASE}/api/v1/material-categories`)
+  if (!res.ok) throw new Error('Failed to fetch categories')
+  const json = await res.json()
+  return json.data ?? []
+}
+
+const DEFAULT_CATEGORIES: APIMaterialCategory[] = [
+  { id: '1', key: 'art', nameLo: 'Art Paper (ເຈ້ຍອາດ)', nameEn: 'Art Paper & Card', icon: 'layers', sortOrder: 10, isActive: true },
+  { id: '2', key: 'uncoated', nameLo: 'Woodfree (ເຈ້ຍປອນ/A4)', nameEn: 'Woodfree & Uncoated', icon: 'file-text', sortOrder: 20, isActive: true },
+  { id: '3', key: 'kraft', nameLo: 'Kraft (ເຈ້ຍຄຣາຟ)', nameEn: 'Kraft Eco Stock', icon: 'leaf', sortOrder: 30, isActive: true },
+  { id: '4', key: 'specialty', nameLo: 'Specialty Card (ເຈ້ຍພິເສດ)', nameEn: 'Specialty & Luxury', icon: 'sparkles', sortOrder: 40, isActive: true },
+  { id: '5', key: 'sticker', nameLo: 'Sticker (ສະຕິກເກີ)', nameEn: 'Stickers & Labels', icon: 'tag', sortOrder: 50, isActive: true },
 ]
 
 const PRODUCT_PRESETS = [
@@ -295,6 +158,26 @@ const PRODUCT_PRESETS = [
 export default function PrintGuidePage() {
   const { language } = useShop()
   const isLao = language === 'lo'
+
+  const { data: PAPER_DATA = [], isLoading: papersLoading } = useQuery({
+    queryKey: ['storefront-materials'],
+    queryFn: fetchMaterials,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: categoriesData = [] } = useQuery({
+    queryKey: ['storefront-material-categories'],
+    queryFn: fetchMaterialCategories,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const activeCategories = categoriesData.length > 0 ? categoriesData : DEFAULT_CATEGORIES
+
+  const { data: faqData = [] } = useQuery({
+    queryKey: ['storefront-faqs'],
+    queryFn: fetchFAQs,
+    staleTime: 5 * 60 * 1000,
+  })
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [selectedPaperId, setSelectedPaperId] = useState<string | null>(null)
@@ -435,6 +318,21 @@ export default function PrintGuidePage() {
     }
   }, [gsmSimValue, isLao])
 
+  if (papersLoading) {
+    return (
+      <div className="pg-page">
+        <div className="pg-container">
+          <div style={{ padding: '4rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
+              <div style={{ width: 40, height: 40, border: '3px solid var(--border-subtle)', borderTop: '3px solid var(--gold)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <span style={{ fontSize: '14px', fontWeight: 600 }}>{isLao ? 'ກຳລັງໂຫລດຂໍ້ມູນວັດສະດຸ...' : 'Loading material data...'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="pg-page">
       <div className="pg-container">
@@ -447,12 +345,12 @@ export default function PrintGuidePage() {
             </div>
             <div>
               <h1 className="pg-header-title">
-                {isLao ? 'ຄູ່ມືເຈ້ຍ & ວັດສະດຸສິ່ງພິມ' : 'Paper & Material Spec Guide'}
+                {isLao ? 'ຂໍ້ມູນເພີ່ມຕື່ມກ່ຽວກັບຜະລິດຕະພັນ' : 'Product Information & Materials'}
               </h1>
               <p className="pg-header-subtitle">
                 {isLao
-                  ? 'ເລືອກສະເປັກ, ຄວາມໜາ GSM, ຜິວສຳຜັດ ແລະ ເຕັກນິກການເຄືອບທີ່ເໝາະສົມ'
-                  : 'Select paper stock, GSM thickness, finishes, and finishing techniques'}
+                  ? 'ຂໍ້ມູນວັດສະດຸ, ຄວາມໜາ GSM, ຜິວສຳຜັດ, ເຕັກນິກການເຄືອບ ແລະ FAQ'
+                  : 'Material specs, GSM thickness, finishes, finishing techniques & FAQ'}
               </p>
             </div>
           </div>
@@ -517,190 +415,76 @@ export default function PrintGuidePage() {
                 </span>
               </button>
 
-              {/* Category: Art Paper */}
-              <div className="pg-accordion-item">
-                <button
-                  onClick={() => {
-                    toggleAccordion('art')
-                    setSelectedCategory('art')
-                    setSelectedPaperId(null)
-                    setActiveTab('catalog')
-                  }}
-                  className="pg-nav-btn"
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                    <Image size={15} />
-                    <span>{isLao ? 'ເຈ້ຍອາດ (Art Paper)' : 'Art Paper'}</span>
-                  </span>
-                  <span style={{ fontSize: '8.5px', transform: accordions.art ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                    ▼
-                  </span>
-                </button>
-                {accordions.art && (
-                  <div className="pg-subitem-list">
-                    {getPapersByCategory('art').map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => selectPaper(p)}
-                        className={`pg-subitem-btn ${selectedPaperId === p.id ? 'is-active' : ''}`}
-                      >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {isLao ? p.name : p.nameEn}
-                        </span>
-                        <span style={{ fontSize: '10px', opacity: 0.7 }}>{p.gsm}g</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {/* Dynamic Categories */}
+              {activeCategories.map((cat) => {
+                const papersInCat = getPapersByCategory(cat.key)
+                const isOpen = accordions[cat.key] ?? false
 
-              {/* Category: Woodfree */}
-              <div className="pg-accordion-item">
-                <button
-                  onClick={() => {
-                    toggleAccordion('uncoated')
-                    setSelectedCategory('uncoated')
-                    setSelectedPaperId(null)
-                    setActiveTab('catalog')
-                  }}
-                  className="pg-nav-btn"
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                    <FileText size={15} />
-                    <span>{isLao ? 'ເຈ້ຍປອນ / A4 (Woodfree)' : 'Woodfree / Bond'}</span>
-                  </span>
-                  <span style={{ fontSize: '8.5px', transform: accordions.uncoated ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                    ▼
-                  </span>
-                </button>
-                {accordions.uncoated && (
-                  <div className="pg-subitem-list">
-                    {getPapersByCategory('uncoated').map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => selectPaper(p)}
-                        className={`pg-subitem-btn ${selectedPaperId === p.id ? 'is-active' : ''}`}
-                      >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {isLao ? p.name : p.nameEn}
-                        </span>
-                        <span style={{ fontSize: '10px', opacity: 0.7 }}>{p.gsm}g</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+                const renderCategoryIcon = (iconName: string) => {
+                  switch (iconName) {
+                    case 'leaf':
+                      return <Leaf size={15} />
+                    case 'sparkles':
+                      return <Sparkles size={15} className="text-amber-500" />
+                    case 'tag':
+                      return <Tag size={15} />
+                    case 'file-text':
+                      return <FileText size={15} />
+                    case 'layers':
+                    default:
+                      return <Layers size={15} />
+                  }
+                }
 
-              {/* Category: Kraft */}
-              <div className="pg-accordion-item">
-                <button
-                  onClick={() => {
-                    toggleAccordion('kraft')
-                    setSelectedCategory('kraft')
-                    setSelectedPaperId(null)
-                    setActiveTab('catalog')
-                  }}
-                  className="pg-nav-btn"
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                    <Leaf size={15} />
-                    <span>{isLao ? 'ເຈ້ຍຄຣາຟ (Kraft Paper)' : 'Kraft Paper'}</span>
-                  </span>
-                  <span style={{ fontSize: '8.5px', transform: accordions.kraft ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                    ▼
-                  </span>
-                </button>
-                {accordions.kraft && (
-                  <div className="pg-subitem-list">
-                    {getPapersByCategory('kraft').map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => selectPaper(p)}
-                        className={`pg-subitem-btn ${selectedPaperId === p.id ? 'is-active' : ''}`}
-                      >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {isLao ? p.name : p.nameEn}
+                return (
+                  <div key={cat.id || cat.key} className="pg-accordion-item">
+                    <button
+                      onClick={() => {
+                        toggleAccordion(cat.key)
+                        setSelectedCategory(cat.key)
+                        setSelectedPaperId(null)
+                        setActiveTab('catalog')
+                      }}
+                      className="pg-nav-btn"
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                        {renderCategoryIcon(cat.icon)}
+                        <span>{isLao ? cat.nameLo : cat.nameEn}</span>
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span className="pg-badge-count" style={{ background: 'var(--bg-surface)', color: 'var(--text-muted)' }}>
+                          {papersInCat.length}
                         </span>
-                        <span style={{ fontSize: '10px', opacity: 0.7 }}>{p.gsm}g</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Category: Specialty */}
-              <div className="pg-accordion-item">
-                <button
-                  onClick={() => {
-                    toggleAccordion('specialty')
-                    setSelectedCategory('specialty')
-                    setSelectedPaperId(null)
-                    setActiveTab('catalog')
-                  }}
-                  className="pg-nav-btn"
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                    <Crown size={15} className="text-amber-500" />
-                    <span>{isLao ? 'ເຈ້ຍພິເສດ / ການ໌ດຫຼູ' : 'Specialty & Luxury'}</span>
-                  </span>
-                  <span style={{ fontSize: '8.5px', transform: accordions.specialty ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                    ▼
-                  </span>
-                </button>
-                {accordions.specialty && (
-                  <div className="pg-subitem-list">
-                    {getPapersByCategory('specialty').map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => selectPaper(p)}
-                        className={`pg-subitem-btn ${selectedPaperId === p.id ? 'is-active' : ''}`}
-                      >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {isLao ? p.name : p.nameEn}
+                        <span style={{ fontSize: '8.5px', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                          ▼
                         </span>
-                        <span style={{ fontSize: '10px', opacity: 0.7 }}>{p.gsm}g</span>
-                      </button>
-                    ))}
+                      </div>
+                    </button>
+                    {isOpen && (
+                      <div className="pg-subitem-list">
+                        {papersInCat.length === 0 ? (
+                          <div style={{ padding: '0.5rem 0.75rem', fontSize: '11px', color: 'var(--text-muted)' }}>
+                            {isLao ? 'ບໍ່ມີລາຍການ' : 'No items'}
+                          </div>
+                        ) : (
+                          papersInCat.map((p) => (
+                            <button
+                              key={p.id}
+                              onClick={() => selectPaper(p)}
+                              className={`pg-subitem-btn ${selectedPaperId === p.id ? 'is-active' : ''}`}
+                            >
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {isLao ? p.name : p.nameEn}
+                              </span>
+                              <span style={{ fontSize: '10px', opacity: 0.7 }}>{p.gsm}g</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-
-              {/* Category: Sticker */}
-              <div className="pg-accordion-item">
-                <button
-                  onClick={() => {
-                    toggleAccordion('sticker')
-                    setSelectedCategory('sticker')
-                    setSelectedPaperId(null)
-                    setActiveTab('catalog')
-                  }}
-                  className="pg-nav-btn"
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                    <Tag size={15} />
-                    <span>{isLao ? 'ສະຕິກເກີ / ສະຫຼາກ' : 'Stickers & Labels'}</span>
-                  </span>
-                  <span style={{ fontSize: '8.5px', transform: accordions.sticker ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                    ▼
-                  </span>
-                </button>
-                {accordions.sticker && (
-                  <div className="pg-subitem-list">
-                    {getPapersByCategory('sticker').map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => selectPaper(p)}
-                        className={`pg-subitem-btn ${selectedPaperId === p.id ? 'is-active' : ''}`}
-                      >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {isLao ? p.name : p.nameEn}
-                        </span>
-                        <span style={{ fontSize: '10px', opacity: 0.7 }}>{p.gsm}g</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+                )
+              })}
             </div>
 
             {/* Quick Tools Navigation */}
@@ -1204,6 +988,39 @@ export default function PrintGuidePage() {
                     </p>
                   </div>
                 </div>
+
+                {/* Dynamic FAQ Section */}
+                {faqData.length > 0 && (
+                  <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem' }}>
+                      <h3 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                        {isLao ? 'ຄຳຖາມທີ່ພົບເລື້ອຍກ່ຽວກັບວັດສະດຸ (FAQ)' : 'Frequently Asked Questions (FAQ)'}
+                      </h3>
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0.15rem 0 0 0' }}>
+                        {isLao
+                          ? 'ຄຳຕອບສຳລັບຂໍ້ສົງໄສທົ່ວໄປໃນການເລືອກວັດສະດຸ ແລະ ສະເປັກງານພິມ'
+                          : 'Common answers and tips on choosing the right material specifications.'}
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {faqData.map((faq) => (
+                        <details
+                          key={faq.id}
+                          className="pg-finish-card"
+                          style={{ cursor: 'pointer', padding: '1rem', background: 'var(--bg-surface)' }}
+                        >
+                          <summary style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--text-main)', outline: 'none' }}>
+                            {isLao ? faq.questionLo : (faq.questionEn || faq.questionLo)}
+                          </summary>
+                          <p style={{ marginTop: '0.75rem', fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: 1.6, borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem', margin: '0.75rem 0 0 0' }}>
+                            {isLao ? faq.answerLo : (faq.answerEn || faq.answerLo)}
+                          </p>
+                        </details>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

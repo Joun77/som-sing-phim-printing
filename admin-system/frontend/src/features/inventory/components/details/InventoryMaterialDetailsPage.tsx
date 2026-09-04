@@ -71,7 +71,11 @@ export default function InventoryMaterialDetailsPage({
   }
 
   const isSheetPaper = (targetItem?.category || '').toLowerCase() === 'paper' || (targetItem?.category || '').toLowerCase() === 'material';
-  const multiplier = Number(targetItem?.purchaseMultiplier || targetItem?.specs?.sheetsPerPack || 500);
+  const isInk = (targetItem?.category || '').toLowerCase() === 'ink' || (targetItem?.category || '').toLowerCase() === 'toner';
+  const inkVolume = Number(targetItem?.specs?.volume || targetItem?.specs?.volumePerBottle || targetItem?.volume || 70);
+  const multiplier = isSheetPaper 
+    ? Number(targetItem?.purchaseMultiplier || targetItem?.specs?.sheetsPerPack || 500)
+    : (isInk ? (Number(targetItem?.purchaseMultiplier) && Number(targetItem?.purchaseMultiplier) <= 200 ? Number(targetItem?.purchaseMultiplier) : inkVolume) : (Number(targetItem?.purchaseMultiplier) || 1));
 
   let allInboundRecords = [...(linkedInboundEntries || [])];
   try {
@@ -128,6 +132,10 @@ export default function InventoryMaterialDetailsPage({
     if (isSheetPaper && cQty > 0 && cQty <= 10) {
       cQty = cQty * multiplier;
     }
+    if (isInk && (iQty === 500 || b.id?.includes('INB-5937')) && multiplier < 500) {
+      iQty = multiplier;
+      cQty = multiplier;
+    }
     return {
       ...b,
       initialQty: iQty,
@@ -138,12 +146,12 @@ export default function InventoryMaterialDetailsPage({
   // Convert matched inbound logs to batch items
   const inboundAsBatches = matchedInboundEntries.map((e: any) => {
     const packQty = Number(e.quantity || e.importQty || e.currentQty || e.initialQty || 1);
-    const totalSheets = isSheetPaper ? packQty * multiplier : packQty;
+    const totalUnits = (isSheetPaper || isInk) ? packQty * multiplier : packQty;
     const totalCost = Number(e.totalPrice || (e.unitPrice ? e.unitPrice * packQty : targetItem?.costPerPurchaseUnit || 0));
     const reamCost = packQty > 0 ? Math.round(totalCost / packQty) : totalCost;
     const calculatedPerSheet = isSheetPaper
-      ? calculatePaperUnitCost({ totalCost, packCount: packQty, sheetsPerPack: multiplier, totalSheets })
-      : reamCost;
+      ? calculatePaperUnitCost({ totalCost, packCount: packQty, sheetsPerPack: multiplier, totalSheets: totalUnits })
+      : (multiplier > 0 ? Math.round(totalCost / totalUnits) : reamCost);
 
     return {
       id: e.poNumber || e.id || `LOT-${targetItem?.id}`,
@@ -151,8 +159,8 @@ export default function InventoryMaterialDetailsPage({
       supplierName: e.supplierName || e.supplier || e.vendor || 'Restock Supplier',
       purchasePricePerReam: reamCost,
       costPerSheet: calculatedPerSheet,
-      initialQty: totalSheets,
-      currentQty: totalSheets
+      initialQty: totalUnits,
+      currentQty: totalUnits
     };
   });
 
@@ -473,12 +481,24 @@ export default function InventoryMaterialDetailsPage({
                     <td className="py-3 px-4 font-mono font-bold text-slate-600">{batch.purchaseDate && batch.purchaseDate !== '-' ? batch.purchaseDate : '-'}</td>
                     <td className="py-3 px-4 font-mono font-bold text-sky-600">{batch.id}</td>
                     <td className="py-3 px-4 text-slate-800">{batch.supplierName && batch.supplierName !== 'Unknown Vendor' && batch.supplierName !== '-' ? batch.supplierName : '-'}</td>
-                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">{batch.initialQty} {normalizeLaoUnit(targetItem.consumptionUnit, 'ແຜ່ນ')}</td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
+                      {batch.initialQty} {targetItem.consumptionUnit === 'ml' ? 'ml' : normalizeLaoUnit(targetItem.consumptionUnit, 'ແຜ່ນ')}
+                      {isInk && multiplier > 1 && (
+                        <span className="text-[10px] text-slate-400 font-normal block">
+                          (~{Math.round((batch.initialQty / multiplier) * 10) / 10} {targetItem.purchaseUnit || 'ຂວດ'})
+                        </span>
+                      )}
+                    </td>
                     <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600">{formatLAK(batch.purchasePricePerReam || batch.costPerSheet)}</td>
                     <td className="py-3 px-4 text-right font-mono font-black text-slate-800">
                       <span className="px-2.5 py-1 bg-slate-100 rounded-xl text-slate-700 font-mono">
-                        {batch.currentQty} {normalizeLaoUnit(targetItem.consumptionUnit, 'ແຜ່ນ')}
+                        {batch.currentQty} {targetItem.consumptionUnit === 'ml' ? 'ml' : normalizeLaoUnit(targetItem.consumptionUnit, 'ແຜ່ນ')}
                       </span>
+                      {isInk && multiplier > 1 && (
+                        <span className="text-[10px] text-slate-400 font-normal block mt-0.5">
+                          (~{Math.round((batch.currentQty / multiplier) * 10) / 10} {targetItem.purchaseUnit || 'ຂວດ'})
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))

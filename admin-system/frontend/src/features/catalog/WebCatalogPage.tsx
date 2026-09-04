@@ -1413,7 +1413,7 @@ export function WebCatalogPage() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
               {filteredProducts.map((p) => {
                 const cat = categories.find(c => c.id === p.categoryId || c.slug === p.category);
                 return (
@@ -1437,28 +1437,33 @@ export function WebCatalogPage() {
                       )}
 
                       {/* Top Bar: Category badge & Active toggle badge without overlap */}
-                      <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between gap-1.5 z-10 pointer-events-none">
-                        <div className="flex items-center gap-1 min-w-0 pointer-events-auto">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-600/90 backdrop-blur-sm text-white shadow-xs truncate max-w-[130px]">
+                      <div className="absolute top-2.5 inset-x-2.5 flex items-start justify-between gap-2 z-10 pointer-events-none">
+                        <div className="flex flex-col items-start gap-1 min-w-0 pointer-events-auto max-w-[62%]">
+                          <span 
+                            className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-600/95 backdrop-blur-sm text-white shadow-xs truncate max-w-full block"
+                            title={cat ? cat.nameLo : p.category}
+                          >
                             {cat ? cat.nameLo : p.category}
                           </span>
                           {p.bestseller && (
-                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/90 backdrop-blur-sm text-white shadow-xs shrink-0">
-                              Bestseller
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-500/95 backdrop-blur-sm text-white shadow-xs shrink-0 flex items-center gap-1">
+                              <Star className="w-2.5 h-2.5 fill-white" />
+                              <span>Bestseller</span>
                             </span>
                           )}
                         </div>
 
                         <button
                           onClick={() => toggleMutation.mutate({ id: p.id, isActive: !p.isActive })}
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold shadow-xs flex items-center gap-1 transition-all cursor-pointer backdrop-blur-sm shrink-0 pointer-events-auto ${
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow-xs flex items-center gap-1 transition-all cursor-pointer backdrop-blur-sm shrink-0 pointer-events-auto ${
                             p.isActive
-                              ? 'bg-emerald-500/90 text-white hover:bg-emerald-600'
-                              : 'bg-slate-700/80 text-slate-200 hover:bg-slate-600'
+                              ? 'bg-emerald-500/95 text-white hover:bg-emerald-600'
+                              : 'bg-slate-700/90 text-slate-200 hover:bg-slate-800'
                           }`}
+                          title={p.isActive ? 'ຄລິກເພື່ອເຊື່ອງສິນຄ້າຈາກໜ້າເວັບ' : 'ຄລິກເພື່ອສະແດງສິນຄ້າໃນໜ້າເວັບ'}
                         >
-                          {p.isActive ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                          <span>{p.isActive ? 'ສະແດງໜ້າເວັບ' : 'ເຊື່ອງໄວ້'}</span>
+                          {p.isActive ? <Eye className="w-3 h-3 shrink-0" /> : <EyeOff className="w-3 h-3 shrink-0" />}
+                          <span className="whitespace-nowrap">{p.isActive ? 'ສະແດງໜ້າເວັບ' : 'ເຊື່ອງໄວ້'}</span>
                         </button>
                       </div>
                     </div>
@@ -1484,20 +1489,22 @@ export function WebCatalogPage() {
 
                       {/* Pricing & Specs */}
                       <div className="border-t border-slate-100 pt-3 space-y-1.5 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center gap-1 text-indigo-600 font-semibold text-[11px]">
-                            <Calculator className="w-3.5 h-3.5" />
-                            {p.pricingModel === 'BOOK_MULTIPART' ? 'ງານປຶ້ມ / ເຂົ້າເລັ້ມ' :
-                             p.pricingModel === 'SQM_CUSTOM' ? 'ຕາລາງແມັດ' :
-                             p.pricingModel === 'FIXED_UNIT' ? 'ລາຄາຄົງທີ່' : 'ແຜ່ນມາດຕະຖານ'}
+                        <div className="flex items-center justify-between gap-2 min-w-0">
+                          <span className="flex items-center gap-1 text-indigo-600 font-semibold text-[11px] truncate min-w-0">
+                            <Calculator className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">
+                              {p.pricingModel === 'BOOK_MULTIPART' ? 'ງານປຶ້ມ / ເຂົ້າເລັ້ມ' :
+                               p.pricingModel === 'SQM_CUSTOM' ? 'ຕາລາງແມັດ' :
+                               p.pricingModel === 'FIXED_UNIT' ? 'ລາຄາຄົງທີ່' : 'ແຜ່ນມາດຕະຖານ'}
+                            </span>
                           </span>
-                          <span className="font-mono font-bold text-slate-800 text-[11px]">
+                          <span className="font-mono font-bold text-slate-800 text-[11px] whitespace-nowrap shrink-0 text-right">
                             {p.basePrice > 0 ? `${p.basePrice.toLocaleString()} LAK / ${p.unit || 'ຊິ້ນ'}` : 'ຄິດຕາມສະເປັກ'}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-[10px] text-slate-400">
-                          <span>ກຸ່ມສະເປັກ: {p.specGroups?.length || (p.options?.length ? 1 : 0)} ກຸ່ມ</span>
-                          <span>ຂັ້ນຕ່ຳ: {p.minQuantity || 1} {p.unit || 'ຊິ້ນ'}</span>
+                        <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400">
+                          <span className="truncate">ກຸ່ມສະເປັກ: {p.specGroups?.length || (p.options?.length ? 1 : 0)} ກຸ່ມ</span>
+                          <span className="whitespace-nowrap shrink-0">ຂັ້ນຕ່ຳ: {p.minQuantity || 1} {p.unit || 'ຊິ້ນ'}</span>
                         </div>
                       </div>
 

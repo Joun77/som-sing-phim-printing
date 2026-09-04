@@ -445,10 +445,26 @@ export async function getOrders(): Promise<Order[]> {
   try {
     const remote = await request<RawOrder[]>('/orders')
     setDemo(false)
-    return remote.map((o) => normalizeRemoteOrder(o)).concat(local)
+    const normalizedRemote = remote.map((o) => normalizeRemoteOrder(o))
+    
+    // DB is Single Source of Truth: merge local items that do not exist on remote DB
+    const remoteKeys = new Set(
+      normalizedRemote.flatMap((o) => [o.order_id, o.order_number, o.id].filter(Boolean) as string[])
+    )
+    const uniqueLocal = local.filter(
+      (loc) => !remoteKeys.has(loc.order_id) && (!loc.order_number || !remoteKeys.has(loc.order_number)) && (!loc.id || !remoteKeys.has(loc.id))
+    )
+    return [...normalizedRemote, ...uniqueLocal]
   } catch {
     setDemo(true)
-    return seedDemoOrders().concat(local)
+    const demo = seedDemoOrders()
+    const demoKeys = new Set(
+      demo.flatMap((o) => [o.order_id, o.order_number, o.id].filter(Boolean) as string[])
+    )
+    const uniqueLocal = local.filter(
+      (loc) => !demoKeys.has(loc.order_id) && (!loc.order_number || !demoKeys.has(loc.order_number)) && (!loc.id || !demoKeys.has(loc.id))
+    )
+    return [...demo, ...uniqueLocal]
   }
 }
 
@@ -560,36 +576,70 @@ interface RawOrder {
 
 // Map backend order model (order_number, Status*) into frontend tracking shape.
 function normalizeRemoteOrder(o: RawOrder): Order {
+  const rawStatus = String(o.status || o.overall_status || 'PENDING_SLIP_CHECK').trim()
+  const upperStatus = rawStatus.toUpperCase().replace(/[\s-]+/g, '_')
+
   const statusMap: Record<string, string> = {
     DRAFT: 'PENDING_SLIP_CHECK',
+    PENDING: 'PENDING_SLIP_CHECK',
     QUOTATION: 'PENDING_SLIP_CHECK',
     PENDING_PAYMENT: 'PENDING_SLIP_CHECK',
     PENDING_SLIP_CHECK: 'PENDING_SLIP_CHECK',
     WAITING_DEPOSIT: 'PENDING_SLIP_CHECK',
+    PAID: 'PAYMENT_APPROVED',
     PAYMENT_APPROVED: 'PAYMENT_APPROVED',
     PAID_PREPRESS: 'PAYMENT_APPROVED',
+    VERIFIED: 'PAYMENT_APPROVED',
+    PRE_PRESS: 'PREPRESS_CHECK',
+    PREPRESS: 'PREPRESS_CHECK',
     PREPRESS_CHECK: 'PREPRESS_CHECK',
     WAITING_APPROVAL: 'WAITING_APPROVAL',
     PROOF_REJECTED: 'PROOF_REJECTED',
     FILE_CONFIRMED: 'FILE_CONFIRMED',
+    PROOF_APPROVED: 'FILE_CONFIRMED',
+    APPROVED: 'FILE_CONFIRMED',
     READY_TO_PRINT: 'READY_TO_PRINT',
     ORDER_CREATED: 'READY_TO_PRINT',
+    QUEUED: 'READY_TO_PRINT',
+    QUEUED_FOR_PRINT: 'READY_TO_PRINT',
+    ALLOCATED: 'READY_TO_PRINT',
+    MACHINE_SETUP: 'READY_TO_PRINT',
     IN_PRODUCTION: 'IN_PRODUCTION',
+    PRINTING: 'IN_PRODUCTION',
+    RUNNING: 'IN_PRODUCTION',
     POST_PRESS: 'POST_PRESS',
     FINISHING: 'POST_PRESS',
-    SHIPPED: 'SHIPPED',
+    CUTTING: 'POST_PRESS',
+    BINDING: 'POST_PRESS',
+    QC: 'POST_PRESS',
+    READY: 'POST_PRESS',
     READY_FOR_DELIVERY: 'SHIPPED',
+    READY_FOR_PICKUP: 'SHIPPED',
+    SHIPPED: 'SHIPPED',
+    IN_TRANSIT: 'SHIPPED',
+    DISPATCHED: 'SHIPPED',
     DELIVERED: 'DELIVERED',
-    COMPLETED: 'DELIVERED',
+    COMPLETED: 'COMPLETED',
     CANCELLED: 'CANCELLED',
   }
+
   const effectiveId = o.order_no || o.order_number || o.id || ''
   const effectivePhone = o.customer_phone || o.phone || ''
   const effectiveAddress = o.customer_address || o.address || ''
   const effectivePrice = typeof o.total_price === 'number' && o.total_price > 0
     ? o.total_price
     : (typeof o.total_amount_lak === 'number' ? o.total_amount_lak : 0)
-  const rawStatus = o.status || o.overall_status || 'PENDING_SLIP_CHECK'
+
+  const resolvedStatus = statusMap[upperStatus] || statusMap[rawStatus] || (
+    upperStatus.includes('DELIVER') || upperStatus.includes('COMPLETE') ? 'DELIVERED' :
+    upperStatus.includes('SHIP') || upperStatus.includes('TRANSIT') ? 'SHIPPED' :
+    upperStatus.includes('CUT') || upperStatus.includes('POST') || upperStatus.includes('FINISH') || upperStatus.includes('READY') ? 'POST_PRESS' :
+    upperStatus.includes('PRINT') || upperStatus.includes('PROD') ? 'IN_PRODUCTION' :
+    upperStatus.includes('PROOF') || upperStatus.includes('FILE') ? 'FILE_CONFIRMED' :
+    upperStatus.includes('PRE') ? 'PREPRESS_CHECK' :
+    upperStatus.includes('PAID') ? 'PAYMENT_APPROVED' :
+    'PENDING_SLIP_CHECK'
+  )
 
   return {
     order_id: effectiveId,
@@ -601,7 +651,7 @@ function normalizeRemoteOrder(o: RawOrder): Order {
     quantity: o.items && o.items[0] ? o.items[0].quantity : 1,
     total_price: effectivePrice,
     currency: o.currency || 'LAK',
-    status: statusMap[rawStatus] || rawStatus || 'PENDING_SLIP_CHECK',
+    status: resolvedStatus,
     created_at: o.created_at,
     timeline: o.timeline || [],
     tracking_number: o.tracking_number || o.tracking,

@@ -10,9 +10,14 @@
     "docker:up": "docker compose up -d",
     "docker:backend": "docker compose up -d db backend",
     "docker:down": "docker compose down",
-    "docker:logs": "docker compose logs -f"
+    "docker:logs": "docker compose logs -f",
+    "test:unit:backend": "cd admin-system/backend && go test ./...",
+    "test:unit:frontend": "vitest run admin-system/frontend/src/utils/__tests__/",
+    "test:unit": "npm run test:unit:backend && npm run test:unit:frontend",
+    "test": "npm run test:unit"
   },
   "devDependencies": {
-    "concurrently": "^10.0.4"
+    "concurrently": "^10.0.4",
+    "vitest": "^3.2.7"
   }
 }

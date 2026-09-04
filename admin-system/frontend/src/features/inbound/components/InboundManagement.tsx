@@ -553,13 +553,15 @@ export default function InboundManagement() {
         });
       }
     } else {
-      const sheetsPerPack = Number(data.sheetsPerPack || data.specs?.sheetsPerPack || data.sheets_per_pack || data.sheets_per_ream || 500);
       const isSheetPaper = type === 'PAPER' || type === 'MATERIAL' || data.category === 'Paper';
+      const isInk = type === 'INK' || data.category === 'Ink' || (data.category || '').toLowerCase() === 'ink';
+      const sheetsPerPack = Number(data.sheetsPerPack || data.specs?.sheetsPerPack || data.sheets_per_pack || data.sheets_per_ream || 500);
+      const inkVolume = Number(data.volume || data.specs?.volume || data.specs?.volumePerBottle || data.specs?.inkVolume || 70);
       const packQty = Number(data.importQty || 1);
-      const totalSheets = isSheetPaper ? packQty * sheetsPerPack : packQty;
-      const unitPrice = Number(data.unitPrice || data.price || calcTotal || 95000);
-      const perSheetPrice = isSheetPaper && sheetsPerPack > 0 ? (unitPrice / sheetsPerPack) : unitPrice;
-
+      const multiplier = isSheetPaper ? sheetsPerPack : (isInk ? inkVolume : 1);
+      const totalUnits = packQty * multiplier;
+      const unitPrice = Number(data.unitPrice || data.price || calcTotal || (isInk ? 80000 : 95000));
+      const perUnitConsumptionPrice = multiplier > 0 ? (unitPrice / multiplier) : unitPrice;
 
       const existingItem = inventory.find(item => 
         (item.id && (item.id === data.id || item.id === data.sku || item.id === logId)) ||
@@ -575,20 +577,20 @@ export default function InboundManagement() {
           supplierName: data.supplier || data.vendor || '',
           purchasePrice: unitPrice,
           purchaseQty: packQty,
-          sheetsToAdd: totalSheets
+          sheetsToAdd: totalUnits
         });
       } else {
         const newItem = {
           id: data.id || logId,
           name: data.name,
-          category: isSheetPaper ? 'Paper' : (type === 'INK' ? 'Ink' : 'Finishing'),
-          stockQty: totalSheets,
-          consumptionUnit: isSheetPaper ? 'ແຜ່ນ' : (data.unit || 'Units'),
-          purchaseUnit: isSheetPaper ? 'ແພັກ' : (data.unit || 'Units'),
-          purchaseMultiplier: isSheetPaper ? sheetsPerPack : 1,
+          category: isSheetPaper ? 'Paper' : (isInk ? 'Ink' : 'Finishing'),
+          stockQty: totalUnits,
+          consumptionUnit: isSheetPaper ? 'ແຜ່ນ' : (isInk ? 'ml' : (data.unit || 'Units')),
+          purchaseUnit: isSheetPaper ? 'ແພັກ' : (isInk ? (data.unit || 'ຂວດ') : (data.unit || 'Units')),
+          purchaseMultiplier: multiplier,
           costPerPurchaseUnit: unitPrice,
-          costPerConsumptionUnit: perSheetPrice,
-          reorderThreshold: 50,
+          costPerConsumptionUnit: perUnitConsumptionPrice,
+          reorderThreshold: isInk ? 100 : 50,
           specs: data.specs || { ...data },
           batches: [
             {
@@ -596,9 +598,9 @@ export default function InboundManagement() {
               purchaseDate: data.receiptDate || data.importDate || new Date().toISOString().split('T')[0],
               supplierName: data.supplier || data.vendor || '',
               purchasePricePerReam: unitPrice,
-              costPerSheet: perSheetPrice,
-              initialQty: totalSheets,
-              currentQty: totalSheets
+              costPerSheet: perUnitConsumptionPrice,
+              initialQty: totalUnits,
+              currentQty: totalUnits
             }
           ]
         };
@@ -792,13 +794,13 @@ export default function InboundManagement() {
   return (
     <div className="space-y-6 text-slate-800 antialiased">
       {/* Header Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-xs">
-        <div>
-          <h2 className="font-extrabold text-2xl text-slate-900 tracking-tight flex items-center gap-2">
-            <PackagePlus className="w-8 h-8 text-indigo-600" />
-            <span>{currentLang === 'lo' ? 'ບັນທຶກການນຳເຂົ້າສິນຄ້າ (Inbound Master)' : 'Inbound Master Management'}</span>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-slate-100 shadow-xs">
+        <div className="min-w-0">
+          <h2 className="font-extrabold text-xl sm:text-2xl text-slate-900 tracking-tight flex items-center gap-2.5">
+            <PackagePlus className="w-7 h-7 sm:w-8 sm:h-8 text-indigo-600 shrink-0" />
+            <span className="truncate">{currentLang === 'lo' ? 'ບັນທຶກການນຳເຂົ້າສິນຄ້າ (Inbound Master)' : 'Inbound Master Management'}</span>
           </h2>
-          <p className="text-sm font-semibold text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm font-semibold text-slate-400 mt-1">
             {currentLang === 'lo' 
               ? 'ຈັດການປະຫວັດການນຳເຂົ້າ, ເພີ່ມສິນຄ້າໃໝ່, ອັດຕາແລກປ່ຽນ ແລະ ຄຳນວນຕົ້ນທຶນແທ້ຈິງ' 
               : 'Track and manage material receipts, calculate real landed costs, and import assets'}
@@ -806,110 +808,119 @@ export default function InboundManagement() {
         </div>
 
         {/* Global Import Action Buttons - 2 Distinct Buttons */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0">
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="flex items-center gap-2 px-3.5 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-2xl font-bold shadow-xs hover:border-slate-300 transition active:scale-98 cursor-pointer disabled:opacity-60"
+            className="flex items-center gap-2 px-3 sm:px-3.5 py-2.5 sm:py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-2xl font-bold shadow-xs hover:border-slate-300 transition active:scale-98 cursor-pointer disabled:opacity-60 text-xs"
             title={currentLang === 'lo' ? 'ດຶງຂໍ້ມູນລ່າສຸດ' : 'Refresh live data'}
           >
             <RefreshCw className={`w-4 h-4 text-indigo-600 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span className="text-xs">{currentLang === 'lo' ? 'ຣີເຟຣຊ' : 'Refresh'}</span>
+            <span>{currentLang === 'lo' ? 'ຣີເຟຣຊ' : 'Refresh'}</span>
           </button>
 
           {/* Button 1: Restock Existing Inventory */}
           <button
             onClick={() => setIsRestockModalOpen(true)}
-            className="flex items-center gap-2 px-5 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-2xl font-bold shadow-lg shadow-emerald-200 transition cursor-pointer"
+            className="flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-2xl font-bold shadow-lg shadow-emerald-200 transition cursor-pointer text-xs sm:text-sm"
           >
-            <RefreshCw className="w-4 h-4" />
-            <span>{currentLang === 'lo' ? 'ເຕີມສະຕັອກເດີມ (Restock)' : 'Restock Existing'}</span>
+            <RefreshCw className="w-4 h-4 shrink-0" />
+            <span className="whitespace-nowrap">{currentLang === 'lo' ? 'ເຕີມສະຕັອກເດີມ (Restock)' : 'Restock Existing'}</span>
           </button>
 
           {/* Button 2: New Item Batch Inbound */}
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-5 py-3.5 bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white rounded-2xl font-bold shadow-lg shadow-indigo-200 transition cursor-pointer"
+            className="flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white rounded-2xl font-bold shadow-lg shadow-indigo-200 transition cursor-pointer text-xs sm:text-sm"
           >
-            <PackagePlus className="w-4 h-4" />
-            <span>{currentLang === 'lo' ? 'ນຳເຂົ້າສິນຄ້າໃໝ່ (New Items)' : 'New Inbound'}</span>
+            <PackagePlus className="w-4 h-4 shrink-0" />
+            <span className="whitespace-nowrap">{currentLang === 'lo' ? 'ນຳເຂົ້າສິນຄ້າໃໝ່ (New Items)' : 'New Inbound'}</span>
           </button>
         </div>
       </div>
 
       {/* Summary KPI Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {/* KPI 1 */}
-        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between gap-3 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase truncate">
               {currentLang === 'lo' ? 'ລາຍການທັງໝົດ' : 'Total Items'}
             </p>
-            <h3 className="text-2xl font-extrabold text-slate-900 mt-1">{filteredData.length}</h3>
-            <p className="text-xs text-slate-500 font-semibold mt-1">
+            <h3 className="text-xl sm:text-2xl font-black text-slate-900 mt-1 tracking-tight truncate">
+              {filteredData.length}
+            </h3>
+            <p className="text-xs text-slate-500 font-semibold mt-1 truncate">
               {currentLang === 'lo' ? 'ລາຍການທີ່ສະແດງ' : 'Filtered entries'}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-            <PackagePlus className="w-6 h-6" />
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
+            <PackagePlus className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
         </div>
 
         {/* KPI 2 */}
-        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between gap-3 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase truncate">
               {currentLang === 'lo' ? 'ຈຳນວນນຳເຂົ້າລວມ' : 'Total Inbound Qty'}
             </p>
-            <h3 className="text-2xl font-extrabold text-slate-900 mt-1">{totalInboundQty.toLocaleString()}</h3>
-            <p className="text-xs text-slate-500 font-semibold mt-1">
+            <h3 className="text-xl sm:text-2xl font-black text-slate-900 mt-1 tracking-tight truncate">
+              {totalInboundQty.toLocaleString()}
+            </h3>
+            <p className="text-xs text-slate-500 font-semibold mt-1 truncate">
               {currentLang === 'lo' ? 'ຫົວໜ່ວຍທັງໝົດ' : 'Total units received'}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-            <Layers className="w-6 h-6" />
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+            <Layers className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
         </div>
 
         {/* KPI 3 */}
-        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between gap-3 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase truncate">
               {currentLang === 'lo' ? 'ມູນຄ່ານຳເຂົ້າລວມ' : 'Total Inbound Value'}
             </p>
-            <h3 className="text-2xl font-extrabold text-slate-900 mt-1">{formatCurrency(totalInboundValue)}</h3>
-            <p className="text-xs text-slate-500 font-semibold mt-1">
+            <h3 
+              className="text-base sm:text-lg lg:text-base xl:text-lg 2xl:text-xl font-black text-slate-900 mt-1 tracking-tight truncate" 
+              title={formatCurrency(totalInboundValue)}
+            >
+              {formatCurrency(totalInboundValue)}
+            </h3>
+            <p className="text-xs text-slate-500 font-semibold mt-1 truncate">
               {currentLang === 'lo' ? 'ຕົ້ນທຶນຕົວຈິງ' : 'Actual Landed Cost'}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-sky-50 flex items-center justify-center text-sky-600">
-            <FileSpreadsheet className="w-6 h-6" />
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-sky-50 flex items-center justify-center text-sky-600 shrink-0">
+            <FileSpreadsheet className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
         </div>
 
         {/* KPI 4 */}
-        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-100 shadow-xs flex items-center justify-between gap-3 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase truncate">
               {currentLang === 'lo' ? 'ໝວດໝູ່ທີ່ໃຊ້ງານ' : 'Active Category'}
             </p>
-            <h3 className="text-lg font-extrabold text-slate-900 mt-1 truncate">
+            <h3 className="text-base sm:text-lg font-black text-slate-900 mt-1 truncate">
               {activeCategoryFilter}
             </h3>
-            <p className="text-xs text-slate-500 font-semibold mt-1">
+            <p className="text-xs text-slate-500 font-semibold mt-1 truncate">
               {filteredData.length} entries found
             </p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600">
-            <Filter className="w-6 h-6" />
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
+            <Filter className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
         </div>
       </div>
 
       {/* Filter Pills Bar & Search Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
         {/* Category Filter Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-thin">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 lg:pb-0 scrollbar-none no-scrollbar">
           {[
             { id: 'ALL', label: 'All Items' },
             { id: 'MATERIAL', label: 'Paper / Material' },
@@ -921,7 +932,7 @@ export default function InboundManagement() {
             <button
               key={tab.id}
               onClick={() => setActiveCategoryFilter(tab.id)}
-              className={`px-5 py-2.5 rounded-full text-xs transition cursor-pointer flex items-center ${
+              className={`px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs transition cursor-pointer flex items-center shrink-0 whitespace-nowrap ${
                 activeCategoryFilter === tab.id
                   ? 'font-extrabold bg-slate-900 text-white shadow-xs'
                   : 'font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
@@ -938,7 +949,7 @@ export default function InboundManagement() {
         </div>
 
         {/* Search Bar */}
-        <div className="w-full md:w-80 relative">
+        <div className="w-full lg:w-80 relative shrink-0">
           <input
             type="text"
             value={searchQuery}
@@ -953,17 +964,17 @@ export default function InboundManagement() {
       {/* Main Inbound Data Table */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto scrollbar-thin">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full min-w-[940px] text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
-                <th className="py-4 px-6">{currentLang === 'lo' ? 'ວັນທີ & ເວລານຳເຂົ້າ' : 'Import Date & Time'}</th>
-                <th className="py-4 px-6 text-center">{currentLang === 'lo' ? 'ປະເພດ' : 'Type'}</th>
-                <th className="py-4 px-6">{currentLang === 'lo' ? 'ລະຫັດສິນຄ້າ' : 'Item Code'}</th>
-                <th className="py-4 px-6">{currentLang === 'lo' ? 'ຊື່ / ລຸ້ນ' : 'Name/Model'}</th>
-                <th className="py-4 px-6 text-right">{currentLang === 'lo' ? 'ຈຳນວນ' : 'Quantity/Unit'}</th>
-                <th className="py-4 px-6 text-right">{currentLang === 'lo' ? 'ມູນຄ່າລວມ' : 'Total Value'}</th>
-                <th className="py-4 px-6 text-center">{currentLang === 'lo' ? 'ໃບບິນ' : 'Receipt Link'}</th>
-                <th className="py-4 px-6 text-right">{currentLang === 'lo' ? 'ການຈັດການ' : 'Actions'}</th>
+              <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                <th className="py-4 px-5">{currentLang === 'lo' ? 'ວັນທີ & ເວລານຳເຂົ້າ' : 'Import Date & Time'}</th>
+                <th className="py-4 px-4 text-center">{currentLang === 'lo' ? 'ປະເພດ' : 'Type'}</th>
+                <th className="py-4 px-5">{currentLang === 'lo' ? 'ລະຫັດສິນຄ້າ' : 'Item Code'}</th>
+                <th className="py-4 px-5">{currentLang === 'lo' ? 'ຊື່ / ລຸ້ນ' : 'Name/Model'}</th>
+                <th className="py-4 px-5 text-right">{currentLang === 'lo' ? 'ຈຳນວນ' : 'Quantity/Unit'}</th>
+                <th className="py-4 px-5 text-right">{currentLang === 'lo' ? 'ມູນຄ່າລວມ' : 'Total Value'}</th>
+                <th className="py-4 px-4 text-center">{currentLang === 'lo' ? 'ໃບບິນ' : 'Receipt Link'}</th>
+                <th className="py-4 px-5 text-right">{currentLang === 'lo' ? 'ການຈັດການ' : 'Actions'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium">
@@ -977,12 +988,12 @@ export default function InboundManagement() {
               ) : (
                 filteredData.map(item => (
                   <tr key={item.id} className="hover:bg-slate-50/80 transition group">
-                    <td className="py-4 px-6">
+                    <td className="py-4 px-5 whitespace-nowrap">
                       <span className="font-mono font-bold text-slate-800 block text-xs">
                         {item.inboundDate || item.receiptDate || item.createdAt || '-'}
                       </span>
                     </td>
-                    <td className="py-4 px-6 text-center">
+                    <td className="py-4 px-4 text-center whitespace-nowrap">
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
                         item.category === 'MATERIAL' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                         item.category === 'INK' ? 'bg-amber-50 text-amber-700 border-amber-200' :
@@ -993,13 +1004,15 @@ export default function InboundManagement() {
                         {item.categoryPill || item.category}
                       </span>
                     </td>
-                    <td className="py-4 px-6 font-mono font-bold text-slate-600">
+                    <td className="py-4 px-5 font-mono font-bold text-slate-600 whitespace-nowrap">
                       {item.specs?.materialId || item.sku || item.skuCode || item.specs?.skuCode || item.specs?.sku || item.poNumber}
                     </td>
-                    <td className="py-4 px-6">
-                      <span className="font-bold text-slate-900 block group-hover:text-sky-600 transition">{resolveInboundItemName(item)}</span>
+                    <td className="py-4 px-5 max-w-[280px]">
+                      <span className="font-bold text-slate-900 block group-hover:text-sky-600 transition truncate" title={resolveInboundItemName(item)}>
+                        {resolveInboundItemName(item)}
+                      </span>
                     </td>
-                    <td className="py-4 px-6 text-right">
+                    <td className="py-4 px-5 text-right whitespace-nowrap">
                       <span className="font-mono font-black text-slate-900 block">
                         {(() => {
                           const cat = (item.category || '').toUpperCase();
@@ -1024,12 +1037,12 @@ export default function InboundManagement() {
                         })()}
                       </span>
                     </td>
-                    <td className="py-4 px-6 text-right">
+                    <td className="py-4 px-5 text-right whitespace-nowrap">
                       <span className="font-mono font-black text-emerald-600 block">
                         {formatLAK(Number(item.totalPrice) || 0)}
                       </span>
                     </td>
-                    <td className="py-4 px-6 text-center">
+                    <td className="py-4 px-4 text-center whitespace-nowrap">
                       {item.receiptUrl || item.docs?.paymentSlip ? (
                         <a
                           href={item.receiptUrl || item.docs?.paymentSlip}
@@ -1043,7 +1056,7 @@ export default function InboundManagement() {
                         <span className="text-slate-400">-</span>
                       )}
                     </td>
-                    <td className="py-4 px-6 text-right">
+                    <td className="py-4 px-5 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => setSelectedDrawerItem(item)}
@@ -1117,8 +1130,8 @@ export default function InboundManagement() {
               </div>
 
               {/* Drawer Body */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin">
-                <div className="grid grid-cols-3 gap-3">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 scrollbar-thin">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
                     <span className="text-[11px] text-slate-400 font-extrabold block mb-1">Total Import Cost</span>
                     <span className="text-sm md:text-base font-black text-slate-900">{formatLAK(selectedDrawerItem.totalPrice || 0)}</span>

@@ -208,11 +208,15 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
         ]
       };
     } else if (item.importType === 'INK') {
+      const inkVolumeMl = Number(item.inkVolume) || 70;
+      const packCount = Number(item.importQty) || 1;
+      const totalMl = packCount * inkVolumeMl;
       const inkSpecsObj = {
         inkCode: item.inkCode,
         colorName: item.inkColorName,
         colorGroup: item.inkColorGroup,
-        volume: Number(item.inkVolume) || 100,
+        volume: inkVolumeMl,
+        inkVolume: inkVolumeMl,
         inkBaseType: item.inkBaseType,
         isCompatible: item.isCompatible,
         targetPrinterId: item.inkTargetPrinter,
@@ -230,8 +234,11 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
         inkCode: item.inkCode,
         colorName: item.inkColorName,
         colorGroup: item.inkColorGroup,
-        volume: Number(item.inkVolume) || 100,
-        stockQty: Number(item.importQty),
+        volume: inkVolumeMl,
+        stockQty: totalMl,
+        consumptionUnit: 'ml',
+        purchaseUnit: item.importUnit || 'ຂວດ',
+        purchaseMultiplier: inkVolumeMl,
         inkBaseType: item.inkBaseType,
         isCompatible: item.isCompatible,
         targetPrinterId: item.inkTargetPrinter,

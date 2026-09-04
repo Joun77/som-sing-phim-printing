@@ -68,6 +68,7 @@ func main() {
 			}
 		}
 		c.JSON(http.StatusOK, gin.H{
+			"ok":       true,
 			"status":   "healthy",
 			"database": dbStatus,
 		})

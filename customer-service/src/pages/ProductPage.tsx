@@ -51,7 +51,7 @@ export default function ProductPage() {
   const { slug } = useParams()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { currency, convertTo, setOrderDraft, addToCart, t, language, getProduct, getCategory } = useShop()
+  const { currency, rates, convertTo, setOrderDraft, addToCart, t, language, getProduct, getCategory } = useShop()
   const [remoteProduct, setRemoteProduct] = useState<RemoteProduct | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -1041,7 +1041,7 @@ export default function ProductPage() {
               <div className="p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-5">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
                   <div>
-                    <span className="text-xs font-black uppercase tracking-wider text-amber-500 block">
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
                       {categoryName}
                     </span>
                     <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 m-0">
@@ -1180,7 +1180,7 @@ export default function ProductPage() {
                       {/* Active File Header & Batch Apply Helper */}
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
                         <div>
-                          <span className="text-[11px] font-black uppercase tracking-wider text-amber-500 block">
+                          <span className="text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
                             ຟາຍທີ {activeArtworkIndex + 1} / {uploadedArtworks.length}
                           </span>
                           <h3 className="text-lg font-black text-slate-900 dark:text-white m-0 truncate max-w-[280px]">
@@ -1192,7 +1192,7 @@ export default function ProductPage() {
                           <button
                             type="button"
                             onClick={applySpecsToAllArtworks}
-                            className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-bold transition flex items-center gap-1"
+                            className="px-3 py-1.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-700 dark:text-amber-300 border border-amber-500/30 text-xs font-bold transition flex items-center gap-1"
                           >
                             <span>ນຳໃຊ້ສເປັກນີ້ກັບທຸກຟາຍ</span>
                           </button>
@@ -1242,7 +1242,7 @@ export default function ProductPage() {
                                     <span>{language === 'en' ? 'Color Print Mode' : 'ລະບົບສີງານພິມ (Color Mode)'}</span>
                                   </span>
                                 </div>
-                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-sky-500/20">
                                   {activeArtwork.colorMode === 'cmyk' ? 'ພິມ 4 ສີ (CMYK)' : 'ພິມຂາວ-ດຳ'}
                                 </span>
                               </div>

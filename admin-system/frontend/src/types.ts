@@ -105,6 +105,8 @@ export interface AppContextValue {
   setAutoRefresh?: (a: boolean) => void;
   fetchLiveRates?: () => Promise<void>;
   setExchangeRates?: (r: any) => void;
+  isLive?: boolean;
+  connectionStatus?: 'connected' | 'offline' | 'checking';
 
   quotations: Quotation[];
   setQuotations: Dispatch<SetStateAction<Quotation[]>>;

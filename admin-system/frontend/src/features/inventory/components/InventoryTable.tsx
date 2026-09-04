@@ -327,23 +327,23 @@ export default function InventoryTable({ items, activeTab, onRestockItem, onView
                       <div>
                         <span className="font-bold text-slate-700 block font-mono text-xs">{lot.purchaseDate}</span>
                         <span className="text-[10px] text-slate-400 block font-sans">
-                          Init: {Number(lot.initialQty).toLocaleString()} {normalizeLaoUnit(parent.consumptionUnit, 'ແຜ່ນ')}
+                          Init: {Number(lot.initialQty).toLocaleString()} {parent.consumptionUnit === 'ml' ? 'ml' : normalizeLaoUnit(parent.consumptionUnit, 'ແຜ່ນ')}
                           {parent.purchaseUnit && parent.purchaseMultiplier && Number(parent.purchaseMultiplier) > 1 && (
-                            <span className="text-slate-400 font-normal"> (~{Math.round(lot.initialQty / parent.purchaseMultiplier)} {normalizeLaoUnit(parent.purchaseUnit, 'ແພັກ')})</span>
+                            <span className="text-slate-400 font-normal"> (~{Math.round(lot.initialQty / parent.purchaseMultiplier)} {normalizeLaoUnit(parent.purchaseUnit, (parent.category?.toLowerCase() === 'ink' ? 'ຂວດ' : 'ແພັກ'))})</span>
                           )}
                         </span>
                       </div>
                     </td>
                     <td className="py-4.5 px-6">
                       <div className="font-black text-slate-900 font-mono text-sm">
-                        {Number(lot.currentQty).toLocaleString()} {normalizeLaoUnit(parent.consumptionUnit, 'ແຜ່ນ')}
+                        {Number(lot.currentQty).toLocaleString()} {parent.consumptionUnit === 'ml' ? 'ml' : normalizeLaoUnit(parent.consumptionUnit, 'ແຜ່ນ')}
                       </div>
                       {parent.purchaseUnit && parent.purchaseMultiplier && Number(parent.purchaseMultiplier) > 1 && (
                         <div className="text-[10px] text-slate-400 font-sans font-medium">
-                          ≈ {Math.round((lot.currentQty / parent.purchaseMultiplier) * 10) / 10} {normalizeLaoUnit(parent.purchaseUnit, 'ແພັກ')}
+                          ≈ {Math.round((lot.currentQty / parent.purchaseMultiplier) * 10) / 10} {normalizeLaoUnit(parent.purchaseUnit, (parent.category?.toLowerCase() === 'ink' ? 'ຂວດ' : 'ແພັກ'))}
                         </div>
                       )}
-                      {(parent.category?.toLowerCase() === 'ink' || parent.category?.toLowerCase() === 'toner') && parent.volume && (
+                      {(parent.category?.toLowerCase() === 'ink' || parent.category?.toLowerCase() === 'toner') && parent.consumptionUnit !== 'ml' && parent.volume && (
                         <div className="text-[10px] text-slate-400 font-mono">
                           {Number(lot.currentQty) * Number(parent.volume)} ml
                         </div>

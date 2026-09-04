@@ -214,7 +214,7 @@ export default function Header() {
               className="nav-link"
               onClick={() => setMenuOpen(false)}
             >
-              {language === 'en' ? 'Print Guide & Materials' : 'ຄູ່ມືວັດສະດຸ & ເຈ້ຍ'}
+              {language === 'en' ? 'Product Info' : 'ຂໍ້ມູນຜະລິດຕະພັນ'}
             </Link>
             <button
               type="button"
@@ -342,6 +342,10 @@ export default function Header() {
         isOpen={isProfileOpen} 
         onClose={() => setIsProfileOpen(false)}
         onLoginSuccess={(phone) => setCustomerPhone(phone)}
+        onOpenOrders={() => {
+          setIsProfileOpen(false);
+          setIsOrdersOpen(true);
+        }}
       />
       <CustomerOrderHistoryDrawer 
         isOpen={isOrdersOpen} 

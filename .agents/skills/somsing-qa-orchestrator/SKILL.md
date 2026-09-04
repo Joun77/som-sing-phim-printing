@@ -118,14 +118,20 @@ For each phase, write a Markdown prompt file following this template:
 2. {Expected UI or data behavior}
 ```
 
-### Step 5: Save Task Files to Repository
+### Step 5: Save Task Files and QA Reports to Repository
 
-- Save all generated files into `.agents/tasks/` in the project root.
-- Follow the naming standard: `PROMPT_PHASE{N}_{DESCRIPTIVE_UPPERCASE_NAME}.md`.
+- **Task Files:** Save all generated task prompt files into `.agents/tasks/` in the project root.
+  - Follow the naming standard: `PROMPT_PHASE{N}_{DESCRIPTIVE_UPPERCASE_NAME}.md` or `TASK_{NAME}.md`.
+- **QA & Verification Reports:** Save all audit and test verification reports into `.agents/reports/`.
+  - Follow the naming standard: `REPORT_{TASK_NAME}.md` (e.g. `REPORT_PHASE3_CROSS_BROWSER_SYNC.md`).
+  - The report must summarize: Changes Made, Unit Test Results (Vitest / Go test), API Status, UX/UI Usability Checklist, and Final Sign-off.
 - Present a clear summary of findings and the generated phases to the user.
 
 ## Gotchas and Guardrails
 
 - **Enforce Negative Constraints:** Always explicitly state what downstream agents must NOT touch.
 - **Preserve Business Logic:** Never alter core pricing formulas or inventory deduction logic unless the task specifically targets them.
+- **Strict Testing Policy (No Playwright):**
+  - **Unit Testing:** ห้ามสั่งรันหรือติดตั้ง Playwright โดยเด็ดขาด ให้ใช้ `go test` หรือ `vitest` เท่านั้น
+  - **Fast & Reliable:** การทดสอบความถูกต้องของระบบให้ใช้ Compile Check (`go build`, `npm run build`), Unit Tests และ Direct API Verification
 - **Independent Verifiability:** Each phase must have clear acceptance criteria that can be validated before proceeding to the next phase.

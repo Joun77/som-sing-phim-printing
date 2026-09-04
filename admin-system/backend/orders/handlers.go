@@ -40,12 +40,8 @@ func cleanPhoneNumber(phone string) string {
 		}
 	}
 	d := digits.String()
-	if strings.HasPrefix(d, "856") {
-		d = strings.TrimPrefix(d, "856")
-	}
-	if strings.HasPrefix(d, "0") {
-		d = strings.TrimPrefix(d, "0")
-	}
+	d = strings.TrimPrefix(d, "856")
+	d = strings.TrimPrefix(d, "0")
 	return d
 }
 
@@ -853,11 +849,17 @@ func getOrdersFromDB() ([]Order, error) {
 	}
 	query := `
 		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''), 
+		       COALESCE(customer_email, ''), COALESCE(customer_address, ''),
 		       COALESCE(overall_status, status::text), COALESCE(deposit_lak, deposit_amount), 
 		       COALESCE(total_amount_lak, total_price), total_cost, COALESCE(google_drive_link, ''),
 		       COALESCE(customer_id, ''), COALESCE(remaining_lak, 0), COALESCE(delivery_date, ''),
 		       stock_deducted_at, COALESCE(proof_url, ''), proof_approved_at, proof_rejected_at,
 		       COALESCE(proof_signature_ip, ''), COALESCE(proof_rejection_reason, ''),
+		       COALESCE(tracking_code, ''), COALESCE(internal_tracking_code, ''),
+		       COALESCE(courier_name, ''), COALESCE(branch_code, ''),
+		       COALESCE(digital_proof_url, ''), COALESCE(proof_version, 1),
+		       COALESCE(proof_status, 'NOT_SUBMITTED'), COALESCE(proof_feedback, ''),
+		       COALESCE(prepress_notes, ''),
 		       created_at, updated_at
 		FROM orders
 		ORDER BY created_at DESC
@@ -873,11 +875,18 @@ func getOrdersFromDB() ([]Order, error) {
 		var o Order
 		var st string
 		err := rows.Scan(
-			&o.ID, &o.OrderNo, &o.CustomerName, &o.CustomerPhone, &st,
+			&o.ID, &o.OrderNo, &o.CustomerName, &o.CustomerPhone,
+			&o.CustomerEmail, &o.CustomerAddress,
+			&st,
 			&o.DepositLAK, &o.TotalAmountLAK, &o.TotalCost, &o.GoogleDriveLink,
 			&o.CustomerID, &o.RemainingLAK, &o.DeliveryDate,
 			&o.StockDeductedAt, &o.ProofURL, &o.ProofApprovedAt, &o.ProofRejectedAt,
 			&o.ProofSignatureIP, &o.ProofRejectionReason,
+			&o.TrackingCode, &o.InternalTrackingCode,
+			&o.CourierName, &o.CourierBranch,
+			&o.DigitalProofURL, &o.ProofVersion,
+			&o.ProofStatus, &o.ProofFeedback,
+			&o.PrepressNotes,
 			&o.CreatedAt, &o.UpdatedAt,
 		)
 		if err != nil {
@@ -922,11 +931,17 @@ func getOrderByIDFromDB(orderID string) (Order, error) {
 
 	query := `
 		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''), 
+		       COALESCE(customer_email, ''), COALESCE(customer_address, ''),
 		       COALESCE(overall_status, status::text), COALESCE(deposit_lak, deposit_amount), 
 		       COALESCE(total_amount_lak, total_price), total_cost, COALESCE(google_drive_link, ''),
 		       COALESCE(customer_id, ''), COALESCE(remaining_lak, 0), COALESCE(delivery_date, ''),
 		       stock_deducted_at, COALESCE(proof_url, ''), proof_approved_at, proof_rejected_at,
 		       COALESCE(proof_signature_ip, ''), COALESCE(proof_rejection_reason, ''),
+		       COALESCE(tracking_code, ''), COALESCE(internal_tracking_code, ''),
+		       COALESCE(courier_name, ''), COALESCE(branch_code, ''),
+		       COALESCE(digital_proof_url, ''), COALESCE(proof_version, 1),
+		       COALESCE(proof_status, 'NOT_SUBMITTED'), COALESCE(proof_feedback, ''),
+		       COALESCE(prepress_notes, ''),
 		       COALESCE(idempotency_key, ''),
 		       created_at, updated_at
 		FROM orders
@@ -945,11 +960,18 @@ func getOrderByIDFromDB(orderID string) (Order, error) {
 	`
 	var st string
 	err := db.DB.QueryRow(query, cleanQuery, cleanQuery, digits).Scan(
-		&o.ID, &o.OrderNo, &o.CustomerName, &o.CustomerPhone, &st,
+		&o.ID, &o.OrderNo, &o.CustomerName, &o.CustomerPhone,
+		&o.CustomerEmail, &o.CustomerAddress,
+		&st,
 		&o.DepositLAK, &o.TotalAmountLAK, &o.TotalCost, &o.GoogleDriveLink,
 		&o.CustomerID, &o.RemainingLAK, &o.DeliveryDate,
 		&o.StockDeductedAt, &o.ProofURL, &o.ProofApprovedAt, &o.ProofRejectedAt,
 		&o.ProofSignatureIP, &o.ProofRejectionReason,
+		&o.TrackingCode, &o.InternalTrackingCode,
+		&o.CourierName, &o.CourierBranch,
+		&o.DigitalProofURL, &o.ProofVersion,
+		&o.ProofStatus, &o.ProofFeedback,
+		&o.PrepressNotes,
 		&o.IdempotencyKey,
 		&o.CreatedAt, &o.UpdatedAt,
 	)
@@ -986,11 +1008,17 @@ func getOrderByIdempotencyKeyFromDB(idempotencyKey string) (Order, error) {
 	}
 	query := `
 		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''), 
+		       COALESCE(customer_email, ''), COALESCE(customer_address, ''),
 		       COALESCE(overall_status, status::text), COALESCE(deposit_lak, deposit_amount), 
 		       COALESCE(total_amount_lak, total_price), total_cost, COALESCE(google_drive_link, ''),
 		       COALESCE(customer_id, ''), COALESCE(remaining_lak, 0), COALESCE(delivery_date, ''),
 		       stock_deducted_at, COALESCE(proof_url, ''), proof_approved_at, proof_rejected_at,
 		       COALESCE(proof_signature_ip, ''), COALESCE(proof_rejection_reason, ''),
+		       COALESCE(tracking_code, ''), COALESCE(internal_tracking_code, ''),
+		       COALESCE(courier_name, ''), COALESCE(branch_code, ''),
+		       COALESCE(digital_proof_url, ''), COALESCE(proof_version, 1),
+		       COALESCE(proof_status, 'NOT_SUBMITTED'), COALESCE(proof_feedback, ''),
+		       COALESCE(prepress_notes, ''),
 		       COALESCE(idempotency_key, ''),
 		       created_at, updated_at
 		FROM orders
@@ -999,11 +1027,18 @@ func getOrderByIdempotencyKeyFromDB(idempotencyKey string) (Order, error) {
 	`
 	var st string
 	err := db.DB.QueryRow(query, idempotencyKey).Scan(
-		&o.ID, &o.OrderNo, &o.CustomerName, &o.CustomerPhone, &st,
+		&o.ID, &o.OrderNo, &o.CustomerName, &o.CustomerPhone,
+		&o.CustomerEmail, &o.CustomerAddress,
+		&st,
 		&o.DepositLAK, &o.TotalAmountLAK, &o.TotalCost, &o.GoogleDriveLink,
 		&o.CustomerID, &o.RemainingLAK, &o.DeliveryDate,
 		&o.StockDeductedAt, &o.ProofURL, &o.ProofApprovedAt, &o.ProofRejectedAt,
 		&o.ProofSignatureIP, &o.ProofRejectionReason,
+		&o.TrackingCode, &o.InternalTrackingCode,
+		&o.CourierName, &o.CourierBranch,
+		&o.DigitalProofURL, &o.ProofVersion,
+		&o.ProofStatus, &o.ProofFeedback,
+		&o.PrepressNotes,
 		&o.IdempotencyKey,
 		&o.CreatedAt, &o.UpdatedAt,
 	)
@@ -1118,11 +1153,17 @@ func GetOrdersByCustomer(customerID, phone string) ([]Order, error) {
 
 	query := `
 		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''), 
+		       COALESCE(customer_email, ''), COALESCE(customer_address, ''),
 		       COALESCE(overall_status, status::text), COALESCE(deposit_lak, deposit_amount), 
 		       COALESCE(total_amount_lak, total_price), total_cost, COALESCE(google_drive_link, ''),
 		       COALESCE(customer_id, ''), COALESCE(remaining_lak, 0), COALESCE(delivery_date, ''),
 		       stock_deducted_at, COALESCE(proof_url, ''), proof_approved_at, proof_rejected_at,
 		       COALESCE(proof_signature_ip, ''), COALESCE(proof_rejection_reason, ''),
+		       COALESCE(tracking_code, ''), COALESCE(internal_tracking_code, ''),
+		       COALESCE(courier_name, ''), COALESCE(branch_code, ''),
+		       COALESCE(digital_proof_url, ''), COALESCE(proof_version, 1),
+		       COALESCE(proof_status, 'NOT_SUBMITTED'), COALESCE(proof_feedback, ''),
+		       COALESCE(prepress_notes, ''),
 		       created_at, updated_at
 		FROM orders
 		WHERE (NULLIF($1, '') IS NOT NULL AND customer_id = $1)
@@ -1143,11 +1184,18 @@ func GetOrdersByCustomer(customerID, phone string) ([]Order, error) {
 		var o Order
 		var st string
 		err := rows.Scan(
-			&o.ID, &o.OrderNo, &o.CustomerName, &o.CustomerPhone, &st,
+			&o.ID, &o.OrderNo, &o.CustomerName, &o.CustomerPhone,
+			&o.CustomerEmail, &o.CustomerAddress,
+			&st,
 			&o.DepositLAK, &o.TotalAmountLAK, &o.TotalCost, &o.GoogleDriveLink,
 			&o.CustomerID, &o.RemainingLAK, &o.DeliveryDate,
 			&o.StockDeductedAt, &o.ProofURL, &o.ProofApprovedAt, &o.ProofRejectedAt,
 			&o.ProofSignatureIP, &o.ProofRejectionReason,
+			&o.TrackingCode, &o.InternalTrackingCode,
+			&o.CourierName, &o.CourierBranch,
+			&o.DigitalProofURL, &o.ProofVersion,
+			&o.ProofStatus, &o.ProofFeedback,
+			&o.PrepressNotes,
 			&o.CreatedAt, &o.UpdatedAt,
 		)
 		if err != nil {
@@ -1259,34 +1307,65 @@ func saveOrderToDB(o Order) error {
 
 		orderQuery := `
 			INSERT INTO orders (id, order_no, order_number, customer_id, customer_name, customer_phone, 
+			                    customer_email, customer_address,
 			                    status, overall_status, deposit_amount, deposit_lak, remaining_lak,
 			                    total_price, total_amount_lak, total_cost, delivery_date, google_drive_link, 
-			                    stock_deducted_at, proof_url, proof_approved_at, proof_rejected_at,
-			                    proof_signature_ip, proof_rejection_reason, idempotency_key,
-			                    created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW(), NOW())
+			                    stock_deducted_at, proof_url, digital_proof_url, proof_version, proof_status, proof_feedback, prepress_notes,
+			                    proof_approved_at, proof_rejected_at, proof_signature_ip, proof_rejection_reason,
+			                    tracking_code, internal_tracking_code, courier_name, branch_code,
+			                    idempotency_key, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, NOW(), NOW())
 			ON CONFLICT (id) DO UPDATE SET
 				customer_id = EXCLUDED.customer_id,
+				customer_name = EXCLUDED.customer_name,
+				customer_phone = EXCLUDED.customer_phone,
+				customer_email = EXCLUDED.customer_email,
+				customer_address = EXCLUDED.customer_address,
 				status = EXCLUDED.status,
 				overall_status = EXCLUDED.overall_status,
 				deposit_amount = EXCLUDED.deposit_amount,
 				deposit_lak = EXCLUDED.deposit_lak,
 				remaining_lak = EXCLUDED.remaining_lak,
+				total_price = EXCLUDED.total_price,
+				total_amount_lak = EXCLUDED.total_amount_lak,
+				total_cost = EXCLUDED.total_cost,
+				delivery_date = EXCLUDED.delivery_date,
+				google_drive_link = EXCLUDED.google_drive_link,
 				stock_deducted_at = EXCLUDED.stock_deducted_at,
 				proof_url = EXCLUDED.proof_url,
+				digital_proof_url = EXCLUDED.digital_proof_url,
+				proof_version = EXCLUDED.proof_version,
+				proof_status = EXCLUDED.proof_status,
+				proof_feedback = EXCLUDED.proof_feedback,
+				prepress_notes = EXCLUDED.prepress_notes,
 				proof_approved_at = EXCLUDED.proof_approved_at,
 				proof_rejected_at = EXCLUDED.proof_rejected_at,
 				proof_signature_ip = EXCLUDED.proof_signature_ip,
 				proof_rejection_reason = EXCLUDED.proof_rejection_reason,
+				tracking_code = EXCLUDED.tracking_code,
+				internal_tracking_code = EXCLUDED.internal_tracking_code,
+				courier_name = EXCLUDED.courier_name,
+				branch_code = EXCLUDED.branch_code,
 				idempotency_key = EXCLUDED.idempotency_key,
 				updated_at = NOW()
 		`
+		proofVer := o.ProofVersion
+		if proofVer <= 0 {
+			proofVer = 1
+		}
+		proofSt := o.ProofStatus
+		if proofSt == "" {
+			proofSt = "NOT_SUBMITTED"
+		}
 		_, err := tx.Exec(orderQuery,
 			o.ID, o.OrderNo, o.OrderNumber, o.CustomerID, o.CustomerName, o.CustomerPhone,
+			o.CustomerEmail, o.CustomerAddress,
 			string(o.Status), string(o.OverallStatus), o.DepositAmount, o.DepositLAK, o.RemainingLAK,
 			o.TotalPrice, o.TotalAmountLAK, o.TotalCost, o.DeliveryDate, o.GoogleDriveLink,
-			o.StockDeductedAt, o.ProofURL, o.ProofApprovedAt, o.ProofRejectedAt,
-			o.ProofSignatureIP, o.ProofRejectionReason, o.IdempotencyKey,
+			o.StockDeductedAt, o.ProofURL, o.DigitalProofURL, proofVer, proofSt, o.ProofFeedback, o.PrepressNotes,
+			o.ProofApprovedAt, o.ProofRejectedAt, o.ProofSignatureIP, o.ProofRejectionReason,
+			o.TrackingCode, o.InternalTrackingCode, o.CourierName, o.CourierBranch,
+			o.IdempotencyKey,
 		)
 		if err != nil {
 			return err
@@ -1556,13 +1635,30 @@ func HandleTrackOrderQuery(c *gin.Context) {
 	cleanQ := strings.TrimPrefix(q, "#")
 	cleanDigits := cleanPhoneNumber(cleanQ)
 
-	// 1. Search in-memory store by exact ID / OrderNo / IdempotencyKey / Phone
+	// 1. Search in PostgreSQL DB first (DB-first approach for cross-browser sync)
+	if db.DB != nil {
+		order, err := getOrderByIDFromDB(cleanQ)
+		if err == nil && order.ID != "" {
+			c.JSON(http.StatusOK, order)
+			return
+		}
+
+		// Search by customer phone number
+		phoneOrders, err := GetOrdersByCustomer("", cleanQ)
+		if err == nil && len(phoneOrders) > 0 {
+			// Return the latest order
+			c.JSON(http.StatusOK, phoneOrders[0])
+			return
+		}
+	}
+
+	// 2. In-memory store fallback (when DB is nil or order is only in local test store)
 	storeMutex.RLock()
 	for _, o := range ordersStore {
 		cleanOrderNo := strings.TrimPrefix(o.OrderNo, "#")
 		cleanOrderNumber := strings.TrimPrefix(o.OrderNumber, "#")
 		phoneDigits := cleanPhoneNumber(o.CustomerPhone)
-		isPhoneMatch := len(cleanDigits) >= 7 && (phoneDigits == cleanDigits || strings.HasSuffix(phoneDigits, cleanDigits) || strings.HasSuffix(cleanDigits, phoneDigits))
+		isPhoneMatch := len(cleanDigits) >= 7 && len(phoneDigits) >= 7 && (phoneDigits == cleanDigits || strings.HasSuffix(phoneDigits, cleanDigits) || strings.HasSuffix(cleanDigits, phoneDigits))
 		if strings.EqualFold(o.OrderNo, q) || strings.EqualFold(o.OrderNumber, q) || strings.EqualFold(cleanOrderNo, cleanQ) || strings.EqualFold(cleanOrderNumber, cleanQ) || strings.EqualFold(o.ID, q) || strings.EqualFold(o.IdempotencyKey, q) || strings.EqualFold(o.TrackingCode, q) || strings.EqualFold(o.InternalTrackingCode, q) || isPhoneMatch {
 			storeMutex.RUnlock()
 			c.JSON(http.StatusOK, o)
@@ -1571,33 +1667,6 @@ func HandleTrackOrderQuery(c *gin.Context) {
 	}
 	storeMutex.RUnlock()
 
-	if db.DB != nil {
-		order, err := getOrderByIDFromDB(cleanQ)
-		if err == nil && order.ID != "" {
-			c.JSON(http.StatusOK, order)
-			return
-		}
-
-		// 2. Search by customer phone number
-		phoneOrders, err := GetOrdersByCustomer("", cleanQ)
-		if err == nil && len(phoneOrders) > 0 {
-			// Return the latest order
-			c.JSON(http.StatusOK, phoneOrders[0])
-			return
-		}
-	} else {
-		// In-memory phone search fallback
-		storeMutex.RLock()
-		for _, o := range ordersStore {
-			if strings.EqualFold(o.CustomerPhone, cleanQ) {
-				storeMutex.RUnlock()
-				c.JSON(http.StatusOK, o)
-				return
-			}
-		}
-		storeMutex.RUnlock()
-	}
-
 	c.JSON(http.StatusNotFound, gin.H{"found": false, "error": "Order not found for search query: " + q, "message": "Order not found"})
 }
 
@@ -1605,6 +1674,16 @@ func HandleTrackOrderQuery(c *gin.Context) {
 func HandleGetOrderByOrderNo(c *gin.Context) {
 	orderNo := c.Param("order_no")
 
+	// 1. Check PostgreSQL DB first
+	if db.DB != nil {
+		order, err := getOrderByIDFromDB(orderNo)
+		if err == nil && order.ID != "" {
+			c.JSON(http.StatusOK, order)
+			return
+		}
+	}
+
+	// 2. Fallback to in-memory store
 	storeMutex.RLock()
 	for _, o := range ordersStore {
 		if o.OrderNo == orderNo || o.OrderNumber == orderNo || o.ID == orderNo {
@@ -1615,14 +1694,6 @@ func HandleGetOrderByOrderNo(c *gin.Context) {
 	}
 	storeMutex.RUnlock()
 
-	if db.DB != nil {
-		order, err := getOrderByIDFromDB(orderNo)
-		if err == nil {
-			c.JSON(http.StatusOK, order)
-			return
-		}
-	}
-
 	c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 }
 
@@ -1630,6 +1701,16 @@ func HandleGetOrderByOrderNo(c *gin.Context) {
 func HandleGetOrderById(c *gin.Context) {
 	id := c.Param("id")
 
+	// 1. Check PostgreSQL DB first
+	if db.DB != nil {
+		order, err := getOrderByIDFromDB(id)
+		if err == nil && order.ID != "" {
+			c.JSON(http.StatusOK, order)
+			return
+		}
+	}
+
+	// 2. Fallback to in-memory store
 	storeMutex.RLock()
 	for _, o := range ordersStore {
 		if o.ID == id || o.OrderNo == id || o.OrderNumber == id {
@@ -1639,14 +1720,6 @@ func HandleGetOrderById(c *gin.Context) {
 		}
 	}
 	storeMutex.RUnlock()
-
-	if db.DB != nil {
-		order, err := getOrderByIDFromDB(id)
-		if err == nil {
-			c.JSON(http.StatusOK, order)
-			return
-		}
-	}
 
 	c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 }

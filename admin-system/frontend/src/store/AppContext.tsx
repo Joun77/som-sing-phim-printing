@@ -576,6 +576,20 @@ export const AppProvider = ({ children }) => {
       return { ...prev, [code]: { buy: cur.buy, sell: cur.sell, [side]: num } };
     });
     setRatesUpdatedAt(new Date().toISOString());
+
+    // Sync updated rate to PostgreSQL via Go Backend
+    if (code === 'THB' || code === 'USD') {
+      fetch('/api/rates', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currency: code,
+          rate_to_lak: num
+        })
+      }).catch(err => {
+        console.warn(`[Rates Sync] Failed to push rate for ${code} to server:`, err);
+      });
+    }
   };
 
   const getRate = (code) => {
@@ -624,6 +638,10 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     safeSetItem('ss_print_employees_v6', employees);
   }, [employees]);
+
+  // Live Server Connection Status (DB Single Source of Truth indicator)
+  const [isLive, setIsLive] = useState<boolean>(true);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'offline' | 'checking'>('checking');
 
   // ---- Technician Earning Records (Piece-rate & Incentives) ----
   const [earningRecords, setEarningRecords] = useState<EarningRecord[]>(() => {
@@ -823,9 +841,14 @@ export const AppProvider = ({ children }) => {
     const cat = (item.category || '').toLowerCase();
     const nameLower = (item.name || '').toLowerCase();
     const isPaper = cat === 'paper' || cat === 'material' || nameLower.includes('paper') || nameLower.includes('ເຈ້ຍ') || nameLower.includes('double a') || nameLower.includes('green read') || nameLower.includes('idea');
-    let multiplier = Number(item.purchaseMultiplier || item.purchase_multiplier || item.specs?.sheetsPerPack || item.specs?.sheets_per_pack || item.specs?.sheets_per_ream || 500);
+    const isInk = cat === 'ink' || cat === 'toner' || nameLower.includes('ink') || nameLower.includes('ໝຶກ') || nameLower.includes('epson-001') || nameLower.includes('epson-008') || (item.id || '').startsWith('INK-');
+    
+    const inkVolume = Number(item.specs?.volume || item.specs?.volumePerBottle || item.specs?.inkVolume || item.volume || 70);
+    let multiplier = Number(item.purchaseMultiplier || item.purchase_multiplier || item.specs?.sheetsPerPack || item.specs?.sheets_per_pack || item.specs?.sheets_per_ream || (isInk ? inkVolume : 500));
     if (isPaper && (!multiplier || multiplier <= 1)) {
       multiplier = 500;
+    } else if (isInk) {
+      multiplier = (multiplier > 0 && multiplier <= 200) ? multiplier : inkVolume;
     }
     
     let currentStockSheets = Number(item.stockQty) || Number(item.currentStock) || 0;
@@ -833,11 +856,14 @@ export const AppProvider = ({ children }) => {
       currentStockSheets = currentStockSheets * multiplier;
     } else if (isPaper && currentStockSheets === 0) {
       currentStockSheets = multiplier;
+    } else if (isInk && currentStockSheets === 500 && multiplier < 500) {
+      // Heal previously corrupted 500 bottles down to 1 bottle * volume (e.g. 70 ml)
+      currentStockSheets = multiplier;
     }
 
-    const costPerPurchase = Number(item.costPerPurchaseUnit || item.cost_per_purchase_unit || item.price || 95000);
+    const costPerPurchase = Number(item.costPerPurchaseUnit || item.cost_per_purchase_unit || item.price || (isInk ? 80000 : 95000));
     const rawCostPerCons = Number(item.costPerConsumptionUnit || item.cost_per_consumption_unit || 0);
-    const costPerConsumption = isPaper 
+    const costPerConsumption = (isPaper || isInk)
       ? ((rawCostPerCons > 0 && rawCostPerCons < (costPerPurchase / 2)) ? rawCostPerCons : (multiplier > 0 ? (costPerPurchase / multiplier) : costPerPurchase))
       : (rawCostPerCons > 0 ? rawCostPerCons : costPerPurchase);
 
@@ -850,15 +876,23 @@ export const AppProvider = ({ children }) => {
       if (key && !seenBatchKeys.has(key)) {
         seenBatchKeys.add(key);
         let bQty = Number(b.currentQty || b.initialQty || 0);
+        let bInit = Number(b.initialQty || bQty);
+        
         if (isPaper && bQty > 0 && bQty <= 100) {
           bQty = bQty * multiplier;
         }
-        let bInit = Number(b.initialQty || bQty);
         if (isPaper && bInit > 0 && bInit <= 100) {
           bInit = bInit * multiplier;
         }
+
+        // Heal corrupted ink batch lot that had 500 instead of volume in ml
+        if (isInk && (bInit === 500 || b.id?.includes('INB-5937')) && multiplier < 500) {
+          bInit = multiplier;
+          bQty = multiplier;
+        }
+
         const bPurchasePrice = Number(b.purchasePricePerReam || b.purchasePrice || costPerPurchase);
-        const bCostPerSheet = isPaper
+        const bCostPerSheet = (isPaper || isInk)
           ? (Number(b.costPerSheet) > 0 && Number(b.costPerSheet) < (bPurchasePrice / 2) ? Number(b.costPerSheet) : (multiplier > 0 ? bPurchasePrice / multiplier : costPerConsumption))
           : Number(b.costPerSheet || costPerConsumption);
 
@@ -873,7 +907,7 @@ export const AppProvider = ({ children }) => {
     }
 
     if (realBatches.length === 0) {
-      const lotId = `LOT-${(item.id || 'SKU').replace('PAP-', '').slice(-4)}`;
+      const lotId = `LOT-${(item.id || 'SKU').replace('PAP-', '').replace('INK-', '').slice(-4)}`;
       realBatches = [
         {
           id: lotId,
@@ -895,8 +929,8 @@ export const AppProvider = ({ children }) => {
       purchaseMultiplier: multiplier,
       costPerPurchaseUnit: costPerPurchase,
       costPerConsumptionUnit: costPerConsumption,
-      consumptionUnit: isPaper ? 'ແຜ່ນ' : (item.consumptionUnit === 'แผ่น' ? 'ແຜ່ນ' : (item.consumptionUnit || 'Units')),
-      purchaseUnit: isPaper ? 'ແພັກ' : (item.purchaseUnit === 'แพ็ก' ? 'ແພັກ' : (item.purchaseUnit || 'Units')),
+      consumptionUnit: isPaper ? 'ແຜ່ນ' : (isInk ? 'ml' : (item.consumptionUnit === 'แผ่น' ? 'ແຜ່ນ' : (item.consumptionUnit || 'Units'))),
+      purchaseUnit: isPaper ? 'ແພັກ' : (isInk ? 'ຂວດ' : (item.purchaseUnit === 'แพ็ก' ? 'ແພັກ' : (item.purchaseUnit || 'Units'))),
       batches: realBatches
     };
   };
@@ -965,6 +999,71 @@ export const AppProvider = ({ children }) => {
     }
     return [];
   });
+
+  const normalizeBackendOrder = (serverItem: any) => {
+    if (!serverItem) return {};
+    const items = Array.isArray(serverItem.items) && serverItem.items.length > 0
+      ? serverItem.items.map((it: any, idx: number) => ({
+          id: it.id || `item-${idx + 1}`,
+          orderId: it.order_id || serverItem.id || serverItem.order_no || serverItem.orderNo,
+          jobName: it.job_name || it.item_name || it.name || 'ງານສິ່ງພິມ (Custom Print)',
+          name: it.item_name || it.job_name || it.name || 'ງານສິ່ງພິມ (Custom Print)',
+          quantity: Number(it.quantity) || 1,
+          pageCount: Number(it.page_count) || 1,
+          paperSize: it.paper_size || it.specs?.size || it.paperSize || 'A4',
+          coverPaperId: it.cover_paper_id || '',
+          innerPaperId: it.inner_paper_id || '',
+          coverFileUrl: it.cover_file_url || '',
+          innerFileUrl: it.inner_file_url || '',
+          bindingType: it.binding_type || '',
+          spineWidthMm: Number(it.spine_width_mm) || 0,
+          currentStep: it.current_step || 'READY_FOR_PICKUP',
+          unitPrice: Number(it.unit_price_lak) || Number(it.unit_price) || 0,
+          totalPrice: Number(it.total_price_lak) || Number(it.total_price) || 0,
+          specs: it.specs || {},
+        }))
+      : [];
+
+    const orderId = serverItem.id || serverItem.order_no || serverItem.orderNo || serverItem.order_number;
+    const orderNo = serverItem.order_no || serverItem.order_number || serverItem.orderNo || orderId;
+    const totalAmount = Number(serverItem.total_amount_lak) || Number(serverItem.total_price) || 0;
+    const depositAmount = Number(serverItem.deposit_lak) || Number(serverItem.deposit_amount) || 0;
+    const remainingAmount = Number(serverItem.remaining_lak) || (totalAmount - depositAmount);
+    const overallStatus = serverItem.overall_status || serverItem.status || 'Pending';
+    const customerName = serverItem.customer_name || serverItem.customerName || 'ລູກຄ້າທົ່ວໄປ (Customer)';
+    const phone = serverItem.customer_phone || serverItem.phone || '';
+    const paymentStatus = serverItem.payment_status || serverItem.paymentStatus || (depositAmount >= totalAmount && totalAmount > 0 ? 'Paid' : (depositAmount > 0 ? 'Partial' : 'Unpaid'));
+
+    return {
+      id: orderId,
+      orderNo: orderNo,
+      orderNumber: orderNo,
+      customerName: customerName,
+      customer_name: customerName,
+      customerPhone: phone,
+      phone: phone,
+      items: items.length > 0 ? items : undefined,
+      totalAmount: totalAmount,
+      total_amount_lak: totalAmount,
+      totalPriceCharged: totalAmount,
+      paidAmount: depositAmount,
+      depositAmountPaid: depositAmount,
+      deposit_lak: depositAmount,
+      remainingAmount: remainingAmount,
+      remainingUnpaidBalance: remainingAmount,
+      remaining_lak: remainingAmount,
+      status: overallStatus,
+      overall_status: overallStatus,
+      paymentStatus: paymentStatus,
+      payment_status: paymentStatus,
+      paymentSlipUrl: serverItem.payment_slip_url || serverItem.paymentSlipUrl || '',
+      driveLink: serverItem.drive_link || serverItem.google_drive_link || serverItem.driveLink || '',
+      googleDriveLink: serverItem.google_drive_link || serverItem.drive_link || serverItem.googleDriveLink || '',
+      deliveryDate: serverItem.delivery_date || serverItem.deliveryDate || '',
+      createdAt: serverItem.created_at || serverItem.createdAt || new Date().toISOString(),
+      updatedAt: serverItem.updated_at || serverItem.updatedAt || new Date().toISOString(),
+    };
+  };
 
   const refreshData = async () => {
     const deletedIds = getDeletedIds();
@@ -1118,7 +1217,7 @@ export const AppProvider = ({ children }) => {
     } catch (e) {}
 
 
-    // 3. Orders (Safe Merge Strategy)
+    // 3. Orders (DB-First Single Source of Truth Safe Merge Strategy)
     try {
       let res = await fetch('/api/v1/orders');
       if (!res.ok) res = await fetch('/api/orders');
@@ -1128,15 +1227,19 @@ export const AppProvider = ({ children }) => {
         if (serverList.length > 0) {
           setOrders(prev => {
             const mapById = new Map();
-            // 1. Put backend orders
-            serverList.forEach((item: any) => {
-              const id = item.id || item.orderNo || item.order_no;
-              if (id) mapById.set(id, item);
-            });
-            // 2. Put local orders (local state takes precedence so newly created orders and status changes are preserved)
+            // 1. Put local cached orders first as fallback
             prev.forEach((item: any) => {
               const id = item.id || item.orderNo || item.order_no;
               if (id) mapById.set(id, item);
+            });
+            // 2. Put live database orders over local state (PostgreSQL DB is Single Source of Truth)
+            serverList.forEach((item: any) => {
+              const id = item.id || item.orderNo || item.order_no;
+              if (id) {
+                const existingLocal = mapById.get(id) || {};
+                const normalized = normalizeBackendOrder(item);
+                mapById.set(id, { ...existingLocal, ...item, ...normalized });
+              }
             });
             const merged = Array.from(mapById.values());
             safeSetItem('ss_print_orders_v6', merged);
@@ -1146,7 +1249,7 @@ export const AppProvider = ({ children }) => {
       }
     } catch (e) {}
 
-    // 3.5. Quotations (Safe Merge Strategy)
+    // 3.5. Quotations (DB-First Single Source of Truth Safe Merge Strategy)
     try {
       let res = await fetch('/api/v1/quotations');
       if (!res.ok) res = await fetch('/api/quotations');
@@ -1156,13 +1259,18 @@ export const AppProvider = ({ children }) => {
         if (serverList.length > 0) {
           setQuotations(prev => {
             const mapById = new Map();
-            serverList.forEach((item: any) => {
-              const id = item.id || item.quotation_no;
-              if (id) mapById.set(id, item);
-            });
+            // 1. Put local cached quotations first
             prev.forEach((item: any) => {
               const id = item.id || item.quotation_no;
               if (id) mapById.set(id, item);
+            });
+            // 2. Put live database quotations over local state
+            serverList.forEach((item: any) => {
+              const id = item.id || item.quotation_no;
+              if (id) {
+                const existingLocal = mapById.get(id) || {};
+                mapById.set(id, { ...existingLocal, ...item });
+              }
             });
             const merged = Array.from(mapById.values());
             safeSetItem('ss_print_quotations_v6', merged);
@@ -1356,6 +1464,53 @@ export const AppProvider = ({ children }) => {
         }
       }
     } catch (e) {}
+
+    // 10. Exchange Rates (Database Precedence)
+    try {
+      const ratesRes = await fetch('/api/rates');
+      if (ratesRes && ratesRes.ok) {
+        const ratesData = await ratesRes.json();
+        if (ratesData && typeof ratesData === 'object') {
+          setExchangeRates(prev => {
+            const nextRates = { ...prev };
+            if (ratesData.THB && typeof ratesData.THB.rate_to_lak === 'number') {
+              nextRates.THB = {
+                buy: Math.round(ratesData.THB.rate_to_lak),
+                sell: Math.round(ratesData.THB.rate_to_lak)
+              };
+            }
+            if (ratesData.USD && typeof ratesData.USD.rate_to_lak === 'number') {
+              nextRates.USD = {
+                buy: Math.round(ratesData.USD.rate_to_lak),
+                sell: Math.round(ratesData.USD.rate_to_lak)
+              };
+            }
+            safeSetItem('ss_print_rates_v1', JSON.stringify(nextRates));
+            return nextRates;
+          });
+          if (ratesData.THB?.updated_at) {
+            setRatesUpdatedAt(ratesData.THB.updated_at);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Rates Fetch Notice]', e);
+    }
+
+    // 11. Backend Health & Live Status Check
+    try {
+      const healthRes = await fetch('/api/health');
+      if (healthRes && healthRes.ok) {
+        setIsLive(true);
+        setConnectionStatus('connected');
+      } else {
+        setIsLive(false);
+        setConnectionStatus('offline');
+      }
+    } catch (e) {
+      setIsLive(false);
+      setConnectionStatus('offline');
+    }
   };
 
   useEffect(() => {
@@ -1694,14 +1849,21 @@ export const AppProvider = ({ children }) => {
         );
         if (matches.length === 0) return item;
 
-        const sheetsPerPack = item.purchaseMultiplier || matches[0].sheetsPerPack || matches[0].specs?.sheetsPerPack || 500;
+        const isPaper = (item.category || '').toLowerCase() === 'paper' || (item.category || '').toLowerCase() === 'material';
+        const isInk = (item.category || '').toLowerCase() === 'ink' || (item.category || '').toLowerCase() === 'toner';
+        const inkVolume = Number(item.specs?.volume || item.specs?.volumePerBottle || item.specs?.inkVolume || item.volume || matches[0].volume || matches[0].specs?.volume || 70);
+        
+        let sheetsPerPack = isPaper 
+          ? (item.purchaseMultiplier || matches[0].sheetsPerPack || matches[0].specs?.sheetsPerPack || 500)
+          : (isInk ? inkVolume : (item.purchaseMultiplier || 1));
+
         const totalSheetsFromInbound = matches.reduce((sum, e) => {
           const packQty = Number(e.importQty || e.quantity || e.currentQty || 1);
           return sum + (packQty * sheetsPerPack);
         }, 0);
 
-        const latestPrice = Number(matches[0].totalPrice || matches[0].unitPrice || item.costPerPurchaseUnit || 95000);
-        const perSheetPrice = Math.round(latestPrice / sheetsPerPack);
+        const latestPrice = Number(matches[0].totalPrice || matches[0].unitPrice || item.costPerPurchaseUnit || (isInk ? 80000 : 95000));
+        const perSheetPrice = sheetsPerPack > 0 ? Math.round(latestPrice / sheetsPerPack) : latestPrice;
 
         const constructedBatches = matches.map(e => ({
           id: e.poNumber || e.id || `LOT-${item.id}`,
@@ -1714,13 +1876,16 @@ export const AppProvider = ({ children }) => {
         }));
 
         const hasRealBatches = (item.batches || []).some(b => b.id && !b.id.includes('-EMPTY'));
-        if (item.stockQty !== totalSheetsFromInbound || !hasRealBatches) {
+        if (item.stockQty !== totalSheetsFromInbound || !hasRealBatches || (isInk && item.consumptionUnit !== 'ml')) {
           updated = true;
           return {
             ...item,
             stockQty: totalSheetsFromInbound,
             costPerPurchaseUnit: latestPrice,
             costPerConsumptionUnit: perSheetPrice,
+            consumptionUnit: isPaper ? 'ແຜ່ນ' : (isInk ? 'ml' : item.consumptionUnit),
+            purchaseUnit: isPaper ? 'ແພັກ' : (isInk ? 'ຂວດ' : item.purchaseUnit),
+            purchaseMultiplier: sheetsPerPack,
             batches: constructedBatches
           };
         }
@@ -1748,23 +1913,25 @@ export const AppProvider = ({ children }) => {
 
         if (!alreadyExists) {
           const isPaper = e.category === 'Paper' || e.category === 'PAPER' || e.category === 'MATERIAL';
-          const sheetsPerPack = Number(e.sheetsPerPack || e.specs?.sheetsPerPack || (isPaper ? 500 : 1));
+          const isInk = e.category === 'Ink' || e.category === 'INK' || (e.category || '').toLowerCase() === 'ink';
+          const inkVol = Number(e.volume || e.specs?.volume || e.specs?.volumePerBottle || 70);
+          const sheetsPerPack = isPaper ? Number(e.sheetsPerPack || e.specs?.sheetsPerPack || 500) : (isInk ? inkVol : 1);
           const packQty = Number(e.importQty || e.quantity || e.currentQty || 1);
-          const totalStock = isPaper ? packQty * sheetsPerPack : packQty;
-          const price = Number(e.totalPrice || e.unitPrice || 95000);
-          const unitPrice = isPaper ? Math.round(price / sheetsPerPack) : price;
+          const totalStock = packQty * sheetsPerPack;
+          const price = Number(e.totalPrice || e.unitPrice || (isInk ? 80000 : 95000));
+          const unitPrice = sheetsPerPack > 0 ? Math.round(price / sheetsPerPack) : price;
 
           newlyDiscoveredItems.push(sanitizeInventoryItem({
             id: sku || `SKU-${Date.now()}`,
             name: name,
-            category: isPaper ? 'Paper' : (e.category === 'INK' ? 'Ink' : (e.category || 'Finishing')),
+            category: isPaper ? 'Paper' : (isInk ? 'Ink' : (e.category || 'Finishing')),
             stockQty: totalStock,
-            consumptionUnit: isPaper ? 'ແຜ່ນ' : (e.unit || 'Units'),
-            purchaseUnit: isPaper ? 'ແພັກ' : (e.unit || 'Units'),
+            consumptionUnit: isPaper ? 'ແຜ່ນ' : (isInk ? 'ml' : (e.unit || 'Units')),
+            purchaseUnit: isPaper ? 'ແພັກ' : (isInk ? 'ຂວດ' : (e.unit || 'Units')),
             purchaseMultiplier: sheetsPerPack,
             costPerPurchaseUnit: price,
             costPerConsumptionUnit: unitPrice,
-            reorderThreshold: 50,
+            reorderThreshold: isInk ? 100 : 50,
             specs: e.specs || {},
             batches: [
               {
@@ -2084,9 +2251,11 @@ export const AppProvider = ({ children }) => {
       return prev.map(item => {
         if (item.id !== itemId) return item;
 
-        const multiplier = item.purchaseMultiplier || 1;
-        const sheetsToAdd = batchData.purchaseQty * multiplier;
-        const costPerSheet = Math.round(batchData.purchasePrice / multiplier);
+        const isInk = (item.category || '').toLowerCase() === 'ink' || (item.category || '').toLowerCase() === 'toner';
+        const inkVolume = Number(item.specs?.volume || item.specs?.volumePerBottle || item.specs?.inkVolume || item.volume || 70);
+        const multiplier = isInk ? (item.purchaseMultiplier && item.purchaseMultiplier <= 200 ? item.purchaseMultiplier : inkVolume) : (item.purchaseMultiplier || 1);
+        const sheetsToAdd = batchData.sheetsToAdd !== undefined ? Number(batchData.sheetsToAdd) : (batchData.purchaseQty * multiplier);
+        const costPerSheet = multiplier > 0 ? Math.round(batchData.purchasePrice / multiplier) : batchData.purchasePrice;
 
         const newBatch = {
           id: batchData.batchId || `LOT-${Date.now().toString().slice(-4)}`,
@@ -2900,6 +3069,44 @@ export const AppProvider = ({ children }) => {
       }
       return ord;
     }));
+
+    // Sync status to backend API and Broadcast across tabs for Real-time customer tracking
+    const backendStatusMap: Record<string, string> = {
+      Received: 'PENDING_SLIP_CHECK',
+      Pending: 'PENDING_SLIP_CHECK',
+      'Pre-Press': 'PREPRESS_CHECK',
+      Queued: 'READY_TO_PRINT',
+      Printing: 'IN_PRODUCTION',
+      Cutting: 'POST_PRESS',
+      'Post-Press': 'POST_PRESS',
+      Ready: 'READY_TO_PRINT',
+      'Ready for Delivery': 'DELIVERED',
+      Delivered: 'DELIVERED',
+      Completed: 'COMPLETED',
+      Cancelled: 'CANCELLED',
+    };
+    const targetStatus = backendStatusMap[newStatus] || newStatus;
+
+    fetch(`/api/orders/${orderId}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: targetStatus }),
+    }).catch(() => {
+      fetch(`/api/v1/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: targetStatus }),
+      }).catch(() => {});
+    });
+
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('ssp_order_sync');
+        bc.postMessage({ type: 'ORDER_STATUS_UPDATED', orderId, status: targetStatus, timestamp: Date.now() });
+        bc.close();
+      }
+      localStorage.setItem('ssp_order_last_updated', JSON.stringify({ orderId, status: targetStatus, timestamp: Date.now() }));
+    } catch {}
   };
 
   const startOrderProduction = (orderId: string): boolean => {
@@ -4185,13 +4392,16 @@ export const AppProvider = ({ children }) => {
     const itemName = (updatedEntry.itemName || updatedEntry.name || '').trim();
     const cat = (updatedEntry.category || '').toLowerCase();
     const isPaper = cat === 'paper' || cat === 'material';
+    const isInk = cat === 'ink' || cat === 'toner';
     const isEquip = cat === 'printer' || cat === 'machinery' || cat === 'cutter' || cat === 'laminator' || cat === 'binder';
     const sheetsPerPack = Number(updatedEntry.sheetsPerPack || updatedEntry.specs?.sheetsPerPack || updatedEntry.specs?.sheets_per_pack || updatedEntry.specs?.sheets_per_ream || 500);
+    const inkVolume = Number(updatedEntry.volume || updatedEntry.specs?.volume || updatedEntry.specs?.volumePerBottle || 70);
     const packQty = Number(updatedEntry.quantity || updatedEntry.importQty || updatedEntry.currentQty || updatedEntry.initialQty || 1);
-    const totalSheets = isPaper ? packQty * sheetsPerPack : packQty;
-    const totalPrice = Number(updatedEntry.totalPrice || 95000);
+    const multiplier = isPaper ? sheetsPerPack : (isInk ? inkVolume : 1);
+    const totalSheets = packQty * multiplier;
+    const totalPrice = Number(updatedEntry.totalPrice || (isInk ? 80000 : 95000));
     const costPerPurchase = Number(updatedEntry.unitPrice || (totalPrice / Math.max(1, packQty)));
-    const costPerConsumption = isPaper ? Math.round(totalPrice / Math.max(1, totalSheets)) : costPerPurchase;
+    const costPerConsumption = multiplier > 0 ? Math.round(totalPrice / Math.max(1, totalSheets)) : costPerPurchase;
 
     fetch(`/api/inbound/${updatedEntry.id}`, {
       method: 'PUT',
@@ -4304,7 +4514,9 @@ export const AppProvider = ({ children }) => {
             name: invItem.name || itemName,
             colorName: detectedColor,
             stockQty: newStockQty,
-            purchaseMultiplier: isPaper ? sheetsPerPack : (invItem.purchaseMultiplier || 1),
+            purchaseMultiplier: isPaper ? sheetsPerPack : (isInk ? inkVolume : (invItem.purchaseMultiplier || 1)),
+            consumptionUnit: isPaper ? 'ແຜ່ນ' : (isInk ? 'ml' : (invItem.consumptionUnit || 'Units')),
+            purchaseUnit: isPaper ? 'ແພັກ' : (isInk ? 'ຂວດ' : (invItem.purchaseUnit || 'Units')),
             costPerPurchaseUnit: costPerPurchase,
             costPerConsumptionUnit: costPerConsumption,
             supplier: updatedEntry.supplierName || updatedEntry.supplier || invItem.supplier,
@@ -4331,12 +4543,12 @@ export const AppProvider = ({ children }) => {
           colorName: detectedColor,
           category: isPaper ? 'Paper' : (cat === 'ink' ? 'Ink' : 'Finishing'),
           stockQty: totalSheets,
-          consumptionUnit: isPaper ? 'ແຜ່ນ' : (updatedEntry.unit || 'Units'),
-          purchaseUnit: isPaper ? 'ແພັກ' : (updatedEntry.unit || 'Units'),
-          purchaseMultiplier: isPaper ? sheetsPerPack : 1,
+          consumptionUnit: isPaper ? 'ແຜ່ນ' : (cat === 'ink' ? 'ml' : (updatedEntry.unit || 'Units')),
+          purchaseUnit: isPaper ? 'ແພັກ' : (cat === 'ink' ? 'ຂວດ' : (updatedEntry.unit || 'Units')),
+          purchaseMultiplier: isPaper ? sheetsPerPack : (cat === 'ink' ? inkVolume : 1),
           costPerPurchaseUnit: costPerPurchase,
           costPerConsumptionUnit: costPerConsumption,
-          reorderThreshold: 50,
+          reorderThreshold: cat === 'ink' ? 100 : 50,
           specs: {
             ...(updatedEntry.specs || {}),
             colorName: detectedColor
@@ -4633,7 +4845,9 @@ export const AppProvider = ({ children }) => {
       replaceEquipmentComponent,
       updateEquipmentMaintenance,
       resetToDefaultData,
-      refreshData
+      refreshData,
+      isLive,
+      connectionStatus
     }}>
       {children}
     </AppContext.Provider>

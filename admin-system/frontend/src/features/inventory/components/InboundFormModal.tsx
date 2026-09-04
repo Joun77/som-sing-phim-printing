@@ -49,25 +49,29 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
     );
   }, [materials, searchTerm]);
 
-  // Auto-fill when selecting an existing material
+  // Auto-fill when selecting an existing material or switching category
   useEffect(() => {
     if (mode === 'existing' && selectedMaterialId) {
       const selected = materials.find(m => m.id === selectedMaterialId || m.sku === selectedMaterialId);
       if (selected) {
+        const isInk = (selected.category || '').toLowerCase() === 'ink';
         setSkuCode(selected.sku || selected.id);
         setItemName(selected.name);
         setCategory(selected.category || 'paper');
-        setPurchaseUnit(selected.purchase_unit || 'รีม');
-        setPurchaseMultiplier(selected.purchase_multiplier || 500);
+        setPurchaseUnit(selected.purchase_unit || (isInk ? 'ขวด' : 'รีม'));
+        setPurchaseMultiplier(selected.purchase_multiplier || (isInk ? 70 : 500));
         setUnitPurchasePrice(selected.cost_per_purchase_unit || 0);
       }
     } else if (mode === 'new') {
+      const isInk = category === 'ink';
       setSelectedMaterialId('');
-      setSkuCode(`MAT-${Date.now().toString().slice(-6)}`);
+      setSkuCode(isInk ? `INK-${Date.now().toString().slice(-4)}` : `MAT-${Date.now().toString().slice(-6)}`);
       setItemName('');
+      setPurchaseUnit(isInk ? 'ขวด' : 'รีม');
+      setPurchaseMultiplier(isInk ? 70 : 500);
       setUnitPurchasePrice(0);
     }
-  }, [mode, selectedMaterialId, materials]);
+  }, [mode, selectedMaterialId, materials, category]);
 
   // Initial selection if existing
   useEffect(() => {
@@ -400,7 +404,7 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
             </div>
             <p className="text-[11px] text-slate-500 flex items-center gap-1">
               <Zap className="w-3.5 h-3.5 text-blue-600 inline shrink-0" />
-              <span>ແປງເປັນຫົວໜ່ວຍຕັດສະຕັອກຕົວຈິງ: <strong className="text-blue-700">{(numQty * numMult).toLocaleString()}</strong> ຫົວໜ່ວຍ</span>
+              <span>ແປງເປັນຫົວໜ່ວຍຕັດສະຕັອກຕົວຈິງ: <strong className="text-blue-700">{(numQty * numMult).toLocaleString()}</strong> {category === 'ink' ? 'ml' : category === 'paper' ? 'ແຜ່ນ' : 'ຫົວໜ່ວຍ'}</span>
             </p>
           </div>
 

@@ -24,7 +24,8 @@ import {
   Store,
   Settings,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  BookOpen
 } from 'lucide-react';
 
 interface NavSubItem {
@@ -123,6 +124,13 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, setCol
           labelLao: '5. ສິນຄ້າໜ້າເວັບ',
           labelEn: '5. Web Catalog',
           icon: Globe,
+          roles: ['admin', 'owner', 'super_admin', 'sales'],
+        },
+        {
+          id: 'materials',
+          labelLao: '6. ຂໍ້ມູນວັດສະດຸ & FAQ',
+          labelEn: '6. Materials & Guide',
+          icon: BookOpen,
           roles: ['admin', 'owner', 'super_admin', 'sales'],
         },
       ],

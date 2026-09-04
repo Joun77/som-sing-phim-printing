@@ -40,6 +40,9 @@ func main() {
 	orderHdr := handler.NewOrderHandler(pricingSvc, dbConn)
 	orderHdr.RegisterRoutes(r)
 
+	materialHdr := handler.NewMaterialHandler(dbConn)
+	materialHdr.RegisterRoutes(r)
+
 	healthHandler := func(c *gin.Context) {
 		dbStatus := "disconnected"
 		if dbConn != nil {
@@ -48,6 +51,7 @@ func main() {
 			}
 		}
 		c.JSON(200, gin.H{
+			"ok":       true,
 			"status":   "healthy",
 			"database": dbStatus,
 		})

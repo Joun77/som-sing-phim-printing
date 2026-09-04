@@ -17,6 +17,7 @@ import { ProfileSettingsPage } from '@features/profile';
 import { PreflightPage } from './features/production/PreflightPage';
 import { ShopFloorTracker } from './features/production/ShopFloorTracker';
 import { WebCatalogPage } from './features/catalog';
+import { MaterialManagement } from './features/materials';
 import { SupplierManagement } from './features/suppliers';
 import { ProtectedRoute } from '@components/ProtectedRoute';
 import CurrencyRatesModal from '@components/common/CurrencyRatesModal';
@@ -76,6 +77,7 @@ function AppContent() {
                 <>
                   {activeTab === 'dashboard' && <DashboardOverview />}
                   {activeTab === 'catalog' && <WebCatalogPage />}
+                  {activeTab === 'materials' && <MaterialManagement />}
                   {activeTab === 'preflight' && (
                     <PreflightPage
                       onSendToQuotation={(res) => {

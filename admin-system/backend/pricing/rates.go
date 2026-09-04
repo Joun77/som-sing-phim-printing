@@ -63,6 +63,9 @@ func HandleUpdateRate(c *gin.Context) {
 	ratesStore[req.Currency] = req
 	ratesMutex.Unlock()
 
+	// Invalidate exchange proxy cache so all browsers immediately get updated rates
+	InvalidateExchangeCache()
+
 	c.JSON(http.StatusOK, req)
 }
 
