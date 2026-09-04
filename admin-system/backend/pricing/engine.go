@@ -7,7 +7,7 @@ import (
 	"math"
 	"strings"
 
-	"somsing/backend/inventory"
+	"github.com/Joun77/som-sing-phim-printing/backend/inventory"
 
 	"github.com/shopspring/decimal"
 )

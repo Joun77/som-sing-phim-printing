@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"somsing/backend/db"
+	"github.com/Joun77/som-sing-phim-printing/backend/db"
 
 	"github.com/gin-gonic/gin"
 	qrcode "github.com/skip2/go-qrcode"
