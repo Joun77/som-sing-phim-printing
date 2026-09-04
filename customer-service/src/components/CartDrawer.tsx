@@ -47,14 +47,14 @@ export default function CartDrawer() {
     <>
       {/* Overlay Backdrop */}
       <div
-        className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm transition-opacity animate-fade-in"
+        className="fixed inset-0 z-[1000] bg-slate-950/70 backdrop-blur-sm transition-opacity animate-fade-in"
         onClick={closeCart}
         aria-hidden="true"
       />
 
       {/* Slide-out Drawer */}
       <aside
-        className="fixed top-0 right-0 z-50 h-full w-full max-w-md bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col justify-between transition-transform duration-300 ease-out"
+        className="fixed top-0 right-0 z-[1000] h-full w-full max-w-md bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col justify-between transition-transform duration-300 ease-out"
         role="dialog"
         aria-modal="true"
         aria-label="Shopping Cart"

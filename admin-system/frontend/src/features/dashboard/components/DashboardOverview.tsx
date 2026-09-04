@@ -217,69 +217,69 @@ export default function DashboardOverview() {
           {/* Step 1: Prepress */}
           <div 
             onClick={() => setActiveTab('orders')}
-            className="p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition cursor-pointer flex flex-col justify-between space-y-2 group"
+            className="p-3.5 sm:p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition cursor-pointer flex flex-col justify-between space-y-2 group min-w-0"
           >
-            <div className="flex items-center justify-between text-xs sm:text-sm text-sky-300 font-bold">
-              <span className="flex items-center gap-1.5">
-                <Cpu className="w-4 h-4 text-sky-400" />
-                {currentLang === 'lo' ? '1. ກວດໄຟລ໌ & ແບບ' : '1. Prepress'}
+            <div className="flex items-center justify-between text-xs sm:text-sm text-sky-300 font-bold min-w-0">
+              <span className="flex items-center gap-1.5 truncate">
+                <Cpu className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-400 shrink-0" />
+                <span className="truncate">{currentLang === 'lo' ? '1. ກວດໄຟລ໌ & ແບບ' : '1. Prepress'}</span>
               </span>
-              <span className="px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-300 font-mono font-bold text-xs">
+              <span className="px-1.5 sm:px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-300 font-mono font-bold text-[11px] sm:text-xs shrink-0 ml-1">
                 {pipelineCounts.prepress}
               </span>
             </div>
-            <div className="text-xl sm:text-2xl font-black text-white font-sans">{pipelineCounts.prepress} {currentLang === 'lo' ? 'ງານ' : 'Jobs'}</div>
+            <div className="text-lg sm:text-xl md:text-2xl font-black text-white font-sans truncate">{pipelineCounts.prepress} {currentLang === 'lo' ? 'ງານ' : 'Jobs'}</div>
           </div>
 
           {/* Step 2: In Production */}
           <div 
             onClick={() => setActiveTab('orders')}
-            className="p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition cursor-pointer flex flex-col justify-between space-y-2 group"
+            className="p-3.5 sm:p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition cursor-pointer flex flex-col justify-between space-y-2 group min-w-0"
           >
-            <div className="flex items-center justify-between text-xs sm:text-sm text-amber-300 font-bold">
-              <span className="flex items-center gap-1.5">
-                <Printer className="w-4 h-4 text-amber-400" />
-                {currentLang === 'lo' ? '2. ກຳລັງພິມ' : '2. Printing'}
+            <div className="flex items-center justify-between text-xs sm:text-sm text-amber-300 font-bold min-w-0">
+              <span className="flex items-center gap-1.5 truncate">
+                <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />
+                <span className="truncate">{currentLang === 'lo' ? '2. ກຳລັງພິມ' : '2. Printing'}</span>
               </span>
-              <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-mono font-bold text-xs">
+              <span className="px-1.5 sm:px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-mono font-bold text-[11px] sm:text-xs shrink-0 ml-1">
                 {pipelineCounts.printing}
               </span>
             </div>
-            <div className="text-xl sm:text-2xl font-black text-white font-sans">{pipelineCounts.printing} {currentLang === 'lo' ? 'ງານ' : 'Jobs'}</div>
+            <div className="text-lg sm:text-xl md:text-2xl font-black text-white font-sans truncate">{pipelineCounts.printing} {currentLang === 'lo' ? 'ງານ' : 'Jobs'}</div>
           </div>
 
           {/* Step 3: Finishing */}
           <div 
             onClick={() => setActiveTab('orders')}
-            className="p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition cursor-pointer flex flex-col justify-between space-y-2 group"
+            className="p-3.5 sm:p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition cursor-pointer flex flex-col justify-between space-y-2 group min-w-0"
           >
-            <div className="flex items-center justify-between text-xs sm:text-sm text-indigo-300 font-bold">
-              <span className="flex items-center gap-1.5">
-                <Layers className="w-4 h-4 text-indigo-400" />
-                {currentLang === 'lo' ? '3. ເຂົ້າເລັ້ມ / ຕັດ' : '3. Finishing'}
+            <div className="flex items-center justify-between text-xs sm:text-sm text-indigo-300 font-bold min-w-0">
+              <span className="flex items-center gap-1.5 truncate">
+                <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400 shrink-0" />
+                <span className="truncate">{currentLang === 'lo' ? '3. ເຂົ້າເລັ້ມ / ຕັດ' : '3. Finishing'}</span>
               </span>
-              <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 font-mono font-bold text-xs">
+              <span className="px-1.5 sm:px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 font-mono font-bold text-[11px] sm:text-xs shrink-0 ml-1">
                 {pipelineCounts.finishing}
               </span>
             </div>
-            <div className="text-xl sm:text-2xl font-black text-white font-sans">{pipelineCounts.finishing} {currentLang === 'lo' ? 'ງານ' : 'Jobs'}</div>
+            <div className="text-lg sm:text-xl md:text-2xl font-black text-white font-sans truncate">{pipelineCounts.finishing} {currentLang === 'lo' ? 'ງານ' : 'Jobs'}</div>
           </div>
 
           {/* Step 4: Ready For Pickup */}
           <div 
             onClick={() => setActiveTab('orders')}
-            className="p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition cursor-pointer flex flex-col justify-between space-y-2 group"
+            className="p-3.5 sm:p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition cursor-pointer flex flex-col justify-between space-y-2 group min-w-0"
           >
-            <div className="flex items-center justify-between text-xs sm:text-sm text-emerald-300 font-bold">
-              <span className="flex items-center gap-1.5">
-                <PackageCheck className="w-4 h-4 text-emerald-400" />
-                {currentLang === 'lo' ? '4. ພ້ອມສົ່ງ / ຮັບ' : '4. Ready'}
+            <div className="flex items-center justify-between text-xs sm:text-sm text-emerald-300 font-bold min-w-0">
+              <span className="flex items-center gap-1.5 truncate">
+                <PackageCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 shrink-0" />
+                <span className="truncate">{currentLang === 'lo' ? '4. ພ້ອມສົ່ງ / ຮັບ' : '4. Ready'}</span>
               </span>
-              <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-mono font-bold text-xs">
+              <span className="px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[11px] sm:text-xs shrink-0 ml-1">
                 {pipelineCounts.ready}
               </span>
             </div>
-            <div className="text-xl sm:text-2xl font-black text-white font-sans">{pipelineCounts.ready} {currentLang === 'lo' ? 'ງານ' : 'Jobs'}</div>
+            <div className="text-lg sm:text-xl md:text-2xl font-black text-white font-sans truncate">{pipelineCounts.ready} {currentLang === 'lo' ? 'ງານ' : 'Jobs'}</div>
           </div>
         </div>
       </div>
@@ -298,13 +298,13 @@ export default function DashboardOverview() {
               <div 
                 key={ord.id} 
                 onClick={() => setActiveTab('orders')}
-                className="bg-white p-4 sm:p-5 rounded-2xl border border-rose-200/80 flex justify-between items-center shadow-xs cursor-pointer hover:border-rose-300 transition"
+                className="bg-white p-4 sm:p-5 rounded-2xl border border-rose-200/80 flex justify-between items-center shadow-xs cursor-pointer hover:border-rose-300 transition min-w-0"
               >
                 <div className="space-y-1 min-w-0 pr-2">
                   <span className="font-black text-slate-900 text-sm sm:text-base block truncate">{ord.customerName}</span>
-                  <span className="text-xs sm:text-sm text-slate-500 font-semibold flex items-center gap-1.5">
-                    <Calendar className="w-4 h-4 text-slate-400" />
-                    {currentLang === 'lo' ? 'ກຳນົດສົ່ງ:' : 'Due:'} {ord.promisedDeliveryDate || 'Tomorrow'}
+                  <span className="text-xs sm:text-sm text-slate-500 font-semibold flex items-center gap-1.5 truncate">
+                    <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="truncate">{currentLang === 'lo' ? 'ກຳນົດສົ່ງ:' : 'Due:'} {ord.promisedDeliveryDate || 'Tomorrow'}</span>
                   </span>
                 </div>
                 <span className="text-xs bg-rose-100 text-rose-800 font-black px-3 py-1.5 rounded-xl border border-rose-200 uppercase shrink-0">
@@ -317,85 +317,85 @@ export default function DashboardOverview() {
       )}
 
       {/* 4. FINANCIAL & OPERATIONAL KPI STAT CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         
         {/* Realized Revenue */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[160px]">
+        <div className="bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px] min-w-0">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+            <span className="text-xs font-black uppercase text-slate-400 tracking-wider truncate mr-2">
               {currentLang === 'lo' ? 'ຍອດເງິນຮັບແລ້ວ (Cashflow)' : 'Realized Revenue'}
             </span>
-            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
+            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100 shrink-0">
               <TrendingUp className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-4 space-y-1">
-            <h3 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight font-sans">
+          <div className="mt-4 space-y-1 min-w-0">
+            <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-950 tracking-tight font-sans truncate" title={formatLAK(stats.totalRevenue)}>
               {formatLAK(stats.totalRevenue)}
             </h3>
-            <p className="text-xs sm:text-sm text-emerald-600 font-bold flex items-center gap-1">
-              <CheckCircle2 className="w-4 h-4" />
-              {currentLang === 'lo' ? 'ເງິນສົດ & ໂອນຜ່ານ BCEL' : 'Realized cash & bank transfers'}
+            <p className="text-xs sm:text-sm text-emerald-600 font-bold flex items-center gap-1 truncate">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span className="truncate">{currentLang === 'lo' ? 'ເງິນສົດ & ໂອນຜ່ານ BCEL' : 'Realized cash & bank transfers'}</span>
             </p>
           </div>
         </div>
 
         {/* Outstanding Receivables */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[160px]">
+        <div className="bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px] min-w-0">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+            <span className="text-xs font-black uppercase text-slate-400 tracking-wider truncate mr-2">
               {currentLang === 'lo' ? 'ລູກໜີ້ຄົງຄ້າງ (AR)' : 'Outstanding Receivables'}
             </span>
-            <div className="p-2.5 bg-rose-50 text-rose-600 rounded-2xl border border-rose-100">
+            <div className="p-2.5 bg-rose-50 text-rose-600 rounded-2xl border border-rose-100 shrink-0">
               <TrendingDown className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-4 space-y-1">
-            <h3 className="text-2xl sm:text-3xl font-black text-rose-600 tracking-tight font-sans">
+          <div className="mt-4 space-y-1 min-w-0">
+            <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-rose-600 tracking-tight font-sans truncate" title={formatLAK(stats.outstandingPayments)}>
               {formatLAK(stats.outstandingPayments)}
             </h3>
-            <p className="text-xs sm:text-sm text-rose-500 font-bold flex items-center gap-1">
-              <Clock className="w-4 h-4" />
-              {currentLang === 'lo' ? 'ລໍຖ້າຊຳຣະສ່ວນທີ່ເຫຼືອ' : 'Pending balance settlements'}
+            <p className="text-xs sm:text-sm text-rose-500 font-bold flex items-center gap-1 truncate">
+              <Clock className="w-4 h-4 shrink-0" />
+              <span className="truncate">{currentLang === 'lo' ? 'ລໍຖ້າຊຳຣະສ່ວນທີ່ເຫຼືອ' : 'Pending balance settlements'}</span>
             </p>
           </div>
         </div>
 
         {/* Nominal Net Profit */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[160px]">
+        <div className="bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px] min-w-0">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+            <span className="text-xs font-black uppercase text-slate-400 tracking-wider truncate mr-2">
               {currentLang === 'lo' ? 'ກຳໄລສຸດທິ (Net Profit)' : 'Net Profit Margin'}
             </span>
-            <div className="p-2.5 bg-sky-50 text-accent-sky rounded-2xl border border-sky-100">
+            <div className="p-2.5 bg-sky-50 text-accent-sky rounded-2xl border border-sky-100 shrink-0">
               <DollarSign className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-4 space-y-1">
-            <h3 className="text-2xl sm:text-3xl font-black text-accent-sky tracking-tight font-sans">
+          <div className="mt-4 space-y-1 min-w-0">
+            <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-accent-sky tracking-tight font-sans truncate" title={formatLAK(stats.netProfit)}>
               {formatLAK(stats.netProfit)}
             </h3>
-            <p className="text-xs sm:text-sm text-slate-400 font-bold">
+            <p className="text-xs sm:text-sm text-slate-400 font-bold truncate">
               {currentLang === 'lo' ? 'ຫຼັງຫັກຕົ້ນທຶນເຈ້ຍ, ໝຶກ & ແຮງງານ' : 'After paper, ink & machine cost'}
             </p>
           </div>
         </div>
 
         {/* Active Orders Count */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[160px]">
+        <div className="bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px] min-w-0">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+            <span className="text-xs font-black uppercase text-slate-400 tracking-wider truncate mr-2">
               {currentLang === 'lo' ? 'ອໍເດີກຳລັງດຳເນີນງານ' : 'Active Orders'}
             </span>
-            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100">
+            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100 shrink-0">
               <FileText className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-4 space-y-1">
-            <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-sans">
-              {stats.activeOrdersCount} <span className="text-sm font-bold text-slate-400">{currentLang === 'lo' ? 'ລາຍການ' : 'Active Jobs'}</span>
+          <div className="mt-4 space-y-1 min-w-0">
+            <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 tracking-tight font-sans truncate">
+              {stats.activeOrdersCount} <span className="text-xs sm:text-sm font-bold text-slate-400">{currentLang === 'lo' ? 'ລາຍການ' : 'Active Jobs'}</span>
             </h3>
-            <p className="text-xs sm:text-sm text-indigo-600 font-bold">
+            <p className="text-xs sm:text-sm text-indigo-600 font-bold truncate">
               {currentLang === 'lo' ? 'ຢູ່ໃນສາຍການຜະລິດ' : 'In production pipeline'}
             </p>
           </div>
@@ -415,83 +415,83 @@ export default function DashboardOverview() {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             
             {/* Total Paper Cost */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px]">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px] min-w-0">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                <span className="text-xs font-black uppercase text-slate-400 tracking-wider truncate mr-2">
                   {currentLang === 'lo' ? 'ຕົ້ນທຶນເຈ້ຍລວມ (Paper Cost)' : 'Total Paper Cost'}
                 </span>
-                <div className="p-2.5 bg-amber-50 text-amber-600 rounded-2xl border border-amber-100">
+                <div className="p-2.5 bg-amber-50 text-amber-600 rounded-2xl border border-amber-100 shrink-0">
                   <FileCheck className="w-5 h-5" />
                 </div>
               </div>
-              <div className="mt-4 space-y-1">
-                <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-sans">
+              <div className="mt-4 space-y-1 min-w-0">
+                <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 tracking-tight font-sans truncate" title={formatLAK(stats.paperCostTotal || 0)}>
                   {formatLAK(stats.paperCostTotal || 0)}
                 </h3>
-                <p className="text-xs sm:text-sm text-amber-600 font-bold">
+                <p className="text-xs sm:text-sm text-amber-600 font-bold truncate">
                   {currentLang === 'lo' ? 'ຄິດໄລ່ຈາກ Stock Deduction' : 'Deducted from paper stock'}
                 </p>
               </div>
             </div>
 
             {/* Total Ink Cost */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px]">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px] min-w-0">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                <span className="text-xs font-black uppercase text-slate-400 tracking-wider truncate mr-2">
                   {currentLang === 'lo' ? 'ຕົ້ນທຶນໝຶກລວມ (Ink Cost)' : 'Total Ink Cost'}
                 </span>
-                <div className="p-2.5 bg-cyan-50 text-cyan-600 rounded-2xl border border-cyan-100">
+                <div className="p-2.5 bg-cyan-50 text-cyan-600 rounded-2xl border border-cyan-100 shrink-0">
                   <Droplets className="w-5 h-5" />
                 </div>
               </div>
-              <div className="mt-4 space-y-1">
-                <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-sans">
+              <div className="mt-4 space-y-1 min-w-0">
+                <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 tracking-tight font-sans truncate" title={formatLAK(stats.inkCostTotal || 0)}>
                   {formatLAK(stats.inkCostTotal || 0)}
                 </h3>
-                <p className="text-xs sm:text-sm text-cyan-600 font-bold">
+                <p className="text-xs sm:text-sm text-cyan-600 font-bold truncate">
                   {currentLang === 'lo' ? 'ຕາມອັດຕາ Coverage %' : 'Coverage % and impressions'}
                 </p>
               </div>
             </div>
 
             {/* Gross Profit Margin % */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px]">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px] min-w-0">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                <span className="text-xs font-black uppercase text-slate-400 tracking-wider truncate mr-2">
                   {currentLang === 'lo' ? 'ອັດຕາກຳໄລຂັ້ນຕົ້ນ (Gross Margin)' : 'Gross Profit Margin'}
                 </span>
-                <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
+                <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100 shrink-0">
                   <Percent className="w-5 h-5" />
                 </div>
               </div>
-              <div className="mt-4 space-y-1">
-                <h3 className="text-2xl sm:text-3xl font-black text-emerald-600 tracking-tight font-sans">
+              <div className="mt-4 space-y-1 min-w-0">
+                <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-emerald-600 tracking-tight font-sans truncate">
                   {stats.grossProfitMargin || 58}%
                 </h3>
-                <p className="text-xs sm:text-sm text-emerald-600 font-bold">
+                <p className="text-xs sm:text-sm text-emerald-600 font-bold truncate">
                   {currentLang === 'lo' ? '(Revenue - Paper - Ink) / Revenue' : 'High profitability index'}
                 </p>
               </div>
             </div>
 
             {/* Spoilage Financial Cost Impact */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px]">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col justify-between min-h-[150px] min-w-0">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                <span className="text-xs font-black uppercase text-slate-400 tracking-wider truncate mr-2">
                   {currentLang === 'lo' ? 'ຕົ້ນທຶນຂອງເສຍ (Spoilage Loss)' : 'Spoilage Cost Impact'}
                 </span>
-                <div className="p-2.5 bg-rose-50 text-rose-600 rounded-2xl border border-rose-100">
+                <div className="p-2.5 bg-rose-50 text-rose-600 rounded-2xl border border-rose-100 shrink-0">
                   <AlertTriangle className="w-5 h-5" />
                 </div>
               </div>
-              <div className="mt-4 space-y-1">
-                <h3 className="text-2xl sm:text-3xl font-black text-rose-600 tracking-tight font-sans">
+              <div className="mt-4 space-y-1 min-w-0">
+                <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-rose-600 tracking-tight font-sans truncate" title={formatLAK(stats.spoilageCostImpact || 0)}>
                   {formatLAK(stats.spoilageCostImpact || 0)}
                 </h3>
-                <p className="text-xs sm:text-sm text-rose-500 font-bold">
+                <p className="text-xs sm:text-sm text-rose-500 font-bold truncate">
                   {spoilageLogs.length} {currentLang === 'lo' ? 'ລາຍການເສຍຫາຍ' : 'logged scrap entries'}
                 </p>
               </div>

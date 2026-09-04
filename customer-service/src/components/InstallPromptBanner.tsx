@@ -61,11 +61,11 @@ export default function InstallPromptBanner() {
 
   return (
     <aside className="luxury-pwa-banner" aria-label="Install Som-Sing Phim App">
-      <div className="luxury-pwa-content">
+      <div className="luxury-pwa-inner">
         <div className="luxury-pwa-icon" aria-hidden="true">
           SSP
         </div>
-        <div className="luxury-pwa-text">
+        <div className="luxury-pwa-content">
           <h4 className="luxury-pwa-title">
             {language === 'lo' ? 'ຕິດຕັ້ງແອັບ ສົມສິ່ງພິມ (Web App)' : 'Install Som-Sing Phim Atelier'}
           </h4>

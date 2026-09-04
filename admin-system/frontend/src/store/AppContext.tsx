@@ -601,16 +601,17 @@ export const AppProvider = ({ children }) => {
   const formatCurrency = (num) => {
     const meta = CURRENCY_META[currency] || CURRENCY_META.LAK;
     const converted = (Number(num) || 0) / getRate(currency);
+    const fractionDigits = currency === 'LAK' ? 0 : 2;
     const options: Intl.NumberFormatOptions = {
       style: 'currency',
       currency: meta.currency,
-      maximumFractionDigits: 2,
-      minimumFractionDigits: 2
+      maximumFractionDigits: fractionDigits,
+      minimumFractionDigits: fractionDigits
     };
     try {
       return new Intl.NumberFormat(meta.locale, options).format(converted);
     } catch (e) {
-      return `${meta.symbol}${converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      return `${meta.symbol}${converted.toLocaleString(undefined, { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits })}`;
     }
   };
 

@@ -166,7 +166,7 @@ export const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch">
             
             {/* Left Column: Member Privilege Showcase */}
-            <div className="lg:col-span-7 bg-slate-50 border border-slate-200/90 rounded-2xl p-5 sm:p-6 flex flex-col justify-between space-y-5">
+            <div className="order-2 lg:order-1 lg:col-span-7 bg-slate-50 border border-slate-200/90 rounded-2xl p-5 sm:p-6 flex flex-col justify-between space-y-5">
               <div>
                 <div className="flex items-center gap-2 text-amber-700 text-xs font-black uppercase tracking-wider mb-2">
                   <Sparkles className="w-4 h-4 text-amber-600" />
@@ -248,7 +248,7 @@ export const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
             </div>
 
             {/* Right Column: Fast Sign-In Form */}
-            <div className="lg:col-span-5 bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 flex flex-col justify-center space-y-4 shadow-sm">
+            <div className="order-1 lg:order-2 lg:col-span-5 bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 flex flex-col justify-center space-y-4 shadow-sm">
               <div>
                 <h3 className="text-base font-black text-slate-900">ເຂົ້າສູ່ລະບົບດ່ວນ</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
