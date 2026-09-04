@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"backend/db"
+	"somsing/backend/db"
 
 	"github.com/gin-gonic/gin"
 )

@@ -1,4 +1,4 @@
-module backend
+module somsing/backend
 
 go 1.21
 

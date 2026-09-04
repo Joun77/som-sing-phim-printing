@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"backend/db"
-	"backend/inventory"
-	"backend/notifications"
-	"backend/pricing"
+	"somsing/backend/db"
+	"somsing/backend/inventory"
+	"somsing/backend/notifications"
+	"somsing/backend/pricing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
