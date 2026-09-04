@@ -888,8 +888,17 @@ export default function CustomerManagement() {
                           {/* ID & Tier */}
                           <td className="py-4.5 px-4 font-mono text-xs text-slate-400 uppercase">
                             <span className="block font-bold text-slate-700">{c.id}</span>
-                            <div className="mt-1">
+                            <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                               {getTierBadge(c.tier)}
+                              {c.source === 'CUSTOMER_SERVICE' ? (
+                                <span className="px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200/80 font-bold text-[9px] whitespace-nowrap" title={c.authProvider ? `Login: ${c.authProvider}` : 'Storefront Web Login'}>
+                                  ໜ້າຮ້ານ (Web)
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 font-bold text-[9px] whitespace-nowrap" title="ເພີ່ມໂດຍແອັດມິນ">
+                                  ແອັດມິນ (Manual)
+                                </span>
+                              )}
                             </div>
                           </td>
                           {/* Name & details */}
@@ -1020,11 +1029,20 @@ export default function CustomerManagement() {
                     <User className="w-10 h-10 sm:w-12 sm:h-12" />
                   </div>
                   <h4 className="font-black text-2xl sm:text-3xl text-slate-900 mt-5 leading-tight">{selectedCustomerObj.name}</h4>
-                  <div className="flex items-center justify-center gap-2 mt-2">
+                  <div className="flex items-center justify-center gap-2 mt-2 flex-wrap">
                     <span className="text-xs text-slate-400 font-mono tracking-wider uppercase font-bold">
                       ID: {selectedCustomerObj.id}
                     </span>
                     {getTierBadge(selectedCustomerObj.tier)}
+                    {selectedCustomerObj.source === 'CUSTOMER_SERVICE' ? (
+                      <span className="px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 text-xs font-bold">
+                        ໜ້າຮ້ານ (Customer Web) {selectedCustomerObj.authProvider ? `• ${selectedCustomerObj.authProvider}` : ''}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-xs font-bold">
+                        ເພີ່ມໂດຍແອັດມິນ (Admin Manual)
+                      </span>
+                    )}
                   </div>
 
                   {/* Financial Statistics (Clean Light Highlight) */}

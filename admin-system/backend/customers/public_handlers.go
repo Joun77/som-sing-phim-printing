@@ -68,9 +68,10 @@ func HandlePublicCustomerAuth(c *gin.Context) {
 		storeMutex.RUnlock()
 	}
 
+	now := time.Now()
 	if !found {
-		// Register a new customer
-		cust.ID = "cust-" + time.Now().Format("150405")
+		// Register a new customer from Customer Service Storefront
+		cust.ID = "cust-" + now.Format("150405")
 		cust.Phone = phone
 		if req.Name != "" {
 			cust.Name = req.Name
@@ -81,8 +82,11 @@ func HandlePublicCustomerAuth(c *gin.Context) {
 			cust.Email = req.Email
 		}
 		cust.Tier = "STANDARD"
-		cust.CreatedAt = time.Now()
-		cust.UpdatedAt = time.Now()
+		cust.Source = "CUSTOMER_SERVICE"
+		cust.AuthProvider = "PHONE"
+		cust.LastLoginAt = &now
+		cust.CreatedAt = now
+		cust.UpdatedAt = now
 
 		if db.DB != nil {
 			err := saveCustomerToDB(cust)
@@ -91,6 +95,15 @@ func HandlePublicCustomerAuth(c *gin.Context) {
 			}
 		}
 
+		storeMutex.Lock()
+		customerStore[cust.ID] = cust
+		storeMutex.Unlock()
+	} else {
+		// Existing customer login from Customer Service Storefront
+		cust.LastLoginAt = &now
+		if db.DB != nil {
+			_, _ = db.DB.Exec("UPDATE customers SET last_login_at = $1 WHERE id = $2", now, cust.ID)
+		}
 		storeMutex.Lock()
 		customerStore[cust.ID] = cust
 		storeMutex.Unlock()

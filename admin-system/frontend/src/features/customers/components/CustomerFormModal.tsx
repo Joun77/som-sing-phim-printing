@@ -9,7 +9,10 @@ import {
   Truck, 
   FileText,
   Building2,
-  Check
+  Check,
+  Key,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { useApp } from '@store/AppContext';
 import { Customer } from '../types';
@@ -49,6 +52,8 @@ export function CustomerFormModal({
   const [taxId, setTaxId] = useState('');
   const [branchCode, setBranchCode] = useState('');
   const [notes, setNotes] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -81,6 +86,8 @@ export function CustomerFormModal({
         setTaxId('');
         setBranchCode('');
         setNotes('');
+        setPassword('');
+        setShowPassword(false);
       }
     }
   }, [isOpen, customer, customerCategories]);
@@ -120,6 +127,8 @@ export function CustomerFormModal({
         branchCode: hasTaxInfo && branchCode.trim() ? branchCode.trim() : undefined,
         notes: notes.trim() || undefined,
         creditLimit: 0,
+        source: 'ADMIN_MANUAL',
+        ...(password.trim() ? { password: password.trim() } : {})
       };
 
       if (isEdit && customer) {
@@ -362,6 +371,39 @@ export function CustomerFormModal({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Web Access / Password (Optional for Admin Manual entry) */}
+          <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="font-black text-slate-800 flex items-center gap-2 text-xs">
+                <Key className="w-4 h-4 text-sky-600" />
+                <span>ຕັ້ງລະຫັດຜ່ານສຳລັບເວັບໄຊໜ້າຮ້ານ (Web Portal Password)</span>
+              </label>
+              <span className="text-[10px] text-slate-400 font-normal">Optional</span>
+            </div>
+            <p className="text-[11px] text-slate-500 font-normal leading-relaxed">
+              ຫາກຕ້ອງການໃຫ້ລູກຄ້າສາມາດເຂົ້າສູ່ລະບົບໜ້າຮ້ານດ້ວຍເບີໂທລະສັບ ແລະ ລະຫັດຜ່ານ ສາມາດກຳນົດລະຫັດຜ່ານເລີ່ມຕົ້ນໄດ້ທີ່ນີ້ (ຫຼື ປ່ອຍຫວ່າງໄວ້ຫາກຍັງບໍ່ຕ້ອງການ)
+            </p>
+            <div className="relative pt-1">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={isEdit ? "ປ່ອຍຫວ່າງໄວ້ຫາກບໍ່ຕ້ອງການປ່ຽນລະຫັດຜ່ານ" : "ຕັ້ງລະຫັດຜ່ານ (ຢ່າງໜ້ອຍ 6 ຕົວອັກສອນ)"}
+                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-sans text-xs text-slate-800 pr-10 focus:outline-none focus:border-accent-sky"
+              />
+              {password && (
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600 transition"
+                  title={showPassword ? "Hide" : "Show"}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Notes */}

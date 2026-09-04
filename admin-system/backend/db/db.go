@@ -123,6 +123,10 @@ func RunMigrations(db *sql.DB) error {
 		"migrations/028_add_customer_tier_and_courier.sql",
 		"../migrations/029_customer_categories.sql",
 		"migrations/029_customer_categories.sql",
+		"../migrations/030_customer_vip_tiers.sql",
+		"migrations/030_customer_vip_tiers.sql",
+		"../migrations/031_customer_source_and_staff_rbac.sql",
+		"migrations/031_customer_source_and_staff_rbac.sql",
 		"../schema.sql",
 		"schema.sql",
 	}

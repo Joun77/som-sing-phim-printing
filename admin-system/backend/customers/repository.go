@@ -19,7 +19,12 @@ func ensureCustomerColumns() {
 			_, _ = db.DB.Exec(`
 				ALTER TABLE customers 
 				  ADD COLUMN IF NOT EXISTS tier VARCHAR(50) DEFAULT 'STANDARD',
-				  ADD COLUMN IF NOT EXISTS preferred_courier VARCHAR(100);
+				  ADD COLUMN IF NOT EXISTS preferred_courier VARCHAR(100),
+				  ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'CUSTOMER_SERVICE',
+				  ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'PHONE',
+				  ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255),
+				  ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP WITH TIME ZONE;
+				CREATE INDEX IF NOT EXISTS idx_customers_source ON customers(source);
 			`)
 		}
 	})
@@ -34,6 +39,8 @@ func getCustomersFromDB() ([]Customer, error) {
 		       COALESCE(whatsapp, ''), COALESCE(province, ''), COALESCE(district, ''),
 		       COALESCE(village, ''), COALESCE(branch_code, ''), COALESCE(tax_id, ''),
 		       COALESCE(tier, 'STANDARD'), COALESCE(preferred_courier, ''),
+		       COALESCE(source, 'CUSTOMER_SERVICE'), COALESCE(auth_provider, 'PHONE'),
+		       COALESCE(password_hash, ''), last_login_at,
 		       COALESCE(notes, ''), COALESCE(total_spent_lak, 0), COALESCE(total_orders_count, 0),
 		       created_at, updated_at
 		FROM customers
@@ -55,6 +62,8 @@ func getCustomersFromDB() ([]Customer, error) {
 			&cust.WhatsApp, &cust.Province, &cust.District,
 			&cust.Village, &cust.BranchCode, &cust.TaxID,
 			&cust.Tier, &cust.PreferredCourier,
+			&cust.Source, &cust.AuthProvider,
+			&cust.PasswordHash, &cust.LastLoginAt,
 			&cust.Notes, &cust.TotalSpentLAK, &cust.TotalOrdersCount,
 			&cust.CreatedAt, &cust.UpdatedAt,
 		)
@@ -82,6 +91,8 @@ func getCustomerByIDFromDB(id string) (Customer, error) {
 		       COALESCE(whatsapp, ''), COALESCE(province, ''), COALESCE(district, ''),
 		       COALESCE(village, ''), COALESCE(branch_code, ''), COALESCE(tax_id, ''),
 		       COALESCE(tier, 'STANDARD'), COALESCE(preferred_courier, ''),
+		       COALESCE(source, 'CUSTOMER_SERVICE'), COALESCE(auth_provider, 'PHONE'),
+		       COALESCE(password_hash, ''), last_login_at,
 		       COALESCE(notes, ''), COALESCE(total_spent_lak, 0), COALESCE(total_orders_count, 0),
 		       created_at, updated_at
 		FROM customers
@@ -94,6 +105,8 @@ func getCustomerByIDFromDB(id string) (Customer, error) {
 		&cust.WhatsApp, &cust.Province, &cust.District,
 		&cust.Village, &cust.BranchCode, &cust.TaxID,
 		&cust.Tier, &cust.PreferredCourier,
+		&cust.Source, &cust.AuthProvider,
+		&cust.PasswordHash, &cust.LastLoginAt,
 		&cust.Notes, &cust.TotalSpentLAK, &cust.TotalOrdersCount,
 		&cust.CreatedAt, &cust.UpdatedAt,
 	)
@@ -105,14 +118,27 @@ func saveCustomerToDB(cust Customer) error {
 	if cust.Tier == "" {
 		cust.Tier = "STANDARD"
 	}
+	if cust.Source == "" {
+		cust.Source = "ADMIN_MANUAL"
+	}
+	if cust.AuthProvider == "" {
+		if cust.Source == "CUSTOMER_SERVICE" {
+			cust.AuthProvider = "PHONE"
+		} else {
+			cust.AuthProvider = "MANUAL"
+		}
+	}
+
 	query := `
 		INSERT INTO customers (
 			id, name, phone, email, address, credit_limit, payment_terms,
 			instagram, line_id, facebook, whatsapp, province, district, village,
-			branch_code, tax_id, tier, preferred_courier, notes, total_spent_lak, total_orders_count,
+			branch_code, tax_id, tier, preferred_courier,
+			source, auth_provider, password_hash, last_login_at,
+			notes, total_spent_lak, total_orders_count,
 			created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, NOW(), NOW())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, NOW(), NOW())
 		ON CONFLICT (id) DO UPDATE SET
 			name = EXCLUDED.name,
 			phone = EXCLUDED.phone,
@@ -131,6 +157,10 @@ func saveCustomerToDB(cust Customer) error {
 			tax_id = EXCLUDED.tax_id,
 			tier = EXCLUDED.tier,
 			preferred_courier = EXCLUDED.preferred_courier,
+			source = COALESCE(EXCLUDED.source, customers.source),
+			auth_provider = COALESCE(EXCLUDED.auth_provider, customers.auth_provider),
+			password_hash = CASE WHEN EXCLUDED.password_hash != '' THEN EXCLUDED.password_hash ELSE customers.password_hash END,
+			last_login_at = COALESCE(EXCLUDED.last_login_at, customers.last_login_at),
 			notes = EXCLUDED.notes,
 			total_spent_lak = EXCLUDED.total_spent_lak,
 			total_orders_count = EXCLUDED.total_orders_count,
@@ -144,6 +174,7 @@ func saveCustomerToDB(cust Customer) error {
 		cust.WhatsApp, cust.Province, cust.District,
 		cust.Village, cust.BranchCode, cust.TaxID,
 		cust.Tier, cust.PreferredCourier,
+		cust.Source, cust.AuthProvider, cust.PasswordHash, cust.LastLoginAt,
 		cust.Notes, cust.TotalSpentLAK, cust.TotalOrdersCount,
 	)
 	return err

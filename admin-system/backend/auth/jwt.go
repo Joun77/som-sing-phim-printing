@@ -73,54 +73,68 @@ func HandleLogin(c *gin.Context) {
 		return
 	}
 
-	ownerUser := os.Getenv("OWNER_USERNAME")
-	if ownerUser == "" {
-		ownerUser = "admin"
-	}
-	ownerPass := os.Getenv("OWNER_PASSWORD")
-	if ownerPass == "" {
-		ownerPass = "admin123"
-	}
-
 	var role, fullname, email, userId string
-	if req.Username == ownerUser && req.Password == ownerPass {
-		role = "admin"
-		fullname = "Som-Sing Printing Owner (Super Admin)"
-		email = "owner@somsingphim.la"
-		userId = "usr_admin_001"
-	} else if req.Username == "admin" && req.Password == "admin123" {
-		role = "admin"
-		fullname = "Som-Sing Printing Owner (Super Admin)"
-		email = "admin@somsingphim.la"
-		userId = "usr_admin_001"
-	} else if req.Username == "manager" && req.Password == "manager123" {
-		role = "manager"
-		fullname = "Som Sing General Manager"
-		email = "manager@somsingphim.la"
-		userId = "usr_mgr_001"
-	} else if req.Username == "prepress" && req.Password == "prepress123" {
-		role = "prepress"
-		fullname = "Som Sing Prepress Specialist"
-		email = "prepress@somsingphim.la"
-		userId = "usr_prep_001"
-	} else if req.Username == "sales" && req.Password == "sales123" {
-		role = "sales"
-		fullname = "Som Sing Sales Representative"
-		email = "sales@somsingphim.la"
-		userId = "usr_sales_001"
-	} else if (req.Username == "production" && req.Password == "production123") || (req.Username == "production" && req.Password == "prod123") {
-		role = "production"
-		fullname = "Som Sing Lead Printer"
-		email = "production@somsingphim.la"
-		userId = "usr_prod_001"
-	} else if (req.Username == "finance" && req.Password == "finance123") || (req.Username == "accountant" && req.Password == "acc123") {
-		role = "finance"
-		fullname = "Som Sing Lead Accountant"
-		email = "finance@somsingphim.la"
-		userId = "usr_fin_001"
-	} else {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "ຊື່ຜູ້ໃຊ້ງານ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ (Invalid username or password)"})
+
+	// 1. Try real PostgreSQL database authentication with bcrypt
+	dbUser, dbErr := AuthenticateUserAgainstDB(req.Username, req.Password)
+	if dbErr == nil && dbUser != nil {
+		role = dbUser.Role
+		fullname = dbUser.FullName
+		email = dbUser.Email
+		userId = dbUser.ID
+	} else if dbErr != nil && dbErr.Error() == "ACCOUNT_DEACTIVATED" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ບັນຊີນີ້ຖືກປິດການໃຊ້ງານ ກະລຸນາຕິດຕໍ່ Super Admin (Account is deactivated)"})
 		return
+	} else {
+		// 2. Fallback to environment variables or seed accounts
+		ownerUser := os.Getenv("OWNER_USERNAME")
+		if ownerUser == "" {
+			ownerUser = "admin"
+		}
+		ownerPass := os.Getenv("OWNER_PASSWORD")
+		if ownerPass == "" {
+			ownerPass = "admin123"
+		}
+
+		if req.Username == ownerUser && req.Password == ownerPass {
+			role = "admin"
+			fullname = "Som-Sing Printing Owner (Super Admin)"
+			email = "owner@somsingphim.la"
+			userId = "usr_admin_001"
+		} else if req.Username == "admin" && req.Password == "admin123" {
+			role = "admin"
+			fullname = "Som-Sing Printing Owner (Super Admin)"
+			email = "admin@somsingphim.la"
+			userId = "usr_admin_001"
+		} else if req.Username == "manager" && req.Password == "manager123" {
+			role = "manager"
+			fullname = "Som Sing General Manager"
+			email = "manager@somsingphim.la"
+			userId = "usr_mgr_001"
+		} else if req.Username == "prepress" && req.Password == "prepress123" {
+			role = "prepress"
+			fullname = "Som Sing Prepress Specialist"
+			email = "prepress@somsingphim.la"
+			userId = "usr_prep_001"
+		} else if req.Username == "sales" && req.Password == "sales123" {
+			role = "sales"
+			fullname = "Som Sing Sales Representative"
+			email = "sales@somsingphim.la"
+			userId = "usr_sales_001"
+		} else if (req.Username == "production" && req.Password == "production123") || (req.Username == "production" && req.Password == "prod123") {
+			role = "production"
+			fullname = "Som Sing Lead Printer"
+			email = "production@somsingphim.la"
+			userId = "usr_prod_001"
+		} else if (req.Username == "finance" && req.Password == "finance123") || (req.Username == "accountant" && req.Password == "acc123") {
+			role = "finance"
+			fullname = "Som Sing Lead Accountant"
+			email = "finance@somsingphim.la"
+			userId = "usr_fin_001"
+		} else {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "ຊື່ຜູ້ໃຊ້ງານ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ (Invalid username or password)"})
+			return
+		}
 	}
 
 	// 24 hours standard token expiration

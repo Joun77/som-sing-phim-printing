@@ -86,6 +86,12 @@ func main() {
 	router.POST("/api/auth/logout", auth.HandleLogout)
 	router.POST("/api/v1/auth/logout", auth.HandleLogout)
 
+	// Staff User Management & RBAC routes (Admin only)
+	router.GET("/api/v1/admin/users", auth.RequireRoles(auth.RoleAdmin), auth.HandleGetAdminUsers)
+	router.POST("/api/v1/admin/users", auth.RequireRoles(auth.RoleAdmin), auth.HandleCreateAdminUser)
+	router.PUT("/api/v1/admin/users/:id", auth.RequireRoles(auth.RoleAdmin), auth.HandleUpdateAdminUser)
+	router.DELETE("/api/v1/admin/users/:id", auth.RequireRoles(auth.RoleAdmin), auth.HandleDeleteAdminUser)
+
 	// Web Product Catalog & Categories routes (Admin & Public)
 	router.GET("/api/v1/admin/catalog/categories", catalog.HandleGetCategories)
 	router.POST("/api/v1/admin/catalog/categories", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), catalog.HandleAdminCreateCategory)

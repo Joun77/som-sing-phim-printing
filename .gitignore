@@ -21,6 +21,7 @@ dist-ssr
 admin-system/backend/somsing-app
 admin-system/backend/tmp
 admin-system/backend/uploads
+admin-system/backend/orders/uploads
 admin-system/backend/bin
 backend/server
 *.exe

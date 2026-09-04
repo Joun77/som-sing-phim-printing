@@ -42,6 +42,11 @@ type Customer struct {
 	DiscountPercent  float64           `json:"discountPercent,omitempty"`
 	Perks            []string          `json:"perks,omitempty"`
 	PreferredCourier string            `json:"preferredCourier"` // Courier ID or name
+	Source           string            `json:"source"`           // CUSTOMER_SERVICE vs ADMIN_MANUAL
+	AuthProvider     string            `json:"authProvider"`     // PHONE, GOOGLE, MANUAL
+	Password         string            `json:"password,omitempty"` // plain password when creating/resetting (never exposed in output)
+	PasswordHash     string            `json:"-"`                // internal bcrypt hash
+	LastLoginAt      *time.Time        `json:"lastLoginAt,omitempty"`
 	Notes            string            `json:"notes"`
 	TotalSpentLAK    float64           `json:"totalSpentLAK"`
 	TotalOrdersCount int               `json:"totalOrdersCount"`

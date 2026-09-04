@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@store/AppContext';
 import { useTranslation } from 'react-i18next';
+import { StaffUserManagementTab } from './StaffUserManagementTab';
 
 // ========== INITIAL DATA ==========
 const INITIAL_EMPLOYEES: any[] = [];
@@ -92,6 +93,7 @@ export default function EmployeeManagement() {
   const formatLAK = (n: any) => (n || n === 0) ? formatCurrency(n) : '—';
 
   const [employees, setEmployees] = useState(contextEmployees && contextEmployees.length > 0 ? contextEmployees : INITIAL_EMPLOYEES);
+  const [mainTab, setMainTab] = useState<'employees' | 'staff_users'>('employees');
 
   useEffect(() => {
     if (contextEmployees && contextEmployees.length > 0) {
@@ -609,8 +611,47 @@ export default function EmployeeManagement() {
         </button>
       </div>
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Module Switcher Tabs */}
+      <div className="flex items-center gap-2 p-1.5 bg-slate-200/70 rounded-2xl w-fit">
+        <button
+          type="button"
+          onClick={() => setMainTab('employees')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
+            mainTab === 'employees'
+              ? 'bg-white text-slate-900 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Users className="w-4 h-4 text-indigo-600" />
+          <span>{T('ລາຍຊື່ພະນັກງານທັງໝົດ', 'All Employees')}</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold">
+            {employees.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMainTab('staff_users')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
+            mainTab === 'staff_users'
+              ? 'bg-white text-slate-900 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Shield className="w-4 h-4 text-rose-600" />
+          <span>{T('ບັນຊີຜູ້ໃຊ້ & ສິດ RBAC', 'Staff Login & RBAC Users')}</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-rose-50 text-rose-700 text-[10px] font-bold">
+            RBAC
+          </span>
+        </button>
+      </div>
+
+      {mainTab === 'staff_users' ? (
+        <StaffUserManagementTab />
+      ) : (
+        <>
+          {/* Stats Row */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={UserCheck} label={T('ພະນັກງານທີ່ໃຊ້ງານ', 'Active Staff')} value={stats.active} sub={`${employees.length} ${T('ທັງໝົດ', 'total')}`} color="bg-emerald-50 text-emerald-600" />
         <StatCard icon={Banknote} label={T('ເງິນເດືອນລວມ / ເດືອນ', 'Monthly Payroll')} value={`${(stats.totalPayroll / 1000000).toFixed(1)}M`} sub="ກີບ LAK" color="bg-blue-50 text-blue-600" />
         <StatCard icon={TrendingUp} label={T('ມາວຽກໂດຍສະເລ່ຍ', 'Avg Attendance')} value={`${stats.totalPresent}`} sub={T(`ຂາດ ${stats.totalAbsent} ວັນ`, `${stats.totalAbsent} absences`)} color="bg-purple-50 text-purple-600" />
@@ -817,6 +858,8 @@ export default function EmployeeManagement() {
             );
           })}
         </div>
+      )}
+        </>
       )}
 
       {/* Add/Edit Modal */}

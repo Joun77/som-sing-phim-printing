@@ -10,6 +10,7 @@ import (
 	"somsing.local/backend/orders"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // HandleGetCustomers retrieves all customers from PostgreSQL DB or memory fallback
@@ -106,6 +107,18 @@ func HandleCreateCustomer(c *gin.Context) {
 	if cust.Tier == "" {
 		cust.Tier = "STANDARD"
 	}
+	if cust.Source == "" {
+		cust.Source = "ADMIN_MANUAL"
+	}
+	if cust.AuthProvider == "" {
+		cust.AuthProvider = "MANUAL"
+	}
+	if cust.Password != "" {
+		hashed, err := bcrypt.GenerateFromPassword([]byte(cust.Password), bcrypt.DefaultCost)
+		if err == nil {
+			cust.PasswordHash = string(hashed)
+		}
+	}
 	cust.CreatedAt = time.Now()
 	cust.UpdatedAt = time.Now()
 
@@ -120,6 +133,7 @@ func HandleCreateCustomer(c *gin.Context) {
 	customerStore[cust.ID] = cust
 	storeMutex.Unlock()
 
+	cust.Password = "" // do not expose
 	c.JSON(http.StatusCreated, gin.H{"status": "success", "data": cust})
 }
 
@@ -135,6 +149,12 @@ func HandleUpdateCustomer(c *gin.Context) {
 	cust.ID = id
 	if cust.Tier == "" {
 		cust.Tier = "STANDARD"
+	}
+	if cust.Password != "" {
+		hashed, err := bcrypt.GenerateFromPassword([]byte(cust.Password), bcrypt.DefaultCost)
+		if err == nil {
+			cust.PasswordHash = string(hashed)
+		}
 	}
 	cust.UpdatedAt = time.Now()
 

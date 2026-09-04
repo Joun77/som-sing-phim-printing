@@ -233,7 +233,7 @@ export default function TopHeader({ onToggleMobileSidebar, collapsed, onToggleCo
               {user?.username ? user.username.substring(0, 2).toUpperCase() : 'SP'}
             </div>
             <div className="text-left hidden xl:block">
-              <div className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[120px]">{user?.fullName || 'Owner'}</div>
+              <div className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[180px]">{user?.fullName || 'Owner'}</div>
             </div>
           </button>
 

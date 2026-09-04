@@ -192,23 +192,23 @@ export const ProfitChart: React.FC = () => {
     <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 sm:p-7 space-y-6">
       
       {/* Header & Filter Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100 shrink-0">
             <PieIcon className="w-5 h-5" />
           </div>
-          <div>
-            <h2 className="text-base sm:text-lg font-black text-slate-900">
+          <div className="min-w-0">
+            <h2 className="text-base sm:text-lg font-black text-slate-900 truncate">
               {currentLang === 'lo' ? 'ການແຈກແຈງລາຍໄດ້ຕາມໝວດໝູ່ສິນຄ້າ' : 'Revenue by Product Category'}
             </h2>
-            <p className="text-xs sm:text-sm text-slate-400 font-semibold mt-0.5">
+            <p className="text-xs sm:text-sm text-slate-400 font-semibold mt-0.5 truncate">
               {currentLang === 'lo' ? 'ວິເຄາະສັດສ່ວນລາຍຮັບ ແລະ ອັດຕາກຳໄລແຍກຕາມປະເພດງານພິມ' : 'Income distribution and profit margins across product lines.'}
             </p>
           </div>
         </div>
 
         {/* Timeframe Filter Buttons */}
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl self-start sm:self-auto">
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl self-start sm:self-auto shrink-0">
           {[
             { id: 'today', label: currentLang === 'lo' ? 'ມື້ນີ້' : 'Today' },
             { id: 'week', label: currentLang === 'lo' ? 'ອາທິດນີ້' : 'Week' },
@@ -218,7 +218,7 @@ export const ProfitChart: React.FC = () => {
             <button
               key={tf.id}
               onClick={() => setTimeframe(tf.id as any)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
                 timeframe === tf.id 
                   ? 'bg-white text-indigo-600 shadow-xs' 
                   : 'text-slate-500 hover:text-slate-900'
@@ -231,31 +231,31 @@ export const ProfitChart: React.FC = () => {
       </div>
 
       {/* Summary KPI Highlights */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
-          <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-center justify-between gap-2.5 min-w-0">
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">
               {currentLang === 'lo' ? 'ລາຍຮັບລວມໃນຊ່ວງນີ້' : 'Selected Period Revenue'}
             </div>
-            <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1 font-sans">
+            <div className="text-lg sm:text-xl xl:text-2xl font-black text-slate-900 mt-1 font-sans truncate" title={formatLAK(totalFilteredRevenue)}>
               {formatLAK(totalFilteredRevenue)}
             </div>
           </div>
-          <span className="text-xs px-2.5 py-1 bg-indigo-50 text-indigo-700 font-bold rounded-xl border border-indigo-200">
+          <span className="shrink-0 whitespace-nowrap text-xs px-2.5 py-1 bg-indigo-50 text-indigo-700 font-bold rounded-xl border border-indigo-200">
             {filteredOrders.length} {currentLang === 'lo' ? 'ອໍເດີ' : 'Orders'}
           </span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200/60 flex items-center justify-between">
-          <div>
-            <div className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">
+        <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200/60 flex items-center justify-between gap-2.5 min-w-0">
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider truncate">
               {currentLang === 'lo' ? 'ກຳໄລປະເມີນ (Est. Profit)' : 'Estimated Net Profit'}
             </div>
-            <div className="text-xl sm:text-2xl font-black text-emerald-600 mt-1 font-sans">
+            <div className="text-lg sm:text-xl xl:text-2xl font-black text-emerald-600 mt-1 font-sans truncate" title={formatLAK(totalFilteredProfit)}>
               {formatLAK(totalFilteredProfit)}
             </div>
           </div>
-          <span className="text-xs px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-xl font-sans">
+          <span className="shrink-0 whitespace-nowrap text-xs px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-xl font-sans">
             {totalFilteredRevenue > 0 ? Math.round((totalFilteredProfit / totalFilteredRevenue) * 100) : 58}% Margin
           </span>
         </div>

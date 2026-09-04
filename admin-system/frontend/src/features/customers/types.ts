@@ -17,6 +17,10 @@ export interface Customer {
   taxId?: string;
   tier?: string;
   preferredCourier?: string;
+  source?: 'CUSTOMER_SERVICE' | 'ADMIN_MANUAL' | string;
+  authProvider?: 'PHONE' | 'GOOGLE' | 'MANUAL' | string;
+  password?: string;
+  lastLoginAt?: string;
   notes?: string;
   totalSpentLAK?: number;
   totalOrdersCount?: number;
