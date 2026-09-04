@@ -2,6 +2,10 @@
 
 import { useAuthStore } from '../store/useAuthStore';
 
+const rawEnvUrl = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
+// When VITE_API_URL is 'https://som-sing-phim-printing.onrender.com/api', BACKEND_HOST becomes 'https://som-sing-phim-printing.onrender.com'
+export const BACKEND_HOST = rawEnvUrl ? rawEnvUrl.replace(/\/api$/, '') : '';
+
 export interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined | null>;
   skipAuth?: boolean;
@@ -40,6 +44,10 @@ export async function apiFetch<T = any>(
   const { params, skipAuth = false, headers = {}, ...rest } = options;
 
   let url = endpoint;
+  if (BACKEND_HOST && url.startsWith('/api')) {
+    url = `${BACKEND_HOST}${url}`;
+  }
+
   if (params) {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -126,6 +134,11 @@ export function setupGlobalFetchInterceptor(): void {
       return originalFetch(input, init);
     }
 
+    let targetInput: RequestInfo | URL = input;
+    if (BACKEND_HOST && typeof input === 'string' && input.startsWith('/api')) {
+      targetInput = `${BACKEND_HOST}${input}`;
+    }
+
     const headers = new Headers(init?.headers || (typeof input === 'object' && 'headers' in input ? input.headers : undefined));
 
     const token = getAuthToken();
@@ -138,17 +151,18 @@ export function setupGlobalFetchInterceptor(): void {
       headers,
     };
 
-    let response = await originalFetch(input, newInit);
+    let response = await originalFetch(targetInput, newInit);
 
     // If 401 Unauthorized, try silent refresh and retry once
     if (response.status === 401 && !urlStr.includes('/auth/login') && !urlStr.includes('/auth/refresh')) {
       const newToken = await useAuthStore.getState().silentRefreshToken();
       if (newToken && newToken !== 'preview-token') {
         headers.set('Authorization', `Bearer ${newToken}`);
-        response = await originalFetch(input, { ...newInit, headers });
+        response = await originalFetch(targetInput, { ...newInit, headers });
       }
     }
 
     return response;
   };
 }
+

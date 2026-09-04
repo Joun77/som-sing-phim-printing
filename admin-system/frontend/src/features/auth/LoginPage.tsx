@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '@store/useAuthStore';
+import { BACKEND_HOST } from '../../api/client';
 import { ShieldCheck, Lock, User, LogIn, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
@@ -17,8 +18,10 @@ export const LoginPage: React.FC = () => {
     setError(null);
     setLoading(true);
 
+    const baseUrl = BACKEND_HOST || '';
+
     try {
-      let response = await fetch('/api/v1/auth/login', {
+      let response = await fetch(`${baseUrl}/api/v1/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -31,7 +34,7 @@ export const LoginPage: React.FC = () => {
       });
 
       if (!response.ok && response.status === 404) {
-        response = await fetch('/api/auth/login', {
+        response = await fetch(`${baseUrl}/api/auth/login`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -42,6 +45,16 @@ export const LoginPage: React.FC = () => {
             remember_me: rememberMe,
           }),
         });
+      }
+
+      // Check if response is HTML (e.g. Render cold start, gateway error, or 404/504 page)
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await response.text().catch(() => '');
+        if (text.includes('<!doctype') || text.includes('<html') || response.status === 502 || response.status === 504 || response.status === 503) {
+          throw new Error('ເຊີບເວີ Backend (Render) ກຳລັງເລີ່ມຕົ້ນ ຫຼື ພວມຕື່ນຕົວ (Cold-start) ກະລຸນາລໍຖ້າ 30-50 ວິນາທີ ແລ້ວກົດເຂົ້າສູ່ລະບົບໃໝ່ອີກຄັ້ງ');
+        }
+        throw new Error(`ການຕອບສະໜອງຈາກເຊີບເວີບໍ່ຖືກຕ້ອງ (HTTP ${response.status})`);
       }
 
       if (!response.ok) {

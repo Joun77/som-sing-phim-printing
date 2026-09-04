@@ -73,7 +73,9 @@ func main() {
 			"database": dbStatus,
 		})
 	}
+	router.GET("/", healthHandler)
 	router.GET("/health", healthHandler)
+	router.GET("/healthz", healthHandler)
 	router.GET("/api/health", healthHandler)
 
 	// Auth routes

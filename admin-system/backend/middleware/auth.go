@@ -28,7 +28,7 @@ func CORSMiddleware() gin.HandlerFunc {
 			}
 		}
 
-		// Default development origins
+		// Default development & production origins
 		if len(allowedOrigins) == 0 {
 			allowedOrigins = []string{
 				"http://localhost:5173",
@@ -37,6 +37,10 @@ func CORSMiddleware() gin.HandlerFunc {
 				"http://127.0.0.1:5173",
 				"http://127.0.0.1:5174",
 				"http://127.0.0.1:3000",
+				"https://som-sing-phim-admin.web.app",
+				"https://som-sing-phim-admin.firebaseapp.com",
+				"https://som-sing-phim-service.web.app",
+				"https://som-sing-phim-service.firebaseapp.com",
 			}
 		}
 
@@ -47,6 +51,10 @@ func CORSMiddleware() gin.HandlerFunc {
 					isAllowed = true
 					break
 				}
+			}
+			// Fallback: automatically allow any Som Sing Phim firebase subdomains
+			if !isAllowed && (strings.HasSuffix(origin, ".web.app") || strings.HasSuffix(origin, ".firebaseapp.com")) {
+				isAllowed = true
 			}
 		}
 
