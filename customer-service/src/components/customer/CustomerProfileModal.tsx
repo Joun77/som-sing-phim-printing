@@ -285,19 +285,22 @@ export const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                   <label className="text-[11px] font-black text-slate-700 block uppercase">
                     ເບີໂທລະສັບ (Phone Number) *
                   </label>
-                  <div className="relative flex items-center">
-                    <span className="absolute left-3 text-xs font-bold text-slate-500 select-none">
-                      +856 20
-                    </span>
+                  <div className="flex items-center gap-2">
+                    <div className="shrink-0 px-3 py-2.5 bg-slate-100/90 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 select-none flex items-center gap-1.5 shadow-xs">
+                      <span className="px-1 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-extrabold border border-blue-200/60">LA</span>
+                      <span className="font-mono text-slate-800">+856 20</span>
+                    </div>
                     <input
                       type="tel"
                       required
                       placeholder="55XXXXXX ຫຼື 77XXXXXX"
                       value={phoneInput}
-                      onChange={(e) => setPhoneInput(e.target.value)}
-                      className="w-full pl-22 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 focus:bg-white focus:outline-hidden focus:border-blue-600 focus:ring-1 focus:ring-blue-100 transition placeholder:text-slate-400"
+                      onChange={(e) => setPhoneInput(e.target.value.replace(/\D/g, ''))}
+                      maxLength={8}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 focus:bg-white focus:outline-hidden focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition placeholder:text-slate-400 placeholder:font-normal"
                     />
                   </div>
+                  <p className="text-[10px] text-slate-400">ໃສ່ສະເພາະຕົວເລກ 8 ຫຼັກ (ເຊັ່ນ 55123456, 77889900)</p>
                 </div>
 
                 <div className="space-y-1.5">
