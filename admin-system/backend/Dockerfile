@@ -1,6 +1,8 @@
 # Multi-stage build for Go Backend
 FROM golang:1.22-alpine AS builder
 
+ENV CGO_ENABLED=0 GOOS=linux GOTOOLCHAIN=local
+
 WORKDIR /app
 
 COPY go.mod go.sum ./
@@ -8,7 +10,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /app/somsing-app .
+RUN go build -mod=mod -o /app/somsing-app .
 
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates tzdata ghostscript
