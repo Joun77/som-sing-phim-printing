@@ -226,6 +226,7 @@ func main() {
 	router.POST("/api/v1/proof/:order_id/:token/reject", orders.HandleRejectProof)
 
 	// Public Customer Portal routes
+	router.GET("/api/v1/public/customer/tiers", customers.HandlePublicCustomerTiers)
 	router.POST("/api/v1/public/customer/auth", customers.HandlePublicCustomerAuth)
 	router.GET("/api/v1/public/customer/profile", customers.HandlePublicCustomerProfile)
 	router.PUT("/api/v1/public/customer/profile", customers.HandleSavePublicCustomerProfile)

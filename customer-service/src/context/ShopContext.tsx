@@ -4,6 +4,7 @@ import { convert } from '../utils/currency.ts'
 import type { Category, Product, SpecOption } from '../data/catalog.ts'
 import type { PriceBreakdown } from '../utils/pricing.ts'
 import { TRANSLATIONS, type Language } from '../utils/i18n.ts'
+import type { CustomerProfile, CustomerVIPTier } from '../types/customer.ts'
 
 export type ConnectionStatus = 'checking' | 'connected' | 'demo' | 'offline'
 
@@ -89,6 +90,16 @@ export interface ShopContextValue {
   selectedCartItems: CartItem[]
   selectedTotalTHB: number
   cartCount: number
+  // Customer VIP State
+  customerProfile: CustomerProfile | null
+  customerTiers: CustomerVIPTier[]
+  vipDiscountPercent: number
+  isLoggedIn: boolean
+  isProfileModalOpen: boolean
+  setIsProfileModalOpen: (open: boolean) => void
+  setCustomerProfile: (p: CustomerProfile | null) => void
+  refreshCustomerProfile: (phoneOverride?: string) => Promise<void>
+  logoutCustomer: () => void
 }
 
 const ShopContext = createContext<ShopContextValue | null>(null)
@@ -99,6 +110,17 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem('ssp_customer_lang')
     return (saved === 'en' || saved === 'lo') ? saved : 'lo'
   })
+
+  // Customer VIP State
+  const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(null)
+  const [customerTiers, setCustomerTiers] = useState<CustomerVIPTier[]>([])
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
+
+  const vipDiscountPercent = useMemo(() => {
+    return customerProfile?.discountPercent || 0
+  }, [customerProfile])
+
+  const isLoggedIn = Boolean(customerProfile?.phone || localStorage.getItem('ssp_customer_phone'))
 
   const setLanguage = (l: Language) => {
     setLanguageState(l)
@@ -454,6 +476,52 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const apiBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '') || '/api'
+
+  const refreshCustomerProfile = async (phoneOverride?: string) => {
+    const phone = phoneOverride || customerProfile?.phone || localStorage.getItem('ssp_customer_phone')
+    if (!phone) return
+
+    try {
+      const res = await fetch(`${apiBase}/v1/public/customer/profile?phone=${encodeURIComponent(phone)}`)
+      if (res.ok) {
+        const json = await res.json()
+        if (json.status === 'success' && json.data) {
+          setCustomerProfile(json.data)
+          localStorage.setItem('ssp_customer_phone', json.data.phone)
+          localStorage.setItem('ssp_customer_id', json.data.id)
+          if (json.data.name) localStorage.setItem('ssp_customer_name', json.data.name)
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load customer profile:', e)
+    }
+  }
+
+  const logoutCustomer = () => {
+    localStorage.removeItem('ssp_customer_phone')
+    localStorage.removeItem('ssp_customer_id')
+    localStorage.removeItem('ssp_customer_name')
+    setCustomerProfile(null)
+  }
+
+  // Load VIP Tiers & Initial Profile
+  useEffect(() => {
+    fetch(`${apiBase}/v1/public/customer/tiers`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.status === 'success' && Array.isArray(json.data)) {
+          setCustomerTiers(json.data)
+        }
+      })
+      .catch(() => {})
+
+    const savedPhone = localStorage.getItem('ssp_customer_phone')
+    if (savedPhone) {
+      refreshCustomerProfile(savedPhone)
+    }
+  }, [])
+
   const value = useMemo(
     () => ({
       currency,
@@ -496,6 +564,16 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       selectedCartItems,
       selectedTotalTHB,
       cartCount,
+      // Customer VIP
+      customerProfile,
+      customerTiers,
+      vipDiscountPercent,
+      isLoggedIn,
+      isProfileModalOpen,
+      setIsProfileModalOpen,
+      setCustomerProfile,
+      refreshCustomerProfile,
+      logoutCustomer,
     }),
     [
       currency,
@@ -515,6 +593,11 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       selectedCartItems,
       selectedTotalTHB,
       cartCount,
+      customerProfile,
+      customerTiers,
+      vipDiscountPercent,
+      isLoggedIn,
+      isProfileModalOpen,
     ]
   )
 

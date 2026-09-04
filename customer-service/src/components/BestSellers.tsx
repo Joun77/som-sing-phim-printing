@@ -12,7 +12,7 @@ import { fetchPublicProducts, RemoteProduct } from '../api/client.ts'
 gsap.registerPlugin(ScrollTrigger)
 
 export default function BestSellers() {
-  const { currency, rates, convertTo, t, language, products } = useShop()
+  const { currency, rates, convertTo, t, language, products, vipDiscountPercent } = useShop()
   const isLao = language === 'lo'
 
   // Pick top 4 products (bestsellers first)
@@ -138,10 +138,28 @@ export default function BestSellers() {
                   {/* Foot: Price & CTA */}
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
                     <div>
-                      <span className="block text-[10px] text-slate-400 font-bold uppercase">{t('startPriceLabel')}</span>
-                      <strong className="text-base sm:text-lg font-black text-amber-600 dark:text-amber-400 font-mono">
-                        {formatMoneyCompact(price, currency)}
-                      </strong>
+                      <div className="flex items-center gap-1.5">
+                        <span className="block text-[10px] text-slate-400 font-bold uppercase">{t('startPriceLabel')}</span>
+                        {vipDiscountPercent > 0 && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                            VIP -{vipDiscountPercent}%
+                          </span>
+                        )}
+                      </div>
+                      {vipDiscountPercent > 0 ? (
+                        <div className="flex items-baseline gap-1.5">
+                          <strong className="text-base sm:text-lg font-black text-amber-500 font-mono">
+                            {formatMoneyCompact(price * (1 - vipDiscountPercent / 100), currency)}
+                          </strong>
+                          <span className="text-xs text-slate-400 line-through font-mono">
+                            {formatMoneyCompact(price, currency)}
+                          </span>
+                        </div>
+                      ) : (
+                        <strong className="text-base sm:text-lg font-black text-amber-600 dark:text-amber-400 font-mono">
+                          {formatMoneyCompact(price, currency)}
+                        </strong>
+                      )}
                     </div>
                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 group-hover:bg-amber-500 group-hover:text-slate-950 font-bold text-xs transition-all duration-200">
                       <span>{t('chooseSpecBtn')}</span>

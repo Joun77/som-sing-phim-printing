@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"backend/server/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lib/pq"
 	"github.com/shopspring/decimal"
 )
 
@@ -118,6 +120,13 @@ func (h *OrderHandler) RegisterRoutes(r *gin.Engine) {
 		apiV1.GET("/public/locations/provinces", h.HandleGetLocations)
 		apiV1.GET("/locations/provinces", h.HandleGetLocations)
 		apiV1.GET("/couriers", h.HandleGetCouriers)
+
+		// Public Customer VIP & Atelier Member Endpoints
+		apiV1.GET("/public/customer/tiers", h.HandleGetCustomerTiers)
+		apiV1.POST("/public/customer/auth", h.HandleCustomerAuth)
+		apiV1.GET("/public/customer/profile", h.HandleGetCustomerProfile)
+		apiV1.PUT("/public/customer/profile", h.HandleUpdateCustomerProfile)
+		apiV1.GET("/public/customer/orders", h.HandleGetCustomerOrders)
 	}
 
 	// Legacy backward compatibility routes
@@ -126,6 +135,11 @@ func (h *OrderHandler) RegisterRoutes(r *gin.Engine) {
 	r.POST("/api/orders", h.HandleCreateOrder)
 	r.POST("/v1/checkout/verify-slip", h.HandleVerifySlip)
 	r.GET("/v1/couriers", h.HandleGetCouriers)
+	r.GET("/v1/public/customer/tiers", h.HandleGetCustomerTiers)
+	r.POST("/v1/public/customer/auth", h.HandleCustomerAuth)
+	r.GET("/v1/public/customer/profile", h.HandleGetCustomerProfile)
+	r.PUT("/v1/public/customer/profile", h.HandleUpdateCustomerProfile)
+	r.GET("/v1/public/customer/orders", h.HandleGetCustomerOrders)
 }
 
 // HandleCalculatePricing calculates authoritative pricing with full internal breakdown for Admin
@@ -909,3 +923,422 @@ func (h *OrderHandler) HandleGetCouriers(c *gin.Context) {
 		"data":   couriers,
 	})
 }
+
+// ----------------------------------------------------------------------------
+// Customer VIP & Atelier Member Handlers
+// ----------------------------------------------------------------------------
+
+func normalizeLaoPhone(raw string) string {
+	cleaned := strings.TrimSpace(raw)
+	cleaned = strings.ReplaceAll(cleaned, " ", "")
+	cleaned = strings.ReplaceAll(cleaned, "-", "")
+	if strings.HasPrefix(cleaned, "+85620") {
+		return "020" + cleaned[6:]
+	}
+	if strings.HasPrefix(cleaned, "85620") {
+		return "020" + cleaned[5:]
+	}
+	if len(cleaned) == 8 && !strings.HasPrefix(cleaned, "020") {
+		return "020" + cleaned
+	}
+	return cleaned
+}
+
+type CustomerVIPTierDTO struct {
+	ID              string   `json:"id"`
+	NameLo          string   `json:"name_lo"`
+	NameEn          string   `json:"name_en"`
+	DiscountPercent float64  `json:"discount_percent"`
+	MinSpendLAK     float64  `json:"min_spend_lak"`
+	MinOrders       int      `json:"min_orders"`
+	BadgeColor      string   `json:"badge_color"`
+	Perks           []string `json:"perks"`
+	SortOrder       int      `json:"sort_order"`
+	IsActive        bool     `json:"is_active"`
+}
+
+type CustomerProfileDTO struct {
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Phone            string   `json:"phone"`
+	Email            string   `json:"email"`
+	Address          string   `json:"address"`
+	Province         string   `json:"province"`
+	District         string   `json:"district"`
+	Village          string   `json:"village"`
+	BranchCode       string   `json:"branchCode"`
+	PreferredCourier string   `json:"preferredCourier"`
+	Tier             string   `json:"tier"`
+	TierNameLo       string   `json:"tierNameLo"`
+	DiscountPercent  float64  `json:"discountPercent"`
+	TotalSpentLAK    float64  `json:"totalSpentLAK"`
+	TotalOrdersCount int      `json:"totalOrdersCount"`
+	Perks            []string `json:"perks"`
+}
+
+type CustomerAuthRequest struct {
+	Phone string `json:"phone" binding:"required"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+type UpdateCustomerProfileRequest struct {
+	ID               string `json:"id" binding:"required"`
+	Name             string `json:"name"`
+	Phone            string `json:"phone"`
+	Email            string `json:"email"`
+	Province         string `json:"province"`
+	District         string `json:"district"`
+	Village          string `json:"village"`
+	Address          string `json:"address"`
+	BranchCode       string `json:"branchCode"`
+	PreferredCourier string `json:"preferredCourier"`
+}
+
+// HandleGetCustomerTiers returns all active customer VIP tiers and discounts
+func (h *OrderHandler) HandleGetCustomerTiers(c *gin.Context) {
+	if h.db == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"status": "success",
+			"data": []gin.H{
+				{"id": "STANDARD", "name_lo": "ສະມາຊິກທົ່ວໄປ", "discount_percent": 0.0, "badge_color": "slate"},
+				{"id": "SILVER", "name_lo": "ຊິລເວີ VIP", "discount_percent": 5.0, "badge_color": "cyan"},
+				{"id": "GOLD", "name_lo": "ໂກລ VIP", "discount_percent": 10.0, "badge_color": "amber"},
+				{"id": "PLATINUM", "name_lo": "ແພລຕິນໍາ VIP", "discount_percent": 15.0, "badge_color": "purple"},
+			},
+		})
+		return
+	}
+
+	rows, err := h.db.QueryContext(c.Request.Context(), `
+		SELECT id, name_lo, name_en, discount_percent, min_spend_lak, min_orders, badge_color, perks, sort_order, is_active
+		FROM customer_vip_tiers
+		WHERE is_active = TRUE
+		ORDER BY sort_order ASC
+	`)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to query tiers"})
+		return
+	}
+	defer rows.Close()
+
+	var tiers []CustomerVIPTierDTO
+	for rows.Next() {
+		var t CustomerVIPTierDTO
+		var perks pq.StringArray
+		if err := rows.Scan(&t.ID, &t.NameLo, &t.NameEn, &t.DiscountPercent, &t.MinSpendLAK, &t.MinOrders, &t.BadgeColor, &perks, &t.SortOrder, &t.IsActive); err == nil {
+			t.Perks = []string(perks)
+			tiers = append(tiers, t)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   tiers,
+	})
+}
+
+// HandleCustomerAuth handles member phone / Google login and creates/retrieves member profile
+func (h *OrderHandler) HandleCustomerAuth(c *gin.Context) {
+	var req CustomerAuthRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Valid phone number is required"})
+		return
+	}
+
+	phone := normalizeLaoPhone(req.Phone)
+	if phone == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid phone number"})
+		return
+	}
+
+	if h.db == nil {
+		// Mock response if DB unavailable
+		c.JSON(http.StatusOK, gin.H{
+			"status": "success",
+			"data": CustomerProfileDTO{
+				ID:              "MOCK-USER-01",
+				Name:            req.Name,
+				Phone:           phone,
+				Email:           req.Email,
+				Tier:            "GOLD",
+				TierNameLo:      "ໂກລ VIP (Gold Tier)",
+				DiscountPercent: 10.0,
+				Perks:           []string{"ສ່ວນຫຼຸດ 10%", "ສັ່ງພິມຊ້ຳ 1 ຄລິກ"},
+			},
+		})
+		return
+	}
+
+	var p CustomerProfileDTO
+	var perks pq.StringArray
+	query := `
+		SELECT c.id, COALESCE(c.name, ''), c.phone, COALESCE(c.email, ''), COALESCE(c.address, ''),
+		       COALESCE(c.province, ''), COALESCE(c.district, ''), COALESCE(c.village, ''),
+		       COALESCE(c.branch_code, ''), COALESCE(c.preferred_courier, ''), COALESCE(c.tier, 'STANDARD'),
+		       COALESCE(t.name_lo, 'ສະມາຊິກທົ່ວໄປ'), COALESCE(t.discount_percent, 0),
+		       COALESCE(c.total_spent_lak, 0), COALESCE(c.total_orders_count, 0), COALESCE(t.perks, '{}')
+		FROM customers c
+		LEFT JOIN customer_vip_tiers t ON c.tier = t.id
+		WHERE c.phone = $1
+		LIMIT 1
+	`
+	err := h.db.QueryRowContext(c.Request.Context(), query, phone).Scan(
+		&p.ID, &p.Name, &p.Phone, &p.Email, &p.Address,
+		&p.Province, &p.District, &p.Village,
+		&p.BranchCode, &p.PreferredCourier, &p.Tier,
+		&p.TierNameLo, &p.DiscountPercent,
+		&p.TotalSpentLAK, &p.TotalOrdersCount, &perks,
+	)
+
+	if err == sql.ErrNoRows {
+		// Create new member with STANDARD tier
+		newID := fmt.Sprintf("CUST-%d", time.Now().UnixNano()%1000000)
+		custName := req.Name
+		if custName == "" {
+			custName = "ລູກຄ້າ ສົມສິ່ງພິມ"
+		}
+		_, err = h.db.ExecContext(c.Request.Context(), `
+			INSERT INTO customers (id, name, phone, email, tier, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, 'STANDARD', NOW(), NOW())
+		`, newID, custName, phone, req.Email)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to create customer profile"})
+			return
+		}
+
+		p = CustomerProfileDTO{
+			ID:               newID,
+			Name:             custName,
+			Phone:            phone,
+			Email:            req.Email,
+			Tier:             "STANDARD",
+			TierNameLo:       "ສະມາຊິກທົ່ວໄປ (Standard)",
+			DiscountPercent:  0.0,
+			TotalSpentLAK:    0,
+			TotalOrdersCount: 0,
+			Perks:            []string{"ສັ່ງພິມຊ້ຳ 1 ຄລິກ", "ບັນທຶກທີ່ຢູ່ຈັດສົ່ງ"},
+		}
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Database query error: " + err.Error()})
+		return
+	} else {
+		p.Perks = []string(perks)
+		// Update name/email if provided and empty in DB
+		if (req.Name != "" && p.Name == "") || (req.Email != "" && p.Email == "") {
+			if req.Name != "" {
+				p.Name = req.Name
+			}
+			if req.Email != "" {
+				p.Email = req.Email
+			}
+			_, _ = h.db.ExecContext(c.Request.Context(), "UPDATE customers SET name = $1, email = $2, updated_at = NOW() WHERE id = $3", p.Name, p.Email, p.ID)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   p,
+	})
+}
+
+// HandleGetCustomerProfile returns member profile along with tier and dynamic perks
+func (h *OrderHandler) HandleGetCustomerProfile(c *gin.Context) {
+	phone := normalizeLaoPhone(c.Query("phone"))
+	if phone == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Phone number query parameter required"})
+		return
+	}
+
+	if h.db == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"status": "success",
+			"data": CustomerProfileDTO{
+				ID:              "CUST-VIP-001",
+				Name:            "Som Sing Phim VIP Atelier",
+				Phone:           phone,
+				Tier:            "GOLD",
+				TierNameLo:      "ໂກລ VIP (Gold Tier)",
+				DiscountPercent: 10.0,
+				TotalSpentLAK:   12500000.0,
+			},
+		})
+		return
+	}
+
+	var p CustomerProfileDTO
+	var perks pq.StringArray
+	query := `
+		SELECT c.id, COALESCE(c.name, ''), c.phone, COALESCE(c.email, ''), COALESCE(c.address, ''),
+		       COALESCE(c.province, ''), COALESCE(c.district, ''), COALESCE(c.village, ''),
+		       COALESCE(c.branch_code, ''), COALESCE(c.preferred_courier, ''), COALESCE(c.tier, 'STANDARD'),
+		       COALESCE(t.name_lo, 'ສະມາຊິກທົ່ວໄປ'), COALESCE(t.discount_percent, 0),
+		       COALESCE(c.total_spent_lak, 0), COALESCE(c.total_orders_count, 0), COALESCE(t.perks, '{}')
+		FROM customers c
+		LEFT JOIN customer_vip_tiers t ON c.tier = t.id
+		WHERE c.phone = $1
+		LIMIT 1
+	`
+	err := h.db.QueryRowContext(c.Request.Context(), query, phone).Scan(
+		&p.ID, &p.Name, &p.Phone, &p.Email, &p.Address,
+		&p.Province, &p.District, &p.Village,
+		&p.BranchCode, &p.PreferredCourier, &p.Tier,
+		&p.TierNameLo, &p.DiscountPercent,
+		&p.TotalSpentLAK, &p.TotalOrdersCount, &perks,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "Customer profile not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Database query error: " + err.Error()})
+		}
+		return
+	}
+
+	p.Perks = []string(perks)
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   p,
+	})
+}
+
+// HandleUpdateCustomerProfile updates member delivery and profile information
+func (h *OrderHandler) HandleUpdateCustomerProfile(c *gin.Context) {
+	var req UpdateCustomerProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid customer update payload"})
+		return
+	}
+
+	if h.db == nil {
+		c.JSON(http.StatusOK, gin.H{"status": "success", "data": req})
+		return
+	}
+
+	_, err := h.db.ExecContext(c.Request.Context(), `
+		UPDATE customers 
+		SET name = COALESCE(NULLIF($1, ''), name),
+		    province = $2,
+		    district = $3,
+		    village = $4,
+		    address = $5,
+		    branch_code = $6,
+		    preferred_courier = $7,
+		    updated_at = NOW()
+		WHERE id = $8
+	`, req.Name, req.Province, req.District, req.Village, req.Address, req.BranchCode, req.PreferredCourier, req.ID)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to update profile: " + err.Error()})
+		return
+	}
+
+	// Fetch updated profile
+	var p CustomerProfileDTO
+	var perks pq.StringArray
+	query := `
+		SELECT c.id, COALESCE(c.name, ''), c.phone, COALESCE(c.email, ''), COALESCE(c.address, ''),
+		       COALESCE(c.province, ''), COALESCE(c.district, ''), COALESCE(c.village, ''),
+		       COALESCE(c.branch_code, ''), COALESCE(c.preferred_courier, ''), COALESCE(c.tier, 'STANDARD'),
+		       COALESCE(t.name_lo, 'ສະມາຊິກທົ່ວໄປ'), COALESCE(t.discount_percent, 0),
+		       COALESCE(c.total_spent_lak, 0), COALESCE(c.total_orders_count, 0), COALESCE(t.perks, '{}')
+		FROM customers c
+		LEFT JOIN customer_vip_tiers t ON c.tier = t.id
+		WHERE c.id = $1
+		LIMIT 1
+	`
+	_ = h.db.QueryRowContext(c.Request.Context(), query, req.ID).Scan(
+		&p.ID, &p.Name, &p.Phone, &p.Email, &p.Address,
+		&p.Province, &p.District, &p.Village,
+		&p.BranchCode, &p.PreferredCourier, &p.Tier,
+		&p.TierNameLo, &p.DiscountPercent,
+		&p.TotalSpentLAK, &p.TotalOrdersCount, &perks,
+	)
+	p.Perks = []string(perks)
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   p,
+	})
+}
+
+// HandleGetCustomerOrders returns orders belonging to customer for 1-Click Reorder & Tracking
+func (h *OrderHandler) HandleGetCustomerOrders(c *gin.Context) {
+	phone := normalizeLaoPhone(c.Query("phone"))
+	if phone == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Phone number required"})
+		return
+	}
+
+	if h.db == nil {
+		c.JSON(http.StatusOK, gin.H{"status": "success", "data": []interface{}{}})
+		return
+	}
+
+	rows, err := h.db.QueryContext(c.Request.Context(), `
+		SELECT id, order_number, tracking_code, COALESCE(courier_name, ''),
+		       COALESCE(total_amount_lak, total_price, 0), COALESCE(deposit_lak, deposit_amount, 0),
+		       COALESCE(overall_status, status, 'PENDING'), created_at
+		FROM orders
+		WHERE customer_phone = $1 OR customer_id IN (SELECT id FROM customers WHERE phone = $1)
+		ORDER BY created_at DESC
+		LIMIT 10
+	`, phone)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Query orders error: " + err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	type CustomerOrderSummaryDTO struct {
+		ID             string               `json:"id"`
+		OrderNumber    string               `json:"orderNumber"`
+		TrackingCode   string               `json:"trackingCode"`
+		CourierName    string               `json:"courierName"`
+		TotalAmountLAK float64              `json:"totalAmountLAK"`
+		DepositLAK     float64              `json:"depositLAK"`
+		Status         string               `json:"status"`
+		CreatedAt      string               `json:"createdAt"`
+		Items          []domain.PublicOrderItem `json:"items"`
+	}
+
+	var orders []CustomerOrderSummaryDTO
+	for rows.Next() {
+		var o CustomerOrderSummaryDTO
+		var createdAt time.Time
+		if err := rows.Scan(&o.ID, &o.OrderNumber, &o.TrackingCode, &o.CourierName, &o.TotalAmountLAK, &o.DepositLAK, &o.Status, &createdAt); err == nil {
+			o.CreatedAt = createdAt.Format(time.RFC3339)
+			orders = append(orders, o)
+		}
+	}
+
+	// Attach items to each order for 1-Click Reorder
+	for i := range orders {
+		itemRows, err := h.db.QueryContext(c.Request.Context(), `
+			SELECT COALESCE(item_name, job_name, 'Printing Item'), quantity,
+			       COALESCE(paper_size, 'Standard'), COALESCE(binding_type, 'NONE'),
+			       COALESCE(unit_price_lak, unit_price_snapshot, 0), COALESCE(total_price_lak, 0)
+			FROM order_items
+			WHERE order_id = $1
+		`, orders[i].ID)
+		if err == nil {
+			for itemRows.Next() {
+				var it domain.PublicOrderItem
+				var unitPrice, totalPrice float64
+				if err := itemRows.Scan(&it.JobName, &it.Quantity, &it.PaperSize, &it.BindingType, &unitPrice, &totalPrice); err == nil {
+					it.UnitPriceLAK = int64(unitPrice)
+					it.TotalPriceLAK = int64(totalPrice)
+					orders[i].Items = append(orders[i].Items, it)
+				}
+			}
+			itemRows.Close()
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   orders,
+	})
+}
+

@@ -11,6 +11,7 @@ import (
 	"backend/orders"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lib/pq"
 )
 
 type Customer struct {
@@ -471,6 +472,7 @@ func HandlePublicCustomerAuth(c *gin.Context) {
 			       COALESCE(instagram, ''), COALESCE(line_id, ''), COALESCE(facebook, ''),
 			       COALESCE(whatsapp, ''), COALESCE(province, ''), COALESCE(district, ''),
 			       COALESCE(village, ''), COALESCE(branch_code, ''), COALESCE(tax_id, ''),
+			       COALESCE(tier, 'STANDARD'), COALESCE(preferred_courier, ''),
 			       COALESCE(notes, ''), COALESCE(total_spent_lak, 0), COALESCE(total_orders_count, 0),
 			       created_at, updated_at
 			FROM customers
@@ -482,6 +484,7 @@ func HandlePublicCustomerAuth(c *gin.Context) {
 			&cust.Instagram, &cust.LineID, &cust.Facebook,
 			&cust.WhatsApp, &cust.Province, &cust.District,
 			&cust.Village, &cust.BranchCode, &cust.TaxID,
+			&cust.Tier, &cust.PreferredCourier,
 			&cust.Notes, &cust.TotalSpentLAK, &cust.TotalOrdersCount,
 			&cust.CreatedAt, &cust.UpdatedAt,
 		)
@@ -548,6 +551,7 @@ func HandlePublicCustomerProfile(c *gin.Context) {
 			       COALESCE(instagram, ''), COALESCE(line_id, ''), COALESCE(facebook, ''),
 			       COALESCE(whatsapp, ''), COALESCE(province, ''), COALESCE(district, ''),
 			       COALESCE(village, ''), COALESCE(branch_code, ''), COALESCE(tax_id, ''),
+			       COALESCE(tier, 'STANDARD'), COALESCE(preferred_courier, ''),
 			       COALESCE(notes, ''), COALESCE(total_spent_lak, 0), COALESCE(total_orders_count, 0),
 			       created_at, updated_at FROM customers WHERE id = $1`
 			arg = id
@@ -557,6 +561,7 @@ func HandlePublicCustomerProfile(c *gin.Context) {
 			       COALESCE(instagram, ''), COALESCE(line_id, ''), COALESCE(facebook, ''),
 			       COALESCE(whatsapp, ''), COALESCE(province, ''), COALESCE(district, ''),
 			       COALESCE(village, ''), COALESCE(branch_code, ''), COALESCE(tax_id, ''),
+			       COALESCE(tier, 'STANDARD'), COALESCE(preferred_courier, ''),
 			       COALESCE(notes, ''), COALESCE(total_spent_lak, 0), COALESCE(total_orders_count, 0),
 			       created_at, updated_at FROM customers WHERE phone = $1`
 			arg = phone
@@ -567,6 +572,7 @@ func HandlePublicCustomerProfile(c *gin.Context) {
 			&cust.Instagram, &cust.LineID, &cust.Facebook,
 			&cust.WhatsApp, &cust.Province, &cust.District,
 			&cust.Village, &cust.BranchCode, &cust.TaxID,
+			&cust.Tier, &cust.PreferredCourier,
 			&cust.Notes, &cust.TotalSpentLAK, &cust.TotalOrdersCount,
 			&cust.CreatedAt, &cust.UpdatedAt,
 		)
@@ -703,4 +709,58 @@ func HandleSavePublicCustomerProfile(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": original})
 }
+
+// HandlePublicCustomerTiers returns dynamic VIP tiers and discounts
+func HandlePublicCustomerTiers(c *gin.Context) {
+	if db.DB == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"status": "success",
+			"data": []gin.H{
+				{"id": "STANDARD", "name_lo": "ສະມາຊິກທົ່ວໄປ (Standard)", "discount_percent": 0.0, "badge_color": "slate"},
+				{"id": "SILVER", "name_lo": "ຊິລເວີ VIP (Silver)", "discount_percent": 5.0, "badge_color": "cyan"},
+				{"id": "GOLD", "name_lo": "ໂກລ VIP (Gold)", "discount_percent": 10.0, "badge_color": "amber"},
+				{"id": "PLATINUM", "name_lo": "ແພລຕິນໍາ VIP (Platinum)", "discount_percent": 15.0, "badge_color": "purple"},
+			},
+		})
+		return
+	}
+
+	rows, err := db.DB.Query(`
+		SELECT id, name_lo, name_en, discount_percent, min_spend_lak, min_orders, badge_color, perks, sort_order, is_active
+		FROM customer_vip_tiers
+		WHERE is_active = TRUE
+		ORDER BY sort_order ASC
+	`)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to query tiers: " + err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	type TierDTO struct {
+		ID              string   `json:"id"`
+		NameLo          string   `json:"name_lo"`
+		NameEn          string   `json:"name_en"`
+		DiscountPercent float64  `json:"discount_percent"`
+		MinSpendLAK     float64  `json:"min_spend_lak"`
+		MinOrders       int      `json:"min_orders"`
+		BadgeColor      string   `json:"badge_color"`
+		Perks           []string `json:"perks"`
+		SortOrder       int      `json:"sort_order"`
+		IsActive        bool     `json:"is_active"`
+	}
+
+	var tiers []TierDTO
+	for rows.Next() {
+		var t TierDTO
+		var perks pq.StringArray
+		if err := rows.Scan(&t.ID, &t.NameLo, &t.NameEn, &t.DiscountPercent, &t.MinSpendLAK, &t.MinOrders, &t.BadgeColor, &perks, &t.SortOrder, &t.IsActive); err == nil {
+			t.Perks = []string(perks)
+			tiers = append(tiers, t)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": tiers})
+}
+
 

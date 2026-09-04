@@ -289,3 +289,56 @@ func TestOrderHandler_CreateOrder_Idempotency(t *testing.T) {
 		t.Errorf("expected order_no ORD-IDEM-001, got %s", res2.Data.OrderNo)
 	}
 }
+
+func TestOrderHandler_CustomerVIP_Flow(t *testing.T) {
+	r, _ := setupTestRouter()
+
+	// 1. Test Get Customer Tiers
+	reqTiers, _ := http.NewRequest(http.MethodGet, "/api/v1/public/customer/tiers", nil)
+	wTiers := httptest.NewRecorder()
+	r.ServeHTTP(wTiers, reqTiers)
+
+	if wTiers.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from /public/customer/tiers, got %d: %s", wTiers.Code, wTiers.Body.String())
+	}
+
+	// 2. Test Customer Auth
+	authBody := handler.CustomerAuthRequest{
+		Phone: "020 55889988",
+		Name:  "Som Sing Phim VIP",
+		Email: "customer@gmail.com",
+	}
+	bodyBytes, _ := json.Marshal(authBody)
+	reqAuth, _ := http.NewRequest(http.MethodPost, "/api/v1/public/customer/auth", bytes.NewBuffer(bodyBytes))
+	reqAuth.Header.Set("Content-Type", "application/json")
+	wAuth := httptest.NewRecorder()
+	r.ServeHTTP(wAuth, reqAuth)
+
+	if wAuth.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from /public/customer/auth, got %d: %s", wAuth.Code, wAuth.Body.String())
+	}
+
+	var resAuth struct {
+		Status string                     `json:"status"`
+		Data   handler.CustomerProfileDTO `json:"data"`
+	}
+	if err := json.Unmarshal(wAuth.Body.Bytes(), &resAuth); err != nil {
+		t.Fatalf("failed to decode auth response: %v", err)
+	}
+	if resAuth.Data.Phone != "02055889988" && resAuth.Data.Phone != "020 55889988" {
+		t.Errorf("expected phone normalized, got %s", resAuth.Data.Phone)
+	}
+	if resAuth.Data.Tier == "" {
+		t.Errorf("expected non-empty customer VIP tier")
+	}
+
+	// 3. Test Customer Profile by Phone
+	reqProf, _ := http.NewRequest(http.MethodGet, "/api/v1/public/customer/profile?phone=02055889988", nil)
+	wProf := httptest.NewRecorder()
+	r.ServeHTTP(wProf, reqProf)
+
+	if wProf.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from /public/customer/profile, got %d: %s", wProf.Code, wProf.Body.String())
+	}
+}
+

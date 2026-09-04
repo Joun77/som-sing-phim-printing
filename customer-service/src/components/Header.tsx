@@ -14,7 +14,7 @@ import {
   CartIcon,
 } from './icons.tsx'
 import { CURRENCIES } from '../utils/currency.ts'
-import { User, ShoppingBag } from 'lucide-react'
+import { User, ShoppingBag, Crown } from 'lucide-react'
 import { CustomerProfileModal } from './customer/CustomerProfileModal.tsx'
 import { CustomerOrderHistoryDrawer } from './customer/CustomerOrderHistoryDrawer.tsx'
 
@@ -133,10 +133,18 @@ export default function Header() {
   const [catOpen, setCatOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
-  const { t, language, openCart, cartCount, categories = [] } = useShop()
-  const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const { 
+    t, 
+    language, 
+    openCart, 
+    cartCount, 
+    categories = [],
+    customerProfile,
+    isLoggedIn,
+    isProfileModalOpen,
+    setIsProfileModalOpen
+  } = useShop()
   const [isOrdersOpen, setIsOrdersOpen] = useState(false)
-  const [customerPhone, setCustomerPhone] = useState(localStorage.getItem('ssp_customer_phone') || '')
 
   // Close menu on route change
   useEffect(() => {
@@ -255,16 +263,21 @@ export default function Header() {
                 <span className="header-cart-badge">{cartCount}</span>
               )}
             </button>
-            {customerPhone ? (
+            {isLoggedIn && customerProfile ? (
               <div className="flex items-center gap-1.5 hidden-mobile">
                 <button
                   type="button"
-                  className="px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 font-bold text-xs flex items-center gap-1.5 hover:bg-amber-500/20 transition cursor-pointer"
-                  onClick={() => setIsProfileOpen(true)}
-                  title="ຂໍ້ມູນສະມາຊິກ & ທີ່ຢູ່ຈັດສົ່ງ"
+                  className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent border border-amber-500/40 text-amber-300 font-black text-xs flex items-center gap-2 hover:border-amber-400 transition cursor-pointer shadow-sm shadow-amber-500/10"
+                  onClick={() => setIsProfileModalOpen(true)}
+                  title="Som Sing Phim VIP Atelier Hub"
                 >
-                  <User className="w-3.5 h-3.5" />
-                  <span className="font-mono text-[11px]">{customerPhone}</span>
+                  <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="font-bold text-white max-w-[130px] truncate">
+                    {customerProfile.name || customerProfile.phone}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded-md bg-amber-400 text-slate-950 text-[9px] font-black shrink-0">
+                    {customerProfile.tier || 'VIP'}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -278,12 +291,12 @@ export default function Header() {
             ) : (
               <button
                 type="button"
-                className="px-3.5 py-1.5 rounded-full bg-slate-100 hover:bg-amber-500 hover:text-slate-950 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer hidden-mobile"
-                onClick={() => setIsProfileOpen(true)}
-                title="ເຂົ້າສູ່ລະບົບສະມາຊິກ"
+                className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs flex items-center gap-1.5 transition cursor-pointer hidden-mobile shadow-md shadow-amber-500/20"
+                onClick={() => setIsProfileModalOpen(true)}
+                title="ເຂົ້າສູ່ລະບົບສະມາຊິກ VIP"
               >
-                <User className="w-3.5 h-3.5" />
-                <span>{language === 'en' ? 'Sign In' : 'ເຂົ້າສູ່ລະບົບ'}</span>
+                <Crown className="w-3.5 h-3.5" />
+                <span>{language === 'en' ? 'VIP Sign In' : 'ເຂົ້າສູ່ລະບົບ / ສິດ VIP'}</span>
               </button>
             )}
           </div>
@@ -307,13 +320,17 @@ export default function Header() {
           <button
             type="button"
             className="header-cart-btn"
-            onClick={() => setIsProfileOpen(true)}
+            onClick={() => setIsProfileModalOpen(true)}
             title="ເຂົ້າສູ່ລະບົບ / ທີ່ຢູ່"
             style={{ padding: '8px' }}
           >
-            <User className="w-5 h-5 text-slate-700" />
+            {isLoggedIn ? (
+              <Crown className="w-5 h-5 text-amber-400" />
+            ) : (
+              <User className="w-5 h-5 text-slate-700" />
+            )}
           </button>
-          {customerPhone && (
+          {isLoggedIn && (
             <button
               type="button"
               className="header-cart-btn"
@@ -339,18 +356,17 @@ export default function Header() {
       </div>
 
       <CustomerProfileModal 
-        isOpen={isProfileOpen} 
-        onClose={() => setIsProfileOpen(false)}
-        onLoginSuccess={(phone) => setCustomerPhone(phone)}
+        isOpen={isProfileModalOpen} 
+        onClose={() => setIsProfileModalOpen(false)}
         onOpenOrders={() => {
-          setIsProfileOpen(false);
+          setIsProfileModalOpen(false);
           setIsOrdersOpen(true);
         }}
       />
       <CustomerOrderHistoryDrawer 
         isOpen={isOrdersOpen} 
         onClose={() => setIsOrdersOpen(false)}
-        phone={customerPhone}
+        phone={customerProfile?.phone || ''}
       />
     </header>
   )
