@@ -3,33 +3,56 @@
 # ไปที่โฟลเดอร์ของโปรเจกต์อัตโนมัติ
 cd "$(dirname "$0")"
 
-SERVER_HOST="ASUS@100.116.116.18"
 REMOTE_PATH="D:/Github/som-sing-phim-printing"
 
 echo "========================================================"
 echo "🚀 Som Sing Phim: Windows Server Deployment"
-echo "🌐 Remote Server: $SERVER_HOST"
-echo "📂 Remote Path:   $REMOTE_PATH"
 echo "========================================================"
-echo ""
 
-# ตรวจสอบการเชื่อมต่อ SSH
+# ตรวจสอบการเชื่อมต่ออัตโนมัติ (LAN 192.168.100.43 หรือ Tailscale 100.116.116.18)
+SERVER_IP=""
+if nc -z -G 1 192.168.100.43 22 2>/dev/null; then
+    SERVER_IP="192.168.100.43"
+    echo "⚡ เชื่อมต่อผ่าน Local Wi-Fi (192.168.100.43) รวดเร็วระดับ Local Network"
+elif nc -z -G 2 100.116.116.18 22 2>/dev/null; then
+    SERVER_IP="100.116.116.18"
+    echo "🌐 เชื่อมต่อผ่าน Tailscale VPN (100.116.116.18)"
+else
+    echo "❌ ไม่สามารถติดต่อเครื่องคอมพิวเตอร์ Windows ได้!"
+    echo ""
+    echo "💡 สาเหตุที่เป็นไปได้:"
+    echo "  1. แอป Tailscale บนเครื่อง Mac นี้ถูกปิดอยู่ (Status: Stopped) ให้เปิดแอป Tailscale แล้วกด Connect"
+    echo "  2. หรือ เครื่อง Mac กับคอมพิวเตอร์ Windows ไม่ได้ต่อ Wi-Fi วงเดียวกัน (192.168.100.x)"
+    echo "  3. หรือ เครื่องคอมพิวเตอร์ Windows หลับ/ปิดอยู่"
+    echo ""
+    read -p "กดปุ่ม Enter เพื่อปิดหน้าต่าง..." dummy
+    exit 1
+fi
+
+SERVER_HOST="ASUS@$SERVER_IP"
+echo "🌐 กำลังสั่งงานไปยัง: $SERVER_HOST"
+echo "📂 โฟลเดอร์ปลายทาง:   $REMOTE_PATH"
+echo "--------------------------------------------------------"
+
 echo "🔄 กำลังเชื่อมต่อไปยังเครื่อง Windows เพื่อดึงโค้ดและอัปเดต Docker..."
-ssh "$SERVER_HOST" "cmd /c \"cd /d $REMOTE_PATH && git pull && docker compose up -d --build && docker image prune -f && docker compose ps\""
+# Note: แก้ไขปัญหา Windows OpenSSH Session กับ Docker Credential Manager (A specified logon session does not exist) อัตโนมัติ
+ssh "$SERVER_HOST" "cmd /c \"powershell -NoProfile -Command \"if (Test-Path \$env:USERPROFILE\.docker\config.json) { (Get-Content \$env:USERPROFILE\.docker\config.json) -replace '\"\"credsStore\"\"', '\"\"_credsStore\"\"' | Set-Content \$env:USERPROFILE\.docker\config.json }\" && cd /d $REMOTE_PATH && git pull && docker compose up -d --build && docker image prune -f && docker compose ps\""
 
 if [ $? -eq 0 ]; then
     echo ""
     echo "========================================================"
     echo "✅ Deploy สำเร็จเรียบร้อยแล้วครับ!"
     echo "📱 หน้าร้าน (Customer): https://somsingphim.tail2bf83b.ts.net:5173"
+    echo "   (หรือผ่าน LAN):       http://192.168.100.43:5173"
     echo "🖥️ หลังบ้าน (Admin):     https://somsingphim.tail2bf83b.ts.net:3100"
+    echo "   (หรือผ่าน LAN):       http://192.168.100.43:3100"
     echo "⚙️ Backend API:         https://somsingphim.tail2bf83b.ts.net:8080"
-    echo "🗄️ pgAdmin:             http://100.116.116.18:5050"
+    echo "🗄️ pgAdmin:             http://192.168.100.43:5050"
     echo "========================================================"
 else
     echo ""
-    echo "⚠️ เกิดข้อผิดพลาดในการเชื่อมต่อ SSH หรือรัน Docker"
-    echo "💡 กรุณาตรวจสอบว่าคอมพิวเตอร์ Windows เปิดอยู่ และเชื่อมต่อ Tailscale แล้ว"
+    echo "⚠️ เกิดข้อผิดพลาดในการรันคำสั่งบนเครื่อง Windows"
+    echo "💡 หากมีถาม Password ให้ใส่รหัสผ่านล็อกอินของเครื่อง Windows (ASUS)"
 fi
 
 echo ""
