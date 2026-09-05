@@ -24,30 +24,9 @@ type Offcut struct {
 }
 
 var (
-	offcutsStore = map[string]Offcut{
-		"OFF-CRD350-01": {
-			ID:               "OFF-CRD350-01",
-			ParentMaterialID: "PAP-CRD-350",
-			Name:             "Art Card 350g Card Strips",
-			WidthMm:          120,
-			LengthMm:         250,
-			Quantity:         1500,
-			Location:         "Shelf A-02",
-			CreatedAt:        time.Now().Add(-48 * time.Hour),
-		},
-		"OFF-ART130-01": {
-			ID:               "OFF-ART130-01",
-			ParentMaterialID: "PAP-ART-130",
-			Name:             "Art Paper 130g Offcut Remnant",
-			WidthMm:          200,
-			LengthMm:         300,
-			Quantity:         2000,
-			Location:         "Shelf B-01",
-			CreatedAt:        time.Now().Add(-24 * time.Hour),
-		},
-	}
-	storeMutex sync.RWMutex
-	offcutSeq  int
+	offcutsStore = make(map[string]Offcut)
+	storeMutex   sync.RWMutex
+	offcutSeq    int
 )
 
 // GetMatchingOffcut searches for available offcut scrap matching material, size and quantity
@@ -79,6 +58,20 @@ func GetMatchingOffcut(paperSku, paperName string, jobW, jobH float64, requiredQ
 		}
 	}
 	return nil
+}
+
+// RegisterOffcutItem adds an offcut to the in-memory store
+func RegisterOffcutItem(o Offcut) {
+	storeMutex.Lock()
+	defer storeMutex.Unlock()
+	offcutsStore[o.ID] = o
+}
+
+// ClearOffcutStore clears in-memory offcuts
+func ClearOffcutStore() {
+	storeMutex.Lock()
+	defer storeMutex.Unlock()
+	offcutsStore = make(map[string]Offcut)
 }
 
 // HandleGetOffcuts returns the list of offcut scraps

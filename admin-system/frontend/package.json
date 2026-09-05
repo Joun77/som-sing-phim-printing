@@ -9,6 +9,7 @@
     "build": "vite build",
     "deploy": "npm run build && npx -y firebase-tools@latest deploy --only hosting",
     "lint": "oxlint",
+    "test": "npx -y tsx --test src/utils/*.test.ts",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },

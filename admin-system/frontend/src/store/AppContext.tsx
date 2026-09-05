@@ -1470,10 +1470,10 @@ export const AppProvider = ({ children }) => {
     try {
       const ratesRes = await fetch('/api/rates');
       if (ratesRes && ratesRes.ok) {
-        const ratesData = await ratesRes.json();
+        const ratesData: any = await ratesRes.json();
         if (ratesData && typeof ratesData === 'object') {
           setExchangeRates(prev => {
-            const nextRates = { ...prev };
+            const nextRates: any = { ...prev };
             if (ratesData.THB && typeof ratesData.THB.rate_to_lak === 'number') {
               nextRates.THB = {
                 buy: Math.round(ratesData.THB.rate_to_lak),

@@ -3,6 +3,9 @@ package pricing
 import (
 	"math"
 	"testing"
+	"time"
+
+	"somsing.local/backend/inventory"
 )
 
 // baseReq is the shared A4 baseline request used across all tests.
@@ -587,6 +590,12 @@ func TestBindingCostCalculations(t *testing.T) {
 		t.Errorf("Expected 3500 LAK for CALENDAR, got %v", calendarCost)
 	}
 
+	// Hardcover Case Binding = 15000 LAK
+	hardcoverCost := CalculateBindingCostLAK("HARDCOVER_CASE_BINDING", 0, 0)
+	if hardcoverCost != 15000.0 {
+		t.Errorf("Expected 15000 LAK for HARDCOVER_CASE_BINDING, got %v", hardcoverCost)
+	}
+
 	// Machine depreciation: 10,000,000 * 1.10 / 100,000 = 110 LAK + 350 = 460 LAK
 	glueWithMach := CalculateBindingCostLAK("PERFECT_HOT_GLUE", 10000000, 100000)
 	if glueWithMach != 460.0 {
@@ -635,6 +644,18 @@ func TestBilingualBookDynamicPricingWithPreflight(t *testing.T) {
 }
 
 func TestSmallItemOffcutRecommendation(t *testing.T) {
+	inventory.RegisterOffcutItem(inventory.Offcut{
+		ID:               "OFF-CRD350-01",
+		ParentMaterialID: "PAP-CRD-350",
+		Name:             "Art Card 350g Card Strips",
+		WidthMm:          120,
+		LengthMm:         250,
+		Quantity:         1500,
+		Location:         "Shelf A-02",
+		CreatedAt:        time.Now(),
+	})
+	defer inventory.ClearOffcutStore()
+
 	req := CalculationRequest{
 		JobName:          "Luxury Business Cards",
 		Quantity:         500,

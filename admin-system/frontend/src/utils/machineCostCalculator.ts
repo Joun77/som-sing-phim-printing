@@ -6,11 +6,22 @@
 export interface MachineUnitCostInput {
   purchase_price_lak?: number;
   purchaseCost?: number;
+  purchasePrice?: number;
   price?: number;
+  MachinePrice?: number;
+  unitPrice?: number;
+  unitCost?: number;
   expected_life_pages?: number;
+  expectedLifeA4Pages?: number;
   printedPagesCapacity?: number;
+  TargetTotalPages?: number;
+  lifetimePagesA4?: number;
   maintenance_rate_percent?: number;
   maintenanceRatePercent?: number;
+  category?: string;
+  calculatedCostPerPage?: number;
+  costPerPage?: number;
+  costPerConsumptionUnit?: number;
 }
 
 export interface MachineUnitCostResult {
@@ -20,11 +31,41 @@ export interface MachineUnitCostResult {
 }
 
 export function calculateMachineUnitCost(spec: MachineUnitCostInput): MachineUnitCostResult {
-  const price = Number(spec.purchase_price_lak ?? spec.purchaseCost ?? spec.price ?? 0);
-  const targetPages = Number(spec.expected_life_pages ?? spec.printedPagesCapacity ?? 0);
-  const maintRate = Number(spec.maintenance_rate_percent ?? spec.maintenanceRatePercent ?? 0);
+  const price = Number(
+    spec.purchase_price_lak ??
+    spec.purchaseCost ??
+    spec.purchasePrice ??
+    spec.price ??
+    spec.MachinePrice ??
+    spec.unitPrice ??
+    spec.unitCost ??
+    0
+  );
+
+  const targetPages = Number(
+    spec.expected_life_pages ??
+    spec.expectedLifeA4Pages ??
+    spec.printedPagesCapacity ??
+    spec.TargetTotalPages ??
+    spec.lifetimePagesA4 ??
+    0
+  );
+
+  const maintRate = Number(
+    spec.maintenance_rate_percent ??
+    spec.maintenanceRatePercent ??
+    15
+  );
 
   if (!targetPages || targetPages <= 0 || price <= 0) {
+    if (spec.calculatedCostPerPage || spec.costPerPage || spec.costPerConsumptionUnit) {
+      const fallbackVal = Number(spec.calculatedCostPerPage || spec.costPerPage || spec.costPerConsumptionUnit);
+      return {
+        depreciation: Math.round(fallbackVal * 100) / 100,
+        maintenance: 0,
+        totalMachineCost: Math.round(fallbackVal * 100) / 100,
+      };
+    }
     return { depreciation: 0, maintenance: 0, totalMachineCost: 0 };
   }
 
@@ -35,6 +76,294 @@ export function calculateMachineUnitCost(spec: MachineUnitCostInput): MachineUni
     depreciation: Math.round(depreciation * 100) / 100,
     maintenance: Math.round(maintenance * 100) / 100,
     totalMachineCost: Math.round((depreciation + maintenance) * 100) / 100,
+  };
+}
+
+export interface FormattedMachineCost {
+  depreciation: number;
+  maintenance: number;
+  totalMachineCost: number;
+  inkCost: number;
+  grandTotalCost: number;
+  unitLabel: string; // 'ໜ້າ' | 'ແຜ່ນ' | 'ຫົວ'
+  unitLabelEn: string; // 'page' | 'sheet' | 'book'
+  isPrinter: boolean;
+}
+
+/**
+ * Standardized Canonical Cost Resolver for Som Sing Phim Machinery
+ * Computes Depreciation + Maintenance Wear (+ ISO baseline ink for printers)
+ */
+export function getEquipmentAccurateCost(eq: any): FormattedMachineCost {
+  if (!eq) {
+    return {
+      depreciation: 0,
+      maintenance: 0,
+      totalMachineCost: 0,
+      inkCost: 0,
+      grandTotalCost: 0,
+      unitLabel: 'ໜ້າ',
+      unitLabelEn: 'page',
+      isPrinter: true,
+    };
+  }
+
+  const cat = String(eq.category || eq.printerCategory || '').toLowerCase();
+  const sub = String(eq.postPressSubtype || eq.specs?.postPressSubtype || '').toLowerCase();
+  const name = String(eq.name || eq.model || '').toLowerCase();
+
+  const isCutter = cat.includes('cutter') || sub.includes('cutter') || sub.includes('guillotine') || name.includes('cutter') || name.includes('guillotine') || name.includes('qzyk') || name.includes('polar');
+  const isBinder = cat.includes('binder') || sub.includes('binder') || name.includes('binder') || name.includes('horizon') || name.includes('superbind');
+  const isLaminator = cat.includes('laminat') || sub.includes('laminat') || name.includes('laminat') || name.includes('foliant');
+  const isPrinter = !isCutter && !isBinder && !isLaminator;
+
+  const unitLabel = isCutter ? 'ແຜ່ນ' : isLaminator ? 'ແຜ່ນ' : isBinder ? 'ຫົວ' : 'ໜ້າ';
+  const unitLabelEn = isCutter ? 'sheet' : isLaminator ? 'sheet' : isBinder ? 'book' : 'page';
+
+  const assetValue = Number(
+    eq.MachinePrice ??
+    eq.price ??
+    eq.unitPrice ??
+    eq.purchaseCost ??
+    eq.purchasePrice ??
+    eq.unitCost ??
+    0
+  );
+
+  const lifespanYears = Number(eq.lifespanYears || eq.specs?.lifespanYears || 5);
+  const totalMonths = lifespanYears * 12;
+  const estMonthlyVolume = Number(eq.estMonthlyVolume || eq.specs?.estMonthlyVolume || 0);
+
+  const targetCapacity = Number(
+    eq.TargetTotalPages ||
+    eq.printedPagesCapacity ||
+    eq.expectedLifeA4Pages ||
+    eq.expected_life_pages ||
+    eq.lifetimePagesA4 ||
+    (estMonthlyVolume > 0 && totalMonths > 0 ? estMonthlyVolume * totalMonths : 0) ||
+    (isPrinter ? 1500000 : isCutter ? 3000000 : isBinder ? 600000 : 800000)
+  );
+
+  const maintRatePct = Number(
+    eq.maintenanceRatePercent !== undefined
+      ? eq.maintenanceRatePercent
+      : (eq.maintenance_rate_percent !== undefined
+          ? eq.maintenance_rate_percent
+          : (eq.specs?.maintenanceRatePercent !== undefined ? eq.specs.maintenanceRatePercent : 15))
+  );
+
+  let baseDepreciation = 0;
+  if (targetCapacity > 0 && assetValue > 0) {
+    baseDepreciation = assetValue / targetCapacity;
+  } else if (eq.calculatedCostPerPage || eq.costPerPage || eq.costPerConsumptionUnit) {
+    baseDepreciation = Number(eq.calculatedCostPerPage || eq.costPerPage || eq.costPerConsumptionUnit);
+  }
+
+  const maintWear = baseDepreciation * (maintRatePct / 100);
+  const totalMachine = Math.round((baseDepreciation + maintWear) * 100) / 100;
+
+  // Ink estimation for printers (ISO 5% standard ~150-200 LAK for standard inkjet/press)
+  let inkEstimate = 0;
+  if (isPrinter) {
+    if (eq.totalColorCost && eq.deprPerPage) {
+      inkEstimate = Math.max(0, eq.totalColorCost - eq.deprPerPage - (eq.maintenancePerPage || 0));
+    } else if (eq.colorInkCost) {
+      inkEstimate = Number(eq.colorInkCost);
+    } else if (cat.includes('digital') || name.includes('versant') || name.includes('accurio')) {
+      inkEstimate = 200; // Average digital toner per A4 page
+    } else {
+      inkEstimate = 150; // Average 4-color inkjet per A4 page
+    }
+  }
+
+  const grandTotal = Math.round((totalMachine + inkEstimate) * 100) / 100;
+
+  return {
+    depreciation: Math.round(baseDepreciation * 100) / 100,
+    maintenance: Math.round(maintWear * 100) / 100,
+    totalMachineCost: totalMachine,
+    inkCost: inkEstimate,
+    grandTotalCost: grandTotal,
+    unitLabel,
+    unitLabelEn,
+    isPrinter,
+  };
+}
+
+export interface EquipmentPrintCostResult {
+  assetValue: number;
+  baseCostPerUnit: number;
+  wearAllowancePerUnit: number;
+  netCostPerUnit: number;
+  linkedInkRatePerPage: number;
+  finalCostPerPage: number;
+  isPostPress: boolean;
+  unitLabel: string; // 'ໜ້າ' | 'ແຜ່ນ' | 'ຫົວ'
+  unitLabelEn: string; // 'page' | 'sheet' | 'book'
+  formattedTotal: string; // e.g. "LAK 61"
+  formattedMachine: string; // e.g. "LAK 1.20"
+  formattedInk: string; // e.g. "LAK 60"
+}
+
+export function formatUnitLAK(val: number): string {
+  if (!val || isNaN(val)) return 'LAK 0';
+  if (Math.abs(val) < 1) return `LAK ${val.toFixed(2)}`;
+  if (Math.abs(val) < 10) return `LAK ${val.toFixed(2)}`;
+  return `LAK ${Math.round(val).toLocaleString()}`;
+}
+
+export function calculateEquipmentPrintCost(
+  eq: any,
+  printerColorLinks: any[] = [],
+  inventory: any[] = [],
+  modalCategory?: string
+): EquipmentPrintCostResult {
+  if (!eq) {
+    return {
+      assetValue: 0,
+      baseCostPerUnit: 0,
+      wearAllowancePerUnit: 0,
+      netCostPerUnit: 0,
+      linkedInkRatePerPage: 0,
+      finalCostPerPage: 0,
+      isPostPress: false,
+      unitLabel: 'ໜ້າ',
+      unitLabelEn: 'page',
+      formattedTotal: 'LAK 0',
+      formattedMachine: 'LAK 0',
+      formattedInk: 'LAK 0',
+    };
+  }
+
+  const isPrinterModal = modalCategory === 'Printer';
+  const isCutterModal = modalCategory === 'Cutter';
+  const isBinderModal = modalCategory === 'Binder';
+  const isLaminatorModal = modalCategory === 'Laminator';
+
+  const isPostPress = isPrinterModal 
+    ? false 
+    : (isCutterModal || isBinderModal || isLaminatorModal 
+        ? true 
+        : (eq.category !== 'Printer' && eq.category !== 'PRINTER'));
+
+  const unitLabel = isCutterModal || (!isPrinterModal && (eq.category === 'Cutter' || eq.postPressSubtype === 'guillotine'))
+    ? 'ແຜ່ນ'
+    : isLaminatorModal || (!isPrinterModal && (eq.category === 'Laminator' || eq.postPressSubtype === 'laminator'))
+    ? 'ແຜ່ນ'
+    : isBinderModal || (!isPrinterModal && (eq.category === 'Binder' || eq.postPressSubtype === 'binder'))
+    ? 'ຫົວ'
+    : 'ໜ້າ';
+
+  const unitLabelEn = unitLabel === 'ແຜ່ນ' ? 'sheet' : unitLabel === 'ຫົວ' ? 'book' : 'page';
+
+  // Specs calculation (100% identical to EquipmentTable.tsx)
+  const lifespanYears = Number(eq.lifespanYears || eq.specs?.lifespanYears || 5);
+  const estMonthlyVolume = Number(eq.estMonthlyVolume || eq.specs?.estMonthlyVolume || 50000);
+  const maintenanceRatePct = Number(eq.maintenanceRatePercent || eq.specs?.maintenanceRatePercent || 15);
+  const maintCostPerPage = Number(eq.specs?.fixedMaintenanceCostPerPage || 0);
+
+  const assetValue = Number(
+    eq.MachinePrice ?? 
+    eq.price ?? 
+    eq.unitPrice ?? 
+    eq.purchaseCost ?? 
+    eq.purchasePrice ?? 
+    eq.unitCost ?? 
+    0
+  );
+  const totalMonths = lifespanYears * 12;
+  const targetPages = Number(
+    eq.TargetTotalPages || 
+    eq.printedPagesCapacity || 
+    eq.expectedLifeA4Pages || 
+    eq.lifetimePagesA4 || 
+    (estMonthlyVolume * totalMonths) || 
+    3000000
+  );
+  const monthlyDepr = totalMonths > 0 ? (assetValue / totalMonths) : 0;
+  const baseCostPerUnit = (estMonthlyVolume > 0 && monthlyDepr > 0)
+    ? (monthlyDepr / estMonthlyVolume)
+    : (targetPages > 0 ? (assetValue / targetPages) : 0);
+
+  const wearAllowancePerUnit = Math.round(baseCostPerUnit * (maintenanceRatePct / 100) * 1000) / 1000 + maintCostPerPage;
+  const netCostPerUnit = Math.round((baseCostPerUnit + wearAllowancePerUnit) * 1000) / 1000;
+
+  // Ink calculations for printer
+  const links = (printerColorLinks || []).filter((lnk: any) => lnk.assetId === eq.id);
+  let linkedInkRatePerPage = 0;
+
+  if (!isPostPress) {
+    const oemSlots = 
+      eq.oem_baseline_specs?.slots || 
+      eq.specs?.oem_baseline_specs?.slots || 
+      eq.oemBaselineInks || 
+      eq.specs?.oemBaselineInks || 
+      [
+        { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500, oemPrice: 450000 },
+        { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+        { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+        { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 }
+      ];
+
+    if (oemSlots && oemSlots.length > 0) {
+      linkedInkRatePerPage = oemSlots.reduce((sum: number, oemSlot: any, idx: number) => {
+        const slotPos = oemSlot.slotPosition || `Slot ${idx + 1}`;
+        const isBlack = (oemSlot.colorGroup || '').toLowerCase().includes('black') || (oemSlot.colorGroup || '').toLowerCase().includes('k') || slotPos.toLowerCase().includes('black') || slotPos.toLowerCase().includes('slot 1');
+        const colorGroupName = isBlack ? 'Black' : (oemSlot.colorGroup || (idx === 1 ? 'Cyan' : idx === 2 ? 'Magenta' : idx === 3 ? 'Yellow' : `Color ${idx + 1}`));
+        const defaultYield = isBlack ? 7500 : 6000;
+        const defaultPrice = isBlack ? 450000 : 320000;
+        const defaultVol = isBlack ? 127 : 70;
+
+        const activeLink = links.find((lnk: any) => 
+          lnk.slotPosition === slotPos || 
+          (lnk.slotPosition && slotPos && (lnk.slotPosition.includes(slotPos) || slotPos.includes(lnk.slotPosition))) ||
+          (lnk.colorGroup && colorGroupName && lnk.colorGroup.toLowerCase() === colorGroupName.toLowerCase()) ||
+          (idx === 0 && (lnk.slotPosition?.includes('Slot 1') || lnk.colorGroup?.toLowerCase().includes('black') || lnk.colorGroup?.toLowerCase().includes('k'))) ||
+          (idx === 1 && (lnk.slotPosition?.includes('Slot 2') || lnk.colorGroup?.toLowerCase().includes('cyan') || lnk.colorGroup?.toLowerCase().includes('c'))) ||
+          (idx === 2 && (lnk.slotPosition?.includes('Slot 3') || lnk.colorGroup?.toLowerCase().includes('magenta') || lnk.colorGroup?.toLowerCase().includes('m'))) ||
+          (idx === 3 && (lnk.slotPosition?.includes('Slot 4') || lnk.colorGroup?.toLowerCase().includes('yellow') || lnk.colorGroup?.toLowerCase().includes('y')))
+        );
+        const ink = activeLink ? (inventory || []).find((i: any) => i.id === activeLink.inkCode || i.skuCode === activeLink.inkCode || i.sku === activeLink.inkCode) : null;
+
+        const oemVol = Number(oemSlot.oemStandardVolumeMl || oemSlot.volume || defaultVol);
+        const rawYield = Number(oemSlot.oemStandardIsoYieldA4 || (oemSlot.colorGroup === 'Black' ? (eq.blackYieldPages || defaultYield) : (eq.colorYieldPages || defaultYield)));
+        const yld = rawYield > 500 ? rawYield : defaultYield;
+        const isoRate = yld > 0 ? (oemVol / yld) : 0.0169;
+        
+        let slotCost = yld > 0 ? (Number(oemSlot.oemPrice || defaultPrice) / yld) : ((Number(oemSlot.oemPrice || defaultPrice) / oemVol) * isoRate);
+
+        if (ink) {
+          const bPrice = Number(ink.unitPrice || ink.costPerPurchaseUnit || defaultPrice);
+          const rawInkVol = Number(ink.volume || ink.specs?.volume || ink.specs?.volume_ml || defaultVol);
+          const actualVol = rawInkVol > 1 ? rawInkVol : defaultVol;
+
+          const rawInkYield = Number(ink.yield || ink.standard_page_yield || ink.specs?.yield || ink.specs?.isoYield || 0);
+          const inkYield = rawInkYield > 500 ? rawInkYield : yld;
+          slotCost = inkYield > 0 ? (bPrice / inkYield) : ((bPrice / actualVol) * isoRate);
+        }
+        
+        return sum + slotCost;
+      }, 0);
+    }
+  }
+
+  const finalCostPerPage = isPostPress 
+    ? (eq.costPerConsumptionUnit || netCostPerUnit) 
+    : (netCostPerUnit + Math.round(linkedInkRatePerPage * 1000) / 1000);
+
+  return {
+    assetValue,
+    baseCostPerUnit: Math.round(baseCostPerUnit * 100) / 100,
+    wearAllowancePerUnit: Math.round(wearAllowancePerUnit * 100) / 100,
+    netCostPerUnit: Math.round(netCostPerUnit * 100) / 100,
+    linkedInkRatePerPage: Math.round(linkedInkRatePerPage * 100) / 100,
+    finalCostPerPage: Math.round(finalCostPerPage * 100) / 100,
+    isPostPress,
+    unitLabel,
+    unitLabelEn,
+    formattedTotal: formatUnitLAK(finalCostPerPage),
+    formattedMachine: formatUnitLAK(netCostPerUnit),
+    formattedInk: formatUnitLAK(linkedInkRatePerPage),
   };
 }
 

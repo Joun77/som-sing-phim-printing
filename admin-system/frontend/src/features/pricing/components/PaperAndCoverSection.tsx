@@ -1,5 +1,5 @@
 import React from 'react';
-import { Scissors, Bookmark, Search, ChevronUp, ChevronDown, FileText } from 'lucide-react';
+import { Scissors, Bookmark, Search, ChevronUp, ChevronDown, FileText, CheckCircle2 } from 'lucide-react';
 import type { QuotationItem } from './QuotationManager';
 import type { InventoryItem } from '../../../types';
 
@@ -149,6 +149,19 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
                   </span>
                   <span className="font-bold font-sans">
                     ຕົ້ນທຶນເຈ້ຍປົກ: {formatCurrency(activeCalc.coverPaperCost || 0)}
+                  </span>
+                </div>
+
+                {/* Cover Extraction & Auto-Deduct Preview */}
+                <div className="md:col-span-2 p-2.5 bg-emerald-50/90 border border-emerald-200 rounded-xl text-[11px] text-emerald-950 flex flex-wrap justify-between items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>
+                      <strong>Auto-Split Cover Logic:</strong> ຕັດ {activeItem.coverPagesCount || 4} ໜ້າປົກອອກຈາກຍອດເຈ້ຍເນື້ອໃນ ({activeItem.pagesPerBook || 100} ໜ້າລວມ ➜ ເນື້ອໃນຈິງ {Math.max(0, (activeItem.pagesPerBook || 100) - (activeItem.coverPagesCount || 4))} ໜ້າ)
+                    </span>
+                  </div>
+                  <span className="font-bold text-emerald-700 font-mono text-[10px] bg-white px-2 py-0.5 rounded-md border border-emerald-200 shrink-0">
+                    ບໍ່ຄິດໄລ່ຕົ້ນທຶນຊ້ຳຊ້ອນ
                   </span>
                 </div>
               </div>

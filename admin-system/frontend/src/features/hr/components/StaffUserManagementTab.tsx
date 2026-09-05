@@ -128,7 +128,7 @@ export const StaffUserManagementTab: React.FC = () => {
     setEmployeeId(empId);
     const selected = employees.find((e: any) => e.id === empId);
     if (selected) {
-      if (!fullName) setFullName(selected.name || selected.nameLo || '');
+      if (!fullName) setFullName(selected.name || (selected as any).nameLo || '');
       if (!phone) setPhone(selected.phone || '');
     }
   };
@@ -190,13 +190,9 @@ export const StaffUserManagementTab: React.FC = () => {
       return;
     }
 
-    askConfirmation({
-      title: 'ຢືນຢັນການລຶບບັນຊີຜູ້ໃຊ້',
-      message: `ທ່ານຕ້ອງການລຶບບັນຊີ "${u.username}" (${u.fullName}) ແທ້ບໍ່? ການກະທຳນີ້ບໍ່ສາມາດຍົກເລີກໄດ້`,
-      confirmLabel: 'ລຶບບັນຊີ',
-      cancelLabel: 'ຍົກເລີກ',
-      isDanger: true,
-      onConfirm: async () => {
+    askConfirmation(
+      `ທ່ານຕ້ອງການລຶບບັນຊີ "${u.username}" (${u.fullName}) ແທ້ບໍ່? ການກະທຳນີ້ບໍ່ສາມາດຍົກເລີກໄດ້`,
+      async () => {
         try {
           await apiFetch(`/api/v1/admin/users/${u.id}`, { method: 'DELETE' });
           showToast('ລຶບບັນຊີສຳເລັດ', 'success');
@@ -205,7 +201,7 @@ export const StaffUserManagementTab: React.FC = () => {
           showToast(err.message || 'ລຶບບໍ່ສຳເລັດ', 'error');
         }
       }
-    });
+    );
   };
 
   const handleToggleActive = async (u: AdminUserItem) => {
@@ -233,10 +229,10 @@ export const StaffUserManagementTab: React.FC = () => {
           </div>
           <div>
             <h2 className="text-lg font-black text-slate-900">
-              ຈັດການບັນຊີຜູ້ໃຊ້ & ສิทธิ์ເຂົ້າລະບົບ (Staff Accounts & RBAC)
+              ຈັດການບັນຊີຜູ້ໃຊ້ & ສິດເຂົ້າລະບົບ (Staff Accounts & RBAC)
             </h2>
             <p className="text-xs font-semibold text-slate-400 mt-0.5">
-              ສ້າງບັນຊີປະຈຳຕົວພະນັກງານ, ກຳນົດບົດບາດ (Role), ລະຫັດຜ່ານ, ແລະຈັດການສິດທິການເຂົ້າເຖິງລະບົບ
+              ສ້າງບັນຊີປະຈຳຕົວພະນັກງານ, ກຳນົດບົດບາດ (Role), ລະຫັດຜ່ານ, ແລະຈັດການສິດການເຂົ້າເຖິງລະບົບ
             </p>
           </div>
         </div>
@@ -268,7 +264,7 @@ export const StaffUserManagementTab: React.FC = () => {
               <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-black text-slate-500 uppercase tracking-wider">
                 <th className="py-4 px-6">ຜູ້ໃຊ້ງານ (User & Name)</th>
                 <th className="py-4 px-6">ບົດບາດ & ສິດ (Role / RBAC)</th>
-                <th className="py-4 px-6">ພະນັກງານທີ່ເຊື່ອມໂຍງ</th>
+                <th className="py-4 px-6">ພະນັກງານທີ່ກ່ຽວຂ້ອງ</th>
                 <th className="py-4 px-6">ສະຖານະ</th>
                 <th className="py-4 px-6">ເຂົ້າສູ່ລະບົບຫຼ້າສຸດ</th>
                 <th className="py-4 px-6 text-center">ຈັດການ</th>
@@ -330,7 +326,7 @@ export const StaffUserManagementTab: React.FC = () => {
                         {linkedEmp ? (
                           <div className="flex items-center gap-1.5 text-slate-700 font-bold">
                             <User className="w-3.5 h-3.5 text-slate-400" />
-                            <span>{linkedEmp.name || linkedEmp.nameLo}</span>
+                            <span>{linkedEmp.name || (linkedEmp as any).nameLo}</span>
                           </div>
                         ) : (
                           <span className="text-slate-400 italic font-medium">— ບໍ່ໄດ້ເຊື່ອມ —</span>
@@ -434,7 +430,7 @@ export const StaffUserManagementTab: React.FC = () => {
               {/* Linked Employee Dropdown */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 block">
-                  ເຊື່ອມໂຍງກັບພະນັກງານ (Link to Employee)
+                  ເຊື່ອມຕໍ່ກັບພະນັກງານ (Link to Employee)
                 </label>
                 <select
                   value={employeeId}

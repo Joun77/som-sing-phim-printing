@@ -21,10 +21,17 @@ import {
   FileSpreadsheet,
   Layers3,
   Loader2,
-  CheckSquare
+  CheckSquare,
+  Images,
+  Scissors,
+  Grid,
+  FileImage,
+  Sliders,
+  X,
+  Eye,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { PreflightResult } from '../features/orders/types';
+import type { PreflightResult, BatchPreflightResult } from '../features/orders/types';
 import { analyzeImageClient, analyzePDFClient, convertRGBToCMYKCanvas } from '../lib/preflightAnalyzer';
 
 interface PreflightCheckerProps {
@@ -80,6 +87,197 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   const [cmykSimulatedUrl, setCmykSimulatedUrl] = useState<string | null>(null);
   const [isSavingReport, setIsSavingReport] = useState(false);
   const [reportSavedStatus, setReportSavedStatus] = useState<string | null>(null);
+
+  // 4. Batch Photo Preflight States (1-100 Photos per item)
+  const [preflightMode, setPreflightMode] = useState<'single' | 'batch'>('single');
+  const [batchFiles, setBatchFiles] = useState<File[]>([]);
+  const [batchPreviews, setBatchPreviews] = useState<{ name: string; url: string; size: number }[]>([]);
+  const [batchPhotoSize, setBatchPhotoSize] = useState<'4x6' | '3x4' | '5x7' | '2x3' | 'A4'>('4x6');
+  const [borderMode, setBorderMode] = useState<'BORDERED' | 'BORDERLESS'>('BORDERED');
+  const [isBatchAnalyzing, setIsBatchAnalyzing] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; pct: number }>({ current: 0, total: 0, pct: 0 });
+  const [batchResult, setBatchResult] = useState<BatchPreflightResult | null>(null);
+  const [batchErrorMessage, setBatchErrorMessage] = useState<string | null>(null);
+  const [selectedPreviewPhoto, setSelectedPreviewPhoto] = useState<string | null>(null);
+
+  const PHOTO_PRESETS: Record<string, { label: string; w: number; h: number; cutsPerA4: number; descLao: string }> = {
+    '4x6': { label: '4x6" (A6)', w: 100, h: 150, cutsPerA4: 3, descLao: 'ມາດຕະຖານ 3 ຮູບ/ແຜ່ນ A4' },
+    '3x4': { label: '3x4"', w: 75, h: 100, cutsPerA4: 6, descLao: '6 ຮູບ/ແຜ່ນ A4' },
+    '5x7': { label: '5x7"', w: 130, h: 180, cutsPerA4: 2, descLao: '2 ຮູບ/ແຜ່ນ A4' },
+    '2x3': { label: '2x3" (Polaroid)', w: 54, h: 86, cutsPerA4: 8, descLao: '8 ຮູບ/ແຜ່ນ A4' },
+    'A4': { label: 'A4 ເຕັມແຜ່ນ', w: 210, h: 297, cutsPerA4: 1, descLao: '1 ຮູບ/ແຜ່ນ A4' },
+  };
+
+  const resetBatch = () => {
+    setBatchFiles([]);
+    setBatchPreviews([]);
+    setBatchResult(null);
+    setBatchErrorMessage(null);
+    setSelectedPreviewPhoto(null);
+  };
+
+  const handleBatchFilesSelected = (filesList: FileList | File[]) => {
+    const incoming = Array.from(filesList);
+    if (incoming.length === 0) return;
+
+    if (incoming.length > 100) {
+      setBatchErrorMessage(
+        currentLang === 'lo'
+          ? `ຈຳກັດສູງສຸດບໍ່ເກີນ 100 ຮູບຕໍ່ 1 ລາຍການ (ທ່ານເລືອກມາ ${incoming.length} ຮູບ - ລະບົບເລືອກສະເພາະ 100 ຮູບທຳອິດ)`
+          : `Limit is 100 photos per item (You selected ${incoming.length} photos - only first 100 will be analyzed)`
+      );
+    }
+
+    const selected = incoming.slice(0, 100);
+    setBatchFiles(selected);
+    setBatchErrorMessage(null);
+
+    const previews = selected.map(f => ({
+      name: f.name,
+      url: URL.createObjectURL(f),
+      size: f.size,
+    }));
+    setBatchPreviews(previews);
+
+    runBatchPreflightAnalysis(selected, batchPhotoSize, borderMode);
+  };
+
+  const runBatchPreflightAnalysis = async (
+    filesToAnalyze: File[],
+    photoSize: string,
+    border: 'BORDERED' | 'BORDERLESS'
+  ) => {
+    setIsBatchAnalyzing(true);
+    setBatchErrorMessage(null);
+    setBatchProgress({ current: 0, total: filesToAnalyze.length, pct: 0 });
+
+    try {
+      const formData = new FormData();
+      filesToAnalyze.forEach(file => {
+        formData.append('files', file);
+      });
+      formData.append('photo_size', photoSize);
+      formData.append('border_mode', border);
+
+      const res = await fetch('/api/v1/preflight/batch-analyze', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Server returned status ${res.status}`);
+      }
+
+      const data: BatchPreflightResult = await res.json();
+      setBatchResult(data);
+    } catch (err: any) {
+      console.warn('Batch endpoint fallback to client-side analyzer:', err);
+      try {
+        const preset = PHOTO_PRESETS[photoSize] || PHOTO_PRESETS['4x6'];
+        const clientResults: PreflightResult[] = [];
+        let sumC = 0, sumM = 0, sumY = 0, sumK = 0, lowDpi = 0;
+
+        for (let i = 0; i < filesToAnalyze.length; i++) {
+          setBatchProgress({
+            current: i + 1,
+            total: filesToAnalyze.length,
+            pct: Math.round(((i + 1) / filesToAnalyze.length) * 100),
+          });
+          const f = filesToAnalyze[i];
+          const clientRes = await analyzeImageClient(f, {
+            targetPaperSize: preset.label,
+            targetWidthMM: preset.w,
+            targetHeightMM: preset.h,
+          });
+          if ((clientRes.dpi_estimate || 0) < 150) {
+            lowDpi++;
+          }
+          sumC += clientRes.avg_cov_c || 0;
+          sumM += clientRes.avg_cov_m || 0;
+          sumY += clientRes.avg_cov_y || 0;
+          sumK += clientRes.avg_cov_k || 0;
+          clientResults.push(clientRes);
+        }
+
+        const total = filesToAnalyze.length;
+        const cutsPerSheet = preset.cutsPerA4;
+        const reqSheets = Math.ceil(total / cutsPerSheet);
+        const spoilSheets = Math.max(1, Math.ceil(reqSheets * 0.05));
+        const totalSheets = reqSheets + spoilSheets;
+
+        const borderNote = border === 'BORDERLESS' ? 'ບໍ່ມີຂອບ (Bleed 2mm)' : 'ມີຂອບຂາວ';
+        const summaryLao = `ຮູບ ${total} ໃບ (${preset.label}, ${borderNote}) ຈັດວາງ ${cutsPerSheet} ຮູບ/ແຜ່ນ A4 ➜ ໃຊ້ເຈ້ຍ A4 ທັງໝົດ ${reqSheets} ແຜ່ນ (ເຜື່ອເສຍ ${spoilSheets} = ລວມ ${totalSheets} ແຜ່ນ)`;
+
+        const fallbackResult: BatchPreflightResult = {
+          total_files: total,
+          avg_cov_c: Math.round((sumC / total) * 100) / 100,
+          avg_cov_m: Math.round((sumM / total) * 100) / 100,
+          avg_cov_y: Math.round((sumY / total) * 100) / 100,
+          avg_cov_k: Math.round((sumK / total) * 100) / 100,
+          low_dpi_count: lowDpi,
+          suggested_imposition: {
+            parent_sheet: 'A4',
+            cuts_per_sheet: cutsPerSheet,
+            required_sheets: reqSheets,
+            spoilage_sheets: spoilSheets,
+            total_sheets: totalSheets,
+            summary_lao: summaryLao,
+          },
+          files: clientResults,
+        };
+
+        setBatchResult(fallbackResult);
+      } catch (fallbackErr: any) {
+        setBatchErrorMessage(fallbackErr.message || 'Error analyzing batch photos');
+      }
+    } finally {
+      setIsBatchAnalyzing(false);
+    }
+  };
+
+  const handleSendBatchToQuotationAction = () => {
+    if (!batchResult) return;
+    const preset = PHOTO_PRESETS[batchPhotoSize] || PHOTO_PRESETS['4x6'];
+
+    const exportPayload: PreflightResult = {
+      file_name: `ພິມຮູບພາບ Photo Prints (ຊຸດ ${batchResult.total_files} ໃບ)`,
+      total_pages: batchResult.total_files,
+      color_pages_count: batchResult.total_files,
+      mono_pages_count: 0,
+      avg_cov_c: batchResult.avg_cov_c,
+      avg_cov_m: batchResult.avg_cov_m,
+      avg_cov_y: batchResult.avg_cov_y,
+      avg_cov_k: batchResult.avg_cov_k,
+      color_pages_avg_c: batchResult.avg_cov_c,
+      color_pages_avg_m: batchResult.avg_cov_m,
+      color_pages_avg_y: batchResult.avg_cov_y,
+      color_pages_avg_k: batchResult.avg_cov_k,
+      color_space: 'CMYK',
+      color_mode: 'CMYK',
+      has_rgb: false,
+      is_standard_cmyk: true,
+      status_badge_lao: `ຊຸດພິມຮູບພາບ ${batchResult.total_files} ໃບ (${borderMode === 'BORDERED' ? 'ມີຂອບ' : 'ບໍ່ມີຂອບ'})`,
+      target_paper_size: preset.label,
+      target_width_mm: preset.w,
+      target_height_mm: preset.h,
+      suggested_paper: 'Photo Glossy 230gsm',
+      dpi_estimate: 300,
+      bleed_mm: borderMode === 'BORDERLESS' ? 2 : 0,
+      has_sufficient_bleed: true,
+      execution_notice: batchResult.suggested_imposition.summary_lao,
+      ...({
+        is_batch_photo: true,
+        border_mode: borderMode,
+        batch_imposition: batchResult.suggested_imposition,
+        batch_files: batchResult.files,
+      } as any),
+    };
+
+    if (onSendToQuotation) {
+      onSendToQuotation(exportPayload);
+    }
+  };
 
   const isImageFile = (fileName: string) => {
     const ext = fileName.slice(fileName.lastIndexOf('.')).toLowerCase();
@@ -381,7 +579,36 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
-          {file && (
+          {/* Mode Switcher */}
+          <div className="flex items-center bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setPreflightMode('single')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
+                preflightMode === 'single'
+                  ? 'bg-primary-navy text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>{currentLang === 'lo' ? 'ໄຟລ໌ດ່ຽວ / ປຶ້ມ' : 'Single Doc'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreflightMode('batch')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
+                preflightMode === 'batch'
+                  ? 'bg-primary-navy text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Images className="w-3.5 h-3.5" />
+              <span>{currentLang === 'lo' ? 'ຊຸດພິມຮູບພາບ (1-100 ຮູບ)' : 'Batch Photos'}</span>
+              <span className="text-[10px] px-1.5 py-0.5 bg-accent-sky/20 text-accent-sky rounded font-mono font-bold">{batchFiles.length} ລາຍການ</span>
+            </button>
+          </div>
+
+          {preflightMode === 'single' && file && (
             <button
               onClick={resetAll}
               className="px-4 py-2 text-xs font-black text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition cursor-pointer border border-slate-200"
@@ -389,11 +616,441 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
               {currentLang === 'lo' ? 'ເລີ່ມໃໝ່ (New File)' : 'Reset / New File'}
             </button>
           )}
+
+          {preflightMode === 'batch' && batchFiles.length > 0 && (
+            <button
+              onClick={resetBatch}
+              className="px-4 py-2 text-xs font-black text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition cursor-pointer border border-slate-200"
+            >
+              {currentLang === 'lo' ? 'ເລີ່ມໃໝ່ (Reset Photos)' : 'Reset Photos'}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* 2. MAIN LAYOUT */}
-      {!file ? (
+      {/* 2. MAIN LAYOUT SWITCH: BATCH PHOTOS VS SINGLE DOC */}
+      {preflightMode === 'batch' ? (
+        <div className="space-y-6 animate-fade-in">
+          {/* Batch Controls Toolbar */}
+          <div className="bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <span className="text-xs font-black text-slate-400 uppercase tracking-wider block">
+                  1. ເລືອກຂະໜາດຮູບພາບ (Photo Size Preset)
+                </span>
+                <span className="text-sm font-black text-slate-900 mt-0.5 block">
+                  ຂະໜາດທີ່ຕ້ອງການພິມ & ເລເອົາ Imposition
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(PHOTO_PRESETS).map(([key, preset]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      setBatchPhotoSize(key as any);
+                      if (batchFiles.length > 0) {
+                        runBatchPreflightAnalysis(batchFiles, key, borderMode);
+                      }
+                    }}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer flex flex-col items-center ${
+                      batchPhotoSize === key
+                        ? 'bg-primary-navy text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>{preset.label}</span>
+                    <span className="text-[10px] opacity-75 font-sans">{preset.cutsPerA4} ຮູບ/A4</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Border Mode Toggle & Item Limit Badge */}
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-black text-slate-500">
+                  2. ຮູບແບບຂອບຮູບ (Border Style):
+                </span>
+                <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBorderMode('BORDERED');
+                      if (batchFiles.length > 0) {
+                        runBatchPreflightAnalysis(batchFiles, batchPhotoSize, 'BORDERED');
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                      borderMode === 'BORDERED'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    ມີຂອບຂາວ (Bordered)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBorderMode('BORDERLESS');
+                      if (batchFiles.length > 0) {
+                        runBatchPreflightAnalysis(batchFiles, batchPhotoSize, 'BORDERLESS');
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                      borderMode === 'BORDERLESS'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    ບໍ່ມີຂອບ (Borderless Bleed 2mm)
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 text-xs font-bold rounded-xl bg-amber-50 text-amber-800 border border-amber-200">
+                  ຂີດຈຳກັດ: ສູງສຸດ 100 ຮູບຕໍ່ 1 ລາຍການ
+                </span>
+                {batchFiles.length > 0 && (
+                  <span className="px-3 py-1 text-xs font-black rounded-xl bg-sky-50 text-sky-800 border border-sky-200 font-mono">
+                    ເລືອກແລ້ວ {batchFiles.length} / 100 ຮູບ
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* If no files uploaded yet: Drag & Drop Dropzone */}
+          {batchFiles.length === 0 ? (
+            <div className="bg-white border border-slate-200/90 rounded-3xl p-8 sm:p-12 shadow-sm">
+              <div
+                onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                onDragLeave={() => setIsDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragOver(false);
+                  if (e.dataTransfer.files) {
+                    handleBatchFilesSelected(e.dataTransfer.files);
+                  }
+                }}
+                onClick={() => document.getElementById('preflight-batch-input')?.click()}
+                className={`border-2 border-dashed rounded-3xl p-10 sm:p-14 text-center transition-all cursor-pointer ${
+                  isDragOver
+                    ? 'border-accent-sky bg-accent-sky/5 scale-[1.01]'
+                    : 'border-slate-300 hover:border-accent-sky/70 hover:bg-slate-50'
+                }`}
+              >
+                <input
+                  id="preflight-batch-input"
+                  type="file"
+                  multiple
+                  accept=".png,.jpg,.jpeg,.webp,.tiff,.tif,.pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files) {
+                      handleBatchFilesSelected(e.target.files);
+                    }
+                  }}
+                />
+
+                <div className="flex flex-col items-center justify-center space-y-4 max-w-lg mx-auto">
+                  <div className="w-16 h-16 rounded-3xl bg-primary-navy/10 text-primary-navy flex items-center justify-center shadow-xs">
+                    <Images className="w-8 h-8 text-accent-sky" />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-base sm:text-lg font-black text-slate-900">
+                      {currentLang === 'lo'
+                        ? 'ລາກຮູບພາບຫຼາຍໄຟລ໌ມາວາງທີ່ນີ້ ຫຼື ຄລິກເພື່ອເລືອກ (ສູງສຸດ 100 ຮູບ)'
+                        : 'Drag & Drop Multiple Photos or Click to Browse (Max 100 photos)'}
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                      {currentLang === 'lo'
+                        ? 'ຮອງຮັບ JPG, PNG, WebP (ຕົວຢ່າງ 40 ຮູບລວມເປັນ 1 ລາຍການ) ລະບົບຈະຄິດໄລ່ຄ່າສີສະເລ່ຍ CMYK, ການວາງເລເອົາ A4, ແລະ ການຕັດ Polar Guillotine'
+                        : 'Supports multiple JPG, PNG, WebP. Consolidates into 1 single Order Item with average CMYK coverage and imposition cutting plan.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {batchErrorMessage && (
+                <div className="mt-4 p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs font-bold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{batchErrorMessage}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Batch Results View */
+            <div className="space-y-6">
+              {/* Loading overlay if analyzing */}
+              {isBatchAnalyzing && (
+                <div className="bg-slate-900 text-white rounded-3xl p-8 flex flex-col items-center justify-center space-y-3 shadow-lg text-center">
+                  <Loader2 className="w-10 h-10 animate-spin text-accent-sky" />
+                  <div className="text-sm font-black">
+                    ກຳລັງວິເຄາະຮູບພາບ {batchProgress.current} / {batchProgress.total} ({batchProgress.pct}%)...
+                  </div>
+                  <div className="w-64 bg-slate-700 h-2 rounded-full overflow-hidden">
+                    <div className="bg-accent-sky h-full transition-all duration-150" style={{ width: `${batchProgress.pct}%` }} />
+                  </div>
+                </div>
+              )}
+
+              {batchResult && (
+                <div className="space-y-6">
+                  {/* Top Consolidated Hero Card */}
+                  <div className="bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-7 shadow-sm space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md">
+                            1 ລາຍການສັ່ງພິມຫຼັກ (Single Consolidated Item)
+                          </span>
+                          <span className="text-xs font-bold text-slate-400 font-mono">
+                            {PHOTO_PRESETS[batchPhotoSize]?.label || '4x6"'} • {borderMode === 'BORDERED' ? 'ມີຂອບຂາວ' : 'ບໍ່ມີຂອບ (Bleed 2mm)'}
+                          </span>
+                        </div>
+                        <h3 className="text-xl sm:text-2xl font-black text-slate-900">
+                          ຊຸດພິມຮູບພາບ Photo Prints ({batchResult.total_files} ໃບ)
+                        </h3>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        {onSendToQuotation && (
+                          <button
+                            type="button"
+                            onClick={handleSendBatchToQuotationAction}
+                            className="px-6 py-3.5 bg-accent-sky hover:bg-sky-600 text-white rounded-2xl font-black text-xs flex items-center gap-2 shadow-lg shadow-accent-sky/20 transition active:scale-95 cursor-pointer"
+                          >
+                            <Send className="w-4 h-4" />
+                            <span>ສົ່ງໄປຍັງໃບສະເໜີລາຄາ (1 ລາຍການ / {batchResult.total_files} ຮູບ)</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 4 CMYK Average Coverage Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="p-4 bg-cyan-50/70 border border-cyan-200/80 rounded-2xl space-y-1">
+                        <div className="text-[11px] font-bold text-cyan-800 flex items-center justify-between">
+                          <span>Cyan (C) ສະເລ່ຍ:</span>
+                          <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 inline-block" />
+                        </div>
+                        <div className="text-2xl font-black text-cyan-900 font-mono">
+                          {batchResult.avg_cov_c}%
+                        </div>
+                        <div className="w-full bg-cyan-100 rounded-full h-1.5 overflow-hidden mt-2">
+                          <div className="bg-cyan-500 h-full" style={{ width: `${Math.min(batchResult.avg_cov_c * 3, 100)}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="p-4 bg-pink-50/70 border border-pink-200/80 rounded-2xl space-y-1">
+                        <div className="text-[11px] font-bold text-pink-800 flex items-center justify-between">
+                          <span>Magenta (M) ສະເລ່ຍ:</span>
+                          <span className="w-2.5 h-2.5 rounded-full bg-pink-500 inline-block" />
+                        </div>
+                        <div className="text-2xl font-black text-pink-900 font-mono">
+                          {batchResult.avg_cov_m}%
+                        </div>
+                        <div className="w-full bg-pink-100 rounded-full h-1.5 overflow-hidden mt-2">
+                          <div className="bg-pink-500 h-full" style={{ width: `${Math.min(batchResult.avg_cov_m * 3, 100)}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="p-4 bg-amber-50/70 border border-amber-200/80 rounded-2xl space-y-1">
+                        <div className="text-[11px] font-bold text-amber-800 flex items-center justify-between">
+                          <span>Yellow (Y) ສະເລ່ຍ:</span>
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />
+                        </div>
+                        <div className="text-2xl font-black text-amber-900 font-mono">
+                          {batchResult.avg_cov_y}%
+                        </div>
+                        <div className="w-full bg-amber-100 rounded-full h-1.5 overflow-hidden mt-2">
+                          <div className="bg-amber-400 h-full" style={{ width: `${Math.min(batchResult.avg_cov_y * 3, 100)}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="p-4 bg-slate-100 border border-slate-300 rounded-2xl space-y-1">
+                        <div className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
+                          <span>Key Black (K) ສະເລ່ຍ:</span>
+                          <span className="w-2.5 h-2.5 rounded-full bg-slate-800 inline-block" />
+                        </div>
+                        <div className="text-2xl font-black text-slate-900 font-mono">
+                          {batchResult.avg_cov_k}%
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden mt-2">
+                          <div className="bg-slate-800 h-full" style={{ width: `${Math.min(batchResult.avg_cov_k * 3, 100)}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Imposition & Production Guillotine Cutting Strategy */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-3">
+                      <div className="flex items-center gap-2 text-xs font-black text-slate-800">
+                        <Grid className="w-4 h-4 text-primary-navy" />
+                        <span>ແຜນຈັດວາງເຈ້ຍ A4 (Imposition Layout)</span>
+                      </div>
+                      <div className="space-y-2 text-xs">
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5">
+                          <div className="flex justify-between font-bold text-slate-700">
+                            <span>ຂະໜາດເຈ້ຍແມ່ພິມ:</span>
+                            <span className="font-mono font-black text-slate-900">A4 (210 × 297 mm)</span>
+                          </div>
+                          <div className="flex justify-between font-bold text-slate-700">
+                            <span>ຈຳນວນຮູບຕໍ່ແຜ່ນ A4:</span>
+                            <span className="font-mono font-black text-slate-900">
+                              {batchResult.suggested_imposition.cuts_per_sheet} ຮູບ/ແຜ່ນ
+                            </span>
+                          </div>
+                          <div className="flex justify-between font-bold text-slate-700 border-t border-slate-200 pt-1.5">
+                            <span>ຈຳນວນເຈ້ຍ A4 ຕົວຈິງ:</span>
+                            <span className="font-mono font-black text-emerald-700">
+                              {batchResult.suggested_imposition.required_sheets} ແຜ່ນ
+                            </span>
+                          </div>
+                          <div className="flex justify-between font-bold text-slate-500 text-[11px]">
+                            <span>ເຜື່ອເສຍ (Spoilage 5%):</span>
+                            <span className="font-mono font-bold">
+                              +{batchResult.suggested_imposition.spoilage_sheets} ແຜ່ນ (ລວມ {batchResult.suggested_imposition.total_sheets} ແຜ່ນ)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-3">
+                      <div className="flex items-center gap-2 text-xs font-black text-slate-800">
+                        <Scissors className="w-4 h-4 text-accent-sky" />
+                        <span>ຂັ້ນຕອນການຕັດ (Guillotine Cutting Plan)</span>
+                      </div>
+                      <div className="p-4 bg-sky-50/60 border border-sky-200 rounded-2xl space-y-2 text-xs text-sky-900 font-medium">
+                        <div className="font-black text-sky-950 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-sky-600" />
+                          <span>Polar 78 ECO Guillotine (ຕັດປຶກດຽວ)</span>
+                        </div>
+                        <p className="text-[11px] leading-relaxed text-sky-800">
+                          {batchResult.suggested_imposition.summary_lao}
+                        </p>
+                        <div className="text-[10px] text-sky-700 font-bold bg-white/70 p-2 rounded-xl border border-sky-100">
+                          {borderMode === 'BORDERED'
+                            ? '• ມີຂອບຂາວ 3-5mm: ຕັດຕາມເສັ້ນ Margin ແຍກແຕ່ລະຮູບ ບໍ່ເສຍເນື້ອຮູບ'
+                            : '• ບໍ່ມີຂອບ (Borderless): ຕັດຕົກ Bleed 2mm ປາດຂອບ 4 ດ້ານ ໄດ້ຮູບເຕັມໃບງົດງາມ'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* DPI Quality Check Banner */}
+                  {batchResult.low_dpi_count > 0 ? (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 text-xs text-amber-900">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="space-y-0.5">
+                        <span className="font-black text-amber-950 block">
+                          ພົບ {batchResult.low_dpi_count} ຮູບ ທີ່ມີຄວາມລະອຽດຕ່ຳກວ່າ 150 DPI
+                        </span>
+                        <span className="text-[11px] text-amber-800 leading-relaxed block">
+                          ບາງຮູບອາດຈະມົວຫຼືແຕກເມື່ອພິມຂະໜາດໃຫຍ່ (ແນະນຳໃຫ້ແຈ້ງລູກຄ້າສົ່ງໄຟລ໌ຕົ້ນສະບັບ ຫຼື ຢືນຢັນກ່ອນພິມ)
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3 text-xs text-emerald-900">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <span className="font-bold">
+                        ທຸກຮູບພາບ ({batchResult.total_files} ໃບ) ຜ່ານມາດຕະຖານຄວາມລະອຽດການພິມ (DPI ພຽງພໍຕໍ່ການພິມຄົມຊັດ)
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Contact Sheet Photo Gallery */}
+                  <div className="bg-white border border-slate-200/90 rounded-3xl p-6 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-2">
+                        <Images className="w-5 h-5 text-accent-sky" />
+                        <span className="text-xs font-black text-slate-800">
+                          Contact Sheet Gallery ({batchResult.total_files} ຮູບພາບ)
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-400 font-bold">
+                        ຄລິກທີ່ຮູບເພື່ອເບິ່ງຂະໜາດໃຫຍ່
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                      {batchPreviews.map((preview, idx) => {
+                        const itemRes = batchResult.files[idx];
+                        const isLowDpi = itemRes && (itemRes.dpi_estimate || 0) < 150;
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => setSelectedPreviewPhoto(preview.url)}
+                            className="group relative bg-slate-50 border border-slate-200 hover:border-accent-sky rounded-2xl overflow-hidden shadow-2xs hover:shadow-md transition cursor-pointer flex flex-col"
+                          >
+                            <div className="aspect-square w-full bg-slate-900/5 flex items-center justify-center overflow-hidden relative">
+                              <img
+                                src={preview.url}
+                                alt={preview.name}
+                                className="w-full h-full object-cover group-hover:scale-105 transition duration-200"
+                              />
+                              <div className="absolute inset-0 bg-slate-900/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
+                                <Eye className="w-5 h-5" />
+                              </div>
+                            </div>
+                            <div className="p-2 space-y-1 text-[10px]">
+                              <div className="font-bold text-slate-800 truncate" title={preview.name}>
+                                {idx + 1}. {preview.name}
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className={`px-1.5 py-0.2 rounded font-mono font-bold text-[9px] ${
+                                  isLowDpi ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                                }`}>
+                                  {itemRes?.dpi_estimate ? `${itemRes.dpi_estimate} DPI` : '300 DPI'}
+                                </span>
+                                {itemRes && (
+                                  <span className="font-mono text-slate-500 text-[9px]">
+                                    {Math.round((itemRes.avg_cov_c + itemRes.avg_cov_m + itemRes.avg_cov_y + itemRes.avg_cov_k))}%
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Bottom Final Quotation Action */}
+                  <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={resetBatch}
+                      className="px-5 py-3 text-xs font-black text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition cursor-pointer border border-slate-200"
+                    >
+                      ເລືອກຮູບໃໝ່ / ລຶບທັງໝົດ
+                    </button>
+                    {onSendToQuotation && (
+                      <button
+                        type="button"
+                        onClick={handleSendBatchToQuotationAction}
+                        className="px-8 py-3.5 bg-accent-sky hover:bg-sky-600 text-white rounded-2xl font-black text-xs flex items-center gap-2 shadow-lg shadow-accent-sky/20 transition active:scale-95 cursor-pointer"
+                      >
+                        <Send className="w-4 h-4" />
+                        <span>ສົ່ງໄປຍັງໃບສະເໜີລາຄາ (1 ລາຍການ / {batchResult.total_files} ຮູບ)</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* SINGLE DOC / BOOK PREFLIGHT LAYOUT */
+        !file ? (
         /* Empty Upload State */
         <div className="bg-white border border-slate-200/90 rounded-3xl p-8 sm:p-12 shadow-sm">
           <div
@@ -920,8 +1577,34 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
           </div>
 
         </div>
-      )}
+      )
+    )}
 
+      {/* Lightbox Modal for Full View of Selected Photo */}
+      {selectedPreviewPhoto && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4 sm:p-8"
+          onClick={() => setSelectedPreviewPhoto(null)}
+        >
+          <div
+            className="relative bg-white rounded-3xl overflow-hidden max-w-4xl max-h-[90vh] shadow-2xl p-4 flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedPreviewPhoto(null)}
+              className="absolute top-4 right-4 p-2 bg-slate-900/70 hover:bg-slate-900 text-white rounded-full transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img
+              src={selectedPreviewPhoto}
+              alt="Enlarged preview"
+              className="max-h-[80vh] w-auto object-contain rounded-2xl"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

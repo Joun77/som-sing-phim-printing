@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { CheckCircle2, XCircle, Eye, DollarSign, ShieldAlert } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CheckCircle2, XCircle, Eye, DollarSign, ShieldAlert, RefreshCw } from 'lucide-react';
+import { useApp } from '../../store/AppContext';
 
 interface PendingSlipOrder {
   id: string;
@@ -12,29 +13,54 @@ interface PendingSlipOrder {
 }
 
 export const PaymentVerificationTable: React.FC = () => {
+  const { orders, refreshData } = useApp();
   const [selectedSlip, setSelectedSlip] = useState<PendingSlipOrder | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
-  const [slips, setSlips] = useState<PendingSlipOrder[]>([
-    {
-      id: 'ord-101',
-      orderNumber: 'ORD-2026-0815',
-      customerName: 'Vientiane Publishing House',
-      totalAmount: 14500000,
-      currency: 'LAK',
-      paymentSlipUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=800&auto=format&fit=crop&q=80',
-      createdAt: '2026-08-15 10:30',
-    },
-    {
-      id: 'ord-102',
-      orderNumber: 'ORD-2026-0816',
-      customerName: 'Som-Sing Commercial Packaging',
-      totalAmount: 8200000,
-      currency: 'LAK',
-      paymentSlipUrl: 'https://images.unsplash.com/photo-1554224154-26032ffc0d07?w=800&auto=format&fit=crop&q=80',
-      createdAt: '2026-08-15 11:45',
-    },
-  ]);
+  const [slips, setSlips] = useState<PendingSlipOrder[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchPendingSlips = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/v1/finance/pending-slips');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setSlips(data);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch pending slips API, checking store orders:', err);
+    }
+
+    // Fallback: derive from AppContext orders if API not available
+    const orderSlips: PendingSlipOrder[] = [];
+    orders.forEach((o: any) => {
+      const slipUrl = o.paymentSlipUrl || o.payment_slip_url || o.proof_url || o.proofUrl;
+      const isPending = ['PENDING_PAYMENT', 'Pending Payment', 'WAITING_DEPOSIT', 'PENDING_SLIP_CHECK'].includes(o.status || o.overall_status);
+      if (slipUrl && isPending) {
+        orderSlips.push({
+          id: o.id,
+          orderNumber: o.orderNumber || o.order_number || o.orderNo || o.id,
+          customerName: o.customerName || o.customer_name || 'Customer',
+          totalAmount: o.totalPriceCharged || o.total_amount_lak || o.totalAmount || 0,
+          currency: 'LAK',
+          paymentSlipUrl: slipUrl,
+          createdAt: o.createdAt || o.created_at || new Date().toISOString(),
+        });
+      }
+    });
+
+    setSlips(orderSlips);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchPendingSlips();
+  }, [orders]);
 
   const handleApprove = async (orderId: string) => {
     try {
@@ -45,6 +71,7 @@ export const PaymentVerificationTable: React.FC = () => {
       });
       setSlips((prev) => prev.filter((s) => s.id !== orderId));
       setSelectedSlip(null);
+      if (refreshData) refreshData();
     } catch (err) {
       console.error('Approve failed:', err);
     }
@@ -66,6 +93,7 @@ export const PaymentVerificationTable: React.FC = () => {
       setShowRejectModal(false);
       setSelectedSlip(null);
       setRejectReason('');
+      if (refreshData) refreshData();
     } catch (err) {
       console.error('Reject failed:', err);
     }
@@ -83,9 +111,19 @@ export const PaymentVerificationTable: React.FC = () => {
             ກວດສອບສລິບການໂອນ ແລະ ກົດອະນຸມັດຍອດເພື່ອປ່ຽນສະຖານະເປັນ Paid & ເຂົ້າສູ່ການຜະລິດ
           </p>
         </div>
-        <span className="px-3.5 py-1.5 bg-emerald-50 text-emerald-700 font-extrabold text-sm rounded-full border border-emerald-200">
-          {slips.length} ລາຍການຄ້າງກວດສອບ
-        </span>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={fetchPendingSlips}
+            disabled={loading}
+            className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition cursor-pointer"
+            title="ໂຫຼດຂໍ້ມູນໃໝ່"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <span className="px-3.5 py-1.5 bg-emerald-50 text-emerald-700 font-extrabold text-sm rounded-full border border-emerald-200">
+            {slips.length} ລາຍການຄ້າງກວດສອບ
+          </span>
+        </div>
       </div>
 
       {slips.length === 0 ? (

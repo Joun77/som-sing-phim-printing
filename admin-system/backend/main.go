@@ -58,6 +58,8 @@ func main() {
 	router.Static("/uploads", "./uploads")
 	router.POST("/api/upload/artwork", orders.HandleArtworkUpload)
 	router.POST("/api/v1/upload/artwork", orders.HandleArtworkUpload)
+	router.POST("/api/upload/batch-artworks", orders.HandleBatchArtworkUpload)
+	router.POST("/api/v1/upload/batch-artworks", orders.HandleBatchArtworkUpload)
 
 	// Server status health check
 	healthHandler := func(c *gin.Context) {
@@ -120,6 +122,8 @@ func main() {
 
 	// PDF & Image Preflight CMYK Extraction routes
 	router.POST("/api/preflight/analyze", preflight.HandlePreflightPDF)
+	router.POST("/api/preflight/batch-analyze", preflight.HandleBatchPreflight)
+	router.POST("/api/v1/preflight/batch-analyze", preflight.HandleBatchPreflight)
 	router.POST("/api/preflight", preflight.HandlePreflightPDF)
 	router.POST("/api/orders/preflight", preflight.HandlePreflightPDF)
 	router.POST("/api/v1/preflight/analyze", preflight.HandlePreflightPDF)
@@ -131,6 +135,8 @@ func main() {
 	router.GET("/api/v1/finance/summary", financeAuth, finance.HandleGetFinanceSummary)
 	router.GET("/api/finance/summary", financeAuth, finance.HandleGetFinanceSummary)
 	router.POST("/api/v1/finance/verify-slip", financeAuth, finance.HandleVerifyPaymentSlip)
+	router.GET("/api/v1/finance/pending-slips", financeAuth, finance.HandleGetPendingSlips)
+	router.GET("/api/finance/pending-slips", financeAuth, finance.HandleGetPendingSlips)
 	router.POST("/api/v1/checkout/verify-slip", finance.HandleVerifySlip)
 	router.POST("/api/checkout/verify-slip", finance.HandleVerifySlip)
 	router.GET("/api/v1/finance/ar-aging", financeAuth, finance.HandleGetARAging)
@@ -163,9 +169,17 @@ func main() {
 
 	// Pricing engine route & margin approval
 	router.POST("/api/pricing/calculate", pricing.HandleCalculatePrice)
+	router.POST("/api/pricing/batch-imposition", pricing.HandleCalculateBatchImposition)
+	router.POST("/api/v1/pricing/batch-imposition", pricing.HandleCalculateBatchImposition)
 	router.POST("/api/pricing/margin-approval", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "approved", "message": "Margin override authorized"})
 	})
+
+	// Batch file ZIP download
+	router.POST("/api/orders/batch-zip", orders.HandleBatchDownloadZip)
+	router.POST("/api/v1/orders/batch-zip", orders.HandleBatchDownloadZip)
+	router.GET("/api/orders/batch-zip", orders.HandleBatchDownloadZip)
+	router.GET("/api/v1/orders/batch-zip", orders.HandleBatchDownloadZip)
 
 	// Order management, Quotation & Shop Floor Tracker routes
 	router.GET("/api/orders", orders.HandleGetOrders)

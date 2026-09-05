@@ -32,3 +32,20 @@ func HandleCalculatePrice(c *gin.Context) {
 	// Return computed results
 	c.JSON(http.StatusOK, res)
 }
+
+// HandleCalculateBatchImposition is the HTTP POST controller for `/api/v1/pricing/batch-imposition`
+func HandleCalculateBatchImposition(c *gin.Context) {
+	var req BatchImpositionRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid input parameters",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	res := CalculateBatchImposition(req)
+	c.JSON(http.StatusOK, res)
+}
+

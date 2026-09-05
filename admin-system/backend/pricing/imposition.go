@@ -1,6 +1,9 @@
 package pricing
 
 import (
+	"fmt"
+	"math"
+
 	"github.com/shopspring/decimal"
 )
 
@@ -275,3 +278,126 @@ func generatePlacedItems(cols, rows int, slotW, slotH, gutterMM decimal.Decimal,
 	}
 	return items
 }
+
+// BatchImpositionRequest defines input parameters for multi-item / photo imposition
+type BatchImpositionRequest struct {
+	ItemWidthMM     float64 `json:"item_width_mm"`
+	ItemHeightMM    float64 `json:"item_height_mm"`
+	ParentSheet     string  `json:"parent_sheet"` // "A4", "A3", "A3+", or "CUSTOM"
+	ParentWidthMM   float64 `json:"parent_width_mm"`
+	ParentHeightMM  float64 `json:"parent_height_mm"`
+	TotalItems      int     `json:"total_items"` // e.g. 40 photos
+	BleedMM         float64 `json:"bleed_mm"`
+	GutterMM        float64 `json:"gutter_mm"`
+	SpoilagePercent float64 `json:"spoilage_percent"` // e.g. 5.0 for 5%
+}
+
+// BatchImpositionResponse defines calculated yields, required sheets, and layout grid
+type BatchImpositionResponse struct {
+	ItemWidthMM          float64    `json:"item_width_mm"`
+	ItemHeightMM         float64    `json:"item_height_mm"`
+	ParentSheet          string     `json:"parent_sheet"`
+	ParentWidthMM        float64    `json:"parent_width_mm"`
+	ParentHeightMM       float64    `json:"parent_height_mm"`
+	TotalItems           int        `json:"total_items"`
+	CutsPerSheet         int        `json:"cuts_per_sheet"`
+	RequiredParentSheets int        `json:"required_parent_sheets"`
+	SpoilageSheets       int        `json:"spoilage_sheets"`
+	TotalParentSheets    int        `json:"total_parent_sheets"`
+	WastePercent         float64    `json:"waste_percent"`
+	Layout               LayoutGrid `json:"layout"`
+	SummaryTextLao       string     `json:"summary_text_lao"`
+	SummaryTextEn        string     `json:"summary_text_en"`
+}
+
+// CalculateBatchImposition determines cuts per sheet, total required parent sheets, and generates imposition layout
+func CalculateBatchImposition(req BatchImpositionRequest) BatchImpositionResponse {
+	pWidth := req.ParentWidthMM
+	pHeight := req.ParentHeightMM
+	pSheet := req.ParentSheet
+
+	if pSheet == "" {
+		pSheet = "A4"
+	}
+
+	switch pSheet {
+	case "A4", "a4":
+		pWidth = 210.0
+		pHeight = 297.0
+	case "A3", "a3":
+		pWidth = 297.0
+		pHeight = 420.0
+	case "A3+", "a3+", "SUPER_A3":
+		pWidth = 329.0
+		pHeight = 483.0
+	default:
+		if pWidth <= 0 || pHeight <= 0 {
+			pSheet = "A4"
+			pWidth = 210.0
+			pHeight = 297.0
+		}
+	}
+
+	itemW := req.ItemWidthMM
+	itemH := req.ItemHeightMM
+	if itemW <= 0 {
+		itemW = 102.0 // standard 4x6" default (102x152mm)
+	}
+	if itemH <= 0 {
+		itemH = 152.0
+	}
+
+	totalItems := req.TotalItems
+	if totalItems <= 0 {
+		totalItems = 1
+	}
+
+	dItemW := decimal.NewFromFloat(itemW)
+	dItemH := decimal.NewFromFloat(itemH)
+	dParentW := decimal.NewFromFloat(pWidth)
+	dParentH := decimal.NewFromFloat(pHeight)
+	dBleed := decimal.NewFromFloat(req.BleedMM)
+	dGutter := decimal.NewFromFloat(req.GutterMM)
+
+	cutsPerSheet, wastePctDec, layout := CalculateImposition(dItemW, dItemH, dParentW, dParentH, dBleed, dGutter)
+	if cutsPerSheet < 1 {
+		cutsPerSheet = 1
+	}
+
+	reqSheets := int(math.Ceil(float64(totalItems) / float64(cutsPerSheet)))
+
+	spoilPct := req.SpoilagePercent
+	if spoilPct < 0 {
+		spoilPct = 0
+	} else if spoilPct > 1.0 {
+		spoilPct = spoilPct / 100.0
+	}
+
+	spoilSheets := int(math.Ceil(float64(reqSheets) * spoilPct))
+	totalSheets := reqSheets + spoilSheets
+	wastePct, _ := wastePctDec.Float64()
+
+	summaryLao := fmt.Sprintf("ຮູບ %d ໃບ (ຂະໜາດ %.0fx%.0fmm) ຈັດວາງເທິງເຈ້ຍ %s ໄດ້ %d ຮູບ/ແຜ່ນ ➜ ໃຊ້ເຈ້ຍ %s ທັງໝົດ %d ແຜ່ນ (ເຜື່ອເສຍ %d ແຜ່ນ = ລວມ %d ແຜ່ນ)",
+		totalItems, itemW, itemH, pSheet, cutsPerSheet, pSheet, reqSheets, spoilSheets, totalSheets)
+
+	summaryEn := fmt.Sprintf("%d items (%.0fx%.0fmm) imposed on %s (%d up) ➜ %d required sheets + %d spoilage = %d total %s sheets",
+		totalItems, itemW, itemH, pSheet, cutsPerSheet, reqSheets, spoilSheets, totalSheets, pSheet)
+
+	return BatchImpositionResponse{
+		ItemWidthMM:          itemW,
+		ItemHeightMM:         itemH,
+		ParentSheet:          pSheet,
+		ParentWidthMM:        pWidth,
+		ParentHeightMM:       pHeight,
+		TotalItems:           totalItems,
+		CutsPerSheet:         cutsPerSheet,
+		RequiredParentSheets: reqSheets,
+		SpoilageSheets:       spoilSheets,
+		TotalParentSheets:    totalSheets,
+		WastePercent:         wastePct,
+		Layout:               layout,
+		SummaryTextLao:       summaryLao,
+		SummaryTextEn:        summaryEn,
+	}
+}
+

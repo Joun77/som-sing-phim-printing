@@ -70,6 +70,7 @@ export const CustomerInvoiceTemplate: React.FC<CustomerInvoiceTemplateProps> = (
       case 'WIRE_O': return currentLang === 'lo' ? 'ສັນຫ່ວງຂົດລວດ (Wire-O)' : 'Wire-O Binding';
       case 'SADDLE_STITCH': return currentLang === 'lo' ? 'ຫຍິບມຸງກົກ (Saddle Stitch)' : 'Saddle Stitch';
       case 'PERFECT_HOT_GLUE': return currentLang === 'lo' ? 'ໄສກາວຮ້ອນ (Perfect Glue)' : 'Perfect Glue Binding';
+      case 'HARDCOVER_CASE_BINDING': return currentLang === 'lo' ? 'ເຂົ້າເຫຼັ້ມປົກແຂງ (Hardcover Case Binding)' : 'Hardcover Case Binding';
       case 'CALENDAR': return currentLang === 'lo' ? 'ສັນປະຕິທິນ (Calendar)' : 'Calendar Wire-O';
       case 'CORNER_STAPLE': return currentLang === 'lo' ? 'ແມັກມຸມ (Corner Staple)' : 'Corner Staple';
       default: return method || '';
