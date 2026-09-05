@@ -41,7 +41,7 @@ git push
 
 # 3. SSH into Windows Server & Update Docker Containers
 echo "🔄 Updating & Rebuilding containers on Windows Server..."
-ssh "$SERVER_HOST" 'cmd /c "cd /d D:\Github\som-sing-phim-printing && git pull && docker compose up -d --build && docker image prune -f && docker compose ps"'
+ssh "$SERVER_HOST" 'cmd /c "docker buildx use default 2>nul & docker pull alpine:latest & docker pull golang:1.22-alpine & docker pull node:20-alpine & docker pull nginx:alpine & docker pull postgres:15-alpine & cd /d D:\Github\som-sing-phim-printing && git pull && docker compose up -d --build && docker image prune -f && docker compose ps"'
 
 echo ""
 echo "=========================================="

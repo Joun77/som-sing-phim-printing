@@ -17,12 +17,7 @@ elif nc -z -G 2 100.116.116.18 22 2>/dev/null; then
     echo "🌐 เชื่อมต่อผ่าน Tailscale VPN (100.116.116.18)"
 else
     echo "❌ ไม่สามารถติดต่อเครื่องคอมพิวเตอร์ Windows ได้!"
-    echo ""
-    echo "💡 สาเหตุที่เป็นไปได้:"
-    echo "  1. แอป Tailscale บนเครื่อง Mac นี้ถูกปิดอยู่ (Status: Stopped) ให้เปิดแอป Tailscale แล้วกด Connect"
-    echo "  2. หรือ เครื่อง Mac กับคอมพิวเตอร์ Windows ไม่ได้ต่อ Wi-Fi วงเดียวกัน (192.168.100.x)"
-    echo "  3. หรือ เครื่องคอมพิวเตอร์ Windows หลับ/ปิดอยู่"
-    echo ""
+    echo "💡 ตรวจสอบว่าเปิดแอป Tailscale บน Mac หรือเชื่อมต่อ Wi-Fi เดียวกันหรือไม่"
     read -p "กดปุ่ม Enter เพื่อปิดหน้าต่าง..." dummy
     exit 1
 fi
@@ -32,9 +27,9 @@ echo "🌐 กำลังสั่งงานไปยัง: $SERVER_HOST"
 echo "📂 โฟลเดอร์ปลายทาง:   D:/Github/som-sing-phim-printing"
 echo "--------------------------------------------------------"
 
-echo "🔄 กำลังเชื่อมต่อไปยังเครื่อง Windows เพื่อดึงโค้ดและอัปเดต Docker..."
-# ใช้ Single Quotes เพื่อป้องกัน Bash แปลงเครื่องหมาย Backslash (\)
-ssh "$SERVER_HOST" 'cmd /c "cd /d D:\Github\som-sing-phim-printing && git pull && docker compose up -d --build && docker image prune -f && docker compose ps"'
+echo "🔄 กำลังตรวจสอบและดึง Images พื้นฐานเข้า Docker บนเครื่อง Windows..."
+# 1. Switch buildx to default and pre-pull public base images
+ssh "$SERVER_HOST" 'cmd /c "docker buildx use default 2>nul & docker pull alpine:latest & docker pull golang:1.22-alpine & docker pull node:20-alpine & docker pull nginx:alpine & docker pull postgres:15-alpine & cd /d D:\Github\som-sing-phim-printing && git pull && docker compose up -d --build && docker image prune -f && docker compose ps"'
 
 if [ $? -eq 0 ]; then
     echo ""
