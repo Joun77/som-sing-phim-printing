@@ -2,7 +2,6 @@
 set -e
 
 MSG=${1:-"auto-deploy $(date '+%Y-%m-%d %H:%M:%S')"}
-REMOTE_PATH="D:/Github/som-sing-phim-printing"
 
 echo "=========================================="
 echo "🚀 Som Sing Phim: Deploying to Windows Server"
@@ -25,7 +24,7 @@ fi
 
 SERVER_HOST="ASUS@$SERVER_IP"
 echo "🌐 Server:  $SERVER_HOST"
-echo "📂 Remote:  $REMOTE_PATH"
+echo "📂 Remote:  D:/Github/som-sing-phim-printing"
 echo "------------------------------------------"
 
 # 1. Check & Commit local changes (if any)
@@ -42,7 +41,7 @@ git push
 
 # 3. SSH into Windows Server & Update Docker Containers
 echo "🔄 Updating & Rebuilding containers on Windows Server..."
-ssh "$SERVER_HOST" "cmd /c \"cd /d $REMOTE_PATH && git pull && docker compose up -d --build && docker image prune -f && docker compose ps\""
+ssh "$SERVER_HOST" 'cmd /c "cd /d D:\Github\som-sing-phim-printing && git pull && docker compose up -d --build && docker image prune -f && docker compose ps"'
 
 echo ""
 echo "=========================================="

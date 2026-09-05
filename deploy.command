@@ -3,8 +3,6 @@
 # ไปที่โฟลเดอร์ของโปรเจกต์อัตโนมัติ
 cd "$(dirname "$0")"
 
-REMOTE_PATH="D:/Github/som-sing-phim-printing"
-
 echo "========================================================"
 echo "🚀 Som Sing Phim: Windows Server Deployment"
 echo "========================================================"
@@ -31,11 +29,12 @@ fi
 
 SERVER_HOST="ASUS@$SERVER_IP"
 echo "🌐 กำลังสั่งงานไปยัง: $SERVER_HOST"
-echo "📂 โฟลเดอร์ปลายทาง:   $REMOTE_PATH"
+echo "📂 โฟลเดอร์ปลายทาง:   D:/Github/som-sing-phim-printing"
 echo "--------------------------------------------------------"
 
 echo "🔄 กำลังเชื่อมต่อไปยังเครื่อง Windows เพื่อดึงโค้ดและอัปเดต Docker..."
-ssh "$SERVER_HOST" "cmd /c \"cd /d $REMOTE_PATH && git pull && docker compose up -d --build && docker image prune -f && docker compose ps\""
+# ใช้ Single Quotes เพื่อป้องกัน Bash แปลงเครื่องหมาย Backslash (\)
+ssh "$SERVER_HOST" 'cmd /c "cd /d D:\Github\som-sing-phim-printing && git pull && docker compose up -d --build && docker image prune -f && docker compose ps"'
 
 if [ $? -eq 0 ]; then
     echo ""
