@@ -1,22 +1,24 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import path from 'path'
+import { fileURLToPath, URL } from 'node:url'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/admin',
+
   resolve: {
     dedupe: ['react', 'react-dom'],
     alias: {
-      react: path.resolve(import.meta.dirname, './node_modules/react'),
-      'react-dom': path.resolve(import.meta.dirname, './node_modules/react-dom'),
-      '@': path.resolve(import.meta.dirname, './src'),
-      '@features': path.resolve(import.meta.dirname, './src/features'),
-      '@components': path.resolve(import.meta.dirname, './src/components'),
-      '@store': path.resolve(import.meta.dirname, './src/store'),
-      '@types': path.resolve(import.meta.dirname, './src/types'),
-      '@lib': path.resolve(import.meta.dirname, './src/lib'),
-      '@utils': path.resolve(import.meta.dirname, './src/utils'),
+      react: fileURLToPath(new URL('./node_modules/react', import.meta.url)),
+      'react-dom': fileURLToPath(new URL('./node_modules/react-dom', import.meta.url)),
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@features': fileURLToPath(new URL('./src/features', import.meta.url)),
+      '@components': fileURLToPath(new URL('./src/components', import.meta.url)),
+      '@store': fileURLToPath(new URL('./src/store', import.meta.url)),
+      '@types': fileURLToPath(new URL('./src/types', import.meta.url)),
+      '@lib': fileURLToPath(new URL('./src/lib', import.meta.url)),
+      '@utils': fileURLToPath(new URL('./src/utils', import.meta.url)),
     },
   },
   plugins: [
