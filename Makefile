@@ -1,4 +1,8 @@
-.PHONY: dev dev-infra dev-backend dev-worker dev-admin dev-customer stop-infra clean
+.PHONY: dev dev-infra dev-backend dev-worker dev-admin dev-customer stop-infra clean sync-db
+
+# Sync Local Database to Cloud Database
+sync-db:
+	@chmod +x ./sync-db.sh && ./sync-db.sh
 
 # Run only infrastructure (PostgreSQL & Redis)
 dev-infra:

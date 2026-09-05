@@ -47,7 +47,7 @@ export const StockTable = React.memo(function StockTable({ materials, loading, o
 
   const handleDeleteMaterial = async (m: MaterialMaster) => {
     const targetId = m.id || m.sku;
-    const confirmMsg = `ທ່ານຕັ້ງໃຈລຶບສິນຄ້າ "${m.name}" (${m.sku || m.id}) ອອກຈາກຄັງສິນຄ້າແທ້ບໍ?`;
+    const confirmMsg = `ທ່ານຕັ້ງໃຈລຶບສິນຄ້າ "${m.name}" (${m.sku || m.id}) ອອກຈາກສາງສິນຄ້າແທ້ບໍ?`;
     if (!window.confirm(confirmMsg)) return;
 
     try {

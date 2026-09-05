@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '@store/AppContext';
 import { useTranslation } from 'react-i18next';
 import CustomerCombobox from '@components/common/CustomerCombobox';
@@ -91,7 +91,8 @@ import {
   UserPlus,
   UserCheck,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Images,
 } from 'lucide-react';
 import { FormModalTemplate, FormSection } from '@components/common/FormModalTemplate';
 
@@ -159,6 +160,7 @@ export interface QuotationItem {
   fileSize?: number;
   mimeType?: string;
   preflightData?: PreflightResult;
+  batchFiles?: any[];
 }
 
 export const getPresetDimensions = (preset: string, currentW: number = 210, currentH: number = 297) => {
@@ -200,6 +202,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   } = useApp();
   
   const [quotationSearchQuery, setQuotationSearchQuery] = useState('');
+  const itemFileInputRef = useRef<HTMLInputElement>(null);
   
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
@@ -403,6 +406,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       fileSize: specs?.fileSize,
       mimeType: specs?.mimeType,
       preflightData: specs?.preflightData,
+      batchFiles: specs?.batchFiles || specs?.preflightData?.batch_files || [],
       selectedPrinterId: defaultPrinter.id,
       selectedInkSet: 'Konica C6085 OEM Set',
       printerAllocations: initialAllocations,
@@ -501,6 +505,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         fileName: incomingSpecs.fileName || activeItem.fileName,
         artworkUrl: incomingSpecs.fileUrl || incomingSpecs.artworkUrl || activeItem.artworkUrl,
         preflightData: incomingSpecs.preflightData || activeItem.preflightData,
+        batchFiles: incomingSpecs.batchFiles || incomingSpecs.preflightData?.batch_files || activeItem.batchFiles || [],
         printerAllocations: [{
           printer_id: selectedPrinter.id,
           printer_name: selectedPrinter.name || selectedPrinter.id,
@@ -817,12 +822,57 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   ];
 
   const handleApplyTemplate = (tpl: PricingTemplatePreset) => {
+    let presetSpecificFields: Partial<QuotationItem> = {};
+
+    if (tpl.id === 'TPL_PERFECT_BIND_BOOK') {
+      presetSpecificFields = {
+        name: activeItem.name && !activeItem.name.includes('ລາຍການ') ? activeItem.name : 'ປຶ້ມສັນກາວຮ້ອນ (Perfect Bind Book)',
+        includeCover: true,
+        coverPagesCount: 4,
+        pagesPerBook: (activeItem.pagesPerBook && activeItem.pagesPerBook > 1) ? activeItem.pagesPerBook : 96,
+        bindingOption: 'PERFECT_HOT_GLUE',
+        unitName: 'ຫົວ',
+        isDoubleSided: true,
+        jobSizePreset: 'A5',
+        jobWidth: 148,
+        jobHeight: 210,
+      };
+    } else if (tpl.id === 'TPL_HARDCOVER_BOOK') {
+      presetSpecificFields = {
+        name: activeItem.name && !activeItem.name.includes('ລາຍການ') ? activeItem.name : 'ປຶ້ມປົກແຂງຈົ່ວປັງ (Hardcover Book)',
+        includeCover: true,
+        coverPagesCount: 4,
+        pagesPerBook: (activeItem.pagesPerBook && activeItem.pagesPerBook > 1) ? activeItem.pagesPerBook : 120,
+        bindingOption: 'HARDCOVER_CASE_BINDING',
+        unitName: 'ຫົວ',
+        isDoubleSided: true,
+        jobSizePreset: 'A5',
+        jobWidth: 148,
+        jobHeight: 210,
+      };
+    } else if (tpl.id === 'TPL_PHOTO_PRINT') {
+      presetSpecificFields = {
+        name: activeItem.name && !activeItem.name.includes('ລາຍການ') ? activeItem.name : 'ພິມຮູບພາບ (Photo Prints)',
+        includeCover: false,
+        pagesPerBook: 1,
+        bindingOption: 'NONE',
+        unitName: 'ໃບ',
+        isDoubleSided: false,
+        jobSizePreset: 'CUSTOM',
+        jobWidth: 102,
+        jobHeight: 152,
+        printVolume: activeItem.printVolume || 40,
+      };
+    }
+
     updateActiveItem({
       selectedTemplateId: tpl.id,
       activeModules: { ...tpl.activeModules },
       finishingMaterials: tpl.defaultMaterials ? [...tpl.defaultMaterials] : [],
       laborPercent: tpl.defaultLaborPercent !== undefined ? tpl.defaultLaborPercent : activeItem.laborPercent,
+      ...presetSpecificFields,
     });
+
     if (showToast) {
       showToast(
         currentLang === 'lo' 
@@ -1461,8 +1511,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
             file_name: item.fileName || (item.artworkUrl ? item.artworkUrl.split('/').pop()?.split('?')[0] : ''),
             file_size_bytes: item.fileSize || 0,
             preview_thumbnail_url: item.artworkUrl || '',
-            page_count: item.pagesPerBook || 1
+            page_count: item.pagesPerBook || 1,
+            batch_files: item.batchFiles || (item.preflightData as any)?.batch_files,
+            artwork_files: item.batchFiles || (item.preflightData as any)?.batch_files,
           },
+          batch_files: item.batchFiles || (item.preflightData as any)?.batch_files,
           drive_link: item.artworkUrl,
           avg_cov_c: item.cCoverage || 0,
           avg_cov_m: item.mCoverage || 0,
@@ -2712,6 +2765,46 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 </div>
               </div>
 
+              {/* 1-Click Fast Presets Pills Bar */}
+              <div className="p-2.5 bg-gradient-to-r from-sky-50/80 via-indigo-50/60 to-purple-50/80 border border-sky-200/80 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-2xs">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="w-6 h-6 rounded-lg bg-sky-600 text-white flex items-center justify-center shadow-xs">
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider">
+                    {currentLang === 'lo' ? 'ຕັ້ງຄ່າດ່ວນ 1-Click:' : 'Fast Presets:'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto">
+                  {DEFAULT_PRICING_TEMPLATES.slice(0, 5).map((tpl) => {
+                    const isSelected = activeItem.selectedTemplateId === tpl.id;
+                    return (
+                      <button
+                        key={tpl.id}
+                        type="button"
+                        onClick={() => handleApplyTemplate(tpl)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                          isSelected
+                            ? 'bg-sky-600 text-white shadow-xs scale-[1.02]'
+                            : 'bg-white hover:bg-sky-50 text-slate-700 border border-slate-200/80 hover:border-sky-300'
+                        }`}
+                      >
+                        {tpl.id === 'TPL_PERFECT_BIND_BOOK' && <BookOpen className="w-3.5 h-3.5" />}
+                        {tpl.id === 'TPL_HARDCOVER_BOOK' && <Bookmark className="w-3.5 h-3.5" />}
+                        {tpl.id === 'TPL_PHOTO_PRINT' && <ImageIcon className="w-3.5 h-3.5" />}
+                        {tpl.id === 'TPL_BOOKLET_STAPLE' && <Layers className="w-3.5 h-3.5" />}
+                        {tpl.id === 'TPL_DESK_CALENDAR' && <Calendar className="w-3.5 h-3.5" />}
+                        <span className="truncate max-w-[150px]">
+                          {currentLang === 'lo' ? tpl.nameLao.split('(')[0].trim() : tpl.nameEn}
+                        </span>
+                        {isSelected && <CheckCircle2 className="w-3 h-3 text-white ml-0.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* 3-Stage Production Step Tabs */}
               <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100/80 rounded-2xl border border-slate-200 text-xs font-black">
                 <button
@@ -2873,31 +2966,88 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                     <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-gradient-to-r from-indigo-50/90 to-sky-50/90 border border-indigo-200/80 rounded-2xl">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                          <Palette className="w-4 h-4" />
+                          {activeItem.batchFiles && activeItem.batchFiles.length > 1 ? (
+                            <Images className="w-4 h-4" />
+                          ) : (
+                            <Palette className="w-4 h-4" />
+                          )}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-black text-slate-900 truncate">
-                              {activeItem.fileName || (activeItem.preflightData ? 'ໄຟລ໌ກວດສອບ Preflight' : 'ຄ່າສີມາດຕະຖານ')}
+                              {activeItem.batchFiles && activeItem.batchFiles.length > 1
+                                ? `ຊຸດໄຟລ໌ (${activeItem.batchFiles.length} ໄຟລ໌ / ຮູບ)`
+                                : (activeItem.fileName || (activeItem.preflightData ? 'ໄຟລ໌ກວດສອບ Preflight' : 'ຄ່າສີມາດຕະຖານ'))}
                             </span>
+                            {activeItem.batchFiles && activeItem.batchFiles.length > 1 && (
+                              <span className="px-1.5 py-0.5 rounded-md bg-sky-100 text-sky-900 text-[10px] font-black font-mono">
+                                {activeItem.batchFiles.length} ໄຟລ໌ (ສູງສຸດ 100)
+                              </span>
+                            )}
                             <span className="px-1.5 py-0.5 rounded-md bg-indigo-100 text-indigo-900 text-[10px] font-black font-mono">
                               C:{Math.round(activeItem.cCoverage ?? 15)}% M:{Math.round(activeItem.mCoverage ?? 15)}% Y:{Math.round(activeItem.yCoverage ?? 15)}% K:{Math.round(activeItem.kCoverage ?? 15)}%
                             </span>
                           </div>
                           <p className="text-[10px] text-slate-500 font-medium">
-                            {currentLang === 'lo' ? 'ຄ່າສີນີ້ຖືກຊິງຄ໌ກັບແຖບສີຂອງເຄື່ອງພິມໂດຍອັດຕະໂນມັດ' : 'CMYK coverage automatically synced with printer'}
+                            {activeItem.batchFiles && activeItem.batchFiles.length > 1
+                              ? 'ຄ່າສີສະເລ່ຍຖົວສະເລ່ຍຈາກທຸກໄຟລ໌ໃນລາຍການນີ້ (1 ລາຍການຫຼັກ)'
+                              : (currentLang === 'lo' ? 'ຄ່າສີນີ້ຖືກຊິງຄ໌ກັບແຖບສີຂອງເຄື່ອງພິມໂດຍອັດຕະໂນມັດ' : 'CMYK coverage automatically synced with printer')}
                           </p>
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setPreviewColorItem(activeItem)}
-                        className="px-3 py-1.5 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>{currentLang === 'lo' ? 'ກວດສອບໄຟລ໌ & ສີ' : 'Inspect Colors'}</span>
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Hidden input for multi-file upload directly on the quotation item */}
+                        <input
+                          ref={itemFileInputRef}
+                          type="file"
+                          multiple
+                          accept="image/*,.pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const rawFiles = e.target.files;
+                            if (!rawFiles || rawFiles.length === 0) return;
+                            const files = Array.from(rawFiles).slice(0, 100);
+                            const newItems = files.map(f => ({
+                              name: f.name,
+                              url: URL.createObjectURL(f),
+                              size: f.size,
+                              mimeType: f.type || (f.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
+                            }));
+                            const newBatch = [...(activeItem.batchFiles || []), ...newItems].slice(0, 100);
+                            const totalSize = newBatch.reduce((acc, cur) => acc + (cur.size || 0), 0);
+                            updateActiveItem({
+                              batchFiles: newBatch,
+                              artworkUrl: newBatch[0]?.url || activeItem.artworkUrl,
+                              fileName: newBatch.length > 1 ? `ຊຸດໄຟລ໌ (${newBatch.length} ໄຟລ໌)` : (newBatch[0]?.name || activeItem.fileName),
+                              fileSize: totalSize,
+                              printVolume: newBatch.length > 1 && (activeItem.printVolume === 1 || !activeItem.includeCover) ? newBatch.length : activeItem.printVolume,
+                            });
+                            if (showToast) {
+                              showToast(`ອັບໂຫຼດ ${files.length} ໄຟລ໌ເຂົ້າໃນລາຍການສຳເລັດ! (ລວມ ${newBatch.length} ໄຟລ໌)`, 'success');
+                            }
+                          }}
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => itemFileInputRef.current?.click()}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          title="ອັບໂຫຼດໄຟລ໌ດຽວ ຫຼື ຫຼາຍໄຟລ໌ພ້ອມກັນ (ສູງສຸດ 100 ໄຟລ໌)"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>+ ອັບໂຫຼດໄຟລ໌ (1-100)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setPreviewColorItem(activeItem)}
+                          className="px-3 py-1.5 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>{currentLang === 'lo' ? 'ກວດສອບໄຟລ໌ & ສີ' : 'Inspect Colors'}</span>
+                        </button>
+                      </div>
                     </div>
 
                     <ManualPrinterAllocator

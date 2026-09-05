@@ -87,7 +87,7 @@ export const FinanceDashboard: React.FC = () => {
             </div>
             <div>
               <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
-                ສູນການເງິນ ແລະ ບັນຊີ (Finance & Accounting)
+                ລະບົບການເງິນ ແລະ ບັນຊີ (Finance & Accounting)
               </h2>
               <p className="text-sm font-medium text-slate-400 mt-0.5">
                 ໂຮງພິມ ສົມສິ່ງພິມ ERP • ງົບກຳໄລຂາດທຶນ, ລູກໜີ້/ເຈົ້າໜີ້, ລາຍຈ່າຍ ແລະ ກວດສລິບໂອນ

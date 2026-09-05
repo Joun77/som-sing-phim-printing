@@ -99,7 +99,7 @@ export const AddOffcutModal: React.FC<AddOffcutModalProps> = ({
       notes
     });
 
-    showToast('ບັນທຶກເສດເຈ້ຍເຂົ້າຄັງສິນຄ້າສຳເລັດ!', 'success');
+    showToast('ບັນທຶກເສດເຈ້ຍເຂົ້າສາງສິນຄ້າສຳເລັດ!', 'success');
     onClose();
   };
 

@@ -47,10 +47,11 @@ function AppContent() {
 
   const isTrackerRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/track');
   const trackerOrderNo = isTrackerRoute ? window.location.pathname.replace(/^\/track\/?/, '') : null;
+  const isTracker = isTrackerRoute || activeTab === 'tracker';
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-slate-50 font-sans antialiased text-slate-800 flex">
+      <div className="min-h-screen bg-slate-50 font-sans antialiased text-slate-800 flex transition-colors duration-300">
         {/* Left Side: Modern Dark Navy Collapsible Sidebar */}
         <Sidebar
           sidebarOpen={sidebarOpen}

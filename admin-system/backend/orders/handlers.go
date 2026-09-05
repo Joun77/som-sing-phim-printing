@@ -1,6 +1,7 @@
 package orders
 
 import (
+	"archive/zip"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -1486,6 +1487,178 @@ func HandleArtworkUpload(c *gin.Context) {
 		"file_url":  fileURL,
 		"url":       fileURL,
 	})
+}
+
+// HandleBatchArtworkUpload handles uploading multiple files simultaneously (e.g. 40 photos)
+func HandleBatchArtworkUpload(c *gin.Context) {
+	form, err := c.MultipartForm()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse multipart form", "details": err.Error()})
+		return
+	}
+
+	files := form.File["files"]
+	if len(files) == 0 {
+		files = form.File["file"]
+	}
+	if len(files) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No files provided in form payload"})
+		return
+	}
+
+	// Security: limit to 100 files max per request
+	if len(files) > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Too many files. Maximum allowed per batch is 100"})
+		return
+	}
+
+	targetDir := "./uploads/artworks"
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create upload directory"})
+		return
+	}
+
+	type UploadedAsset struct {
+		AssetID  string `json:"asset_id"`
+		FileName string `json:"file_name"`
+		FileURL  string `json:"file_url"`
+		FileSize int64  `json:"file_size"`
+	}
+
+	var results []UploadedAsset
+	batchTimestamp := time.Now().UnixNano() / 1e6
+
+	for idx, file := range files {
+		// Security: Validate file extension
+		ext := strings.ToLower(filepath.Ext(file.Filename))
+		validExts := map[string]bool{
+			".pdf": true, ".ai": true, ".eps": true, ".jpg": true, ".jpeg": true,
+			".png": true, ".tiff": true, ".tif": true, ".psd": true, ".webp": true,
+		}
+		if !validExts[ext] {
+			continue // Skip dangerous or unallowed extensions
+		}
+
+		// Security: file size limit (50MB per file)
+		if file.Size > 50*1024*1024 {
+			continue
+		}
+
+		assetID := fmt.Sprintf("batch-%d-%03d", batchTimestamp, idx+1)
+		safeName := fmt.Sprintf("%s_%s", assetID, filepath.Base(file.Filename))
+		destinationPath := filepath.Join(targetDir, safeName)
+
+		if err := c.SaveUploadedFile(file, destinationPath); err != nil {
+			continue
+		}
+
+		fileURL := fmt.Sprintf("/uploads/artworks/%s", safeName)
+		results = append(results, UploadedAsset{
+			AssetID:  assetID,
+			FileName: file.Filename,
+			FileURL:  fileURL,
+			FileSize: file.Size,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":      "success",
+		"total_count": len(results),
+		"files":       results,
+	})
+}
+
+// BatchZipDownloadRequest represents files to pack into a ZIP
+type BatchZipDownloadRequest struct {
+	ZipName  string   `json:"zip_name"`
+	FileURLs []string `json:"file_urls"`
+}
+
+// HandleBatchDownloadZip creates and streams a ZIP archive of requested files
+func HandleBatchDownloadZip(c *gin.Context) {
+	var req BatchZipDownloadRequest
+	if c.Request.Method == http.MethodPost {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload", "details": err.Error()})
+			return
+		}
+	} else {
+		// GET query params fallback
+		req.ZipName = c.Query("zip_name")
+		urlsParam := c.Query("urls")
+		if urlsParam != "" {
+			req.FileURLs = strings.Split(urlsParam, ",")
+		}
+	}
+
+	if len(req.FileURLs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No file URLs provided for zip archive"})
+		return
+	}
+
+	zipName := filepath.Base(req.ZipName)
+	if zipName == "" || zipName == "." {
+		zipName = fmt.Sprintf("batch_files_%d.zip", time.Now().Unix())
+	}
+	if !strings.HasSuffix(strings.ToLower(zipName), ".zip") {
+		zipName += ".zip"
+	}
+
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", zipName))
+	c.Header("Cache-Control", "no-cache")
+
+	zipWriter := zip.NewWriter(c.Writer)
+	defer zipWriter.Close()
+
+	addedFiles := make(map[string]bool)
+
+	for idx, rawURL := range req.FileURLs {
+		cleanURL := strings.TrimSpace(rawURL)
+		if cleanURL == "" {
+			continue
+		}
+
+		cleanURL = strings.TrimPrefix(cleanURL, "http://localhost:8080")
+		cleanURL = strings.TrimPrefix(cleanURL, "http://127.0.0.1:8080")
+
+		var localPath string
+		if strings.HasPrefix(cleanURL, "/uploads/") {
+			localPath = filepath.Clean("." + cleanURL)
+		} else if strings.HasPrefix(cleanURL, "/api/v1/orders/files/") {
+			subPath := strings.TrimPrefix(cleanURL, "/api/v1/orders/files/")
+			localPath = filepath.Clean(filepath.Join("./uploads", subPath))
+		} else {
+			localPath = filepath.Clean(filepath.Join("./uploads/artworks", filepath.Base(cleanURL)))
+		}
+
+		rel, err := filepath.Rel(".", localPath)
+		if err != nil || (!strings.HasPrefix(rel, "uploads/") && !strings.HasPrefix(rel, "uploads\\") && rel != "uploads") {
+			continue
+		}
+
+		fileData, err := os.ReadFile(localPath)
+		if err != nil {
+			fallbackPath := filepath.Join("./uploads/artworks", filepath.Base(cleanURL))
+			fileData, err = os.ReadFile(fallbackPath)
+			if err != nil {
+				continue
+			}
+		}
+
+		entryName := filepath.Base(localPath)
+		if addedFiles[entryName] {
+			entryName = fmt.Sprintf("%02d_%s", idx+1, entryName)
+		}
+		addedFiles[entryName] = true
+
+		entryWriter, err := zipWriter.Create(entryName)
+		if err != nil {
+			continue
+		}
+
+		_, _ = entryWriter.Write(fileData)
+	}
 }
 
 // HandleUpdateOrderItemStep updates the production step for a specific OrderItem

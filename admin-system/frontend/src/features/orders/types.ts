@@ -10,7 +10,8 @@ export type BindingType =
   | 'SADDLE_STITCH'
   | 'WIRE_O'
   | 'PLASTIC_COMB'
-  | 'CALENDAR';
+  | 'CALENDAR'
+  | 'HARDCOVER_CASE_BINDING';
 
 export type ProductionStep =
   | 'PENDING'
@@ -67,6 +68,25 @@ export interface PreflightResult {
   suggested_paper?: string;
   is_simulated?: boolean;
   execution_notice?: string;
+  pages?: any[];
+}
+
+export interface BatchPreflightResult {
+  total_files: number;
+  avg_cov_c: number;
+  avg_cov_m: number;
+  avg_cov_y: number;
+  avg_cov_k: number;
+  low_dpi_count: number;
+  suggested_imposition: {
+    parent_sheet: string;
+    cuts_per_sheet: number;
+    required_sheets: number;
+    spoilage_sheets: number;
+    total_sheets: number;
+    summary_lao: string;
+  };
+  files: PreflightResult[];
 }
 
 export interface MasterOrderItem {

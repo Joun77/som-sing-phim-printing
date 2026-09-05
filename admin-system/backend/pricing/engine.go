@@ -274,6 +274,8 @@ func GetBindingConsumableCostLAK(bType string) float64 {
 		return 1500.0
 	case "CALENDAR", "calendar":
 		return 3500.0
+	case "HARDCOVER_CASE_BINDING", "HARDCOVER", "hardcover", "case_binding":
+		return 15000.0
 	default:
 		return 0.0
 	}

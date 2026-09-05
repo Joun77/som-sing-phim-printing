@@ -261,6 +261,53 @@ func HandleVerifyPaymentSlip(c *gin.Context) {
 	})
 }
 
+type PendingSlipOrderDTO struct {
+	ID             string  `json:"id"`
+	OrderNumber    string  `json:"orderNumber"`
+	CustomerName   string  `json:"customerName"`
+	TotalAmount    float64 `json:"totalAmount"`
+	Currency       string  `json:"currency"`
+	PaymentSlipURL string  `json:"paymentSlipUrl"`
+	CreatedAt      string  `json:"createdAt"`
+}
+
+// HandleGetPendingSlips returns list of orders waiting for slip verification
+func HandleGetPendingSlips(c *gin.Context) {
+	slips := make([]PendingSlipOrderDTO, 0)
+
+	if db.DB != nil {
+		rows, err := db.DB.Query(`
+			SELECT 
+				o.id, 
+				COALESCE(o.order_no, o.order_number, o.id) as order_number, 
+				COALESCE(c.company_name, c.contact_person, o.customer_name, 'Customer') as customer_name,
+				COALESCE(o.total_price, o.total_amount_lak, 0) as total_amount,
+				COALESCE(o.payment_slip_url, o.proof_url, '') as slip_url,
+				o.created_at
+			FROM orders o
+			LEFT JOIN customers c ON o.customer_id = c.id
+			WHERE (o.payment_slip_url IS NOT NULL OR o.proof_url IS NOT NULL)
+			  AND COALESCE(o.payment_slip_url, o.proof_url, '') != ''
+			  AND o.status IN ('PENDING_PAYMENT', 'Pending Payment', 'Verification Required', 'PENDING_SLIP_CHECK', 'WAITING_DEPOSIT')
+			ORDER BY o.created_at DESC
+		`)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var item PendingSlipOrderDTO
+				var createdAt time.Time
+				if err := rows.Scan(&item.ID, &item.OrderNumber, &item.CustomerName, &item.TotalAmount, &item.PaymentSlipURL, &createdAt); err == nil {
+					item.Currency = "LAK"
+					item.CreatedAt = createdAt.Format("2006-01-02 15:04")
+					slips = append(slips, item)
+				}
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, slips)
+}
+
 // HandleGetARAging returns accounts receivable aging report grouped by customer and age buckets
 func HandleGetARAging(c *gin.Context) {
 	var items []ARAgingItem

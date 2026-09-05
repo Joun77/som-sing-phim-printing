@@ -160,7 +160,7 @@ export const OffcutsTab: React.FC<OffcutsTabProps> = ({ onOpenAddModal }) => {
           </div>
           <div>
             <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              {currentLang === 'lo' ? 'ຈຳນວນລາຍການ / ໄຊສ໌' : 'Active Sizes'}
+              {currentLang === 'lo' ? 'ຈຳນວນລາຍການ / ຂະໜາດ' : 'Active Sizes'}
             </div>
             <div className="text-xl font-black text-slate-900 mt-0.5 font-sans">
               {stats.totalBatches} <span className="text-xs font-semibold text-slate-500">ລາຍການ</span>
@@ -254,7 +254,7 @@ export const OffcutsTab: React.FC<OffcutsTabProps> = ({ onOpenAddModal }) => {
                 <th className="py-4 px-4">ຂະໜາດ (W × H mm)</th>
                 <th className="py-4 px-4">ສະຕັອກຄົງເຫຼືອ (Available)</th>
                 <th className="py-4 px-4">ມູນຄ່າປະຢັດ (Est. Value)</th>
-                <th className="py-4 px-4">ສະຖານທີ່ເກັບ (Location)</th>
+                <th className="py-4 px-4">ບ່ອນເກັບມ້ຽນ (Location)</th>
                 <th className="py-4 px-5 text-right">ຈັດການ (Actions)</th>
               </tr>
             </thead>

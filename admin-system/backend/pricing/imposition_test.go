@@ -88,3 +88,43 @@ func TestCalculateImposition_StandardSizes(t *testing.T) {
 		}
 	})
 }
+
+func TestCalculateBatchImposition_Photos(t *testing.T) {
+	// User Requirement: 40 photos (4x6 inch = 102x152mm) on A4 paper
+	req := BatchImpositionRequest{
+		ItemWidthMM:     102.0,
+		ItemHeightMM:    152.0,
+		ParentSheet:     "A4",
+		TotalItems:      40,
+		BleedMM:         0,
+		GutterMM:        0,
+		SpoilagePercent: 0.05, // 5% spoilage
+	}
+
+	resp := CalculateBatchImposition(req)
+
+	// 2D Shelf Guillotine packs 2 unrotated (102x152) + 1 rotated (152x102 in remnant 210x145) = 3 cuts per A4!
+	if resp.CutsPerSheet != 3 {
+		t.Errorf("Expected 3 photos per A4 sheet, got %d", resp.CutsPerSheet)
+	}
+
+	// 40 / 3 = 14 sheets
+	if resp.RequiredParentSheets != 14 {
+		t.Errorf("Expected 14 required A4 sheets, got %d", resp.RequiredParentSheets)
+	}
+
+	// 14 * 0.05 = 0.7 -> 1 spoilage sheet
+	if resp.SpoilageSheets != 1 {
+		t.Errorf("Expected 1 spoilage sheet, got %d", resp.SpoilageSheets)
+	}
+
+	// Total = 14 + 1 = 15 sheets
+	if resp.TotalParentSheets != 15 {
+		t.Errorf("Expected 15 total parent sheets, got %d", resp.TotalParentSheets)
+	}
+
+	if resp.SummaryTextLao == "" || resp.SummaryTextEn == "" {
+		t.Errorf("Expected non-empty summary texts")
+	}
+}
+

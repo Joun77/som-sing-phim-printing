@@ -142,7 +142,7 @@ export default function InventoryManagement() {
         <div>
           <h2 className="font-extrabold text-2xl text-slate-900 tracking-tight flex items-center gap-2">
             <Boxes className="w-8 h-8 text-blue-600" />
-            <span>{currentLang === 'lo' ? 'ຈັດການສະຕ໋ອກ & ວັດຖຸດິບ (ຄັງສິນຄ້າ)' : 'Warehouse Inventory & Materials'}</span>
+            <span>{currentLang === 'lo' ? 'ຈັດການສະຕ໋ອກ & ວັດຖຸດິບ (ສາງສິນຄ້າ)' : 'Warehouse Inventory & Materials'}</span>
           </h2>
           <p className="text-sm font-semibold text-slate-400 mt-1">
             {currentLang === 'lo' ? 'ສະຕ໋ອກເຈ້ຍ, ໝຶກພິມ, ແລະ ອຸປະກອນ (ບໍ່ລວມເຄື່ອງຈັກ)' : 'Paper, Inks, & Consumables Ledger (Single-Master Stock)'}

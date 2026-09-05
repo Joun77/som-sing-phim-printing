@@ -63,6 +63,7 @@ export const ArtworkViewerModal: React.FC<ArtworkViewerModalProps> = ({
       case 'WIRE_O': return currentLang === 'lo' ? 'ສັນຫ່ວງຂົດລວດ' : 'Wire-O';
       case 'SADDLE_STITCH': return currentLang === 'lo' ? 'ຫຍິບມຸງກົກ' : 'Saddle Stitch';
       case 'PERFECT_HOT_GLUE': return currentLang === 'lo' ? 'ໄສກາວຮ້ອນ' : 'Perfect Glue';
+      case 'HARDCOVER_CASE_BINDING': return currentLang === 'lo' ? 'ເຂົ້າເຫຼັ້ມປົກແຂງ' : 'Hardcover Case';
       case 'CALENDAR': return currentLang === 'lo' ? 'ສັນປະຕິທິນ' : 'Calendar';
       case 'CORNER_STAPLE': return currentLang === 'lo' ? 'ແມັກມຸມ' : 'Corner Staple';
       default: return '';

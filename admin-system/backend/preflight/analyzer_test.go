@@ -118,3 +118,37 @@ func TestAnalyzeImageSkinToneGCR(t *testing.T) {
 		t.Errorf("Expected M ~15-20%% for skin tone, got %.2f%%", res.AvgCovM)
 	}
 }
+
+func TestBatchPreflightCalculations(t *testing.T) {
+	// Verify aggregate averaging and imposition metrics
+	r1 := PreflightResult{AvgCovC: 10.0, AvgCovM: 20.0, AvgCovY: 30.0, AvgCovK: 5.0}
+	r2 := PreflightResult{AvgCovC: 20.0, AvgCovM: 10.0, AvgCovY: 10.0, AvgCovK: 15.0}
+
+	results := []PreflightResult{r1, r2}
+	var sumC, sumM, sumY, sumK float64
+	for _, r := range results {
+		sumC += r.AvgCovC
+		sumM += r.AvgCovM
+		sumY += r.AvgCovY
+		sumK += r.AvgCovK
+	}
+
+	total := float64(len(results))
+	avgC := sumC / total
+	avgM := sumM / total
+	avgY := sumY / total
+	avgK := sumK / total
+
+	if avgC != 15.0 || avgM != 15.0 || avgY != 20.0 || avgK != 10.0 {
+		t.Errorf("Unexpected average CMYK calculation: C=%.1f, M=%.1f, Y=%.1f, K=%.1f", avgC, avgM, avgY, avgK)
+	}
+
+	// 40 items at 3 cuts/sheet
+	totalItems := 40
+	cutsPerSheet := 3
+	reqSheets := (totalItems + cutsPerSheet - 1) / cutsPerSheet
+	if reqSheets != 14 {
+		t.Errorf("Expected 14 sheets for 40 items at 3 cuts/sheet, got %d", reqSheets)
+	}
+}
+

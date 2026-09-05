@@ -87,7 +87,7 @@ export const APManagementPage: React.FC = () => {
 
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <span className="text-[11px] font-extrabold text-slate-400 uppercase block">ຍອດເຈົ້າໜີ້ຄ້າງຈ່າຍ</span>
+            <span className="text-[11px] font-extrabold text-slate-400 uppercase block">ຍອດເຈົ້າໜີ້ຄ້າງຊຳລະ</span>
             <span className="text-xl font-black text-rose-600 font-sans">₭{totalPendingAP.toLocaleString()}</span>
           </div>
           <button onClick={loadAP} className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition">
@@ -114,7 +114,7 @@ export const APManagementPage: React.FC = () => {
               {apList.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-slate-400">
-                    ບໍ່ມີລາຍການເຈົ້າໜີ້ຄ້າງຈ່າຍ
+                    ບໍ່ມີລາຍການເຈົ້າໜີ້ຄ້າງຊຳລະ
                   </td>
                 </tr>
               ) : (
