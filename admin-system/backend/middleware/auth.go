@@ -41,6 +41,7 @@ func CORSMiddleware() gin.HandlerFunc {
 				"https://som-sing-phim-admin.firebaseapp.com",
 				"https://som-sing-phim-service.web.app",
 				"https://som-sing-phim-service.firebaseapp.com",
+				"https://somsingphim.tail2bf83b.ts.net",
 			}
 		}
 
@@ -52,8 +53,8 @@ func CORSMiddleware() gin.HandlerFunc {
 					break
 				}
 			}
-			// Fallback: automatically allow any Som Sing Phim firebase subdomains
-			if !isAllowed && (strings.HasSuffix(origin, ".web.app") || strings.HasSuffix(origin, ".firebaseapp.com")) {
+			// Fallback: automatically allow any Som Sing Phim firebase subdomains or Tailscale domains
+			if !isAllowed && (strings.HasSuffix(origin, ".web.app") || strings.HasSuffix(origin, ".firebaseapp.com") || strings.HasSuffix(origin, ".ts.net") || strings.Contains(origin, "100.116.116.18")) {
 				isAllowed = true
 			}
 		}
