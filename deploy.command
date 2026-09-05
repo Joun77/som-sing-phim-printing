@@ -35,8 +35,7 @@ echo "📂 โฟลเดอร์ปลายทาง:   $REMOTE_PATH"
 echo "--------------------------------------------------------"
 
 echo "🔄 กำลังเชื่อมต่อไปยังเครื่อง Windows เพื่อดึงโค้ดและอัปเดต Docker..."
-# Note: แก้ไขปัญหา Windows OpenSSH Session กับ Docker Credential Manager (A specified logon session does not exist) อัตโนมัติ
-ssh "$SERVER_HOST" "cmd /c \"powershell -NoProfile -Command \"if (Test-Path \$env:USERPROFILE\.docker\config.json) { (Get-Content \$env:USERPROFILE\.docker\config.json) -replace '\"\"credsStore\"\"', '\"\"_credsStore\"\"' | Set-Content \$env:USERPROFILE\.docker\config.json }\" && cd /d $REMOTE_PATH && git pull && docker compose up -d --build && docker image prune -f && docker compose ps\""
+ssh "$SERVER_HOST" "cmd /c \"cd /d $REMOTE_PATH && git pull && docker compose up -d --build && docker image prune -f && docker compose ps\""
 
 if [ $? -eq 0 ]; then
     echo ""

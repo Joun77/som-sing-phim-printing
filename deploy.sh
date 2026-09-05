@@ -40,9 +40,9 @@ fi
 echo "⬆️  Pushing changes to Git repository..."
 git push
 
-# 3. SSH into Windows Server & Update Docker Containers (Fixing credsStore for SSH session)
+# 3. SSH into Windows Server & Update Docker Containers
 echo "🔄 Updating & Rebuilding containers on Windows Server..."
-ssh "$SERVER_HOST" "cmd /c \"powershell -NoProfile -Command \"if (Test-Path \$env:USERPROFILE\.docker\config.json) { (Get-Content \$env:USERPROFILE\.docker\config.json) -replace '\"\"credsStore\"\"', '\"\"_credsStore\"\"' | Set-Content \$env:USERPROFILE\.docker\config.json }\" && cd /d $REMOTE_PATH && git pull && docker compose up -d --build && docker image prune -f && docker compose ps\""
+ssh "$SERVER_HOST" "cmd /c \"cd /d $REMOTE_PATH && git pull && docker compose up -d --build && docker image prune -f && docker compose ps\""
 
 echo ""
 echo "=========================================="
