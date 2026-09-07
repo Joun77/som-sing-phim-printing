@@ -9,17 +9,20 @@ import {
 import { useApp } from '@store/AppContext';
 import { useTranslation } from 'react-i18next';
 import { StaffUserManagementTab } from './StaffUserManagementTab';
+import { EmployeeModal } from './EmployeeModal';
+import { apiFetch } from '../../../api/client';
 
 // ========== INITIAL DATA ==========
 const INITIAL_EMPLOYEES: any[] = [];
 
 const ROLES = [
+  { id: 'ceo',                labelLo: 'ປະທານເຈົ້າໜ້າທີ່ບໍລິຫານ (CEO / Owner)', labelEn: 'Chief Executive Officer (CEO)', color: 'bg-amber-100 text-amber-900 border-amber-300' },
+  { id: 'manager',            labelLo: 'ຜູ້ຈັດການ (Manager)',                  labelEn: 'Manager',               color: 'bg-rose-100 text-rose-800 border-rose-200' },
   { id: 'press_operator',    labelLo: 'ຊ່າງພິມ (Press Operator)',            labelEn: 'Press Operator',        color: 'bg-purple-100 text-purple-800 border-purple-200' },
   { id: 'cutting_finishing',  labelLo: 'ຊ່າງຕັດ & ສຳເລັດຮູບ (Cutting)',      labelEn: 'Cutting & Finishing',   color: 'bg-blue-100 text-blue-800 border-blue-200' },
   { id: 'design_prepress',    labelLo: 'ນັກອອກແບບ / Pre-press',              labelEn: 'Designer / Pre-press',  color: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
   { id: 'delivery_logistics', labelLo: 'ໄດເວີ / ຈັດສົ່ງ (Delivery)',          labelEn: 'Delivery / Logistics',  color: 'bg-amber-100 text-amber-800 border-amber-200' },
   { id: 'customer_service',   labelLo: 'ພະນັກງານຕ້ອນຮັບ / CRM',              labelEn: 'Customer Service',      color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  { id: 'manager',            labelLo: 'ຜູ້ຈັດການ (Manager)',                  labelEn: 'Manager',               color: 'bg-rose-100 text-rose-800 border-rose-200' },
 ];
 
 const SHIFTS = [
@@ -36,7 +39,13 @@ const emptyForm = {
   name: '', nameEn: '', role: 'press_operator', phone: '', address: '',
   salary: '', salaryType: 'monthly', startDate: '', shift: 'morning',
   status: 'active', skills: '', avatar: '',
-  pieceRatePerImpression: 5, salesCommissionRate: 0, impressionsProduced: 0
+  pieceRatePerImpression: 5, salesCommissionRate: 0, impressionsProduced: 0,
+  hasLoginAccount: false,
+  username: '',
+  password: '',
+  systemRole: 'production',
+  customRoleTitle: 'Production Lead (ຊ່າງພິມ & ຜະລິດ)',
+  permissions: ['dashboard', 'tracker', 'equipment', 'inventory'] as string[],
 };
 
 // ========== AVATAR ==========
@@ -203,7 +212,13 @@ export default function EmployeeManagement() {
       ...emp,
       skills: Array.isArray(emp.skills) ? emp.skills.join(', ') : emp.skills,
       pieceRatePerImpression: emp.pieceRatePerImpression !== undefined ? emp.pieceRatePerImpression : 5,
-      salesCommissionRate: emp.salesCommissionRate || 0
+      salesCommissionRate: emp.salesCommissionRate || 0,
+      hasLoginAccount: Boolean(emp.hasLoginAccount || emp.loginAccount || emp.username),
+      username: emp.username || emp.loginAccount?.username || '',
+      password: '',
+      systemRole: emp.systemRole || emp.loginAccount?.role || (emp.role === 'ceo' ? 'ceo' : 'production'),
+      customRoleTitle: emp.customRoleTitle || emp.loginAccount?.customRoleTitle || (emp.role === 'ceo' ? 'CEO / Owner (ປະທານເຈົ້າໜ້າທີ່ບໍລິຫານ)' : ''),
+      permissions: emp.permissions || emp.loginAccount?.permissions || (emp.role === 'ceo' ? ['ALL'] : ['dashboard', 'orders', 'tracker']),
     });
     setIsEditing(true);
     setIsModalOpen(true);
@@ -211,27 +226,45 @@ export default function EmployeeManagement() {
 
   const closeModal = () => { setIsModalOpen(false); setForm(emptyForm); };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name || !form.phone || !form.role) {
       showToast(T('ກະລຸນາຕື່ມຂໍ້ມູນທີ່ຈຳເປັນ!', 'Please fill in required fields!'), 'error');
       return;
     }
+
+    if (form.hasLoginAccount) {
+      if (!form.username?.trim()) {
+        showToast(T('ກະລຸນາປ້ອນຊື່ຜູ້ໃຊ້ເຂົ້າລະບົບ (Username is required)', 'Username is required for system login'), 'warning');
+        return;
+      }
+      if (!isEditing && !form.password) {
+        showToast(T('ກະລຸນາປ້ອນລະຫັດຜ່ານສຳລັບບັນຊີເຂົ້າລະບົບ (Password is required)', 'Password is required for new system account'), 'warning');
+        return;
+      }
+    }
+
     const skillArr = form.skills ? form.skills.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
     const avatarInit = form.nameEn ? form.nameEn.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) : form.name.slice(0, 2);
+    const empId = isEditing ? form.id : `EMP-${String(Date.now()).slice(-3).padStart(3, '0')}`;
 
     const payload = {
-      id: isEditing ? form.id : `EMP-${String(Date.now()).slice(-3).padStart(3, '0')}`,
+      id: empId,
       nameLo: form.name,
       nameEn: form.nameEn || form.name,
       role: form.role,
-      department: 'Digital Printing',
+      department: form.role === 'ceo' ? 'Executive Management' : 'Digital Printing',
       phone: form.phone,
       address: form.address,
       salaryLAK: Number(form.salary) || 0,
       status: form.status ? form.status.toUpperCase() : 'ACTIVE',
       skills: skillArr,
       pieceRatePerImpression: Number(form.pieceRatePerImpression) || 0,
-      salesCommissionRate: Number(form.salesCommissionRate) || 0
+      salesCommissionRate: Number(form.salesCommissionRate) || 0,
+      hasLoginAccount: Boolean(form.hasLoginAccount),
+      username: form.hasLoginAccount ? form.username.trim() : undefined,
+      systemRole: form.hasLoginAccount ? (form.role === 'ceo' ? 'ceo' : (form.systemRole || 'production')) : undefined,
+      customRoleTitle: form.hasLoginAccount ? form.customRoleTitle : undefined,
+      permissions: form.hasLoginAccount ? (form.role === 'ceo' ? ['ALL'] : (form.permissions || [])) : undefined,
     };
 
     fetch(isEditing ? `/api/employees/${form.id}` : '/api/employees', {
@@ -239,6 +272,37 @@ export default function EmployeeManagement() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).catch(err => console.log('API save error', err));
+
+    // Sync to admin user account if login account enabled
+    if (form.hasLoginAccount && form.username?.trim()) {
+      try {
+        const userPayload: any = {
+          username: form.username.trim(),
+          fullName: form.nameEn || form.name,
+          phone: form.phone,
+          role: form.role === 'ceo' ? 'ceo' : (form.systemRole || 'production'),
+          employeeId: empId,
+          isActive: form.status !== 'inactive'
+        };
+        if (form.password) {
+          userPayload.password = form.password;
+        }
+
+        await apiFetch('/api/v1/admin/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(userPayload)
+        }).catch(async () => {
+          return apiFetch(`/api/v1/admin/users/by-username/${encodeURIComponent(form.username.trim())}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userPayload)
+          }).catch(e => console.warn('Admin user sync skipped:', e));
+        });
+      } catch (err) {
+        console.warn('Sync admin user error:', err);
+      }
+    }
 
     if (isEditing) {
       const updatedList = employees.map(e => e.id === form.id ? { 
@@ -581,8 +645,14 @@ export default function EmployeeManagement() {
         {/* Edit Modal */}
         {isModalOpen && (
           <EmployeeModal
-            isEditing={isEditing} form={form} setForm={setForm}
-            onSave={handleSave} onClose={closeModal} T={T}
+            isEditing={isEditing}
+            form={form}
+            setForm={setForm}
+            onSave={handleSave}
+            onClose={closeModal}
+            T={T}
+            roles={ROLES}
+            shifts={SHIFTS}
           />
         )}
       </div>
@@ -862,214 +932,19 @@ export default function EmployeeManagement() {
         </>
       )}
 
-      {/* Add/Edit Modal */}
+      {/* Add/Edit Modal (Universal FormModalTemplate with Inline RBAC) */}
       {isModalOpen && (
         <EmployeeModal
-          isEditing={isEditing} form={form} setForm={setForm}
-          onSave={handleSave} onClose={closeModal} T={T}
+          isEditing={isEditing}
+          form={form}
+          setForm={setForm}
+          onSave={handleSave}
+          onClose={closeModal}
+          T={T}
+          roles={ROLES}
+          shifts={SHIFTS}
         />
       )}
-    </div>
-  );
-}
-
-// ========== MODAL ==========
-interface EmployeeModalProps {
-  isEditing: boolean;
-  form: any;
-  setForm: React.Dispatch<React.SetStateAction<any>>;
-  onSave: () => void;
-  onClose: () => void;
-  T: (lo: string, en: string) => string;
-}
-
-function EmployeeModal({ isEditing, form, setForm, onSave, onClose, T }: EmployeeModalProps) {
-  const F = (field: string, val: any) => setForm((prev: any) => ({ ...prev, [field]: val }));
-
-  return (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-md animate-fade-in">
-      <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
-        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b bg-slate-900 text-white">
-          <div>
-            <p className="text-[10px] font-black text-white/50 uppercase tracking-widest">
-              {isEditing ? T('ແກ້ໄຂຂໍ້ມູນ', 'Edit Record') : T('ເພີ່ມໃໝ່', 'New Employee')}
-            </p>
-            <h2 className="text-lg font-black">{T('ລະບົບພະນັກງານ', 'Employee System')}</h2>
-          </div>
-          <button type="button" onClick={onClose} className="p-2 hover:bg-white/10 rounded-xl cursor-pointer">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase">{T('ຊື່ ພາສາລາວ *', 'Name (Lao) *')}</label>
-              <input
-                value={form.name}
-                onChange={e => F('name', e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:bg-white focus:border-slate-400 outline-none transition"
-                placeholder="ສົມຈິດ ແກ້ວມະນີ"
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase">{T('ຊື່ ພາສາອັງກິດ', 'Name (English)')}</label>
-              <input
-                value={form.nameEn}
-                onChange={e => F('nameEn', e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:bg-white focus:border-slate-400 outline-none transition"
-                placeholder="Somchit Kaewmanee"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase">{T('ໜ້າທີ່ / ຕຳແໜ່ງ *', 'Role *')}</label>
-              <select value={form.role} onChange={e => F('role', e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 cursor-pointer focus:bg-white outline-none">
-                {ROLES.map(r => <option key={r.id} value={r.id}>{r.labelEn}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase">{T('ກະເວລາ', 'Shift')}</label>
-              <select value={form.shift} onChange={e => F('shift', e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 cursor-pointer focus:bg-white outline-none">
-                {SHIFTS.map(s => <option key={s.id} value={s.id}>{s.labelEn}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase">{T('ເບີໂທ *', 'Phone *')}</label>
-              <input
-                value={form.phone}
-                onChange={e => F('phone', e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold font-mono text-slate-800 focus:bg-white focus:border-slate-400 outline-none transition"
-                placeholder="020-XXXX-XXXX"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase">{T('ວັນທີເລີ່ມວຽກ', 'Start Date')}</label>
-              <input
-                type="date"
-                value={form.startDate}
-                onChange={e => F('startDate', e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold font-mono text-slate-800 focus:bg-white focus:border-slate-400 outline-none transition"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-black text-slate-500 uppercase">{T('ທີ່ຢູ່', 'Address')}</label>
-            <input
-              value={form.address}
-              onChange={e => F('address', e.target.value)}
-              className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:bg-white focus:border-slate-400 outline-none transition"
-              placeholder="ບ້ານ ສາຍລົມ, ວຽງຈັນ"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase">{T('ເງິນເດືອນ (ກີບ)', 'Salary (LAK)')}</label>
-              <input
-                type="number"
-                value={form.salary}
-                onChange={e => F('salary', e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold font-mono text-slate-800 focus:bg-white focus:border-slate-400 outline-none transition"
-                placeholder="2500000"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase">{T('ສະຖານະ', 'Status')}</label>
-              <select value={form.status} onChange={e => F('status', e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 cursor-pointer focus:bg-white outline-none">
-                <option value="active">{T('ໃຊ້ງານ', 'Active')}</option>
-                <option value="inactive">{T('ປິດໃຊ້ງານ', 'Inactive')}</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-black text-slate-500 uppercase">{T('ທັກສະ (ຄັ່ນດ້ວຍຈຸດ)', 'Skills (comma separated)')}</label>
-            <input
-              value={form.skills}
-              onChange={e => F('skills', e.target.value)}
-              className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:bg-white focus:border-slate-400 outline-none transition"
-              placeholder="Digital Printing, CMYK, Mimaki"
-            />
-          </div>
-
-          {/* Phase C: Piece-Rate & Incentive Rate Configuration */}
-          <div className="p-4 bg-amber-50/70 border border-amber-200/80 rounded-2xl space-y-3">
-            <div className="flex items-center gap-2">
-              <Coins className="w-4 h-4 text-amber-600" />
-              <h4 className="text-xs font-black text-amber-950 uppercase tracking-wide">
-                {T('ຕັ້ງຄ່າຄ່າແຮງງານຕາມຜົນງານ (Piece-Rate & Commission)', 'Piece-Rate & Incentive Configuration')}
-              </h4>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-700 block">
-                  {T('ຄ່າແຮງງານຕໍ່ 1 Impression (LAK)', 'Piece-Rate / Impression (LAK)')}
-                </label>
-                <input
-                  type="number"
-                  step="1"
-                  min="0"
-                  value={form.pieceRatePerImpression !== undefined ? form.pieceRatePerImpression : 5}
-                  onChange={e => F('pieceRatePerImpression', Number(e.target.value) || 0)}
-                  className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl text-sm font-black text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  placeholder="5"
-                />
-                <span className="text-[10px] text-slate-400 block font-medium">
-                  = {(Number(form.pieceRatePerImpression || 5) * 1000).toLocaleString()} LAK / 1,000 แผ่น
-                </span>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-700 block">
-                  {T('ຄອມມິດຊັ່ນຍອດຂາຍ (%)', 'Sales Commission (%)')}
-                </label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="100"
-                  value={form.salesCommissionRate !== undefined ? form.salesCommissionRate : 0}
-                  onChange={e => F('salesCommissionRate', Number(e.target.value) || 0)}
-                  className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl text-sm font-black text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  placeholder="0"
-                />
-                <span className="text-[10px] text-slate-400 block font-medium">
-                  {T('ສຳລັບພະນັກງານຂາຍ/ຕ້ອນຮັບ', 'For sales & CRM reps')}
-                </span>
-              </div>
-            </div>
-
-            {/* Live Calculation Preview Simulation */}
-            <div className="p-2.5 bg-white/90 border border-amber-200 rounded-xl text-[11px] flex items-center justify-between">
-              <span className="text-slate-600 font-medium flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                <span>{T('ຕົວຢ່າງ: ງານພິມ 5,000 Impressions', 'Example: 5,000 Impressions Job')}</span>
-              </span>
-              <span className="font-mono font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                +{(Number(form.pieceRatePerImpression !== undefined ? form.pieceRatePerImpression : 5) * 5000).toLocaleString()} LAK
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex gap-3 px-6 pb-6 pt-4 border-t bg-slate-50">
-          <button type="button" onClick={onClose} className="flex-1 py-3 border-2 border-slate-200 text-slate-700 rounded-2xl text-sm font-black hover:bg-slate-100 transition active:scale-95 cursor-pointer">
-            {T('ຍົກເລີກ', 'Cancel')}
-          </button>
-          <button type="button" onClick={onSave} className="flex-1 py-3 bg-slate-900 text-white rounded-2xl text-sm font-black hover:bg-slate-700 transition active:scale-95 cursor-pointer shadow-md">
-            {isEditing ? T('ບັນທຶກການແກ້ໄຂ', 'Save Changes') : T('ເພີ່ມພະນັກງານ', 'Add Employee')}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

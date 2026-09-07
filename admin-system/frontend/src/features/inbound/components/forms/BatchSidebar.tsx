@@ -94,7 +94,11 @@ export const BatchSidebar: React.FC<BatchSidebarProps> = ({
           {items.map((item, idx) => {
             const isSelected = idx === activeIdx;
             const itemRate = exchangeRates[item.importCurrency] || 1;
-            const rowSubtotal = (Number(item.importCost) || 0) * (Number(item.importQty) || 1) * itemRate;
+            const qty = Number(item.importQty) || 1;
+            const rawTotal = (item.costInputMode === 'TOTAL' && Number(item.totalLotCost) > 0)
+              ? Number(item.totalLotCost)
+              : (Number(item.importCost) || 0) * qty;
+            const rowSubtotal = rawTotal * itemRate;
             
             let label = item.paperName || item.inkColorName || item.printerModel || item.machineryName || item.bindingName || item.laminationName || item.sparePartName || item.offcutName;
             if (!label) label = `${item.importType} Item #${idx + 1}`;

@@ -220,17 +220,24 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, setCol
     },
   ];
 
+  const hasPagePermission = (pageId: string, itemRoles: string[]) => {
+    if (userRole === 'admin' || userRole === 'owner' || userRole === 'super_admin' || userRole === 'ceo') return true;
+    if (user?.permissions?.includes('ALL') || user?.permissions?.includes('*')) return true;
+    if (user?.permissions?.includes(pageId)) return true;
+    return itemRoles.includes(userRole);
+  };
+
   const filteredNavGroups = navGroups
     .filter((group) => {
-      if (userRole === 'admin' || userRole === 'owner' || userRole === 'super_admin') return true;
+      if (userRole === 'admin' || userRole === 'owner' || userRole === 'super_admin' || userRole === 'ceo') return true;
+      if (user?.permissions?.includes('ALL') || user?.permissions?.includes('*')) return true;
+      if (user?.permissions?.includes(group.id)) return true;
+      if (group.items?.some((it) => user?.permissions?.includes(it.id))) return true;
       return group.roles.includes(userRole);
     })
     .map((group) => {
       if (group.isDirectLink || !group.items) return group;
-      const filteredItems = group.items.filter((item) => {
-        if (userRole === 'admin' || userRole === 'owner' || userRole === 'super_admin') return true;
-        return item.roles.includes(userRole);
-      });
+      const filteredItems = group.items.filter((item) => hasPagePermission(item.id, item.roles));
       return { ...group, items: filteredItems };
     })
     .filter((group) => group.isDirectLink || (group.items && group.items.length > 0));

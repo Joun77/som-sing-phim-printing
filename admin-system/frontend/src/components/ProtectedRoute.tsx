@@ -23,7 +23,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
   // Check role authorization if specified
   if (allowedRoles && allowedRoles.length > 0 && user) {
     const userRole = (user.role || '').toLowerCase();
-    const isSuperAdmin = userRole === 'owner' || userRole === 'admin' || userRole === 'super_admin';
+    const isSuperAdmin = userRole === 'owner' || userRole === 'admin' || userRole === 'super_admin' || userRole === 'ceo';
     const isAllowed = isSuperAdmin || allowedRoles.some(r => r.toLowerCase() === userRole);
 
     if (!isAllowed) {

@@ -488,7 +488,7 @@ export default function InboundManagement() {
 
   const processSingleImportItem = (type: string, data: any, batchIndex?: number) => {
     const logId = data.id || `INB-${Date.now().toString().slice(-4)}${batchIndex !== undefined ? `-${batchIndex}` : ''}`;
-    const calcTotal = Number(data.price) || Number(data.unitPrice) || Number(data.rawImportCost) || ((data.importQty || 1) * Number(data.unitPrice || 0));
+    const calcTotal = Number(data.totalPrice) || Number(data.price) || (Number(data.unitPrice || 0) * Number(data.importQty || 1)) || Number(data.rawImportCost) || 0;
     const resolvedItemName = resolveInboundItemName(data);
 
     unrecordDeletedId(logId);
@@ -560,8 +560,8 @@ export default function InboundManagement() {
       const packQty = Number(data.importQty || 1);
       const multiplier = isSheetPaper ? sheetsPerPack : (isInk ? inkVolume : 1);
       const totalUnits = packQty * multiplier;
-      const unitPrice = Number(data.unitPrice || data.price || calcTotal || (isInk ? 80000 : 95000));
-      const perUnitConsumptionPrice = multiplier > 0 ? (unitPrice / multiplier) : unitPrice;
+      const unitPrice = Number(data.unitPrice) || (packQty > 0 && calcTotal > 0 ? (calcTotal / packQty) : calcTotal) || (isInk ? 80000 : 95000);
+      const perUnitConsumptionPrice = Number(data.costPerConsumptionUnit) || (multiplier > 0 ? (unitPrice / multiplier) : (totalUnits > 0 ? calcTotal / totalUnits : unitPrice));
 
       const existingItem = inventory.find(item => 
         (item.id && (item.id === data.id || item.id === data.sku || item.id === logId)) ||

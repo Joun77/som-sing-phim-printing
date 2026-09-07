@@ -21,6 +21,12 @@ export interface AdminUserItem {
 }
 
 const ROLE_CONFIGS: Record<string, { labelLo: string; labelEn: string; color: string; descLo: string }> = {
+  ceo: {
+    labelLo: 'ປະທານເຈົ້າໜ້າທີ່ບໍລິຫານ (CEO / Owner)',
+    labelEn: 'Chief Executive Officer (CEO)',
+    color: 'bg-amber-100 text-amber-900 border-amber-300',
+    descLo: 'ສິດສູງສຸດຄວບຄຸມລະບົບທັງໝົດ, ການເງິນ, ລາຍງານ, ໂຄງສ້າງ ແລະຈັດການຜູ້ໃຊ້ທັງໝົດ'
+  },
   admin: {
     labelLo: 'ເຈົ້າຂອງຮ້ານ (Super Admin)',
     labelEn: 'Super Admin',

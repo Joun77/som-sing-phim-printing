@@ -79,16 +79,32 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
 
   // Convert a single InboundItemFormData to final API payload
   const transformItemToPayload = (item: InboundItemFormData) => {
-    const rawCost = Number(item.importCost) || 0;
+    const qty = Number(item.importQty) || 1;
     const rate = exchangeRates[item.importCurrency] || 1;
-    const unitPriceLak = rawCost * rate;
+    
+    let rawUnitCost = Number(item.importCost) || 0;
+    let rawTotalCost = Number(item.totalLotCost) || 0;
+
+    if (item.costInputMode === 'TOTAL' && rawTotalCost > 0) {
+      rawUnitCost = qty > 0 ? (rawTotalCost / qty) : rawTotalCost;
+    } else {
+      rawTotalCost = rawUnitCost * qty;
+    }
+
+    const unitPriceLak = Math.round(rawUnitCost * rate * 100) / 100;
+    const totalPriceLak = Math.round(rawTotalCost * rate * 100) / 100;
 
     let finalData: Record<string, any> = {
       isRestockMode: false,
-      importQty: Number(item.importQty),
+      importQty: qty,
       unit: item.importUnit,
       unitPrice: unitPriceLak,
-      rawImportCost: rawCost,
+      totalPrice: totalPriceLak,
+      price: totalPriceLak,
+      costInputMode: item.costInputMode || 'UNIT',
+      totalLotCost: rawTotalCost,
+      rawImportCost: rawUnitCost,
+      rawTotalCost: rawTotalCost,
       currency: item.importCurrency,
       exchangeRate: rate,
       supplier: item.importVendor || null,
@@ -250,6 +266,10 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
       const totalSheetsCalculated = isSheet ? (Number(item.importQty) || 1) * sheetsPerPack : null;
       const totalSqmCalculated = !isSheet ? (Number(item.rollWidthM) || 0.61) * (Number(item.rollLengthM) || 30) * (Number(item.importQty) || 1) : null;
 
+      const costPerSheet = isSheet && totalSheetsCalculated && totalSheetsCalculated > 0
+        ? Math.round((totalPriceLak / totalSheetsCalculated) * 100) / 100
+        : unitPriceLak;
+
       finalData = {
         ...finalData,
         id: item.paperCode || `PAP-${Date.now().toString().slice(-4)}`,
@@ -260,6 +280,9 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
         stockQty: Number(item.importQty),
         totalSheetsCalculated,
         totalSqmCalculated,
+        costPerPurchaseUnit: unitPriceLak,
+        costPerConsumptionUnit: costPerSheet,
+        costPerSheet,
         specs: {
           paperCode: item.paperCode,
           brand: item.paperBrand,
@@ -393,7 +416,11 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
 
   const grandTotalAllItemsLAK = items.reduce((sum, item) => {
     const rate = exchangeRates[item.importCurrency] || 1;
-    return sum + ((Number(item.importCost) || 0) * (Number(item.importQty) || 1) * rate);
+    const qty = Number(item.importQty) || 1;
+    const rawTotal = (item.costInputMode === 'TOTAL' && Number(item.totalLotCost) > 0)
+      ? Number(item.totalLotCost)
+      : (Number(item.importCost) || 0) * qty;
+    return sum + (rawTotal * rate);
   }, 0);
 
   return (

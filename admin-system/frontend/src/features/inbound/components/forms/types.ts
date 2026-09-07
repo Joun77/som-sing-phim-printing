@@ -17,6 +17,8 @@ export interface InboundItemFormData {
   importQty: number;
   importUnit: string;
   importCost: string;
+  totalLotCost?: string;
+  costInputMode?: 'UNIT' | 'TOTAL';
   importCurrency: string;
   importVendor: string;
   importDate: string;
@@ -165,8 +167,10 @@ export const createDefaultItem = (type: string = 'PAPER'): InboundItemFormData =
     id: `ITEM-${Date.now()}-${rand}`,
     importType: type,
     importQty: 1,
-    importUnit: type === 'PRINTER' || type === 'MACHINERY' ? 'ເຄື່ອງ' : type === 'INK' ? 'ຂວດ' : 'ແຜ່ນ',
+    importUnit: type === 'PRINTER' || type === 'MACHINERY' ? 'ເຄື່ອງ' : type === 'INK' ? 'ຂວດ' : type === 'PAPER' ? 'ຣີມ' : 'ແຜ່ນ',
     importCost: '',
+    totalLotCost: '',
+    costInputMode: 'UNIT',
     importCurrency: 'LAK',
     importVendor: '',
     importDate: new Date().toISOString().split('T')[0],

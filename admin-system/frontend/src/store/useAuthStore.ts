@@ -5,6 +5,7 @@ export interface UserProfile {
   username: string;
   role: string;
   fullName: string;
+  permissions?: string[];
 }
 
 interface AuthState {
