@@ -330,14 +330,28 @@ func HandleConvertQuotationToOrder(c *gin.Context) {
 			}
 		}
 
+		var paperSize string = "A4"
+		if ps, ok := itemMap["paperSize"].(string); ok && ps != "" {
+			paperSize = ps
+		} else if ps, ok := itemMap["size"].(string); ok && ps != "" {
+			paperSize = ps
+		}
+
+		var pageCount int = 1
+		if pc, ok := itemMap["pageCount"].(float64); ok && pc > 0 {
+			pageCount = int(pc)
+		} else if pc, ok := itemMap["pages"].(float64); ok && pc > 0 {
+			pageCount = int(pc)
+		}
+
 		itemsList = append(itemsList, OrderItem{
 			ID:                fmt.Sprintf("item-%s-%d", newOrderID, idx+1),
 			OrderID:           newOrderID,
 			JobName:           itemName,
 			ItemName:          itemName,
 			Quantity:          qty,
-			PageCount:         1,
-			PaperSize:         "A5",
+			PageCount:         pageCount,
+			PaperSize:         paperSize,
 			CoverFileURL:      itemArtworkURL,
 			InnerFileURL:      itemArtworkURL,
 			ArtworkURL:         itemArtworkURL,

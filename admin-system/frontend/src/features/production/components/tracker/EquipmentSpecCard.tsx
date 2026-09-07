@@ -21,12 +21,14 @@ import { useApp } from '../../../../store/AppContext';
 interface EquipmentSpecCardProps {
   item: any;
   availableMachines?: Equipment[];
+  orderWorkflow?: any;
   onMachineChanged?: (log: MachineChangeLog) => void;
 }
 
 export const EquipmentSpecCard: React.FC<EquipmentSpecCardProps> = ({
   item,
   availableMachines = [],
+  orderWorkflow,
   onMachineChanged,
 }) => {
   const { printerColorLinks = [], inventory = [] } = useApp();
@@ -71,28 +73,70 @@ export const EquipmentSpecCard: React.FC<EquipmentSpecCardProps> = ({
   const allAvailableInks = React.useMemo(() => [...inventory, ...dbInks], [inventory, dbInks]);
 
   // Machine assignments state
-  const defaultPress = item.page_count > 10 || item.quantity > 500
-    ? 'Heidelberg Speedmaster SM52 (Offset 4-Color)'
-    : 'Konica Minolta AccurioPress C4080 (Digital Color)';
-  
-  const defaultCutter = 'Polar 78 ECO Guillotine Cutter';
+  const hasBinding = item.binding_type && item.binding_type !== 'NONE';
+  const hasLamination = item.specs?.lamination && item.specs?.lamination !== 'none';
+  const hasFinishing = hasBinding || hasLamination;
 
-  const defaultFinish = item.binding_type === 'HARDCOVER_CASE_BINDING'
-    ? 'Kolbus Case Maker / Hardcover Binding (ປົກແຂງຈົ່ວປັງ)'
-    : item.binding_type === 'PERFECT_HOT_GLUE'
-    ? 'Horizon BQ-270V Perfect Binder (ກາວຮ້ອນ)'
-    : item.binding_type === 'WIRE_O'
-    ? 'Renz DTP 340A Wire-O Binder (ສັນຂົດລວດ)'
-    : 'Foliant Vega 400A Thermal Laminator (ເຄືອບຟິມ)';
+  // Check if this item or its workflow actually requires cutting
+  const effectiveWorkflow = orderWorkflow || item.specs?.productionWorkflow || item.productionWorkflow;
+  const workflowSteps = Array.isArray(effectiveWorkflow?.steps) ? effectiveWorkflow.steps : [];
+
+  const hasCuttingInWorkflow = workflowSteps.some((st: any) => {
+    const text = `${st.id || ''} ${st.name || ''} ${st.nameLao || ''} ${st.category || ''}`.toLowerCase();
+    return text.includes('cut') || text.includes('trim') || text.includes('die') || text.includes('ຕັດ') || text.includes('ເຈຽນ');
+  });
+
+  const hasExplicitCutter = Boolean(
+    item.assigned_cutter_name &&
+    item.assigned_cutter_name !== 'NONE' &&
+    item.assigned_cutter_name !== 'none' &&
+    !item.assigned_cutter_name.includes('ບໍ່ໃຊ້ງານ')
+  );
+
+  const hasExplicitCuttingSpec = Boolean(
+    item.specs?.has_cutting ||
+    item.specs?.hasCutting ||
+    (item.specs?.cutting_method && item.specs.cutting_method !== 'NONE')
+  );
+
+  // If order explicitly defined workflow steps, follow the workflow strictly!
+  // If workflow has steps and NONE of them is cutting, then cutting is NOT used!
+  const hasCutting = workflowSteps.length > 0
+    ? (hasCuttingInWorkflow || hasExplicitCutter)
+    : (hasExplicitCutter || hasExplicitCuttingSpec);
+
+  const defaultPress = item.assigned_press_name || item.specs?.printerName || item.specs?.printer_name || (
+    item.page_count > 10 || item.quantity > 500
+      ? 'Heidelberg Speedmaster SM52 (Offset 4-Color)'
+      : 'Konica Minolta AccurioPress C4080 (Digital Color)'
+  );
+  
+  const defaultCutter = hasExplicitCutter
+    ? item.assigned_cutter_name
+    : hasCutting
+    ? (item.assigned_cutter_name || 'Polar 78 ECO Guillotine Cutter')
+    : '';
+
+  const defaultFinish = item.assigned_finish_name || (
+    item.binding_type === 'HARDCOVER_CASE_BINDING'
+      ? 'Kolbus Case Maker / Hardcover Binding (ປົກແຂງຈົ່ວປັງ)'
+      : item.binding_type === 'PERFECT_HOT_GLUE'
+      ? 'Horizon BQ-270V Perfect Binder (ກາວຮ້ອນ)'
+      : item.binding_type === 'WIRE_O'
+      ? 'Renz DTP 340A Wire-O Binder (ສັນຂົດລວດ)'
+      : hasLamination
+      ? 'Foliant Vega 400A Thermal Laminator (ເຄືອບຟິມ)'
+      : ''
+  );
 
   const [pressMachine, setPressMachine] = useState<string>(item.assigned_press_name || defaultPress);
-  const [cutterMachine, setCutterMachine] = useState<string>(item.assigned_cutter_name || defaultCutter);
-  const [finishMachine, setFinishMachine] = useState<string>(item.assigned_finish_name || defaultFinish);
+  const [cutterMachine, setCutterMachine] = useState<string>(defaultCutter);
+  const [finishMachine, setFinishMachine] = useState<string>(defaultFinish);
 
   // Derive accurate machine costs
   const pressObj = availableMachines.find(m => m.name === pressMachine || m.id === pressMachine) || { name: pressMachine, category: 'Printer' };
   const cutterObj = availableMachines.find(m => m.name === cutterMachine || m.id === cutterMachine) || { name: cutterMachine, category: 'Cutter' };
-  const finishObj = availableMachines.find(m => m.name === finishMachine || m.id === finishMachine) || { name: finishMachine, category: item.binding_type === 'NONE' ? 'Laminator' : 'Binder' };
+  const finishObj = availableMachines.find(m => m.name === finishMachine || m.id === finishMachine) || { name: finishMachine || 'None', category: item.binding_type === 'NONE' ? 'Laminator' : 'Binder' };
 
   const finishCategory = item.binding_type === 'NONE' ? 'Laminator' : 'Binder';
   const pressCost = calculateEquipmentPrintCost(pressObj, printerColorLinks, allAvailableInks, 'Printer');
@@ -112,15 +156,18 @@ export const EquipmentSpecCard: React.FC<EquipmentSpecCardProps> = ({
     if (!modalCategory) return;
 
     let prevName = '';
+    const isNone = machine.id === 'NONE' || machine.name.includes('ບໍ່ໃຊ້ງານ');
+    const machineName = isNone ? '' : machine.name;
+
     if (modalCategory === 'Printer') {
       prevName = pressMachine;
-      setPressMachine(machine.name);
+      setPressMachine(machineName);
     } else if (modalCategory === 'Cutter') {
       prevName = cutterMachine;
-      setCutterMachine(machine.name);
+      setCutterMachine(machineName);
     } else {
       prevName = finishMachine;
-      setFinishMachine(machine.name);
+      setFinishMachine(machineName);
     }
 
     const log: MachineChangeLog = {
@@ -189,7 +236,7 @@ export const EquipmentSpecCard: React.FC<EquipmentSpecCardProps> = ({
         <div className="p-3.5 bg-sky-50/50 border border-sky-100/80 rounded-2xl flex flex-col justify-between space-y-2">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">1. ແທ່ນພິມຫຼັກ (Press)</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase">1. ເຄື່ອງພິມຫຼັກ (Printer)</span>
               <Activity className="w-3.5 h-3.5 text-sky-500 animate-pulse" />
             </div>
             <strong className="text-xs font-black text-slate-900 block truncate mt-1" title={pressMachine}>
@@ -220,79 +267,145 @@ export const EquipmentSpecCard: React.FC<EquipmentSpecCardProps> = ({
             className="w-full py-1.5 px-2.5 bg-white hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
           >
             <RefreshCw className="w-3 h-3" />
-            <span>ຄົ້ນຫາ / ປ່ຽນແທ່ນພິມ</span>
+            <span>ຄົ້ນຫາ / ປ່ຽນເຄື່ອງພິມ</span>
           </button>
         </div>
 
         {/* 2. Precision Cutting Tile */}
-        <div className="p-3.5 bg-sky-50/50 border border-sky-100/80 rounded-2xl flex flex-col justify-between space-y-2">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">2. ເຄື່ອງຕັດເຈ້ຍ (Cutter)</span>
-              <Scissors className="w-3.5 h-3.5 text-sky-500" />
-            </div>
-            <strong className="text-xs font-black text-slate-900 block truncate mt-1" title={cutterMachine}>
-              {cutterMachine}
-            </strong>
-            <div className="mt-1 space-y-0.5">
-              <div className="flex items-baseline gap-1">
-                <span className="text-[11px] font-bold text-slate-700">ຄ່າຕັດ 1 ແຜ່ນ:</span>
-                <strong className="text-xs font-black text-slate-900 font-mono">
-                  {cutterCost.formattedTotal}
-                </strong>
-                <span className="text-[10px] text-slate-400">/ {cutterCost.unitLabel}</span>
+        {!hasCutting || !cutterMachine ? (
+          <div className="p-3.5 bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl flex flex-col justify-between space-y-2">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">2. ເຄື່ອງຕັດເຈ້ຍ (Cutter)</span>
+                <Scissors className="w-3.5 h-3.5 text-slate-400" />
               </div>
-              <span className="text-[10px] text-slate-400 block truncate">
-                ຕັດຂອບສາກ • ຕັດ Bleed 3mm
-              </span>
+              <div className="mt-1">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-black bg-slate-200/70 text-slate-700">
+                  ບໍ່ມີການຕັດ / ບໍ່ໄດ້ໃຊ້ເຄື່ອງຕັດ
+                </span>
+              </div>
+              <div className="mt-1.5 space-y-0.5">
+                <span className="text-[11px] font-semibold text-slate-500 block">
+                  (No Cutting Required)
+                </span>
+                <span className="text-[10px] text-slate-400 block truncate">
+                  ງານພິມເຕັມແຜ່ນ • ບໍ່ມີຂັ້ນຕອນຕັດແບ່ງແຜ່ນ
+                </span>
+              </div>
             </div>
-          </div>
 
-          <button
-            type="button"
-            onClick={() => handleOpenSelect('Cutter')}
-            className="w-full py-1.5 px-2.5 bg-white hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
-          >
-            <RefreshCw className="w-3 h-3" />
-            <span>ຄົ້ນຫາ / ປ່ຽນເຄື່ອງຕັດ</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => handleOpenSelect('Cutter')}
+              className="w-full py-1.5 px-2.5 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>+ ເພີ່ມເຄື່ອງຕັດເຈ້ຍ</span>
+            </button>
+          </div>
+        ) : (
+          <div className="p-3.5 bg-sky-50/50 border border-sky-100/80 rounded-2xl flex flex-col justify-between space-y-2">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">2. ເຄື່ອງຕັດເຈ້ຍ (Cutter)</span>
+                <Scissors className="w-3.5 h-3.5 text-sky-500" />
+              </div>
+              <strong className="text-xs font-black text-slate-900 block truncate mt-1" title={cutterMachine}>
+                {cutterMachine}
+              </strong>
+              <div className="mt-1 space-y-0.5">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[11px] font-bold text-slate-700">ຄ່າຕັດ 1 ແຜ່ນ:</span>
+                  <strong className="text-xs font-black text-slate-900 font-mono">
+                    {cutterCost.formattedTotal}
+                  </strong>
+                  <span className="text-[10px] text-slate-400">/ {cutterCost.unitLabel}</span>
+                </div>
+                <span className="text-[10px] text-slate-400 block truncate">
+                  ຕັດຂອບສາກ • ຕັດ Bleed 3mm
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleOpenSelect('Cutter')}
+              className="w-full py-1.5 px-2.5 bg-white hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>ຄົ້ນຫາ / ປ່ຽນເຄື່ອງຕັດ</span>
+            </button>
+          </div>
+        )}
 
         {/* 3. Finishing & Binding Tile */}
-        <div className="p-3.5 bg-sky-50/50 border border-sky-100/80 rounded-2xl flex flex-col justify-between space-y-2">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">3. ເຂົ້າເຫຼັ້ມ/ເຄືອບ (Finishing)</span>
-              <Layers className="w-3.5 h-3.5 text-sky-500" />
-            </div>
-            <strong className="text-xs font-black text-slate-900 block truncate mt-1" title={finishMachine}>
-              {finishMachine}
-            </strong>
-            <div className="mt-1 space-y-0.5">
-              <div className="flex items-baseline gap-1">
-                <span className="text-[11px] font-bold text-indigo-800">
-                  {finishCost.unitLabel === 'ແຜ່ນ' ? 'ຄ່າເຄືອບ 1 ແຜ່ນ:' : 'ຄ່າເຂົ້າເຫຼັ້ມ 1 ຫົວ:'}
-                </span>
-                <strong className="text-xs font-black text-indigo-700 font-mono">
-                  {finishCost.formattedTotal}
-                </strong>
-                <span className="text-[10px] text-slate-400">/ {finishCost.unitLabel}</span>
+        {!hasFinishing ? (
+          <div className="p-3.5 bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl flex flex-col justify-between space-y-2">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">3. ເຂົ້າເຫຼັ້ມ/ເຄືອບ (Finishing)</span>
+                <Layers className="w-3.5 h-3.5 text-slate-400" />
               </div>
-              <span className="text-[10px] text-slate-400 block truncate">
-                ສັນປຶ້ມ: {item.spine_width_mm || 0} ມມ
-              </span>
+              <div className="mt-1">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-black bg-slate-200/70 text-slate-700">
+                  ບໍ່ມີການເຂົ້າເລ່ມ / ແປຮູບ
+                </span>
+              </div>
+              <div className="mt-1.5 space-y-0.5">
+                <span className="text-[11px] font-semibold text-slate-500 block">
+                  (Single Sheet / No Binding)
+                </span>
+                <span className="text-[10px] text-slate-400 block truncate">
+                  ງານແຜ່ນດ່ຽວ • ບໍ່ມີຂັ້ນຕອນແປຮູບຫຼັງພິມ
+                </span>
+              </div>
             </div>
-          </div>
 
-          <button
-            type="button"
-            onClick={() => handleOpenSelect(item.binding_type === 'NONE' ? 'Laminator' : 'Binder')}
-            className="w-full py-1.5 px-2.5 bg-white hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
-          >
-            <RefreshCw className="w-3 h-3" />
-            <span>ຄົ້ນຫາ / ປ່ຽນເຄື່ອງເຂົ້າເຫຼັ້ມ</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => handleOpenSelect('Binder')}
+              className="w-full py-1.5 px-2.5 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>+ ເພີ່ມເຄື່ອງແປຮູບ / ເຂົ້າເຫຼັ້ມ</span>
+            </button>
+          </div>
+        ) : (
+          <div className="p-3.5 bg-sky-50/50 border border-sky-100/80 rounded-2xl flex flex-col justify-between space-y-2">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">3. ເຂົ້າເຫຼັ້ມ/ເຄືອບ (Finishing)</span>
+                <Layers className="w-3.5 h-3.5 text-sky-500" />
+              </div>
+              <strong className="text-xs font-black text-slate-900 block truncate mt-1" title={finishMachine}>
+                {finishMachine}
+              </strong>
+              <div className="mt-1 space-y-0.5">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[11px] font-bold text-indigo-800">
+                    {finishCost.unitLabel === 'ແຜ່ນ' ? 'ຄ່າເຄືອບ 1 ແຜ່ນ:' : 'ຄ່າເຂົ້າເຫຼັ້ມ 1 ຫົວ:'}
+                  </span>
+                  <strong className="text-xs font-black text-indigo-700 font-mono">
+                    {finishCost.formattedTotal}
+                  </strong>
+                  <span className="text-[10px] text-slate-400">/ {finishCost.unitLabel}</span>
+                </div>
+                <span className="text-[10px] text-slate-400 block truncate">
+                  ສັນປຶ້ມ: {item.spine_width_mm || 0} ມມ
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleOpenSelect(item.binding_type === 'NONE' ? 'Laminator' : 'Binder')}
+              className="w-full py-1.5 px-2.5 bg-white hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>ຄົ້ນຫາ / ປ່ຽນເຄື່ອງເຂົ້າເຫຼັ້ມ</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Universal Search & Select Machine Modal */}

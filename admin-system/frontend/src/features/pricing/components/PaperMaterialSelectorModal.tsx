@@ -1,13 +1,15 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Check, Filter, Layers, FileText, AlertCircle, ChevronDown, Package } from 'lucide-react';
+import { Search, Check, Filter, Layers, FileText, AlertCircle, ChevronDown, Package, Star } from 'lucide-react';
 import { FormModalTemplate } from '@components/common/FormModalTemplate';
 import type { InventoryItem } from '../../../types';
 
 interface PaperMaterialSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (paperId: string) => void;
+  onSelect: (paperId: string, paperItem?: InventoryItem) => void;
   selectedPaperId?: string;
+  defaultPaperId?: string;
+  onSetDefault?: (paperId: string) => void;
   papers: InventoryItem[];
   title?: string;
   targetType?: 'cover' | 'inner' | 'general';
@@ -20,6 +22,8 @@ export const PaperMaterialSelectorModal: React.FC<PaperMaterialSelectorModalProp
   onClose,
   onSelect,
   selectedPaperId,
+  defaultPaperId,
+  onSetDefault,
   papers,
   title,
   targetType = 'general',
@@ -231,6 +235,7 @@ export const PaperMaterialSelectorModal: React.FC<PaperMaterialSelectorModalProp
                 const mult = Number(paper.purchaseMultiplier || (paper as any).purchase_multiplier || 500);
                 const rawStock = paper.stockQty !== undefined ? paper.stockQty : (paper.stock_qty || 0);
                 const stock = (rawStock > 0 && rawStock <= 100) ? rawStock * mult : rawStock;
+                const isDefault = defaultPaperId === paper.id;
                 const pCost = Number(paper.costPerPurchaseUnit || (paper as any).cost_per_purchase_unit || 95000);
                 const rawCons = Number(paper.costPerConsumptionUnit || (paper as any).cost_per_consumption_unit || paper.costPerSheet || 0);
                 const fallbackPrice = (rawCons > 0 && (mult <= 1 || rawCons < (pCost / 2)))
@@ -243,12 +248,11 @@ export const PaperMaterialSelectorModal: React.FC<PaperMaterialSelectorModalProp
                 const size = paper.specs?.size || paper.specs?.standardSize || 'A4';
                 const isLowStock = stock <= (paper.minStockThreshold || 100);
 
-
                 return (
                   <div
                     key={paper.id}
                     onClick={() => {
-                      onSelect(paper.id);
+                      onSelect(paper.id, paper);
                       onClose();
                     }}
                     className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
@@ -268,6 +272,11 @@ export const PaperMaterialSelectorModal: React.FC<PaperMaterialSelectorModalProp
                             {gsm && (
                               <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold font-sans">
                                 {gsm} gsm
+                              </span>
+                            )}
+                            {isDefault && (
+                              <span className="px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-900 text-[10px] font-bold font-sans flex items-center gap-1">
+                                <Star className="w-3 h-3 text-amber-600 fill-amber-500" /> ຄ່າເລີ່ມຕົ້ນ
                               </span>
                             )}
                           </div>
@@ -298,14 +307,36 @@ export const PaperMaterialSelectorModal: React.FC<PaperMaterialSelectorModalProp
                       </div>
                     </div>
 
-                    {/* Bottom Row: Cost Price Breakdown */}
+                    {/* Bottom Row: Cost Price Breakdown & Set Default */}
                     <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-[11px] text-slate-500 font-medium">
-                        {fifoCost > 0 ? 'ຕົ້ນທຶນ FIFO ຈິງ:' : 'ຕົ້ນທຶນ/ແຜ່ນ:'}
-                      </span>
-                      <span className="text-xs font-black text-slate-950 font-sans">
-                        {formatCurrency(price)}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {onSetDefault && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSetDefault(paper.id);
+                            }}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition ${
+                              isDefault
+                                ? 'bg-amber-100 text-amber-800 font-black'
+                                : 'bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-800'
+                            }`}
+                            title="ຕັ້ງເປັນເຈ້ຍເລີ່ມຕົ້ນຂອງຮ້ານ"
+                          >
+                            <Star className={`w-3 h-3 ${isDefault ? 'text-amber-600 fill-amber-500' : 'text-slate-400'}`} />
+                            <span>{isDefault ? 'ເລີ່ມຕົ້ນ' : 'ຕັ້ງເປັນເລີ່ມຕົ້ນ'}</span>
+                          </button>
+                        )}
+                      </div>
+                      <div className="text-right font-sans">
+                        <span className="text-[10px] text-slate-400 block">
+                          {fifoCost > 0 ? 'ຕົ້ນທຶນ FIFO ຈິງ:' : 'ຕົ້ນທຶນ/ແຜ່ນ:'}
+                        </span>
+                        <span className="text-xs font-black text-slate-950">
+                          {formatCurrency(price)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 );

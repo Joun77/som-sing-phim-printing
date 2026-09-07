@@ -12,7 +12,10 @@ import {
   CreditCard,
   Truck,
   Layers,
-  Sparkles
+  Sparkles,
+  Scissors,
+  Wrench,
+  Package
 } from 'lucide-react';
 
 export interface CustomerQuotationTemplateProps {
@@ -173,9 +176,9 @@ export const CustomerQuotationTemplate: React.FC<CustomerQuotationTemplateProps>
           <tbody className="divide-y divide-slate-100">
             {items.map((item, idx) => {
               const calc = calculatedItems[idx] || {};
-              const unitPrice = calc.effectiveSellingPrice || calc.sellingPrice || 0;
               const volume = Number(item.printVolume || 1);
-              const totalLine = unitPrice * volume;
+              const totalLine = calc.sellingPrice || ((calc.unitPrice || calc.effectiveSellingPrice || 0) * volume) || 0;
+              const unitPrice = calc.unitPrice || (volume > 0 ? Math.round(totalLine / volume) : totalLine);
 
               const paperItem = inventory.find(p => p.id === item.paperId);
               const coverPaperItem = item.includeCover && item.coverPaperId ? inventory.find(p => p.id === item.coverPaperId) : null;
@@ -187,51 +190,194 @@ export const CustomerQuotationTemplate: React.FC<CustomerQuotationTemplateProps>
                 .map(m => m.name)
                 .filter(Boolean);
 
-              return (
-                <tr key={item.id || idx} className="hover:bg-slate-50/50">
-                  <td className="p-3 text-center font-bold text-slate-400">{idx + 1}</td>
-                  <td className="p-3">
-                    <div className="font-black text-slate-900 text-sm">
-                      {item.name || `ລາຍການທີ ${idx + 1}`}
-                    </div>
+              // Sub-item calculations with margin multiplier
+              const netCost = Number(calc.netCost || 0);
+              const marginMultiplier = (netCost > 0 && totalLine > 0) ? (totalLine / netCost) : 1;
 
-                    <div className="mt-1 space-y-0.5 text-[11px] text-slate-600">
-                      <div>
-                        • ໜ້າພິມ: <span className="font-semibold text-slate-800">{item.pagesPerBook ? `${item.pagesPerBook} ໜ້າ` : '1 ໜ້າ'}</span> ({item.isDoubleSided ? 'ພິມ 2 ໜ້າ Duplex' : 'ພິມໜ້າດຽວ Simplex'})
+              const cutsPerSheet = Number(calc.cutsPerSheet || item.cutsPerSheetOverride || 1);
+              const isBatchPhoto = Boolean(calc.isBatchPhoto || item.isBatchPhoto);
+              const totalSheets = Number(calc.totalParentSheets || calc.totalInnerParentSheets || calc.parentSheetsNeeded) ||
+                (volume * Math.ceil((Number(item.pagesPerBook) || 1) / (item.isDoubleSided ? 2 : 1)));
+
+              const rawFinishingMatCost = Number(calc.finishingMaterialsCost || 0);
+              const rawLaborCost = Number(calc.laborCost || 0);
+              const rawPkgCost = Number(calc.packagingDeliveryCost || 0);
+              const rawPostPressCost = Number(calc.postPressCost || 0);
+
+              const postPressMachs = (item.selectedPostPressIds || []).map((mId: string) => {
+                const mach = equipment.find(e => e.id === mId);
+                const rate = Number((mach as any)?.costPerPage) || Number((mach as any)?.calculatedCostPerPage) || 300;
+                const isCut = mach?.name ? (/ตัด|ຕັດ|cut|guillotine|trim/i.test(mach.name)) : false;
+                return {
+                  id: mId,
+                  name: mach?.name || '',
+                  cost: Math.round(rate * volume),
+                  isCut
+                };
+              });
+
+              const cuttingMachCost = postPressMachs.filter(m => m.isCut).reduce((sum, m) => sum + m.cost, 0);
+              const otherPostPressCost = postPressMachs.filter(m => !m.isCut).reduce((sum, m) => sum + m.cost, 0);
+
+              // 1. Finishing Services List (only explicit finishing/binding/lamination, excluding cutting)
+              const cleanFinishingList = [
+                (item.bindingOption && item.bindingOption !== 'none' && item.bindingOption !== 'NONE') ? item.bindingOption : null,
+                ...(postPressNames || []).filter(n => !/ตัด|ຕັດ|cut|guillotine|trim/i.test(n)),
+                ...(matNames || [])
+              ].filter(Boolean);
+
+              // 2. Cost calculations
+              // Labor, setup, cutting, paper, ink, overhead, and packaging are bundled into Base Print & Production
+              const rawFinishingCost = otherPostPressCost + rawFinishingMatCost;
+              const finishingCostSelling = Math.round(rawFinishingCost * marginMultiplier);
+
+              // Only show sub-items when there is actual add-on finishing/binding service
+              const hasFinishingAddon = cleanFinishingList.length > 0 && finishingCostSelling > 0;
+              const printingCostSelling = Math.max(0, totalLine - (hasFinishingAddon ? finishingCostSelling : 0));
+              const printingUnitSelling = volume > 0 ? Math.round(printingCostSelling / volume) : printingCostSelling;
+              const finishingUnitSelling = volume > 0 ? Math.round(finishingCostSelling / volume) : finishingCostSelling;
+
+              // Finished Product Size vs Production Parent Paper Sheet
+              const finishedSizeLabel = (() => {
+                if (item.jobSizePreset && item.jobSizePreset !== 'CUSTOM' && item.jobSizePreset !== 'Custom') {
+                  return item.jobSizePreset;
+                }
+                if (item.jobWidth && item.jobHeight) {
+                  return `${Math.round(item.jobWidth)}×${Math.round(item.jobHeight)} mm`;
+                }
+                return item.jobSizePreset || 'A4';
+              })();
+
+              const finishedDimensionMM = (item.jobWidth && item.jobHeight && item.jobSizePreset && !item.jobSizePreset.includes('×') && !item.jobSizePreset.toLowerCase().includes('mm'))
+                ? `${Math.round(item.jobWidth)}×${Math.round(item.jobHeight)} mm`
+                : null;
+
+              const parentPaperName = paperItem?.name || item.paperId || 'ມາດຕະຖານ A4';
+
+              return (
+                <React.Fragment key={item.id || idx}>
+                  {/* Main Product Row */}
+                  <tr className="hover:bg-slate-50/50 bg-white">
+                    <td className="p-3 text-center font-bold text-slate-400">{idx + 1}</td>
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-slate-900 text-sm">
+                          {item.name || (isBatchPhoto ? (currentLang === 'lo' ? `ຊຸດຮູບພາບ ${finishedSizeLabel}` : `Photo Set ${finishedSizeLabel}`) : `ລາຍການທີ ${idx + 1}`)}
+                        </span>
+                        {isBatchPhoto && (
+                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/70 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                            {currentLang === 'lo' ? 'ຊຸດຮູບພາບ' : 'Photo Batch'}
+                          </span>
+                        )}
                       </div>
-                      <div>
-                        • ເຈ້ຍເນື້ອໃນ: <span className="font-semibold text-slate-800">{paperItem?.name || item.paperId || 'ມາດຕະຖານ A4'}</span>
-                      </div>
-                      {item.includeCover && (
-                        <div className="text-amber-800">
-                          • ປົກ: <span className="font-semibold">{coverPaperItem?.name || 'ເຈ້ຍປົກ'}</span> ({item.coverPagesCount || 4} ໜ້າ)
-                        </div>
-                      )}
-                      <div>
-                        • ລະບົບສີ: <span className="font-semibold text-slate-800">{item.colorPrintMode === 'MONO_K' ? 'ຂາວດຳ Mono (K)' : 'ພິມສີ Full Color CMYK'}</span>
-                      </div>
-                      {((postPressNames.length > 0) || (matNames.length > 0) || item.bindingOption) && (
+
+                      <div className="mt-1 space-y-0.5 text-[11px] text-slate-600">
                         <div>
-                          • ຫຼັງພິມ/ເຂົ້າຮູບ: <span className="font-semibold text-slate-800">{[item.bindingOption, ...postPressNames, ...matNames].filter(Boolean).join(', ')}</span>
+                          • ໜ້າພິມ: <span className="font-semibold text-slate-800">{item.pagesPerBook ? `${item.pagesPerBook} ໜ້າ` : '1 ໜ້າ'}</span> ({item.isDoubleSided ? 'ພິມ 2 ໜ້າ' : 'ພິມໜ້າດຽວ'})
                         </div>
+                        <div>
+                          • ປະເພດເຈ້ຍ: <span className="font-semibold text-slate-800">{parentPaperName}</span>
+                        </div>
+                        {item.jobSizePreset && item.jobSizePreset !== 'A4' && (
+                          <div>
+                            • ຂະໜາດ: <span className="font-semibold text-slate-800">{finishedSizeLabel}</span> {finishedDimensionMM ? `(${finishedDimensionMM})` : ''}
+                          </div>
+                        )}
+                        {item.includeCover && (
+                          <div className="text-amber-800">
+                            • ປົກ: <span className="font-semibold">{coverPaperItem?.name || 'ເຈ້ຍປົກ'}</span> ({item.coverPagesCount || 4} ໜ້າ)
+                          </div>
+                        )}
+                        <div>
+                          • ລະບົບສີ: <span className="font-semibold text-slate-800">{item.colorPrintMode === 'MONO_K' ? (currentLang === 'lo' ? 'ພິມຂາວດຳ (Mono)' : 'Black & White') : (currentLang === 'lo' ? 'ພິມ 4 ສີ (Color)' : 'Full Color')}</span>
+                        </div>
+                        {cleanFinishingList.length > 0 && (
+                          <div>
+                            • ຫຼັງພິມ/ເຂົ້າຮູບ: <span className="font-semibold text-slate-800">{cleanFinishingList.join(', ')}</span>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-3 text-center font-bold text-slate-700">
+                      <span className="px-2.5 py-1 bg-slate-100 text-slate-800 rounded-lg font-black inline-block">
+                        {finishedSizeLabel}
+                      </span>
+                      {finishedDimensionMM && (
+                        <span className="text-[10px] text-slate-400 block font-normal font-mono mt-0.5">
+                          {finishedDimensionMM}
+                        </span>
                       )}
-                    </div>
-                  </td>
-                  <td className="p-3 text-center font-bold text-slate-700">
-                    <span className="px-2 py-1 bg-slate-100 rounded-lg">
-                      {item.jobSizePreset || 'A4'}
-                    </span>
-                  </td>
-                  <td className="p-3 text-center font-black text-slate-900 font-sans">
-                    {volume.toLocaleString()} {item.unitName || 'ຊຸດ'}
-                  </td>
-                  <td className="p-3 text-right font-bold text-slate-800 font-mono">
-                    {formatCurrency(unitPrice)}
-                  </td>
-                  <td className="p-3 text-right font-black text-slate-900 font-mono text-sm">
-                    {formatCurrency(totalLine)}
-                  </td>
-                </tr>
+                    </td>
+                    <td className="p-3 text-center font-black text-slate-900 font-sans">
+                      {volume.toLocaleString()} {item.unitName || 'ຊຸດ'}
+                    </td>
+                    <td className="p-3 text-right font-bold text-slate-800 font-mono">
+                      {formatCurrency(unitPrice)}
+                    </td>
+                    <td className="p-3 text-right font-black text-slate-900 font-mono text-sm">
+                      {formatCurrency(totalLine)}
+                    </td>
+                  </tr>
+
+                  {/* Sub-items: Only rendered if there is an explicit finishing/binding add-on */}
+                  {hasFinishingAddon && (
+                    <>
+                      {/* Sub-item 1: Base Printing & Production (รวมกระดาษ, หมึก, ค่าตัด, ค่าแรง, ค่าจักร) */}
+                      <tr className="bg-slate-50/60 text-[11px] text-slate-600 border-t border-dashed border-slate-200/80">
+                        <td className="p-2 text-center text-slate-300 select-none"></td>
+                        <td className="p-2 pl-6">
+                          <div className="flex items-center gap-1.5 font-medium text-slate-700">
+                            <span className="text-slate-400 font-mono select-none">└─</span>
+                            <Printer className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                            <span>
+                              {currentLang === 'lo'
+                                ? 'ຄ່າບໍລິການພິມ & ຜະລິດ (Printing & Production)'
+                                : 'Print & Production Service'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-2 text-center font-medium text-slate-500">
+                          {finishedSizeLabel}
+                        </td>
+                        <td className="p-2 text-center font-medium text-slate-700 font-sans">
+                          {volume.toLocaleString()} {item.unitName || 'ຊຸດ'}
+                        </td>
+                        <td className="p-2 text-right font-medium text-slate-600 font-mono">
+                          {formatCurrency(printingUnitSelling)}/{item.unitName || 'ຊຸດ'}
+                        </td>
+                        <td className="p-2 text-right font-bold text-slate-800 font-mono">
+                          {formatCurrency(printingCostSelling)}
+                        </td>
+                      </tr>
+
+                      {/* Sub-item 2: Finishing / Binding Add-on (งานหลังพิมพ์ / เข้าเล่ม / เคลือบ) */}
+                      <tr className="bg-slate-50/60 text-[11px] text-slate-600 border-t border-dashed border-slate-200/80">
+                        <td className="p-2 text-center text-slate-300 select-none"></td>
+                        <td className="p-2 pl-6">
+                          <div className="flex items-center gap-1.5 font-medium text-slate-700">
+                            <span className="text-slate-400 font-mono select-none">└─</span>
+                            <Layers className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                            <span>
+                              {currentLang === 'lo'
+                                ? `ຄ່າງານຫຼັງພິມ / ເຂົ້າຮູບ (${cleanFinishingList.join(', ')})`
+                                : `Finishing & Binding (${cleanFinishingList.join(', ')})`}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-2 text-center text-slate-400 font-sans">-</td>
+                        <td className="p-2 text-center font-medium text-slate-700 font-sans">
+                          {volume.toLocaleString()} {item.unitName || 'ຊຸດ'}
+                        </td>
+                        <td className="p-2 text-right font-medium text-slate-500 font-mono">
+                          {formatCurrency(finishingUnitSelling)}/{item.unitName || 'ຊຸດ'}
+                        </td>
+                        <td className="p-2 text-right font-bold text-slate-800 font-mono">
+                          {formatCurrency(finishingCostSelling)}
+                        </td>
+                      </tr>
+                    </>
+                  )}
+                </React.Fragment>
               );
             })}
           </tbody>

@@ -259,7 +259,13 @@ export function calculateEquipmentPrintCost(
   // Specs calculation (100% identical to EquipmentTable.tsx)
   const lifespanYears = Number(eq.lifespanYears || eq.specs?.lifespanYears || 5);
   const estMonthlyVolume = Number(eq.estMonthlyVolume || eq.specs?.estMonthlyVolume || 50000);
-  const maintenanceRatePct = Number(eq.maintenanceRatePercent || eq.specs?.maintenanceRatePercent || 15);
+  const maintenanceRatePct = Number(
+    eq.maintenanceRatePercent !== undefined ? eq.maintenanceRatePercent :
+    eq.specs?.maintenanceRatePercent !== undefined ? eq.specs.maintenanceRatePercent :
+    eq.maintenance_rate_percent !== undefined ? eq.maintenance_rate_percent :
+    eq.specs?.maintenance_rate_percent !== undefined ? eq.specs.maintenance_rate_percent :
+    15
+  );
   const maintCostPerPage = Number(eq.specs?.fixedMaintenanceCostPerPage || 0);
 
   const assetValue = Number(
@@ -269,19 +275,32 @@ export function calculateEquipmentPrintCost(
     eq.purchaseCost ?? 
     eq.purchasePrice ?? 
     eq.unitCost ?? 
+    eq.totalPrice ??
+    eq.cost_per_purchase_unit ??
+    eq.costPerPurchaseUnit ??
+    eq.specs?.totalPrice ??
+    eq.specs?.price ??
+    eq.specs?.purchaseCost ??
     0
   );
   const totalMonths = lifespanYears * 12;
-  const targetPages = Number(
+  const explicitCapacity = Number(
+    eq.expectedLifeA4Pages ||
+    eq.specs?.expectedLifeA4Pages ||
     eq.TargetTotalPages || 
     eq.printedPagesCapacity || 
-    eq.expectedLifeA4Pages || 
     eq.lifetimePagesA4 || 
-    (estMonthlyVolume * totalMonths) || 
-    3000000
+    eq.expected_life_pages ||
+    eq.specs?.printedPagesCapacity ||
+    0
   );
+  const targetPages = explicitCapacity > 0 
+    ? explicitCapacity 
+    : (estMonthlyVolume > 0 && totalMonths > 0 ? estMonthlyVolume * totalMonths : 3000000);
   const monthlyDepr = totalMonths > 0 ? (assetValue / totalMonths) : 0;
-  const baseCostPerUnit = (estMonthlyVolume > 0 && monthlyDepr > 0)
+  const baseCostPerUnit = (explicitCapacity > 0 && assetValue > 0)
+    ? (assetValue / explicitCapacity)
+    : (estMonthlyVolume > 0 && monthlyDepr > 0)
     ? (monthlyDepr / estMonthlyVolume)
     : (targetPages > 0 ? (assetValue / targetPages) : 0);
 

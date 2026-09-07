@@ -158,4 +158,35 @@ describe('machineCostCalculator Unit Tests', () => {
     assert.strictEqual(brotherCost.formattedMachine, 'LAK 2.80');
     assert.strictEqual(brotherCost.formattedInk, 'LAK 940');
   });
+
+  it('correctly calculates depreciation and print cost for equipment with explicit expectedLifeA4Pages from DB', () => {
+    // Epson L15150 from materials DB: 18,000,000 LAK, 200,000 pages, 20% maintenance
+    // Depreciation = 18,000,000 / 200,000 = 90 LAK/page
+    // Maintenance = 90 * 0.20 = 18 LAK/page
+    // Total Machine = 108 LAK/page
+    const epsonDb = {
+      id: 'PRN-9614',
+      name: 'Epson L15150',
+      category: 'PRINTER',
+      totalPrice: 18000000,
+      expectedLifeA4Pages: 200000,
+      maintenanceRatePercent: 20,
+      oemBaselineInks: [
+        { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemPrice: 450000, oemStandardIsoYieldA4: 7500 }, // 60
+        { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemPrice: 320000, oemStandardIsoYieldA4: 6000 },   // 53.33
+        { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemPrice: 320000, oemStandardIsoYieldA4: 6000 }, // 53.33
+        { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemPrice: 320000, oemStandardIsoYieldA4: 6000 },  // 53.33
+      ]
+    };
+
+    const cost = calculateEquipmentPrintCost(epsonDb, [], [], 'Printer');
+    assert.strictEqual(cost.baseCostPerUnit, 90);
+    assert.strictEqual(cost.wearAllowancePerUnit, 18);
+    assert.strictEqual(cost.netCostPerUnit, 108);
+    assert.strictEqual(cost.formattedMachine, 'LAK 108');
+    // Ink = 60 + 53.33 + 53.33 + 53.33 = 220 LAK
+    // Total = 108 + 220 = 328 LAK
+    assert.strictEqual(cost.formattedInk, 'LAK 220');
+    assert.strictEqual(cost.formattedTotal, 'LAK 328');
+  });
 });

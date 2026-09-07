@@ -18,9 +18,15 @@ import {
   Send,
   Eye,
   Tag,
-  MapPin
+  MapPin,
+  Images,
+  Image as ImageIcon,
+  ZoomIn,
+  Loader2
 } from 'lucide-react';
 import { useApp } from '@store/AppContext';
+import { FormModalTemplate } from '@components/common/FormModalTemplate';
+import { downloadPhotosAsZip } from '@utils/zipDownloader';
 
 interface ArtworkPrepressCardProps {
   orderIdDisplay: string;
@@ -49,6 +55,7 @@ interface ArtworkPrepressCardProps {
   onUploadProof?: (proofUrl: string) => void;
   onConfigureWorkflow?: () => void;
   productionWorkflow?: any;
+  setLightbox?: (lb: { src: string; title: string } | null) => void;
 }
 
 export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
@@ -78,6 +85,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
   onUploadProof,
   onConfigureWorkflow,
   productionWorkflow,
+  setLightbox,
 }) => {
   const { customerCategories = [] } = useApp();
   const categoryObj = customerCategories.find((c: any) => c.id === customerTier);
@@ -87,6 +95,23 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
   const [newLink, setNewLink] = useState('');
   const [isAttachingProof, setIsAttachingProof] = useState(false);
   const [newProofLink, setNewProofLink] = useState('');
+
+  const [galleryModalItem, setGalleryModalItem] = useState<{ name: string; photos: { name: string; url: string }[] } | null>(null);
+  const [isZipping, setIsZipping] = useState(false);
+
+  const handleDownloadBatchZip = async (itemPhotos: { name: string; url: string }[], itemName: string) => {
+    setIsZipping(true);
+    try {
+      await downloadPhotosAsZip(
+        itemPhotos,
+        `${orderIdDisplay}_${itemName.replace(/\s+/g, '_')}_${itemPhotos.length}_images.zip`
+      );
+    } catch (err) {
+      console.error('ZIP download error:', err);
+    } finally {
+      setIsZipping(false);
+    }
+  };
 
   const handleSaveProofLink = (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,6 +234,14 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                 const itArtworkSize = it.artwork?.file_size_bytes || it.artworkFileSize || it.artwork_file_size || it.fileSize || 0;
                 const itFormattedSize = itArtworkSize > 0 ? `${(itArtworkSize / (1024 * 1024)).toFixed(2)} MB` : '';
 
+                // Extract all batch photos / artwork files
+                const rawBatch: any[] = it.batch_files || it.batchFiles || it.gallery_urls || it.galleryUrls || it.fileUrls || it.artworkUrls || [];
+                const batchFiles: string[] = Array.isArray(rawBatch) && rawBatch.length > 0
+                  ? rawBatch.map((f: any) => (typeof f === 'string' ? f : (f?.file_url || f?.url || ''))).filter(Boolean)
+                  : (itArtworkUrl ? [itArtworkUrl] : []);
+
+                const hasBatch = batchFiles.length > 1;
+
                 return (
                   <div key={it.id || idx} className="pt-2 text-slate-800 space-y-2">
                     <div className="flex justify-between items-start">
@@ -239,55 +272,139 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                         </div>
 
                         {/* Per-Job Artwork File Info & Quick Actions */}
-                        {itArtworkUrl && (
-                          <div className="mt-2 flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-100/80 border border-slate-200 text-[11px]">
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono font-bold text-[9px] uppercase shrink-0">
-                                {itArtworkFileName.toLowerCase().endsWith('.pdf') ? 'PDF' : 'ARTWORK'}
-                              </span>
-                              <span className="font-mono font-bold text-slate-700 truncate" title={itArtworkFileName}>
-                                {itArtworkFileName || 'Job Artwork'}
-                              </span>
-                              {itFormattedSize && (
-                                <span className="text-slate-400 text-[10px] shrink-0 font-medium">({itFormattedSize})</span>
-                              )}
+                        {batchFiles.length > 0 && (
+                          <div className="mt-2 p-2.5 rounded-xl bg-slate-100/90 border border-slate-200 space-y-2 text-[11px]">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                {hasBatch ? (
+                                  <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-mono font-black text-[9px] uppercase shrink-0 flex items-center gap-1">
+                                    <Images className="w-2.5 h-2.5" />
+                                    {batchFiles.length} PHOTOS
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono font-bold text-[9px] uppercase shrink-0">
+                                    {itArtworkFileName.toLowerCase().endsWith('.pdf') ? 'PDF' : 'ARTWORK'}
+                                  </span>
+                                )}
+                                <span className="font-mono font-bold text-slate-700 truncate" title={itArtworkFileName}>
+                                  {hasBatch ? `ຊຸດໄຟລ໌ຮູບພາບ (${batchFiles.length} ຮູບ)` : (itArtworkFileName || 'Job Artwork')}
+                                </span>
+                                {itFormattedSize && (
+                                  <span className="text-slate-400 text-[10px] shrink-0 font-medium">({itFormattedSize})</span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (hasBatch) {
+                                      const itemPhotos = batchFiles.map((url, i) => ({
+                                        name: `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
+                                        url
+                                      }));
+                                      handleDownloadBatchZip(itemPhotos, it.name || 'photos');
+                                    } else if (itArtworkUrl) {
+                                      try {
+                                        const link = document.createElement('a');
+                                        link.href = itArtworkUrl;
+                                        link.download = itArtworkFileName || 'artwork.pdf';
+                                        link.target = '_blank';
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        document.body.removeChild(link);
+                                      } catch (err) {
+                                        window.open(itArtworkUrl, '_blank');
+                                      }
+                                    }
+                                  }}
+                                  className="px-2 py-1 rounded-lg bg-white hover:bg-slate-200 text-slate-700 border border-slate-200 text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                                  title={hasBatch ? `Download all ${batchFiles.length} photos as ZIP` : "Download Job Artwork"}
+                                >
+                                  {isZipping ? <Loader2 className="w-3 h-3 text-slate-600 animate-spin" /> : <Download className="w-3 h-3 text-slate-600" />}
+                                  <span>{hasBatch ? 'ໂຫຼດ ZIP' : 'ໂຫຼດ'}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (hasBatch) {
+                                      const itemPhotos = batchFiles.map((url, i) => ({
+                                        name: `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
+                                        url
+                                      }));
+                                      setGalleryModalItem({ name: it.name || 'Photo Prints', photos: itemPhotos });
+                                    } else if (setLightbox && batchFiles[0]) {
+                                      setLightbox({
+                                        src: batchFiles[0],
+                                        title: `${it.name || 'Artwork'}`
+                                      });
+                                    } else if (itArtworkUrl) {
+                                      window.open(itArtworkUrl, '_blank');
+                                    }
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold flex items-center gap-1 transition cursor-pointer shadow-xs"
+                                  title="Open Job Artwork Gallery"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  <span>{hasBatch ? 'ເບິ່ງຄັງຮູບ' : 'ເບິ່ງ'}</span>
+                                </button>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  try {
-                                    const link = document.createElement('a');
-                                    link.href = itArtworkUrl;
-                                    link.download = itArtworkFileName || 'artwork.pdf';
-                                    link.target = '_blank';
-                                    document.body.appendChild(link);
-                                    link.click();
-                                    document.body.removeChild(link);
-                                  } catch (err) {
-                                    window.open(itArtworkUrl, '_blank');
-                                  }
-                                }}
-                                className="px-2 py-1 rounded-lg bg-white hover:bg-slate-200 text-slate-700 border border-slate-200 text-[10px] font-bold flex items-center gap-1 transition"
-                                title="Download Job Artwork"
-                              >
-                                <Download className="w-3 h-3 text-slate-600" />
-                                <span>ໂຫຼດ</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  window.open(itArtworkUrl, '_blank');
-                                }}
-                                className="px-2 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold flex items-center gap-1 transition"
-                                title="Open Job Artwork"
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                                <span>ເບິ່ງ</span>
-                              </button>
-                            </div>
+
+                            {/* Batch Photos Thumbnail Strip (up to 6 thumbnails) */}
+                            {hasBatch && (
+                              <div className="flex items-center gap-1.5 pt-1 overflow-x-auto pb-1">
+                                {batchFiles.slice(0, 6).map((imgUrl: string, bIdx: number) => (
+                                  <div
+                                    key={bIdx}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (setLightbox) {
+                                        setLightbox({
+                                          src: imgUrl,
+                                          title: `${it.name || 'Photo'} - ຮູບທີ ${bIdx + 1}/${batchFiles.length}`
+                                        });
+                                      } else {
+                                        window.open(imgUrl, '_blank');
+                                      }
+                                    }}
+                                    className="w-11 h-11 rounded-lg border border-slate-200 bg-white overflow-hidden shrink-0 cursor-pointer hover:border-sky-500 hover:scale-105 transition-all relative group shadow-2xs"
+                                    title={`Click to view photo #${bIdx + 1}`}
+                                  >
+                                    <img
+                                      src={imgUrl}
+                                      alt={`Thumb ${bIdx + 1}`}
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => {
+                                        (e.target as HTMLElement).style.display = 'none';
+                                      }}
+                                    />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-[9px] font-bold text-white">
+                                      #{bIdx + 1}
+                                    </div>
+                                  </div>
+                                ))}
+                                {batchFiles.length > 6 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const itemPhotos = batchFiles.map((url, i) => ({
+                                        name: `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
+                                        url
+                                      }));
+                                      setGalleryModalItem({ name: it.name || 'Photo Prints', photos: itemPhotos });
+                                    }}
+                                    className="w-11 h-11 rounded-lg border border-dashed border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 flex items-center justify-center font-black text-[10px] shrink-0 transition cursor-pointer"
+                                    title="View all photos in gallery"
+                                  >
+                                    +{batchFiles.length - 6}
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -358,6 +475,83 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
           </button>
         )}
       </div>
+
+      {/* Universal Photo Batch Gallery Modal */}
+      {galleryModalItem && (
+        <FormModalTemplate
+          isOpen={galleryModalItem !== null}
+          onClose={() => setGalleryModalItem(null)}
+          icon={<Images className="w-5 h-5 text-white" />}
+          title={currentLang === 'lo' ? `ຄັງຮູບພາບງານພິມ (${galleryModalItem.photos.length} ຮູບ)` : `Artwork Gallery (${galleryModalItem.photos.length} Photos)`}
+          subtitle={`ອໍເດີ #${orderIdDisplay} • ລາຍການ: ${galleryModalItem.name} • ລູກຄ້າ: ${customerName}`}
+          maxWidthClass="max-w-4xl"
+          badgeText={`${galleryModalItem.photos.length} PHOTOS`}
+          footerActions={
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
+              <span className="text-xs text-slate-500 font-semibold text-center sm:text-left">
+                {currentLang === 'lo' 
+                  ? `ລວມທັງໝົດ ${galleryModalItem.photos.length} ຮູບພາບ • ກົດທີ່ຮູບເພື່ອເບິ່ງ Preview ຄວາມລະອຽດສູງ` 
+                  : `Total ${galleryModalItem.photos.length} photos ready for press`}
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadBatchZip(galleryModalItem.photos, galleryModalItem.name)}
+                  className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-black text-xs cursor-pointer transition flex items-center gap-1.5 shadow-sm"
+                >
+                  {isZipping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                  <span>{currentLang === 'lo' ? 'ດາວໂຫຼດຮູບທັງໝົດ (ZIP)' : 'Download All as ZIP'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGalleryModalItem(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs cursor-pointer transition"
+                >
+                  {currentLang === 'lo' ? 'ປິດໜ້າຕ່າງ' : 'Close'}
+                </button>
+              </div>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3 max-h-[60vh] overflow-y-auto p-1">
+              {galleryModalItem.photos.map((photo, pIdx) => (
+                <div
+                  key={pIdx}
+                  onClick={() => {
+                    if (setLightbox) {
+                      setLightbox({
+                        src: photo.url,
+                        title: `${galleryModalItem.name} - ຮູບທີ ${pIdx + 1}/${galleryModalItem.photos.length}`
+                      });
+                    }
+                  }}
+                  className="group relative bg-white rounded-2xl overflow-hidden border border-slate-200 hover:border-sky-500 cursor-pointer shadow-2xs transition hover:shadow-md"
+                >
+                  <div className="aspect-square w-full overflow-hidden bg-slate-100">
+                    <img 
+                      src={photo.url} 
+                      alt={photo.name} 
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-200" 
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
+                  <div className="p-2 bg-white">
+                    <span className="text-[10.5px] font-bold text-slate-700 block truncate" title={photo.name}>
+                      {pIdx + 1}. {photo.name}
+                    </span>
+                  </div>
+                  <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
+                    <ZoomIn className="w-5 h-5 text-sky-300" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </FormModalTemplate>
+      )}
     </div>
   );
 };

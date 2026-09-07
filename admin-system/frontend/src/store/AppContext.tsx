@@ -496,7 +496,43 @@ const ROLE_OPTIONS = [
 ];
 
 export const AppProvider = ({ children }) => {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  // Sync activeTab with URL search params (?tab=...) for bookmarking & refresh retention
+  const [activeTab, setActiveTabState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam) return tabParam;
+    }
+    return 'dashboard';
+  });
+
+  const setActiveTab = useCallback((tab: string | ((prev: string) => string)) => {
+    setActiveTabState((prevTab) => {
+      const nextTab = typeof tab === 'function' ? tab(prevTab) : tab;
+      if (typeof window !== 'undefined' && nextTab) {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('tab') !== nextTab) {
+          url.searchParams.set('tab', nextTab);
+          window.history.pushState({}, '', url.toString());
+        }
+      }
+      return nextTab;
+    });
+  }, []);
+
+  // Listen to popstate (back/forward buttons)
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam) {
+        setActiveTabState(tabParam);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   const [focusOrderId, setFocusOrderId] = useState(null);
   const [preselectedCustomerName, setPreselectedCustomerName] = useState('');
   const [prefilledOrderSpecs, setPrefilledOrderSpecs] = useState(null);
@@ -1674,6 +1710,50 @@ export const AppProvider = ({ children }) => {
     }
     return defaultCustomerCategories;
   });
+
+  const defaultWorkflowTemplates = [
+    {
+      id: 'tpl_standard_print',
+      name: 'Standard Commercial Print',
+      nameLao: 'ມາດຕະຖານງານພິມທົ່ວໄປ (Standard Commercial)',
+      description: 'Pre-press -> Press -> Cutting -> QC',
+      category: 'Commercial',
+      isDefault: true,
+      steps: [
+        { id: 'step-prepress', name: 'File Inspection & RIP Processing', nameLao: 'ກວດໄຟລ໌ & RIP ແຍກສີ', category: 'PRE_PRESS' },
+        { id: 'step-press', name: 'Digital Press Printing Run', nameLao: 'ສັ່ງພິມລົງແທ່ນພິມດິຈິຕອລ', category: 'PRESS' },
+        { id: 'step-finishing', name: 'Precision Cutting & Trimming', nameLao: 'ຕັດຂອບ & ຕັດແບ່ງຕາມຂະໜາດ', category: 'FINISHING' },
+        { id: 'step-qc', name: 'Quality Check & Packaging', nameLao: 'ກວດສອບຄຸນນະພາບ (QC) & ແພັກກິ້ງ', category: 'QC' }
+      ]
+    },
+    {
+      id: 'tpl_photo_prints',
+      name: 'Photo Prints Workflow',
+      nameLao: 'ສາຍການຜະລິດພິມຮູບພາບ (Photo Prints Workflow)',
+      description: 'Imposition -> Photo Press -> Lamination -> Photo Cut -> Pack',
+      category: 'Photo',
+      isDefault: true,
+      steps: [
+        { id: 'step-photo-prepress', name: 'Photo Grid Preflight & Imposition', nameLao: 'ຈັດລຽງໜ້າພິມຮູບພາບ (Imposition)', category: 'PRE_PRESS' },
+        { id: 'step-photo-press', name: 'Photo Quality Color Press Run', nameLao: 'ພິມລະບົບສີລະອຽດສູງ (Photo Quality)', category: 'PRESS' },
+        { id: 'step-photo-coating', name: 'UV/Film Lamination (Optional)', nameLao: 'ເຄືອບຟິມປ້ອງກັນຮອຍ / UV', category: 'FINISHING' },
+        { id: 'step-photo-cutting', name: 'Precision Photo Cutting', nameLao: 'ຕັດແບ່ງຮູບພາບແຕ່ລະໃບ', category: 'FINISHING' },
+        { id: 'step-photo-qc', name: 'Final Photo QC & Envelope Pack', nameLao: 'ກວດ QC ຄົບຈຳນວນ & ໃສ່ຊອງແພັກ', category: 'QC' }
+      ]
+    }
+  ];
+
+  const [workflowTemplates, setWorkflowTemplates] = useState<any[]>(() => {
+    const saved = localStorage.getItem('ss_print_workflow_templates_v1');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return defaultWorkflowTemplates;
+  });
+
   const [linkedInboundEntries, setLinkedInboundEntries] = useState(() => {
     const saved = localStorage.getItem('ss_print_inbound_entries_v6');
     if (saved !== null) {
@@ -3930,17 +4010,37 @@ export const AppProvider = ({ children }) => {
     const qArtworkFileSize = quotation.artworkFileSize || quotation.artwork_file_size || (quotation.items && quotation.items.find((it: any) => it.fileSize)?.fileSize) || 0;
 
     const orderItems = (quotation.items || []).map((item: any, idx: number) => {
-      const invItem = inventory.find(i => i.id === item.id || i.name === item.name);
-      const itArtworkUrl = item.artworkUrl || item.artwork_url || item.fileUrl || item.file_url || qArtworkUrl;
-      const itArtworkFileName = item.fileName || item.file_name || (itArtworkUrl ? itArtworkUrl.split('/').pop()?.split('?')[0] : '');
-      const itArtworkFileSize = item.fileSize || item.file_size || 0;
+      const invPaper = inventory.find(i => i.id === item.paperId || (i.category === 'Paper' && (i.id === item.id || i.name === item.paperType)));
+      const paperName = invPaper?.name || item.paperName || item.paperType || item.paper_name || 'Art Card 260g';
+      const paperBrand = invPaper?.specs?.brand || invPaper?.brand || item.paperBrand || item.paper_brand || (paperName.includes('Double A') ? 'Double A' : 'SCG Premium');
+      const paperWeight = invPaper?.specs?.grammage || invPaper?.weight_gsm || item.weight_gsm || item.paperWeight || '260 gsm';
+      const paperSku = invPaper?.sku || item.paperSku || item.paper_sku || 'PAP-ART-260';
+
+      const batchFiles = Array.isArray(item.batchFiles) ? item.batchFiles : (Array.isArray(item.batch_files) ? item.batch_files : []);
+      const galleryUrls = Array.isArray(item.galleryUrls) ? item.galleryUrls : (Array.isArray(item.gallery_urls) ? item.gallery_urls : []);
+
+      const itArtworkUrl = item.artworkUrl || item.artwork_url || item.fileUrl || item.file_url || (batchFiles[0]?.url || batchFiles[0]?.file_url) || qArtworkUrl;
+      const itArtworkFileName = item.fileName || item.file_name || (batchFiles[0]?.name || batchFiles[0]?.file_name) || (itArtworkUrl ? itArtworkUrl.split('/').pop()?.split('?')[0] : '');
+      const itArtworkFileSize = item.fileSize || item.file_size || (batchFiles[0]?.size || 0);
+
+      const cutsPerSheet = Number(item.cutsPerSheet || item.cuts_per_sheet || 1);
+      const totalUnits = Number(item.quantity || 1) * (batchFiles.length > 0 ? batchFiles.length : Number(item.pageCount || item.pages || 1));
+      const parentSheets = Math.ceil(totalUnits / cutsPerSheet);
+
       return {
         id: `item-${quotation.id}-${idx + 1}`,
-        job_name: item.name || invItem?.name || item.jobName || 'Custom Print Job',
-        item_name: item.name || invItem?.name || item.itemName || 'Custom Print Job',
+        job_name: item.name || item.jobName || 'Custom Print Job',
+        item_name: item.name || item.itemName || 'Custom Print Job',
         quantity: Number(item.quantity) || 1,
-        page_count: Number(item.pageCount || item.pages || 1),
-        paper_size: item.paperSize || item.size || 'A5',
+        page_count: Number(item.pageCount || item.pages || (batchFiles.length > 0 ? batchFiles.length : 1)),
+        paper_size: item.paperSize || item.size || 'A4',
+        paper_brand: paperBrand,
+        paper_weight: paperWeight,
+        paper_sku: paperSku,
+        paper_name: paperName,
+        total_parent_sheets: parentSheets,
+        total_cut_pieces: totalUnits,
+        cuts_per_sheet: cutsPerSheet,
         unit_price_lak: Number(item.unitPrice || item.unitPriceSnapshot || item.unitCost || 0),
         total_price_lak: Number(item.totalPrice || (Number(item.quantity || 1) * Number(item.unitPrice || 0))),
         unit_cost_lak: Number(item.unitCost || item.costPriceSnapshot || 0),
@@ -3952,28 +4052,44 @@ export const AppProvider = ({ children }) => {
         artworkFileName: itArtworkFileName,
         artwork_file_size: itArtworkFileSize,
         artworkFileSize: itArtworkFileSize,
+        batch_files: batchFiles,
+        gallery_urls: galleryUrls,
         artwork: {
           file_url: itArtworkUrl,
           file_name: itArtworkFileName,
           file_size_bytes: itArtworkFileSize,
           preview_thumbnail_url: itArtworkUrl,
-          page_count: Number(item.pageCount || item.pages || 1)
+          page_count: Number(item.pageCount || item.pages || (batchFiles.length > 0 ? batchFiles.length : 1))
         },
         specifications: {
           ...(item.specifications || item.specs || item),
-          paper_id: item.paperId || item.id,
-          paper_name: item.name || invItem?.name,
-          color_mode: item.colorPrintMode || item.colorMode,
-          printer_id: item.printerId,
+          paper_id: item.paperId || invPaper?.id || 'PAP-ART-260',
+          paper_name: paperName,
+          paper_brand: paperBrand,
+          paper_weight: paperWeight,
+          paper_sku: paperSku,
+          color_mode: item.colorPrintMode || item.colorMode || 'CMYK',
+          printer_id: item.printerId || quotation.printerId || 'EQ-CANON-C165',
+          printer_name: item.printerName || quotation.printerName || 'Canon imagePRESS C165',
           binding: item.bindingMethod || item.binding,
           coating: item.coating || item.lamination,
-          pages: Number(item.pageCount || item.pages || 1)
+          pages: Number(item.pageCount || item.pages || (batchFiles.length > 0 ? batchFiles.length : 1)),
+          batch_files: batchFiles,
+          gallery_urls: galleryUrls,
+          cuts_per_sheet: cutsPerSheet,
+          parent_sheets: parentSheets,
         },
         specs: {
           ...(item.specs || item),
+          paper_name: paperName,
+          paper_brand: paperBrand,
+          paper_weight: paperWeight,
+          paper_sku: paperSku,
           artworkUrl: itArtworkUrl,
           artworkFileName: itArtworkFileName,
-          artworkFileSize: itArtworkFileSize
+          artworkFileSize: itArtworkFileSize,
+          batch_files: batchFiles,
+          gallery_urls: galleryUrls,
         }
       };
     });
@@ -3981,6 +4097,9 @@ export const AppProvider = ({ children }) => {
     const totalPrice = Number(quotation.grandTotal || quotation.total_selling_price || quotation.finalGrandTotal) || 0;
     const depositAmt = Math.round(totalPrice * 0.5);
     const orderNo = `ORD-${new Date().toISOString().replace(/\D/g, '').slice(2, 8)}-${Date.now().toString().slice(-3)}`;
+
+    const allocatedPrinterId = quotation.printerId || 'EQ-CANON-C165';
+    const allocatedPrinterName = quotation.printerName || 'Canon imagePRESS C165';
 
     const orderPayload = {
       order_no: orderNo,
@@ -4003,6 +4122,19 @@ export const AppProvider = ({ children }) => {
       google_drive_link: qArtworkUrl || quotation.artworkLink || '',
       status: 'WAITING_DEPOSIT',
       overall_status: 'WAITING_DEPOSIT',
+      isPacked: false,
+      packing_status: 'PENDING',
+      isDispatched: false,
+      dispatch_status: 'PENDING',
+      isCustomerReceived: false,
+      allocated_printer_id: allocatedPrinterId,
+      allocated_printer_name: allocatedPrinterName,
+      realized_paper_cost: Number(quotation.paperCost || quotation.realized_paper_cost || Math.round(totalPrice * 0.35)),
+      realized_ink_cost: Number(quotation.inkCost || quotation.realized_ink_cost || Math.round(totalPrice * 0.15)),
+      realized_labor_cost: Number(quotation.laborCost || quotation.realized_labor_cost || Math.round(totalPrice * 0.10)),
+      realized_finishing_cost: Number(quotation.finishingCost || quotation.realized_finishing_cost || 0),
+      realized_spoilage_cost: Number(quotation.spoilageCost || quotation.realized_spoilage_cost || Math.round(totalPrice * 0.03)),
+      realized_total_cost: Number(quotation.totalCost || quotation.realized_total_cost || Math.round(totalPrice * 0.63)),
       notes: `ແປງມາຈາກໃບສະເໜີລາຄາ #${quotation.quotationNumber || quotation.quotation_no || quotation.id}. ${quotation.notes || ''}`,
       source_quotation_id: quotation.id,
       items: orderItems
@@ -4044,7 +4176,15 @@ export const AppProvider = ({ children }) => {
           artworkFileName: it.artwork_file_name,
           artworkFileSize: it.artwork_file_size,
           inner_file_url: it.artwork_url,
-          cover_file_url: it.artwork_url
+          cover_file_url: it.artwork_url,
+          specs: it.specs,
+          batch_files: it.specs?.batch_files || (quotation as any).batch_files || (quotation as any).gallery_urls || [],
+          gallery_urls: it.specs?.gallery_urls || (quotation as any).gallery_urls || [],
+          binding_type: it.binding_type,
+          bindingType: it.binding_type,
+          printerName: allocatedPrinterName,
+          printer_name: allocatedPrinterName,
+          assigned_press_name: allocatedPrinterName
         })),
         totalPriceCharged: totalPrice,
         depositAmountPaid: depositAmt,
@@ -4060,7 +4200,13 @@ export const AppProvider = ({ children }) => {
         artwork_file_name: qArtworkFileName,
         artworkFileSize: qArtworkFileSize,
         artwork_file_size: qArtworkFileSize,
-        sourceQuotationId: quotation.id
+        sourceQuotationId: quotation.id,
+        printer_name: allocatedPrinterName,
+        printerName: allocatedPrinterName,
+        allocated_printer_name: allocatedPrinterName,
+        batch_files: (quotation as any).batch_files || (quotation as any).gallery_urls || [],
+        gallery_urls: (quotation as any).gallery_urls || [],
+        productionWorkflow: (quotation as any).productionWorkflow || (quotation as any).workflow || null
       };
 
       setOrders(prev => [localOrderObj, ...prev]);
@@ -4379,6 +4525,90 @@ export const AppProvider = ({ children }) => {
       console.warn('Delete customer category error:', err);
       throw err;
     }
+  };
+
+  const fetchWorkflowTemplates = async () => {
+    try {
+      const res = await fetch('/api/v1/production/templates');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+          const normalized = data.data.map((tpl: any) => ({
+            ...tpl,
+            steps: typeof tpl.steps === 'string' ? JSON.parse(tpl.steps) : tpl.steps
+          }));
+          setWorkflowTemplates(normalized);
+          safeSetItem('ss_print_workflow_templates_v1', normalized);
+        }
+      }
+    } catch (e) {
+      console.warn('Fetch workflow templates error:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchWorkflowTemplates();
+  }, []);
+
+  const saveWorkflowTemplate = async (template: any) => {
+    const payload = {
+      ...template,
+      id: template.id || `tpl_${Date.now()}`,
+      name: template.name || template.nameLao || 'Custom Template',
+      nameLao: template.nameLao || template.name || 'Custom Template',
+      category: template.category || 'Custom',
+      steps: template.steps || []
+    };
+
+    try {
+      const res = await fetch('/api/v1/production/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.data) {
+          const savedTpl = {
+            ...data.data,
+            steps: typeof data.data.steps === 'string' ? JSON.parse(data.data.steps) : data.data.steps
+          };
+          setWorkflowTemplates(prev => {
+            const filtered = prev.filter(t => t.id !== savedTpl.id);
+            const updated = [savedTpl, ...filtered];
+            safeSetItem('ss_print_workflow_templates_v1', updated);
+            return updated;
+          });
+          return savedTpl;
+        }
+      }
+    } catch (err) {
+      console.warn('Save workflow template backend notice, saving locally:', err);
+    }
+
+    // Local fallback
+    setWorkflowTemplates(prev => {
+      const filtered = prev.filter(t => t.id !== payload.id);
+      const updated = [payload, ...filtered];
+      safeSetItem('ss_print_workflow_templates_v1', updated);
+      return updated;
+    });
+    return payload;
+  };
+
+  const deleteWorkflowTemplate = async (id: string) => {
+    try {
+      await fetch(`/api/v1/production/templates/${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      });
+    } catch (err) {
+      console.warn('Delete workflow template network error:', err);
+    }
+    setWorkflowTemplates(prev => {
+      const updated = prev.filter(t => t.id !== id);
+      safeSetItem('ss_print_workflow_templates_v1', updated);
+      return updated;
+    });
   };
 
   const updateInboundEntry = (updatedEntry: any) => {
@@ -4807,6 +5037,10 @@ export const AppProvider = ({ children }) => {
       addCustomerCategory,
       updateCustomerCategory,
       deleteCustomerCategory,
+      workflowTemplates,
+      fetchWorkflowTemplates,
+      saveWorkflowTemplate,
+      deleteWorkflowTemplate,
       addOffcut,
       consumeOffcut,
       deleteOffcut,

@@ -41,3 +41,26 @@ export interface Quotation {
   notes?: string;
   artworkLink?: string;
 }
+
+export type DimensionUnit = 'inch' | 'cm' | 'mm';
+
+export interface DimensionPreset {
+  id: string;
+  name: string;
+  category: string;
+  unit: DimensionUnit;
+  width: number;
+  height: number;
+  width_mm: number;
+  height_mm: number;
+  is_default?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ShopDefaults {
+  default_paper_id?: string;
+  default_dimension_unit?: DimensionUnit;
+  default_color_mode?: string;
+  [key: string]: any;
+}

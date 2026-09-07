@@ -1,24 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { AppProvider, useApp } from '@store/AppContext';
 import Sidebar from '@components/Sidebar';
 import TopHeader from '@components/TopHeader';
-import { DashboardOverview } from '@features/dashboard';
-import { InventoryManagement } from '@features/inventory';
-import { EquipmentManagement as EquipmentOverhead } from '@features/equipment';
-import { InboundManagement } from '@features/inbound';
-import { CustomerManagement } from '@features/customers';
-import { CustomerOrders } from '@features/orders';
-import { QuotationManager } from '@features/pricing';
-import { HistoryAnalytics } from '@features/analytics';
-import { EmployeeManagement } from '@features/hr';
-import { FinanceDashboard } from '@features/finance';
-import { ProfileSettingsPage } from '@features/profile';
-import { PreflightPage } from './features/production/PreflightPage';
-import { ShopFloorTracker } from './features/production/ShopFloorTracker';
-import { WebCatalogPage } from './features/catalog';
-import { MaterialManagement } from './features/materials';
-import { SupplierManagement } from './features/suppliers';
 import { ProtectedRoute } from '@components/ProtectedRoute';
 import CurrencyRatesModal from '@components/common/CurrencyRatesModal';
 import { useTranslation } from 'react-i18next';
@@ -27,8 +11,36 @@ import {
   CheckCircle2, 
   AlertCircle, 
   X, 
-  HelpCircle
+  HelpCircle,
+  Loader2
 } from 'lucide-react';
+
+// Lazy-loaded Feature Modules for Fast Initial Bundle Load
+const DashboardOverview = lazy(() => import('@features/dashboard').then(m => ({ default: m.DashboardOverview })));
+const InventoryManagement = lazy(() => import('@features/inventory').then(m => ({ default: m.InventoryManagement })));
+const EquipmentOverhead = lazy(() => import('@features/equipment').then(m => ({ default: m.EquipmentManagement })));
+const InboundManagement = lazy(() => import('@features/inbound').then(m => ({ default: m.InboundManagement })));
+const CustomerManagement = lazy(() => import('@features/customers').then(m => ({ default: m.CustomerManagement })));
+const CustomerOrders = lazy(() => import('@features/orders').then(m => ({ default: m.CustomerOrders })));
+const QuotationManager = lazy(() => import('@features/pricing').then(m => ({ default: m.QuotationManager })));
+const HistoryAnalytics = lazy(() => import('@features/analytics').then(m => ({ default: m.HistoryAnalytics })));
+const EmployeeManagement = lazy(() => import('@features/hr').then(m => ({ default: m.EmployeeManagement })));
+const FinanceDashboard = lazy(() => import('@features/finance').then(m => ({ default: m.FinanceDashboard })));
+const ProfileSettingsPage = lazy(() => import('@features/profile').then(m => ({ default: m.ProfileSettingsPage })));
+const PreflightPage = lazy(() => import('./features/production/PreflightPage').then(m => ({ default: m.PreflightPage })));
+const ShopFloorTracker = lazy(() => import('./features/production/ShopFloorTracker').then(m => ({ default: m.ShopFloorTracker })));
+const WebCatalogPage = lazy(() => import('./features/catalog').then(m => ({ default: m.WebCatalogPage })));
+const MaterialManagement = lazy(() => import('./features/materials').then(m => ({ default: m.MaterialManagement })));
+const SupplierManagement = lazy(() => import('./features/suppliers').then(m => ({ default: m.SupplierManagement })));
+
+function ModuleSkeleton() {
+  return (
+    <div className="w-full h-96 flex flex-col items-center justify-center gap-3 text-slate-400 animate-pulse">
+      <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+      <span className="text-sm font-medium">ກຳລັງໂຫລດຂໍ້ມູນໜ້າວຽກ...</span>
+    </div>
+  );
+}
 
 function AppContent() {
   const { 
@@ -72,70 +84,85 @@ function AppContent() {
           {/* Main Content Area (Full Width Edge-to-Edge 100%) */}
           <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6">
             <div className="w-full">
-              {isTrackerRoute ? (
-                <ShopFloorTracker initialOrderNo={trackerOrderNo || undefined} />
-              ) : (
-                <>
-                  {activeTab === 'dashboard' && <DashboardOverview />}
-                  {activeTab === 'catalog' && <WebCatalogPage />}
-                  {activeTab === 'materials' && <MaterialManagement />}
-                  {activeTab === 'preflight' && (
-                    <PreflightPage
-                      onSendToQuotation={(res) => {
-                        if (setPrefilledOrderSpecs) {
-                          const isMono = (res.color_pages_count || 0) === 0 && (res.mono_pages_count || 0) > 0;
-                          const covC = res.color_pages_avg_c !== undefined ? res.color_pages_avg_c : (res.avg_cov_c ?? 0);
-                          const covM = res.color_pages_avg_m !== undefined ? res.color_pages_avg_m : (res.avg_cov_m ?? 0);
-                          const covY = res.color_pages_avg_y !== undefined ? res.color_pages_avg_y : (res.avg_cov_y ?? 0);
-                          const covK = (res.color_pages_count || 0) > 0
-                            ? (res.color_pages_avg_k !== undefined ? res.color_pages_avg_k : (res.avg_cov_k ?? 0))
-                            : (res.mono_pages_avg_k !== undefined ? res.mono_pages_avg_k : (res.avg_cov_k ?? 0));
-                          const targetSize = res.target_paper_size || res.suggested_paper || 'A4';
-                          setPrefilledOrderSpecs({
-                            jobName: res.file_name.replace(/\.[^/.]+$/, ''),
-                            pageCount: res.total_pages,
-                            colorPages: res.color_pages_count || 0,
-                            monoPages: res.mono_pages_count || 0,
-                            jobWidth: res.target_width_mm || 210,
-                            jobHeight: res.target_height_mm || 297,
-                            suggestedPaper: targetSize,
-                            jobSizePreset: targetSize,
-                            avgCovC: covC,
-                            avgCovM: covM,
-                            avgCovY: covY,
-                            avgCovK: covK,
-                            cCoverage: covC,
-                            mCoverage: covM,
-                            yCoverage: covY,
-                            kCoverage: covK,
-                            colorMode: isMono ? 'MONO_K' : (res.color_mode || 'CMYK'),
-                            fileUrl: res.file_url,
-                            fileName: res.file_name,
-                            preflightData: res,
-                          });
-                        }
-                        setActiveTab('quotation');
-                        showToast('ສົ່ງຄ່າສີ ແລະ ຈຳນວນໜ້າໄປຍັງໃບສະເໜີລາຄາຮຽບຮ້ອຍ!', 'success');
-                      }}
-                    />
-                  )}
-                  {activeTab === 'quotation' && (
-                    <QuotationManager onConvertToOrder={() => setActiveTab('orders')} />
-                  )}
-                  {(activeTab === 'orders' || activeTab === 'create_order' || activeTab === 'production' || activeTab === 'deliveries') && (
-                    <CustomerOrders initialSubTab={activeTab === 'orders' ? 'orders' : activeTab} />
-                  )}
-                  {activeTab === 'tracker' && <ShopFloorTracker />}
-                  {activeTab === 'suppliers' && <SupplierManagement />}
-                  {activeTab === 'inbound' && <InboundManagement />}
-                  {activeTab === 'inventory' && <InventoryManagement />}
-                  {activeTab === 'equipment' && <EquipmentOverhead />}
-                  {activeTab === 'crm' && <CustomerManagement />}
-                  {activeTab === 'hr' && <EmployeeManagement />}
-                  {activeTab === 'finance' && <FinanceDashboard />}
-                  {(activeTab === 'settings' || activeTab === 'profile') && <ProfileSettingsPage />}
-                </>
-              )}
+              <Suspense fallback={<ModuleSkeleton />}>
+                {isTrackerRoute ? (
+                  <ShopFloorTracker initialOrderNo={trackerOrderNo || undefined} />
+                ) : (
+                  <>
+                    {activeTab === 'dashboard' && <DashboardOverview />}
+                    {activeTab === 'catalog' && <WebCatalogPage />}
+                    {activeTab === 'materials' && <MaterialManagement />}
+                    {activeTab === 'preflight' && (
+                      <PreflightPage
+                        onSendToQuotation={(res) => {
+                          if (setPrefilledOrderSpecs) {
+                            const isBatch = (res as any).is_batch_photo || res.file_name?.includes('Photo Prints') || !!(res as any).batch_files;
+                            const isMono = !isBatch && (res.color_pages_count || 0) === 0 && (res.mono_pages_count || 0) > 0;
+                            const covC = res.color_pages_avg_c !== undefined ? res.color_pages_avg_c : (res.avg_cov_c ?? 0);
+                            const covM = res.color_pages_avg_m !== undefined ? res.color_pages_avg_m : (res.avg_cov_m ?? 0);
+                            const covY = res.color_pages_avg_y !== undefined ? res.color_pages_avg_y : (res.avg_cov_y ?? 0);
+                            const covK = (res.color_pages_count || 0) > 0
+                              ? (res.color_pages_avg_k !== undefined ? res.color_pages_avg_k : (res.avg_cov_k ?? 0))
+                              : (res.mono_pages_avg_k !== undefined ? res.mono_pages_avg_k : (res.avg_cov_k ?? 0));
+                            const targetSize = res.target_paper_size || (isBatch ? '5x7 cm' : (res.suggested_paper || 'A4'));
+                            setPrefilledOrderSpecs({
+                              jobName: res.file_name.replace(/\.[^/.]+$/, ''),
+                              pageCount: isBatch ? 1 : res.total_pages,
+                              orderQuantity: isBatch ? 1 : 1,
+                              photoCount: isBatch ? res.total_pages : undefined,
+                              colorPages: isBatch ? res.total_pages : (res.color_pages_count || 0),
+                              monoPages: isBatch ? 0 : (res.mono_pages_count || 0),
+                              jobWidth: res.target_width_mm || (isBatch ? 50 : 210),
+                              jobHeight: res.target_height_mm || (isBatch ? 70 : 297),
+                              suggestedPaper: res.suggested_paper || (isBatch ? 'Photo Glossy 230gsm' : targetSize),
+                              selected_paper_id: res.selected_paper_id,
+                              paperId: res.selected_paper_id,
+                              jobSizePreset: targetSize,
+                              avgCovC: covC,
+                              avgCovM: covM,
+                              avgCovY: covY,
+                              avgCovK: covK,
+                              cCoverage: covC,
+                              mCoverage: covM,
+                              yCoverage: covY,
+                              kCoverage: covK,
+                              colorMode: isMono ? 'MONO_K' : (res.color_mode || 'CMYK'),
+                              fileUrl: res.file_url,
+                              fileName: res.file_name,
+                              preflightData: res,
+                              is_batch_photo: isBatch,
+                              batch_files: (res as any).batch_files,
+                              batchFiles: (res as any).batch_files,
+                              cuts_per_sheet_override: res.cuts_per_sheet_override,
+                              cutsPerSheetOverride: res.cuts_per_sheet_override,
+                              imposition_summary: res.imposition_summary,
+                              impositionSummary: res.imposition_summary,
+                              includeCover: false,
+                            });
+                          }
+                          setActiveTab('quotation');
+                          showToast('ສົ່ງຄ່າສີ, ຂະໜາດຕັດ ແລະ ຈຳນວນຮູບໄປຍັງໃບສະເໜີລາຄາຮຽບຮ້ອຍ!', 'success');
+                        }}
+                      />
+                    )}
+                    {activeTab === 'quotation' && (
+                      <QuotationManager onConvertToOrder={() => setActiveTab('orders')} />
+                    )}
+                    {(activeTab === 'orders' || activeTab === 'create_order' || activeTab === 'production' || activeTab === 'deliveries') && (
+                      <CustomerOrders initialSubTab={activeTab === 'orders' ? 'orders' : activeTab} />
+                    )}
+                    {activeTab === 'tracker' && <ShopFloorTracker />}
+                    {activeTab === 'suppliers' && <SupplierManagement />}
+                    {activeTab === 'inbound' && <InboundManagement />}
+                    {activeTab === 'inventory' && <InventoryManagement />}
+                    {activeTab === 'equipment' && <EquipmentOverhead />}
+                    {activeTab === 'crm' && <CustomerManagement />}
+                    {activeTab === 'hr' && <EmployeeManagement />}
+                    {activeTab === 'finance' && <FinanceDashboard />}
+                    {(activeTab === 'settings' || activeTab === 'profile') && <ProfileSettingsPage />}
+                  </>
+                )}
+              </Suspense>
             </div>
           </main>
         </div>

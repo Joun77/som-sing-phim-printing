@@ -1,23 +1,57 @@
 import React from 'react';
 import {
   Check,
-  Layers,
-  ChevronRight,
-  ArrowRight
+  Layers
 } from 'lucide-react';
 import type { ProductionStep } from '../../../orders/types';
-import { PRODUCTION_STEPS_CONFIG, STEP_ORDER_MAP } from './types';
+import { PRODUCTION_STEPS_CONFIG, type StepConfig } from './types';
+
+export const SINGLE_SHEET_STEPS_CONFIG: StepConfig[] = [
+  {
+    step: 'INNER_PRINTED',
+    stepNumber: 1,
+    labelLao: '1. ຂັ້ນຕອນການຜະລິດ',
+    labelEn: 'Press Run',
+  },
+  {
+    step: 'READY_FOR_PICKUP',
+    stepNumber: 2,
+    labelLao: '2. QC & ສົ່ງມອບ',
+    labelEn: 'QC & Pack',
+  },
+];
 
 interface ProductionStepperProps {
   currentStep: ProductionStep;
   onAdvanceStep: (targetStep: ProductionStep) => void;
+  bindingType?: string;
+  isSingleSheet?: boolean;
+  customSteps?: StepConfig[];
 }
 
 export const ProductionStepper: React.FC<ProductionStepperProps> = ({
   currentStep,
   onAdvanceStep,
+  bindingType,
+  isSingleSheet,
+  customSteps,
 }) => {
-  const currentNum = STEP_ORDER_MAP[currentStep] || 0;
+  const isSingle = isSingleSheet || bindingType === 'NONE' || bindingType === 'none';
+  const steps = (customSteps && customSteps.length > 0)
+    ? customSteps
+    : isSingle
+    ? SINGLE_SHEET_STEPS_CONFIG
+    : PRODUCTION_STEPS_CONFIG;
+
+  // Step order index within this specific pipeline
+  const currentStepIdx = steps.findIndex(s => s.step === currentStep);
+  const isAllDone = currentStep === 'READY_FOR_PICKUP' || currentStep === 'COMPLETED';
+
+  const progressPercent = isAllDone
+    ? 100
+    : currentStepIdx >= 0
+    ? Math.min(100, Math.round(((currentStepIdx + 1) / steps.length) * 100))
+    : 0;
 
   return (
     <div className="bg-white border border-sky-100 rounded-3xl p-5 sm:p-6 shadow-xs space-y-4 font-sans">
@@ -28,7 +62,7 @@ export const ProductionStepper: React.FC<ProductionStepperProps> = ({
           </div>
           <div>
             <span className="text-[10px] font-black uppercase text-sky-600 tracking-wider block">
-              6-Milestone Pipeline
+              {steps.length}-Milestone Pipeline ({customSteps ? 'Custom Order Workflow' : isSingle ? 'Single Sheet / Batch Photo' : 'Multi-Component Book'})
             </span>
             <h3 className="text-sm font-black text-slate-900">
               ຂັ້ນຕອນການຜະລິດ (Production Milestones)
@@ -36,15 +70,15 @@ export const ProductionStepper: React.FC<ProductionStepperProps> = ({
           </div>
         </div>
         <span className="font-mono text-xs text-sky-700 font-black bg-sky-50 px-3 py-1 rounded-xl border border-sky-200">
-          ຄວາມຄືບໜ້າ: {Math.min(100, Math.round((currentNum / 6) * 100))}%
+          ຄວາມຄືບໜ້າ: {progressPercent}%
         </span>
       </div>
 
       {/* Stepper Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-        {PRODUCTION_STEPS_CONFIG.map((cfg) => {
-          const isDone = currentNum > cfg.stepNumber;
-          const isActive = currentNum === cfg.stepNumber;
+      <div className={`grid grid-cols-2 sm:grid-cols-3 ${steps.length > 3 ? 'lg:grid-cols-6' : 'lg:grid-cols-3'} gap-2.5`}>
+        {steps.map((cfg, idx) => {
+          const isDone = isAllDone || (currentStepIdx > idx);
+          const isActive = !isAllDone && (currentStepIdx === idx);
 
           return (
             <button
@@ -74,11 +108,11 @@ export const ProductionStepper: React.FC<ProductionStepperProps> = ({
                   </div>
                 ) : isActive ? (
                   <div className="w-7 h-7 rounded-full bg-white text-sky-700 flex items-center justify-center font-black text-xs shadow-xs">
-                    {cfg.stepNumber}
+                    {idx + 1}
                   </div>
                 ) : (
                   <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center font-bold text-xs">
-                    {cfg.stepNumber}
+                    {idx + 1}
                   </div>
                 )}
               </div>

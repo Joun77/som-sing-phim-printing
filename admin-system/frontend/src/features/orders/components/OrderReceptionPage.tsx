@@ -231,6 +231,7 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
             items={order.items}
             isArtworkApproved={isArtworkApproved}
             currentLang={currentLang}
+            setLightbox={setLightbox}
             onConfigureWorkflow={() => setIsWorkflowModalOpen(true)}
             productionWorkflow={order.productionWorkflow}
             onUploadProof={(proofUrl) => {

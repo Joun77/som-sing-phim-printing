@@ -29,7 +29,14 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
   getFIFOCostPerSheet,
   currentLang,
 }) => {
-  const isCoverActive = Boolean(activeItem.includeCover);
+  const isBatchPhoto = Boolean(
+    activeItem.isBatchPhoto || 
+    activeCalc.isBatchPhoto || 
+    activeItem.name?.includes('Photo Prints') || 
+    (activeItem.batchFiles && activeItem.batchFiles.length > 0) ||
+    (activeItem.preflightData as any)?.is_batch_photo
+  );
+  const isCoverActive = !isBatchPhoto && Boolean(activeItem.includeCover);
 
   return (
     <div id="sec-phase3" className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition">
@@ -41,11 +48,13 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
         <div className="flex items-center gap-2.5">
           <span className="w-6 h-6 rounded-lg bg-sky-600 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">3</span>
           <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
-            {currentLang === 'lo' ? 'ເລືອກເຈ້ຍ, ໜ້າປົກ & ຂະໜາດຕັດ (Paper, Cover & Cut)' : 'Paper, Cover & Cut Specs'}
+            {isBatchPhoto 
+              ? (currentLang === 'lo' ? 'ເລືອກເຈ້ຍພິມຮູບພາບ & ແຜນຕັດ (Photo Paper & Cuts)' : 'Photo Paper & Cut Specs')
+              : (currentLang === 'lo' ? 'ເລືອກເຈ້ຍ, ໜ້າປົກ & ຂະໜາດຕັດ (Paper, Cover & Cut)' : 'Paper, Cover & Cut Specs')}
           </span>
           <span className="text-[11px] font-bold px-2 py-0.5 bg-sky-50 text-sky-700 rounded-lg border border-sky-200 font-sans flex items-center gap-1">
             <Scissors className="w-3 h-3" />
-            {activeCalc.cutsPerSheet} ຕັດ • {formatCurrency(activeCalc.paperCost)}
+            {activeCalc.cutsPerSheet} ຕັດ/ແຜ່ນ • {formatCurrency(activeCalc.paperCost)}
           </span>
         </div>
         <div className="flex items-center gap-2 text-slate-400">
@@ -57,7 +66,22 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
       {isOpen && (
         <div className="p-4 sm:p-5 border-t border-slate-100 space-y-4 animate-fade-in">
           
-          {/* SECTION 1: BOOK COVER CONFIGURATION WITH MODERN TOGGLE SWITCH (ດັອກກີ້ສະວິດ) */}
+          {/* SECTION 1: BOOK COVER CONFIGURATION (Hides cleanly when isBatchPhoto) */}
+          {isBatchPhoto ? (
+            <div className="p-3 bg-sky-50/60 border border-sky-200/80 rounded-2xl flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-sky-900">
+                <Scissors className="w-4 h-4 text-sky-600 shrink-0" />
+                <span className="font-bold">
+                  {currentLang === 'lo' 
+                    ? `ວຽກພິມຮູບພາບ (Photo Prints) — ແຜນຈັດວາງຮູບດ່ຽວ (Single-sheet Imposition) ບໍ່ມີໜ້າປົກ`
+                    : 'Photo Prints — Single-sheet Imposition (No Cover Required)'}
+                </span>
+              </div>
+              <span className="px-2 py-0.5 bg-sky-200/80 text-sky-950 font-bold rounded-lg text-[10px] shrink-0 font-sans">
+                {activeCalc.photoCountPerSet || activeItem.pagesPerBook || 1} ຮູບ/ຊຸດ
+              </span>
+            </div>
+          ) : (
           <div className="p-4 rounded-2xl border-2 transition-all bg-gradient-to-br from-amber-50/40 via-white to-amber-50/20 border-amber-200/90 shadow-2xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -129,7 +153,14 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
 
                 {/* Cover Print Mode */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-amber-900 block">ການພິມປົກ (Cover Print Mode):</label>
+                  <div className="flex justify-between items-center">
+                    <label className="text-[11px] font-bold text-amber-900 block">ການພິມປົກ (Cover Print Mode):</label>
+                    {activeCalc.coverInkCost > 0 && (
+                      <span className="text-[10px] font-black text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded-md font-mono">
+                        ຄ່ານ້ຳໝຶກປົກ: {formatCurrency(activeCalc.coverInkCost)}
+                      </span>
+                    )}
+                  </div>
                   <select
                     value={activeItem.coverPrintMode || 'CMYK_1_SIDE'}
                     onChange={(e) => updateActiveItem({ coverPrintMode: e.target.value as any })}
@@ -141,6 +172,68 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
                   </select>
                 </div>
 
+                {/* Cover File Artwork Status & Upload */}
+                <div className="md:col-span-2 p-3 bg-white border border-amber-300 rounded-xl flex flex-wrap items-center justify-between gap-2.5 shadow-2xs">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                      <Bookmark className="w-4 h-4 text-amber-700" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-black text-slate-800">
+                          {currentLang === 'lo' ? 'ໄຟລ໌ໜ້າປົກ (Cover Artwork):' : 'Cover Artwork File:'}
+                        </span>
+                        {activeItem.coverArtworkUrl && (
+                          <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded">
+                            {currentLang === 'lo' ? 'ພ້ອມພິມ' : 'Ready'}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-600 truncate max-w-xs font-mono mt-0.5">
+                        {activeItem.coverFileName || (activeItem.coverArtworkUrl ? 'ໄຟລ໌ໜ້າປົກແຍກ' : (currentLang === 'lo' ? 'ຍັງບໍ່ມີໄຟລ໌ປົກ (ຄລິກເພື່ອອັບໂຫຼດ)' : 'No cover file selected'))}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <input
+                      type="file"
+                      id="cover-file-upload-input"
+                      accept=".pdf,.png,.jpg,.jpeg,.webp,.tiff,.psd"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const url = URL.createObjectURL(file);
+                        updateActiveItem({
+                          coverArtworkUrl: url,
+                          coverFileName: file.name,
+                          coverFileSize: file.size,
+                        });
+                      }}
+                    />
+                    {activeItem.coverArtworkUrl && (
+                      <a
+                        href={activeItem.coverArtworkUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2.5 py-1 text-[10px] font-black text-amber-900 bg-amber-100 hover:bg-amber-200 rounded-lg transition"
+                      >
+                        {currentLang === 'lo' ? 'ເບິ່ງໄຟລ໌' : 'View'}
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => document.getElementById('cover-file-upload-input')?.click()}
+                      className="px-3 py-1 text-[10px] font-black text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition shadow-2xs cursor-pointer"
+                    >
+                      {activeItem.coverArtworkUrl 
+                        ? (currentLang === 'lo' ? 'ປ່ຽນໄຟລ໌ປົກ' : 'Change') 
+                        : (currentLang === 'lo' ? '+ ອັບໂຫຼດໄຟລ໌ປົກ' : '+ Upload Cover')}
+                    </button>
+                  </div>
+                </div>
+
                 {/* Cover Summary Banner */}
                 <div className="md:col-span-2 p-2.5 bg-amber-100/80 border border-amber-200 rounded-xl text-[11px] text-amber-950 flex flex-wrap justify-between items-center">
                   <span className="flex items-center gap-1.5">
@@ -148,7 +241,7 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
                     <span>ໃຊ້ເຈ້ຍປົກ: <strong>{activeCalc.totalCoverParentSheets?.toLocaleString() || activeItem.printVolume} ແຜ່ນ</strong> (1 ແຜ່ນປົກກາງຄູ່ / ເລັ້ມ + ເຜື່ອເສຍ)</span>
                   </span>
                   <span className="font-bold font-sans">
-                    ຕົ້ນທຶນເຈ້ຍປົກ: {formatCurrency(activeCalc.coverPaperCost || 0)}
+                    ຕົ້ນທຶนເຈ້ຍປົກ: {formatCurrency(activeCalc.coverPaperCost || 0)}
                   </span>
                 </div>
 
@@ -167,17 +260,24 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
               </div>
             )}
           </div>
+          )}
 
-          {/* SECTION 2: INNER PAGES PAPER (ສ່ວນເຈ້ຍເນື້ອໃນ) */}
+          {/* SECTION 2: PAPER SUBSTRATE SELECTION (ປັບຕາມປະເພດວຽກ: ຮູບພາບ ຫຼື ປຶ້ມ) */}
           <div className="space-y-2">
             <div className="flex justify-between items-center">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                 <FileText className="w-3.5 h-3.5 text-slate-500" />
-                <span>ເຈ້ຍເນື້ອໃນ (Inner Pages Paper) *</span>
+                <span>
+                  {isBatchPhoto 
+                    ? (currentLang === 'lo' ? 'ເຈ້ຍພິມຮູບພາບ (Photo Substrate Paper) *' : 'Photo Substrate Paper *')
+                    : (currentLang === 'lo' ? 'ເຈ້ຍເນື້ອໃນ (Inner Pages Paper) *' : 'Inner Pages Paper *')}
+                </span>
               </label>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-slate-500 font-medium hidden sm:inline">
-                  ເນື້ອໃນ {activeCalc.innerPagesPerBook || activeItem.pagesPerBook || 1} ໜ້າ ({activeCalc.innerSheetsPerBook || 1} ແຜ່ນ/ເລັ້ມ)
+                  {isBatchPhoto
+                    ? `ຮູບ ${activeCalc.photoCountPerSet || activeItem.pagesPerBook || 1} ໃບ/ຊຸດ (${activeCalc.cutsPerSheet} ຮູບ/ແຜ່ນແມ່)`
+                    : `ເນື້ອໃນ ${activeCalc.innerPagesPerBook || activeItem.pagesPerBook || 1} ໜ້າ (${activeCalc.innerSheetsPerBook || 1} ແຜ່ນ/ເລັ້ມ)`}
                 </span>
                 <button
                   type="button"
@@ -213,27 +313,85 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
 
           {/* SECTION 3: CUTTING & YIELD CALCULATION BOX (ສະຫຼຸບການຕັດ & ຕົ້ນທຶນ) */}
           <div className="p-4 bg-sky-50/90 border border-sky-200 rounded-2xl text-xs space-y-2.5 shadow-2xs">
-            <div className="flex justify-between items-center text-sky-950 font-black">
+            <div className="flex flex-wrap justify-between items-center gap-2 text-sky-950 font-black">
               <span className="flex items-center gap-1.5">
                 <Scissors className="w-4 h-4 text-sky-600" />
                 <span>ສະຫຼຸບການໃຊ້ເຈ້ຍ & ການຕັດ ({activeItem.name})</span>
               </span>
-              <span className="px-2.5 py-0.5 bg-sky-100 text-sky-900 rounded-md font-bold font-sans">
-                1 ແຜ່ນແມ່ ຕັດໄດ້ {activeCalc.cutsPerSheet} ແຜ່ນງານ {activeCalc.cutsPerSheet === 2 ? '(ແບ່ງເຄິ່ງ 50%)' : ''}
-              </span>
+
+              {/* Manual Override for Cuts Per Sheet */}
+              <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-xl border border-sky-300 shadow-2xs">
+                <span className="text-[11px] text-slate-600 font-medium">1 ແຜ່ນແມ່ ຕັດໄດ້:</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = activeCalc.cutsPerSheet || 1;
+                      const next = Math.max(1, current - 1);
+                      updateActiveItem({ cutsPerSheetOverride: next });
+                    }}
+                    className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs cursor-pointer"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={activeItem.cutsPerSheetOverride !== undefined ? activeItem.cutsPerSheetOverride : activeCalc.cutsPerSheet}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      updateActiveItem({ cutsPerSheetOverride: v > 0 ? v : undefined });
+                    }}
+                    className="w-10 text-center font-mono font-black text-xs text-sky-900 border border-sky-200 rounded py-0.5 focus:outline-none focus:border-sky-500 bg-sky-50/50"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = activeCalc.cutsPerSheet || 1;
+                      updateActiveItem({ cutsPerSheetOverride: current + 1 });
+                    }}
+                    className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs cursor-pointer"
+                  >
+                    +
+                  </button>
+                </div>
+                <span className="text-[11px] text-sky-900 font-bold">ແຜ່ນງານ</span>
+                {activeItem.cutsPerSheetOverride !== undefined && (
+                  <button
+                    type="button"
+                    onClick={() => updateActiveItem({ cutsPerSheetOverride: undefined })}
+                    className="ml-1 text-[9px] text-rose-600 hover:underline font-bold"
+                    title="ຄືນຄ່າ Auto"
+                  >
+                    (Auto)
+                  </button>
+                )}
+              </div>
             </div>
             
-            <div className="text-slate-700 space-y-1.5 font-medium">
+              {/* Imposition Plan Notice if provided */}
+              {activeItem.impositionSummary && (
+                <div className="p-2.5 bg-white border border-sky-300/80 rounded-xl text-[11px] text-sky-900 font-semibold shadow-2xs">
+                  <span className="font-bold text-sky-950 block mb-0.5">ແຜນ Imposition Layout:</span>
+                  <span>{activeItem.impositionSummary}</span>
+                </div>
+              )}
+
               <div className="flex justify-between">
-                <span>ຕົ້ນທຶນເຈ້ຍເນື້ອໃນຕໍ່ແຜ່ນແມ່:</span>
+                <span>{isBatchPhoto ? 'ຕົ້ນທຶນເຈ້ຍພິມຮູບຕໍ່ແຜ່ນແມ່:' : 'ຕົ້ນທຶນເຈ້ຍເນື້ອໃນຕໍ່ແຜ່ນແມ່:'}</span>
                 <span className="font-sans font-bold text-slate-900">{formatCurrency(activeCalc.paperUnitCost)} / ແຜ່ນ</span>
               </div>
               <div className="flex justify-between">
-                <span>ແຜ່ນເນື້ອໃນທີ່ຕ້ອງໃຊ້ (Base Sheets):</span>
-                <span className="font-sans font-bold text-slate-900">{activeCalc.totalInnerSheets?.toLocaleString() || activeCalc.parentSheetsNeeded?.toLocaleString()} ແຜ່ນງານ</span>
+                <span>{isBatchPhoto ? 'ຈຳນວນຮູບທັງໝົດທີ່ຕ້ອງພິມ:' : 'ແຜ່ນເນື້ອໃນທີ່ຕ້ອງໃຊ້ (Base Sheets):'}</span>
+                <span className="font-sans font-bold text-slate-900">
+                  {isBatchPhoto 
+                    ? `${(activeCalc.totalPhotos || activeCalc.totalInnerSheets || activeItem.pagesPerBook || 1).toLocaleString()} ຮູບ`
+                    : `${(activeCalc.totalInnerSheets || activeCalc.parentSheetsNeeded || 1).toLocaleString()} ແຜ່ນງານ`}
+                </span>
               </div>
               <div className="flex justify-between">
-                <span>ຈຳນວນແຜ່ນແມ່ທີ່ຕ້ອງຕັດ (Parent Sheets):</span>
+                <span>{isBatchPhoto ? 'ຈຳນວນແຜ່ນແມ່ທີ່ຕ້ອງໃຊ້ພິມ:' : 'ຈຳນວນແຜ່ນແມ່ທີ່ຕ້ອງຕັດ (Parent Sheets):'}</span>
                 <span className="font-sans font-bold text-sky-900">{activeCalc.parentSheetsNeeded?.toLocaleString()} ແຜ່ນແມ່</span>
               </div>
               <div className="space-y-1.5 pt-0.5 border-t border-sky-200/50">
@@ -282,10 +440,13 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
                 <span>ຈຳນວນແຜ່ນລວມທີ່ຕ້ອງຕັດ (FIFO Draw):</span>
                 <span className="font-sans font-black text-slate-950 text-sm">{activeCalc.totalParentSheets?.toLocaleString()} ແຜ່ນ</span>
               </div>
-            </div>
 
             <div className="flex justify-between items-center bg-sky-100/80 p-2.5 rounded-xl text-sky-950 font-black border border-sky-200">
-              <span className="text-xs">ມູນຄ່າຕົ້ນທຶນເຈ້ຍລວມ {isCoverActive ? '(ເນື້ອໃນ + ປົກ)' : ''}:</span>
+              <span className="text-xs">
+                {isBatchPhoto 
+                  ? 'ມູນຄ່າຕົ້ນທຶນເຈ້ຍພິມຮູບພາບລວມ:'
+                  : `ມູນຄ່າຕົ້ນທຶນເຈ້ຍລວມ ${isCoverActive ? '(ເນື້ອໃນ + ປົກ)' : ''}:`}
+              </span>
               <span className="text-base font-sans text-sky-950 font-black">{formatCurrency(activeCalc.paperCost)}</span>
             </div>
           </div>

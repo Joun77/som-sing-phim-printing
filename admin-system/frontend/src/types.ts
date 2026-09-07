@@ -228,6 +228,10 @@ export interface AppContextValue {
   unrecordDeletedId?: (id: string) => void;
   addPurchaseOrder: (...args: any[]) => any;
   updateEquipmentComponentUsage: (...args: any[]) => any;
+  workflowTemplates?: any[];
+  fetchWorkflowTemplates?: () => Promise<void>;
+  saveWorkflowTemplate?: (template: any) => Promise<any>;
+  deleteWorkflowTemplate?: (id: string) => Promise<void>;
   resetEquipmentComponent: (...args: any[]) => any;
   swapEquipmentInk?: (equipmentId: string, slotPosition: string, inkSku: string, qty?: number, remarks?: string) => boolean;
   replaceEquipmentComponent?: (equipmentId: string, componentName: string, deductSparePartSku?: string, qty?: number, remarks?: string) => boolean;

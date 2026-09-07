@@ -22,7 +22,9 @@ export const PaperMaterialCard: React.FC<PaperMaterialCardProps> = ({ item }) =>
       case 'WIRE_O': return 'ສັນຂົດລວດ (Wire-O)';
       case 'PLASTIC_COMB': return 'ສັນກະດູກງູ (Comb)';
       case 'CALENDAR': return 'ສັນປະຕິທິນ (Desk Calendar)';
-      default: return b || 'ບໍ່ເຂົ້າເຫຼັ້ມ (None)';
+      case 'NONE':
+      case 'none':
+      default: return 'ບໍ່ມີການເຂົ້າເລ່ມ (No Binding)';
     }
   };
 
@@ -112,7 +114,9 @@ export const PaperMaterialCard: React.FC<PaperMaterialCardProps> = ({ item }) =>
               {formatBinding(item.binding_type)}
             </span>
             <span className="text-[11px] text-indigo-600 font-bold block">
-              ສັນປຶ້ມ: {item.spine_width_mm || 0} ມມ
+              {!item.binding_type || item.binding_type === 'NONE'
+                ? 'ສັນປຶ້ມ: ບໍ່ມີ (0 ມມ)'
+                : `ສັນປຶ້ມ: ${item.spine_width_mm || 0} ມມ`}
             </span>
           </div>
         </div>

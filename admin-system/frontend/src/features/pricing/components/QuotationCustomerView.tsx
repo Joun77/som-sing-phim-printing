@@ -173,6 +173,9 @@ export const QuotationCustomerView: React.FC<QuotationCustomerViewProps> = ({
             <tbody className="divide-y divide-slate-100">
               {items.map((it, idx) => {
                 const calc = calculatedItems[idx] || {};
+                const isBatchPhoto = it.is_batch_photo || it.preflightData?.is_batch_photo || (it.suggestedPaper && (it.suggestedPaper.includes('Photo') || it.suggestedPaper.includes('3x4') || it.suggestedPaper.includes('4x6') || it.suggestedPaper.includes('2x3'))) || (it.paperSize && (it.paperSize.includes('3x4') || it.paperSize.includes('4x6') || it.paperSize.includes('2x3')));
+                const cutsPerSheet = it.cutsPerSheetOverride || it.cuts_per_sheet_override || it.preflightData?.cuts_per_sheet_override || (it.impositionSummary?.match(/(\d+)\s*ຊິ້ນ/)?.[1] ? Number(it.impositionSummary.match(/(\d+)\s*ຊິ້ນ/)[1]) : undefined);
+                const photoPresetName = it.suggestedPaper && (it.suggestedPaper.includes('3x4') || it.suggestedPaper.includes('4x6') || it.suggestedPaper.includes('2x3')) ? it.suggestedPaper : (it.paperSize && (it.paperSize.includes('3x4') || it.paperSize.includes('4x6') || it.paperSize.includes('2x3')) ? it.paperSize : null);
                 const unitPrice = calc.effectiveSellingPrice || calc.sellingPrice || 0;
                 const totalLine = (unitPrice * (Number(it.quantity) || 1));
                 const totalPagesPerBook = (Number(it.pagesPerBook) || 1);
@@ -184,17 +187,39 @@ export const QuotationCustomerView: React.FC<QuotationCustomerViewProps> = ({
                   <tr key={it.id || idx} className="hover:bg-slate-50/50">
                     <td className="p-3.5 text-center font-bold text-slate-400">{idx + 1}</td>
                     <td className="p-3.5">
-                      <div className="font-black text-slate-900 text-sm">
-                        {it.customJobName || it.name || `ລາຍການທີ ${idx + 1}`}
+                      <div className="flex items-center gap-1.5">
+                        <div className="font-black text-slate-900 text-sm">
+                          {it.customJobName || it.name || `ລາຍການທີ ${idx + 1}`}
+                        </div>
+                        {isBatchPhoto && (
+                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/70 text-[9px] font-bold px-1.5 py-0.2 rounded">
+                            ຊຸດຮູບພາບ
+                          </span>
+                        )}
                       </div>
                       
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 font-sans">
                         <span className="font-semibold text-slate-700">
                           {getGenericPaperClean(it.paperId || it.paperSku)}
                         </span>
+                        {it.impositionSummary ? (
+                          <>
+                            <span className="text-slate-300">•</span>
+                            <span className="bg-amber-50 text-amber-800 border border-amber-200/70 px-1.5 py-0.5 rounded font-medium">
+                              {it.impositionSummary}
+                            </span>
+                          </>
+                        ) : cutsPerSheet && cutsPerSheet > 1 ? (
+                          <>
+                            <span className="text-slate-300">•</span>
+                            <span className="bg-amber-50 text-amber-800 border border-amber-200/70 px-1.5 py-0.5 rounded font-medium">
+                              ຕັດ {cutsPerSheet} ຊິ້ນງານ/ແຜ່ນໃຫຍ່
+                            </span>
+                          </>
+                        ) : null}
                         <span className="text-slate-300">•</span>
                         <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-medium border border-indigo-100">
-                          ຕົ້ນທຶນພິມ+ເຈ້ຍ: {formatCurrency(ratePerSheetCombined)}/ໜ້າ
+                          ຕົ້ນທຶນພິມ+ເຈ້ຍ: {formatCurrency(ratePerSheetCombined)}/{isBatchPhoto ? 'ຮູບ' : 'ໜ້າ'}
                         </span>
                         {it.finishing && it.finishing !== 'none' && it.finishing !== 'NONE' && (
                           <>
@@ -208,10 +233,10 @@ export const QuotationCustomerView: React.FC<QuotationCustomerViewProps> = ({
                     </td>
                     <td className="p-3.5 text-center font-sans font-medium text-slate-600">
                       <span className="inline-block px-2 py-0.5 rounded-md bg-slate-100 font-bold text-slate-700">
-                        {it.paperSize || 'A4'}
+                        {photoPresetName || it.paperSize || 'A4'}
                       </span>
                       <div className="text-[10px] text-slate-400 mt-0.5">
-                        {it.pagesPerBook ? `${it.pagesPerBook} ໜ້າ/ຊຸດ` : '1 ໜ້າ'}
+                        {it.pagesPerBook ? `${it.pagesPerBook} ${isBatchPhoto ? 'ຮູບ/ຊຸດ' : 'ໜ້າ/ຊຸດ'}` : `1 ${isBatchPhoto ? 'ຮູບ' : 'ໜ້າ'}`}
                       </div>
                     </td>
                     <td className="p-3.5 text-right font-black text-slate-900 font-sans">

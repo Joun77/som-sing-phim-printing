@@ -7,24 +7,27 @@ import (
 	"time"
 )
 
-// JobDeductionSpec represents production requirements for paper, ink, and finishing
+// JobDeductionSpec represents production requirements for paper, ink, finishing, and spoilage
 type JobDeductionSpec struct {
-	OrderID            string
-	OrderItemID        string
-	PaperSKU           string
-	Quantity           int
-	PageCount          int
-	CoverPaperID       string
-	InnerPaperID       string
-	ColorMode          string
-	MachineID          string
-	AvgCovC            float64
-	AvgCovM            float64
-	AvgCovY            float64
-	AvgCovK            float64
-	InkCoveragePct     float64
-	AllowNegativeStock bool
-	CreatedBy          string
+	OrderID                string
+	OrderItemID            string
+	PaperSKU               string
+	Quantity               int
+	PageCount              int
+	CoverPaperID           string
+	InnerPaperID           string
+	ColorMode              string
+	MachineID              string
+	AvgCovC                float64
+	AvgCovM                float64
+	AvgCovY                float64
+	AvgCovK                float64
+	InkCoveragePct         float64
+	SpoilageAllowanceSheets int
+	SpoilagePercent        float64
+	SpoilageCost           float64
+	AllowNegativeStock     bool
+	CreatedBy              string
 }
 
 // DeductInventoryForJob deducts paper sheets (via FIFO batches & materials), ink volume, and logs stock_movements inside a db.Transaction
@@ -47,6 +50,10 @@ func DeductInventoryForJob(tx *sql.Tx, spec JobDeductionSpec) error {
 		paperSku = spec.InnerPaperID
 	}
 
+	var materialID string
+	var currentStock float64
+	var unitCost float64
+
 	if paperSku != "" {
 		sheetsNeeded := spec.Quantity
 		if spec.PageCount > 0 {
@@ -58,9 +65,6 @@ func DeductInventoryForJob(tx *sql.Tx, spec JobDeductionSpec) error {
 		}
 
 		// Lock material row
-		var materialID string
-		var currentStock float64
-		var unitCost float64
 		err := tx.QueryRow(`
 			SELECT id, stock_qty, cost_per_unit 
 			FROM materials 
@@ -213,6 +217,43 @@ func DeductInventoryForJob(tx *sql.Tx, spec JobDeductionSpec) error {
 			`, inkMlNeeded, c.code)
 
 			log.Printf("[INK DEDUCTION] Deducted %.4f ml for Color %s (Order %s, Item %s, Mode: %s)", inkMlNeeded, c.code, spec.OrderID, spec.OrderItemID, spec.ColorMode)
+		}
+	}
+
+	// 3. Automated Spoilage Summary Logging (admin-architecture-guard Rule 3)
+	// If spoilage allowance or percentage was computed during pricing/preflight, record it in spoilage_logs
+	spoilQty := float64(spec.SpoilageAllowanceSheets)
+	if spoilQty <= 0 && spec.SpoilagePercent > 0 {
+		// Calculate estimated waste sheets based on total quantity & spoilage %
+		baseSheets := spec.Quantity
+		if spec.PageCount > 0 {
+			baseSheets = (spec.PageCount + 1) / 2 * spec.Quantity
+		}
+		spoilQty = float64(baseSheets) * spec.SpoilagePercent
+		if spoilQty < 1 && spec.SpoilagePercent > 0 {
+			spoilQty = 1
+		}
+	}
+
+	if spoilQty > 0 || spec.SpoilageCost > 0 {
+		spoilID := fmt.Sprintf("spoil-%s-%s-%d", spec.OrderID, spec.OrderItemID, time.Now().UnixNano()%1000000)
+		reason := fmt.Sprintf("Production allowance & make-ready waste (Order %s, Item %s)", spec.OrderID, spec.OrderItemID)
+		if spec.SpoilagePercent > 0 {
+			reason = fmt.Sprintf("Make-ready waste allowance (%.1f%%, Order %s)", spec.SpoilagePercent*100, spec.OrderID)
+		}
+
+		_, err := tx.Exec(`
+			INSERT INTO spoilage_logs (id, order_id, machine_id, material_id, paper_sku, spoilage_qty, unit, reason, cost_impact, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, 'Sheet', $7, $8, NOW())
+			ON CONFLICT (id) DO UPDATE SET
+				spoilage_qty = EXCLUDED.spoilage_qty,
+				reason = EXCLUDED.reason,
+				cost_impact = EXCLUDED.cost_impact
+		`, spoilID, spec.OrderID, spec.MachineID, materialID, paperSku, spoilQty, reason, spec.SpoilageCost)
+		if err != nil {
+			log.Printf("[SPOILAGE LOG WARN] Failed to log automated spoilage for order %s: %v", spec.OrderID, err)
+		} else {
+			log.Printf("[SPOILAGE LOG] Recorded automated spoilage log %s: %.1f sheets, cost: %.2f LAK", spoilID, spoilQty, spec.SpoilageCost)
 		}
 	}
 

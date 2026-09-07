@@ -20,6 +20,7 @@ interface Props {
   onOpenPrinterModal?: () => void;
   activeCalc?: any;
   jobSizePreset?: string;
+  paperSizeName?: string;
 }
 
 const DEFAULT_CMYK_CHANNELS: ColorChannel[] = [
@@ -49,6 +50,7 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
   onOpenPrinterModal,
   activeCalc,
   jobSizePreset,
+  paperSizeName,
 }) => {
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
@@ -293,7 +295,7 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
                       </div>
                       <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[10px] text-slate-500 font-medium">
                         <span className="text-indigo-900 font-bold font-sans bg-indigo-50/80 px-2 py-0.5 rounded border border-indigo-100">
-                          ໝຶກຈິງ: LAK {realInkPerSheet.toLocaleString()} / ແຜ່ນ ({jobSizePreset || 'A4'})
+                          ໝຶກຈິງ: LAK {realInkPerSheet.toLocaleString()} / ແຜ່ນ ({paperSizeName || (jobSizePreset && jobSizePreset.toUpperCase() !== 'CUSTOM' ? jobSizePreset : 'A4')})
                         </span>
                         <span>•</span>
                         <span>ຄ່າເສື່ອມ & ໄຟ: LAK {machCost.toLocaleString()} / ແຜ່ນ</span>

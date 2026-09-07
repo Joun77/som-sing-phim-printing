@@ -12,7 +12,8 @@ import {
   SpoilageModal,
   ArtworkModal,
   STEP_ORDER_MAP,
-  PRODUCTION_STEPS_CONFIG
+  PRODUCTION_STEPS_CONFIG,
+  type StepConfig
 } from './components/tracker';
 import { BookOpen, Clock, AlertCircle } from 'lucide-react';
 
@@ -74,30 +75,51 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
           created_at: (localOrd as any).createdTime || new Date().toISOString(),
           updated_at: new Date().toISOString(),
           items: (localOrd.items && localOrd.items.length > 0)
-            ? (localOrd.items || []).map((it: any, idx: number) => ({
-                id: it.id || `item-${idx + 1}`,
-                order_id: localOrd.id,
-                item_name: it.name || it.description || it.item_name || (localOrd as any).jobName || `ລາຍການທີ ${idx + 1}`,
-                quantity: it.quantity || (localOrd as any).totalQuantity || 100,
-                page_count: it.pageCount || it.page_count || 1,
-                paper_size: it.paperSize || it.paper_size || 'A4',
-                binding_type: it.bindingType || it.binding_type || 'PERFECT_HOT_GLUE',
-                spine_width_mm: it.spineWidth || it.spine_width_mm || 5.0,
-                current_step: (it.currentStep || it.current_step || 'PENDING') as ProductionStep,
-                avg_cov_c: it.avg_cov_c || 2.5,
-                avg_cov_m: it.avg_cov_m || 2.5,
-                avg_cov_y: it.avg_cov_y || 2.5,
-                avg_cov_k: it.avg_cov_k || 5.0,
-                unit_cost_lak: it.unitCost || it.unit_cost_lak || (it.specs?.unitCost || 0),
-                unit_price_lak: it.unitPrice || it.unit_price_lak || 0,
-                total_price_lak: (it.unitPrice || it.unit_price_lak || 0) * (it.quantity || 1),
-                cover_file_url: it.cover_file_url || `/api/v1/orders/files/orders/${ordNo}/cover.pdf`,
-                inner_file_url: it.inner_file_url || `/api/v1/orders/files/orders/${ordNo}/inner.pdf`,
-                assigned_press_name: it.assigned_press_name || it.press_machine,
-                assigned_cutter_name: it.assigned_cutter_name || it.cutter_machine,
-                assigned_finish_name: it.assigned_finish_name || it.finish_machine,
-                specs: it.specs || it
-              }))
+            ? (localOrd.items || []).map((it: any, idx: number) => {
+                const rawBinding = it.bindingType || it.binding_type || it.bindingMethod || it.specs?.bindingMethod || it.specs?.binding_method || it.specs?.bindingType;
+                const isNoBinding = !rawBinding || rawBinding === 'none' || rawBinding === 'NONE' || rawBinding === 'ບໍ່ມີ' || (it.pageCount === 1 && !rawBinding);
+                const bindingType = isNoBinding ? 'NONE' : (rawBinding || 'NONE');
+                const spineWidth = isNoBinding ? 0 : Number(it.spineWidth || it.spine_width_mm || it.specs?.spine_width_mm || 0);
+
+                const pressMachine = it.assigned_press_name || it.press_machine || it.printerName || it.printer_name || it.specs?.printerName || it.specs?.printer_name || (localOrd as any).printer_name || (localOrd as any).allocated_printer_name || (localOrd as any).printerName || 'Epson L15150 (A3+ Inkjet)';
+
+                const batchFiles = it.batch_files || it.specs?.batch_files || (localOrd as any).batch_files || (localOrd as any).artwork_batch || (localOrd as any).photos || (localOrd as any).gallery_urls || [];
+                const galleryUrls = it.gallery_urls || it.specs?.gallery_urls || (localOrd as any).gallery_urls || [];
+
+                return {
+                  id: it.id || `item-${idx + 1}`,
+                  order_id: localOrd.id,
+                  item_name: it.name || it.description || it.item_name || (localOrd as any).jobName || `ລາຍການທີ ${idx + 1}`,
+                  quantity: it.quantity || (localOrd as any).totalQuantity || 100,
+                  page_count: it.pageCount || it.page_count || 1,
+                  paper_size: it.paperSize || it.paper_size || 'A4',
+                  binding_type: bindingType,
+                  spine_width_mm: spineWidth,
+                  current_step: (it.currentStep || it.current_step || 'PENDING') as ProductionStep,
+                  avg_cov_c: it.avg_cov_c || 2.5,
+                  avg_cov_m: it.avg_cov_m || 2.5,
+                  avg_cov_y: it.avg_cov_y || 2.5,
+                  avg_cov_k: it.avg_cov_k || 5.0,
+                  unit_cost_lak: it.unitCost || it.unit_cost_lak || (it.specs?.unitCost || 0),
+                  unit_price_lak: it.unitPrice || it.unit_price_lak || 0,
+                  total_price_lak: (it.unitPrice || it.unit_price_lak || 0) * (it.quantity || 1),
+                  cover_file_url: it.cover_file_url || it.artworkUrl || it.artwork_url || `/api/v1/orders/files/orders/${ordNo}/cover.pdf`,
+                  inner_file_url: it.inner_file_url || it.artworkUrl || it.artwork_url || `/api/v1/orders/files/orders/${ordNo}/inner.pdf`,
+                  assigned_press_name: pressMachine,
+                  assigned_cutter_name: it.assigned_cutter_name || it.cutter_machine,
+                  assigned_finish_name: it.assigned_finish_name || it.finish_machine,
+                  batch_files: batchFiles,
+                  gallery_urls: galleryUrls,
+                  specs: {
+                    ...(it.specs || it),
+                    batch_files: batchFiles,
+                    gallery_urls: galleryUrls,
+                    printerName: pressMachine,
+                    printer_name: pressMachine,
+                    productionWorkflow: (localOrd as any).productionWorkflow || (localOrd as any).workflow || null
+                  }
+                };
+              })
             : [
                 {
                   id: 'item-1',
@@ -116,11 +138,15 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
                   unit_cost_lak: 0,
                   unit_price_lak: localOrd.totalPriceCharged || 0,
                   total_price_lak: localOrd.totalPriceCharged || 0,
-                  cover_file_url: `/api/v1/orders/files/orders/${ordNo}/cover.pdf`,
-                  inner_file_url: `/api/v1/orders/files/orders/${ordNo}/inner.pdf`,
+                  cover_file_url: (localOrd as any).artworkUrl || (localOrd as any).artwork_url || `/api/v1/orders/files/orders/${ordNo}/cover.pdf`,
+                  inner_file_url: (localOrd as any).artworkUrl || (localOrd as any).artwork_url || `/api/v1/orders/files/orders/${ordNo}/inner.pdf`,
+                  assigned_press_name: (localOrd as any).printer_name || (localOrd as any).allocated_printer_name || 'Epson L15150 (A3+ Inkjet)',
+                  batch_files: (localOrd as any).batch_files || (localOrd as any).artwork_batch || (localOrd as any).photos || (localOrd as any).gallery_urls || [],
+                  gallery_urls: (localOrd as any).gallery_urls || [],
                   specs: localOrd
                 }
-              ]
+              ],
+          productionWorkflow: (localOrd as any).productionWorkflow || (localOrd as any).workflow || null
         };
         setOrder(mappedOrder);
         setLoading(false);
@@ -366,6 +392,7 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
                         <EquipmentSpecCard
                           item={item}
                           availableMachines={equipment || []}
+                          orderWorkflow={item.specs?.productionWorkflow || order?.productionWorkflow}
                           onMachineChanged={(log) => {
                             showToast(`ປ່ຽນ ${log.category} ເປັນ "${log.newMachineName}" ສຳເລັດ! (ເຫດຜົນ: ${log.reason})`, 'success');
                           }}
@@ -380,13 +407,30 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
                           onPreviewArtwork={(title, url) => setPreviewFile({ title, url, item })}
                         />
 
-                        {/* 4. 6-Milestone Interactive Pipeline Stepper */}
-                        <ProductionStepper
-                          currentStep={item.current_step}
-                          onAdvanceStep={(targetStep) =>
-                            executeStepUpdate(item, targetStep, 0, 'MANUAL', `Switched to ${targetStep}`)
-                          }
-                        />
+                        {/* 4. Interactive Pipeline Stepper (Dynamic for Single Sheet vs Book) */}
+                        {(() => {
+                          const itemWorkflow = item.specs?.productionWorkflow || order.productionWorkflow;
+                          const customWorkflowSteps: StepConfig[] | undefined = (itemWorkflow && Array.isArray(itemWorkflow.steps) && itemWorkflow.steps.length > 0)
+                            ? itemWorkflow.steps.map((st: any, sIdx: number) => ({
+                                step: (st.id || `step-${sIdx + 1}`) as any,
+                                stepNumber: sIdx + 1,
+                                labelLao: `${sIdx + 1}. ${st.nameLao || st.name || 'ຂັ້ນຕອນການຜະລິດ'}`,
+                                labelEn: st.category || 'Production Step',
+                              }))
+                            : undefined;
+
+                          return (
+                            <ProductionStepper
+                              currentStep={item.current_step}
+                              bindingType={item.binding_type}
+                              isSingleSheet={item.binding_type === 'NONE' || (item.page_count || 1) <= 1}
+                              customSteps={customWorkflowSteps}
+                              onAdvanceStep={(targetStep) =>
+                                executeStepUpdate(item, targetStep, 0, 'MANUAL', `Switched to ${targetStep}`)
+                              }
+                            />
+                          );
+                        })()}
 
                         {/* 5. Tactile Touch Action Buttons */}
                         <TactileActionButtons

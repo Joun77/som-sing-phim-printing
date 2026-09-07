@@ -31,7 +31,8 @@ import {
   CheckCircle,
   FileCheck2,
   HelpCircle,
-  UserCheck
+  UserCheck,
+  ChevronDown
 } from 'lucide-react';
 import { ProductionWorkflow, ProductionWorkflowStep, WorkflowTemplate, WorkflowStepCategory } from '../../types';
 import { useApp } from '@store/AppContext';
@@ -136,9 +137,9 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
   currentLang,
   onConfirmWorkflow,
 }) => {
-  const { employees = [] } = useApp();
+  const { employees = [], workflowTemplates = [], saveWorkflowTemplate } = useApp();
 
-  // Custom saved templates from localStorage
+  // Custom saved templates from localStorage & central database
   const [customTemplates, setCustomTemplates] = useState<WorkflowTemplate[]>(() => {
     try {
       const saved = localStorage.getItem('ss_print_workflow_templates_v1');
@@ -149,8 +150,17 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
   });
 
   const allTemplates = useMemo(() => {
-    return [...BUILT_IN_WORKFLOW_TEMPLATES, ...customTemplates];
-  }, [customTemplates]);
+    const combined = [...customTemplates];
+    // Merge database templates
+    if (Array.isArray(workflowTemplates)) {
+      workflowTemplates.forEach((dbTpl: any) => {
+        if (!combined.some(t => t.id === dbTpl.id)) {
+          combined.push(dbTpl);
+        }
+      });
+    }
+    return [...BUILT_IN_WORKFLOW_TEMPLATES, ...combined];
+  }, [customTemplates, workflowTemplates]);
 
   // Order items list
   const orderItems: any[] = useMemo(() => {
@@ -421,7 +431,14 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
     setShowAssignAllDropdown(false);
   };
 
-  // Save current pipeline as custom template
+  // Update category of a step dynamically
+  const handleUpdateStepCategory = (stepId: string, newCategory: WorkflowStepCategory) => {
+    setSteps((prev) =>
+      prev.map((s) => (s.id === stepId ? { ...s, category: newCategory } : s))
+    );
+  };
+
+  // Save current pipeline as custom template to Central DB and Local
   const handleSaveAsCustomTemplate = () => {
     if (!newTemplateName.trim()) return;
 
@@ -441,6 +458,9 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
 
     const updatedCustom = [newTpl, ...customTemplates];
     setCustomTemplates(updatedCustom);
+    if (saveWorkflowTemplate) {
+      saveWorkflowTemplate(newTpl);
+    }
     try {
       localStorage.setItem('ss_print_workflow_templates_v1', JSON.stringify(updatedCustom));
     } catch (e) {
@@ -863,7 +883,29 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
                             onChange={(e) => handleUpdateStepName(step.id, e.target.value)}
                             className="text-xs font-black text-slate-900 bg-white/80 border border-slate-200 hover:border-slate-300 focus:border-sky-500 focus:bg-white px-2.5 py-1 rounded-xl outline-hidden w-full max-w-sm shadow-2xs"
                           />
-                          {getCategoryBadge(step.category)}
+                          <div className="relative inline-flex items-center">
+                            <select
+                              value={step.category}
+                              onChange={(e) => handleUpdateStepCategory(step.id, e.target.value as WorkflowStepCategory)}
+                              className={`px-2 py-0.5 rounded-lg text-[10px] font-black cursor-pointer border transition outline-hidden appearance-none pr-5.5 shadow-2xs ${
+                                step.category === 'FINISHING' ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' :
+                                step.category === 'PRE_PRESS' ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' :
+                                step.category === 'PRESS' ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100' :
+                                step.category === 'POST_PRESS' ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100' :
+                                step.category === 'QC' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' :
+                                'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                              }`}
+                              title={currentLang === 'lo' ? 'ຄລິກເພື່ອປ່ຽນປະເພດຂັ້ນຕອນ (Finishing, Pre-Press, Press, QC)' : 'Click to change step category'}
+                            >
+                              <option value="FINISHING">Finishing</option>
+                              <option value="PRE_PRESS">Pre-Press</option>
+                              <option value="PRESS">Press Run</option>
+                              <option value="POST_PRESS">Post-Press</option>
+                              <option value="QC">QC & Pack</option>
+                              <option value="OTHER">Custom</option>
+                            </select>
+                            <ChevronDown className="w-3 h-3 text-slate-400 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
                         </div>
                       </div>
                     </div>

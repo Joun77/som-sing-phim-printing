@@ -779,24 +779,48 @@ func dischargeFIFOStockForOrder(o Order, allowNegativeStock bool) error {
 				colorMode, _ = item.Specs["colorMode"].(string)
 			}
 
+			spoilageSheets := 0
+			if s, ok := item.Specs["spoilage_allowance_sheets"].(float64); ok {
+				spoilageSheets = int(s)
+			} else if s, ok := item.Specs["spoilageAllowanceSheets"].(float64); ok {
+				spoilageSheets = int(s)
+			}
+
+			spoilagePct := 0.0
+			if p, ok := item.Specs["spoilage_percent"].(float64); ok {
+				spoilagePct = p
+			} else if p, ok := item.Specs["spoilagePercent"].(float64); ok {
+				spoilagePct = p
+			}
+
+			spoilageCost := 0.0
+			if c, ok := item.Specs["spoilage_cost"].(float64); ok {
+				spoilageCost = c
+			} else if c, ok := item.Specs["spoilageCost"].(float64); ok {
+				spoilageCost = c
+			}
+
 			// Deduct Paper and Ink using inventory.DeductInventoryForJob inside DB transaction
 			err := inventory.DeductInventoryForJob(tx, inventory.JobDeductionSpec{
-				OrderID:            o.ID,
-				OrderItemID:        item.ID,
-				PaperSKU:           paperSku,
-				Quantity:           item.Quantity,
-				PageCount:          item.PageCount,
-				CoverPaperID:       item.CoverPaperID,
-				InnerPaperID:       item.InnerPaperID,
-				ColorMode:          colorMode,
-				MachineID:          item.MachineID,
-				AvgCovC:            item.AvgCovC,
-				AvgCovM:            item.AvgCovM,
-				AvgCovY:            item.AvgCovY,
-				AvgCovK:            item.AvgCovK,
-				InkCoveragePct:     inkCov,
-				AllowNegativeStock: allowNegativeStock,
-				CreatedBy:          "PRODUCTION_TRIGGER",
+				OrderID:                 o.ID,
+				OrderItemID:             item.ID,
+				PaperSKU:                paperSku,
+				Quantity:                item.Quantity,
+				PageCount:               item.PageCount,
+				CoverPaperID:            item.CoverPaperID,
+				InnerPaperID:            item.InnerPaperID,
+				ColorMode:               colorMode,
+				MachineID:               item.MachineID,
+				AvgCovC:                 item.AvgCovC,
+				AvgCovM:                 item.AvgCovM,
+				AvgCovY:                 item.AvgCovY,
+				AvgCovK:                 item.AvgCovK,
+				InkCoveragePct:          inkCov,
+				SpoilageAllowanceSheets: spoilageSheets,
+				SpoilagePercent:         spoilagePct,
+				SpoilageCost:            spoilageCost,
+				AllowNegativeStock:      allowNegativeStock,
+				CreatedBy:               "PRODUCTION_TRIGGER",
 			})
 			if err != nil {
 				log.Printf("[INVENTORY DEDUCTION ERROR] %v", err)

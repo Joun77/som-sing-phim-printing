@@ -69,6 +69,18 @@ export interface PreflightResult {
   is_simulated?: boolean;
   execution_notice?: string;
   pages?: any[];
+  // Split Cover & Content Extension
+  is_split_cover?: boolean;
+  cover_result?: PreflightResult;
+  inner_result?: PreflightResult;
+  cover_file_url?: string;
+  cover_file_name?: string;
+  // Imposition & Inventory Paper Binding
+  selected_paper_id?: string;
+  cuts_per_sheet_override?: number;
+  cover_paper_id?: string;
+  cover_cuts_per_sheet_override?: number;
+  imposition_summary?: string;
 }
 
 export interface BatchPreflightResult {
@@ -113,6 +125,11 @@ export interface MasterOrderItem {
   total_price_lak: number;
   unit_price_snapshot?: number;
   cost_price_snapshot?: number;
+  assigned_press_name?: string;
+  assigned_cutter_name?: string;
+  assigned_finish_name?: string;
+  batch_files?: any[];
+  gallery_urls?: string[];
   specs?: any;
 }
 
@@ -130,6 +147,7 @@ export interface MasterOrder {
   status?: string;
   delivery_date?: string;
   google_drive_link?: string;
+  productionWorkflow?: any;
   items: MasterOrderItem[];
   created_at: string;
   updated_at: string;

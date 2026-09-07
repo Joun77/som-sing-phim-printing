@@ -127,6 +127,12 @@ func RunMigrations(db *sql.DB) error {
 		"migrations/030_customer_vip_tiers.sql",
 		"../migrations/031_customer_source_and_staff_rbac.sql",
 		"migrations/031_customer_source_and_staff_rbac.sql",
+		"../migrations/032_offcuts_table.sql",
+		"migrations/032_offcuts_table.sql",
+		"../migrations/033_print_dimension_presets.sql",
+		"migrations/033_print_dimension_presets.sql",
+		"../migrations/034_order_performance_indexes.sql",
+		"migrations/034_order_performance_indexes.sql",
 		"../schema.sql",
 		"schema.sql",
 	}

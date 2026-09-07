@@ -26,7 +26,6 @@ type Offcut struct {
 var (
 	offcutsStore = make(map[string]Offcut)
 	storeMutex   sync.RWMutex
-	offcutSeq    int
 )
 
 // GetMatchingOffcut searches for available offcut scrap matching material, size and quantity

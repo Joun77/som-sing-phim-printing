@@ -91,15 +91,16 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
     order.courierProofUrl || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&q=80&w=600'
   );
 
-  // Strict Sequential Delivery Lifecycle States
+  // Strict Sequential Delivery Lifecycle States (Packaging -> Dispatch -> Customer Received)
   const [isPacked, setIsPacked] = useState<boolean>(
     Boolean(order.isPacked === true || order.packing_status === 'PACKED')
   );
   const [isDispatched, setIsDispatched] = useState<boolean>(
     Boolean(order.isDispatched === true || order.dispatch_status === 'DISPATCHED')
   );
+  // Never default isDelivered to true prematurely unless customer actually received the items
   const [isDelivered, setIsDelivered] = useState<boolean>(
-    Boolean(order.isCustomerReceived === true || order.status === 'Delivered' || order.status === 'COMPLETED')
+    Boolean(order.isCustomerReceived === true)
   );
 
   // Payment Settlement State
@@ -125,7 +126,20 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
       setIsDispatched(false);
       setIsDelivered(false);
     }
-    if (order) order.isPacked = next;
+    if (order) {
+      order.isPacked = next;
+      if (!next) {
+        order.isDispatched = false;
+        order.isCustomerReceived = false;
+      }
+    }
+    if (onUpdateOrder) {
+      onUpdateOrder({
+        ...order,
+        isPacked: next,
+        ...(next ? {} : { isDispatched: false, isCustomerReceived: false })
+      });
+    }
     showToast(next ? 'ແພັກກິ້ງສິນຄ້າຮຽບຮ້ອຍແລ້ວ! ປົດລັອກຂັ້ນຕອນມອບໃຫ້ຂົນສົ່ງ' : 'Reverted packaging status', 'info');
   };
 
@@ -168,6 +182,18 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
       order.trackingNumber = trackingNumber;
       order.shippingFee = shippingFee;
       order.courierProofUrl = courierProofImage;
+    }
+    if (onUpdateOrder) {
+      onUpdateOrder({
+        ...order,
+        status: 'Dispatched',
+        isDispatched: true,
+        isPacked: true,
+        deliveryMethod: courier,
+        trackingNumber: trackingNumber,
+        shippingFee: shippingFee,
+        courierProofUrl: courierProofImage
+      });
     }
     showToast(
       currentLang === 'lo' 

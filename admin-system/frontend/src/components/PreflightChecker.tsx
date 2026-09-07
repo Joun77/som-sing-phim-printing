@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   UploadCloud,
   FileText,
@@ -29,10 +29,15 @@ import {
   Sliders,
   X,
   Eye,
+  ArrowRight,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useApp } from '../store/AppContext';
 import type { PreflightResult, BatchPreflightResult } from '../features/orders/types';
+import type { InventoryItem } from '../types';
 import { analyzeImageClient, analyzePDFClient, convertRGBToCMYKCanvas } from '../lib/preflightAnalyzer';
+import { CustomDimensionInput } from '../features/pricing/components/CustomDimensionInput';
+import { PaperMaterialSelectorModal } from '../features/pricing/components/PaperMaterialSelectorModal';
 
 interface PreflightCheckerProps {
   onSendToQuotation?: (result: PreflightResult) => void;
@@ -75,6 +80,85 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   const [customWidthMM, setCustomWidthMM] = useState<number>(210);
   const [customHeightMM, setCustomHeightMM] = useState<number>(297);
 
+  // 1.1 Inventory Paper Substrate Picker & Defaults
+  const { inventory, formatCurrency } = useApp();
+  const papers = (inventory || []).filter(item => {
+    const cat = (item.category || '').toLowerCase();
+    return cat === 'paper' || cat === 'material' || (item.specs?.paperFormat || item.paperFormat);
+  });
+  const [isPaperModalOpen, setIsPaperModalOpen] = useState<boolean>(false);
+  const [paperModalTarget, setPaperModalTarget] = useState<'single' | 'cover' | 'inner'>('single');
+  const [selectedPaper, setSelectedPaper] = useState<InventoryItem | null>(null);
+  const [coverPaper, setCoverPaper] = useState<InventoryItem | null>(null);
+  const [innerPaper, setInnerPaper] = useState<InventoryItem | null>(null);
+  const [defaultPaperId, setDefaultPaperId] = useState<string>('');
+
+  // Manual Guillotine Cuts Overrides
+  const [singleCutsOverride, setSingleCutsOverride] = useState<number | undefined>(undefined);
+  const [coverCutsOverride, setCoverCutsOverride] = useState<number | undefined>(undefined);
+  const [innerCutsOverride, setInnerCutsOverride] = useState<number | undefined>(undefined);
+
+  // Fetch shop defaults on mount
+  useEffect(() => {
+    fetch('/api/v1/settings/defaults')
+      .then(res => res.json())
+      .then(json => {
+        if (json.data && json.data.default_paper_id) {
+          setDefaultPaperId(json.data.default_paper_id);
+          const found = papers.find(p => p.id === json.data.default_paper_id);
+          if (found) {
+            if (!selectedPaper) setSelectedPaper(found);
+            if (!innerPaper) setInnerPaper(found);
+          }
+          const foundCover = papers.find(p => p.name?.includes('260') || p.name?.includes('300') || p.name?.includes('Art'));
+          if (foundCover && !coverPaper) {
+            setCoverPaper(foundCover);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [papers.length]);
+
+  // Set default paper in DB
+  const handleSetDefaultPaper = async (paperId: string) => {
+    try {
+      const res = await fetch('/api/v1/settings/defaults', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'default_paper_id', value: paperId }),
+      });
+      if (res.ok) {
+        setDefaultPaperId(paperId);
+      }
+    } catch (err) {
+      console.error('Failed to set default paper:', err);
+    }
+  };
+
+  // Helper to calculate cuts / imposition based on parent paper vs job item size
+  const calculateBestFitImposition = (parentW: number, parentH: number, itemW: number, itemH: number) => {
+    if (!parentW || !parentH || !itemW || !itemH) return 1;
+    // Orientation 1: Portrait / direct
+    const fit1 = Math.floor(parentW / itemW) * Math.floor(parentH / itemH);
+    // Orientation 2: Landscape / rotated 90 deg
+    const fit2 = Math.floor(parentW / itemH) * Math.floor(parentH / itemW);
+    return Math.max(1, Math.max(fit1, fit2));
+  };
+
+  // Determine active parent sheet dimensions from a paper item or fallback to A4 (210x297)
+  const getItemSheetDims = (pItem: InventoryItem | null) => {
+    if (!pItem) return { name: 'A4 (210×297mm)', w: 210, h: 297 };
+    const szStr = (pItem.specs?.size || pItem.specs?.standardSize || '').toUpperCase();
+    if (szStr.includes('A3+') || szStr.includes('320') || szStr.includes('330')) return { name: pItem.name, w: 320, h: 480 };
+    if (szStr.includes('A3')) return { name: pItem.name, w: 297, h: 420 };
+    if (szStr.includes('A4')) return { name: pItem.name, w: 210, h: 297 };
+    if (szStr.includes('31X43') || szStr.includes('787')) return { name: pItem.name, w: 787, h: 1092 };
+    return { name: pItem.name, w: 210, h: 297 };
+  };
+
+  // Determine active parent sheet dimensions from selectedPaper
+  const getParentSheetDims = () => getItemSheetDims(selectedPaper);
+
   // 2. Customer Requested Print Mode
   const [customerPrintMode, setCustomerPrintMode] = useState<'COLOR' | 'MONO_ALL'>('COLOR');
   const [colorChannelOption, setColorChannelOption] = useState<'4_COLOR' | '6_COLOR' | '12_COLOR'>('4_COLOR');
@@ -88,17 +172,33 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   const [isSavingReport, setIsSavingReport] = useState(false);
   const [reportSavedStatus, setReportSavedStatus] = useState<string | null>(null);
 
-  // 4. Batch Photo Preflight States (1-100 Photos per item)
-  const [preflightMode, setPreflightMode] = useState<'single' | 'batch'>('single');
+  // 4. Preflight Modes: 'single' (Single Document) | 'split' (Cover + Inner Split) | 'batch' (Multi-Asset 1-100)
+  const [preflightMode, setPreflightMode] = useState<'single' | 'split' | 'batch'>('single');
+
+  // Split Cover & Inner Content States
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
+  const [coverResult, setCoverResult] = useState<PreflightResult | null>(null);
+  const [isCoverScanning, setIsCoverScanning] = useState(false);
+
+  const [innerFile, setInnerFile] = useState<File | null>(null);
+  const [innerPreviewUrl, setInnerPreviewUrl] = useState<string | null>(null);
+  const [innerResult, setInnerResult] = useState<PreflightResult | null>(null);
+  const [isInnerScanning, setIsInnerScanning] = useState(false);
+
+  // Batch Multi-Asset States (1-100 Files)
   const [batchFiles, setBatchFiles] = useState<File[]>([]);
   const [batchPreviews, setBatchPreviews] = useState<{ name: string; url: string; size: number }[]>([]);
   const [batchPhotoSize, setBatchPhotoSize] = useState<'4x6' | '3x4' | '5x7' | '2x3' | 'A4'>('4x6');
+  const [batchCustomW, setBatchCustomW] = useState<number>(100);
+  const [batchCustomH, setBatchCustomH] = useState<number>(150);
   const [borderMode, setBorderMode] = useState<'BORDERED' | 'BORDERLESS'>('BORDERED');
   const [isBatchAnalyzing, setIsBatchAnalyzing] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; pct: number }>({ current: 0, total: 0, pct: 0 });
   const [batchResult, setBatchResult] = useState<BatchPreflightResult | null>(null);
   const [batchErrorMessage, setBatchErrorMessage] = useState<string | null>(null);
   const [selectedPreviewPhoto, setSelectedPreviewPhoto] = useState<string | null>(null);
+  const [batchCutsOverride, setBatchCutsOverride] = useState<number | undefined>(undefined);
 
   const PHOTO_PRESETS: Record<string, { label: string; w: number; h: number; cutsPerA4: number; descLao: string }> = {
     '4x6': { label: '4x6" (A6)', w: 100, h: 150, cutsPerA4: 3, descLao: 'ມາດຕະຖານ 3 ຮູບ/ແຜ່ນ A4' },
@@ -114,6 +214,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
     setBatchResult(null);
     setBatchErrorMessage(null);
     setSelectedPreviewPhoto(null);
+    setBatchCutsOverride(undefined);
   };
 
   const handleBatchFilesSelected = (filesList: FileList | File[]) => {
@@ -236,9 +337,158 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
     }
   };
 
+  const resetSplit = () => {
+    setCoverFile(null);
+    setCoverPreviewUrl(null);
+    setCoverResult(null);
+    setInnerFile(null);
+    setInnerPreviewUrl(null);
+    setInnerResult(null);
+  };
+
+  const handleCoverFileProcess = async (file: File) => {
+    setCoverFile(file);
+    setIsCoverScanning(true);
+    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    if (ext !== '.pdf') {
+      try { setCoverPreviewUrl(URL.createObjectURL(file)); } catch (e) {}
+    } else {
+      setCoverPreviewUrl(null);
+    }
+    try {
+      let res: PreflightResult;
+      const opts = { targetPaperSize: 'A4', targetWidthMM: 210, targetHeightMM: 297 };
+      if (ext !== '.pdf') {
+        res = await analyzeImageClient(file, opts);
+      } else {
+        res = await analyzePDFClient(file, opts);
+      }
+      setCoverResult(res);
+    } catch (e) {
+      console.error('Cover preflight err:', e);
+    } finally {
+      setIsCoverScanning(false);
+    }
+  };
+
+  const handleInnerFileProcess = async (file: File) => {
+    setInnerFile(file);
+    setIsInnerScanning(true);
+    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    if (ext !== '.pdf') {
+      try { setInnerPreviewUrl(URL.createObjectURL(file)); } catch (e) {}
+    } else {
+      setInnerPreviewUrl(null);
+    }
+    try {
+      let res: PreflightResult;
+      const opts = { targetPaperSize: 'A4', targetWidthMM: 210, targetHeightMM: 297 };
+      if (ext !== '.pdf') {
+        res = await analyzeImageClient(file, opts);
+      } else {
+        res = await analyzePDFClient(file, opts);
+      }
+      setInnerResult(res);
+    } catch (e) {
+      console.error('Inner preflight err:', e);
+    } finally {
+      setIsInnerScanning(false);
+    }
+  };
+
+  const handleSendSplitToQuotationAction = () => {
+    if (!coverResult && !innerResult) return;
+    const coverP = coverResult?.total_pages || 4;
+    const innerP = innerResult?.total_pages || 1;
+    const totalP = coverP + innerP;
+
+    const innerDims = getItemSheetDims(innerPaper || selectedPaper);
+    const coverDims = getItemSheetDims(coverPaper || selectedPaper);
+
+    const autoInnerCuts = calculateBestFitImposition(innerDims.w, innerDims.h, innerResult?.target_width_mm || 210, innerResult?.target_height_mm || 297);
+    const effectiveInnerCuts = innerCutsOverride !== undefined ? innerCutsOverride : autoInnerCuts;
+
+    const autoCoverCuts = calculateBestFitImposition(coverDims.w, coverDims.h, (innerResult?.target_width_mm || 210) * 2, innerResult?.target_height_mm || 297);
+    const effectiveCoverCuts = coverCutsOverride !== undefined ? coverCutsOverride : Math.max(1, autoCoverCuts);
+
+    const splitSummary = `ປົກ: ${coverDims.name} (ຕັດໄດ້ ${effectiveCoverCuts} ປົກ/ແຜ່ນ) | ເນື້ອໃນ: ${innerDims.name} (ຕັດໄດ້ ${effectiveInnerCuts} ໜ້າ/ແຜ່ນ)`;
+
+    const exportPayload: PreflightResult = {
+      file_name: innerResult?.file_name ? `ປຶ້ມແຍກປົກ (${innerResult.file_name})` : 'ປຶ້ມແຍກປົກ & ເນື້ອໃນ',
+      file_url: innerPreviewUrl || innerResult?.file_url || '',
+      cover_file_url: coverPreviewUrl || coverResult?.file_url || '',
+      cover_file_name: coverFile?.name || coverResult?.file_name || 'Cover_Art',
+      total_pages: totalP,
+      color_pages_count: (coverResult?.color_pages_count || 0) + (innerResult?.color_pages_count || 0),
+      mono_pages_count: (coverResult?.mono_pages_count || 0) + (innerResult?.mono_pages_count || 0),
+      avg_cov_c: innerResult?.avg_cov_c ?? coverResult?.avg_cov_c ?? 15,
+      avg_cov_m: innerResult?.avg_cov_m ?? coverResult?.avg_cov_m ?? 15,
+      avg_cov_y: innerResult?.avg_cov_y ?? coverResult?.avg_cov_y ?? 15,
+      avg_cov_k: innerResult?.avg_cov_k ?? coverResult?.avg_cov_k ?? 15,
+      color_pages_avg_c: innerResult?.color_pages_avg_c ?? coverResult?.color_pages_avg_c ?? 15,
+      color_pages_avg_m: innerResult?.color_pages_avg_m ?? coverResult?.color_pages_avg_m ?? 15,
+      color_pages_avg_y: innerResult?.color_pages_avg_y ?? coverResult?.color_pages_avg_y ?? 15,
+      color_pages_avg_k: innerResult?.color_pages_avg_k ?? coverResult?.color_pages_avg_k ?? 15,
+      color_space: innerResult?.color_space || 'CMYK',
+      color_mode: (innerResult?.color_mode === 'MONO_K' && coverResult?.color_mode === 'MONO_K') ? 'MONO_K' : 'CMYK',
+      has_rgb: Boolean(innerResult?.has_rgb || coverResult?.has_rgb),
+      is_standard_cmyk: Boolean(innerResult?.is_standard_cmyk && coverResult?.is_standard_cmyk),
+      status_badge_lao: `ແຍກປົກ (${coverP} ໜ້າ) + ເນື້ອໃນ (${innerP} ໜ້າ)`,
+      target_paper_size: innerResult?.target_paper_size || 'A4',
+      target_width_mm: innerResult?.target_width_mm || 210,
+      target_height_mm: innerResult?.target_height_mm || 297,
+      suggested_paper: 'A4',
+      selected_paper_id: innerPaper?.id || selectedPaper?.id,
+      cuts_per_sheet_override: effectiveInnerCuts,
+      cover_paper_id: coverPaper?.id || selectedPaper?.id,
+      cover_cuts_per_sheet_override: effectiveCoverCuts,
+      imposition_summary: splitSummary,
+      dpi_estimate: Math.min(coverResult?.dpi_estimate || 300, innerResult?.dpi_estimate || 300),
+      bleed_mm: 3,
+      has_sufficient_bleed: true,
+      execution_notice: `ແຍກປົກ & ເນື້ອໃນ (ປົກ: ${coverFile?.name || 'Cover'}, ເນື້ອໃນ: ${innerFile?.name || 'Inner'})`,
+      is_split_cover: true,
+      cover_result: coverResult || undefined,
+      inner_result: innerResult || undefined,
+    };
+
+    if (onSendToQuotation) {
+      onSendToQuotation(exportPayload);
+    }
+  };
+
   const handleSendBatchToQuotationAction = () => {
     if (!batchResult) return;
     const preset = PHOTO_PRESETS[batchPhotoSize] || PHOTO_PRESETS['4x6'];
+
+    const effectiveItemW = batchCustomW || preset.w;
+    const effectiveItemH = batchCustomH || preset.h;
+    const parentDims = getParentSheetDims();
+    const autoCuts = calculateBestFitImposition(parentDims.w, parentDims.h, effectiveItemW, effectiveItemH);
+    const effectiveCuts = batchCutsOverride !== undefined ? batchCutsOverride : (autoCuts || batchResult.suggested_imposition.cuts_per_sheet);
+    const reqSheets = Math.ceil(batchResult.total_files / Math.max(1, effectiveCuts));
+    const spoilSheets = Math.max(1, Math.ceil(reqSheets * 0.05));
+    const totalSheets = reqSheets + spoilSheets;
+    
+    // Label for target paper size
+    const sizeDisplayLabel = (Math.abs(effectiveItemW - 50) < 2 && Math.abs(effectiveItemH - 70) < 2) || (Math.abs(effectiveItemW - 70) < 2 && Math.abs(effectiveItemH - 50) < 2)
+      ? '5x7 cm'
+      : (Math.abs(effectiveItemW - 100) < 2 && Math.abs(effectiveItemH - 150) < 2)
+        ? '4x6" (A6)'
+        : (Math.abs(effectiveItemW - 130) < 3 && Math.abs(effectiveItemH - 180) < 3)
+          ? '5x7"'
+          : `${Math.round(effectiveItemW)}x${Math.round(effectiveItemH)}mm`;
+
+    const summaryLao = `ຮູບ ${batchResult.total_files} ໃບ (${sizeDisplayLabel}, ${borderMode === 'BORDERLESS' ? 'ບໍ່ມີຂອບ Bleed 2mm' : 'ມີຂອບຂາວ'}) ຈັດວາງ ${effectiveCuts} ຮູບ/ແຜ່ນ ${parentDims.name} ➜ ໃຊ້ເຈ້ຍ ${parentDims.name} ທັງໝົດ ${reqSheets} ແຜ່ນ (ເຜື່ອເສຍ ${spoilSheets} = ລວມ ${totalSheets} ແຜ່ນ)`;
+
+    const updatedImposition = {
+      ...batchResult.suggested_imposition,
+      cuts_per_sheet: effectiveCuts,
+      required_sheets: reqSheets,
+      spoilage_sheets: spoilSheets,
+      total_sheets: totalSheets,
+      summary_lao: summaryLao,
+    };
 
     const exportPayload: PreflightResult = {
       file_name: `ພິມຮູບພາບ Photo Prints (ຊຸດ ${batchResult.total_files} ໃບ)`,
@@ -258,18 +508,21 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       has_rgb: false,
       is_standard_cmyk: true,
       status_badge_lao: `ຊຸດພິມຮູບພາບ ${batchResult.total_files} ໃບ (${borderMode === 'BORDERED' ? 'ມີຂອບ' : 'ບໍ່ມີຂອບ'})`,
-      target_paper_size: preset.label,
-      target_width_mm: preset.w,
-      target_height_mm: preset.h,
-      suggested_paper: 'Photo Glossy 230gsm',
+      target_paper_size: sizeDisplayLabel,
+      target_width_mm: Math.round(effectiveItemW),
+      target_height_mm: Math.round(effectiveItemH),
+      suggested_paper: selectedPaper?.name || 'Photo Glossy 230gsm',
+      selected_paper_id: selectedPaper?.id,
+      cuts_per_sheet_override: effectiveCuts,
+      imposition_summary: summaryLao,
       dpi_estimate: 300,
       bleed_mm: borderMode === 'BORDERLESS' ? 2 : 0,
       has_sufficient_bleed: true,
-      execution_notice: batchResult.suggested_imposition.summary_lao,
+      execution_notice: summaryLao,
       ...({
         is_batch_photo: true,
         border_mode: borderMode,
-        batch_imposition: batchResult.suggested_imposition,
+        batch_imposition: updatedImposition,
         batch_files: batchResult.files,
       } as any),
     };
@@ -534,6 +787,11 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   const handleSendToQuotationAction = () => {
     if (!result) return;
 
+    const parentDims = getParentSheetDims();
+    const autoCuts = calculateBestFitImposition(parentDims.w, parentDims.h, customWidthMM, customHeightMM);
+    const effectiveCuts = singleCutsOverride !== undefined ? singleCutsOverride : autoCuts;
+    const impSummary = `ເຈ້ຍແມ່ພິມ ${parentDims.name} ຕັດໄດ້ ${effectiveCuts} ຊິ້ນງານ (ຂະໜາດ ${customWidthMM}×${customHeightMM}mm)`;
+
     const exportPayload: PreflightResult = {
       ...result,
       color_mode: customerPrintMode === 'MONO_ALL' ? 'MONO_K' : 'CMYK',
@@ -547,6 +805,9 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       target_paper_size: targetPaperSize,
       target_width_mm: customWidthMM,
       target_height_mm: customHeightMM,
+      selected_paper_id: selectedPaper?.id,
+      cuts_per_sheet_override: effectiveCuts,
+      imposition_summary: impSummary,
     };
 
     if (onSendToQuotation) {
@@ -595,6 +856,23 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
             </button>
             <button
               type="button"
+              onClick={() => setPreflightMode('split')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
+                preflightMode === 'split'
+                  ? 'bg-primary-navy text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5 text-amber-400" />
+              <span>{currentLang === 'lo' ? 'ແຍກປົກ & ເນື້ອໃນ' : 'Cover + Content'}</span>
+              {(coverFile || innerFile) && (
+                <span className="text-[10px] px-1.5 py-0.5 bg-amber-400/20 text-amber-800 rounded font-mono font-bold">
+                  {(coverFile ? 1 : 0) + (innerFile ? 1 : 0)}/2
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
               onClick={() => setPreflightMode('batch')}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
                 preflightMode === 'batch'
@@ -602,11 +880,20 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Images className="w-3.5 h-3.5" />
-              <span>{currentLang === 'lo' ? 'ຊຸດພິມຮູບພາບ (1-100 ຮູບ)' : 'Batch Photos'}</span>
-              <span className="text-[10px] px-1.5 py-0.5 bg-accent-sky/20 text-accent-sky rounded font-mono font-bold">{batchFiles.length} ລາຍການ</span>
+              <Images className="w-3.5 h-3.5 text-sky-400" />
+              <span>{currentLang === 'lo' ? 'ຊຸດໄຟລ໌ (1-100)' : 'Multi-Asset'}</span>
+              <span className="text-[10px] px-1.5 py-0.5 bg-accent-sky/20 text-accent-sky rounded font-mono font-bold">{batchFiles.length}</span>
             </button>
           </div>
+
+          {preflightMode === 'split' && (coverFile || innerFile) && (
+            <button
+              onClick={resetSplit}
+              className="px-4 py-2 text-xs font-black text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition cursor-pointer border border-slate-200"
+            >
+              {currentLang === 'lo' ? 'ເລີ່ມໃໝ່ (Reset Split)' : 'Reset Split'}
+            </button>
+          )}
 
           {preflightMode === 'single' && file && (
             <button
@@ -628,41 +915,458 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
         </div>
       </div>
 
-      {/* 2. MAIN LAYOUT SWITCH: BATCH PHOTOS VS SINGLE DOC */}
-      {preflightMode === 'batch' ? (
+      {/* 2. MAIN LAYOUT SWITCH: SPLIT COVER VS BATCH PHOTOS VS SINGLE DOC */}
+      {preflightMode === 'split' ? (
+        <div className="space-y-6 animate-fade-in">
+          {/* Split Top Action Bar */}
+          <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <span className="text-xs font-black text-slate-400 uppercase tracking-wider block">
+                ໂໝດກວດສອບແຍກປົກ & ເນື້ອໃນ (Cover + Content Split Engine)
+              </span>
+              <span className="text-sm font-black text-slate-900 mt-0.5 block">
+                ອັບໂຫຼດໄຟລ໌ໜ້າປົກ ແລະ ໄຟລ໌ເນື້ອໃນ ເພື່ອວິເຄາະຄ່າສີ CMYK ແຍກກັນ 2 ພາກສ່ວນ
+              </span>
+            </div>
+
+            {(coverResult || innerResult) && (
+              <button
+                type="button"
+                onClick={handleSendSplitToQuotationAction}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black transition flex items-center gap-2 shadow-sm cursor-pointer active:scale-95"
+              >
+                <span>{currentLang === 'lo' ? 'ສົ່ງຂໍ້ມູນແຍກປົກເຂົ້າໃບສະເໜີລາຄາ' : 'Send Split to Quotation'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Box 1: Cover File */}
+            <div className="space-y-4 p-6 bg-amber-50/40 border-2 border-amber-200/90 rounded-3xl flex flex-col justify-between shadow-xs">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-amber-200/60 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center font-black text-sm shadow-xs">
+                      1
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900">
+                        {currentLang === 'lo' ? 'ໄຟລ໌ໜ້າປົກ (Cover File)' : 'Cover Artwork File'}
+                      </h4>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        {currentLang === 'lo' ? 'ປົກໜ້າ-ຫຼັງ (PDF, AI, PSD, JPG, PNG)' : 'Front & Back Cover'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {coverResult && (
+                    <span className="px-3 py-1 rounded-xl bg-amber-200 text-amber-900 text-xs font-bold font-mono">
+                      {coverResult.total_pages || 4} ໜ້າປົກ
+                    </span>
+                  )}
+                </div>
+
+                {!coverFile ? (
+                  <div
+                    onClick={() => document.getElementById('checker-split-cover-input')?.click()}
+                    className="border-2 border-dashed border-amber-300 hover:border-amber-500 rounded-3xl p-10 text-center bg-white/80 hover:bg-white transition cursor-pointer space-y-3"
+                  >
+                    <input
+                      id="checker-split-cover-input"
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.webp,.tiff,.psd"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleCoverFileProcess(f);
+                      }}
+                    />
+                    <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shadow-xs">
+                      <UploadCloud className="w-7 h-7" />
+                    </div>
+                    <h5 className="text-sm font-black text-slate-800">
+                      {currentLang === 'lo' ? 'ຄລິກເພື່ອອັບໂຫຼດໄຟລ໌ປົກ' : 'Upload Cover File'}
+                    </h5>
+                    <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                      ຮອງຮັບ PDF, JPG, PNG, PSD (ເຈ້ຍໜາ 260-300g, ເຄືອບເງົາ/ດ້ານ)
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4 bg-white p-5 rounded-3xl border border-amber-200 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {coverPreviewUrl ? (
+                          <img src={coverPreviewUrl} alt="Cover" className="w-14 h-14 object-cover rounded-xl border border-slate-200" />
+                        ) : (
+                          <div className="w-14 h-14 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700">
+                            <FileText className="w-7 h-7" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <span className="text-sm font-black text-slate-900 truncate block">
+                            {coverFile.name}
+                          </span>
+                          <span className="text-xs text-slate-500 font-mono font-bold">
+                            {(coverFile.size / (1024 * 1024)).toFixed(2)} MB
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCoverFile(null);
+                          setCoverPreviewUrl(null);
+                          setCoverResult(null);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-xl hover:bg-rose-50 transition"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {isCoverScanning ? (
+                      <div className="p-4 bg-amber-50 rounded-2xl flex items-center gap-2.5 text-xs font-bold text-amber-900">
+                        <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+                        <span>ກຳລັງວິເຄາະຄ່າສີໜ້າປົກ...</span>
+                      </div>
+                    ) : coverResult && (
+                      <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-3">
+                        <div className="flex justify-between text-xs font-bold text-amber-400">
+                          <span>ຄ່າສີປົກ (Cover CMYK):</span>
+                          <span>{coverResult.color_mode || 'CMYK'}</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 text-center font-mono text-xs font-bold">
+                          <div className="bg-sky-500/20 text-sky-300 py-2 rounded-xl">C:{Math.round(coverResult.avg_cov_c)}%</div>
+                          <div className="bg-pink-500/20 text-pink-300 py-2 rounded-xl">M:{Math.round(coverResult.avg_cov_m)}%</div>
+                          <div className="bg-amber-500/20 text-amber-300 py-2 rounded-xl">Y:{Math.round(coverResult.avg_cov_y)}%</div>
+                          <div className="bg-slate-700 text-slate-200 py-2 rounded-xl">K:{Math.round(coverResult.avg_cov_k)}%</div>
+                        </div>
+                        <div className="text-xs text-slate-400 flex justify-between pt-2 border-t border-white/10">
+                          <span>DPI: {coverResult.dpi_estimate || 300}</span>
+                          <span>Bleed: {coverResult.bleed_mm || 3}mm</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Cover Paper Substrate Selector & Cutting Imposition */}
+              <div className="bg-amber-100/60 p-4 rounded-2xl border border-amber-200/80 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-amber-950 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-amber-700" />
+                    <span>ເຈ້ຍປົກ (Cover Paper):</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaperModalTarget('cover');
+                      setIsPaperModalOpen(true);
+                    }}
+                    className="text-[10px] font-black text-amber-800 bg-amber-200/70 hover:bg-amber-200 border border-amber-300 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                  >
+                    {coverPaper ? 'ປ່ຽນເຈ້ຍປົກ' : 'ເລືອກເຈ້ຍປົກຈາກສາງ'}
+                  </button>
+                </div>
+                {(() => {
+                  const cDims = getItemSheetDims(coverPaper || selectedPaper);
+                  const autoCuts = calculateBestFitImposition(cDims.w, cDims.h, (innerResult?.target_width_mm || 210) * 2, innerResult?.target_height_mm || 297);
+                  const effectiveCuts = coverCutsOverride !== undefined ? coverCutsOverride : Math.max(1, autoCuts);
+                  return (
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <span className="font-black text-amber-900 truncate max-w-[180px]">
+                          {coverPaper ? coverPaper.name : 'Art Card 260g - 300g (ມາດຕະຖານ)'}
+                        </span>
+                        <span className="text-[10px] font-bold text-amber-700 font-mono">
+                          {cDims.w}×{cDims.h}mm
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center bg-white/90 px-2.5 py-1.5 rounded-xl border border-amber-200">
+                        <span className="font-bold text-amber-950 text-xs flex items-center gap-1">
+                          <Scissors className="w-3.5 h-3.5 text-amber-600" />
+                          <span>1 ແຜ່ນແມ່ ຕັດໄດ້:</span>
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setCoverCutsOverride(Math.max(1, effectiveCuts - 1))}
+                            className="w-5 h-5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 font-black flex items-center justify-center text-xs cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={effectiveCuts}
+                            onChange={(e) => {
+                              const v = Number(e.target.value);
+                              setCoverCutsOverride(v > 0 ? v : 1);
+                            }}
+                            className="w-8 text-center font-mono font-black text-xs text-amber-900 border-0 focus:outline-none bg-transparent"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setCoverCutsOverride(effectiveCuts + 1)}
+                            className="w-5 h-5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 font-black flex items-center justify-center text-xs cursor-pointer"
+                          >
+                            +
+                          </button>
+                          <span className="text-[10px] text-amber-800 font-bold">ປົກ/ແຜ່ນ</span>
+                          {coverCutsOverride !== undefined && (
+                            <button
+                              type="button"
+                              onClick={() => setCoverCutsOverride(undefined)}
+                              className="text-[9px] text-rose-600 hover:underline font-bold ml-1 cursor-pointer"
+                            >
+                              (Auto)
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Box 2: Inner Pages Content */}
+            <div className="space-y-4 p-6 bg-sky-50/40 border-2 border-sky-200/90 rounded-3xl flex flex-col justify-between shadow-xs">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-sky-200/60 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-sky-600 text-white flex items-center justify-center font-black text-sm shadow-xs">
+                      2
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900">
+                        {currentLang === 'lo' ? 'ໄຟລ໌ເນື້ອໃນ (Inner Content File)' : 'Inner Pages Content'}
+                      </h4>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        {currentLang === 'lo' ? 'ເນື້ອໃນທັງໝົດ (PDF ຫຼາຍໜ້າ ຫຼື ຊຸດໜ້າ)' : 'Multiple Pages Document'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {innerResult && (
+                    <span className="px-3 py-1 rounded-xl bg-sky-200 text-sky-900 text-xs font-bold font-mono">
+                      {innerResult.total_pages} ໜ້າເນື້ອໃນ
+                    </span>
+                  )}
+                </div>
+
+                {!innerFile ? (
+                  <div
+                    onClick={() => document.getElementById('checker-split-inner-input')?.click()}
+                    className="border-2 border-dashed border-sky-300 hover:border-sky-500 rounded-3xl p-10 text-center bg-white/80 hover:bg-white transition cursor-pointer space-y-3"
+                  >
+                    <input
+                      id="checker-split-inner-input"
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.webp,.tiff"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleInnerFileProcess(f);
+                      }}
+                    />
+                    <div className="w-14 h-14 mx-auto rounded-2xl bg-sky-100 text-sky-800 flex items-center justify-center shadow-xs">
+                      <UploadCloud className="w-7 h-7" />
+                    </div>
+                    <h5 className="text-sm font-black text-slate-800">
+                      {currentLang === 'lo' ? 'ຄລິກເພື່ອອັບໂຫຼດໄຟລ໌ເນື້ອໃນ' : 'Upload Inner Pages File'}
+                    </h5>
+                    <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                      ຮອງຮັບ PDF ຫຼາຍໜ້າ (1-500+ ໜ້າ, ລະບົບຈະແຍກໜ້າສີ ແລະ ຂາວດຳ)
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4 bg-white p-5 rounded-3xl border border-sky-200 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {innerPreviewUrl ? (
+                          <img src={innerPreviewUrl} alt="Inner" className="w-14 h-14 object-cover rounded-xl border border-slate-200" />
+                        ) : (
+                          <div className="w-14 h-14 rounded-xl bg-sky-100 flex items-center justify-center text-sky-700">
+                            <FileText className="w-7 h-7" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <span className="text-sm font-black text-slate-900 truncate block">
+                            {innerFile.name}
+                          </span>
+                          <span className="text-xs text-slate-500 font-mono font-bold">
+                            {(innerFile.size / (1024 * 1024)).toFixed(2)} MB
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInnerFile(null);
+                          setInnerPreviewUrl(null);
+                          setInnerResult(null);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-xl hover:bg-rose-50 transition"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {isInnerScanning ? (
+                      <div className="p-4 bg-sky-50 rounded-2xl flex items-center gap-2.5 text-xs font-bold text-sky-900">
+                        <Loader2 className="w-4 h-4 animate-spin text-sky-600" />
+                        <span>ກຳລັງວິເຄາະຄ່າສີ & ໜ້າເນື້ອໃນ...</span>
+                      </div>
+                    ) : innerResult && (
+                      <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-3">
+                        <div className="flex justify-between text-xs font-bold text-sky-400">
+                          <span>ຄ່າສີເນື້ອໃນ ({innerResult.total_pages} ໜ້າ):</span>
+                          <span>{innerResult.color_mode || 'CMYK'}</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 text-center font-mono text-xs font-bold">
+                          <div className="bg-sky-500/20 text-sky-300 py-2 rounded-xl">C:{Math.round(innerResult.avg_cov_c)}%</div>
+                          <div className="bg-pink-500/20 text-pink-300 py-2 rounded-xl">M:{Math.round(innerResult.avg_cov_m)}%</div>
+                          <div className="bg-amber-500/20 text-amber-300 py-2 rounded-xl">Y:{Math.round(innerResult.avg_cov_y)}%</div>
+                          <div className="bg-slate-700 text-slate-200 py-2 rounded-xl">K:{Math.round(innerResult.avg_cov_k)}%</div>
+                        </div>
+                        <div className="text-xs text-slate-400 flex justify-between pt-2 border-t border-white/10">
+                          <span>ໜ້າສີ: {innerResult.color_pages_count || 0}</span>
+                          <span>ໜ້າຂາວດຳ: {innerResult.mono_pages_count || 0}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Inner Paper Substrate Selector & Cutting Imposition */}
+              <div className="bg-sky-100/60 p-4 rounded-2xl border border-sky-200/80 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-sky-950 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-sky-700" />
+                    <span>ເຈ້ຍເນື້ອໃນ (Inner Paper):</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaperModalTarget('inner');
+                      setIsPaperModalOpen(true);
+                    }}
+                    className="text-[10px] font-black text-sky-800 bg-sky-200/70 hover:bg-sky-200 border border-sky-300 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                  >
+                    {innerPaper ? 'ປ່ຽນເຈ້ຍເນື້ອໃນ' : 'ເລືອກເຈ້ຍເນື້ອໃນຈາກສາງ'}
+                  </button>
+                </div>
+                {(() => {
+                  const iDims = getItemSheetDims(innerPaper || selectedPaper);
+                  const autoCuts = calculateBestFitImposition(iDims.w, iDims.h, innerResult?.target_width_mm || 210, innerResult?.target_height_mm || 297);
+                  const effectiveCuts = innerCutsOverride !== undefined ? innerCutsOverride : autoCuts;
+                  return (
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <span className="font-black text-sky-900 truncate max-w-[180px]">
+                          {innerPaper ? innerPaper.name : 'Woodfree 70g - 80g (ມາດຕະຖານ)'}
+                        </span>
+                        <span className="text-[10px] font-bold text-sky-700 font-mono">
+                          {iDims.w}×{iDims.h}mm
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center bg-white/90 px-2.5 py-1.5 rounded-xl border border-sky-200">
+                        <span className="font-bold text-sky-950 text-xs flex items-center gap-1">
+                          <Scissors className="w-3.5 h-3.5 text-sky-600" />
+                          <span>1 ແຜ່ນແມ່ ຕັດໄດ້:</span>
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setInnerCutsOverride(Math.max(1, effectiveCuts - 1))}
+                            className="w-5 h-5 rounded bg-sky-100 hover:bg-sky-200 text-sky-800 font-black flex items-center justify-center text-xs cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={effectiveCuts}
+                            onChange={(e) => {
+                              const v = Number(e.target.value);
+                              setInnerCutsOverride(v > 0 ? v : 1);
+                            }}
+                            className="w-8 text-center font-mono font-black text-xs text-sky-900 border-0 focus:outline-none bg-transparent"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setInnerCutsOverride(effectiveCuts + 1)}
+                            className="w-5 h-5 rounded bg-sky-100 hover:bg-sky-200 text-sky-800 font-black flex items-center justify-center text-xs cursor-pointer"
+                          >
+                            +
+                          </button>
+                          <span className="text-[10px] text-sky-800 font-bold">ໜ້າ/ແຜ່ນ</span>
+                          {innerCutsOverride !== undefined && (
+                            <button
+                              type="button"
+                              onClick={() => setInnerCutsOverride(undefined)}
+                              className="text-[9px] text-rose-600 hover:underline font-bold ml-1 cursor-pointer"
+                            >
+                              (Auto)
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : preflightMode === 'batch' ? (
         <div className="space-y-6 animate-fade-in">
           {/* Batch Controls Toolbar */}
           <div className="bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
-              <div>
-                <span className="text-xs font-black text-slate-400 uppercase tracking-wider block">
-                  1. ເລືອກຂະໜາດຮູບພາບ (Photo Size Preset)
-                </span>
-                <span className="text-sm font-black text-slate-900 mt-0.5 block">
-                  ຂະໜາດທີ່ຕ້ອງການພິມ & ເລເອົາ Imposition
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {Object.entries(PHOTO_PRESETS).map(([key, preset]) => (
+            <div className="flex flex-col gap-3 border-b border-slate-100 pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <span className="text-xs font-black text-slate-400 uppercase tracking-wider block">
+                    1. ເລືອກຂະໜາດຮູບພາບ & ໜ່ວຍວັດແທກ (Photo Size & Unit)
+                  </span>
+                  <span className="text-sm font-black text-slate-900 mt-0.5 block">
+                    ກຳນົດຂະໜາດພິມ (ນິ້ວ / ຊມ / ມມ) ແລະ ດຶງເຈ້ຍແມ່ພິມຈາກສາງ
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
                   <button
-                    key={key}
                     type="button"
-                    onClick={() => {
-                      setBatchPhotoSize(key as any);
-                      if (batchFiles.length > 0) {
-                        runBatchPreflightAnalysis(batchFiles, key, borderMode);
-                      }
-                    }}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer flex flex-col items-center ${
-                      batchPhotoSize === key
-                        ? 'bg-primary-navy text-white shadow-sm'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
+                    onClick={() => setIsPaperModalOpen(true)}
+                    className="text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
                   >
-                    <span>{preset.label}</span>
-                    <span className="text-[10px] opacity-75 font-sans">{preset.cutsPerA4} ຮູບ/A4</span>
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>{selectedPaper ? `ເຈ້ຍ: ${selectedPaper.name}` : 'ເລືອກເຈ້ຍແມ່ພິມຈາກສາງ'}</span>
                   </button>
-                ))}
+                </div>
+              </div>
+
+              {/* Multi-unit & DB Presets Controller */}
+              <div className="bg-slate-50/70 p-3.5 rounded-2xl border border-slate-200/80">
+                <CustomDimensionInput
+                  widthMM={batchCustomW}
+                  heightMM={batchCustomH}
+                  currentLang={currentLang}
+                  onChangeMM={(wMM, hMM, presetName) => {
+                    setBatchCustomW(wMM);
+                    setBatchCustomH(hMM);
+                    if (batchFiles.length > 0) {
+                      runBatchPreflightAnalysis(batchFiles, presetName || `${Math.round(wMM)}x${Math.round(hMM)}mm`, borderMode);
+                    }
+                  }}
+                />
               </div>
             </div>
 
@@ -721,9 +1425,9 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
             </div>
           </div>
 
-          {/* If no files uploaded yet: Drag & Drop Dropzone */}
+          {/* If no files uploaded yet: Compact Modern Dropzone */}
           {batchFiles.length === 0 ? (
-            <div className="bg-white border border-slate-200/90 rounded-3xl p-8 sm:p-12 shadow-sm">
+            <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border border-slate-700/80 rounded-3xl p-6 sm:p-8 shadow-md text-white">
               <div
                 onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
                 onDragLeave={() => setIsDragOver(false)}
@@ -735,10 +1439,10 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                   }
                 }}
                 onClick={() => document.getElementById('preflight-batch-input')?.click()}
-                className={`border-2 border-dashed rounded-3xl p-10 sm:p-14 text-center transition-all cursor-pointer ${
+                className={`border-2 border-dashed rounded-2xl p-8 sm:p-10 text-center transition-all cursor-pointer ${
                   isDragOver
-                    ? 'border-accent-sky bg-accent-sky/5 scale-[1.01]'
-                    : 'border-slate-300 hover:border-accent-sky/70 hover:bg-slate-50'
+                    ? 'border-accent-sky bg-accent-sky/15 scale-[1.01]'
+                    : 'border-slate-700 hover:border-accent-sky hover:bg-slate-800/60'
                 }`}
               >
                 <input
@@ -754,28 +1458,32 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                   }}
                 />
 
-                <div className="flex flex-col items-center justify-center space-y-4 max-w-lg mx-auto">
-                  <div className="w-16 h-16 rounded-3xl bg-primary-navy/10 text-primary-navy flex items-center justify-center shadow-xs">
-                    <Images className="w-8 h-8 text-accent-sky" />
+                <div className="flex flex-col items-center justify-center space-y-3.5 max-w-lg mx-auto">
+                  <div className="w-14 h-14 rounded-2xl bg-accent-sky/15 border border-accent-sky/30 text-accent-sky flex items-center justify-center shadow-xs">
+                    <Images className="w-7 h-7" />
                   </div>
-                  <div className="space-y-2">
-                    <h3 className="text-base sm:text-lg font-black text-slate-900">
+                  <div className="space-y-1.5">
+                    <h3 className="text-base sm:text-lg font-black text-white">
                       {currentLang === 'lo'
                         ? 'ລາກຮູບພາບຫຼາຍໄຟລ໌ມາວາງທີ່ນີ້ ຫຼື ຄລິກເພື່ອເລືອກ (ສູງສຸດ 100 ຮູບ)'
                         : 'Drag & Drop Multiple Photos or Click to Browse (Max 100 photos)'}
                     </h3>
-                    <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    <p className="text-xs text-slate-300 font-medium leading-relaxed">
                       {currentLang === 'lo'
                         ? 'ຮອງຮັບ JPG, PNG, WebP (ຕົວຢ່າງ 40 ຮູບລວມເປັນ 1 ລາຍການ) ລະບົບຈະຄິດໄລ່ຄ່າສີສະເລ່ຍ CMYK, ການວາງເລເອົາ A4, ແລະ ການຕັດ Polar Guillotine'
                         : 'Supports multiple JPG, PNG, WebP. Consolidates into 1 single Order Item with average CMYK coverage and imposition cutting plan.'}
                     </p>
                   </div>
+                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-xl bg-accent-sky/20 border border-accent-sky/40 text-accent-sky text-xs font-bold">
+                    <UploadCloud className="w-3.5 h-3.5" />
+                    <span>{currentLang === 'lo' ? 'ຄລິກເລືອກຊຸດຮູບພາບ' : 'Browse Photo Batch'}</span>
+                  </div>
                 </div>
               </div>
 
               {batchErrorMessage && (
-                <div className="mt-4 p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs font-bold flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <div className="mt-4 p-4 bg-rose-950/70 border border-rose-600 text-rose-200 rounded-2xl text-xs font-bold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
                   <span>{batchErrorMessage}</span>
                 </div>
               )}
@@ -886,61 +1594,107 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                   </div>
 
                   {/* Imposition & Production Guillotine Cutting Strategy */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-3">
-                      <div className="flex items-center gap-2 text-xs font-black text-slate-800">
-                        <Grid className="w-4 h-4 text-primary-navy" />
-                        <span>ແຜນຈັດວາງເຈ້ຍ A4 (Imposition Layout)</span>
-                      </div>
-                      <div className="space-y-2 text-xs">
-                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5">
-                          <div className="flex justify-between font-bold text-slate-700">
-                            <span>ຂະໜາດເຈ້ຍແມ່ພິມ:</span>
-                            <span className="font-mono font-black text-slate-900">A4 (210 × 297 mm)</span>
+                  {(() => {
+                    const parentDims = getParentSheetDims();
+                    const autoCuts = calculateBestFitImposition(parentDims.w, parentDims.h, batchCustomW, batchCustomH);
+                    const effectiveCuts = batchCutsOverride !== undefined ? batchCutsOverride : (autoCuts || batchResult.suggested_imposition.cuts_per_sheet);
+                    const reqSheets = Math.ceil(batchResult.total_files / Math.max(1, effectiveCuts));
+                    const spoilSheets = Math.max(1, Math.ceil(reqSheets * 0.05));
+                    const totalSheets = reqSheets + spoilSheets;
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-xs font-black text-slate-800">
+                              <Grid className="w-4 h-4 text-primary-navy" />
+                              <span>ແຜນຈັດວາງເຈ້ຍແມ່ພິມ (Imposition Layout)</span>
+                            </div>
+                            {batchCutsOverride !== undefined && (
+                              <button
+                                type="button"
+                                onClick={() => setBatchCutsOverride(undefined)}
+                                className="text-[10px] text-rose-600 hover:underline font-bold cursor-pointer"
+                              >
+                                (ຄືນຄ່າ Auto)
+                              </button>
+                            )}
                           </div>
-                          <div className="flex justify-between font-bold text-slate-700">
-                            <span>ຈຳນວນຮູບຕໍ່ແຜ່ນ A4:</span>
-                            <span className="font-mono font-black text-slate-900">
-                              {batchResult.suggested_imposition.cuts_per_sheet} ຮູບ/ແຜ່ນ
-                            </span>
-                          </div>
-                          <div className="flex justify-between font-bold text-slate-700 border-t border-slate-200 pt-1.5">
-                            <span>ຈຳນວນເຈ້ຍ A4 ຕົວຈິງ:</span>
-                            <span className="font-mono font-black text-emerald-700">
-                              {batchResult.suggested_imposition.required_sheets} ແຜ່ນ
-                            </span>
-                          </div>
-                          <div className="flex justify-between font-bold text-slate-500 text-[11px]">
-                            <span>ເຜື່ອເສຍ (Spoilage 5%):</span>
-                            <span className="font-mono font-bold">
-                              +{batchResult.suggested_imposition.spoilage_sheets} ແຜ່ນ (ລວມ {batchResult.suggested_imposition.total_sheets} ແຜ່ນ)
-                            </span>
+                          <div className="space-y-2 text-xs">
+                            <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                              <div className="flex justify-between font-bold text-slate-700">
+                                <span>ຂະໜາດເຈ້ຍແມ່ພິມ:</span>
+                                <span className="font-mono font-black text-slate-900">{parentDims.name}</span>
+                              </div>
+                              <div className="flex justify-between items-center font-bold text-slate-700">
+                                <span>ຈຳນວນຮູບຕໍ່ 1 ແຜ່ນແມ່:</span>
+                                <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-xl border border-slate-200 shadow-2xs">
+                                  <button
+                                    type="button"
+                                    onClick={() => setBatchCutsOverride(Math.max(1, effectiveCuts - 1))}
+                                    className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs cursor-pointer"
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="100"
+                                    value={effectiveCuts}
+                                    onChange={(e) => {
+                                      const v = Number(e.target.value);
+                                      setBatchCutsOverride(v > 0 ? v : 1);
+                                    }}
+                                    className="w-8 text-center font-mono font-black text-xs text-primary-navy border-0 focus:outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setBatchCutsOverride(effectiveCuts + 1)}
+                                    className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs cursor-pointer"
+                                  >
+                                    +
+                                  </button>
+                                  <span className="text-[10px] text-slate-400 font-normal">ຮູບ/ແຜ່ນ</span>
+                                </div>
+                              </div>
+                              <div className="flex justify-between font-bold text-slate-700 border-t border-slate-200 pt-1.5">
+                                <span>ຈຳນວນແຜ່ນແມ່ຕົວຈິງ:</span>
+                                <span className="font-mono font-black text-emerald-700">
+                                  {reqSheets} ແຜ່ນ
+                                </span>
+                              </div>
+                              <div className="flex justify-between font-bold text-slate-500 text-[11px]">
+                                <span>ເຜື່ອເສຍ (Spoilage 5%):</span>
+                                <span className="font-mono font-bold">
+                                  +{spoilSheets} ແຜ່ນ (ລວມ {totalSheets} ແຜ່ນ)
+                                </span>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
 
-                    <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-3">
-                      <div className="flex items-center gap-2 text-xs font-black text-slate-800">
-                        <Scissors className="w-4 h-4 text-accent-sky" />
-                        <span>ຂັ້ນຕອນການຕັດ (Guillotine Cutting Plan)</span>
-                      </div>
-                      <div className="p-4 bg-sky-50/60 border border-sky-200 rounded-2xl space-y-2 text-xs text-sky-900 font-medium">
-                        <div className="font-black text-sky-950 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4 text-sky-600" />
-                          <span>Polar 78 ECO Guillotine (ຕັດປຶກດຽວ)</span>
+                        <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-3">
+                          <div className="flex items-center gap-2 text-xs font-black text-slate-800">
+                            <Scissors className="w-4 h-4 text-accent-sky" />
+                            <span>ຂັ້ນຕອນການຕັດ (Guillotine Cutting Plan)</span>
+                          </div>
+                          <div className="p-4 bg-sky-50/60 border border-sky-200 rounded-2xl space-y-2 text-xs text-sky-900 font-medium">
+                            <div className="font-black text-sky-950 flex items-center gap-1.5">
+                              <CheckCircle2 className="w-4 h-4 text-sky-600" />
+                              <span>Polar 78 ECO Guillotine (ຕັດປຶກດຽວ)</span>
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-sky-800">
+                              {`ຮູບ ${batchResult.total_files} ໃບ (${Math.round(batchCustomW)}×${Math.round(batchCustomH)}mm, ${borderMode === 'BORDERLESS' ? 'ບໍ່ມີຂອບ Bleed 2mm' : 'ມີຂອບຂາວ'}) ຈັດວາງ ${effectiveCuts} ຮູບ/ແຜ່ນ ➜ ໃຊ້ເຈ້ຍແມ່ ${parentDims.name} ທັງໝົດ ${reqSheets} ແຜ່ນ (ເຜື່ອເສຍ ${spoilSheets} = ລວມ ${totalSheets} ແຜ່ນ)`}
+                            </p>
+                            <div className="text-[10px] text-sky-700 font-bold bg-white/70 p-2 rounded-xl border border-sky-100">
+                              {borderMode === 'BORDERED'
+                                ? '• ມີຂອບຂາວ 3-5mm: ຕັດຕາມເສັ້ນ Margin ແຍກແຕ່ລະຮູບ ບໍ່ເສຍເນື້ອຮູບ'
+                                : '• ບໍ່ມີຂອບ (Borderless): ຕັດຕົກ Bleed 2mm ປາດຂອບ 4 ດ້ານ ໄດ້ຮູບເຕັມໃບງົດງາມ'}
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-[11px] leading-relaxed text-sky-800">
-                          {batchResult.suggested_imposition.summary_lao}
-                        </p>
-                        <div className="text-[10px] text-sky-700 font-bold bg-white/70 p-2 rounded-xl border border-sky-100">
-                          {borderMode === 'BORDERED'
-                            ? '• ມີຂອບຂາວ 3-5mm: ຕັດຕາມເສັ້ນ Margin ແຍກແຕ່ລະຮູບ ບໍ່ເສຍເນື້ອຮູບ'
-                            : '• ບໍ່ມີຂອບ (Borderless): ຕັດຕົກ Bleed 2mm ປາດຂອບ 4 ດ້ານ ໄດ້ຮູບເຕັມໃບງົດງາມ'}
-                        </div>
                       </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                   {/* DPI Quality Check Banner */}
                   {batchResult.low_dpi_count > 0 ? (
@@ -1052,44 +1806,253 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
         /* SINGLE DOC / BOOK PREFLIGHT LAYOUT */
         !file ? (
         /* Empty Upload State */
-        <div className="bg-white border border-slate-200/90 rounded-3xl p-8 sm:p-12 shadow-sm">
-          <div
-            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-            onDragLeave={() => setIsDragOver(false)}
-            onDrop={handleDrop}
-            onClick={() => document.getElementById('preflight-file-input')?.click()}
-            className={`border-2 border-dashed rounded-3xl p-10 sm:p-14 text-center transition-all cursor-pointer ${
-              isDragOver
-                ? 'border-accent-sky bg-accent-sky/5 scale-[1.01]'
-                : 'border-slate-300 hover:border-accent-sky/70 hover:bg-slate-50'
-            }`}
-          >
-            <input
-              id="preflight-file-input"
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff,.tif,.psd"
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files && e.target.files[0]) {
-                  handleFileUpload(e.target.files[0]);
-                }
-              }}
-            />
+        <div className="space-y-6">
+          {/* Compact Upload Hero Card */}
+          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border border-slate-700/80 rounded-3xl p-6 sm:p-8 shadow-md text-white">
+            <div
+              onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById('preflight-file-input')?.click()}
+              className={`border-2 border-dashed rounded-2xl p-8 sm:p-10 text-center transition-all cursor-pointer ${
+                isDragOver
+                  ? 'border-accent-sky bg-accent-sky/15 scale-[1.01]'
+                  : 'border-slate-700 hover:border-accent-sky hover:bg-slate-800/60'
+              }`}
+            >
+              <input
+                id="preflight-file-input"
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff,.tif,.psd"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    handleFileUpload(e.target.files[0]);
+                  }
+                }}
+              />
 
-            <div className="flex flex-col items-center justify-center space-y-4 max-w-md mx-auto">
-              <div className="w-16 h-16 rounded-3xl bg-primary-navy/10 text-primary-navy flex items-center justify-center shadow-xs">
-                <UploadCloud className="w-8 h-8" />
+              <div className="flex flex-col items-center justify-center space-y-3.5 max-w-lg mx-auto">
+                <div className="w-14 h-14 rounded-2xl bg-accent-sky/15 border border-accent-sky/30 text-accent-sky flex items-center justify-center shadow-xs">
+                  <UploadCloud className="w-7 h-7" />
+                </div>
+                <div className="space-y-1.5">
+                  <h3 className="text-base sm:text-lg font-black text-white">
+                    {currentLang === 'lo' ? 'ລາກໄຟລ໌ມາວາງທີ່ນີ້ ຫຼື ຄລິກເພື່ອເລືອກໄຟລ໌' : 'Drag & Drop Artwork or Click to Browse'}
+                  </h3>
+                  <p className="text-xs text-slate-300 font-medium leading-relaxed">
+                    {currentLang === 'lo'
+                      ? 'ຮອງຮັບ PDF (ສະແກນທຸກໜ້າ 1-500+ ໜ້າ, ແຍກໜ້າສີ/ຂາວດຳ), PNG, JPG, WebP, TIFF, PSD'
+                      : 'Supports multi-page PDF (Full-Scan all pages with Color/Mono Split), PNG, JPG, WebP, TIFF'}
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-xl bg-accent-sky/20 border border-accent-sky/40 text-accent-sky text-xs font-bold">
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>{currentLang === 'lo' ? 'ຄລິກເພື່ອເລືອກໄຟລ໌ຈາກຄອມພິວເຕີ' : 'Browse File'}</span>
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <h3 className="text-base font-black text-slate-900">
-                  {currentLang === 'lo' ? 'ລາກໄຟລ໌ມາວາງທີ່ນີ້ ຫຼື ຄລິກເພື່ອເລືອກໄຟລ໌' : 'Drag & Drop Artwork or Click to Browse'}
-                </h3>
-                <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                  {currentLang === 'lo'
-                    ? 'ຮອງຮັບ PDF (ສະແກນທຸກໜ້າ 1-500+ ໜ້າ, ແຍກໜ້າສີ/ຂາວດຳ), PNG, JPG, WebP, TIFF, PSD'
-                    : 'Supports multi-page PDF (Full-Scan all pages with Color/Mono Split), PNG, JPG, WebP, TIFF'}
-                </p>
+            </div>
+          </div>
+
+          {/* Target Paper & Configuration Section (Interactive even before file upload) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 1. Target Paper Dimensions */}
+            <div className="bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-6 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                  <Maximize2 className="w-3.5 h-3.5 text-primary-navy" />
+                  <span>1. ຂະໜາດເຈ້ຍທີ່ຈະພິມ (Target Paper):</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-bold font-sans">
+                  {paperWidthMM} × {paperHeightMM} mm
+                </span>
               </div>
+
+              {/* Multi-unit & DB Presets Dimension Controller */}
+              <CustomDimensionInput
+                widthMM={paperWidthMM}
+                heightMM={paperHeightMM}
+                currentLang={currentLang}
+                onChangeMM={(wMM, hMM, presetName) => {
+                  setTargetPaperSize(presetName || 'CUSTOM');
+                  handleCustomDimensionChange(wMM, hMM);
+                }}
+              />
+
+              {/* Material Substrate Selector from Inventory */}
+              <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-700 flex items-center gap-1">
+                    <FileText className="w-3.5 h-3.5 text-sky-600" />
+                    <span>ເຈ້ຍແມ່ພິມໃນສາງ:</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaperModalTarget('single');
+                      setIsPaperModalOpen(true);
+                    }}
+                    className="text-[10px] font-black text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                  >
+                    {selectedPaper ? 'ປ່ຽນເຈ້ຍ' : 'ເລືອກເຈ້ຍຈາກສາງ'}
+                  </button>
+                </div>
+                {selectedPaper ? (() => {
+                  const pDims = getParentSheetDims();
+                  const autoCuts = calculateBestFitImposition(pDims.w, pDims.h, paperWidthMM, paperHeightMM);
+                  const effectiveCuts = singleCutsOverride !== undefined ? singleCutsOverride : autoCuts;
+                  return (
+                    <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-2 font-sans">
+                      <div className="flex justify-between items-center">
+                        <span className="font-black text-slate-900 truncate max-w-[180px]">{selectedPaper.name}</span>
+                        <span className="text-[10px] font-bold text-slate-500 font-mono">
+                          {pDims.w}×{pDims.h}mm
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] text-slate-500">
+                        <span>ຄັງເຫຼືອ: {Number(selectedPaper.stockQty || 0).toLocaleString()} ແຜ່ນ</span>
+                        <span className="text-[10px] text-slate-400">Auto: {autoCuts} ຊິ້ນງານ</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/80">
+                        <span className="font-bold text-sky-900 text-xs flex items-center gap-1">
+                          <Scissors className="w-3.5 h-3.5 text-sky-600" />
+                          <span>1 ແຜ່ນແມ່ ຕັດໄດ້:</span>
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setSingleCutsOverride(Math.max(1, effectiveCuts - 1))}
+                            className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={effectiveCuts}
+                            onChange={(e) => {
+                              const v = Number(e.target.value);
+                              setSingleCutsOverride(v > 0 ? v : 1);
+                            }}
+                            className="w-8 text-center font-mono font-black text-xs text-primary-navy border-0 focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setSingleCutsOverride(effectiveCuts + 1)}
+                            className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs cursor-pointer"
+                          >
+                            +
+                          </button>
+                          <span className="text-[10px] text-slate-500 font-bold">ຊິ້ນງານ</span>
+                          {singleCutsOverride !== undefined && (
+                            <button
+                              type="button"
+                              onClick={() => setSingleCutsOverride(undefined)}
+                              className="text-[9px] text-rose-600 hover:underline font-bold ml-1 cursor-pointer"
+                            >
+                              (Auto)
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })() : (
+                  <div className="p-2 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-[11px] text-slate-400 text-center">
+                    ຍັງບໍ່ໄດ້ເລືອກເຈ້ຍ (ຄິດໄລ່ທຽບຖານ A4 210×297mm)
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 2. Print Mode Selection */}
+            <div className="bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-6 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                  <Printer className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>2. ໂໝດການພິມທີ່ລູກຄ້າເລືອກ (Print Mode):</span>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCustomerPrintMode('COLOR')}
+                  className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                    customerPrintMode === 'COLOR'
+                      ? 'bg-pink-50/80 border-pink-300 text-pink-950 shadow-xs'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-black text-xs">
+                    <Palette className="w-3.5 h-3.5 text-pink-500" />
+                    <span>ພິມສີ (Color Print)</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-1">
+                    ແຍກໜ້າສີ & ຂາວດຳອັດຕະໂນມັດ
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCustomerPrintMode('MONO_ALL')}
+                  className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                    customerPrintMode === 'MONO_ALL'
+                      ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-black text-xs">
+                    <FileCode className="w-3.5 h-3.5 text-slate-400" />
+                    <span>ພິມຂາວດຳລ້ວນ (All B&W)</span>
+                  </div>
+                  <div className={`text-[10px] mt-1 ${customerPrintMode === 'MONO_ALL' ? 'text-slate-300' : 'text-slate-400'}`}>
+                    ຄິດຄ່າໝຶກດຳທຸກໜ້າລ້ວນ
+                  </div>
+                </button>
+              </div>
+
+              {/* Color Channels */}
+              {customerPrintMode === 'COLOR' && (
+                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+                    <span>ຈຳນວນສີ (Color Channels):</span>
+                    <div className="flex gap-1">
+                      {[
+                        { id: '4_COLOR', label: '4 ສີ (CMYK)' },
+                        { id: '6_COLOR', label: '6 ສີ (Photo)' },
+                        { id: '12_COLOR', label: '12 ສີ (Fine Art)' }
+                      ].map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setColorChannelOption(c.id as any)}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                            colorChannelOption === c.id
+                              ? 'bg-pink-600 text-white shadow-xs font-black'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {onSkipToManual && (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={onSkipToManual}
+                    className="w-full py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition cursor-pointer text-center"
+                  >
+                    ຂ້າມການກວດໄຟລ໌ / ໄປປ້ອນຄ່າເອງ (Manual)
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1198,48 +2161,105 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {['A4', 'A5', 'A3', 'CUSTOM'].map(sz => (
+                  {/* Multi-unit & DB Presets Dimension Controller */}
+                  <CustomDimensionInput
+                    widthMM={paperWidthMM}
+                    heightMM={paperHeightMM}
+                    currentLang={currentLang}
+                    onChangeMM={(wMM, hMM, presetName) => {
+                      setTargetPaperSize(presetName || 'CUSTOM');
+                      handleCustomDimensionChange(wMM, hMM);
+                    }}
+                  />
+
+                  {/* Material Substrate Selector from Inventory */}
+                  <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-700 flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5 text-sky-600" />
+                        <span>ເຈ້ຍແມ່ພິມໃນສາງ:</span>
+                      </span>
                       <button
-                        key={sz}
                         type="button"
-                        onClick={() => handlePaperSizeSelect(sz)}
-                        className={`py-2 rounded-xl text-xs font-black transition cursor-pointer text-center ${
-                          targetPaperSize === sz
-                            ? 'bg-primary-navy text-white shadow-sm'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
+                        onClick={() => {
+                          setPaperModalTarget('single');
+                          setIsPaperModalOpen(true);
+                        }}
+                        className="text-[10px] font-black text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-2.5 py-1 rounded-lg transition cursor-pointer"
                       >
-                        {sz}
+                        {selectedPaper ? 'ປ່ຽນເຈ້ຍ' : 'ເລືອກເຈ້ຍຈາກສາງ'}
                       </button>
-                    ))}
+                    </div>
+                    {selectedPaper ? (() => {
+                      const pDims = getParentSheetDims();
+                      const autoCuts = calculateBestFitImposition(pDims.w, pDims.h, paperWidthMM, paperHeightMM);
+                      const effectiveCuts = singleCutsOverride !== undefined ? singleCutsOverride : autoCuts;
+                      return (
+                        <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-2 font-sans">
+                          <div className="flex justify-between items-center">
+                            <span className="font-black text-slate-900 truncate max-w-[180px]">{selectedPaper.name}</span>
+                            <span className="text-[10px] font-bold text-slate-500 font-mono">
+                              {pDims.w}×{pDims.h}mm
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center text-[10px] text-slate-500">
+                            <span>ຄັງເຫຼືອ: {Number(selectedPaper.stockQty || 0).toLocaleString()} ແຜ່ນ</span>
+                            <span className="text-[10px] text-slate-400">Auto: {autoCuts} ຊິ້ນງານ</span>
+                          </div>
+                          <div className="flex justify-between items-center bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/80">
+                            <span className="font-bold text-sky-900 text-xs flex items-center gap-1">
+                              <Scissors className="w-3.5 h-3.5 text-sky-600" />
+                              <span>1 ແຜ່ນແມ່ ຕັດໄດ້:</span>
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setSingleCutsOverride(Math.max(1, effectiveCuts - 1))}
+                                className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs cursor-pointer"
+                              >
+                                -
+                              </button>
+                              <input
+                                type="number"
+                                min="1"
+                                max="100"
+                                value={effectiveCuts}
+                                onChange={(e) => {
+                                  const v = Number(e.target.value);
+                                  setSingleCutsOverride(v > 0 ? v : 1);
+                                }}
+                                className="w-8 text-center font-mono font-black text-xs text-primary-navy border-0 focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setSingleCutsOverride(effectiveCuts + 1)}
+                                className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs cursor-pointer"
+                              >
+                                +
+                              </button>
+                              <span className="text-[10px] text-slate-500 font-bold">ຊິ້ນງານ</span>
+                              {singleCutsOverride !== undefined && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSingleCutsOverride(undefined)}
+                                  className="text-[9px] text-rose-600 hover:underline font-bold ml-1 cursor-pointer"
+                                >
+                                  (Auto)
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })() : (
+                      <div className="p-2 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-[11px] text-slate-400 text-center">
+                        ຍັງບໍ່ໄດ້ເລືອກເຈ້ຍ (ຄິດໄລ່ທຽບຖານ A4 210×297mm)
+                      </div>
+                    )}
                   </div>
 
-                  {targetPaperSize === 'CUSTOM' && (
-                    <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
-                      <div className="flex items-center gap-1 flex-1">
-                        <span className="text-[10px] font-bold text-slate-500">W:</span>
-                        <input
-                          type="number"
-                          value={customWidthMM}
-                          onChange={(e) => handleCustomDimensionChange(Number(e.target.value), customHeightMM)}
-                          className="w-full px-2 py-1 text-xs border rounded-lg font-mono font-bold"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1 flex-1">
-                        <span className="text-[10px] font-bold text-slate-500">H:</span>
-                        <input
-                          type="number"
-                          value={customHeightMM}
-                          onChange={(e) => handleCustomDimensionChange(customWidthMM, Number(e.target.value))}
-                          className="w-full px-2 py-1 text-xs border rounded-lg font-mono font-bold"
-                        />
-                      </div>
-                    </div>
-                  )}
-
                   <div className="p-2.5 bg-sky-50/70 border border-sky-200/60 rounded-xl flex items-center justify-between text-[11px]">
-                    <span className="text-sky-950 font-bold">ເນື້ອທີ່ເຈ້ຍ: {paperAreaM2.toFixed(4)} $m^2$</span>
+                    <span className="text-sky-950 font-bold">ເນື້ອທີ່ເຈ້ຍ: {paperAreaM2.toFixed(4)} m²</span>
                     <span className="text-sky-700 font-mono font-bold">~{estimatedGrandTotalInkML} mL Ink</span>
                   </div>
                 </div>
@@ -1605,6 +2625,33 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
           </div>
         </div>
       )}
+
+      {/* Paper Material Selector Modal from Inventory */}
+      <PaperMaterialSelectorModal
+        isOpen={isPaperModalOpen}
+        onClose={() => setIsPaperModalOpen(false)}
+        papers={papers}
+        selectedPaperId={
+          paperModalTarget === 'cover' 
+            ? coverPaper?.id 
+            : paperModalTarget === 'inner' 
+              ? innerPaper?.id 
+              : selectedPaper?.id
+        }
+        defaultPaperId={defaultPaperId}
+        onSetDefault={handleSetDefaultPaper}
+        formatCurrency={formatCurrency || ((n: number) => `${n.toLocaleString()} ₭`)}
+        onSelect={(paperId, paperItem) => {
+          const targetItem = paperItem || papers.find(p => p.id === paperId) || null;
+          if (paperModalTarget === 'cover') {
+            setCoverPaper(targetItem);
+          } else if (paperModalTarget === 'inner') {
+            setInnerPaper(targetItem);
+          } else {
+            setSelectedPaper(targetItem);
+          }
+        }}
+      />
     </div>
   );
 };

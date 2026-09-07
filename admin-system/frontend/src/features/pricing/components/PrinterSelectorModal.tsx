@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Check, Printer, AlertCircle, ShieldCheck, Database, Layers, Palette } from 'lucide-react';
 import { FormModalTemplate } from '@components/common/FormModalTemplate';
 import { useApp } from '@store/AppContext';
+import { calculateEquipmentPrintCost } from '@utils/machineCostCalculator';
 import type { Equipment } from '../../../types';
 
 interface PrinterSelectorModalProps {
@@ -25,7 +26,47 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
   getPrinterMachineRate,
   getPrinterActualInkCostPerPage
 }) => {
-  const { equipment: appEquipment = [] } = useApp();
+  const { equipment: appEquipment = [], printerColorLinks = [], inventory = [] } = useApp();
+  const [dbInks, setDbInks] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/api/inbound')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const items = Array.isArray(data) ? data : data?.data || [];
+        const inks = items
+          .filter((i: any) => {
+            const c = (i.category || '').toUpperCase();
+            const sku = (i.skuCode || i.id || '').toUpperCase();
+            const name = (i.itemName || i.name || '').toUpperCase();
+            return (
+              c.includes('INK') ||
+              name.includes('INK') ||
+              name.includes('TONER') ||
+              name.includes('ໝຶກ') ||
+              sku.startsWith('INK')
+            );
+          })
+          .map((m: any) => ({
+            id: m.skuCode || m.id,
+            sku: m.skuCode || m.id,
+            skuCode: m.skuCode || m.id,
+            name: m.itemName || m.name || m.skuCode || m.id,
+            unitPrice: Number(
+              m.unitPrice ||
+                m.costPerPurchaseUnit ||
+                (m.totalPrice && m.quantity ? Math.round(Number(m.totalPrice) / Number(m.quantity)) : 0)
+            ),
+            volume: Number(m.specs?.volume || m.specs?.volume_ml || 140),
+            yield: Number(m.specs?.yield || m.specs?.expectedYield || m.specs?.isoYield || m.yield || 0),
+          }));
+        if (inks.length > 0) setDbInks(inks);
+      })
+      .catch(() => {});
+  }, []);
+
+  const allAvailableInks = useMemo(() => [...inventory, ...dbInks], [inventory, dbInks]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTech, setSelectedTech] = useState('ALL');
   const [selectedColorCount, setSelectedColorCount] = useState('ALL');
@@ -249,8 +290,14 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[52vh] overflow-y-auto pr-1">
               {filteredPrinters.map(printer => {
                 const isSelected = selectedPrinterId === printer.id;
-                const rate = getPrinterMachineRate ? getPrinterMachineRate(printer) : (Number((printer as any).costPerPage) || Number((printer as any).calculatedCostPerPage) || 50);
+                const costResult = calculateEquipmentPrintCost(printer, printerColorLinks, allAvailableInks, 'Printer');
+                const machineCost = getPrinterMachineRate ? getPrinterMachineRate(printer) : costResult.netCostPerUnit;
+                const inkCost = getPrinterActualInkCostPerPage ? getPrinterActualInkCostPerPage(printer) : costResult.linkedInkRatePerPage;
+                const totalCost = (machineCost || 0) + (inkCost || 0);
                 const colorBadge = getPrinterColorBadge(printer);
+
+                const assetVal = costResult.assetValue || Number(printer.price || printer.purchaseCost || (printer as any).totalPrice || 0);
+                const capacityPages = Number(printer.expectedLifeA4Pages || (printer as any).TargetTotalPages || (printer as any).printedPagesCapacity || (printer as any).specs?.expectedLifeA4Pages || 0);
 
                 return (
                   <div
@@ -290,28 +337,33 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
                         <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded font-bold flex items-center gap-1">
                           <ShieldCheck className="w-3 h-3" /> ພ້ອມໃຊ້ງານ
                         </span>
-                        <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-bold flex items-center gap-1">
-                          <Database className="w-3 h-3" /> ຖານຂໍ້ມູນຈິງ
-                        </span>
+                        {assetVal > 0 && (
+                          <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded font-bold font-mono">
+                            ມູນຄ່າ: {formatCurrency(assetVal)}
+                          </span>
+                        )}
+                        {capacityPages > 0 && (
+                          <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded font-sans font-mono">
+                            ອາຍຸ: {capacityPages.toLocaleString()} ໜ້າ
+                          </span>
+                        )}
                       </div>
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                      <div className="text-left space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-slate-400 font-medium">ຄ່າເສື່ອມເຄື່ອງ:</span>
-                          <span className="text-xs font-black text-slate-900 font-sans">
-                            {formatCurrency(rate)} <span className="text-[10px] text-slate-400 font-normal">/ໜ້າ</span>
-                          </span>
+                      <div className="text-left space-y-1">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-[11px] font-bold text-slate-600">ຕົ້ນທຶນພິມລວມ:</span>
+                          <strong className="text-sm font-black text-sky-700 font-sans">
+                            {formatCurrency(totalCost > 0 ? totalCost : costResult.finalCostPerPage)}
+                          </strong>
+                          <span className="text-[10px] text-slate-400 font-normal">/ໜ້າ</span>
                         </div>
-                        {getPrinterActualInkCostPerPage && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-purple-600 font-medium">ຕົ້ນທຶນໝຶກພື້ນຖານ:</span>
-                            <span className="text-[11px] font-bold text-purple-700 font-sans">
-                              ~{formatCurrency(getPrinterActualInkCostPerPage(printer))} <span className="text-[9px] text-purple-400 font-normal">/ໜ້າ</span>
-                            </span>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
+                          <span>ຄ່າເຄື່ອງ {costResult.formattedMachine || formatCurrency(machineCost)}</span>
+                          <span>+</span>
+                          <span className="text-purple-700 font-bold">ໝຶກ {costResult.formattedInk || `~${formatCurrency(inkCost)}`}</span>
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-1.5">

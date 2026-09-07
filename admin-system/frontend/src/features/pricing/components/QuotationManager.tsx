@@ -155,22 +155,38 @@ export interface QuotationItem {
   profitMargin: number;
   discountPercent: number;
   spoilagePercent?: number;
+  cutsPerSheetOverride?: number;
+  coverCutsPerSheetOverride?: number;
+  impositionSummary?: string;
   fileName?: string;
   artworkUrl?: string;
   fileSize?: number;
   mimeType?: string;
+  coverFileName?: string;
+  coverArtworkUrl?: string;
+  coverFileSize?: number;
   preflightData?: PreflightResult;
   batchFiles?: any[];
+  isBatchPhoto?: boolean;
+  photoCount?: number;
+  suggestedPaper?: string;
+  selectedPaperName?: string;
+  cutPerSheet?: number;
+  totalLargeSheets?: number;
 }
 
 export const getPresetDimensions = (preset: string, currentW: number = 210, currentH: number = 297) => {
-  switch (preset) {
-    case 'A3': return { w: 297, h: 420 };
-    case 'A4': return { w: 210, h: 297 };
-    case 'A5': return { w: 148, h: 210 };
-    case 'A6': return { w: 105, h: 148 };
-    default: return { w: currentW || 210, h: currentH || 297 };
-  }
+  const p = (preset || '').trim().toLowerCase();
+  if (p === 'a3') return { w: 297, h: 420 };
+  if (p === 'a4') return { w: 210, h: 297 };
+  if (p === 'a5') return { w: 148, h: 210 };
+  if (p === 'a6') return { w: 105, h: 148 };
+  if (p.includes('5x7 cm') || p.includes('5x7cm') || p === '5x7 (cm)') return { w: 50, h: 70 };
+  if (p.includes('4x6') || p.includes('4*6') || p.includes('4"x6"') || p.includes('4"×6"')) return { w: 100, h: 150 };
+  if (p.includes('5x7"') || p.includes('5*7') || p.includes('5"x7"') || p.includes('5"×7"') || p === '5x7') return { w: 127, h: 178 };
+  if (p.includes('3x4') || p.includes('3*4') || p.includes('3"x4"')) return { w: 75, h: 100 };
+  if (p.includes('2x3') || p.includes('2*3') || p.includes('2"x3"') || p.includes('polaroid')) return { w: 54, h: 86 };
+  return { w: currentW || 210, h: currentH || 297 };
 };
 
 export default function QuotationManager({ onConvertToOrder, onBack, prefilledSpecs }: any) {
@@ -203,9 +219,29 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   
   const [quotationSearchQuery, setQuotationSearchQuery] = useState('');
   const itemFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Dynamic 1-Click Fast Presets (LocalStorage synced)
+  const [customFastPresets, setCustomFastPresets] = useState<PricingTemplatePreset[]>(() => {
+    try {
+      const saved = localStorage.getItem('somsing_custom_fast_presets');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return DEFAULT_PRICING_TEMPLATES.slice(0, 5);
+  });
+  const [isSavePresetModalOpen, setIsSavePresetModalOpen] = useState(false);
+  const [newPresetName, setNewPresetName] = useState('');
+  const [newPresetIcon, setNewPresetIcon] = useState('Sparkles');
   
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
+
+  const formatInkMl = (ml?: number) => {
+    if (!ml || ml <= 0) return '0.0';
+    if (ml < 0.1) return ml.toFixed(2);
+    return ml.toFixed(1);
+  };
 
   const papers = inventory.filter(item => {
     const cat = (item.category || '').toLowerCase();
@@ -382,8 +418,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     return {
       id: `item-${Date.now()}-${Math.random().toString().slice(-4)}`,
       name: specs?.jobName || name,
-      paperId: defaultPaper,
-      jobSizePreset: specs?.suggestedPaper || 'A4',
+      paperId: specs?.paperId || specs?.selected_paper_id || defaultPaper,
+      jobSizePreset: specs?.suggestedPaper || specs?.target_paper_size || 'A4',
       jobWidth: Number(specs?.jobWidth) || 210,
       jobHeight: Number(specs?.jobHeight) || 297,
       isDoubleSided: isBook ? true : false,
@@ -391,7 +427,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       pagesPerBook: pageCount,
       unitName: isBook ? 'ຊຸດ' : 'ແຜ່ນ',
       includeCover: isBook,
-      coverPaperId: defaultCoverPaper,
+      coverPaperId: specs?.coverPaperId || specs?.cover_paper_id || defaultCoverPaper,
       coverPrintMode: 'CMYK_1_SIDE',
       coverPagesCount: 4,
       colorPrintMode: isMono ? 'MONO_K' : 'CMYK',
@@ -401,6 +437,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       mCoverage: covM,
       yCoverage: covY,
       kCoverage: covK,
+      cutsPerSheetOverride: specs?.cutsPerSheetOverride !== undefined ? specs?.cutsPerSheetOverride : specs?.cuts_per_sheet_override,
+      coverCutsPerSheetOverride: specs?.coverCutsPerSheetOverride !== undefined ? specs?.coverCutsPerSheetOverride : specs?.cover_cuts_per_sheet_override,
+      impositionSummary: specs?.impositionSummary || specs?.imposition_summary,
       fileName: specs?.fileName,
       artworkUrl: specs?.artworkUrl,
       fileSize: specs?.fileSize,
@@ -454,22 +493,31 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   // Auto-sync when prefilledOrderSpecs or prefilledSpecs arrives dynamically
   useEffect(() => {
     if (incomingSpecs && (incomingSpecs.avgCovC !== undefined || incomingSpecs.cCoverage !== undefined || incomingSpecs.jobName || incomingSpecs.pageCount || incomingSpecs.jobWidth || incomingSpecs.suggestedPaper)) {
-      const isMono = (incomingSpecs.colorPages === 0 && (incomingSpecs.monoPages || 0) > 0) || incomingSpecs.colorMode === 'MONO_K';
+      const isBatch = Boolean(incomingSpecs.is_batch_photo || incomingSpecs.isBatchPhoto || incomingSpecs.jobName?.includes('Photo Prints') || (incomingSpecs.batchFiles && incomingSpecs.batchFiles.length > 0) || (incomingSpecs.preflightData as any)?.is_batch_photo);
+      const isMono = !isBatch && ((incomingSpecs.colorPages === 0 && (incomingSpecs.monoPages || 0) > 0) || incomingSpecs.colorMode === 'MONO_K');
       const c = Number(incomingSpecs.cCoverage !== undefined ? incomingSpecs.cCoverage : (incomingSpecs.avgCovC || 0));
       const m = Number(incomingSpecs.mCoverage !== undefined ? incomingSpecs.mCoverage : (incomingSpecs.avgCovM || 0));
       const y = Number(incomingSpecs.yCoverage !== undefined ? incomingSpecs.yCoverage : (incomingSpecs.avgCovY || 0));
       const k = Number(incomingSpecs.kCoverage !== undefined ? incomingSpecs.kCoverage : (incomingSpecs.avgCovK || 0));
-      const pages = Number(incomingSpecs.pageCount) || activeItem.pagesPerBook || 1;
-      const orderQty = Number(incomingSpecs.orderQuantity) || activeItem.printVolume || 1;
-      const isBook = pages >= 4;
+      
+      const photoCount = Number(incomingSpecs.photoCount) || (incomingSpecs.preflightData?.total_pages) || (incomingSpecs.batchFiles?.length) || 1;
+      const pages = isBatch ? photoCount : (Number(incomingSpecs.pageCount) || activeItem.pagesPerBook || 1);
+      const orderQty = Number(incomingSpecs.orderQuantity) || (isBatch ? 1 : (activeItem.printVolume || 1));
+      const isBook = !isBatch && pages >= 4;
 
-      const targetPreset = incomingSpecs.suggestedPaper || incomingSpecs.jobSizePreset || activeItem.jobSizePreset || 'A4';
+      const targetPreset = incomingSpecs.jobSizePreset || incomingSpecs.suggestedPaper || activeItem.jobSizePreset || 'A4';
       const defaultDimensions = getPresetDimensions(targetPreset, Number(incomingSpecs.jobWidth) || activeItem.jobWidth || 210, Number(incomingSpecs.jobHeight) || activeItem.jobHeight || 297);
       const targetW = Number(incomingSpecs.jobWidth) || defaultDimensions.w;
       const targetH = Number(incomingSpecs.jobHeight) || defaultDimensions.h;
 
-      const isDuplex = isBook ? true : activeItem.isDoubleSided;
-      const totalJobSheets = orderQty * Math.ceil(pages / (isDuplex ? 2 : 1));
+      const effectiveCutsOverride = incomingSpecs.cutsPerSheetOverride !== undefined 
+        ? Number(incomingSpecs.cutsPerSheetOverride) 
+        : (incomingSpecs.cuts_per_sheet_override !== undefined ? Number(incomingSpecs.cuts_per_sheet_override) : activeItem.cutsPerSheetOverride);
+
+      const isDuplex = isBook ? true : (isBatch ? false : activeItem.isDoubleSided);
+      const totalJobSheets = isBatch
+        ? (orderQty * Math.ceil(pages / Math.max(1, effectiveCutsOverride || 1)))
+        : (orderQty * Math.ceil(pages / (isDuplex ? 2 : 1)));
 
       const selectedPrinter = printers.find(p => p.id === activeItem.selectedPrinterId) || printers[0] || { id: 'PRN-DEFAULT', name: 'Default Printer' };
       const rate = getPrinterMachineRate(selectedPrinter);
@@ -489,9 +537,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         name: incomingSpecs.jobName || activeItem.name,
         pagesPerBook: pages,
         printVolume: orderQty,
-        unitName: isBook ? 'ຊຸດ' : 'ແຜ່ນ',
+        unitName: isBatch ? 'ຊຸດ' : (isBook ? 'ຊຸດ' : 'ແຜ່ນ'),
         isDoubleSided: isDuplex,
         includeCover: isBook,
+        isBatchPhoto: isBatch,
+        photoCount: isBatch ? pages : undefined,
         colorPrintMode: isMono ? 'MONO_K' : 'CMYK',
         coverageMode: 'advanced',
         cCoverage: c,
@@ -502,6 +552,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         jobSizePreset: targetPreset,
         jobWidth: targetW,
         jobHeight: targetH,
+        paperId: incomingSpecs.paperId || incomingSpecs.selected_paper_id || activeItem.paperId,
+        coverPaperId: incomingSpecs.coverPaperId || incomingSpecs.cover_paper_id || activeItem.coverPaperId,
+        cutsPerSheetOverride: effectiveCutsOverride,
+        coverCutsPerSheetOverride: incomingSpecs.coverCutsPerSheetOverride !== undefined ? incomingSpecs.coverCutsPerSheetOverride : (incomingSpecs.cover_cuts_per_sheet_override !== undefined ? incomingSpecs.cover_cuts_per_sheet_override : activeItem.coverCutsPerSheetOverride),
+        impositionSummary: incomingSpecs.impositionSummary || incomingSpecs.imposition_summary || activeItem.impositionSummary,
         fileName: incomingSpecs.fileName || activeItem.fileName,
         artworkUrl: incomingSpecs.fileUrl || incomingSpecs.artworkUrl || activeItem.artworkUrl,
         preflightData: incomingSpecs.preflightData || activeItem.preflightData,
@@ -521,7 +576,12 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       });
 
       if (showToast) {
-        showToast(`ດຶງຂໍ້ມູນສີ (${isMono ? `K:${k}%` : `C:${c}% M:${m}% Y:${y}% K:${k}%`}), ຂະໜາດ ${targetPreset} (${targetW}×${targetH}mm) ແລະ ຈຳນວນໜ້າ (${pages} ໜ້າ) ເຂົ້າຮຽບຮ້ອຍ!`, 'success');
+        showToast(
+          isBatch
+            ? `ດຶງຊຸດຮູບພາບ (${pages} ຮູບ), ຂະໜາດ ${targetPreset} (${targetW}×${targetH}mm) ແລະ ແຜນຕັດ (${effectiveCutsOverride || 'Auto'} ຮູບ/ແຜ່ນ) ເຂົ້າຮຽບຮ້ອຍ!`
+            : `ດຶງຂໍ້ມູນສີ (${isMono ? `K:${k}%` : `C:${c}% M:${m}% Y:${y}% K:${k}%`}), ຂະໜາດ ${targetPreset} (${targetW}×${targetH}mm) ແລະ ຈຳນວນໜ້າ (${pages} ໜ້າ) ເຂົ້າຮຽບຮ້ອຍ!`,
+          'success'
+        );
       }
       if (setPrefilledOrderSpecs) {
         setPrefilledOrderSpecs(null);
@@ -726,30 +786,59 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       ? (pfResult.color_pages_avg_k !== undefined ? pfResult.color_pages_avg_k : (pfResult.avg_cov_k ?? 0))
       : (pfResult.mono_pages_avg_k !== undefined ? pfResult.mono_pages_avg_k : (pfResult.avg_cov_k ?? 0));
 
+    const isSplit = Boolean(pfResult.is_split_cover);
+    const innerRes = pfResult.inner_result;
+    const coverRes = pfResult.cover_result;
+
+    const totalPages = isSplit ? ((innerRes?.total_pages || 0) + (coverRes?.total_pages || 4)) : (pfResult.total_pages || 1);
+
+    const isBatch = Boolean((pfResult as any)?.is_batch_photo);
+    const batchImp = (pfResult as any)?.batch_imposition;
+
     const newItem = createNewItem(cleanName, {
       jobName: cleanName,
       fileName: pfResult.file_name,
       artworkUrl: pfResult.file_url,
-      pageCount: pfResult.total_pages || 1,
-      orderQuantity: 1,
+      coverFileName: pfResult.cover_file_name || coverRes?.file_name,
+      coverArtworkUrl: pfResult.cover_file_url || coverRes?.file_url,
+      includeCover: isSplit,
+      coverPagesCount: coverRes?.total_pages || 4,
+      coverPrintMode: coverRes?.color_mode === 'MONO_K' ? 'MONO_K' : 'CMYK_1_SIDE',
+      pageCount: totalPages,
+      orderQuantity: isBatch ? totalPages : 1,
+      printVolume: isBatch ? totalPages : 1,
       colorPages: pfResult.color_pages_count || 0,
       monoPages: pfResult.mono_pages_count || 0,
       monoPagesAvgK: pfResult.mono_pages_avg_k || covK,
       jobWidth: pfResult.target_width_mm || 210,
       jobHeight: pfResult.target_height_mm || 297,
       suggestedPaper: pfResult.target_paper_size || 'A4',
+      paperId: pfResult.selected_paper_id,
+      coverPaperId: pfResult.cover_paper_id,
+      cutsPerSheetOverride: pfResult.cuts_per_sheet_override !== undefined ? pfResult.cuts_per_sheet_override : (batchImp?.cuts_per_sheet ? Number(batchImp.cuts_per_sheet) : undefined),
+      coverCutsPerSheetOverride: pfResult.cover_cuts_per_sheet_override,
+      impositionSummary: pfResult.imposition_summary || batchImp?.summary_lao,
       colorPrintMode: detectedColorMode,
       cCoverage: covC,
       mCoverage: covM,
       yCoverage: covY,
       kCoverage: covK,
       preflightData: pfResult,
+      batchFiles: (pfResult as any)?.batch_files || [],
+      mimeType: isBatch ? 'image/jpeg' : (pfResult.file_name?.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
     });
 
     setItems(prev => [...prev, newItem]);
     setActiveItemIndex(items.length);
     setIsPreflightModalOpen(false);
-    if (showToast) showToast(`ເພີ່ມລາຍການ "${cleanName}" (${pfResult.total_pages} ໜ້າ) ສຳເລັດ!`, 'success');
+    if (showToast) {
+      showToast(
+        isSplit 
+          ? `ເພີ່ມລາຍການ "${cleanName}" (ແຍກປົກ ${coverRes?.total_pages || 4} ໜ້າ + ເນື້ອໃນ ${innerRes?.total_pages || totalPages} ໜ້າ) ສຳເລັດ!`
+          : `ເພີ່ມລາຍການ "${cleanName}" (${pfResult.total_pages} ໜ້າ) ສຳເລັດ!`,
+        'success'
+      );
+    }
   };
 
   const handleSkipPreflightItem = () => {
@@ -881,6 +970,56 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         'success'
       );
     }
+  };
+
+  const handleSaveCurrentAsPreset = () => {
+    if (!newPresetName.trim()) {
+      if (showToast) showToast('ກະລຸນາປ້ອນຊື່ແມ່ແບບ', 'warning');
+      return;
+    }
+
+    const newTpl: PricingTemplatePreset = {
+      id: `CUST_TPL_${Date.now()}`,
+      nameLao: newPresetName.trim(),
+      nameEn: newPresetName.trim(),
+      category: 'custom',
+      description: `${activeItem.jobSizePreset || 'Custom'} • ${activeItem.paperId || 'Paper'} • ${activeItem.printVolume || 1} units`,
+      iconName: newPresetIcon || 'Sparkles',
+      activeModules: activeItem.activeModules ? { ...activeItem.activeModules } : {
+        paper: true,
+        printEngine: true,
+        postPressMachinery: true,
+        finishingMaterials: true,
+        laborAndSetup: true,
+        packagingDelivery: true,
+      },
+      defaultMaterials: activeItem.finishingMaterials ? [...activeItem.finishingMaterials] : [],
+      defaultLaborPercent: activeItem.laborPercent || 15,
+    };
+
+    const updated = [...customFastPresets, newTpl];
+    setCustomFastPresets(updated);
+    try {
+      localStorage.setItem('somsing_custom_fast_presets', JSON.stringify(updated));
+    } catch (e) {
+      console.error(e);
+    }
+
+    setIsSavePresetModalOpen(false);
+    setNewPresetName('');
+    if (showToast) showToast(`ບັນທຶກແມ່ແບບດ່ວນ "${newTpl.nameLao}" ສຳເລັດ!`, 'success');
+  };
+
+  const handleDeleteCustomPreset = (tplId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = customFastPresets.filter(p => p.id !== tplId);
+    setCustomFastPresets(updated);
+    try {
+      localStorage.setItem('somsing_custom_fast_presets', JSON.stringify(updated));
+    } catch (e) {
+      console.error(e);
+    }
+    if (showToast) showToast('ລຶບແມ່ແບບດ່ວນສຳເລັດ!', 'info');
   };
 
   const handleToggleModule = (key: keyof ItemModuleToggles) => {
@@ -1104,34 +1243,58 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       (p.sku && p.sku.toLowerCase() === item.paperId?.toLowerCase()) ||
       p.name === item.paperId
     );
-    let parentW = 297;
-    let parentH = 420;
-    if (paperItem?.name?.includes('A4') || paperItem?.specs?.standardSize === 'A4') { parentW = 210; parentH = 297; }
-    else if (paperItem?.name?.includes('A3') || paperItem?.specs?.standardSize === 'A3') { parentW = 297; parentH = 420; }
+    let parentW = 210;
+    let parentH = 297;
+    if (paperItem?.name?.includes('A3') || paperItem?.specs?.standardSize === 'A3') { parentW = 297; parentH = 420; }
+    else if (paperItem?.name?.includes('A4') || paperItem?.specs?.standardSize === 'A4') { parentW = 210; parentH = 297; }
+    else if (paperItem?.name?.includes('A5') || paperItem?.specs?.standardSize === 'A5') { parentW = 148; parentH = 210; }
+    else if (paperItem?.specs?.width && paperItem?.specs?.height) {
+      parentW = Number(paperItem.specs.width);
+      parentH = Number(paperItem.specs.height);
+    }
     
     const curW = Number(jobW) + (Number(bleedMargin) * 2);
     const curH = Number(jobH) + (Number(bleedMargin) * 2);
     const portraitCuts = Math.floor(parentW / curW) * Math.floor(parentH / curH);
     const landscapeCuts = Math.floor(parentW / curH) * Math.floor(parentH / curW);
-    const cutsPerSheet = Math.max(1, portraitCuts, landscapeCuts);
+    const autoCutsPerSheet = Math.max(1, portraitCuts, landscapeCuts);
+    const cutsPerSheet = (item.cutsPerSheetOverride !== undefined && item.cutsPerSheetOverride > 0)
+      ? Number(item.cutsPerSheetOverride)
+      : autoCutsPerSheet;
+
+    // 1. Check if this is a Photo Print / Batch Multi-Photo item:
+    const isBatchPhoto = Boolean(
+      item.isBatchPhoto || 
+      item.name?.includes('Photo Prints') || 
+      (item.batchFiles && item.batchFiles.length > 0) ||
+      (item.preflightData as any)?.is_batch_photo
+    );
 
     // 1. Pages & Sheets Breakdown:
-    const pagesPerBook = Number(item.pagesPerBook || 1);
     const orderQty = Number(item.printVolume || 1);
-    const hasCover = Boolean(item.includeCover && pagesPerBook >= 4);
+    const photoCountPerSet = Number(item.photoCount) || (item.batchFiles && item.batchFiles.length > 0 ? item.batchFiles.length : Number(item.pagesPerBook || 1));
+    const pagesPerBook = isBatchPhoto ? photoCountPerSet : Number(item.pagesPerBook || 1);
+    const hasCover = Boolean(!isBatchPhoto && item.includeCover && pagesPerBook >= 4);
     const coverPagesCount = hasCover ? (Number(item.coverPagesCount) || 4) : 0;
-    const innerPagesPerBook = Math.max(1, pagesPerBook - coverPagesCount);
-    const innerSheetsPerBook = item.isDoubleSided ? Math.ceil(innerPagesPerBook / 2) : innerPagesPerBook;
+    const innerPagesPerBook = isBatchPhoto ? photoCountPerSet : Math.max(1, pagesPerBook - coverPagesCount);
+    
+    // For photo batch prints, each set contains photoCountPerSet individual photos
+    const innerSheetsPerBook = isBatchPhoto 
+      ? photoCountPerSet
+      : (item.isDoubleSided ? Math.ceil(innerPagesPerBook / 2) : innerPagesPerBook);
 
     // 2. Inner Paper Sheets Calculation:
+    // For Batch Photo: totalPhotos = photoCountPerSet * orderQty; parent sheets = ceil(totalPhotos / cutsPerSheet)
     const totalInnerSheets = innerSheetsPerBook * orderQty;
-    const innerParentSheetsNeeded = Math.ceil(totalInnerSheets / cutsPerSheet);
+    const innerParentSheetsNeeded = isBatchPhoto
+      ? Math.ceil(totalInnerSheets / Math.max(1, cutsPerSheet))
+      : Math.ceil(totalInnerSheets / Math.max(1, cutsPerSheet));
 
     const tier = spoilageTiers.find(t => totalInnerSheets >= t.min && totalInnerSheets <= t.max);
     const itemSpoilageRate = (item.spoilagePercent !== undefined && item.spoilagePercent !== null)
       ? Number(item.spoilagePercent)
       : (tier ? tier.rate : 5);
-    const innerWastedSheets = Math.ceil(innerParentSheetsNeeded * (itemSpoilageRate / 100));
+    const innerWastedSheets = Math.max(1, Math.ceil(innerParentSheetsNeeded * (itemSpoilageRate / 100)));
     const totalInnerParentSheets = innerParentSheetsNeeded + innerWastedSheets;
 
     const fifoUnitCost = paperItem ? getFIFOCostPerSheet(paperItem.id, totalInnerParentSheets) : getFIFOCostPerSheet(item.paperId, totalInnerParentSheets);
@@ -1153,7 +1316,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     if (hasCover) {
       const coverPaperItem = inventory.find(p => p.id === item.coverPaperId) || paperItem;
       const totalCoverSheets = 1 * orderQty; // 1 Spread sheet per book
-      coverParentSheetsNeeded = Math.ceil(totalCoverSheets / 1);
+      const coverCutsPerSheet = (item.coverCutsPerSheetOverride !== undefined && item.coverCutsPerSheetOverride > 0)
+        ? Number(item.coverCutsPerSheetOverride)
+        : 1;
+      coverParentSheetsNeeded = Math.ceil(totalCoverSheets / coverCutsPerSheet);
       coverWastedSheets = Math.ceil(coverParentSheetsNeeded * (itemSpoilageRate / 100));
       totalCoverParentSheets = coverParentSheetsNeeded + coverWastedSheets;
       
@@ -1167,7 +1333,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const totalParentSheets = totalInnerParentSheets + totalCoverParentSheets;
 
     const A4_AREA = 210 * 297;
-    const areaFactor = (Number(jobW) * Number(jobH)) / A4_AREA;
+    const parentSheetAreaFactor = Math.max(0.2, (parentW * parentH) / A4_AREA);
+    // When gang-run or batch photo, multiple cuts fill the parent sheet, so ink applies to the parent sheet area
+    const printAreaFactor = (isBatchPhoto || cutsPerSheet > 1)
+      ? parentSheetAreaFactor
+      : Math.max(0.1, Math.min(parentSheetAreaFactor, (Number(jobW) * Number(jobH)) / A4_AREA));
 
     let cyanMl = 0;
     let magentaMl = 0;
@@ -1177,7 +1347,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     let machDepr = 0;
     let electricityCost = 0;
 
-    const totalJobProductionSheets = (Number(item.printVolume) || 1) * Math.ceil(Math.max(1, Number(item.pagesPerBook || 1)) / (item.isDoubleSided ? 2 : 1));
+    // For batch photo prints or gang-run sheets, the physical sheets fed into the printer = total parent sheets needed
+    const totalJobProductionSheets = (isBatchPhoto || cutsPerSheet > 1) 
+      ? innerParentSheetsNeeded 
+      : ((Number(item.printVolume) || 1) * Math.ceil(Math.max(1, Number(item.pagesPerBook || 1)) / (item.isDoubleSided ? 2 : 1)));
 
     const allocations = (item.printerAllocations && item.printerAllocations.length > 0)
       ? item.printerAllocations
@@ -1237,20 +1410,32 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
       // Active linked inventory inks and OEM specs for this printer
       const activePrnLinks = printerColorLinks.filter(l => l.assetId === prn?.id || l.assetId === rawPrnId);
-      const oemSlots = (prn?.printerColorLinks && prn?.printerColorLinks.length > 0)
-        ? prn.printerColorLinks
-        : (prn?.oemBaselineInks && prn?.oemBaselineInks.length > 0)
-          ? prn.oemBaselineInks
-          : (prn?.specs?.printerColorLinks && prn?.specs?.printerColorLinks.length > 0)
-            ? prn.specs.printerColorLinks
+      
+      const standardCmykSlots = [
+        { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500, oemPrice: 450000 },
+        { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+        { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+        { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 }
+      ];
+
+      const rawOemSlots = (prn?.oem_baseline_specs?.slots && prn?.oem_baseline_specs.slots.length > 0)
+        ? prn.oem_baseline_specs.slots
+        : (prn?.specs?.oem_baseline_specs?.slots && prn?.specs.oem_baseline_specs.slots.length > 0)
+          ? prn.specs.oem_baseline_specs.slots
+          : (prn?.oemBaselineInks && prn?.oemBaselineInks.length > 0)
+            ? prn.oemBaselineInks
             : (prn?.specs?.oemBaselineInks && prn?.specs?.oemBaselineInks.length > 0)
               ? prn.specs.oemBaselineInks
-              : [];
+              : (prn?.printerColorLinks && prn?.printerColorLinks.length > 0)
+                ? prn.printerColorLinks
+                : (prn?.specs?.printerColorLinks && prn?.specs?.printerColorLinks.length > 0)
+                  ? prn.specs.printerColorLinks
+                  : standardCmykSlots;
 
       const computeChannel = (channelCode: 'C' | 'M' | 'Y' | 'K', covPct: number) => {
         if (covPct <= 0) return { ml: 0, cost: 0 };
 
-        const oemSlot = oemSlots.find((s: any) => {
+        const oemSlot = rawOemSlots.find((s: any) => {
           const pos = (s.slotPosition || '').toUpperCase();
           const grp = (s.colorGroup || '').toUpperCase();
           const sku = (s.oemInkCode || '').toUpperCase();
@@ -1259,11 +1444,15 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
           if (channelCode === 'M') return pos.includes('MAGENTA') || pos.includes('(M') || pos.includes(' 3') || grp.includes('MAGENTA') || sku.endsWith('-M');
           if (channelCode === 'Y') return pos.includes('YELLOW') || pos.includes('(Y') || pos.includes(' 4') || grp.includes('YELLOW') || sku.endsWith('-Y');
           return false;
-        });
+        }) || standardCmykSlots.find(s => s.colorGroup.toUpperCase().startsWith(channelCode === 'K' ? 'B' : channelCode));
 
-        const oemVol = Number(oemSlot?.oemStandardVolumeMl || (channelCode === 'K' ? 65 : 19));
-        const oemYield = Number(oemSlot?.oemStandardIsoYieldA4 || 1500);
-        const isoRateMlPerSheet = oemYield > 0 ? (oemVol / oemYield) : (channelCode === 'K' ? 0.04333 : 0.01267);
+        const defaultPrice = channelCode === 'K' ? 450000 : 320000;
+        const defaultVol = channelCode === 'K' ? 127 : 70;
+        const defaultYield = channelCode === 'K' ? 7500 : 6000;
+
+        const oemVol = Number(oemSlot?.oemStandardVolumeMl || defaultVol);
+        const oemYield = Number(oemSlot?.oemStandardIsoYieldA4 || defaultYield);
+        const isoRateMlPerSheet = oemYield > 0 ? (oemVol / oemYield) : (channelCode === 'K' ? (127 / 7500) : (70 / 6000));
 
         const link = activePrnLinks.find((l: any) => {
           const pos = (l.slotPosition || '').toUpperCase();
@@ -1277,7 +1466,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
         const linkedItem = link ? inventory.find(inv => inv.id === link.inkCode || inv.skuCode === link.inkCode || inv.sku === link.inkCode) : null;
 
-        let costPerMl = 2500;
+        let costPerMl = oemVol > 0 ? (Number((oemSlot as any)?.oemPrice || defaultPrice) / oemVol) : (defaultPrice / defaultVol);
         let rateMlPerSheet = isoRateMlPerSheet;
 
         if (linkedItem) {
@@ -1289,7 +1478,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
             linkedItem.specs?.oemStandardVolumeMl || 
             linkedItem.specs?.oemVolumeMl || 
             (linkedItem.purchaseMultiplier > 1 ? linkedItem.purchaseMultiplier : null) ||
-            100
+            defaultVol
           );
           if (itemPrice > 0 && itemVol > 0) {
             costPerMl = itemPrice / itemVol;
@@ -1308,7 +1497,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
           }
         }
 
-        const ml = rateMlPerSheet * (covPct / 5) * areaFactor * allocPages * sideFactor;
+        const ml = rateMlPerSheet * (covPct / 5) * printAreaFactor * allocPages * sideFactor;
         const cost = ml * costPerMl;
         return { ml, cost };
       };
@@ -1338,12 +1527,39 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       });
 
       const deprPerSheet = machineCalc.totalMachineCost > 0
-        ? machineCalc.totalMachineCost * areaFactor
+        ? machineCalc.totalMachineCost * printAreaFactor
         : costPerPageFallback;
 
       machDepr += Math.round(deprPerSheet * allocPages * sideFactor);
       electricityCost += Math.round(allocPages * sideFactor * 40);
     });
+
+    // Separate Cover Print Ink & Machine Overhead Calculation
+    let coverInkCost = 0;
+    let coverMachDepr = 0;
+    let coverElectricityCost = 0;
+
+    if (hasCover) {
+      const coverPrnId = (item.selectedPrinterId || 'default').split('__')[0];
+      const coverPrn = equipment.find(e => e.id === coverPrnId || e.id === item.selectedPrinterId);
+      const coverSides = item.coverPrintMode === 'CMYK_2_SIDES' ? 2 : 1;
+      const isCoverMono = item.coverPrintMode === 'MONO_K';
+      const coverPrintSheets = orderQty; // 1 cover spread sheet per book
+
+      // Cover ink rate calculation
+      const coverInkPerPage = getPrinterActualInkCostPerPage(coverPrn) || 80;
+      const coverInkUnitCost = isCoverMono ? (coverInkPerPage * 0.35) : coverInkPerPage;
+      coverInkCost = Math.round(coverPrintSheets * coverSides * coverInkUnitCost * (parentSheetAreaFactor > 0 ? parentSheetAreaFactor : 1)); // Cover spread uses parent sheet area
+
+      // Cover machine depreciation
+      const coverDeprRate = getPrinterMachineRate(coverPrn) || 50;
+      coverMachDepr = Math.round(coverPrintSheets * coverSides * coverDeprRate * (parentSheetAreaFactor > 0 ? parentSheetAreaFactor : 1));
+      coverElectricityCost = Math.round(coverPrintSheets * coverSides * 40);
+
+      totalInkCostAccum += coverInkCost;
+      machDepr += coverMachDepr;
+      electricityCost += coverElectricityCost;
+    }
 
     const hasPaperModule = item.activeModules ? item.activeModules.paper : true;
     const hasPrintEngineModule = item.activeModules ? item.activeModules.printEngine : true;
@@ -1415,11 +1631,17 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       innerPagesPerBook,
       innerSheetsPerBook,
       hasCover,
+      isBatchPhoto,
+      photoCountPerSet,
+      totalPhotos: totalInnerSheets,
+      totalJobProductionSheets,
+      totalProductionSheets: totalJobProductionSheets,
       cyanMl,
       magentaMl,
       yellowMl,
       blackMl,
       inkCost,
+      coverInkCost,
       machineOverhead,
       machDepr,
       electricityCost,
@@ -2427,8 +2649,16 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                             </div>
                             <div className="text-[10px] text-slate-500 truncate max-w-[220px]">
                               <span>{paperItem?.name || item.paperId || 'A4 ທົ່ວໄປ'}</span>
+                              {item.cutsPerSheetOverride !== undefined && item.cutsPerSheetOverride > 1 && (
+                                <span className="text-sky-700 font-bold"> ({item.cutsPerSheetOverride} ຕັດ/ແຜ່ນ)</span>
+                              )}
                               {item.includeCover && coverPaperItem && (
-                                <span className="text-amber-700 font-semibold"> • ປົກ: {coverPaperItem.name}</span>
+                                <span className="text-amber-700 font-semibold">
+                                  {' '}• ປົກ: {coverPaperItem.name}
+                                  {item.coverCutsPerSheetOverride !== undefined && item.coverCutsPerSheetOverride > 1 && (
+                                    <span> ({item.coverCutsPerSheetOverride} ປົກ/ແຜ່ນ)</span>
+                                  )}
+                                </span>
                               )}
                               {printerItem?.name && (
                                 <span> • {printerItem.name}</span>
@@ -2575,27 +2805,56 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                     .map(m => m.name)
                     .filter(Boolean);
 
+                  // Intelligent Batch Photo & Single Sheet Detection
+                  const isBatchPhoto = Boolean(
+                    item.batchFiles && item.batchFiles.length > 0 ||
+                    (item.preflightData as any)?.is_batch_photo ||
+                    (item.suggestedPaper && (item.suggestedPaper.includes('Photo') || item.suggestedPaper.includes('3x4') || item.suggestedPaper.includes('4x6') || item.suggestedPaper.includes('2x3'))) ||
+                    (item.jobSizePreset && (item.jobSizePreset.includes('3x4') || item.jobSizePreset.includes('4x6') || item.jobSizePreset.includes('2x3')))
+                  );
+                  const batchCount = item.batchFiles?.length || (item.preflightData as any)?.total_files || (isBatchPhoto ? (item.pagesPerBook || 1) : 0);
+                  const primaryArtworkUrl = item.artworkUrl || item.batchFiles?.[0]?.url || item.batchFiles?.[0]?.file_url || item.preflightData?.file_url;
+                  const isSingleOrPhoto = isBatchPhoto || (!item.includeCover && (item.pagesPerBook || 1) <= 1);
+
+                  // Per-page / Per-photo and Parent Sheet Costing breakdown
+                  const totalJobPages = Math.max(1, (Number(item.pagesPerBook) || 1) * (Number(item.printVolume) || 1));
+                  const costPerSingleUnit = Math.round((calc.netCost || 0) / totalJobPages);
+                  const pricePerSingleUnit = Math.round(unitPrice / Math.max(1, Number(item.pagesPerBook) || 1));
+                  const parentSheetCost = calc.paperUnitCost || 850;
+                  const parentSheetsUsed = calc.totalParentSheets || calc.totalInnerParentSheets || Math.ceil(totalJobPages / Math.max(1, calc.cutsPerSheet || 1));
+
                   return (
                     <div
                       key={item.id}
                       onClick={() => setActiveItemIndex(idx)}
-                      className={`p-3 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between space-y-2.5 ${
+                      className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between space-y-3 ${
                         isActive
-                          ? 'bg-white border-primary-navy shadow-sm ring-2 ring-primary-navy/15'
+                          ? 'bg-white border-primary-navy shadow-md ring-2 ring-primary-navy/15'
                           : 'bg-slate-50/80 border-slate-200/80 hover:bg-white hover:border-slate-300'
                       }`}
                     >
-                      {/* Card Header: #No + Name + Actions */}
-                      <div className="flex items-start justify-between gap-1.5">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className={`w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 ${
-                            isActive ? 'bg-primary-navy text-white' : 'bg-slate-200 text-slate-700'
+                      {/* Card Header: #No + Name + Badge + Actions */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[11px] font-black shrink-0 ${
+                            isActive ? 'bg-primary-navy text-white shadow-xs' : 'bg-slate-200 text-slate-700'
                           }`}>
                             #{idx + 1}
                           </span>
-                          <span className={`text-xs font-black truncate ${isActive ? 'text-slate-900' : 'text-slate-700'}`}>
-                            {item.name || `ລາຍການ ${idx + 1}`}
-                          </span>
+                          <div className="min-w-0">
+                            <span className={`text-xs font-black truncate block ${isActive ? 'text-slate-900' : 'text-slate-700'}`}>
+                              {item.name || `ລາຍການ ${idx + 1}`}
+                            </span>
+                            {isBatchPhoto ? (
+                              <span className="inline-block text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.2 rounded mt-0.5">
+                                ຊຸດຮູບພາບ ({batchCount} ຮູບ)
+                              </span>
+                            ) : item.includeCover ? (
+                              <span className="inline-block text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200/60 px-1.5 py-0.2 rounded mt-0.5">
+                                ປຶ້ມແຍກປົກ
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
 
                         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -2605,7 +2864,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                             className="p-1 hover:bg-slate-200 text-slate-400 hover:text-slate-700 rounded-md transition cursor-pointer"
                             title="Duplicate item"
                           >
-                            <Copy className="w-3 h-3" />
+                            <Copy className="w-3.5 h-3.5" />
                           </button>
                           {items.length > 1 && (
                             <button
@@ -2614,32 +2873,77 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                               className="p-1 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded-md transition cursor-pointer"
                               title="Remove item"
                             >
-                              <X className="w-3 h-3" />
+                              <X className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </div>
                       </div>
 
-                      {/* Structured Specifications Breakdown (Rows / ລົງແຖວ) */}
-                      <div className="space-y-1.5 text-[11px] bg-slate-50/70 p-2 rounded-xl border border-slate-200/60">
-                        {/* Row 1: Volume & Pages & Size */}
+                      {/* Visual Artwork Thumbnail & Quick Preview Trigger */}
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewColorItem(item);
+                        }}
+                        className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-100/70 hover:bg-indigo-50/60 border border-slate-200/80 hover:border-indigo-300 transition group cursor-pointer"
+                      >
+                        <div className="w-11 h-11 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 shadow-2xs relative">
+                          {primaryArtworkUrl ? (
+                            <img 
+                              src={primaryArtworkUrl} 
+                              alt="Artwork thumbnail" 
+                              className="w-full h-full object-cover group-hover:scale-110 transition duration-200"
+                            />
+                          ) : (
+                            <FileText className="w-5 h-5 text-slate-400 group-hover:text-indigo-600 transition" />
+                          )}
+                          {isBatchPhoto && batchCount > 1 && (
+                            <span className="absolute bottom-0 right-0 bg-slate-900/85 text-white font-mono text-[8px] font-bold px-1 rounded-tl">
+                              +{batchCount}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black text-slate-800 group-hover:text-indigo-950 truncate flex items-center gap-1">
+                              <Eye className="w-3 h-3 text-indigo-600" />
+                              <span>{isBatchPhoto ? `ໄຟລ໌ຮູບ ${batchCount} ໃບ` : (item.fileName || 'ກົດເບິ່ງໄຟລ໌')}</span>
+                            </span>
+                            <span className="text-[9px] font-bold text-indigo-700 bg-white px-1.5 py-0.5 rounded border border-indigo-200 shadow-2xs">
+                              Preview
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-900 mt-0.5">
+                            <Palette className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
+                            <span className="font-mono">C{Math.round(item.cCoverage ?? 15)} M{Math.round(item.mCoverage ?? 15)} Y{Math.round(item.yCoverage ?? 15)} K{Math.round(item.kCoverage ?? 15)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Structured Specifications Breakdown */}
+                      <div className="space-y-1.5 text-[11px] bg-slate-50/70 p-2.5 rounded-xl border border-slate-200/60">
+                        {/* Row 1: Volume & Dimensions */}
                         <div className="flex items-center gap-1.5 text-slate-700 font-bold">
                           <Layers className="w-3 h-3 text-indigo-500 shrink-0" />
                           <span className="truncate">
-                            {item.printVolume || 1} {item.unitName || 'ຊຸດ'} • {item.pagesPerBook ? `${item.pagesPerBook} ໜ້າ` : '1 ໜ້າ'} • {item.jobSizePreset || 'A4'}
+                            {item.printVolume || 1} {isBatchPhoto ? 'ຊຸດ' : (item.unitName || 'ຊຸດ')} • {isBatchPhoto ? `${item.pagesPerBook || batchCount} ຮູບ/ຊຸດ` : `${item.pagesPerBook || 1} ໜ້າ`} • <strong className="text-slate-900">{item.jobSizePreset || '4x6"'}</strong>
                           </span>
                         </div>
 
-                        {/* Row 2: Inner Paper */}
+                        {/* Row 2: Substrate / Parent Paper & Imposition Cuts */}
                         <div className="flex items-center gap-1.5 text-slate-600">
                           <FileText className="w-3 h-3 text-sky-500 shrink-0" />
                           <span className="truncate">
-                            ເຈ້ຍ: <strong className="text-slate-800 font-semibold">{paperItem?.name || item.paperId || 'A4 ທົ່ວໄປ'}</strong>
+                            ເຈ້ຍ: <strong className="text-slate-800 font-semibold">{paperItem?.name || item.paperId || 'A4'}</strong>
+                            {calc.cutsPerSheet && calc.cutsPerSheet > 1 && (
+                              <span className="text-sky-700 font-bold"> (ຕັດ {calc.cutsPerSheet} ຊິ້ນ/ແຜ່ນ)</span>
+                            )}
                           </span>
                         </div>
 
-                        {/* Row 3: Cover Paper (Only if cover is enabled) */}
-                        {item.includeCover && (
+                        {/* Row 3: Cover Paper (Only if cover is enabled and job is book) */}
+                        {item.includeCover && !isSingleOrPhoto && (
                           <div className="flex items-center gap-1.5 text-amber-800 bg-amber-50/80 px-1.5 py-0.5 rounded border border-amber-200/60">
                             <BookOpen className="w-3 h-3 text-amber-600 shrink-0" />
                             <span className="truncate">
@@ -2648,7 +2952,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                           </div>
                         )}
 
-                        {/* Row 4: Printer & Color Mode */}
+                        {/* Row 4: Printer Fleet */}
                         <div className="flex items-center gap-1.5 text-slate-600">
                           <Printer className="w-3 h-3 text-purple-500 shrink-0" />
                           <span className="truncate">
@@ -2656,43 +2960,45 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                           </span>
                         </div>
 
-                        {/* Row 5: Color Info & Preview Button */}
-                        <div className="flex items-center justify-between text-[10px] bg-indigo-50/70 px-1.5 py-1 rounded border border-indigo-100">
-                          <span className="font-bold text-indigo-900 flex items-center gap-1 truncate">
-                            <Palette className="w-3 h-3 text-indigo-600 shrink-0" />
-                            <span className="truncate">C{Math.round(item.cCoverage ?? 15)} M{Math.round(item.mCoverage ?? 15)} Y{Math.round(item.yCoverage ?? 15)} K{Math.round(item.kCoverage ?? 15)}</span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPreviewColorItem(item);
-                            }}
-                            className="px-1.5 py-0.5 bg-white hover:bg-indigo-100 text-indigo-700 rounded font-black border border-indigo-200 cursor-pointer shadow-2xs text-[9px] shrink-0 ml-1"
-                          >
-                            Preview ໄຟລ໌
-                          </button>
-                        </div>
-
-                        {/* Row 6: Post-Press & Finishing Materials (Only if selected) */}
-                        {((postPressNames.length > 0) || (matNames.length > 0) || item.bindingOption) && (
+                        {/* Row 5: Post-Press & Finishing Materials (Only if selected and not pure photo) */}
+                        {((postPressNames.length > 0) || (matNames.length > 0) || (item.bindingOption && !isSingleOrPhoto)) && (
                           <div className="flex items-start gap-1.5 text-slate-600 bg-white px-1.5 py-1 rounded border border-slate-200/60">
                             <Scissors className="w-3 h-3 text-rose-500 shrink-0 mt-0.5" />
                             <span className="truncate leading-tight text-[10px]">
-                              {[item.bindingOption, ...postPressNames, ...matNames].filter(Boolean).join(', ')}
+                              {[(!isSingleOrPhoto ? item.bindingOption : null), ...postPressNames, ...matNames].filter(Boolean).join(', ')}
                             </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Costing & Unit Average Summary Panel */}
+                      <div className="bg-slate-100/80 border border-slate-200/80 rounded-xl p-2 text-[10px] space-y-1">
+                        <div className="flex items-center justify-between text-slate-500 font-medium">
+                          <span>ຕົ້ນທຶນສະເລ່ຍ/{isBatchPhoto ? 'ຮູບ' : 'ໜ້າ'}:</span>
+                          <span className="font-mono font-bold text-slate-700">{formatCurrency(costPerSingleUnit)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-slate-500 font-medium">
+                          <span>ເຈ້ຍແມ່ພິມ (ໃຊ້ {parentSheetsUsed} ແຜ່ນ):</span>
+                          <span className="font-mono font-semibold text-slate-600">{formatCurrency(parentSheetCost)}/ແຜ່ນ</span>
+                        </div>
+                        {pricePerSingleUnit > 0 && (
+                          <div className="flex items-center justify-between text-indigo-700 font-bold border-t border-slate-200/60 pt-0.5">
+                            <span>ລາຄາຂາຍ/{isBatchPhoto ? 'ຮູບ' : 'ໜ້າ'}:</span>
+                            <span className="font-mono">{formatCurrency(pricePerSingleUnit)}</span>
                           </div>
                         )}
                       </div>
 
                       {/* Card Footer: Subtotal Unit Price & Total Line */}
                       <div className="flex items-center justify-between border-t border-slate-100 pt-1.5 text-xs">
-                        <span className="text-[10px] text-slate-400 font-sans">
-                          {formatCurrency(unitPrice)}/ຊຸດ
+                        <span className="text-[10px] text-slate-400 font-sans font-medium">
+                          {formatCurrency(unitPrice)}/{isBatchPhoto ? 'ຊຸດ' : (item.unitName || 'ຊຸດ')}
                         </span>
-                        <span className="font-mono font-black text-emerald-700 text-xs">
-                          {formatCurrency(totalLine)}
-                        </span>
+                        <div className="text-right">
+                          <span className="font-mono font-black text-emerald-700 text-sm">
+                            {formatCurrency(totalLine)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   );
@@ -2765,7 +3071,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 </div>
               </div>
 
-              {/* 1-Click Fast Presets Pills Bar */}
+              {/* 1-Click Fast Presets Pills Bar (Dynamic & User-definable) */}
               <div className="p-2.5 bg-gradient-to-r from-sky-50/80 via-indigo-50/60 to-purple-50/80 border border-sky-200/80 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-2xs">
                 <div className="flex items-center gap-1.5 shrink-0">
                   <div className="w-6 h-6 rounded-lg bg-sky-600 text-white flex items-center justify-center shadow-xs">
@@ -2777,31 +3083,60 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 </div>
 
                 <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto">
-                  {DEFAULT_PRICING_TEMPLATES.slice(0, 5).map((tpl) => {
+                  {customFastPresets.map((tpl) => {
                     const isSelected = activeItem.selectedTemplateId === tpl.id;
+                    const isCustom = tpl.id.startsWith('CUST_TPL_');
                     return (
-                      <button
-                        key={tpl.id}
-                        type="button"
-                        onClick={() => handleApplyTemplate(tpl)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                          isSelected
-                            ? 'bg-sky-600 text-white shadow-xs scale-[1.02]'
-                            : 'bg-white hover:bg-sky-50 text-slate-700 border border-slate-200/80 hover:border-sky-300'
-                        }`}
-                      >
-                        {tpl.id === 'TPL_PERFECT_BIND_BOOK' && <BookOpen className="w-3.5 h-3.5" />}
-                        {tpl.id === 'TPL_HARDCOVER_BOOK' && <Bookmark className="w-3.5 h-3.5" />}
-                        {tpl.id === 'TPL_PHOTO_PRINT' && <ImageIcon className="w-3.5 h-3.5" />}
-                        {tpl.id === 'TPL_BOOKLET_STAPLE' && <Layers className="w-3.5 h-3.5" />}
-                        {tpl.id === 'TPL_DESK_CALENDAR' && <Calendar className="w-3.5 h-3.5" />}
-                        <span className="truncate max-w-[150px]">
-                          {currentLang === 'lo' ? tpl.nameLao.split('(')[0].trim() : tpl.nameEn}
-                        </span>
-                        {isSelected && <CheckCircle2 className="w-3 h-3 text-white ml-0.5" />}
-                      </button>
+                      <div key={tpl.id} className="relative group">
+                        <button
+                          type="button"
+                          onClick={() => handleApplyTemplate(tpl)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                            isSelected
+                              ? 'bg-sky-600 text-white shadow-xs scale-[1.02]'
+                              : 'bg-white hover:bg-sky-50 text-slate-700 border border-slate-200/80 hover:border-sky-300'
+                          }`}
+                        >
+                          {(tpl.iconName === 'Book' || tpl.id === 'TPL_PERFECT_BIND_BOOK') && <BookOpen className="w-3.5 h-3.5" />}
+                          {(tpl.iconName === 'Bookmark' || tpl.id === 'TPL_HARDCOVER_BOOK') && <Bookmark className="w-3.5 h-3.5" />}
+                          {(tpl.iconName === 'ImageIcon' || tpl.id === 'TPL_PHOTO_PRINT') && <ImageIcon className="w-3.5 h-3.5" />}
+                          {(tpl.iconName === 'Layers' || tpl.id === 'TPL_BOOKLET_STAPLE') && <Layers className="w-3.5 h-3.5" />}
+                          {(tpl.iconName === 'Calendar' || tpl.id === 'TPL_DESK_CALENDAR') && <Calendar className="w-3.5 h-3.5" />}
+                          {(tpl.iconName === 'Sparkles' || (!['Book', 'Bookmark', 'ImageIcon', 'Layers', 'Calendar'].includes(tpl.iconName || ''))) && <Sparkles className="w-3.5 h-3.5" />}
+                          <span className="truncate max-w-[150px]">
+                            {currentLang === 'lo' ? tpl.nameLao.split('(')[0].trim() : tpl.nameEn}
+                          </span>
+                          {isSelected && <CheckCircle2 className="w-3 h-3 text-white ml-0.5" />}
+                        </button>
+
+                        {/* Delete Custom Preset button on hover */}
+                        {isCustom && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteCustomPreset(tpl.id, e)}
+                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 hover:bg-rose-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-xs cursor-pointer"
+                            title="ລຶບແມ່ແບບນີ້"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                      </div>
                     );
                   })}
+
+                  {/* Add New Custom Preset Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewPresetName(activeItem.name || 'ແມ່ແບບດ່ວນໃໝ່');
+                      setIsSavePresetModalOpen(true);
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                    title="ບັນທຶກສເປກປະຈຸບັນເປັນແມ່ແບບດ່ວນ"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ ບັນທຶກແມ່ແບບດ່ວນ</span>
+                  </button>
                 </div>
               </div>
 
@@ -3029,15 +3364,34 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                           }}
                         />
 
-                        <button
-                          type="button"
-                          onClick={() => itemFileInputRef.current?.click()}
-                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
-                          title="ອັບໂຫຼດໄຟລ໌ດຽວ ຫຼື ຫຼາຍໄຟລ໌ພ້ອມກັນ (ສູງສຸດ 100 ໄຟລ໌)"
-                        >
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>+ ອັບໂຫຼດໄຟລ໌ (1-100)</span>
-                        </button>
+                        {/* If already has files from Preflight, show ready indicator and option to add/change */}
+                        {(activeItem.batchFiles && activeItem.batchFiles.length > 0) || activeItem.artworkUrl ? (
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-black flex items-center gap-1 border border-emerald-200">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>ໄຟລ໌ພ້ອມພິມ ({activeItem.batchFiles?.length || 1} ໄຟລ໌)</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => itemFileInputRef.current?.click()}
+                              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer border border-slate-200"
+                              title="ປ່ຽນ ຫຼື ເພີ່ມໄຟລ໌"
+                            >
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>ປ່ຽນໄຟລ໌</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => itemFileInputRef.current?.click()}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                            title="ອັບໂຫຼດໄຟລ໌ດຽວ ຫຼື ຫຼາຍໄຟລ໌ພ້ອມກັນ (ສູງສຸດ 100 ໄຟລ໌)"
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>+ ອັບໂຫຼດໄຟລ໌ (1-100)</span>
+                          </button>
+                        )}
 
                         <button
                           type="button"
@@ -3051,7 +3405,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                     </div>
 
                     <ManualPrinterAllocator
-                      targetQuantity={(Number(activeItem.printVolume) || 1) * Math.ceil(Math.max(1, Number(activeItem.pagesPerBook || 1)) / ((activeItem.isDoubleSided || activeItem.printerAllocations?.some(a => a.is_double_sided)) ? 2 : 1))}
+                      targetQuantity={activeCalc.totalProductionSheets || ((Number(activeItem.printVolume) || 1) * Math.ceil(Math.max(1, Number(activeItem.pagesPerBook || 1)) / ((activeItem.isDoubleSided || activeItem.printerAllocations?.some(a => a.is_double_sided)) ? 2 : 1)))}
                       allocations={activeItem.printerAllocations}
                       availablePrinters={printers.map(p => ({
                         id: p.id,
@@ -3065,6 +3419,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                       onOpenPrinterModal={() => setIsPrinterModalOpen(true)}
                       activeCalc={activeCalc}
                       jobSizePreset={activeItem.jobSizePreset || 'A4'}
+                      paperSizeName={inventory.find(p => p.id === activeItem.paperId)?.name}
                     />
 
                     <div className="p-4 bg-purple-50/90 border border-purple-200 rounded-2xl text-xs space-y-2.5">
@@ -3084,7 +3439,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                           <div className="text-right">
                             <span className="font-sans font-bold text-slate-900">{formatCurrency(activeCalc.inkCost)}</span>
                             <span className="text-[10px] text-slate-400 block font-sans">
-                              (C:{activeCalc.cyanMl?.toFixed(1)}ml M:{activeCalc.magentaMl?.toFixed(1)}ml Y:{activeCalc.yellowMl?.toFixed(1)}ml K:{activeCalc.blackMl?.toFixed(1)}ml)
+                              (C:{formatInkMl(activeCalc.cyanMl)}ml M:{formatInkMl(activeCalc.magentaMl)}ml Y:{formatInkMl(activeCalc.yellowMl)}ml K:{formatInkMl(activeCalc.blackMl)}ml)
                             </span>
                           </div>
                         </div>
@@ -3497,7 +3852,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                         </span>
                       </div>
                       <p className="text-[10px] text-slate-400 font-medium font-mono truncate">
-                        C:{activeCalc.cyanMl?.toFixed(1) || '0.0'}ml M:{activeCalc.magentaMl?.toFixed(1) || '0.0'}ml Y:{activeCalc.yellowMl?.toFixed(1) || '0.0'}ml K:{activeCalc.blackMl?.toFixed(1) || '0.0'}ml
+                        C:{formatInkMl(activeCalc.cyanMl)}ml M:{formatInkMl(activeCalc.magentaMl)}ml Y:{formatInkMl(activeCalc.yellowMl)}ml K:{formatInkMl(activeCalc.blackMl)}ml
                       </p>
                     </div>
 
@@ -4263,27 +4618,132 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         isOpen={!!previewColorItem}
         onClose={() => setPreviewColorItem(null)}
         item={previewColorItem}
+        items={items}
+        onItemSelect={(idx) => {
+          setActiveItemIndex(idx);
+          setPreviewColorItem(items[idx]);
+        }}
         onSyncColorsToPrinter={handleSyncColorsToActivePrinter}
         onUpdateArtwork={(data) => {
-          updateActiveItem({
+          const updates: any = {
             artworkUrl: data.artworkUrl,
             fileName: data.fileName,
             mimeType: data.mimeType,
             fileSize: data.fileSize,
-          });
+          };
+          if (data.batchFiles) updates.batchFiles = data.batchFiles;
+          if (data.coverArtworkUrl) updates.coverArtworkUrl = data.coverArtworkUrl;
+          if (data.coverFileName) updates.coverFileName = data.coverFileName;
+
+          updateActiveItem(updates);
           if (previewColorItem) {
             setPreviewColorItem({
               ...previewColorItem,
-              artworkUrl: data.artworkUrl,
-              fileName: data.fileName,
-              mimeType: data.mimeType,
-              fileSize: data.fileSize,
+              ...updates,
             });
           }
           if (showToast) showToast('ອັບໂຫຼດໄຟລ໌ອາດເວິກສຳເລັດ!', 'success');
         }}
         currentLang={currentLang}
       />
+
+      {/* CUSTOM FAST PRESET MODAL */}
+      {isSavePresetModalOpen && (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 w-full max-w-md space-y-4 animate-scale-up">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <h4 className="text-sm font-black text-slate-900">
+                  {currentLang === 'lo' ? 'ບັນທຶກສະເປກເປັນແມ່ແບບດ່ວນ 1-Click' : 'Save as 1-Click Fast Preset'}
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSavePresetModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  {currentLang === 'lo' ? 'ຊື່ແມ່ແບບດ່ວນ (Preset Name):' : 'Preset Name:'}
+                </label>
+                <input
+                  type="text"
+                  value={newPresetName}
+                  onChange={(e) => setNewPresetName(e.target.value)}
+                  placeholder="ຕົວຢ່າງ: ພິມຮູບ 4x6 A4, ປຶ້ມສັນຫ່ວງ..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                  {currentLang === 'lo' ? 'ເລືອກໄອຄອນ (Select Icon):' : 'Select Icon:'}
+                </label>
+                <div className="grid grid-cols-6 gap-2">
+                  {[
+                    { id: 'Sparkles', icon: Sparkles },
+                    { id: 'Book', icon: BookOpen },
+                    { id: 'Bookmark', icon: Bookmark },
+                    { id: 'ImageIcon', icon: ImageIcon },
+                    { id: 'Layers', icon: Layers },
+                    { id: 'Calendar', icon: Calendar },
+                  ].map((ic) => {
+                    const IconComp = ic.icon;
+                    const isCur = newPresetIcon === ic.id;
+                    return (
+                      <button
+                        key={ic.id}
+                        type="button"
+                        onClick={() => setNewPresetIcon(ic.id)}
+                        className={`p-2.5 rounded-xl border flex items-center justify-center transition cursor-pointer ${
+                          isCur
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                            : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200'
+                        }`}
+                      >
+                        <IconComp className="w-4 h-4" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 space-y-1">
+                <span className="font-bold text-slate-800 block">ລາຍລະອຽດສະເປກທີ່ຈະບັນທຶກ:</span>
+                <p className="truncate">• ຂະໜາດ: {activeItem.jobSizePreset || 'A4'} ({activeItem.jobWidth}×{activeItem.jobHeight} mm)</p>
+                <p className="truncate">• ເຈ້ຍ: {activeItem.paperId || 'Default'}</p>
+                <p className="truncate">• ໂໝດສີ: {activeItem.colorPrintMode} • ຈຳນວນ: {activeItem.printVolume} ໜ່ວຍ</p>
+                <p className="text-emerald-700 font-bold">• ເປີດທຸກໂມດູນຄິດໄລ່ໄວ້ພ້ອມໃຊ້ງານ</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsSavePresetModalOpen(false)}
+                className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                {currentLang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCurrentAsPreset}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-xs transition cursor-pointer"
+              >
+                {currentLang === 'lo' ? 'ບັນທຶກແມ່ແບບ' : 'Save Preset'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CUSTOMER CATEGORY MANAGEMENT MODAL */}
       <CustomerCategoryModal

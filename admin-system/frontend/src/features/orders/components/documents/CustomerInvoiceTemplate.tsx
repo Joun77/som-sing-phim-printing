@@ -126,10 +126,12 @@ export const CustomerInvoiceTemplate: React.FC<CustomerInvoiceTemplateProps> = (
         <div className="text-right space-y-2">
           <div className="inline-block px-4 py-1.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-950 text-right shadow-xs">
             <span className="text-[10px] font-black uppercase tracking-widest text-sky-600 block">
-              OFFICIAL INVOICE
+              {isFullyPaid 
+                ? (currentLang === 'lo' ? 'ໃບເສັດຮັບເງິນ • RECEIPT' : 'OFFICIAL RECEIPT')
+                : (currentLang === 'lo' ? 'ໃບຮຽກເກັບເງິນ • INVOICE' : 'OFFICIAL INVOICE')}
             </span>
             <span className="text-sm font-black font-mono tracking-wider text-slate-900">
-              {invoiceNo}
+              {isFullyPaid ? `REC-${orderNo.toString().replace(/^SSP-|^ORD-|^#/, '')}` : invoiceNo}
             </span>
           </div>
 
@@ -197,11 +199,19 @@ export const CustomerInvoiceTemplate: React.FC<CustomerInvoiceTemplateProps> = (
               const itemUnitPrice = Number(it.unitPrice || it.unit_price_lak || (itemTotal / qty));
               
               // Specs formatting for customer
-              const sizeText = it.jobWidth && it.jobHeight ? `${it.jobWidth}×${it.jobHeight}mm (${it.paperSize || 'Custom'})` : (it.paperSize || 'A4');
-              const paperText = it.paperSku || it.paperId || it.paperType || it.paper_name || 'Art Card 260g';
+              const cutsPerSheet = it.cutsPerSheetOverride || it.cuts_per_sheet_override || it.preflightData?.cuts_per_sheet_override || (it.impositionSummary?.match(/(\d+)\s*ຊິ້ນ/)?.[1] ? Number(it.impositionSummary.match(/(\d+)\s*ຊິ້ນ/)[1]) : undefined);
+              const isBatchPhoto = it.is_batch_photo || it.preflightData?.is_batch_photo || (it.suggestedPaper && (it.suggestedPaper.includes('Photo') || it.suggestedPaper.includes('3x4') || it.suggestedPaper.includes('4x6') || it.suggestedPaper.includes('2x3'))) || (it.paperSize && (it.paperSize.includes('3x4') || it.paperSize.includes('4x6') || it.paperSize.includes('2x3') || it.paperSize.includes('1x1.5')));
+              const photoPresetName = it.suggestedPaper && (it.suggestedPaper.includes('3x4') || it.suggestedPaper.includes('4x6') || it.suggestedPaper.includes('2x3')) ? it.suggestedPaper : (it.paperSize && (it.paperSize.includes('3x4') || it.paperSize.includes('4x6') || it.paperSize.includes('2x3')) ? it.paperSize : null);
+              
+              const sizeText = photoPresetName 
+                ? (it.jobWidth && it.jobHeight ? `${photoPresetName} (${it.jobWidth}×${it.jobHeight}mm)` : photoPresetName)
+                : (it.jobWidth && it.jobHeight ? `${it.jobWidth}×${it.jobHeight}mm (${it.paperSize || 'Custom'})` : (it.paperSize || 'A4'));
+              
+              const paperText = it.paperSku || it.paperId || it.paperType || it.paper_name || (isBatchPhoto ? 'Photo Glossy 230g' : 'Art Card 260g');
               const totalPages = it.pagesPerBook || it.page_count || it.pages || 1;
               const bindingDesc = it.bindingMethod ? getBindingLabel(it.bindingMethod) : (it.binding ? getBindingLabel(it.binding) : null);
               const coatingDesc = it.coating ? getCoatingLabel(it.coating) : null;
+              const impNote = it.impositionSummary || (cutsPerSheet && cutsPerSheet > 1 ? `ຕັດ ${cutsPerSheet} ຮູບ/ແຜ່ນໃຫຍ່` : null);
 
               return (
                 <tr key={it.id || idx} className="hover:bg-slate-50/70 transition">
@@ -209,21 +219,28 @@ export const CustomerInvoiceTemplate: React.FC<CustomerInvoiceTemplateProps> = (
                     {idx + 1}
                   </td>
                   <td className="py-3.5 px-4">
-                    <strong className="text-slate-900 block text-xs font-black">
-                      {it.name || it.item_name || it.job_name || `Print Product #${idx + 1}`}
-                    </strong>
+                    <div className="flex items-center gap-1.5">
+                      <strong className="text-slate-900 block text-xs font-black">
+                        {it.name || it.item_name || it.job_name || `Print Product #${idx + 1}`}
+                      </strong>
+                      {isBatchPhoto && (
+                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/70 text-[9px] font-bold px-1.5 py-0.2 rounded">
+                          {currentLang === 'lo' ? 'ຊຸດຮູບພາບ' : 'Photo Set'}
+                        </span>
+                      )}
+                    </div>
                     
                     {/* Customer Spec Chips */}
                     <div className="flex flex-wrap gap-1.5 mt-1 text-[10px] text-slate-500">
                       <span className="bg-slate-100 px-2 py-0.5 rounded font-medium">
-                        ຂະໜາດ: {sizeText}
+                        {isBatchPhoto ? 'ຂະໜາດຮູບ:' : 'ຂະໜາດ:'} {sizeText}
                       </span>
                       <span className="bg-slate-100 px-2 py-0.5 rounded font-medium">
                         ເຈ້ຍ: {paperText}
                       </span>
                       {totalPages > 1 && (
                         <span className="bg-slate-100 px-2 py-0.5 rounded font-medium">
-                          {totalPages} ໜ້າ
+                          {totalPages} {isBatchPhoto ? 'ຮູບ' : 'ໜ້າ'}
                         </span>
                       )}
                       {bindingDesc && (

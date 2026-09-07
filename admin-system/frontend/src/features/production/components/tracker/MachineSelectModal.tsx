@@ -213,9 +213,33 @@ export const MachineSelectModal: React.FC<MachineSelectModalProps> = ({
 
         {/* Machine Selection Grid */}
         <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-            ລາຍການເຄື່ອງຈັກໃນໝວດໝູ່ດຽວກັນ ({filteredMachines.length} ເຄື່ອງ)
-          </span>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              ລາຍການເຄື່ອງຈັກໃນໝວດໝູ່ດຽວກັນ ({filteredMachines.length} ເຄື່ອງ)
+            </span>
+            {category !== 'Printer' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedMachine({
+                    id: 'NONE',
+                    name: 'ບໍ່ໃຊ້ງານ (None / No Machine)',
+                    category: category as any,
+                    status: 'Ready',
+                    costPerUnit: 0,
+                  } as any);
+                }}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                  selectedMachine?.id === 'NONE'
+                    ? 'bg-rose-100 text-rose-700 border border-rose-300'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+                }`}
+              >
+                <X className="w-3 h-3" />
+                <span>ບໍ່ໃຊ້ງານເຄື່ອງຈັກໃນຂັ້ນຕອນນີ້</span>
+              </button>
+            )}
+          </div>
 
           {filteredMachines.length === 0 ? (
             <div className="p-8 bg-white border border-dashed border-slate-200 rounded-2xl text-center text-xs text-slate-400">

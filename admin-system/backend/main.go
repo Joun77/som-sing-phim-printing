@@ -259,6 +259,14 @@ func main() {
 	router.PUT("/api/v1/admin/notification-config", settings.HandleUpdateNotificationConfig)
 	router.POST("/api/v1/admin/notification-test", settings.HandleTestNotification)
 
+	// Print Dimension Presets & Shop Defaults routes (Dynamic Sizing & Material Config)
+	router.GET("/api/v1/pricing/presets", settings.HandleGetDimensionPresets)
+	router.GET("/api/pricing/presets", settings.HandleGetDimensionPresets)
+	router.POST("/api/v1/pricing/presets", settings.HandleCreateDimensionPreset)
+	router.DELETE("/api/v1/pricing/presets/:id", settings.HandleDeleteDimensionPreset)
+	router.GET("/api/v1/settings/defaults", settings.HandleGetShopDefaults)
+	router.POST("/api/v1/settings/defaults", settings.HandleSetShopDefaults)
+
 	// Production Scheduling & Machine Queue routes
 	prodAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction)
 	router.GET("/api/v1/production/machines/schedule", prodAuth, spoilage.HandleGetMachineSchedule)
@@ -441,6 +449,14 @@ func main() {
 	router.GET("/api/orders/deliveries", orders.HandleGetDeliveries)
 	router.POST("/api/orders/deliveries", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales, auth.RoleProduction), orders.HandleSaveDelivery)
 	router.PUT("/api/orders/deliveries/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales, auth.RoleProduction), orders.HandleUpdateDelivery)
+
+	// Workflow Template routes
+	router.GET("/api/v1/production/templates", orders.HandleGetWorkflowTemplates)
+	router.POST("/api/v1/production/templates", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction), orders.HandleSaveWorkflowTemplate)
+	router.DELETE("/api/v1/production/templates/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleDeleteWorkflowTemplate)
+	router.GET("/api/production/templates", orders.HandleGetWorkflowTemplates)
+	router.POST("/api/production/templates", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction), orders.HandleSaveWorkflowTemplate)
+	router.DELETE("/api/production/templates/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleDeleteWorkflowTemplate)
 
 	// Start Daily Predictive Maintenance Background Cron
 	inventory.StartPPMDailyCron()

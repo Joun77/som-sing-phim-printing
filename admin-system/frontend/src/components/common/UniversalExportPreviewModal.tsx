@@ -26,6 +26,7 @@ export interface UniversalExportPreviewModalProps {
   defaultFileName?: string;
   children: React.ReactNode;
   paperOrientation?: 'portrait' | 'landscape';
+  toolbarExtras?: React.ReactNode;
 }
 
 export const UniversalExportPreviewModal: React.FC<UniversalExportPreviewModalProps> = ({
@@ -35,7 +36,8 @@ export const UniversalExportPreviewModal: React.FC<UniversalExportPreviewModalPr
   documentNumber = 'DOC-001',
   defaultFileName = 'document',
   children,
-  paperOrientation = 'portrait'
+  paperOrientation = 'portrait',
+  toolbarExtras
 }) => {
   const [zoomScale, setZoomScale] = useState<number>(0.9);
   const [isExporting, setIsExporting] = useState<boolean>(false);
@@ -220,70 +222,79 @@ export const UniversalExportPreviewModal: React.FC<UniversalExportPreviewModalPr
             </button>
           </div>
 
-          {/* Export Action Buttons */}
-          <div className="flex items-center flex-wrap gap-2">
-            
-            {/* Copy to Clipboard */}
-            <button
-              onClick={handleCopyToClipboard}
-              disabled={isExporting}
-              className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
-            >
-              {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-500" />}
-              <span>{copied ? 'ກັອບປີ້ຮູບແລ້ວ!' : 'ກັອບປີ້ຮູບ (Clipboard)'}</span>
-            </button>
+          {/* Right Action Group: Document Options + Export Buttons */}
+          <div className="flex items-center flex-wrap gap-3">
+            {/* Custom Toolbar Extras (Language, QR options, Confirm order, etc.) */}
+            {toolbarExtras && (
+              <div className="flex items-center flex-wrap gap-2 pr-3 border-r border-slate-200">
+                {toolbarExtras}
+              </div>
+            )}
 
-            {/* PNG Image Export */}
-            <button
-              onClick={handleExportPNG}
-              disabled={isExporting}
-              className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
-            >
-              {isExporting && exportType === 'PNG' ? (
-                <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
-              ) : (
-                <ImageIcon className="w-4 h-4 text-emerald-600" />
-              )}
-              <span>ດາວໂຫຼດຮູບ PNG</span>
-            </button>
+            {/* Export Action Buttons */}
+            <div className="flex items-center flex-wrap gap-2">
+              {/* Copy to Clipboard */}
+              <button
+                onClick={handleCopyToClipboard}
+                disabled={isExporting}
+                className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-500" />}
+                <span>{copied ? 'ກັອບປີ້ຮູບແລ້ວ!' : 'ກັອບປີ້ຮູບ (Clipboard)'}</span>
+              </button>
 
-            {/* JPEG Image Export */}
-            <button
-              onClick={handleExportJPEG}
-              disabled={isExporting}
-              className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-sky-800 hover:text-sky-900 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
-            >
-              {isExporting && exportType === 'JPEG' ? (
-                <Loader2 className="w-4 h-4 animate-spin text-sky-600" />
-              ) : (
-                <ImageIcon className="w-4 h-4 text-sky-600" />
-              )}
-              <span>ດາວໂຫຼດຮູບ JPEG</span>
-            </button>
+              {/* PNG Image Export */}
+              <button
+                onClick={handleExportPNG}
+                disabled={isExporting}
+                className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                {isExporting && exportType === 'PNG' ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                ) : (
+                  <ImageIcon className="w-4 h-4 text-emerald-600" />
+                )}
+                <span>ດາວໂຫຼດຮູບ PNG</span>
+              </button>
 
-            {/* PDF Export */}
-            <button
-              onClick={handleExportPDF}
-              disabled={isExporting}
-              className="flex items-center gap-2 px-4 py-2 text-xs font-black text-white bg-sky-500 hover:bg-sky-600 rounded-xl transition-all shadow-md shadow-sky-500/25 active:scale-95 disabled:opacity-50 cursor-pointer border-none"
-            >
-              {isExporting && exportType === 'PDF' ? (
-                <Loader2 className="w-4 h-4 animate-spin text-white" />
-              ) : (
-                <FileText className="w-4 h-4 text-white" />
-              )}
-              <span>ດາວໂຫຼດ PDF</span>
-            </button>
+              {/* JPEG Image Export */}
+              <button
+                onClick={handleExportJPEG}
+                disabled={isExporting}
+                className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-sky-800 hover:text-sky-900 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                {isExporting && exportType === 'JPEG' ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-sky-600" />
+                ) : (
+                  <ImageIcon className="w-4 h-4 text-sky-600" />
+                )}
+                <span>ດາວໂຫຼດຮູບ JPEG</span>
+              </button>
 
-            {/* Print Direct */}
-            <button
-              onClick={handlePrint}
-              disabled={isExporting}
-              className="p-2 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors active:scale-95 shadow-xs cursor-pointer"
-              title="ສັ່ງພິມທັນທີ (Print)"
-            >
-              <Printer className="w-4 h-4 text-sky-600" />
-            </button>
+              {/* PDF Document Export */}
+              <button
+                onClick={handleExportPDF}
+                disabled={isExporting}
+                className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                {isExporting && exportType === 'PDF' ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                ) : (
+                  <FileText className="w-4 h-4 text-white" />
+                )}
+                <span>ດາວໂຫຼດ PDF</span>
+              </button>
+
+              {/* Print Direct */}
+              <button
+                onClick={handlePrint}
+                disabled={isExporting}
+                className="p-2 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors active:scale-95 shadow-xs cursor-pointer"
+                title="ສັ່ງພິມທັນທີ (Print)"
+              >
+                <Printer className="w-4 h-4 text-sky-600" />
+              </button>
+            </div>
           </div>
         </div>
 
