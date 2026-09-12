@@ -33,6 +33,7 @@ import { analyzeImageClient, analyzePDFClient } from '../lib/preflightAnalyzer';
 import type { PreflightResult, BatchPreflightResult } from '../features/orders/types';
 import type { InventoryItem } from '../types';
 import { CustomDimensionInput } from '../features/pricing/components/CustomDimensionInput';
+import { JobSizeSelectorCard } from '../features/pricing/components/JobSizeSelectorCard';
 import { PaperMaterialSelectorModal } from '../features/pricing/components/PaperMaterialSelectorModal';
 
 export interface PreflightItemCreationModalProps {
@@ -897,23 +898,14 @@ export const PreflightItemCreationModal: React.FC<PreflightItemCreationModalProp
                 
                 <div className="space-y-4">
                   {/* Step 1: Target Paper Size & Unit Switcher */}
-                  <div className="p-4 bg-white border border-slate-200/90 rounded-2xl shadow-xs space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                        <Maximize2 className="w-3.5 h-3.5 text-primary-navy" />
-                        <span>1. ຂະໜາດເຈ້ຍທີ່ຈະພິມ (Target Size & Unit):</span>
-                      </span>
-                      <span className="text-[11px] text-slate-500 font-bold font-mono">
-                        {Math.round(customWidth)} × {Math.round(customHeight)} mm
-                      </span>
-                    </div>
-
-                    {/* Multi-unit & DB Presets Controller */}
-                    <CustomDimensionInput
+                  <div className="p-4 bg-white border border-slate-200/90 rounded-2xl shadow-xs space-y-4">
+                    <JobSizeSelectorCard
                       widthMM={customWidth}
                       heightMM={customHeight}
+                      presetName={targetPaperSize}
                       currentLang={currentLang}
-                      onChangeMM={(wMM, hMM, presetName) => {
+                      title={currentLang === 'lo' ? '1. ຂະໜາດເຈ້ຍທີ່ຈະພິມ (Target Size)' : '1. Target Paper Size'}
+                      onChange={(wMM, hMM, presetName) => {
                         setTargetPaperSize(presetName || 'CUSTOM');
                         setCustomWidth(wMM);
                         setCustomHeight(hMM);
@@ -1676,21 +1668,21 @@ export const PreflightItemCreationModal: React.FC<PreflightItemCreationModalProp
                     </div>
                   </div>
 
-                  {/* Multi-unit & DB Presets Controller */}
-                  <div className="bg-slate-50/70 p-3 rounded-2xl border border-slate-200/80">
-                    <CustomDimensionInput
-                      widthMM={batchCustomW}
-                      heightMM={batchCustomH}
-                      currentLang={currentLang}
-                      onChangeMM={(wMM, hMM, presetName) => {
-                        setBatchCustomW(wMM);
-                        setBatchCustomH(hMM);
-                        if (batchFiles.length > 0) {
-                          runBatchPreflightAnalysis(batchFiles, presetName || `${Math.round(wMM)}x${Math.round(hMM)}mm`, borderMode);
-                        }
-                      }}
-                    />
-                  </div>
+                  {/* Job Size Selector Card */}
+                  <JobSizeSelectorCard
+                    widthMM={batchCustomW}
+                    heightMM={batchCustomH}
+                    presetName={`${Math.round(batchCustomW)}x${Math.round(batchCustomH)}mm`}
+                    currentLang={currentLang}
+                    title={currentLang === 'lo' ? '1. ຂະໜາດຮູບທີ່ຈະພິມ (Target Photo Size)' : '1. Target Photo Size'}
+                    onChange={(wMM, hMM, presetName) => {
+                      setBatchCustomW(wMM);
+                      setBatchCustomH(hMM);
+                      if (batchFiles.length > 0) {
+                        runBatchPreflightAnalysis(batchFiles, presetName || `${Math.round(wMM)}x${Math.round(hMM)}mm`, borderMode);
+                      }
+                    }}
+                  />
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Droplet, 
   RefreshCw, 
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@store/AppContext';
 import { FormModalTemplate } from '@components/common/FormModalTemplate';
+import { getAuthHeaders } from '@utils/authHeaders';
 
 interface PrinterInkComparisonCardProps {
   printerItem: any;
@@ -55,7 +56,7 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
 
   useEffect(() => {
     // 1. Fetch Inbound Transactions from PostgreSQL
-    const p1 = fetch('/api/inbound')
+    const p1 = fetch('/api/inbound', { headers: getAuthHeaders() })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         const items = Array.isArray(data) ? data : (data?.data || []);
@@ -98,7 +99,7 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
       .catch(() => []);
 
     // 2. Fetch Materials Items from PostgreSQL
-    const p2 = fetch('/api/inventory/items')
+    const p2 = fetch('/api/inventory/items', { headers: getAuthHeaders() })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         const items = Array.isArray(data) ? data : (data?.data || []);
@@ -236,8 +237,7 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
     totalActualCostPerPage += actualCostPerPage;
 
     const slotSavingsPerPage = oemCostPerPage - actualCostPerPage;
-    const slotSavingsPercent = oemCostPerPage > 0 ? (slotSavingsPerPage / oemCostPerPage) * 100 : 0;
-
+    const slotSavingsPercent = oemCostPerPage > 0 ? ((oemCostPerPage - actualCostPerPage) / oemCostPerPage) * 100 : 0;
     return {
       slotPos,
       colorGroup: oemSlot.colorGroup || `Color ${idx + 1}`,
@@ -256,6 +256,52 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
       slotSavingsPercent
     };
   });
+
+  const roundedTotalActualCost = Math.round(totalActualCostPerPage * 100) / 100;
+  const blackSlot = slotComparisons.find(s => 
+    (s.colorGroup || '').toLowerCase().includes('black') || 
+    s.slotPos.toLowerCase().includes('black') || 
+    s.slotPos.toLowerCase().includes('slot 1')
+  );
+  const roundedBwCost = blackSlot ? Math.round(blackSlot.actualCostPerPage * 100) / 100 : 0;
+  
+  const currentBreakdown = slotComparisons.map(s => ({
+    slot: s.slotPos,
+    colorGroup: s.colorGroup,
+    sku: s.activeLink?.inkCode || s.oemSlot.oemInkCode || 'OEM',
+    name: s.linkedInkItem?.name || s.oemSlot.oemInkCode || s.slotPos,
+    bottlePrice: s.actualInkPrice,
+    standardVolume: s.actualVol,
+    isoYield: s.oemYield,
+    costPerPage: Math.round(s.actualCostPerPage * 100) / 100,
+    isLinked: !!s.linkedInkItem,
+  }));
+
+  const lastSyncedCostRef = useRef<number | null>(null);
+
+  // Auto-sync persistent ink cost fields onto printerItem whenever actual ink cost is calculated
+  useEffect(() => {
+    if (!printerItem?.id || roundedTotalActualCost <= 0) return;
+
+    const currentCost = Number(printerItem.colorInkCost || printerItem.linkedInkCostPerPage || 0);
+    // If not yet set or differs by more than 0.01 LAK and has not already been synced to this exact value
+    if (Math.abs(currentCost - roundedTotalActualCost) > 0.01 && lastSyncedCostRef.current !== roundedTotalActualCost) {
+      lastSyncedCostRef.current = roundedTotalActualCost;
+      updateEquipment(printerItem.id, {
+        colorInkCost: roundedTotalActualCost,
+        bwInkCost: roundedBwCost,
+        linkedInkCostPerPage: roundedTotalActualCost,
+        inkCostPerPage: roundedTotalActualCost,
+        specs: {
+          ...(printerItem.specs || {}),
+          colorInkCost: roundedTotalActualCost,
+          bwInkCost: roundedBwCost,
+          linkedInkCostPerPage: roundedTotalActualCost,
+          inkSlotsBreakdown: currentBreakdown,
+        }
+      });
+    }
+  }, [printerItem?.id, roundedTotalActualCost, roundedBwCost, printerItem?.colorInkCost, printerItem?.linkedInkCostPerPage]);
 
   // Link Ink Handler
   const handleLinkInk = (slotPos: string, inkSkuId: string) => {
@@ -297,14 +343,23 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
   // Sync calculated actual cost to printer equipment state
   const handleSyncToEngine = () => {
     updateEquipment(printerItem.id, {
-      inkCostPerPage: totalActualCostPerPage,
-      inkConsumptionStandard: totalActualCostPerPage
+      colorInkCost: roundedTotalActualCost,
+      bwInkCost: roundedBwCost,
+      linkedInkCostPerPage: roundedTotalActualCost,
+      inkCostPerPage: roundedTotalActualCost,
+      specs: {
+        ...(printerItem.specs || {}),
+        colorInkCost: roundedTotalActualCost,
+        bwInkCost: roundedBwCost,
+        linkedInkCostPerPage: roundedTotalActualCost,
+        inkSlotsBreakdown: currentBreakdown,
+      }
     });
 
     showToast(
       currentLang === 'lo'
-        ? `ອັບເດດຕົ້ນທຶນໝຶກພິມຈິງ (${formatLAK(totalActualCostPerPage)}/ແຜ່ນ) ເຂົ້າສູ່ Quotation Engine ສຳເລັດ!`
-        : `Synced actual ink cost (${formatLAK(totalActualCostPerPage)}/page) to Quotation Engine!`,
+        ? `ອັບເດດຕົ້ນທຶນໝຶກພິມຈິງ (${formatUnitLAK(roundedTotalActualCost)}/ແຜ່ນ) ເຂົ້າສູ່ລະບົບສຳເລັດ!`
+        : `Synced actual ink cost (${formatUnitLAK(roundedTotalActualCost)}/page) to machinery specs!`,
       'success'
     );
   };
@@ -359,11 +414,11 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
   return (
     <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
       {/* Top Header & Coverage Controls */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-        <div>
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+        <div className="min-w-0 flex-1">
           <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-            <Droplet className="w-5 h-5 text-sky-600" />
-            <span>
+            <Droplet className="w-5 h-5 text-sky-600 shrink-0" />
+            <span className="break-words">
               {currentLang === 'lo' 
                 ? 'ຕາຕະລາງຕົ້ນທຶນໝຶກພິມຈິງ & ຜູກສີກັບສາງ (Ink Cost Benchmark & Linker)' 
                 : 'Ink Cost Benchmark & Linker'}
@@ -377,8 +432,8 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
         </div>
 
         {/* Coverage Selector Pills */}
-        <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shrink-0">
-          <span className="text-[10px] font-black uppercase text-slate-500 px-2">Ink Coverage:</span>
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shrink-0 self-start xl:self-auto">
+          <span className="text-[10px] font-black uppercase text-slate-500 px-2 shrink-0">Ink Coverage:</span>
           {[
             { label: '5% (ISO)', val: 5 },
             { label: '15% (Text+Logo)', val: 15 },
@@ -388,7 +443,7 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
             <button
               key={preset.val}
               onClick={() => setCoveragePercent(preset.val)}
-              className={`px-3 py-1 text-xs font-black rounded-xl transition cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-1 text-xs font-black rounded-xl transition cursor-pointer shrink-0 ${
                 coveragePercent === preset.val 
                   ? 'bg-sky-600 text-white shadow-xs' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
@@ -401,10 +456,10 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
       </div>
 
       {/* SECTION 1: OEM Factory Baseline Reference Specs Banner */}
-      <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-sm space-y-3">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div className="bg-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-slate-800 rounded-lg text-sky-400 font-bold text-sm">
+            <div className="p-1.5 bg-slate-800 rounded-lg text-sky-400 font-bold text-sm shrink-0">
               <SlidersHorizontal className="w-4 h-4 text-sky-400" />
             </div>
             <div>
@@ -420,23 +475,33 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
               </p>
             </div>
           </div>
-          <span className="px-3 py-1 bg-sky-500/20 text-sky-300 border border-sky-500/30 rounded-xl text-[10px] font-black uppercase tracking-wider">
+          <span className="self-start sm:self-auto px-3 py-1 bg-sky-500/20 text-sky-300 border border-sky-500/30 rounded-xl text-[10px] font-black uppercase tracking-wider shrink-0">
             {currentLang === 'lo' ? 'ສະເປັກອັດຕາສິ້ນເປືອງໂຮງງານ' : 'Factory ISO Rate Baseline'}
           </span>
         </div>
 
         {/* OEM Baseline Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
           {oemBaselineSlots.map((slot: any, i: number) => {
             const vol = Number(slot.oemStandardVolumeMl || slot.volume || 100);
             const yld = Number(slot.oemStandardIsoYieldA4 || slot.isoYield || 5000);
             const isoRate = yld > 0 ? (vol / yld) : 0.0169;
 
+            // Clean slot position label: e.g. "Slot 1 (K - Black)" -> "Slot 1 (K)"
+            let displaySlotPos = slot.slotPosition || `Slot ${i + 1}`;
+            if (displaySlotPos.includes(' - ')) {
+              displaySlotPos = displaySlotPos.split(' - ')[0] + (displaySlotPos.includes('(') ? ')' : '');
+            }
+
             return (
               <div key={i} className="bg-slate-800/80 p-3 rounded-xl border border-slate-700 space-y-1 text-xs font-mono">
-                <div className="flex justify-between items-center text-slate-300 font-bold text-[11px]">
-                  <span>{slot.slotPosition || `Slot ${i + 1}`}</span>
-                  <span className="text-sky-400 font-extrabold">{slot.colorGroup || ''}</span>
+                <div className="flex items-center justify-between gap-1 text-slate-300 font-bold text-[11px]">
+                  <span className="truncate">{displaySlotPos}</span>
+                  {slot.colorGroup && (
+                    <span className="shrink-0 text-[10px] font-black uppercase text-sky-400 bg-sky-950/70 px-2 py-0.5 rounded border border-sky-800/50">
+                      {slot.colorGroup}
+                    </span>
+                  )}
                 </div>
                 <span className="text-white font-extrabold text-xs block truncate">{slot.oemInkCode || 'OEM Standard'}</span>
                 <div className="text-[10px] text-slate-400 space-y-0.5 font-sans pt-1 border-t border-slate-700/60">
@@ -448,9 +513,9 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
                     <span>{currentLang === 'lo' ? 'ຄາດວ່າພິມໄດ້:' : 'Factory Yield:'}</span>
                     <span className="font-mono font-bold text-slate-200">{yld.toLocaleString()} {currentLang === 'lo' ? 'ແຜ່ນ' : 'pages'}</span>
                   </div>
-                  <div className="flex justify-between text-sky-300 font-bold pt-1 border-t border-slate-700/40">
-                    <span>{currentLang === 'lo' ? 'ອັດຕາສິ້ນເປືອງ:' : 'Standard Rate:'}</span>
-                    <span className="font-mono text-sky-400 font-extrabold">{isoRate.toFixed(4)} ml/{currentLang === 'lo' ? 'ແຜ່ນ' : 'sheet'}</span>
+                  <div className="flex flex-wrap items-center justify-between gap-1 text-sky-300 font-bold pt-1 border-t border-slate-700/40">
+                    <span className="text-[10px]">{currentLang === 'lo' ? 'ອັດຕາສິ້ນເປືອງ:' : 'Standard Rate:'}</span>
+                    <span className="font-mono text-sky-400 font-extrabold text-[11px] shrink-0">{isoRate.toFixed(4)} ml/{currentLang === 'lo' ? 'ແຜ່ນ' : 'sheet'}</span>
                   </div>
                 </div>
               </div>
@@ -469,7 +534,7 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
           </span>
         </div>
 
-        <div className="bg-sky-50 p-4 rounded-2xl border border-sky-200 space-y-1 col-span-2">
+        <div className="bg-sky-50 p-4 rounded-2xl border border-sky-200 space-y-1 col-span-1 sm:col-span-2">
           <span className="text-[10px] font-bold text-sky-700 uppercase block">
             {currentLang === 'lo' ? 'ຕົ້ນທຶນໝຶກຈິງຕໍ່ແຜ່ນ (Actual Linked Ink Cost / Page)' : 'Actual Linked Ink Cost / Page'}
           </span>

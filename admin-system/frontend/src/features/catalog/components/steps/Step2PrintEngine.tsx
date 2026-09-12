@@ -100,18 +100,32 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
     return 'dual_mode';
   }, [printModeGroup]);
 
+  const getFallbackPrinter = () => {
+    if (dynamicPrinters.length > 0) return dynamicPrinters[0];
+    const firstEq = (equipment || []).find(e => e.category === 'Printer' || e.category === 'PRINTER') || (equipment || [])[0];
+    if (firstEq) {
+      return {
+        id: firstEq.id,
+        name: firstEq.name,
+        totalColorCost: 1250,
+        totalBwCost: 280,
+      };
+    }
+    return {
+      id: '',
+      name: 'ມາດຕະຖານໂຮງພິມ (Standard Machine)',
+      totalColorCost: 0,
+      totalBwCost: 0,
+    };
+  };
+
   // Helper to ensure printModeGroup exists
   const ensurePrintModeGroup = (initialOptions?: PublicProductOption[]) => {
     setSpecGroups(prev => {
       const idx = prev.findIndex(g => g.id === 'group_print_mode' || g.groupType === 'printing_mode');
       const existingGroup = idx >= 0 ? prev[idx] : undefined;
 
-      const defaultPrinter = dynamicPrinters[0] || {
-        id: 'PRN-FUJI-V180',
-        name: 'Fuji Xerox Versant 180 Press',
-        totalColorCost: 1250,
-        totalBwCost: 280,
-      };
+      const defaultPrinter = dynamicPrinters[0] || getFallbackPrinter();
 
       // If existing options exist, preserve them rather than overwriting with hardcoded defaults
       let options: PublicProductOption[];
@@ -218,12 +232,7 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
 
   // Preset Capability switcher
   const handleApplyCapabilityMode = (mode: 'dual_mode' | 'color_only' | 'mono_only') => {
-    const defaultPrinter = dynamicPrinters.find(p => p.id === defaultMachineId) || dynamicPrinters[0] || {
-      id: 'PRN-FUJI-V180',
-      name: 'Fuji Xerox Versant 180 Press',
-      totalColorCost: 1250,
-      totalBwCost: 280,
-    };
+    const defaultPrinter = dynamicPrinters.find(p => p.id === defaultMachineId) || dynamicPrinters[0] || getFallbackPrinter();
 
     const options: PublicProductOption[] = [];
 
@@ -341,12 +350,7 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
 
   // Add custom print mode option
   const handleAddCustomPrintMode = () => {
-    const defaultPrinter = dynamicPrinters[0] || {
-      id: 'PRN-FUJI-V180',
-      name: 'Fuji Xerox Versant 180 Press',
-      totalColorCost: 1250,
-      totalBwCost: 280,
-    };
+    const defaultPrinter = dynamicPrinters[0] || getFallbackPrinter();
 
     setSpecGroups(prev => {
       const gIdx = prev.findIndex(g => g.id === 'group_print_mode' || g.groupType === 'printing_mode');

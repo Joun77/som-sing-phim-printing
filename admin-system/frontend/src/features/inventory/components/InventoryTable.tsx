@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, Edit3, Plus, Minus, ExternalLink, Image as ImageIcon, Trash2, Scissors } from 'lucide-react';
+import { Eye, Edit3, Plus, ExternalLink, Image as ImageIcon, Trash2, Scissors, Wrench } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import InventoryDetailsModal from './modals/InventoryDetailsModal';
@@ -28,13 +28,13 @@ const formatLaoCategory = (cat?: string) => {
   if (c === 'paper' || c === 'material') return 'ເຈ້ຍ & ວັດສະດຸ';
   if (c === 'offcut') return 'ເສດເຈ້ຍ';
   if (c === 'ink' || c === 'toner') return 'ນ້ຳໝຶກ';
-  if (c === 'hardware' || c === 'spare_parts') return 'ອຸປະກອນ & ອາໄຫຼ່';
+  if (c === 'hardware' || c === 'spare_parts' || c === 'spareparts') return 'ອຸປະກອນ & ອາໄຫຼ່';
   if (c === 'finishing' || c === 'lamination' || c === 'binding' || c === 'film' || c === 'glue') return 'ງານຫຼັງພິມ';
   if (c === 'packaging' || c.startsWith('pkg')) return 'ກ່ອງ & ບັນຈຸພັນ';
   return cat.toUpperCase();
 };
 
-export default function InventoryTable({ items, activeTab, onRestockItem, onViewDetails, onDischargeItem }: { items: any[]; activeTab: string; onRestockItem?: (item: any) => void; onViewDetails?: (lot: any) => void; onDischargeItem?: (item: any) => void }) {
+export default function InventoryTable({ items, activeTab, onRestockItem, onViewDetails, onDischargeItem, onIssuePart }: { items: any[]; activeTab: string; onRestockItem?: (item: any) => void; onViewDetails?: (lot: any) => void; onDischargeItem?: (item: any) => void; onIssuePart?: (item: any) => void }) {
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
   const { editInventoryBatch, editInventorySku, deleteInventoryBatch, deleteInventoryFromBackend, showToast, formatCurrency, quickAdjustStock } = useApp();
@@ -355,14 +355,16 @@ export default function InventoryTable({ items, activeTab, onRestockItem, onView
                       </span>
                     </td>
                     <td className="py-4.5 px-6 text-right flex items-center justify-end gap-1.5">
-                      <button
-                        onClick={() => onDischargeItem ? onDischargeItem(parent) : null}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-black transition border border-rose-200 cursor-pointer"
-                        title="Stock Discharge"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                        <span>{currentLang === 'lo' ? 'ເບີກ' : 'Discharge'}</span>
-                      </button>
+                      {onIssuePart && ((parent.category || '').toLowerCase().includes('spare') || (parent.category || '').toLowerCase() === 'hardware' || (parent.id || '').startsWith('PART-')) && (
+                        <button
+                          onClick={() => onIssuePart(parent)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-black transition border border-amber-200 cursor-pointer"
+                          title="Issue to Machine"
+                        >
+                          <Wrench className="w-3.5 h-3.5" />
+                          <span>{currentLang === 'lo' ? 'ເບີກໃສ່ເຄື່ອງ' : 'Issue Part'}</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => onViewDetails ? onViewDetails(lot) : setSelectedLotModal(lot)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition active:scale-95 border border-slate-200 cursor-pointer"

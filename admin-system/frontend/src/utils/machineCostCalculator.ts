@@ -85,9 +85,120 @@ export interface FormattedMachineCost {
   totalMachineCost: number;
   inkCost: number;
   grandTotalCost: number;
-  unitLabel: string; // 'ໜ້າ' | 'ແຜ່ນ' | 'ຫົວ'
-  unitLabelEn: string; // 'page' | 'sheet' | 'book'
+  unitLabel: string; // 'ໜ້າ' | 'ແຜ່ນ' | 'ຮອບຕັດ' | 'ແມັດ' | 'ຫົວ'
+  unitLabelEn: string; // 'page' | 'sheet' | 'cut' | 'meter' | 'book'
   isPrinter: boolean;
+}
+
+/**
+ * Resolves the display image of a machine from all potential sources
+ */
+export function resolveMachineImage(machine: any): string | null {
+  if (!machine) return null;
+  return (
+    machine.imageUrl ||
+    machine.itemPhoto ||
+    machine.productPhoto ||
+    machine.image ||
+    machine.docs?.productPhoto ||
+    machine.specs?.productPhoto ||
+    machine.specs?.productImage ||
+    (Array.isArray(machine.actual_images) && machine.actual_images[0]) ||
+    (Array.isArray(machine.specs?.actual_images) && machine.specs?.actual_images[0]) ||
+    null
+  );
+}
+
+/**
+ * Computes exact itemized wear parts rate per unit from Data Material specification
+ */
+export function calculateMachineWearPartsRate(eq: any): number {
+  if (!eq) return 0;
+  const specs = eq.specs || {};
+  const cat = String(eq.category || eq.printerCategory || '').toLowerCase();
+  const sub = String(eq.postPressSubtype || specs.postPressSubtype || '').toLowerCase();
+  const name = String(eq.name || eq.model || '').toLowerCase();
+
+  const isCutter = cat.includes('cutter') || sub.includes('cutter') || sub.includes('guillotine') || sub.includes('plotter') || name.includes('cutter');
+  const isBinder = cat.includes('binder') || sub.includes('binder') || name.includes('binder');
+  const isLaminator = cat.includes('laminat') || sub.includes('laminat') || name.includes('laminat');
+  const isInkjet = sub.includes('inkjet') || cat.includes('inkjet') || specs.feedType !== undefined || (!isCutter && !isBinder && !isLaminator && (name.includes('tank') || name.includes('ecotank') || name.includes('l15150')));
+  const isLaser = !isCutter && !isBinder && !isLaminator && !isInkjet;
+
+  let totalWear = 0;
+
+  if (isInkjet) {
+    // 4 Wear parts for Inkjet from Data Material
+    const maintBoxCost = Number(specs.wearMaintBoxCost || eq.wearMaintBoxCost || 0);
+    const maintBoxLife = Number(specs.wearMaintBoxLife || eq.wearMaintBoxLife || 0);
+    if (maintBoxCost > 0 && maintBoxLife > 0) totalWear += (maintBoxCost / maintBoxLife);
+
+    const rollerCost = Number(specs.wearPickupRollerCost || eq.wearPickupRollerCost || 0);
+    const rollerLife = Number(specs.wearPickupRollerLife || eq.wearPickupRollerLife || 0);
+    if (rollerCost > 0 && rollerLife > 0) totalWear += (rollerCost / rollerLife);
+
+    const beltCost = Number(specs.wearCarriageBeltCost || eq.wearCarriageBeltCost || 0);
+    const beltLife = Number(specs.wearCarriageBeltLife || eq.wearCarriageBeltLife || 0);
+    if (beltCost > 0 && beltLife > 0) totalWear += (beltCost / beltLife);
+
+    const headCost = Number(specs.wearPrintheadCost || eq.wearPrintheadCost || 0);
+    const headLife = Number(specs.wearPrintheadLife || eq.wearPrintheadLife || 0);
+    if (headCost > 0 && headLife > 0) totalWear += (headCost / headLife);
+  } else if (isLaser) {
+    // 5 Wear parts for Laser from Data Material
+    const drumCost = Number(specs.wearDrumUnitCost || eq.wearDrumUnitCost || 0);
+    const drumLife = Number(specs.wearDrumUnitLife || eq.wearDrumUnitLife || 0);
+    if (drumCost > 0 && drumLife > 0) totalWear += (drumCost / drumLife);
+
+    const fuserCost = Number(specs.wearFuserUnitCost || eq.wearFuserUnitCost || 0);
+    const fuserLife = Number(specs.wearFuserUnitLife || eq.wearFuserUnitLife || 0);
+    if (fuserCost > 0 && fuserLife > 0) totalWear += (fuserCost / fuserLife);
+
+    const itbCost = Number(specs.wearTransferBeltCost || eq.wearTransferBeltCost || 0);
+    const itbLife = Number(specs.wearTransferBeltLife || eq.wearTransferBeltLife || 0);
+    if (itbCost > 0 && itbLife > 0) totalWear += (itbCost / itbLife);
+
+    const rollerCost = Number(specs.wearPickupRollerCost || eq.wearPickupRollerCost || 0);
+    const rollerLife = Number(specs.wearPickupRollerLife || eq.wearPickupRollerLife || 0);
+    if (rollerCost > 0 && rollerLife > 0) totalWear += (rollerCost / rollerLife);
+
+    const wasteBoxCost = Number(specs.wearWasteTonerBoxCost || eq.wearWasteTonerBoxCost || 0);
+    const wasteBoxLife = Number(specs.wearWasteTonerBoxLife || eq.wearWasteTonerBoxLife || 0);
+    if (wasteBoxCost > 0 && wasteBoxLife > 0) totalWear += (wasteBoxCost / wasteBoxLife);
+  } else if (isCutter) {
+    const isGuillotine = sub.includes('guillotine') || name.includes('guillotine') || cat.includes('guillotine');
+    if (isGuillotine) {
+      const sharpCost = Number(specs.wearSharpeningCost || eq.wearSharpeningCost || 0);
+      const sharpLife = Number(specs.wearSharpeningIntervalCuts || eq.wearSharpeningIntervalCuts || 0);
+      if (sharpCost > 0 && sharpLife > 0) totalWear += (sharpCost / sharpLife);
+
+      const stickCost = Number(specs.wearCuttingStickCost || eq.wearCuttingStickCost || 0);
+      const stickLife = Number(specs.wearCuttingStickLifeCuts || eq.wearCuttingStickLifeCuts || 0);
+      if (stickCost > 0 && stickLife > 0) totalWear += (stickCost / stickLife);
+    } else {
+      const bladeCost = Number(specs.wearBladeCost || eq.wearBladeCost || 0);
+      const bladeLife = Number(specs.wearBladeLifeMeters || eq.wearBladeLifeMeters || 0);
+      if (bladeCost > 0 && bladeLife > 0) totalWear += (bladeCost / bladeLife);
+
+      const teflonCost = Number(specs.wearTeflonStripCost || eq.wearTeflonStripCost || 0);
+      const teflonLife = Number(specs.wearTeflonStripLifeMeters || eq.wearTeflonStripLifeMeters || 0);
+      if (teflonCost > 0 && teflonLife > 0) totalWear += (teflonCost / teflonLife);
+    }
+  } else if (isLaminator) {
+    const rollerCost = Number(specs.wearSiliconeRollerCost || eq.wearSiliconeRollerCost || 0);
+    const rollerLife = Number(specs.wearSiliconeRollerLifeMeters || eq.wearSiliconeRollerLifeMeters || 0);
+    if (rollerCost > 0 && rollerLife > 0) totalWear += (rollerCost / rollerLife);
+  } else if (isBinder) {
+    const millCost = Number(specs.wearMillingCutterCost || eq.wearMillingCutterCost || 0);
+    const millLife = Number(specs.wearMillingCutterLifeBooks || eq.wearMillingCutterLifeBooks || 0);
+    if (millCost > 0 && millLife > 0) totalWear += (millCost / millLife);
+
+    const punchCost = Number(specs.wearPunchingPinsCost || eq.wearPunchingPinsCost || 0);
+    const punchLife = Number(specs.wearPunchingPinsLifePunches || eq.wearPunchingPinsLifePunches || 0);
+    if (punchCost > 0 && punchLife > 0) totalWear += (punchCost / punchLife);
+  }
+
+  return Math.round(totalWear * 1000) / 1000;
 }
 
 /**
@@ -112,13 +223,16 @@ export function getEquipmentAccurateCost(eq: any): FormattedMachineCost {
   const sub = String(eq.postPressSubtype || eq.specs?.postPressSubtype || '').toLowerCase();
   const name = String(eq.name || eq.model || '').toLowerCase();
 
-  const isCutter = cat.includes('cutter') || sub.includes('cutter') || sub.includes('guillotine') || name.includes('cutter') || name.includes('guillotine') || name.includes('qzyk') || name.includes('polar');
-  const isBinder = cat.includes('binder') || sub.includes('binder') || name.includes('binder') || name.includes('horizon') || name.includes('superbind');
-  const isLaminator = cat.includes('laminat') || sub.includes('laminat') || name.includes('laminat') || name.includes('foliant');
-  const isPrinter = !isCutter && !isBinder && !isLaminator;
+  const isExplicitPrinter = cat === 'printer' || cat === 'digital press' || cat === 'inkjet' || cat === 'laser';
+  const isCutter = !isExplicitPrinter && (cat.includes('cutter') || sub.includes('cutter') || sub.includes('guillotine') || sub.includes('plotter') || name.includes('cutter') || name.includes('guillotine') || name.includes('qzyk') || name.includes('polar'));
+  const isBinder = !isExplicitPrinter && (cat.includes('binder') || sub.includes('binder') || name.includes('binder') || name.includes('horizon') || name.includes('superbind'));
+  const isLaminator = !isExplicitPrinter && (cat.includes('laminat') || sub.includes('laminat') || name.includes('laminat') || name.includes('foliant'));
+  const isInkjet = isExplicitPrinter && (sub.includes('inkjet') || cat.includes('inkjet') || eq.specs?.feedType !== undefined || name.includes('tank') || name.includes('ecotank') || name.includes('l15150') || name.includes('epson'));
+  const isPrinter = isExplicitPrinter || (!isCutter && !isBinder && !isLaminator);
 
-  const unitLabel = isCutter ? 'ແຜ່ນ' : isLaminator ? 'ແຜ່ນ' : isBinder ? 'ຫົວ' : 'ໜ້າ';
-  const unitLabelEn = isCutter ? 'sheet' : isLaminator ? 'sheet' : isBinder ? 'book' : 'page';
+  const isGuillotine = isCutter && (sub.includes('guillotine') || name.includes('guillotine') || cat.includes('guillotine'));
+  const unitLabel = isGuillotine ? 'ຮອບຕັດ' : (isCutter || isLaminator) ? 'ແມັດ' : isBinder ? 'ຫົວ' : 'ໜ້າ';
+  const unitLabelEn = isGuillotine ? 'cut' : (isCutter || isLaminator) ? 'meter' : isBinder ? 'book' : 'page';
 
   const assetValue = Number(
     eq.MachinePrice ??
@@ -127,6 +241,12 @@ export function getEquipmentAccurateCost(eq: any): FormattedMachineCost {
     eq.purchaseCost ??
     eq.purchasePrice ??
     eq.unitCost ??
+    eq.totalPrice ??
+    eq.cost_per_purchase_unit ??
+    eq.costPerPurchaseUnit ??
+    eq.specs?.totalPrice ??
+    eq.specs?.price ??
+    eq.specs?.purchaseCost ??
     0
   );
 
@@ -134,15 +254,30 @@ export function getEquipmentAccurateCost(eq: any): FormattedMachineCost {
   const totalMonths = lifespanYears * 12;
   const estMonthlyVolume = Number(eq.estMonthlyVolume || eq.specs?.estMonthlyVolume || 0);
 
-  const targetCapacity = Number(
+  const explicitCapacity = Number(
+    eq.expectedLife ||
+    eq.specs?.expectedLife ||
+    eq.expectedLifeA4Pages ||
+    eq.specs?.expectedLifeA4Pages ||
     eq.TargetTotalPages ||
     eq.printedPagesCapacity ||
-    eq.expectedLifeA4Pages ||
     eq.expected_life_pages ||
     eq.lifetimePagesA4 ||
-    (estMonthlyVolume > 0 && totalMonths > 0 ? estMonthlyVolume * totalMonths : 0) ||
-    (isPrinter ? 1500000 : isCutter ? 3000000 : isBinder ? 600000 : 800000)
+    eq.specs?.printedPagesCapacity ||
+    0
   );
+
+  const fallbackCapacity = isPrinter 
+    ? (isInkjet ? 200000 : 500000) 
+    : isCutter 
+    ? 100000 
+    : isBinder 
+    ? 30000 
+    : 50000;
+
+  const targetCapacity = explicitCapacity > 0 
+    ? explicitCapacity 
+    : (estMonthlyVolume > 0 && totalMonths > 0 ? estMonthlyVolume * totalMonths : fallbackCapacity);
 
   const maintRatePct = Number(
     eq.maintenanceRatePercent !== undefined
@@ -159,7 +294,9 @@ export function getEquipmentAccurateCost(eq: any): FormattedMachineCost {
     baseDepreciation = Number(eq.calculatedCostPerPage || eq.costPerPage || eq.costPerConsumptionUnit);
   }
 
-  const maintWear = baseDepreciation * (maintRatePct / 100);
+  // Exact Itemized Wear Parts Rate or fallback to Maintenance %
+  const itemizedWear = calculateMachineWearPartsRate(eq);
+  const maintWear = itemizedWear > 0 ? itemizedWear : (baseDepreciation * (maintRatePct / 100));
   const totalMachine = Math.round((baseDepreciation + maintWear) * 100) / 100;
 
   // Ink estimation for printers (ISO 5% standard ~150-200 LAK for standard inkjet/press)
@@ -190,12 +327,25 @@ export function getEquipmentAccurateCost(eq: any): FormattedMachineCost {
   };
 }
 
+export interface LinkedInkSlotDetail {
+  slot: string;
+  colorGroup: string;
+  sku: string;
+  name: string;
+  bottlePrice: number;
+  standardVolume: number;
+  isoYield: number;
+  costPerPage: number;
+  isLinked: boolean;
+}
+
 export interface EquipmentPrintCostResult {
   assetValue: number;
   baseCostPerUnit: number;
   wearAllowancePerUnit: number;
   netCostPerUnit: number;
   linkedInkRatePerPage: number;
+  bwRatePerPage: number;
   finalCostPerPage: number;
   isPostPress: boolean;
   unitLabel: string; // 'ໜ້າ' | 'ແຜ່ນ' | 'ຫົວ'
@@ -203,12 +353,22 @@ export interface EquipmentPrintCostResult {
   formattedTotal: string; // e.g. "LAK 61"
   formattedMachine: string; // e.g. "LAK 1.20"
   formattedInk: string; // e.g. "LAK 60"
+  inkSlotsBreakdown: LinkedInkSlotDetail[];
 }
 
 export function formatUnitLAK(val: number): string {
   if (!val || isNaN(val)) return 'LAK 0';
   if (Math.abs(val) < 1) return `LAK ${val.toFixed(2)}`;
   if (Math.abs(val) < 10) return `LAK ${val.toFixed(2)}`;
+  return `LAK ${Math.round(val).toLocaleString()}`;
+}
+
+export function formatUnitPrecisionLAK(val: number): string {
+  if (!val || isNaN(val)) return 'LAK 0';
+  const rounded = Math.round(val * 100) / 100;
+  if (Math.abs(rounded) < 1000 && rounded % 1 !== 0) {
+    return `LAK ${rounded.toFixed(2)}`;
+  }
   return `LAK ${Math.round(val).toLocaleString()}`;
 }
 
@@ -225,6 +385,7 @@ export function calculateEquipmentPrintCost(
       wearAllowancePerUnit: 0,
       netCostPerUnit: 0,
       linkedInkRatePerPage: 0,
+      bwRatePerPage: 0,
       finalCostPerPage: 0,
       isPostPress: false,
       unitLabel: 'ໜ້າ',
@@ -232,9 +393,11 @@ export function calculateEquipmentPrintCost(
       formattedTotal: 'LAK 0',
       formattedMachine: 'LAK 0',
       formattedInk: 'LAK 0',
+      inkSlotsBreakdown: [],
     };
   }
 
+  const accurate = getEquipmentAccurateCost(eq);
   const isPrinterModal = modalCategory === 'Printer';
   const isCutterModal = modalCategory === 'Cutter';
   const isBinderModal = modalCategory === 'Binder';
@@ -244,29 +407,23 @@ export function calculateEquipmentPrintCost(
     ? false 
     : (isCutterModal || isBinderModal || isLaminatorModal 
         ? true 
-        : (eq.category !== 'Printer' && eq.category !== 'PRINTER'));
+        : !accurate.isPrinter);
 
-  const unitLabel = isCutterModal || (!isPrinterModal && (eq.category === 'Cutter' || eq.postPressSubtype === 'guillotine'))
-    ? 'ແຜ່ນ'
-    : isLaminatorModal || (!isPrinterModal && (eq.category === 'Laminator' || eq.postPressSubtype === 'laminator'))
-    ? 'ແຜ່ນ'
-    : isBinderModal || (!isPrinterModal && (eq.category === 'Binder' || eq.postPressSubtype === 'binder'))
+  const unitLabel = isCutterModal
+    ? (accurate.unitLabel === 'ຮອບຕັດ' ? 'ຮອບຕັດ' : 'ແມັດ')
+    : isLaminatorModal
+    ? 'ແມັດ'
+    : isBinderModal
     ? 'ຫົວ'
-    : 'ໜ້າ';
+    : accurate.unitLabel;
 
-  const unitLabelEn = unitLabel === 'ແຜ່ນ' ? 'sheet' : unitLabel === 'ຫົວ' ? 'book' : 'page';
-
-  // Specs calculation (100% identical to EquipmentTable.tsx)
-  const lifespanYears = Number(eq.lifespanYears || eq.specs?.lifespanYears || 5);
-  const estMonthlyVolume = Number(eq.estMonthlyVolume || eq.specs?.estMonthlyVolume || 50000);
-  const maintenanceRatePct = Number(
-    eq.maintenanceRatePercent !== undefined ? eq.maintenanceRatePercent :
-    eq.specs?.maintenanceRatePercent !== undefined ? eq.specs.maintenanceRatePercent :
-    eq.maintenance_rate_percent !== undefined ? eq.maintenance_rate_percent :
-    eq.specs?.maintenance_rate_percent !== undefined ? eq.specs.maintenance_rate_percent :
-    15
-  );
-  const maintCostPerPage = Number(eq.specs?.fixedMaintenanceCostPerPage || 0);
+  const unitLabelEn = isCutterModal
+    ? (accurate.unitLabelEn === 'cut' ? 'cut' : 'meter')
+    : isLaminatorModal
+    ? 'meter'
+    : isBinderModal
+    ? 'book'
+    : accurate.unitLabelEn;
 
   const assetValue = Number(
     eq.MachinePrice ?? 
@@ -275,41 +432,47 @@ export function calculateEquipmentPrintCost(
     eq.purchaseCost ?? 
     eq.purchasePrice ?? 
     eq.unitCost ?? 
-    eq.totalPrice ??
-    eq.cost_per_purchase_unit ??
-    eq.costPerPurchaseUnit ??
-    eq.specs?.totalPrice ??
-    eq.specs?.price ??
-    eq.specs?.purchaseCost ??
+    eq.totalPrice ?? 
+    eq.cost_per_purchase_unit ?? 
+    eq.costPerPurchaseUnit ?? 
+    eq.specs?.totalPrice ?? 
+    eq.specs?.price ?? 
+    eq.specs?.purchaseCost ?? 
     0
   );
-  const totalMonths = lifespanYears * 12;
-  const explicitCapacity = Number(
-    eq.expectedLifeA4Pages ||
-    eq.specs?.expectedLifeA4Pages ||
-    eq.TargetTotalPages || 
-    eq.printedPagesCapacity || 
-    eq.lifetimePagesA4 || 
-    eq.expected_life_pages ||
-    eq.specs?.printedPagesCapacity ||
-    0
-  );
-  const targetPages = explicitCapacity > 0 
-    ? explicitCapacity 
-    : (estMonthlyVolume > 0 && totalMonths > 0 ? estMonthlyVolume * totalMonths : 3000000);
-  const monthlyDepr = totalMonths > 0 ? (assetValue / totalMonths) : 0;
-  const baseCostPerUnit = (explicitCapacity > 0 && assetValue > 0)
-    ? (assetValue / explicitCapacity)
-    : (estMonthlyVolume > 0 && monthlyDepr > 0)
-    ? (monthlyDepr / estMonthlyVolume)
-    : (targetPages > 0 ? (assetValue / targetPages) : 0);
 
-  const wearAllowancePerUnit = Math.round(baseCostPerUnit * (maintenanceRatePct / 100) * 1000) / 1000 + maintCostPerPage;
-  const netCostPerUnit = Math.round((baseCostPerUnit + wearAllowancePerUnit) * 1000) / 1000;
+  const baseCostPerUnit = accurate.depreciation;
+  const wearAllowancePerUnit = accurate.maintenance;
+  const netCostPerUnit = accurate.totalMachineCost;
+
+  // 1. Direct Field Retrieval: prioritize authoritative persistent fields from equipment if already set
+  const persistentColorInkCost = Number(
+    eq.colorInkCost ?? 
+    eq.linkedInkCostPerPage ?? 
+    eq.inkCostPerPage ?? 
+    eq.specs?.colorInkCost ?? 
+    eq.specs?.linkedInkCostPerPage ?? 
+    0
+  );
+
+  const persistentBwInkCost = Number(
+    eq.bwInkCost ?? 
+    eq.specs?.bwInkCost ?? 
+    0
+  );
+
+  const persistentTotalCost = Number(
+    eq.totalPrintCostPerPage ?? 
+    eq.calculatedCostPerPage ?? 
+    eq.costPerPage ?? 
+    eq.specs?.totalPrintCostPerPage ?? 
+    0
+  );
 
   // Ink calculations for printer
   const links = (printerColorLinks || []).filter((lnk: any) => lnk.assetId === eq.id);
   let linkedInkRatePerPage = 0;
+  const inkSlotsBreakdown: LinkedInkSlotDetail[] = [];
 
   if (!isPostPress) {
     const oemSlots = 
@@ -325,7 +488,7 @@ export function calculateEquipmentPrintCost(
       ];
 
     if (oemSlots && oemSlots.length > 0) {
-      linkedInkRatePerPage = oemSlots.reduce((sum: number, oemSlot: any, idx: number) => {
+      oemSlots.forEach((oemSlot: any, idx: number) => {
         const slotPos = oemSlot.slotPosition || `Slot ${idx + 1}`;
         const isBlack = (oemSlot.colorGroup || '').toLowerCase().includes('black') || (oemSlot.colorGroup || '').toLowerCase().includes('k') || slotPos.toLowerCase().includes('black') || slotPos.toLowerCase().includes('slot 1');
         const colorGroupName = isBlack ? 'Black' : (oemSlot.colorGroup || (idx === 1 ? 'Cyan' : idx === 2 ? 'Magenta' : idx === 3 ? 'Yellow' : `Color ${idx + 1}`));
@@ -337,12 +500,18 @@ export function calculateEquipmentPrintCost(
           lnk.slotPosition === slotPos || 
           (lnk.slotPosition && slotPos && (lnk.slotPosition.includes(slotPos) || slotPos.includes(lnk.slotPosition))) ||
           (lnk.colorGroup && colorGroupName && lnk.colorGroup.toLowerCase() === colorGroupName.toLowerCase()) ||
-          (idx === 0 && (lnk.slotPosition?.includes('Slot 1') || lnk.colorGroup?.toLowerCase().includes('black') || lnk.colorGroup?.toLowerCase().includes('k'))) ||
-          (idx === 1 && (lnk.slotPosition?.includes('Slot 2') || lnk.colorGroup?.toLowerCase().includes('cyan') || lnk.colorGroup?.toLowerCase().includes('c'))) ||
-          (idx === 2 && (lnk.slotPosition?.includes('Slot 3') || lnk.colorGroup?.toLowerCase().includes('magenta') || lnk.colorGroup?.toLowerCase().includes('m'))) ||
-          (idx === 3 && (lnk.slotPosition?.includes('Slot 4') || lnk.colorGroup?.toLowerCase().includes('yellow') || lnk.colorGroup?.toLowerCase().includes('y')))
+          (idx === 0 && (lnk.slotPosition?.includes('Slot 1') || lnk.colorGroup?.toLowerCase() === 'black' || lnk.colorGroup?.toLowerCase() === 'k')) ||
+          (idx === 1 && (lnk.slotPosition?.includes('Slot 2') || lnk.colorGroup?.toLowerCase() === 'cyan' || lnk.colorGroup?.toLowerCase() === 'c')) ||
+          (idx === 2 && (lnk.slotPosition?.includes('Slot 3') || lnk.colorGroup?.toLowerCase() === 'magenta' || lnk.colorGroup?.toLowerCase() === 'm')) ||
+          (idx === 3 && (lnk.slotPosition?.includes('Slot 4') || lnk.colorGroup?.toLowerCase() === 'yellow' || lnk.colorGroup?.toLowerCase() === 'y'))
         );
-        const ink = activeLink ? (inventory || []).find((i: any) => i.id === activeLink.inkCode || i.skuCode === activeLink.inkCode || i.sku === activeLink.inkCode) : null;
+        const ink = activeLink ? (inventory || []).find((i: any) => 
+          i.id === activeLink.inkCode || 
+          i.skuCode === activeLink.inkCode || 
+          i.sku === activeLink.inkCode ||
+          i.specs?.inkCode === activeLink.inkCode ||
+          i.specs?.sku === activeLink.inkCode
+        ) : null;
 
         const oemVol = Number(oemSlot.oemStandardVolumeMl || oemSlot.volume || defaultVol);
         const rawYield = Number(oemSlot.oemStandardIsoYieldA4 || (oemSlot.colorGroup === 'Black' ? (eq.blackYieldPages || defaultYield) : (eq.colorYieldPages || defaultYield)));
@@ -350,25 +519,89 @@ export function calculateEquipmentPrintCost(
         const isoRate = yld > 0 ? (oemVol / yld) : 0.0169;
         
         let slotCost = yld > 0 ? (Number(oemSlot.oemPrice || defaultPrice) / yld) : ((Number(oemSlot.oemPrice || defaultPrice) / oemVol) * isoRate);
-
+        let actualInkPrice = Number(oemSlot.oemPrice || defaultPrice);
+        let actualVol = oemVol;
+        let slotYield = yld;
+        let isLinked = false;
         if (ink) {
-          const bPrice = Number(ink.unitPrice || ink.costPerPurchaseUnit || defaultPrice);
-          const rawInkVol = Number(ink.volume || ink.specs?.volume || ink.specs?.volume_ml || defaultVol);
-          const actualVol = rawInkVol > 1 ? rawInkVol : defaultVol;
+          isLinked = true;
+          actualInkPrice = Number(ink.unitPrice || ink.costPerPurchaseUnit || defaultPrice);
+          const rawInkVol = Number(
+            ink.volume || 
+            ink.specs?.volume || 
+            ink.specs?.volume_ml || 
+            ink.specs?.oemStandardVolumeMl || 
+            ink.specs?.oemVolumeMl || 
+            ink.oemStandardVolumeMl || 
+            (ink.purchaseMultiplier > 1 ? ink.purchaseMultiplier : null) ||
+            defaultVol
+          );
+          actualVol = rawInkVol > 1 ? rawInkVol : defaultVol;
 
-          const rawInkYield = Number(ink.yield || ink.standard_page_yield || ink.specs?.yield || ink.specs?.isoYield || 0);
-          const inkYield = rawInkYield > 500 ? rawInkYield : yld;
-          slotCost = inkYield > 0 ? (bPrice / inkYield) : ((bPrice / actualVol) * isoRate);
+          const rawInkYield = Number(
+            ink.yield || 
+            ink.standard_page_yield || 
+            ink.standardPageYield || 
+            ink.specs?.yield || 
+            ink.specs?.expectedYield || 
+            ink.specs?.standard_page_yield || 
+            ink.specs?.isoYield || 
+            0
+          );
+
+          const actualCostPerMl = actualVol > 0 ? (actualInkPrice / actualVol) : 0;
+          let actualRateMlPerSheet: number;
+          if (rawInkYield > 500) {
+            actualRateMlPerSheet = actualVol / rawInkYield;
+            slotYield = rawInkYield;
+          } else if (actualVol > oemVol * 1.5) {
+            // Bulk ink refill container (e.g. 500ml, 1000ml) without explicit page yield
+            // Consumes ink at printer's standard ISO baseline rate
+            actualRateMlPerSheet = isoRate;
+            slotYield = actualRateMlPerSheet > 0 ? Math.round(actualVol / actualRateMlPerSheet) : yld;
+          } else {
+            // Standard cartridge / bottle capacity matching OEM
+            actualRateMlPerSheet = yld > 0 ? (actualVol / yld) : isoRate;
+            slotYield = yld;
+          }
+          slotCost = actualCostPerMl * actualRateMlPerSheet;
         }
         
-        return sum + slotCost;
-      }, 0);
+        const roundedSlotCost = Math.round(slotCost * 100) / 100;
+        linkedInkRatePerPage += slotCost;
+
+        inkSlotsBreakdown.push({
+          slot: slotPos,
+          colorGroup: colorGroupName,
+          sku: activeLink?.inkCode || oemSlot.oemInkCode || 'OEM',
+          name: ink?.name || oemSlot.oemInkCode || slotPos,
+          bottlePrice: actualInkPrice,
+          standardVolume: actualVol,
+          isoYield: slotYield,
+          costPerPage: roundedSlotCost,
+          isLinked,
+        });
+      });
     }
   }
 
+  // Direct Field Prioritization: If persistent color ink cost is stored on machine, adopt it
+  if (persistentColorInkCost > 0) {
+    linkedInkRatePerPage = persistentColorInkCost;
+  } else {
+    linkedInkRatePerPage = Math.round(linkedInkRatePerPage * 100) / 100;
+  }
+
+  const blackSlot = inkSlotsBreakdown.find(s => 
+    (s.colorGroup || '').toLowerCase().includes('black') || 
+    (s.slot || '').toLowerCase().includes('black') || 
+    (s.slot || '').toLowerCase().includes('slot 1')
+  );
+  const bwRatePerPage = persistentBwInkCost > 0 ? persistentBwInkCost : (blackSlot ? blackSlot.costPerPage : 0);
+
   const finalCostPerPage = isPostPress 
     ? (eq.costPerConsumptionUnit || netCostPerUnit) 
-    : (netCostPerUnit + Math.round(linkedInkRatePerPage * 1000) / 1000);
+    : (persistentTotalCost > 0 ? persistentTotalCost : (netCostPerUnit + linkedInkRatePerPage));
 
   return {
     assetValue,
@@ -376,6 +609,7 @@ export function calculateEquipmentPrintCost(
     wearAllowancePerUnit: Math.round(wearAllowancePerUnit * 100) / 100,
     netCostPerUnit: Math.round(netCostPerUnit * 100) / 100,
     linkedInkRatePerPage: Math.round(linkedInkRatePerPage * 100) / 100,
+    bwRatePerPage: Math.round(bwRatePerPage * 100) / 100,
     finalCostPerPage: Math.round(finalCostPerPage * 100) / 100,
     isPostPress,
     unitLabel,
@@ -383,6 +617,7 @@ export function calculateEquipmentPrintCost(
     formattedTotal: formatUnitLAK(finalCostPerPage),
     formattedMachine: formatUnitLAK(netCostPerUnit),
     formattedInk: formatUnitLAK(linkedInkRatePerPage),
+    inkSlotsBreakdown,
   };
 }
 

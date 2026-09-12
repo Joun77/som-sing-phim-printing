@@ -140,7 +140,6 @@ export function calculateItemCosting(item: any, inventory: any[] = [], equipment
   let totalInkCostK = 0;
   let totalInkCostCMY = 0;
   let depreciationCost = 0;
-  let electricityCost = 0;
   let maintenanceCost = 0;
   let printerStdMl = 0.05;
   let inkCostPerMl = 500;
@@ -227,11 +226,10 @@ export function calculateItemCosting(item: any, inventory: any[] = [], equipment
         : costPerPageFallback;
 
       depreciationCost += Math.round(deprPerSheet * allocPages * sideFactor);
-      electricityCost += Math.round(allocPages * sideFactor * 40);
     });
   }
 
-  const machineOverhead = depreciationCost + electricityCost;
+  const machineOverhead = depreciationCost;
 
   // Post-Press Machinery Cost
   const hasPostPressModule = item.activeModules ? item.activeModules.postPressMachinery : true;
@@ -1462,7 +1460,7 @@ export default function ItemSpecConfigurator({
                     <span className="font-black text-purple-900">{formatLAK(costing.totalInkCost)}</span>
                   </div>
                   <div>
-                    <span className="text-purple-600 block text-[10px]">ຄ່າເສື່ອມເຄື່ອງພິມ & ໄຟຟ້າ:</span>
+                    <span className="text-purple-600 block text-[10px]">ຄ່າເສື່ອມເຄື່ອງພິມ & ອາໄຫຼ່:</span>
                     <span className="font-black text-purple-900">{formatLAK(costing.overheadCost)}</span>
                   </div>
                 </div>
@@ -1687,7 +1685,7 @@ export default function ItemSpecConfigurator({
                 <span className="font-black text-slate-800">{formatLAK(costing.totalInkCost)}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-50">
-                <span className="text-slate-500">3. ຄ່າເສື່ອມ & ໄຟຟ້າ (Machine Overhead):</span>
+                <span className="text-slate-500">3. ເຄື່ອງຈັກ & ອາໄຫຼ່ (Machine Overhead):</span>
                 <span className="font-black text-slate-800">{formatLAK(costing.overheadCost)}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-50">

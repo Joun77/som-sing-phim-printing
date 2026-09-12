@@ -25,7 +25,8 @@ import {
   Settings,
   ChevronRight,
   ShieldCheck,
-  BookOpen
+  BookOpen,
+  SlidersHorizontal
 } from 'lucide-react';
 
 interface NavSubItem {
@@ -207,6 +208,13 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, setCol
           labelLao: 'ພະນັກງານ (HR / Staff)',
           labelEn: 'Employee & HR',
           icon: Users,
+          roles: ['admin', 'owner', 'super_admin'],
+        },
+        {
+          id: 'master_data',
+          labelLao: 'ຂໍ້ມູນພື້ນຖານລະບົບ (Lookups)',
+          labelEn: 'Master Data Settings',
+          icon: SlidersHorizontal,
           roles: ['admin', 'owner', 'super_admin'],
         },
         {

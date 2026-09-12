@@ -31,6 +31,7 @@ const PreflightPage = lazy(() => import('./features/production/PreflightPage').t
 const ShopFloorTracker = lazy(() => import('./features/production/ShopFloorTracker').then(m => ({ default: m.ShopFloorTracker })));
 const WebCatalogPage = lazy(() => import('./features/catalog').then(m => ({ default: m.WebCatalogPage })));
 const MaterialManagement = lazy(() => import('./features/materials').then(m => ({ default: m.MaterialManagement })));
+const MasterDataManagement = lazy(() => import('./features/master-data').then(m => ({ default: m.MasterDataManagement })));
 const SupplierManagement = lazy(() => import('./features/suppliers').then(m => ({ default: m.SupplierManagement })));
 
 function ModuleSkeleton() {
@@ -92,6 +93,7 @@ function AppContent() {
                     {activeTab === 'dashboard' && <DashboardOverview />}
                     {activeTab === 'catalog' && <WebCatalogPage />}
                     {activeTab === 'materials' && <MaterialManagement />}
+                    {activeTab === 'master_data' && <MasterDataManagement />}
                     {activeTab === 'preflight' && (
                       <PreflightPage
                         onSendToQuotation={(res) => {

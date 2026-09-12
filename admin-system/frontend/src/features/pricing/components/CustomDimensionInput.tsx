@@ -7,7 +7,11 @@ import {
   Layers, 
   Sliders, 
   Sparkles,
-  Star
+  LayoutGrid,
+  FileText,
+  Image as ImageIcon,
+  CreditCard,
+  Tag
 } from 'lucide-react';
 import type { DimensionUnit, DimensionPreset } from '../types';
 
@@ -19,6 +23,16 @@ interface CustomDimensionInputProps {
   selectedPresetId?: string;
   className?: string;
 }
+
+export type PresetCategoryFilter = 'ALL' | 'DOCUMENT' | 'PHOTO' | 'CARD' | 'STICKER';
+
+const CATEGORY_TABS: { key: PresetCategoryFilter; labelLo: string; labelEn: string; icon: React.ElementType }[] = [
+  { key: 'ALL', labelLo: 'ທັງໝົດ', labelEn: 'All', icon: LayoutGrid },
+  { key: 'DOCUMENT', labelLo: 'ເອກະສານ', labelEn: 'Documents', icon: FileText },
+  { key: 'PHOTO', labelLo: 'ຮູບພາບ', labelEn: 'Photos', icon: ImageIcon },
+  { key: 'CARD', labelLo: 'ນາມບັດ & ກາດ', labelEn: 'Cards', icon: CreditCard },
+  { key: 'STICKER', labelLo: 'ສະຕິກເກີ', labelEn: 'Stickers', icon: Tag },
+];
 
 // Convert from mm to given unit
 export function mmToUnit(mm: number, unit: DimensionUnit): number {
@@ -50,11 +64,12 @@ export const CustomDimensionInput: React.FC<CustomDimensionInputProps> = ({
 }) => {
   const [unit, setUnit] = useState<DimensionUnit>('inch');
   const [presets, setPresets] = useState<DimensionPreset[]>([]);
+  const [activeCategory, setActiveCategory] = useState<PresetCategoryFilter>('ALL');
   const [isLoadingPresets, setIsLoadingPresets] = useState(false);
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [newPresetName, setNewPresetName] = useState('');
-  const [newPresetCategory, setNewPresetCategory] = useState('PHOTO');
+  const [newPresetCategory, setNewPresetCategory] = useState('DOCUMENT');
 
   // Input states in currently selected unit
   const [inputW, setInputW] = useState<string>(() => mmToUnit(widthMM, 'inch').toString());
@@ -142,8 +157,11 @@ export const CustomDimensionInput: React.FC<CustomDimensionInputProps> = ({
       });
 
       if (res.ok) {
+        const savedCategory = newPresetCategory as PresetCategoryFilter;
         setShowSaveModal(false);
         setNewPresetName('');
+        setActiveCategory(savedCategory);
+        onChangeMM(wMM, hMM, newPresetName.trim());
         await fetchPresets();
       }
     } catch (err) {
@@ -170,6 +188,31 @@ export const CustomDimensionInput: React.FC<CustomDimensionInputProps> = ({
   // Select preset
   const handleSelectPreset = (p: DimensionPreset) => {
     onChangeMM(p.width_mm, p.height_mm, p.name);
+  };
+
+  // Category counts and filter
+  const getCategoryCount = (catKey: PresetCategoryFilter) => {
+    if (catKey === 'ALL') return presets.length;
+    return presets.filter(p => p.category === catKey).length;
+  };
+
+  const filteredPresets = activeCategory === 'ALL' 
+    ? presets 
+    : presets.filter(p => p.category === activeCategory);
+
+  const getCategoryBadge = (category: string) => {
+    switch (category) {
+      case 'DOCUMENT':
+        return { labelLo: 'ເອກະສານ', labelEn: 'Doc', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+      case 'PHOTO':
+        return { labelLo: 'ຮູບພາບ', labelEn: 'Photo', color: 'bg-amber-50 text-amber-700 border-amber-200' };
+      case 'CARD':
+        return { labelLo: 'ກາດ', labelEn: 'Card', color: 'bg-purple-50 text-purple-700 border-purple-200' };
+      case 'STICKER':
+        return { labelLo: 'ສະຕິກເກີ', labelEn: 'Sticker', color: 'bg-rose-50 text-rose-700 border-rose-200' };
+      default:
+        return { labelLo: category, labelEn: category, color: 'bg-slate-50 text-slate-600 border-slate-200' };
+    }
   };
 
   return (
@@ -204,53 +247,120 @@ export const CustomDimensionInput: React.FC<CustomDimensionInputProps> = ({
         </div>
       </div>
 
-      {/* Preset Chips (Horizontal Scrollable or Wrap) */}
-      <div className="space-y-1">
+      {/* Category Tabs / Filter Pills */}
+      <div className="space-y-2">
         <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500">
-          <span>{currentLang === 'lo' ? 'ຂະໜາດມາດຕະຖານ / Presets ໃນລະບົບ' : 'Presets & Templates'}:</span>
+          <span>{currentLang === 'lo' ? 'ໝວດໝູ່ຂະໜາດ (Category)' : 'Dimension Category'}:</span>
           <button
             type="button"
-            onClick={() => setShowSaveModal(true)}
-            className="text-[10px] font-bold text-sky-600 hover:text-sky-800 flex items-center gap-1 cursor-pointer bg-sky-50 hover:bg-sky-100 px-2 py-0.5 rounded-md border border-sky-200"
+            onClick={() => {
+              if (activeCategory !== 'ALL') {
+                setNewPresetCategory(activeCategory);
+              }
+              setShowSaveModal(true);
+            }}
+            className="text-[10px] font-bold text-sky-600 hover:text-sky-800 flex items-center gap-1 cursor-pointer bg-sky-50 hover:bg-sky-100 px-2 py-0.5 rounded-md border border-sky-200 transition"
           >
             <Plus className="w-3 h-3" />
             <span>{currentLang === 'lo' ? '+ ບັນທຶກຂະໜາດໃໝ່' : '+ Save Preset'}</span>
           </button>
         </div>
 
-        <div className="flex flex-wrap gap-1.5 pt-1">
-          {presets.map((p) => {
-            // Check if active
-            const isMatch = Math.abs(p.width_mm - widthMM) < 1.5 && Math.abs(p.height_mm - heightMM) < 1.5;
+        {/* Category Pills Bar */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none">
+          {CATEGORY_TABS.map((cat) => {
+            const Icon = cat.icon;
+            const isCatActive = activeCategory === cat.key;
+            const count = getCategoryCount(cat.key);
             return (
-              <div
-                key={p.id}
-                onClick={() => handleSelectPreset(p)}
-                className={`group px-2.5 py-1 rounded-xl text-xs font-bold font-sans transition cursor-pointer flex items-center gap-1.5 border ${
-                  isMatch
-                    ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:border-sky-300 hover:bg-sky-50/50'
+              <button
+                key={cat.key}
+                type="button"
+                onClick={() => setActiveCategory(cat.key)}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer border ${
+                  isCatActive
+                    ? 'bg-sky-600 text-white border-sky-600 shadow-2xs'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <span>{p.name}</span>
-                <span className={`text-[10px] ${isMatch ? 'text-sky-100' : 'text-slate-400'}`}>
-                  {p.width}×{p.height}{p.unit === 'inch' ? '"' : p.unit}
+                <Icon className={`w-3.5 h-3.5 ${isCatActive ? 'text-white' : 'text-slate-500'}`} />
+                <span>{currentLang === 'lo' ? cat.labelLo : cat.labelEn}</span>
+                <span className={`text-[10px] px-1 py-0.2 rounded-full font-mono font-normal ${
+                  isCatActive ? 'bg-sky-700/80 text-white' : 'bg-slate-200/80 text-slate-600'
+                }`}>
+                  {count}
                 </span>
-                {!p.is_default && (
-                  <button
-                    type="button"
-                    onClick={(e) => handleDeletePreset(p.id, e)}
-                    className={`opacity-0 group-hover:opacity-100 hover:text-rose-600 p-0.5 rounded transition ${
-                      isMatch ? 'text-white hover:text-rose-200' : 'text-slate-400'
-                    }`}
-                    title="Delete preset"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
+              </button>
             );
           })}
+        </div>
+
+        {/* Preset Chips */}
+        <div className="min-h-[48px] bg-slate-50/70 border border-slate-100 rounded-xl p-2">
+          {filteredPresets.length === 0 ? (
+            <div className="flex items-center justify-between py-2 px-3 text-xs text-slate-400">
+              <span>{currentLang === 'lo' ? 'ຍັງບໍ່ມີຂະໜາດໃນໝວດນີ້' : 'No presets in this category'}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewPresetCategory(activeCategory === 'ALL' ? 'DOCUMENT' : activeCategory);
+                  setShowSaveModal(true);
+                }}
+                className="text-[11px] font-bold text-sky-600 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3 h-3" />
+                <span>{currentLang === 'lo' ? 'ເພີ່ມຂະໜາດ' : 'Add Preset'}</span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {filteredPresets.map((p) => {
+                // Check if active
+                const isMatch = Math.abs(p.width_mm - widthMM) < 1.5 && Math.abs(p.height_mm - heightMM) < 1.5;
+                const catBadge = getCategoryBadge(p.category);
+
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => handleSelectPreset(p)}
+                    className={`group px-2.5 py-1 rounded-xl text-xs font-bold font-sans transition cursor-pointer flex items-center gap-1.5 border ${
+                      isMatch
+                        ? 'bg-sky-600 text-white border-sky-600 shadow-xs ring-2 ring-sky-200'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-sky-300 hover:bg-sky-50/50'
+                    }`}
+                  >
+                    {isMatch && <Check className="w-3 h-3 text-white shrink-0" />}
+                    <span>{p.name}</span>
+                    <span className={`text-[10px] font-mono ${isMatch ? 'text-sky-100' : 'text-slate-400'}`}>
+                      {p.width}×{p.height}{p.unit === 'inch' ? '"' : p.unit}
+                    </span>
+
+                    {/* Category pill on ALL tab */}
+                    {activeCategory === 'ALL' && (
+                      <span className={`text-[9px] px-1 py-0.2 rounded border font-medium ${
+                        isMatch ? 'bg-sky-700 text-sky-100 border-sky-500' : catBadge.color
+                      }`}>
+                        {currentLang === 'lo' ? catBadge.labelLo : catBadge.labelEn}
+                      </span>
+                    )}
+
+                    {!p.is_default && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeletePreset(p.id, e)}
+                        className={`opacity-0 group-hover:opacity-100 hover:text-rose-600 p-0.5 rounded transition ${
+                          isMatch ? 'text-white hover:text-rose-200' : 'text-slate-400'
+                        }`}
+                        title="Delete custom preset"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -339,31 +449,33 @@ export const CustomDimensionInput: React.FC<CustomDimensionInputProps> = ({
 
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">
-                  {currentLang === 'lo' ? 'ໝວດໝູ່ (Category)' : 'Category'}
+                  {currentLang === 'lo' ? 'ໝວດໝູ່ Master Data (Category)' : 'Master Data Category'} *
                 </label>
                 <select
                   value={newPresetCategory}
                   onChange={(e) => setNewPresetCategory(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-sky-500 bg-white"
                 >
-                  <option value="PHOTO">ຮູບພາບ (Photo)</option>
-                  <option value="CARD">ນາມບັດ / ກາດ (Card)</option>
-                  <option value="STICKER">ສະຕິກເກີ (Sticker)</option>
-                  <option value="DOCUMENT">ເອກະສານ / ປຶ້ມ (Document)</option>
-                  <option value="POSTER">ໂປສເຕີ (Poster)</option>
+                  <option value="DOCUMENT">{currentLang === 'lo' ? 'ເອກະສານທົ່ວໄປ (General Documents)' : 'General Documents'}</option>
+                  <option value="PHOTO">{currentLang === 'lo' ? 'ຮູບພາບ & ໂຟໂຕ້ (Photo Prints)' : 'Photo Prints'}</option>
+                  <option value="CARD">{currentLang === 'lo' ? 'ນາມບັດ & ກາດ (Cards & Invitations)' : 'Cards & Invitations'}</option>
+                  <option value="STICKER">{currentLang === 'lo' ? 'ສະຕິກເກີ & ປ້າຍ (Stickers & Labels)' : 'Stickers & Labels'}</option>
                 </select>
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  {currentLang === 'lo' ? 'ຂະໜາດນີ້ຈະຖືກບັນທຶກເຂົ້າ Master Data ແລະ ສະແດງໃນແທັບໝວດໝູ່ທີ່ເລືອກ' : 'This preset will be saved into Master Data under the chosen category'}
+                </span>
               </div>
 
               <div className="p-3 bg-slate-50 rounded-xl text-xs space-y-1 text-slate-600 border border-slate-100 font-sans">
                 <div className="flex justify-between">
-                  <span>ຂະໜາດທີ່ບັນທຶກ:</span>
+                  <span>{currentLang === 'lo' ? 'ຂະໜາດທີ່ບັນທຶກ:' : 'Preset Dimensions:'}</span>
                   <span className="font-bold text-slate-900">
                     {inputW} × {inputH} {unit === 'inch' ? 'ນິ້ວ (inch)' : unit}
                   </span>
                 </div>
                 <div className="flex justify-between text-[11px] text-slate-400">
-                  <span>ຄ່າ MM (ມມ):</span>
-                  <span>{Math.round(unitToMM(parseFloat(inputW) || 0, unit))} × {Math.round(unitToMM(parseFloat(inputH) || 0, unit))} mm</span>
+                  <span>{currentLang === 'lo' ? 'ຂະໜາດເປັນ MM (ມມ):' : 'Converted MM:'}</span>
+                  <span className="font-mono">{Math.round(unitToMM(parseFloat(inputW) || 0, unit))} × {Math.round(unitToMM(parseFloat(inputH) || 0, unit))} mm</span>
                 </div>
               </div>
 
@@ -371,7 +483,7 @@ export const CustomDimensionInput: React.FC<CustomDimensionInputProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowSaveModal(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
                   {currentLang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
                 </button>
@@ -380,7 +492,7 @@ export const CustomDimensionInput: React.FC<CustomDimensionInputProps> = ({
                   disabled={isSavingPreset || !newPresetName.trim()}
                   className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 disabled:opacity-50 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
-                  {isSavingPreset ? 'ກຳລັງບັນທຶກ...' : (currentLang === 'lo' ? 'ບັນທຶກລົງລະບົບ' : 'Save to DB')}
+                  {isSavingPreset ? 'ກຳລັງບັນທຶກ...' : (currentLang === 'lo' ? 'ບັນທຶກລົງ Master Data' : 'Save to Master Data')}
                 </button>
               </div>
             </form>

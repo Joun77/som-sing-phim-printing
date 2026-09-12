@@ -54,6 +54,10 @@ export interface Equipment {
   clickRateColor?: number;
   clickRateBW?: number;
   supportedInkSets?: string[];
+  colorInkCost?: number;
+  bwInkCost?: number;
+  linkedInkCostPerPage?: number;
+  inkCostPerPage?: number;
   purchaseDate: string;
   warrantyExpiration: string;
   lastMaintenanceDate: string;

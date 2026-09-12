@@ -158,6 +158,24 @@ type CalculationRequest struct {
 	BindingLifetimeCycles float64 `json:"binding_lifetime_cycles"` // Lifecycle cycles for binding machine
 	BindingMachinePrice   float64 `json:"binding_machine_price"`   // Purchase price of binding machine
 
+	// Electricity & Power Consumption
+	MachinePowerWatts   float64 `json:"machine_power_watts"`   // Operating power in Watts
+	MachineRuntimeHours float64 `json:"machine_runtime_hours"` // Estimated operating runtime in hours
+
+	// Guillotine & Cutting Options
+	RequiresGuillotineCut bool    `json:"requires_guillotine_cut"`
+	GuillotineFlatFeeLAK  float64 `json:"guillotine_flat_fee_lak"` // Override or defaults to 10,000 LAK
+
+	// Parent Sheet 31x43" & Rigid Board
+	Use31x43ParentSheet  bool    `json:"use_31x43_parent_sheet"`
+	IsRigidSubstrate     bool    `json:"is_rigid_substrate"`
+	RigidBoardPricePerM2 float64 `json:"rigid_board_price_per_m2"`
+
+	// Packaging Options
+	IncludePackaging     bool    `json:"include_packaging"`
+	PackagingCostPerUnit float64 `json:"packaging_cost_per_unit"`
+	PackagingType        string  `json:"packaging_type"` // e.g. "BOX_SMALL", "BOX_LARGE", "CORRUGATED", "KRAFT_WRAP"
+
 	TargetCurrency string `json:"target_currency"`
 }
 
@@ -170,6 +188,9 @@ type CostBreakdownItem struct {
 	DepreciationCost float64 `json:"depreciation_cost"`
 	MaintenanceCost  float64 `json:"maintenance_cost"`
 	MachineCost      float64 `json:"machine_cost"`
+	ElectricityCost  float64 `json:"electricity_cost"`
+	CuttingCost      float64 `json:"cutting_cost"`
+	PackagingCost    float64 `json:"packaging_cost"`
 	SetupCost        float64 `json:"setup_cost"`
 	FinishingCost    float64 `json:"finishing_cost"`
 	LaborCost        float64 `json:"labor_cost"`
@@ -187,17 +208,20 @@ type CalculationResponse struct {
 	UnitBreakdown  CostBreakdownItem `json:"unit_breakdown"`
 
 	// Cost breakdown
-	PaperCost           float64 `json:"paper_cost"`
-	OffcutRebateCost    float64 `json:"offcut_rebate_cost"`
-	InkCost             float64 `json:"ink_cost"` // Total combined ink cost
-	InkCostK            float64 `json:"ink_cost_k"`
-	InkCostCMY          float64 `json:"ink_cost_cmy"`
-	PlateCost           float64 `json:"plate_cost"`
-	DepreciationCost    float64 `json:"depreciation_cost"`
-	MaintenanceCost     float64 `json:"maintenance_cost"`
-	MachineCost         float64 `json:"machine_cost"`
-	CustomFinishingCost float64 `json:"custom_finishing_cost"`
-	LaminationCost      float64 `json:"lamination_cost"`
+	PaperCost             float64 `json:"paper_cost"`
+	OffcutRebateCost      float64 `json:"offcut_rebate_cost"`
+	InkCost               float64 `json:"ink_cost"` // Total combined ink cost
+	InkCostK              float64 `json:"ink_cost_k"`
+	InkCostCMY            float64 `json:"ink_cost_cmy"`
+	PlateCost             float64 `json:"plate_cost"`
+	DepreciationCost      float64 `json:"depreciation_cost"`
+	MaintenanceCost       float64 `json:"maintenance_cost"`
+	MachineCost           float64 `json:"machine_cost"`
+	ElectricityCost       float64 `json:"electricity_cost"`
+	GuillotineCuttingCost float64 `json:"guillotine_cutting_cost"`
+	PackagingCost         float64 `json:"packaging_cost"`
+	CustomFinishingCost   float64 `json:"custom_finishing_cost"`
+	LaminationCost        float64 `json:"lamination_cost"`
 	BindingCost         float64 `json:"binding_cost"`
 	LaborCost           float64 `json:"labor_cost"`
 	SetupCost           float64 `json:"setup_cost"`
@@ -243,6 +267,16 @@ func init() {
 
 // a4BaselineArea is the reference area (mm²) used for Paper Area Factor S (210 x 297 mm = 62370)
 const a4BaselineArea = 62370.0
+
+// Standard Electricity, Cutting, and Parent Sheet Constants
+const (
+	StandardElectricityRateLAK  = 1700.0  // Standard commercial electricity rate in Laos (LAK/kWh)
+	GuillotineFlatCuttingFeeLAK = 10000.0 // Standard flat job setup fee for Guillotine cutter (LAK)
+	ParentSheet31x43WidthMM     = 787.0   // Standard 31" parent sheet width (mm)
+	ParentSheet31x43HeightMM    = 1092.0  // Standard 43" parent sheet height (mm)
+	StandardRigidBoardWidthMM   = 1220.0  // Standard 4x8 ft rigid board width (mm)
+	StandardRigidBoardHeightMM  = 2440.0  // Standard 4x8 ft rigid board height (mm)
+)
 
 // CalculateSpineWidthMM calculates spine thickness for booklets/books using Decimal precision
 // Formula: (pageCount / 2.0) * sheetThickness + coverAndGlueOffset
@@ -433,11 +467,24 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		jobH = 297.0
 	}
 
-	// ── Step 1: Paper Area Factor S ──────────────────────────────────────────
+	// ── Step 1: Paper Area Factor S & Imposition ───────────────────────────
 	dJobW := decimal.NewFromFloat(jobW)
 	dJobH := decimal.NewFromFloat(jobH)
 	dA4Base := decimal.NewFromFloat(a4BaselineArea)
 	dAreaFactor := dJobW.Mul(dJobH).Div(dA4Base)
+
+	// Resolve 31x43" parent sheet or Rigid board dimensions if specified
+	if req.Use31x43ParentSheet || req.PaperFormat == "31x43" || req.PaperFormat == "parent_sheet" {
+		if req.ParentSheetWidthMM <= 0 || req.ParentSheetHeightMM <= 0 {
+			req.ParentSheetWidthMM = ParentSheet31x43WidthMM
+			req.ParentSheetHeightMM = ParentSheet31x43HeightMM
+		}
+	} else if req.IsRigidSubstrate || req.PaperFormat == "rigid" {
+		if req.ParentSheetWidthMM <= 0 || req.ParentSheetHeightMM <= 0 {
+			req.ParentSheetWidthMM = StandardRigidBoardWidthMM
+			req.ParentSheetHeightMM = StandardRigidBoardHeightMM
+		}
+	}
 
 	cutsPerSheet := req.CutsPerSheet
 	var impositionGrid *LayoutGrid
@@ -464,7 +511,11 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		dOffcutRebate = decimal.NewFromFloat(req.OffcutRebateCost)
 	}
 
-	if req.PaperFormat == "roll" && req.PaperRollPricePerM2 > 0 {
+	if (req.IsRigidSubstrate || req.PaperFormat == "rigid") && req.RigidBoardPricePerM2 > 0 {
+		dPricePerM2 := decimal.NewFromFloat(req.RigidBoardPricePerM2)
+		dJobAreaM2 := dJobW.Div(decimal.NewFromFloat(1000.0)).Mul(dJobH.Div(decimal.NewFromFloat(1000.0)))
+		dPaperCost = dPricePerM2.Mul(dJobAreaM2).Mul(dQuantity)
+	} else if req.PaperFormat == "roll" && req.PaperRollPricePerM2 > 0 {
 		dPricePerM2 := decimal.NewFromFloat(req.PaperRollPricePerM2)
 		dJobAreaM2 := dJobW.Div(decimal.NewFromFloat(1000.0)).Mul(dJobH.Div(decimal.NewFromFloat(1000.0)))
 		dPaperCost = dPricePerM2.Mul(dJobAreaM2).Mul(dQuantity)
@@ -755,14 +806,60 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		}
 	}
 
+	// Guillotine Cutting Fee
+	dGuillotineCost := decimal.Zero
+	if req.RequiresGuillotineCut || (req.CutsPerSheet > 1 && req.GuillotineFlatFeeLAK > 0) {
+		fee := GuillotineFlatCuttingFeeLAK
+		if req.GuillotineFlatFeeLAK > 0 {
+			fee = req.GuillotineFlatFeeLAK
+		}
+		dGuillotineCost = decimal.NewFromFloat(fee)
+	}
+
+	// Electricity Cost calculation (StandardElectricityRateLAK = 1,700 LAK/kWh)
+	dElectricityCost := decimal.Zero
+	if req.MachinePowerWatts > 0 {
+		runtime := req.MachineRuntimeHours
+		if runtime <= 0 {
+			runtime = float64(req.Quantity) / 1000.0
+			if runtime < 0.1 {
+				runtime = 0.1
+			}
+		}
+		dKWh := decimal.NewFromFloat(req.MachinePowerWatts).Div(decimal.NewFromFloat(1000.0)).Mul(decimal.NewFromFloat(runtime))
+		dElectricityCost = dKWh.Mul(decimal.NewFromFloat(StandardElectricityRateLAK)).Round(2)
+	}
+
+	// Packaging Cost calculation
+	dPackagingCost := decimal.Zero
+	if req.IncludePackaging {
+		pkgUnit := req.PackagingCostPerUnit
+		if pkgUnit <= 0 {
+			switch strings.ToUpper(req.PackagingType) {
+			case "BOX_LARGE", "LARGE_BOX":
+				pkgUnit = 5000.0
+			case "KRAFT_WRAP", "PAPER_WRAP":
+				pkgUnit = 1000.0
+			case "CORRUGATED", "HEAVY_DUTY":
+				pkgUnit = 8000.0
+			default:
+				pkgUnit = 2500.0 // Standard box
+			}
+		}
+		dPackagingCost = decimal.NewFromFloat(pkgUnit).Mul(dQuantity)
+	}
+
 	// ── Step 7: Totals, Overhead, Spoilage, Net Cost ───────────────────────────
 	dDirectCost := dPaperCost.
 		Add(dInkCost).
 		Add(dPlateCost).
 		Add(dDepreciationCost).
 		Add(dMaintenanceCost).
+		Add(dElectricityCost).
 		Add(dSetupCost).
 		Add(dFinishingCost).
+		Add(dGuillotineCost).
+		Add(dPackagingCost).
 		Add(dCustomFinishingCost).
 		Add(dLaborCost)
 
@@ -864,6 +961,9 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		DepreciationCost: roundToTwoDecimals(dDepreciationCost.InexactFloat64()),
 		MaintenanceCost:  roundToTwoDecimals(dMaintenanceCost.InexactFloat64()),
 		MachineCost:      roundToTwoDecimals(dMachineCost.InexactFloat64()),
+		ElectricityCost:  roundToTwoDecimals(dElectricityCost.InexactFloat64()),
+		CuttingCost:      roundToTwoDecimals(dGuillotineCost.InexactFloat64()),
+		PackagingCost:    roundToTwoDecimals(dPackagingCost.InexactFloat64()),
 		SetupCost:        roundToTwoDecimals(dSetupCost.InexactFloat64()),
 		FinishingCost:    roundToTwoDecimals(dFinishingCost.Add(dCustomFinishingCost).InexactFloat64()),
 		LaborCost:        roundToTwoDecimals(dLaborCost.InexactFloat64()),
@@ -880,6 +980,9 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		DepreciationCost: roundToTwoDecimals(dDepreciationCost.Div(dQuantity).InexactFloat64()),
 		MaintenanceCost:  roundToTwoDecimals(dMaintenanceCost.Div(dQuantity).InexactFloat64()),
 		MachineCost:      roundToTwoDecimals(dMachineCost.Div(dQuantity).InexactFloat64()),
+		ElectricityCost:  roundToTwoDecimals(dElectricityCost.Div(dQuantity).InexactFloat64()),
+		CuttingCost:      roundToTwoDecimals(dGuillotineCost.Div(dQuantity).InexactFloat64()),
+		PackagingCost:    roundToTwoDecimals(dPackagingCost.Div(dQuantity).InexactFloat64()),
 		SetupCost:        roundToTwoDecimals(dSetupCost.Div(dQuantity).InexactFloat64()),
 		FinishingCost:    roundToTwoDecimals(dFinishingCost.Add(dCustomFinishingCost).Div(dQuantity).InexactFloat64()),
 		LaborCost:        roundToTwoDecimals(dLaborCost.Div(dQuantity).InexactFloat64()),
@@ -915,6 +1018,9 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		DepreciationCost:      roundToTwoDecimals(dDepreciationCost.InexactFloat64()),
 		MaintenanceCost:       roundToTwoDecimals(dMaintenanceCost.InexactFloat64()),
 		MachineCost:           roundToTwoDecimals(dMachineCost.InexactFloat64()),
+		ElectricityCost:       roundToTwoDecimals(dElectricityCost.InexactFloat64()),
+		GuillotineCuttingCost: roundToTwoDecimals(dGuillotineCost.InexactFloat64()),
+		PackagingCost:         roundToTwoDecimals(dPackagingCost.InexactFloat64()),
 		CustomFinishingCost:   roundToTwoDecimals(dCustomFinishingCost.InexactFloat64()),
 		LaminationCost:        roundToTwoDecimals(dLaminationCost.InexactFloat64()),
 		BindingCost:           roundToTwoDecimals(dBindingCost.InexactFloat64()),

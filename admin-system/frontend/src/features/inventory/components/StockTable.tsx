@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Edit3, Plus, CheckCircle2, AlertTriangle, XCircle, Search, X, Eye, Trash2 } from 'lucide-react';
+import { Edit3, CheckCircle2, AlertTriangle, XCircle, Search, X, Eye, Trash2, Wrench } from 'lucide-react';
 import { MaterialMaster } from '../types';
 import { updateMaterialDirect, deleteMaterial } from '../api/inventoryApi';
 import { useApp } from '@store/AppContext';
@@ -9,8 +9,8 @@ interface StockTableProps {
   materials: MaterialMaster[];
   loading: boolean;
   onRefresh: () => void;
-  onOpenInbound?: (material?: MaterialMaster) => void;
   onViewDetails?: (material: MaterialMaster) => void;
+  onIssuePart?: (material: MaterialMaster) => void;
 }
 
 const normalizeLaoUnit = (unit?: string, fallback = 'ແຜ່ນ') => {
@@ -27,7 +27,7 @@ const normalizeLaoUnit = (unit?: string, fallback = 'ແຜ່ນ') => {
   return unit;
 };
 
-export const StockTable = React.memo(function StockTable({ materials, loading, onRefresh, onOpenInbound, onViewDetails }: StockTableProps) {
+export const StockTable = React.memo(function StockTable({ materials, loading, onRefresh, onViewDetails, onIssuePart }: StockTableProps) {
   const queryClient = useQueryClient();
   const { showToast, deleteInventorySku, formatCurrency, updateMaterialReorderPoint } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,7 +71,33 @@ export const StockTable = React.memo(function StockTable({ materials, loading, o
       (m.sku || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (m.category || '').toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesCategory = categoryFilter === 'ALL' || (m.category || '').toLowerCase() === categoryFilter.toLowerCase();
+    const cat = (m.category || '').toLowerCase();
+    const name = (m.name || '').toLowerCase();
+    const sku = (m.sku || '').toUpperCase();
+
+    let matchesCategory = categoryFilter === 'ALL';
+    if (categoryFilter === 'paper') {
+      matchesCategory = (cat === 'paper' || cat === 'material') && !cat.includes('offcut') && !cat.includes('parent') && !name.includes('31x43');
+    } else if (categoryFilter === 'parent_sheet') {
+      matchesCategory = cat === 'parent_sheet' || cat === 'parentsheet' || name.includes('31x43') || name.includes('787') || sku.includes('PARENT');
+    } else if (categoryFilter === 'offcut') {
+      matchesCategory = cat === 'offcut' || sku.startsWith('OFF-');
+    } else if (categoryFilter === 'ink') {
+      matchesCategory = cat === 'ink' || cat === 'toner';
+    } else if (categoryFilter === 'rigid_substrates') {
+      matchesCategory = cat === 'rigid' || cat === 'rigid_substrates' || sku.startsWith('RIGID-') || name.includes('foam') || name.includes('acrylic') || name.includes('plaswood');
+    } else if (categoryFilter === 'lamination') {
+      matchesCategory = cat === 'lamination' || cat === 'film' || cat === 'cutting_supplies';
+    } else if (categoryFilter === 'binding') {
+      matchesCategory = cat === 'binding' || cat === 'glue' || cat === 'spiral' || cat === 'wire';
+    } else if (categoryFilter === 'packaging') {
+      matchesCategory = cat === 'packaging' || sku.startsWith('PKG-');
+    } else if (categoryFilter === 'spare_parts') {
+      matchesCategory = cat === 'spare_parts' || cat === 'spareparts' || cat === 'hardware' || sku.startsWith('PART-');
+    } else if (categoryFilter !== 'ALL') {
+      matchesCategory = cat === categoryFilter.toLowerCase();
+    }
+
     return matchesSearch && matchesCategory;
   });
 
@@ -170,17 +196,28 @@ export const StockTable = React.memo(function StockTable({ materials, loading, o
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-          {['ALL', 'paper', 'offcut', 'ink', 'lamination', 'binding'].map((cat) => (
+          {[
+            { id: 'ALL', label: 'ທັງໝວດໝູ່' },
+            { id: 'paper', label: 'ເຈ້ຍ & ວັດສະດຸ' },
+            { id: 'parent_sheet', label: 'ເຈ້ຍໃຫຍ່ 31x43"' },
+            { id: 'offcut', label: 'ເສດເຈ້ຍ (OFFCUT)' },
+            { id: 'ink', label: 'ນ້ຳໝຶກ & ໂທເນີ' },
+            { id: 'rigid_substrates', label: 'ແຜ່ນແຂງ Rigid' },
+            { id: 'lamination', label: 'ເຄືອບ & ຕັດ' },
+            { id: 'binding', label: 'ງານເຂົ້າເລັ້ມ' },
+            { id: 'packaging', label: 'ບັນຈຸພັນ' },
+            { id: 'spare_parts', label: 'ອະໄຫຼ່ສຳຮອງ' },
+          ].map((cat) => (
             <button
-              key={cat}
-              onClick={() => setCategoryFilter(cat)}
+              key={cat.id}
+              onClick={() => setCategoryFilter(cat.id)}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                categoryFilter === cat
+                categoryFilter === cat.id
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {cat === 'ALL' ? 'ທັງໝວດໝູ່' : cat === 'offcut' ? 'ເສດເຈ້ຍ (OFFCUT)' : cat.toUpperCase()}
+              {cat.label}
             </button>
           ))}
         </div>
@@ -215,29 +252,56 @@ export const StockTable = React.memo(function StockTable({ materials, loading, o
                   </td>
                 </tr>
               ) : (
-                filteredMaterials.map((m) => (
-                  <tr key={m.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-bold text-slate-900">{m.name}</span>
-                        {(m.category?.toLowerCase() === 'offcut' || m.technical_specs?.dimensionFormatted) && (
-                          <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded text-[10px] font-mono font-bold">
-                            {m.technical_specs?.dimensionFormatted || 'Offcut'}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-blue-600 font-mono mt-0.5">{m.sku || m.id}</div>
-                    </td>
+                filteredMaterials.map((m) => {
+                  const catLower = (m.category || '').toLowerCase();
+                  const isSpare = catLower.includes('spare') || catLower.includes('part') || catLower.includes('ອະໄຫຼ່') || Boolean((m as any).isSparePart);
+                  const assignedMachine = (m as any).assignedPrinterId || (m as any).assignedMachineName || m.technical_specs?.assignedPrinterId || m.technical_specs?.assignedMachineName;
+                  const modelRef = (m as any).modelRef || (m as any).partModelRef || m.technical_specs?.modelRef || m.technical_specs?.partModelRef;
+                  const partYield = Number((m as any).partYield || m.technical_specs?.partYield || m.technical_specs?.expectedLifespanUnits || 0);
 
-                    <td className="py-3.5 px-4">
-                      <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
-                        m.category?.toLowerCase() === 'offcut'
-                          ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                          : 'bg-slate-100 text-slate-700'
-                      }`}>
-                        {m.category || 'General'}
-                      </span>
-                    </td>
+                  return (
+                    <tr key={m.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-900">{m.name}</span>
+                          {(m.category?.toLowerCase() === 'offcut' || m.technical_specs?.dimensionFormatted) && (
+                            <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded text-[10px] font-mono font-bold">
+                              {m.technical_specs?.dimensionFormatted || 'Offcut'}
+                            </span>
+                          )}
+                          {isSpare && assignedMachine && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded text-[10px] font-bold">
+                              <Wrench className="w-2.5 h-2.5 text-indigo-600" />
+                              <span>ເຄື່ອງ: {assignedMachine}</span>
+                            </span>
+                          )}
+                          {isSpare && modelRef && (
+                            <span className="px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded text-[10px] font-mono font-bold">
+                              OEM: {modelRef}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-blue-600 font-mono mt-0.5 flex items-center gap-2 flex-wrap">
+                          <span>{m.sku || m.id}</span>
+                          {isSpare && partYield > 0 && (
+                            <span className="text-slate-400 font-sans text-[10px]">
+                              (ອາຍຸການໃຊ້ງານ: {partYield.toLocaleString()} {normalizeLaoUnit(m.consumption_unit, 'ແຜ່ນ')})
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-4">
+                        <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                          m.category?.toLowerCase() === 'offcut'
+                            ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                            : isSpare
+                              ? 'bg-violet-50 text-violet-700 border border-violet-200'
+                              : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          {isSpare ? 'ອະໄຫຼ່ (Spare Parts)' : (m.category || 'General')}
+                        </span>
+                      </td>
 
                     <td className="py-3.5 px-4 text-center">
                       <div className="font-black text-slate-900 text-sm sm:text-base">
@@ -296,14 +360,14 @@ export const StockTable = React.memo(function StockTable({ materials, loading, o
                           <Edit3 className="w-3.5 h-3.5" />
                           ແກ້ໄຂ
                         </button>
-                        {onOpenInbound && (
+                        {onIssuePart && (isSpare || m.category?.toLowerCase() === 'hardware' || (m.sku || '').startsWith('PART-')) && (
                           <button
-                            onClick={() => onOpenInbound(m)}
-                            className="p-1.5 hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700 rounded-xl transition-all border border-emerald-100 hover:border-emerald-200 shadow-sm flex items-center gap-1 text-xs font-semibold cursor-pointer"
-                            title="ຮັບເຂົ້າເພີ່ມ (Restock)"
+                            onClick={() => onIssuePart(m)}
+                            className="p-1.5 hover:bg-amber-50 text-amber-700 hover:text-amber-800 rounded-xl transition-all border border-amber-200 hover:border-amber-300 shadow-sm flex items-center gap-1 text-xs font-semibold cursor-pointer"
+                            title="ເບີກໃສ່ເຄື່ອງຈັກ (Issue to Machine)"
                           >
-                            <Plus className="w-3.5 h-3.5" />
-                            ຮັບເຂົ້າ
+                            <Wrench className="w-3.5 h-3.5" />
+                            ເບີກໃສ່ເຄື່ອງ
                           </button>
                         )}
                         <button
@@ -317,7 +381,8 @@ export const StockTable = React.memo(function StockTable({ materials, loading, o
                       </div>
                     </td>
                   </tr>
-                ))
+                );
+              })
               )}
             </tbody>
           </table>

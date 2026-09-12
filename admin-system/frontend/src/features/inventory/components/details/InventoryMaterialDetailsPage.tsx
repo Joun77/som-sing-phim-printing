@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Trash2, Edit3, ShieldAlert, Package, Calendar, Truck, Layers, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit3, ShieldAlert, Package, Calendar, Truck, Layers, AlertTriangle, CheckCircle, XCircle, Wrench } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import { calculatePaperUnitCost } from '@utils/costCalculator';
@@ -145,19 +145,44 @@ export default function InventoryMaterialDetailsPage({
 
   // Convert matched inbound logs to batch items
   const inboundAsBatches = matchedInboundEntries.map((e: any) => {
-    const packQty = Number(e.quantity || e.importQty || e.currentQty || e.initialQty || 1);
-    const totalUnits = (isSheetPaper || isInk) ? packQty * multiplier : packQty;
-    const totalCost = Number(e.totalPrice || (e.unitPrice ? e.unitPrice * packQty : targetItem?.costPerPurchaseUnit || 0));
-    const reamCost = packQty > 0 ? Math.round(totalCost / packQty) : totalCost;
-    const calculatedPerSheet = isSheetPaper
-      ? calculatePaperUnitCost({ totalCost, packCount: packQty, sheetsPerPack: multiplier, totalSheets: totalUnits })
-      : (multiplier > 0 ? Math.round(totalCost / totalUnits) : reamCost);
+    const rawQuantity = Number(e.quantity || e.importQty || e.currentQty || e.initialQty || 1);
+    const totalCost = Number(e.totalPrice || (e.unitPrice ? e.unitPrice * rawQuantity : targetItem?.costPerPurchaseUnit || 0));
+
+    let packQty = rawQuantity;
+    let totalUnits = rawQuantity;
+    if (isSheetPaper || isInk) {
+      if (rawQuantity >= multiplier && multiplier > 1) {
+        totalUnits = rawQuantity;
+        packQty = Math.max(1, Math.round(rawQuantity / multiplier));
+      } else {
+        packQty = rawQuantity;
+        totalUnits = rawQuantity * multiplier;
+      }
+    }
+
+    const pricePerPack = packQty > 0 ? Math.round(totalCost / packQty) : totalCost;
+
+    // Direct resolution: check if costPerConsumptionUnit / costPerSheet already exists
+    const directStoredCost = Number(
+      e.costPerConsumptionUnit || 
+      e.costPerSheet || 
+      e.specs?.costPerConsumptionUnit || 
+      e.specs?.costPerSheet ||
+      targetItem?.costPerConsumptionUnit ||
+      targetItem?.cost_per_consumption_unit ||
+      0
+    );
+
+    const calculatedPerSheet = (directStoredCost > 0 && (multiplier <= 1 || directStoredCost < pricePerPack))
+      ? directStoredCost
+      : (totalUnits > 0 ? Math.round((totalCost / totalUnits) * 100) / 100 : (multiplier > 0 ? Math.round(pricePerPack / multiplier) : pricePerPack));
 
     return {
       id: e.poNumber || e.id || `LOT-${targetItem?.id}`,
       purchaseDate: e.inboundDate || e.receiptDate || e.importDate || '-',
-      supplierName: e.supplierName || e.supplier || e.vendor || 'Restock Supplier',
-      purchasePricePerReam: reamCost,
+      supplierName: e.supplierName || e.supplier || e.vendor || 'Supplier',
+      purchasePricePerReam: pricePerPack,
+      totalCost: totalCost,
       costPerSheet: calculatedPerSheet,
       initialQty: totalUnits,
       currentQty: totalUnits
@@ -196,14 +221,56 @@ export default function InventoryMaterialDetailsPage({
     activeCurrentQty = activeCurrentQty * multiplier;
   }
 
-  const lotPurchaseReamPrice = Number(activeLot?.purchasePricePerReam || activeLot?.purchasePrice || targetItem?.costPerPurchaseUnit || 95000);
-  const perSheetCost = isSheetPaper
-    ? (activeLot?.costPerSheet && activeLot.costPerSheet < lotPurchaseReamPrice
-        ? activeLot.costPerSheet
-        : (targetItem?.costPerConsumptionUnit && targetItem.costPerConsumptionUnit < lotPurchaseReamPrice
-            ? targetItem.costPerConsumptionUnit
-            : calculatePaperUnitCost({ totalCost: lotPurchaseReamPrice, packCount: 1, sheetsPerPack: multiplier })))
-    : Number(activeLot?.costPerSheet || targetItem?.costPerConsumptionUnit || 0);
+  // Priority 1: Direct stored consumption unit cost from material, batch or linked inbound
+  const storedConsumptionCost = Number(
+    targetItem?.costPerConsumptionUnit || 
+    targetItem?.cost_per_consumption_unit || 
+    activeLot?.costPerSheet ||
+    activeLot?.cost_per_consumption_unit ||
+    matchedInboundEntries[0]?.costPerConsumptionUnit ||
+    matchedInboundEntries[0]?.costPerSheet ||
+    matchedInboundEntries[0]?.specs?.costPerConsumptionUnit ||
+    0
+  );
+
+  const rawPurchasePrice = Number(
+    targetItem?.costPerPurchaseUnit || 
+    targetItem?.cost_per_purchase_unit || 
+    activeLot?.purchasePricePerReam || 
+    activeLot?.purchasePrice || 
+    matchedInboundEntries[0]?.costPerPurchaseUnit ||
+    matchedInboundEntries[0]?.unitPrice ||
+    0
+  );
+
+  const lotTotalCost = Number(
+    activeLot?.totalCost || 
+    matchedInboundEntries[0]?.totalPrice || 
+    (rawPurchasePrice > 0 && activeInitialQty > 0 && multiplier > 1 && rawPurchasePrice < 200000 ? (rawPurchasePrice * Math.max(1, Math.round(activeInitialQty / multiplier))) : rawPurchasePrice)
+  );
+
+  let finalPerSheetCost = storedConsumptionCost;
+
+  // Auto-heal: If storedConsumptionCost was previously corrupted by dividing total lot cost by 500 instead of total sheets
+  // e.g. 5 packs of Double A 80g bought for 300,000 -> activeInitialQty = 2,500 sheets.
+  // If storedConsumptionCost == 600 and lotTotalCost == 300,000 (meaning 600 * 500 = 300,000):
+  if (isSheetPaper && activeInitialQty >= (2 * multiplier) && finalPerSheetCost > 0 && lotTotalCost > 0 && Math.round(finalPerSheetCost * multiplier) === Math.round(lotTotalCost)) {
+    finalPerSheetCost = Math.round((lotTotalCost / activeInitialQty) * 100) / 100;
+  } else if (finalPerSheetCost <= 0 || (rawPurchasePrice > 0 && multiplier > 1 && finalPerSheetCost >= rawPurchasePrice)) {
+    if (lotTotalCost > 0 && activeInitialQty > 0) {
+      finalPerSheetCost = Math.round((lotTotalCost / activeInitialQty) * 100) / 100;
+    } else if (rawPurchasePrice > 0 && multiplier > 0) {
+      finalPerSheetCost = Math.round((rawPurchasePrice / multiplier) * 100) / 100;
+    }
+  }
+
+  // Calculate proper purchase price per pack/ream (e.g. 60,000 LAK / ream)
+  let purchasePricePerReam = rawPurchasePrice;
+  if (isSheetPaper && multiplier > 1 && finalPerSheetCost > 0) {
+    if (purchasePricePerReam <= 0 || purchasePricePerReam >= (finalPerSheetCost * multiplier * 1.5)) {
+      purchasePricePerReam = Math.round(finalPerSheetCost * multiplier);
+    }
+  }
 
   const lotData = {
     parentItem: targetItem,
@@ -212,8 +279,9 @@ export default function InventoryMaterialDetailsPage({
     purchaseDate: activeLot?.purchaseDate || targetItem?.receiptDate || targetItem?.importDate || '-',
     supplierName: activeLot?.supplierName || targetItem?.supplierName || targetItem?.supplier || targetItem?.vendor || '-',
     paymentMethod: activeLot?.paymentMethod || targetItem?.paymentMethod || 'TRANSFER',
-    costPerSheet: perSheetCost,
-    purchasePrice: lotPurchaseReamPrice,
+    costPerSheet: finalPerSheetCost,
+    purchasePrice: purchasePricePerReam,
+    totalCost: lotTotalCost,
     currentQty: activeCurrentQty,
     initialQty: activeInitialQty,
     usageHistory: targetItem?.usageHistory || targetItem?.dischargeLogs || []
@@ -340,9 +408,14 @@ export default function InventoryMaterialDetailsPage({
               {currentLang === 'lo' ? 'ຕົ້ນທຶນຕໍ່ໜ່ວຍເບີກ (Unit Cost)' : 'Consumption Unit Cost'}
             </span>
             <span className="text-xl font-black text-emerald-600 font-mono block mt-1">
-              {formatLAK(lotData.costPerSheet || targetItem.costPerConsumptionUnit)}
+              {formatLAK(lotData.costPerSheet || finalPerSheetCost)}
               <span className="text-xs text-slate-400 font-bold ml-1">/{normalizeLaoUnit(targetItem.consumptionUnit, 'ແຜ່ນ')}</span>
             </span>
+            {purchasePricePerReam > 0 && multiplier > 1 && (
+              <span className="text-[11px] text-slate-500 font-sans font-medium block mt-0.5">
+                ({formatLAK(purchasePricePerReam)} / {normalizeLaoUnit(targetItem.purchaseUnit, 'ແພັກ')})
+              </span>
+            )}
           </div>
           <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
             <Truck className="w-5 h-5" />
@@ -388,6 +461,65 @@ export default function InventoryMaterialDetailsPage({
         </div>
       </div>
 
+      {/* Assigned Machine Banner for Spare Parts */}
+      {(() => {
+        const catLower = (targetItem?.category || '').toLowerCase();
+        const isSpare = catLower.includes('spare') || catLower.includes('part') || catLower.includes('ອະໄຫຼ່') || Boolean(targetItem?.isSparePart);
+        const assignedMachine = targetItem?.assignedPrinterId || targetItem?.assignedMachineName || targetItem?.specs?.assignedPrinterId || targetItem?.specs?.assignedMachineName;
+        
+        if (!assignedMachine && !isSpare) return null;
+
+        const matchedEquipment = assignedMachine 
+          ? (equipment || []).find((eq: any) => 
+              (eq.id && eq.id.toLowerCase() === String(assignedMachine).toLowerCase()) ||
+              (eq.name && eq.name.toLowerCase().includes(String(assignedMachine).toLowerCase())) ||
+              (String(assignedMachine).toLowerCase().includes((eq.name || '').toLowerCase()))
+            )
+          : null;
+
+        return (
+          <div className="bg-indigo-50/80 border border-indigo-200/90 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <Wrench className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider block flex items-center gap-1.5">
+                  <span>{currentLang === 'lo' ? 'ອະໄຫຼ່ຜູກກັບເຄື່ອງຈັກ (Assigned Machine):' : 'Assigned Equipment Asset:'}</span>
+                  {matchedEquipment?.status && (
+                    <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-bold rounded">
+                      {matchedEquipment.status}
+                    </span>
+                  )}
+                </span>
+                <span className="text-sm sm:text-base font-black text-slate-900 mt-0.5 block">
+                  {matchedEquipment ? `${matchedEquipment.name} [${matchedEquipment.id}]` : (assignedMachine || (currentLang === 'lo' ? 'ສາງກາງ (General Stock)' : 'General Stock'))}
+                </span>
+              </div>
+            </div>
+
+            {matchedEquipment && (
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.hash = 'equipment';
+                  showToast(
+                    currentLang === 'lo' 
+                      ? `ເປີດໂປຣໄຟລ໌ເຄື່ອງຈັກ: ${matchedEquipment.name}` 
+                      : `Open equipment profile: ${matchedEquipment.name}`, 
+                    'info'
+                  );
+                }}
+                className="px-4 py-2 bg-white hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer shrink-0"
+              >
+                <Wrench className="w-3.5 h-3.5" />
+                <span>{currentLang === 'lo' ? 'ໄປທີ່ໂປຣໄຟລ໌ເຄື່ອງຈັກ' : 'Go to Equipment Profile'}</span>
+              </button>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Main Grid: Details cards & Ledger */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Card 1: Procurement & Supplier Info */}
@@ -426,14 +558,37 @@ export default function InventoryMaterialDetailsPage({
             {lotData.initialQty > 0 && (
               <div>
                 <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ຈຳນວນນຳເຂົ້າເລີ່ມຕົ້ນ:' : 'Initial Received Qty:'}</span>
-                <span className="font-mono text-slate-900 font-bold">{lotData.initialQty} {targetItem.consumptionUnit || 'ແຜ່ນ'}</span>
+                <span className="font-mono text-slate-900 font-bold">
+                  {lotData.initialQty.toLocaleString()} {normalizeLaoUnit(targetItem.consumptionUnit, 'ແຜ່ນ')}
+                  {multiplier > 1 && (
+                    <span className="text-slate-400 text-[10px] font-sans ml-1">
+                      ({Math.round((lotData.initialQty / multiplier) * 10) / 10} {normalizeLaoUnit(targetItem.purchaseUnit, 'ແພັກ')})
+                    </span>
+                  )}
+                </span>
               </div>
             )}
-            {(lotData.purchasePrice || lotData.costPerSheet || targetItem.costPerConsumptionUnit) > 0 && (
+            {lotData.totalCost > 0 && (
               <div>
                 <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ມູນຄ່ານຳເຂົ້າລວມ:' : 'Total Purchase Value:'}</span>
                 <span className="font-mono text-emerald-600 font-black text-sm block">
-                  {formatLAK(lotData.purchasePrice || lotData.costPerSheet || targetItem.costPerConsumptionUnit)}
+                  {formatLAK(lotData.totalCost)}
+                </span>
+              </div>
+            )}
+            {purchasePricePerReam > 0 && multiplier > 1 && (
+              <div>
+                <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ລາຄາຕໍ່ແພັກ/ຣີມ:' : 'Price Per Pack/Ream:'}</span>
+                <span className="font-mono text-slate-800 font-bold block">
+                  {formatLAK(purchasePricePerReam)} / {normalizeLaoUnit(targetItem.purchaseUnit, 'ແພັກ')}
+                </span>
+              </div>
+            )}
+            {finalPerSheetCost > 0 && (
+              <div>
+                <span className="text-slate-400 block text-[11px] font-semibold">{currentLang === 'lo' ? 'ຕົ້ນທຶນຕໍ່ໜ່ວຍເບີກ:' : 'Unit Cost:'}</span>
+                <span className="font-mono text-emerald-600 font-bold block">
+                  {formatLAK(finalPerSheetCost)} / {normalizeLaoUnit(targetItem.consumptionUnit, 'ແຜ່ນ')}
                 </span>
               </div>
             )}
@@ -470,7 +625,8 @@ export default function InventoryMaterialDetailsPage({
                 <th className="py-3 px-4">ລະຫັດລ໋ອດ / ໃບສັ່ງ (Lot ID)</th>
                 <th className="py-3 px-4">ຜູ້ຈັດຈຳໜ່າຍ (Supplier)</th>
                 <th className="py-3 px-4 text-right">ຈຳນວນນຳເຂົ້າ</th>
-                <th className="py-3 px-4 text-right">ລາຄານຳເຂົ້າ (LAK ₭)</th>
+                <th className="py-3 px-4 text-right">{currentLang === 'lo' ? 'ລາຄານຳເຂົ້າ (LAK ₭)' : 'Purchase Cost (LAK ₭)'}</th>
+                <th className="py-3 px-4 text-right">{currentLang === 'lo' ? 'ຕົ້ນທຶນ/ໜ່ວຍ' : 'Unit Cost'}</th>
                 <th className="py-3 px-4 text-right">ຄົງເຫຼືອລ໋ອດນີ້</th>
               </tr>
             </thead>
@@ -489,7 +645,20 @@ export default function InventoryMaterialDetailsPage({
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600">{formatLAK(batch.purchasePricePerReam || batch.costPerSheet)}</td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
+                      {formatLAK(batch.totalCost || batch.purchasePricePerReam)}
+                      {multiplier > 1 && batch.purchasePricePerReam > 0 && (
+                        <span className="text-[10px] text-slate-400 font-normal block">
+                          ({formatLAK(batch.purchasePricePerReam)}/{normalizeLaoUnit(targetItem.purchaseUnit, 'ແພັກ')})
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600">
+                      {formatLAK(batch.costPerSheet || finalPerSheetCost)}
+                      <span className="text-[10px] text-slate-400 font-normal block">
+                        /{normalizeLaoUnit(targetItem.consumptionUnit, 'ແຜ່ນ')}
+                      </span>
+                    </td>
                     <td className="py-3 px-4 text-right font-mono font-black text-slate-800">
                       <span className="px-2.5 py-1 bg-slate-100 rounded-xl text-slate-700 font-mono">
                         {batch.currentQty} {targetItem.consumptionUnit === 'ml' ? 'ml' : normalizeLaoUnit(targetItem.consumptionUnit, 'ແຜ່ນ')}
@@ -504,7 +673,7 @@ export default function InventoryMaterialDetailsPage({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">
+                  <td colSpan={7} className="py-8 text-center text-slate-400 font-semibold">
                     {currentLang === 'lo' ? 'ຍັງບໍ່ມີປະວັດການນຳເຂົ້າ' : 'No inbound batches recorded yet'}
                   </td>
                 </tr>

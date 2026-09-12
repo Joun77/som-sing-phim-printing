@@ -6,30 +6,32 @@ import { CheckCircle2 } from 'lucide-react';
 import { InboundItemFormData, createDefaultItem } from './forms/types';
 import { BatchSidebar } from './forms/BatchSidebar';
 import { PurchasingSection } from './forms/PurchasingSection';
-import { PrinterSpecsForm } from './forms/PrinterSpecsForm';
 import { InkSpecsForm } from './forms/InkSpecsForm';
 import { PaperSpecsForm } from './forms/PaperSpecsForm';
 import { 
   MachinerySpecsForm, 
   BindingSpecsForm, 
   LaminationSpecsForm, 
-  SparePartsSpecsForm, 
-  OffcutSpecsForm 
+  RigidSubstratesSpecsForm,
+  CuttingSuppliesSpecsForm,
+  PackagingSpecsForm,
+  SparePartsSpecsForm
 } from './forms/OtherSpecsForms';
 
 interface ImportFormProps {
+  initialType?: string;
   onSubmit: (type: string, data: any, isBatch?: boolean) => void;
   onClose: () => void;
 }
 
-export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
+export default function ImportForm({ initialType, onSubmit, onClose }: ImportFormProps) {
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
   const { equipment, inventory, showToast, formatCurrency } = useApp();
 
   // Multi-Item Batch List & Active Index
   const [items, setItems] = useState<InboundItemFormData[]>([
-    createDefaultItem('PAPER')
+    createDefaultItem(initialType || 'PAPER')
   ]);
   const [activeIdx, setActiveIdx] = useState(0);
 
@@ -71,10 +73,8 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
 
   // Live Calculations for current item (Machinery)
   const totalCostInLak = Number(currentItem.importCost || 0) * (exchangeRates[currentItem.importCurrency] || 1);
-  const machineryTotalMonths = (Number(currentItem.machineryLifespanYears) || 1) * 12;
-  const machineryMonthlyDepr = machineryTotalMonths > 0 ? (totalCostInLak / machineryTotalMonths) : 0;
-  const machineryBaseCostPerUnit = (Number(currentItem.machineryEstMonthlyVolume) || 1) > 0 ? (machineryMonthlyDepr / Number(currentItem.machineryEstMonthlyVolume)) : 0;
-  const machineryNetCostPerUnit = machineryBaseCostPerUnit * (1 + (Number(currentItem.machineryMaintenanceRatePct) || 0) / 100);
+  const machineLife = Number(currentItem.machineExpectedLife) || 200000;
+  const machineryNetCostPerUnit = machineLife > 0 ? (totalCostInLak / machineLife) : 0;
   const machineryFinalUnitCost = Math.round(machineryNetCostPerUnit * 100) / 100;
 
   // Convert a single InboundItemFormData to final API payload
@@ -93,6 +93,7 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
 
     const unitPriceLak = Math.round(rawUnitCost * rate * 100) / 100;
     const totalPriceLak = Math.round(rawTotalCost * rate * 100) / 100;
+    const defaultImg = (Array.isArray(item.actualImages) && item.actualImages[0]) || item.productImage || null;
 
     let finalData: Record<string, any> = {
       isRestockMode: false,
@@ -110,11 +111,17 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
       supplier: item.importVendor || null,
       importDate: item.importDate || null,
       paymentMethod: item.paymentMethod || null,
-      imageUrl: item.productImage || null,
+      imageUrl: defaultImg,
+      itemPhoto: defaultImg,
+      productPhoto: defaultImg,
       receiptUrl: item.paymentSlip || null,
       taxInvoiceUrl: item.taxInvoice || null,
       actual_images: item.actualImages,
       payment_slip: item.paymentSlip,
+      docs: {
+        productPhoto: defaultImg,
+        paymentSlip: item.paymentSlip || null,
+      },
       supplier_phone: item.supplierPhone,
       purchase_link: item.purchaseLink,
       customFields: (item.customFields || []).reduce((acc, field) => {
@@ -123,41 +130,93 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
       }, {})
     };
 
-    if (item.importType === 'PRINTER') {
-      const pLifespanYears = Number(item.printerLifespanYears || 5);
-      const pEstMonthlyVol = Number(item.printerEstMonthlyVolume || 50000);
-      const pTotalMonths = pLifespanYears * 12;
-      const pTargetPages = Number(item.expectedLifeA4 || (pLifespanYears * 12 * pEstMonthlyVol) || 3000000);
-      const pMaintRatePct = Number(item.maintenanceRatePct || 15);
-      const pFixedMaintCost = Number(item.printerMaintenanceCostPerPage || 0);
+    if (item.importType === 'MACHINERY' || item.importType === 'PRINTER') {
+      const machineType = item.machineryTypeCategory || 'laser';
+      const isGuillotine = machineType === 'guillotine';
+      const isPlotter = machineType === 'plotter';
+      const isLaminator = machineType === 'laminator';
+      const isPrinter = machineType === 'laser' || machineType === 'inkjet';
 
-      const mMonthlyDepr = pTotalMonths > 0 ? (unitPriceLak / pTotalMonths) : 0;
-      const mBaseRate = pEstMonthlyVol > 0 ? (mMonthlyDepr / pEstMonthlyVol) : (pTargetPages > 0 ? (unitPriceLak / pTargetPages) : 0);
-      const mWearRate = Math.round(mBaseRate * (pMaintRatePct / 100) * 100) / 100 + pFixedMaintCost;
-      const pNetRate = Math.round((mBaseRate + mWearRate) * 100) / 100;
+      const machineExpectedLife = Number(item.machineExpectedLife) || (
+        machineType === 'laser' ? 500000 :
+        machineType === 'inkjet' ? 200000 :
+        machineType === 'guillotine' ? 100000 :
+        machineType === 'binder' ? 30000 : 20000
+      );
+      const machineDeprRate = machineExpectedLife > 0 ? (unitPriceLak / machineExpectedLife) : 0;
+      const finalCostPerUnit = Math.round(machineDeprRate * 100) / 100;
 
-      const printerSpecsObj = {
-        brand: item.printerBrand,
-        model: item.printerModel,
-        printerCategory: item.printerCategory,
+      const machineResolvedPhoto = (Array.isArray(item.actualImages) && item.actualImages[0]) || item.productImage || null;
+      const machineSpecsObj = {
+        category: machineType,
+        postPressSubtype: machineType,
+        brand: item.machineBrand,
+        model: item.machineModel,
+        serialNumber: item.machineSn || `EQ-${machineType.toUpperCase().slice(0, 3)}-${Date.now().toString().slice(-4)}`,
+        operatingWatts: item.machineOperatingWatts,
+        warmUpTimeMins: (machineType === 'guillotine' || machineType === 'inkjet') ? 0 : item.warmUpTimeMins,
+        expectedLife: machineExpectedLife,
+        lifeUnit: item.machineLifeUnit || (isPrinter ? 'pages' : isGuillotine ? 'cuts' : (isPlotter || isLaminator) ? 'meters' : 'books'),
+        productPhoto: machineResolvedPhoto,
+        
+        // Printer specific
         color_config: {
           colorScheme: item.colorSchemeType,
           slots: item.colorSlots
         },
         colorSchemeType: item.colorSchemeType,
-        totalColorSlots: Number(item.totalColorSlots),
-        expectedLifeA4Pages: pTargetPages,
-        lifespanYears: pLifespanYears,
-        estMonthlyVolume: pEstMonthlyVol,
-        maintenanceRatePercent: pMaintRatePct,
-        maintenanceCostPerPage: pFixedMaintCost,
-        speedPpm: item.printerSpeedPpm || '25 ppm (A4)',
-        maxWidth: item.printerMaxWidth || 'A3+ (329 x 483 mm)',
-        inkType: item.printerInkType || 'Pigment Ink (DURABrite Pro)',
-        printTech: item.printerPrintTech || 'PrecisionCore Heat-Free',
-        blackYieldPages: Number(item.printerBlackYield || 7500),
-        colorYieldPages: Number(item.printerColorYield || 6000),
+        totalColorSlots: Number(item.totalColorSlots || (item.colorSlots ? item.colorSlots.length : 4)),
         oemBaselineInks: item.printerInkSlots,
+        speedMonoPpm: item.printerSpeedMonoPpm,
+        speedColorPpm: item.printerSpeedColorPpm,
+        feedType: item.printerFeedType,
+        supportedGsmMin: item.printerSupportedGsmMin,
+        supportedGsmMax: item.printerSupportedGsmMax,
+        maxPaperSize: item.printerMaxPaperSize,
+        duplexMode: item.printerDuplexMode,
+        inkType: item.printerInkType,
+
+        // Wear parts embedded
+        wearDrumUnitCost: item.wearDrumUnitCost,
+        wearDrumUnitLife: item.wearDrumUnitLife,
+        wearFuserUnitCost: item.wearFuserUnitCost,
+        wearFuserUnitLife: item.wearFuserUnitLife,
+        wearTransferBeltCost: item.wearTransferBeltCost,
+        wearTransferBeltLife: item.wearTransferBeltLife,
+        wearPickupRollerCost: item.wearPickupRollerCost,
+        wearPickupRollerLife: item.wearPickupRollerLife,
+        wearWasteTonerBoxCost: item.wearWasteTonerBoxCost,
+        wearWasteTonerBoxLife: item.wearWasteTonerBoxLife,
+
+        wearMaintBoxCost: item.wearMaintBoxCost,
+        wearMaintBoxLife: item.wearMaintBoxLife,
+        wearCarriageBeltCost: item.wearCarriageBeltCost,
+        wearCarriageBeltLife: item.wearCarriageBeltLife,
+        wearPrintheadCost: item.wearPrintheadCost,
+        wearPrintheadLife: item.wearPrintheadLife,
+
+        cutterMaxWidthMm: item.cutterMaxWidthMm,
+        cutterMaxSpeedMms: item.cutterMaxSpeedMms,
+        cutterDownforceG: item.cutterDownforceG,
+        wearBladeCost: item.wearBladeCost,
+        wearBladeLifeMeters: item.wearBladeLifeMeters,
+        wearTeflonStripCost: item.wearTeflonStripCost,
+        wearTeflonStripLifeMeters: item.wearTeflonStripLifeMeters,
+        wearSharpeningCost: item.wearSharpeningCost,
+        wearSharpeningIntervalCuts: item.wearSharpeningIntervalCuts,
+        wearCuttingStickCost: item.wearCuttingStickCost,
+        wearCuttingStickLifeCuts: item.wearCuttingStickLifeCuts,
+
+        laminatorMaxWidthMm: item.laminatorMaxWidthMm,
+        laminatorMaxSpeedMmin: item.laminatorMaxSpeedMmin,
+        wearSiliconeRollerCost: item.wearSiliconeRollerCost,
+        wearSiliconeRollerLifeMeters: item.wearSiliconeRollerLifeMeters,
+
+        binderMaxThicknessMm: item.binderMaxThicknessMm,
+        binderSpeedBooksHr: item.binderSpeedBooksHr,
+        wearMillingCutterCost: item.wearMillingCutterCost,
+        wearMillingCutterLifeBooks: item.wearMillingCutterLifeBooks,
+
         actual_images: item.actualImages,
         payment_slip: item.paymentSlip,
         supplier_phone: item.supplierPhone,
@@ -166,62 +225,39 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
         warrantyExpirationYear: item.printerWarrantyYear
       };
 
+      const resolvedCategory = isPrinter 
+        ? 'Printer' 
+        : (isLaminator ? 'Laminator' : (machineType === 'binder' ? 'Binder' : 'Cutter'));
+
       finalData = {
         ...finalData,
-        id: item.printerAssetId,
-        name: `${item.printerBrand} ${item.printerModel}`,
-        serialNumber: item.printerSn,
-        brand: item.printerBrand,
-        model: item.printerModel,
-        category: 'Printer',
-        printerCategory: item.printerCategory,
-        color_config: {
-          colorScheme: item.colorSchemeType,
-          slots: item.colorSlots
-        },
-        colorSchemeType: item.colorSchemeType,
-        totalColorSlots: Number(item.totalColorSlots),
-        expectedLifeA4Pages: pTargetPages,
-        TargetTotalPages: pTargetPages,
-        printedPagesCapacity: pTargetPages,
-        lifespanYears: pLifespanYears,
-        estMonthlyVolume: pEstMonthlyVol,
-        maintenanceRatePercent: pMaintRatePct,
-        MaintenanceCostPerPage: pFixedMaintCost,
-        maintenanceCostPerPage: pFixedMaintCost,
-        costPerConsumptionUnit: pNetRate,
-        calculatedCostPerPage: pNetRate,
-        speedPpm: item.printerSpeedPpm || '25 ppm (A4)',
-        maxWidth: item.printerMaxWidth || 'A3+ (329 x 483 mm)',
-        inkType: item.printerInkType || 'Pigment Ink (DURABrite Pro)',
-        printTech: item.printerPrintTech || 'PrecisionCore Heat-Free',
-        blackYieldPages: Number(item.printerBlackYield || 7500),
-        colorYieldPages: Number(item.printerColorYield || 6000),
-        printerColorLinks: item.printerInkSlots,
-        oemBaselineInks: item.printerInkSlots,
-        actual_images: item.actualImages,
-        payment_slip: item.paymentSlip,
-        supplier_phone: item.supplierPhone,
-        purchase_link: item.purchaseLink,
-        functions: item.selectedFunctions,
-        connectivity: item.selectedConnectivity,
-        osCompatibility: item.selectedOS,
-        purchaseDate: item.importDate,
+        id: `MAC-${Date.now().toString().slice(-4)}`,
+        name: `${item.machineBrand} ${item.machineModel}`.trim() || `Machine ${item.machineryTypeCategory}`,
+        serialNumber: item.machineSn,
+        brand: item.machineBrand,
+        model: item.machineModel,
+        category: resolvedCategory,
+        printerCategory: isPrinter ? (machineType === 'inkjet' ? 'Inkjet Printer' : 'Laser Printer') : undefined,
+        postPressSubtype: machineType,
+        status: 'In Use',
         price: unitPriceLak,
         unitPrice: unitPriceLak,
         purchaseCost: unitPriceLak,
         purchasePrice: unitPriceLak,
         MachinePrice: unitPriceLak,
-        vendor: item.importVendor,
-        location: item.printerLocation,
-        warrantyExpirationYear: item.printerWarrantyYear,
-        status: 'In Use',
-        specs: printerSpecsObj,
-        components: [
-          { name: 'Drum Unit (ຊຸດດຣຳ)', usage: 0, threshold: 90 },
-          { name: 'Fuser Kit (ຊຸດຄວາມຮ້ອນ)', usage: 0, threshold: 90 },
-          { name: 'Waste Toner (ກ່ອງໝຶກເສຍ)', usage: 0, threshold: 95 }
-        ]
+        costPerConsumptionUnit: finalCostPerUnit,
+        calculatedCostPerPage: finalCostPerUnit,
+        TargetTotalPages: machineExpectedLife,
+        printedPagesCapacity: machineExpectedLife,
+        expectedLifeA4Pages: isPrinter ? machineExpectedLife : undefined,
+        imageUrl: machineResolvedPhoto,
+        itemPhoto: machineResolvedPhoto,
+        productPhoto: machineResolvedPhoto,
+        docs: {
+          productPhoto: machineResolvedPhoto,
+          paymentSlip: item.paymentSlip || null,
+        },
+        specs: machineSpecsObj
       };
     } else if (item.importType === 'INK') {
       const inkVolumeMl = Number(item.inkVolume) || 70;
@@ -261,14 +297,15 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
         specs: inkSpecsObj
       };
     } else if (item.importType === 'PAPER') {
-      const isSheet = item.paperFormat === 'Sheet';
-      const sheetsPerPack = Number(item.sheetsPerPack) || 500;
+      const isRoll = (item.paperFormat || '').toLowerCase() === 'roll';
+      const isSheet = !isRoll;
+      const sheetsPerPack = Number(item.sheetsPerPack) || (item.importUnit?.includes('ລັງ') || item.importUnit?.includes('Carton') ? 2500 : 500);
       const totalSheetsCalculated = isSheet ? (Number(item.importQty) || 1) * sheetsPerPack : null;
-      const totalSqmCalculated = !isSheet ? (Number(item.rollWidthM) || 0.61) * (Number(item.rollLengthM) || 30) * (Number(item.importQty) || 1) : null;
+      const totalSqmCalculated = isRoll ? (Number(item.rollWidthM) || 0.61) * (Number(item.rollLengthM) || 30) * (Number(item.importQty) || 1) : null;
 
       const costPerSheet = isSheet && totalSheetsCalculated && totalSheetsCalculated > 0
         ? Math.round((totalPriceLak / totalSheetsCalculated) * 100) / 100
-        : unitPriceLak;
+        : (totalPriceLak / Math.max(1, Number(item.importQty) || 1));
 
       finalData = {
         ...finalData,
@@ -276,34 +313,35 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
         name: item.paperName,
         category: 'Paper',
         brand: item.paperBrand,
-        paperSurface: item.paperSurface,
-        stockQty: Number(item.importQty),
+        paperSurface: item.paperSurface || (item.paperType === 'Plain Paper' ? 'Plain Paper' : 'Glossy'),
+        stockQty: isSheet ? (totalSheetsCalculated || Number(item.importQty)) : Number(item.importQty),
         totalSheetsCalculated,
         totalSqmCalculated,
         costPerPurchaseUnit: unitPriceLak,
         costPerConsumptionUnit: costPerSheet,
         costPerSheet,
         specs: {
-          paperCode: item.paperCode,
+          paperCode: item.paperCode || `PAP-${item.paperSize || 'A4'}-${item.grammage || '80'}-${Date.now().toString().slice(-4)}`,
+          paperType: item.paperType || 'Plain Paper',
           brand: item.paperBrand,
-          paperSurface: item.paperSurface,
-          paperFormat: item.paperFormat,
-          standardSize: isSheet ? item.paperSize : null,
+          paperSurface: item.paperSurface || (item.paperType === 'Plain Paper' ? 'Plain Paper' : 'Glossy'),
+          paperFormat: item.paperFormat || 'cut_sheet',
+          standardSize: isSheet ? (item.paperSize || 'A4') : null,
           customWidthMm: item.paperSize === 'Custom Sheet' ? item.customWidthMm : null,
           customLengthMm: item.paperSize === 'Custom Sheet' ? item.customLengthMm : null,
-          packagingType: isSheet ? item.packagingType : null,
+          packagingType: isSheet ? (item.packagingType || (item.importUnit?.includes('ຣີມ') ? 'Ream' : 'Pack')) : null,
           sheetsPerPack: isSheet ? sheetsPerPack : null,
           sheets_per_pack: isSheet ? sheetsPerPack : null,
           sheets_per_ream: isSheet ? sheetsPerPack : null,
-          rollWidthPreset: !isSheet ? item.rollWidthPreset : null,
-          rollWidthM: !isSheet ? Number(item.rollWidthM) : null,
-          rollLengthM: !isSheet ? Number(item.rollLengthM) : null,
-          paperCore: !isSheet ? item.paperCore : null,
+          rollWidthPreset: isRoll ? item.rollWidthPreset : null,
+          rollWidthM: isRoll ? Number(item.rollWidthM) : null,
+          rollLengthM: isRoll ? Number(item.rollLengthM) : null,
+          paperCore: isRoll ? item.paperCore : null,
           coatingTech: item.coatingTech || null,
-          surfaceFinish: item.surfaceFinish || null,
-          printableSides: item.printableSides || null,
-          grammageGsm: item.grammage || null,
-          compatibilities: item.compatibilities
+          surfaceFinish: isSheet ? (item.paperSurface || 'Uncoated') : (item.surfaceFinish || null),
+          printableSides: item.printableSides || 'double',
+          grammageGsm: item.grammage || '80',
+          compatibilities: item.compatibilities || ['Inkjet', 'Laser']
         }
       };
     } else if (item.importType === 'LAMINATION') {
@@ -319,33 +357,6 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
           laminationThickness: item.laminationThickness || null,
           laminationMethod: item.laminationMethod || null,
           laminationFinish: item.laminationFinish || null
-        }
-      };
-    } else if (item.importType === 'MACHINERY') {
-      finalData = {
-        ...finalData,
-        id: `MAC-${Date.now().toString().slice(-4)}`,
-        name: item.machineryName || `Paper Machine ${item.machineryModel}`,
-        category: 'Cutter',
-        postPressSubtype: item.postPressSubtype,
-        serialNumber: item.machinerySn || null,
-        purchaseCost: totalCostInLak,
-        purchasePrice: totalCostInLak,
-        MachinePrice: totalCostInLak,
-        lifespanYears: Number(item.machineryLifespanYears),
-        estMonthlyVolume: Number(item.machineryEstMonthlyVolume),
-        maintenanceRatePercent: Number(item.machineryMaintenanceRatePct),
-        costPerConsumptionUnit: machineryFinalUnitCost,
-        calculatedCostPerPage: machineryFinalUnitCost,
-        maintenanceCostPerPage: machineryFinalUnitCost,
-        printedPagesCapacity: Number(item.machineryEstMonthlyVolume) * machineryTotalMonths,
-        TargetTotalPages: Number(item.machineryEstMonthlyVolume) * machineryTotalMonths,
-        specs: {
-          postPressSubtype: item.postPressSubtype,
-          lifespanYears: Number(item.machineryLifespanYears),
-          estMonthlyVolume: Number(item.machineryEstMonthlyVolume),
-          maintenanceRatePercent: Number(item.machineryMaintenanceRatePct),
-          netCostPerUnit: machineryFinalUnitCost
         }
       };
     } else if (item.importType === 'BINDING') {
@@ -366,30 +377,91 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
       finalData = {
         ...finalData,
         id: `PRT-${Date.now().toString().slice(-4)}`,
-        name: item.sparePartName,
+        name: item.sparePartName || 'Spare Part',
         category: 'SpareParts',
         stockQty: Number(item.importQty),
+        unit: item.importUnit || 'ອັນ',
+        consumptionUnit: item.importUnit || 'ອັນ',
+        purchaseUnit: item.importUnit || 'ອັນ',
+        assigned_printer_id: item.assignedPrinterId || null,
+        costPerPurchaseUnit: unitPriceLak,
+        costPerConsumptionUnit: unitPriceLak,
         specs: {
-          partSubCategory: item.partSubCategory,
-          partModelRef: item.partModelRef || null,
-          partYield: item.partYield || null
+          partName: item.sparePartName,
+          partCategory: item.sparePartCategory || 'drum',
+          assignedPrinterId: item.assignedPrinterId || null,
+          expectedLifespanUnits: Number(item.sparePartExpectedLife) || 50000,
+          unitType: item.sparePartUnitType || 'pages',
+          modelRef: item.sparePartModelRef || null
+        },
+        technical_specs: {
+          partName: item.sparePartName,
+          partCategory: item.sparePartCategory || 'drum',
+          assigned_printer_id: item.assignedPrinterId || null,
+          expectedLifespanUnits: Number(item.sparePartExpectedLife) || 50000,
+          unitType: item.sparePartUnitType || 'pages',
+          modelRef: item.sparePartModelRef || null
         }
       };
     } else if (item.importType === 'OFFCUT') {
       finalData = {
         ...finalData,
         id: `OFF-${Date.now().toString().slice(-4)}`,
-        name: item.offcutName || 'Paper Offcut',
+        name: 'Paper Offcut',
         category: 'Offcut',
-        stockQty: Number(item.importQty || item.offcutQty),
+        stockQty: Number(item.importQty),
+        unit: 'ແຜ່ນ',
+      };
+    } else if (item.importType === 'RIGID_SUBSTRATES') {
+      finalData = {
+        ...finalData,
+        id: `RIG-${Date.now().toString().slice(-4)}`,
+        name: `${item.rigidSubstrateType || 'Rigid Board'} ${item.rigidBoardThicknessMm || 5}mm`,
+        category: 'RigidSubstrates',
+        stockQty: Number(item.importQty),
         unit: 'ແຜ່ນ',
         specs: {
-          offcutParentSku: item.offcutParentSku,
-          offcutWidthMm: Number(item.offcutWidthMm),
-          offcutLengthMm: Number(item.offcutLengthMm),
-          offcutQty: Number(item.offcutQty),
-          offcutCostPerSheet: unitPriceLak,
-          offcutLocation: item.offcutLocation
+          substrateType: item.rigidSubstrateType,
+          thicknessMm: Number(item.rigidBoardThicknessMm || 5),
+          colorSurface: item.rigidColorSurface || 'White',
+          sheetWidthMm: Number(item.rigidSheetWidthMm || 1220),
+          sheetHeightMm: Number(item.rigidSheetHeightMm || 2440),
+          areaSqm: ((Number(item.rigidSheetWidthMm || 1220) * Number(item.rigidSheetHeightMm || 2440)) / 1000000),
+          wasteFactorPct: Number(item.rigidWasteFactorPct || 15)
+        }
+      };
+    } else if (item.importType === 'CUTTING_SUPPLIES') {
+      finalData = {
+        ...finalData,
+        id: `CUT-${Date.now().toString().slice(-4)}`,
+        name: item.cuttingSupplyType === 'cutting_mat' ? 'Cutting Mat' : 'Transfer Tape',
+        category: 'CuttingSupplies',
+        stockQty: Number(item.importQty),
+        specs: {
+          supplyType: item.cuttingSupplyType,
+          transferTapeType: item.transferTapeType,
+          transferTapeTack: item.transferTapeTack,
+          widthMm: item.transferTapeWidthMm,
+          lengthM: item.transferTapeLengthM,
+          cuttingMatGrip: item.cuttingMatGrip,
+          cuttingMatSize: item.cuttingMatSize,
+          cuttingMatCycles: item.cuttingMatCycles
+        }
+      };
+    } else if (item.importType === 'PACKAGING') {
+      finalData = {
+        ...finalData,
+        id: `PCK-${Date.now().toString().slice(-4)}`,
+        name: item.packagingDimensions || `Packaging ${item.packagingCategory}`,
+        category: 'Packaging',
+        stockQty: Number(item.importQty),
+        specs: {
+          packagingCategory: item.packagingCategory,
+          dimensions: item.packagingDimensions,
+          bubbleRollWidthCm: item.bubbleRollWidthCm,
+          bubbleRollLengthM: item.bubbleRollLengthM,
+          tapeWidthMm: item.tapeWidthMm,
+          tapeLengthM: item.tapeLengthM
         }
       };
     }
@@ -424,10 +496,10 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
   }, 0);
 
   return (
-    <div className="h-[78vh] flex flex-col font-sans">
+    <div className="h-full flex-1 flex flex-col min-h-0 font-sans">
       
       {/* Split-Pane Container with Independent Scrolling */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden gap-6">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden gap-4 lg:gap-5 min-h-0">
         
         {/* =========================================================================
             LEFT SIDEBAR: Independent Scroll Lock (ແຖບລາຍການສິນຄ້າໃນຊຸດ)
@@ -447,69 +519,74 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
         {/* =========================================================================
             RIGHT MAIN AREA: Independent Scroll Form (ຟອມສເປັກຂອງໄອເທມທີ່ເລືອກ)
            ========================================================================= */}
-        <div className="flex-1 h-full overflow-y-auto pr-3 min-w-0 space-y-6">
+        <div className="flex-1 h-full overflow-y-auto pr-1.5 sm:pr-3 min-w-0 space-y-5 min-h-0">
           
           {/* Active Item Title Header (Clean and without duplicate switcher) */}
-          <div className="flex items-center justify-between bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs">
-            <div className="flex items-center gap-2.5">
-              <span className="w-7 h-7 rounded-xl bg-indigo-600 text-white text-xs font-black flex items-center justify-center shadow-xs">
+          <div className="flex items-center justify-between bg-white p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="w-7 h-7 rounded-xl bg-indigo-600 text-white text-xs font-black flex items-center justify-center shadow-xs shrink-0">
                 {activeIdx + 1}
               </span>
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block truncate">
                   {currentLang === 'lo' ? 'ກຳລັງກຳນົດສະເປັກລາຍການທີ່' : 'Configuring Item'} #{activeIdx + 1}
                 </span>
-                <h3 className="font-black text-sm text-slate-900">
-                  {currentItem.paperName || currentItem.inkColorName || currentItem.printerModel || currentItem.machineryName || currentItem.bindingName || currentItem.laminationName || currentItem.sparePartName || currentItem.offcutName || `${currentItem.importType} Item`}
+                <h3 className="font-black text-xs sm:text-sm text-slate-900 truncate">
+                  {currentItem.paperName || currentItem.inkColorName || currentItem.machineModel || currentItem.machineBrand || currentItem.bindingName || currentItem.laminationName || currentItem.sparePartName || `${currentItem.importType} Item`}
                 </h3>
               </div>
             </div>
 
-            <span className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 font-extrabold text-xs rounded-xl">
+            <span className="px-2.5 sm:px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 font-extrabold text-[11px] sm:text-xs rounded-xl shrink-0 ml-2">
               {currentItem.importType}
             </span>
           </div>
 
-          <form id="inbound-master-form" onSubmit={handleSubmitAll} className="space-y-6 text-xs font-semibold text-slate-700 pb-6">
+          <form id="inbound-master-form" onSubmit={handleSubmitAll} className="space-y-5 text-xs font-semibold text-slate-700 pb-4">
             
-            {/* PRINTER SPECS */}
-            {currentItem.importType === 'PRINTER' && (
-              <PrinterSpecsForm item={currentItem} updateField={updateCurrentItem} />
+            {/* 1. MACHINERY & PRINTERS (ALL MACHINES WITH WEAR PARTS) */}
+            {(currentItem.importType === 'MACHINERY' || currentItem.importType === 'PRINTER') && (
+              <MachinerySpecsForm item={currentItem} updateField={updateCurrentItem} />
             )}
 
-            {/* INK SPECS */}
-            {currentItem.importType === 'INK' && (
-              <InkSpecsForm item={currentItem} equipment={equipment} updateField={updateCurrentItem} />
-            )}
-
-            {/* PAPER SPECS */}
+            {/* 2. PAPER & MEDIA */}
             {currentItem.importType === 'PAPER' && (
               <PaperSpecsForm item={currentItem} updateField={updateCurrentItem} />
             )}
 
-            {/* MACHINERY SPECS */}
-            {currentItem.importType === 'MACHINERY' && (
-              <MachinerySpecsForm item={currentItem} updateField={updateCurrentItem} />
+            {/* 3. INK & TONER */}
+            {currentItem.importType === 'INK' && (
+              <InkSpecsForm item={currentItem} equipment={equipment} updateField={updateCurrentItem} />
             )}
 
-            {/* BINDING SPECS */}
-            {currentItem.importType === 'BINDING' && (
-              <BindingSpecsForm item={currentItem} updateField={updateCurrentItem} />
-            )}
-
-            {/* LAMINATION SPECS */}
+            {/* 4. LAMINATION */}
             {currentItem.importType === 'LAMINATION' && (
               <LaminationSpecsForm item={currentItem} updateField={updateCurrentItem} />
             )}
 
-            {/* SPARE PARTS SPECS */}
-            {currentItem.importType === 'SPARE_PARTS' && (
-              <SparePartsSpecsForm item={currentItem} updateField={updateCurrentItem} />
+            {/* 5. BINDING */}
+            {currentItem.importType === 'BINDING' && (
+              <BindingSpecsForm item={currentItem} updateField={updateCurrentItem} />
             )}
 
-            {/* OFFCUT SPECS */}
-            {currentItem.importType === 'OFFCUT' && (
-              <OffcutSpecsForm item={currentItem} inventory={inventory} updateField={updateCurrentItem} />
+            {/* 6. CUTTING SUPPLIES */}
+            {currentItem.importType === 'CUTTING_SUPPLIES' && (
+              <CuttingSuppliesSpecsForm item={currentItem} updateField={updateCurrentItem} />
+            )}
+
+            {/* 7. RIGID SUBSTRATES */}
+            {currentItem.importType === 'RIGID_SUBSTRATES' && (
+              <RigidSubstratesSpecsForm item={currentItem} updateField={updateCurrentItem} />
+            )}
+
+            {/* 8. PACKAGING CONSUMABLES */}
+            {currentItem.importType === 'PACKAGING' && (
+              <PackagingSpecsForm item={currentItem} updateField={updateCurrentItem} />
+            )}
+
+            {/* 9. SPARE PARTS RESTOCK */}
+            {currentItem.importType === 'SPARE_PARTS' && (
+              <SparePartsSpecsForm item={currentItem} updateField={updateCurrentItem} />
             )}
 
             {/* PURCHASING & QUANTITY SECTION */}
@@ -525,8 +602,8 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
       </div>
 
       {/* Fixed Sticky Footer Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200/80 shrink-0 bg-white/80 backdrop-blur-xs">
-        <div className="flex items-center gap-4 text-xs font-bold text-slate-600">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-200/80 shrink-0 bg-white/95 backdrop-blur-xs">
+        <div className="flex items-center gap-3 sm:gap-4 text-xs font-bold text-slate-600 w-full sm:w-auto justify-between sm:justify-start">
           <span>
             {currentLang === 'lo' ? 'ຈຳນວນໃນຊຸດ:' : 'Total Batch Items:'} <strong className="text-indigo-600 text-sm font-black">{items.length}</strong> {currentLang === 'lo' ? 'ລາຍການ' : 'items'}
           </span>
@@ -536,11 +613,11 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
           </span>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
           <button 
             type="button" 
             onClick={onClose} 
-            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+            className="flex-1 sm:flex-initial px-4 sm:px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer text-center"
           >
             {t('common.cancel')}
           </button>
@@ -548,10 +625,10 @@ export default function ImportForm({ onSubmit, onClose }: ImportFormProps) {
           <button
             type="submit"
             form="inbound-master-form"
-            className="px-7 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-2xl transition shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+            className="flex-1 sm:flex-initial px-5 sm:px-7 py-2.5 sm:py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-2xl transition shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
           >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span className="truncate">
               {items.length > 1 
                 ? (currentLang === 'lo' ? `ບັນທຶກທັງໝົດ (${items.length} ລາຍການ)` : `Save All (${items.length} Items)`)
                 : t('common.save')}

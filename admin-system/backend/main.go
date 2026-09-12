@@ -267,6 +267,26 @@ func main() {
 	router.GET("/api/v1/settings/defaults", settings.HandleGetShopDefaults)
 	router.POST("/api/v1/settings/defaults", settings.HandleSetShopDefaults)
 
+	// Universal Master Data Lookups routes (Paper Types, Surface Finishes, Dimensions, UOM, Binding)
+	router.GET("/api/v1/lookups", settings.HandleGetLookups)
+	router.GET("/api/lookups", settings.HandleGetLookups)
+	router.GET("/api/v1/lookups/:type", settings.HandleGetLookupsByType)
+	router.GET("/api/lookups/:type", settings.HandleGetLookupsByType)
+	router.POST("/api/v1/admin/lookups", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleCreateLookup)
+	router.POST("/api/v1/lookups", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleCreateLookup)
+	router.PUT("/api/v1/admin/lookups/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleUpdateLookup)
+	router.PUT("/api/v1/lookups/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleUpdateLookup)
+	router.DELETE("/api/v1/admin/lookups/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleDeleteLookup)
+	router.DELETE("/api/v1/lookups/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleDeleteLookup)
+
+	// Machine Wear Parts routes (Asset maintenance & consumable wear parts)
+	router.GET("/api/v1/equipment/:id/wear-parts", settings.HandleGetMachineWearParts)
+	router.POST("/api/v1/equipment/:id/wear-parts", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleCreateMachineWearPart)
+	router.DELETE("/api/v1/equipment/:id/wear-parts/:part_id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleDeleteMachineWearPart)
+	router.POST("/api/v1/equipment/:id/install-part", settings.HandleInstallMachineWearPart)
+	router.GET("/api/v1/inventory/spare-parts", settings.HandleGetSparePartsInventory)
+	router.GET("/api/inventory/spare-parts", settings.HandleGetSparePartsInventory)
+
 	// Production Scheduling & Machine Queue routes
 	prodAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction)
 	router.GET("/api/v1/production/machines/schedule", prodAuth, spoilage.HandleGetMachineSchedule)
@@ -307,9 +327,13 @@ func main() {
 
 	// Equipment / Printer Master routes
 	router.GET("/api/equipment", inventory.HandleGetEquipment)
+	router.GET("/api/v1/equipment", inventory.HandleGetEquipment)
 	router.POST("/api/equipment", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleCreateEquipment)
+	router.POST("/api/v1/equipment", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleCreateEquipment)
 	router.PUT("/api/equipment/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleUpdateEquipment)
+	router.PUT("/api/v1/equipment/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleUpdateEquipment)
 	router.DELETE("/api/equipment/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleDeleteEquipment)
+	router.DELETE("/api/v1/equipment/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleDeleteEquipment)
 
 	// HR Employee Management routes (RBAC: Admin only)
 	hrAuth := auth.RequireRoles(auth.RoleAdmin)

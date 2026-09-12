@@ -37,6 +37,7 @@ import type { PreflightResult, BatchPreflightResult } from '../features/orders/t
 import type { InventoryItem } from '../types';
 import { analyzeImageClient, analyzePDFClient, convertRGBToCMYKCanvas } from '../lib/preflightAnalyzer';
 import { CustomDimensionInput } from '../features/pricing/components/CustomDimensionInput';
+import { JobSizeSelectorCard } from '../features/pricing/components/JobSizeSelectorCard';
 import { PaperMaterialSelectorModal } from '../features/pricing/components/PaperMaterialSelectorModal';
 
 interface PreflightCheckerProps {
@@ -1353,21 +1354,21 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                 </div>
               </div>
 
-              {/* Multi-unit & DB Presets Controller */}
-              <div className="bg-slate-50/70 p-3.5 rounded-2xl border border-slate-200/80">
-                <CustomDimensionInput
-                  widthMM={batchCustomW}
-                  heightMM={batchCustomH}
-                  currentLang={currentLang}
-                  onChangeMM={(wMM, hMM, presetName) => {
-                    setBatchCustomW(wMM);
-                    setBatchCustomH(hMM);
-                    if (batchFiles.length > 0) {
-                      runBatchPreflightAnalysis(batchFiles, presetName || `${Math.round(wMM)}x${Math.round(hMM)}mm`, borderMode);
-                    }
-                  }}
-                />
-              </div>
+              {/* Job Size Selector Card */}
+              <JobSizeSelectorCard
+                widthMM={batchCustomW}
+                heightMM={batchCustomH}
+                presetName={`${Math.round(batchCustomW)}x${Math.round(batchCustomH)}mm`}
+                currentLang={currentLang}
+                title={currentLang === 'lo' ? 'ຂະໜາດຮູບທີ່ຈະພິມ (Photo Print Size)' : 'Target Photo Size'}
+                onChange={(wMM, hMM, presetName) => {
+                  setBatchCustomW(wMM);
+                  setBatchCustomH(hMM);
+                  if (batchFiles.length > 0) {
+                    runBatchPreflightAnalysis(batchFiles, presetName || `${Math.round(wMM)}x${Math.round(hMM)}mm`, borderMode);
+                  }
+                }}
+              />
             </div>
 
             {/* Border Mode Toggle & Item Limit Badge */}
@@ -1857,23 +1858,14 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
           {/* Target Paper & Configuration Section (Interactive even before file upload) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* 1. Target Paper Dimensions */}
-            <div className="bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-6 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                  <Maximize2 className="w-3.5 h-3.5 text-primary-navy" />
-                  <span>1. ຂະໜາດເຈ້ຍທີ່ຈະພິມ (Target Paper):</span>
-                </span>
-                <span className="text-[10px] text-slate-400 font-bold font-sans">
-                  {paperWidthMM} × {paperHeightMM} mm
-                </span>
-              </div>
-
-              {/* Multi-unit & DB Presets Dimension Controller */}
-              <CustomDimensionInput
+            <div className="bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
+              <JobSizeSelectorCard
                 widthMM={paperWidthMM}
                 heightMM={paperHeightMM}
+                presetName={targetPaperSize}
                 currentLang={currentLang}
-                onChangeMM={(wMM, hMM, presetName) => {
+                title={currentLang === 'lo' ? '1. ຂະໜາດເຈ້ຍທີ່ຈະພິມ (Target Paper)' : '1. Target Paper Size'}
+                onChange={(wMM, hMM, presetName) => {
                   setTargetPaperSize(presetName || 'CUSTOM');
                   handleCustomDimensionChange(wMM, hMM);
                 }}
@@ -2150,23 +2142,14 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
               <div className="space-y-4">
                 
                 {/* 1. Target Paper Size Selection Banner */}
-                <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                      <Maximize2 className="w-3.5 h-3.5 text-primary-navy" />
-                      <span>1. ຂະໜາດເຈ້ຍທີ່ຈະພິມ (Target Paper):</span>
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-bold font-sans">
-                      {paperWidthMM} × {paperHeightMM} mm
-                    </span>
-                  </div>
-
-                  {/* Multi-unit & DB Presets Dimension Controller */}
-                  <CustomDimensionInput
+                <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-4">
+                  <JobSizeSelectorCard
                     widthMM={paperWidthMM}
                     heightMM={paperHeightMM}
+                    presetName={targetPaperSize}
                     currentLang={currentLang}
-                    onChangeMM={(wMM, hMM, presetName) => {
+                    title={currentLang === 'lo' ? '1. ຂະໜາດເຈ້ຍທີ່ຈະພິມ (Target Paper)' : '1. Target Paper Size'}
+                    onChange={(wMM, hMM, presetName) => {
                       setTargetPaperSize(presetName || 'CUSTOM');
                       handleCustomDimensionChange(wMM, hMM);
                     }}

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Globe, 
@@ -175,43 +175,19 @@ export function WebCatalogPage() {
         };
       });
     }
-    return [
-      {
-        id: 'PRN-FUJI-V180',
-        name: 'Fuji Xerox Versant 180 Press',
-        type: 'Digital Color Press',
-        clickRate: 780,
-        colorCostPerPage: 780,
-        bwCostPerPage: 420,
-        deprPerPage: 300,
-        inkCostColor: 480,
-        inkCostBw: 120,
-        linkedInksCount: 4,
-        linkedInksSummary: 'C, M, Y, K (Versant Inks)',
-        desc: 'Fuji Xerox Versant 180 • Main Press Floor (Room A)',
-        category: 'Printer'
-      },
-      {
-        id: 'PRN-EPSON-L1800',
-        name: 'Epson L1800 6-Color Photo',
-        type: 'Inkjet Photo',
-        clickRate: 240,
-        colorCostPerPage: 240,
-        bwCostPerPage: 130,
-        deprPerPage: 93,
-        inkCostColor: 147,
-        inkCostBw: 37,
-        linkedInksCount: 6,
-        linkedInksSummary: '6-Color T673 Photo Inks',
-        desc: 'Epson L1800 • Digital Finishing Room',
-        category: 'Printer'
-      }
-    ];
+    return [];
   }, [equipment, printerColorLinks, inventory]);
 
   // Default Standard Production Machine for Quotation & Costing Baseline
-  const [defaultMachineId, setDefaultMachineId] = useState<string>('PRN-FUJI-V180');
-  const [defaultMachineName, setDefaultMachineName] = useState<string>('Fuji Xerox Versant 180 Press');
+  const [defaultMachineId, setDefaultMachineId] = useState<string>('');
+  const [defaultMachineName, setDefaultMachineName] = useState<string>('');
+
+  useEffect(() => {
+    if (!defaultMachineId && shopMachines.length > 0) {
+      setDefaultMachineId(shopMachines[0].id);
+      setDefaultMachineName(shopMachines[0].name);
+    }
+  }, [shopMachines, defaultMachineId]);
 
   // Fetch Inventory Materials from Backend
   const { data: backendMaterials = [] } = useQuery<MaterialMaster[]>({
@@ -643,6 +619,7 @@ export function WebCatalogPage() {
   };
 
   const loadFinishingPreset = () => {
+    const firstCutter = (equipment || []).find(e => (e.category || '').toLowerCase().includes('cutter') || (e.name || '').toLowerCase().includes('cutter'));
     const finishingGroup: SpecGroup = {
       id: `group_finishing_${Date.now() % 10000}`,
       titleLo: 'ງານຕັດ & ເຂົ້າເລັ້ມ / ຫຼັງພິມ (Post-Press Finishing)',
@@ -652,8 +629,8 @@ export function WebCatalogPage() {
       options: [
         { 
           optionType: 'process', 
-          machineId: 'MAC-CUTTER-920',
-          machineName: 'QZYK920 Hydraulic Paper Guillotine',
+          machineId: firstCutter?.id || '',
+          machineName: firstCutter?.name || 'ຕັດຊື່ມາດຕະຖານ (Straight Cut)',
           label: 'ຕັດຊື່ມາດຕະຖານ (Guillotine Straight Cut)', 
           labelLo: 'ຕັດຊື່ມາດຕະຖານ (Straight Cut)', 
           labelEn: 'Standard Straight Cut', 
@@ -672,8 +649,8 @@ export function WebCatalogPage() {
         },
         { 
           optionType: 'process', 
-          machineId: 'MAC-BIND-WD50',
-          machineName: 'WD-50A Perfect Glue Thermal Binder',
+          machineId: (equipment || []).find(e => (e.category || '').toLowerCase().includes('bind') || (e.name || '').toLowerCase().includes('bind'))?.id || '',
+          machineName: (equipment || []).find(e => (e.category || '').toLowerCase().includes('bind') || (e.name || '').toLowerCase().includes('bind'))?.name || 'ເຂົ້າເລັ້ມສັນກາວ (Binding)',
           label: 'ເຂົ້າເລັ້ມສັນກາວ / ເຈາະສັນຫ່ວງ (Binding / Punching)', 
           labelLo: 'ເຂົ້າເລັ້ມສັນກາວ / ເຈາະສັນຫ່ວງ', 
           labelEn: 'Binding & Punching', 
@@ -683,8 +660,8 @@ export function WebCatalogPage() {
         },
         { 
           optionType: 'process', 
-          machineId: 'MAC-LAM-FM360',
-          machineName: 'FM-360 Roll Laminator Hot & Cold',
+          machineId: (equipment || []).find(e => (e.category || '').toLowerCase().includes('laminat') || (e.name || '').toLowerCase().includes('laminat'))?.id || '',
+          machineName: (equipment || []).find(e => (e.category || '').toLowerCase().includes('laminat') || (e.name || '').toLowerCase().includes('laminat'))?.name || 'ເຄືອບຟິล์ມກັນຮອຍ (Lamination)',
           label: 'ເຄືອບຟິล์ມກັນຮອຍ ເງົາ/ດ້ານ (Lamination)', 
           labelLo: 'ເຄືອບຟິล์ມກັນຮອຍ (Lamination)', 
           labelEn: 'Film Lamination', 

@@ -79,41 +79,7 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
     );
 
     if (nonPrinters.length === 0) {
-      return [
-        {
-          id: 'MAC-CUTTER-920',
-          name: 'QZYK920 Hydraulic Paper Guillotine',
-          brand: 'QZYK',
-          type: 'Program Control Hydraulic Guillotine',
-          category: 'Cutter',
-          costPerUnit: 28.3,
-          unit: 'ແຜ່ນ',
-          icon: '',
-          defaultPrice: 0,
-        },
-        {
-          id: 'MAC-LAM-FM360',
-          name: 'FM-360 Roll Laminator Hot & Cold',
-          brand: 'Boway',
-          type: 'Thermal & Cold Roll Lamination',
-          category: 'Laminator',
-          costPerUnit: 27.5,
-          unit: 'ແຜ່ນ',
-          icon: '',
-          defaultPrice: 3000,
-        },
-        {
-          id: 'MAC-BIND-WD50',
-          name: 'WD-50A Perfect Glue Thermal Binder',
-          brand: 'Superbind',
-          type: 'Heavy Duty Thermal Hot Melt Binder',
-          category: 'Binder',
-          costPerUnit: 110,
-          unit: 'ເລັ້ມ',
-          icon: '',
-          defaultPrice: 10000,
-        },
-      ];
+      return [];
     }
 
     return nonPrinters.map(eq => {
@@ -184,8 +150,8 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
       options: [
         { 
           optionType: 'finishing', 
-          machineId: cutMach?.id || 'MAC-CUTTER-920',
-          machineName: cutMach?.name || 'QZYK920 Hydraulic Paper Guillotine',
+          machineId: cutMach?.id || '',
+          machineName: cutMach?.name || 'ເຄື່ອງຕັດ (Cutter)',
           label: 'ຕັດຊື່ແບ່ງແຜ່ນ A3+ (Straight Cut)', 
           labelLo: 'ຕັດຊື່ແບ່ງແຜ່ນ A3+', 
           labelEn: 'Straight Cut Sheet', 
@@ -196,8 +162,8 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
         },
         { 
           optionType: 'finishing', 
-          machineId: cutMach?.id || 'MAC-CUTTER-920',
-          machineName: cutMach?.name || 'QZYK920 Hydraulic Paper Guillotine',
+          machineId: cutMach?.id || '',
+          machineName: cutMach?.name || 'ເຄື່ອງຕັດ (Cutter)',
           label: 'ໄດຄັດລອກເປັນດວງ (Kiss-Cut Sheet)', 
           labelLo: 'ໄດຄັດລອກເປັນດວງ (Kiss-Cut)', 
           labelEn: 'Kiss-Cut Sheet', 
@@ -208,8 +174,8 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
         },
         { 
           optionType: 'finishing', 
-          machineId: cutMach?.id || 'MAC-CUTTER-920',
-          machineName: cutMach?.name || 'QZYK920 Hydraulic Paper Guillotine',
+          machineId: cutMach?.id || '',
+          machineName: cutMach?.name || 'ເຄື່ອງຕັດ (Cutter)',
           label: 'ໄດຄັດຂາດແຍກດວງ (Die-Cut Individual)', 
           labelLo: 'ໄດຄັດຂາດແຍກດວງ (Die-Cut Individual)', 
           labelEn: 'Die-Cut Individual', 
@@ -240,8 +206,8 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
         },
         { 
           optionType: 'finishing', 
-          machineId: lamMach?.id || 'MAC-LAM-FM360',
-          machineName: lamMach?.name || 'FM-360 Roll Laminator Hot & Cold',
+          machineId: lamMach?.id || '',
+          machineName: lamMach?.name || 'ເຄື່ອງເຄືອບ (Laminator)',
           label: 'ເຄືອບຟິล์ມເງົາ (Glossy Lamination)', 
           labelLo: 'ເຄືອບຟິล์ມເງົາ (Glossy)', 
           labelEn: 'Glossy Lamination', 
@@ -252,8 +218,8 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
         },
         { 
           optionType: 'finishing', 
-          machineId: lamMach?.id || 'MAC-LAM-FM360',
-          machineName: lamMach?.name || 'FM-360 Roll Laminator Hot & Cold',
+          machineId: lamMach?.id || '',
+          machineName: lamMach?.name || 'ເຄື່ອງເຄືອບ (Laminator)',
           label: 'ເຄືອບຟິล์ມດ້ານ (Matte Lamination)', 
           labelLo: 'ເຄືອບຟິล์ມດ້ານ (Matte)', 
           labelEn: 'Matte Lamination', 
@@ -292,8 +258,8 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
       options: [
         { 
           optionType: 'binding', 
-          machineId: bindMach?.id || 'MAC-BIND-WD50',
-          machineName: bindMach?.name || 'WD-50A Perfect Glue Thermal Binder',
+          machineId: bindMach?.id || '',
+          machineName: bindMach?.name || 'ເຄື່ອງເຂົ້າເລັ້ມ (Binder)',
           label: 'ເຂົ້າເລັ້ມໄສກາວຮ້ອນ (Perfect Glue)', 
           labelLo: 'ເຂົ້າເລັ້ມໄສກາວຮ້ອນ (Perfect Glue)', 
           labelEn: 'Perfect Glue Thermal Binding', 

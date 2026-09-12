@@ -1,28 +1,23 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuthStore } from '@store/useAuthStore';
-
-const getAuthHeaders = () => {
-  const token = useAuthStore.getState().token;
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-};
+import { getAuthHeaders } from '@utils/authHeaders';
 
 /**
- * Fetch all equipment and machinery
+ * Fetch all equipment and machinery directly from PostgreSQL database
  */
 export function useEquipmentQuery() {
   return useQuery({
     queryKey: ['equipment'],
     queryFn: async () => {
-      const res = await fetch('/api/v1/equipment', {
+      let res = await fetch('/api/v1/equipment', {
         headers: getAuthHeaders(),
       });
       if (!res.ok) {
-        // Fallback for mock/local
-        const local = localStorage.getItem('somsing_equipment_v1');
-        return local ? JSON.parse(local) : [];
+        res = await fetch('/api/equipment', {
+          headers: getAuthHeaders(),
+        });
+      }
+      if (!res.ok) {
+        return [];
       }
       const data = await res.json();
       return Array.isArray(data) ? data : data.data || [];

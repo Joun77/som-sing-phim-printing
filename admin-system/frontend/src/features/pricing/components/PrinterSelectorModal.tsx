@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Check, Printer, AlertCircle, ShieldCheck, Database, Layers, Palette } from 'lucide-react';
 import { FormModalTemplate } from '@components/common/FormModalTemplate';
 import { useApp } from '@store/AppContext';
-import { calculateEquipmentPrintCost } from '@utils/machineCostCalculator';
+import { calculateEquipmentPrintCost, formatUnitPrecisionLAK } from '@utils/machineCostCalculator';
+import { getAuthHeaders } from '@utils/authHeaders';
 import type { Equipment } from '../../../types';
 
 interface PrinterSelectorModalProps {
@@ -30,7 +31,7 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
   const [dbInks, setDbInks] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch('/api/inbound')
+    fetch('/api/inbound', { headers: getAuthHeaders() })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         const items = Array.isArray(data) ? data : data?.data || [];
@@ -291,9 +292,9 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
               {filteredPrinters.map(printer => {
                 const isSelected = selectedPrinterId === printer.id;
                 const costResult = calculateEquipmentPrintCost(printer, printerColorLinks, allAvailableInks, 'Printer');
-                const machineCost = getPrinterMachineRate ? getPrinterMachineRate(printer) : costResult.netCostPerUnit;
-                const inkCost = getPrinterActualInkCostPerPage ? getPrinterActualInkCostPerPage(printer) : costResult.linkedInkRatePerPage;
-                const totalCost = (machineCost || 0) + (inkCost || 0);
+                const inkCost = Number(printer.colorInkCost || printer.linkedInkCostPerPage || costResult.linkedInkRatePerPage || 0);
+                const totalCost = Number(printer.totalPrintCostPerPage || (printer.specs as any)?.totalPrintCostPerPage || costResult.finalCostPerPage);
+                const machineCost = costResult.netCostPerUnit;
                 const colorBadge = getPrinterColorBadge(printer);
 
                 const assetVal = costResult.assetValue || Number(printer.price || printer.purchaseCost || (printer as any).totalPrice || 0);
@@ -351,19 +352,17 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                      <div className="text-left space-y-1">
+                      <div className="text-left space-y-0.5">
                         <div className="flex items-baseline gap-1.5">
                           <span className="text-[11px] font-bold text-slate-600">ຕົ້ນທຶນພິມລວມ:</span>
-                          <strong className="text-sm font-black text-sky-700 font-sans">
-                            {formatCurrency(totalCost > 0 ? totalCost : costResult.finalCostPerPage)}
+                          <strong className="text-base font-black text-sky-700 font-sans">
+                            {formatUnitPrecisionLAK(totalCost > 0 ? totalCost : costResult.finalCostPerPage)}
                           </strong>
-                          <span className="text-[10px] text-slate-400 font-normal">/ໜ້າ</span>
+                          <span className="text-[11px] text-slate-500 font-bold">/ໜ້າ</span>
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
-                          <span>ຄ່າເຄື່ອງ {costResult.formattedMachine || formatCurrency(machineCost)}</span>
-                          <span>+</span>
-                          <span className="text-purple-700 font-bold">ໝຶກ {costResult.formattedInk || `~${formatCurrency(inkCost)}`}</span>
-                        </div>
+                        <span className="text-[10px] text-slate-400 font-medium block">
+                          ລວມຄ່າເສື່ອມ, ອະໄຫຼ່ ແລະ ໝຶກພິມຈິງ (All-inclusive)
+                        </span>
                       </div>
 
                       <div className="flex items-center gap-1.5">

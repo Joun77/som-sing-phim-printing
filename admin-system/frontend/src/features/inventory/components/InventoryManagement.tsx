@@ -1,18 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Boxes, Plus, Scissors, History, PackagePlus, FileSpreadsheet, RefreshCw, MinusCircle } from 'lucide-react';
+import { Boxes, Scissors, History, RefreshCw, PackageMinus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApp } from '@store/AppContext';
 import InventoryTable from './InventoryTable';
 import StockTable from './StockTable';
 import InboundHistoryTable from './InboundHistoryTable';
-import InboundFormModal from './InboundFormModal';
 import InventoryMaterialDetailsPage from './details/InventoryMaterialDetailsPage';
 import OffcutsTab from './OffcutsTab';
-import AddMaterialModal from './modals/AddMaterialModal';
 import AddOffcutModal from './modals/AddOffcutModal';
 import StockDischargeModal from './modals/StockDischargeModal';
-import SupplierPriceUploader from './SupplierPriceUploader';
+import IssueSparePartModal from './modals/IssueSparePartModal';
 import { fetchMaterials, fetchInboundHistory } from '../api/inventoryApi';
 import { MaterialMaster, StockInboundRecord } from '../types';
 
@@ -49,11 +47,10 @@ export default function InventoryManagement() {
   const [loadingBackendData, setLoadingBackendData] = useState(false);
 
   // Modals state
-  const [isInboundModalOpen, setIsInboundModalOpen] = useState(false);
-  const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
   const [isOffcutOpen, setIsOffcutOpen] = useState(false);
   const [isDischargeOpen, setIsDischargeOpen] = useState(false);
-  const [isPriceUploaderOpen, setIsPriceUploaderOpen] = useState(false);
+  const [isIssuePartOpen, setIsIssuePartOpen] = useState(false);
+  const [selectedPartForIssue, setSelectedPartForIssue] = useState<any>(null);
   const [selectedDischargeItem, setSelectedDischargeItem] = useState<any>(null);
 
   // Fetch backend data
@@ -90,16 +87,18 @@ export default function InventoryManagement() {
   }
 
   // Category tabs for Inventory (Excludes Machinery: Printer, Cutter, Laminator)
-  const categoryTabs = ['All', 'Paper', 'Offcut', 'Ink', 'Hardware', 'Finishing', 'Packaging'];
+  const categoryTabs = ['All', 'Paper', 'ParentSheet', 'Offcut', 'Ink', 'Rigid', 'Finishing', 'Packaging', 'SpareParts'];
 
   const categoryTabLabels: Record<string, { lo: string; en: string }> = {
     All: { lo: 'ທັງໝົດ', en: 'All Items' },
     Paper: { lo: 'ເຈ້ຍ & ວັດສະດຸ', en: 'Paper & Substrates' },
+    ParentSheet: { lo: 'ເຈ້ຍໃຫຍ່ 31x43"', en: 'Parent Sheets 31x43"' },
     Offcut: { lo: 'ເສດເຈ້ຍ', en: 'Offcuts' },
     Ink: { lo: 'ນ້ຳໝຶກ & ໂທເນີ', en: 'Ink & Toner' },
-    Hardware: { lo: 'ອຸປະກອນ & ອາໄຫຼ່', en: 'Hardware & Parts' },
+    Rigid: { lo: 'ແຜ່ນແຂງ Rigid', en: 'Rigid Substrates' },
     Finishing: { lo: 'ງານຫຼັງພິມ & ເຄືອບ', en: 'Finishing' },
     Packaging: { lo: 'ກ່ອງ & ບັນຈຸພັນ', en: 'Packaging' },
+    SpareParts: { lo: 'ອະໄຫຼ່ສຳຮອງ', en: 'Spare Parts' },
   };
 
   // Filter logic for legacy / local items
@@ -111,17 +110,22 @@ export default function InventoryManagement() {
 
     let matchesTab = activeTab === 'All';
     if (activeTab === 'Paper') {
-      matchesTab = (cat === 'paper' || cat === 'material') && !item.isOffcut && !cat.includes('offcut');
+      matchesTab = (cat === 'paper' || cat === 'material') && !item.isOffcut && !cat.includes('offcut') && !cat.includes('parent');
+    } else if (activeTab === 'ParentSheet') {
+      const is31x43 = (item.name || '').includes('31x43') || (item.name || '').includes('787') || (item.sku || '').includes('PARENT') || cat.includes('parent');
+      matchesTab = cat === 'parent_sheet' || cat === 'parentsheet' || is31x43;
     } else if (activeTab === 'Offcut') {
       matchesTab = cat === 'offcut' || item.isOffcut || (item.id || '').startsWith('OFF-');
     } else if (activeTab === 'Ink') {
       matchesTab = cat === 'ink' || cat === 'toner';
-    } else if (activeTab === 'Hardware') {
-      matchesTab = cat === 'hardware';
+    } else if (activeTab === 'Rigid') {
+      matchesTab = cat === 'rigid' || cat === 'rigid_substrates' || (item.sku || '').startsWith('RIGID-') || (item.name || '').toLowerCase().includes('foam') || (item.name || '').toLowerCase().includes('acrylic') || (item.name || '').toLowerCase().includes('plaswood');
     } else if (activeTab === 'Finishing') {
-      matchesTab = cat === 'finishing' || cat === 'film' || cat === 'glue';
+      matchesTab = cat === 'finishing' || cat === 'film' || cat === 'glue' || cat === 'lamination' || cat === 'binding' || cat === 'cutting_supplies';
     } else if (activeTab === 'Packaging') {
       matchesTab = cat === 'packaging' || (item.id || '').startsWith('PKG-');
+    } else if (activeTab === 'SpareParts') {
+      matchesTab = cat === 'spareparts' || cat === 'spare_parts' || cat === 'hardware' || (item.sku || '').startsWith('PART-') || (item.id || '').startsWith('PART-');
     } else if (activeTab !== 'All') {
       matchesTab = cat === activeTab.toLowerCase();
     }
@@ -150,24 +154,10 @@ export default function InventoryManagement() {
         </div>
         <div className="flex flex-wrap gap-2.5">
           <button
-            onClick={() => setIsInboundModalOpen(true)}
-            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-2xl transition shadow-lg shadow-blue-500/20 cursor-pointer active:scale-98"
-          >
-            <PackagePlus className="w-4 h-4" />
-            <span>{currentLang === 'lo' ? 'ຮັບເຂົ້າສິນຄ້າ (Stock Inbound)' : 'Stock Inbound'}</span>
-          </button>
-          <button
-            onClick={() => setIsPriceUploaderOpen(true)}
-            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-2xl transition cursor-pointer shadow-sm active:scale-98"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
-            <span>{currentLang === 'lo' ? 'ອັບໂຫຼດລາຄາເຈ້ຍ (Excel/CSV)' : 'Paper Price Sheets'}</span>
-          </button>
-          <button
             onClick={() => { setSelectedDischargeItem(null); setIsDischargeOpen(true); }}
-            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-rose-50 border border-rose-100 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-2xl transition cursor-pointer active:scale-98"
+            className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-2xl transition shadow-md shadow-slate-900/10 cursor-pointer active:scale-98"
           >
-            <MinusCircle className="w-4 h-4 text-rose-600" />
+            <PackageMinus className="w-4 h-4 text-sky-400" />
             <span>{currentLang === 'lo' ? 'ເບີກໃຊ້ງານ / ຕັດສະຕ໋ອກ' : 'Discharge Stock'}</span>
           </button>
           <button
@@ -176,13 +166,6 @@ export default function InventoryManagement() {
           >
             <Scissors className="w-4 h-4 text-slate-600" />
             <span>{currentLang === 'lo' ? 'ເພີ່ມເສດເຈ້ຍ (Offcut)' : 'Add Offcut'}</span>
-          </button>
-          <button
-            onClick={() => setIsAddMaterialOpen(true)}
-            className="flex items-center gap-1.5 px-4.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-2xl transition shadow-sm cursor-pointer active:scale-98"
-          >
-            <Plus className="w-4 h-4 text-slate-700" />
-            <span>{currentLang === 'lo' ? 'ເພີ່ມ SKU ໃໝ່' : 'New SKU'}</span>
           </button>
         </div>
       </div>
@@ -254,8 +237,9 @@ export default function InventoryManagement() {
               loading={loadingBackendData}
               onRefresh={loadBackendData}
               onViewDetails={(mat) => setSelectedDetailLot(mat)}
-              onOpenInbound={(mat) => {
-                setIsInboundModalOpen(true);
+              onIssuePart={(mat) => {
+                setSelectedPartForIssue(mat);
+                setIsIssuePartOpen(true);
               }}
             />
           ) : (
@@ -290,11 +274,10 @@ export default function InventoryManagement() {
               <InventoryTable 
                 items={filteredItems} 
                 activeTab={activeTab}
-                onRestockItem={() => setIsInboundModalOpen(true)}
                 onViewDetails={(lot) => setSelectedDetailLot(lot)}
-                onDischargeItem={(item) => {
-                  setSelectedDischargeItem(item);
-                  setIsDischargeOpen(true);
+                onIssuePart={(item) => {
+                  setSelectedPartForIssue(item.parentItem || item);
+                  setIsIssuePartOpen(true);
                 }}
               />
             </>
@@ -336,27 +319,6 @@ export default function InventoryManagement() {
         </div>
       )}
 
-      {/* Stock Inbound Modal */}
-      <InboundFormModal
-        isOpen={isInboundModalOpen}
-        onClose={() => setIsInboundModalOpen(false)}
-        onSuccess={() => {
-          showToast('ບັນທຶກການຮັບເຂົ້າສິນຄ້າ ແລະ ຄຳນວນຕົ້ນທຶນສຳເລັດ!', 'success');
-          invalidateInventoryQueries();
-          loadBackendData();
-        }}
-        materials={backendMaterials}
-      />
-
-      {/* Universal SKU Modal */}
-      <AddMaterialModal 
-        isOpen={isAddMaterialOpen} 
-        onClose={() => {
-          setIsAddMaterialOpen(false);
-          invalidateInventoryQueries();
-        }} 
-      />
-
       {/* Offcuts modal */}
       <AddOffcutModal 
         isOpen={isOffcutOpen} 
@@ -376,19 +338,17 @@ export default function InventoryManagement() {
           invalidateInventoryQueries();
         }}
       />
-
-      {/* Supplier Price Sheet Uploader & Versioning Modal */}
-      <SupplierPriceUploader
-        isOpen={isPriceUploaderOpen}
-        onClose={() => setIsPriceUploaderOpen(false)}
+      {/* Issue Spare Part to Equipment Modal */}
+      <IssueSparePartModal
+        isOpen={isIssuePartOpen}
+        onClose={() => {
+          setIsIssuePartOpen(false);
+          setSelectedPartForIssue(null);
+        }}
+        materialItem={selectedPartForIssue}
         onSuccess={() => {
           invalidateInventoryQueries();
-          showToast(
-            currentLang === 'lo'
-              ? 'ອັບເດດຖານຂໍ້ມູນລາຄາກະດາດທັງລະບົບແລ້ວ'
-              : 'System-wide paper price database updated',
-            'success'
-          );
+          loadBackendData();
         }}
       />
     </div>

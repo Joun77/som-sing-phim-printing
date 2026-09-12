@@ -17,6 +17,7 @@ import { FormModalTemplate } from '@components/common';
 import type { Equipment } from '../../../equipment/types';
 import type { MachineChangeLog } from './types';
 import { calculateEquipmentPrintCost } from '../../../../utils/machineCostCalculator';
+import { getAuthHeaders } from '../../../../utils/authHeaders';
 import { useApp } from '../../../../store/AppContext';
 
 interface MachineSelectModalProps {
@@ -40,7 +41,7 @@ export const MachineSelectModal: React.FC<MachineSelectModalProps> = ({
   const [dbInks, setDbInks] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch('/api/inbound')
+    fetch('/api/inbound', { headers: getAuthHeaders() })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         const items = Array.isArray(data) ? data : data?.data || [];

@@ -24,14 +24,14 @@ interface Props {
 }
 
 const DEFAULT_CMYK_CHANNELS: ColorChannel[] = [
-  { channel_name: 'C', density_pct: 15, is_spot_color: false },
-  { channel_name: 'M', density_pct: 15, is_spot_color: false },
-  { channel_name: 'Y', density_pct: 15, is_spot_color: false },
-  { channel_name: 'K', density_pct: 15, is_spot_color: false },
+  { channel_name: 'C', density_pct: 5, is_spot_color: false },
+  { channel_name: 'M', density_pct: 5, is_spot_color: false },
+  { channel_name: 'Y', density_pct: 5, is_spot_color: false },
+  { channel_name: 'K', density_pct: 5, is_spot_color: false },
 ];
 
 const DEFAULT_MONO_CHANNELS: ColorChannel[] = [
-  { channel_name: 'K', density_pct: 15, is_spot_color: false },
+  { channel_name: 'K', density_pct: 5, is_spot_color: false },
 ];
 
 const ISO_COVERAGE_PRESETS = [
@@ -267,11 +267,22 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
           {allocations.map((item, idx) => {
             const isMono = item.color_mode === 'MONO_K';
             const allocatedPct = targetQuantity > 0 ? Math.round(((item.allocated_pages || 0) / targetQuantity) * 100) : 100;
-            const inkCost = item.ink_cost_per_page || 0;
-            const machCost = item.cost_per_page || 0;
+            const rawPrnId = (item.printer_id || '').split('__')[0];
+            const matchedPrn = availablePrinters.find(p => p.id === rawPrnId || p.id === item.printer_id);
+            const inkCost = matchedPrn?.ink_cost_per_page || item.ink_cost_per_page || 0;
+            const machCost = matchedPrn?.cost_per_page || item.cost_per_page || 0;
             const realInkPerSheet = (activeCalc && activeCalc.inkCost !== undefined && targetQuantity > 0)
-              ? Math.round(activeCalc.inkCost / targetQuantity)
+              ? Math.round((activeCalc.inkCost / targetQuantity) * 100) / 100
               : inkCost;
+            const realMachPerSheet = (activeCalc && activeCalc.machineOverhead !== undefined && targetQuantity > 0)
+              ? Math.round((activeCalc.machineOverhead / targetQuantity) * 100) / 100
+              : machCost;
+            const totalPerSheet = Math.round((realInkPerSheet + realMachPerSheet) * 100) / 100;
+
+            const formatVal = (val: number) => {
+              if (Number.isInteger(val)) return val.toLocaleString();
+              return val.toFixed(2);
+            };
 
             return (
               <div
@@ -295,17 +306,17 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
                       </div>
                       <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[10px] text-slate-500 font-medium">
                         <span className="text-indigo-900 font-bold font-sans bg-indigo-50/80 px-2 py-0.5 rounded border border-indigo-100">
-                          ໝຶກຈິງ: LAK {realInkPerSheet.toLocaleString()} / ແຜ່ນ ({paperSizeName || (jobSizePreset && jobSizePreset.toUpperCase() !== 'CUSTOM' ? jobSizePreset : 'A4')})
+                          ໝຶກຈິງ: LAK {formatVal(realInkPerSheet)} / ແຜ່ນ ({paperSizeName || (jobSizePreset && jobSizePreset.toUpperCase() !== 'CUSTOM' ? jobSizePreset : 'A4')})
                         </span>
                         <span>•</span>
-                        <span>ຄ່າເສື່ອມ & ໄຟ: LAK {machCost.toLocaleString()} / ແຜ່ນ</span>
+                        <span>ຄ່າເຄື່ອງ & ອາໄຫຼ່: LAK {formatVal(realMachPerSheet)} / ແຜ່ນ</span>
                         <span>•</span>
                         <span className="text-purple-700 font-black font-sans bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
-                          ລວມ: LAK {(realInkPerSheet + machCost).toLocaleString()} / ແຜ່ນ
+                          ຕົ້ນທຶນພິມລວມ: LAK {formatVal(totalPerSheet)} / ແຜ່ນ
                         </span>
-                        {inkCost > 0 && inkCost !== realInkPerSheet && (
+                        {inkCost > 0 && Math.abs(inkCost - realInkPerSheet) > 0.05 && (
                           <span className="text-slate-400 text-[9px] font-sans">
-                            (ມາດຕະຖານ A4 @5%: LAK {inkCost.toLocaleString()})
+                            (ມາດຕະຖານ A4 @5%: LAK {formatVal(inkCost)})
                           </span>
                         )}
                       </div>

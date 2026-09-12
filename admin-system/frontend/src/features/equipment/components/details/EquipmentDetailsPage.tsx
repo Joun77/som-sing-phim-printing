@@ -15,7 +15,10 @@ import {
   Plus,
   Trash2,
   Edit,
-  TrendingUp,
+  Edit3,
+  Save,
+  Check,
+  X,
   Calendar,
   AlertTriangle,
   Droplet,
@@ -30,6 +33,8 @@ import LogDowntimeModal from '../modals/LogDowntimeModal';
 import QuickLinkInkModal from '../modals/QuickLinkInkModal';
 import QuickSwapConsumableModal from '../modals/QuickSwapConsumableModal';
 import PrinterInkComparisonCard from '@features/inventory/components/details/PrinterInkComparisonCard';
+import { resolveMachineImage, calculateMachineWearPartsRate, getEquipmentAccurateCost, calculateEquipmentPrintCost, formatUnitPrecisionLAK } from '@utils/machineCostCalculator';
+import { getAuthHeaders } from '@utils/authHeaders';
 
 export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmentId: string; onBack: () => void }) {
   const { 
@@ -54,9 +59,11 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
   const formatLAK = formatCurrency;
   const formatUnitLAK = (val: number) => {
     if (!val || isNaN(val)) return 'LAK 0';
-    if (Math.abs(val) < 1) return `LAK ${val.toFixed(2)}`;
-    if (Math.abs(val) < 10) return `LAK ${val.toFixed(2)}`;
-    return formatCurrency(Math.round(val * 100) / 100);
+    const rounded = Math.round(val * 100) / 100;
+    if (Math.abs(rounded) < 1000 && rounded % 1 !== 0) {
+      return `LAK ${rounded.toFixed(2)}`;
+    }
+    return formatCurrency(rounded);
   };
 
   // Active sub-tab state: 'specs' | 'meter' | 'maintenance' | 'inks'
@@ -80,6 +87,15 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
     componentName?: string;
     currentUsage?: number;
   } | null>(null);
+
+  // Core asset & lifetime parameter editing state
+  const [isEditingCoreParams, setIsEditingCoreParams] = useState(false);
+  const [editPrice, setEditPrice] = useState<number>(0);
+  const [editCapacity, setEditCapacity] = useState<number>(0);
+
+  // Itemized wear parts editing state
+  const [isEditingWearParts, setIsEditingWearParts] = useState(false);
+  const [wearPartsDraft, setWearPartsDraft] = useState<Record<string, { cost: number; life: number }>>({});
 
   if (!machine) {
     return (
@@ -138,17 +154,46 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
   const machineDowntimes = downtimeLogs.filter((d: any) => d.equipmentId === machine.id);
 
   // Financial & Depreciation Math (Robust & Synchronized Model)
-  const assetValue = Number(
-    machine.MachinePrice ?? 
-    machine.price ?? 
-    machine.unitPrice ?? 
-    machine.purchaseCost ?? 
-    machine.purchasePrice ?? 
-    machine.unitCost ?? 
-    0
+  const rawPriceCandidates = [
+    machine.price,
+    machine.purchaseCost,
+    machine.purchasePrice,
+    machine.unitPrice,
+    machine.MachinePrice,
+    machine.totalPrice,
+    machine.unitCost,
+    machine.specs?.purchaseCost,
+    machine.specs?.price,
+    machine.specs?.purchasePrice,
+    machine.specs?.totalPrice
+  ];
+  const foundPrice = rawPriceCandidates.find(p => p !== undefined && p !== null && Number(p) > 0);
+  const assetValue = Number(foundPrice || 0);
+
+  const machineCategoryLower = (machine.category || '').toLowerCase();
+  const subtypeLower = (machine.postPressSubtype || machine.specs?.postPressSubtype || '').toLowerCase();
+  const nameLower = (machine.name || '').toLowerCase();
+
+  const isCutter = subtypeLower.includes('guillotine') || subtypeLower.includes('cutter') || subtypeLower.includes('plotter') || machineCategoryLower.includes('cutter') || nameLower.includes('cutter') || nameLower.includes('guillotine');
+  const isLaminator = subtypeLower.includes('laminator') || machineCategoryLower.includes('laminator') || nameLower.includes('laminator');
+  const isBinder = subtypeLower.includes('binder') || machineCategoryLower.includes('binder') || nameLower.includes('binder');
+
+  // A machine is Post-Press only if explicitly a finishing machine (Cutter, Laminator, Binder)
+  const isPostPressMachine = isCutter || isLaminator || isBinder || machineCategoryLower.includes('post_press') || machineCategoryLower.includes('postpress');
+  const isPrinter = !isPostPressMachine;
+  const isInkjet = !isPostPressMachine && (subtypeLower.includes('inkjet') || machineCategoryLower.includes('inkjet') || nameLower.includes('l15150') || nameLower.includes('epson') || (machine.specs?.feedType !== undefined));
+  const accurate = getEquipmentAccurateCost(machine);
+  const isLaser = isPrinter && !isInkjet;
+
+  const isGuillotine = isCutter && (
+    (machine.postPressSubtype || machine.specs?.postPressSubtype || machine.category || '').toLowerCase().includes('guillotine') ||
+    (machine.name || '').toLowerCase().includes('guillotine') ||
+    (machine.name || '').toLowerCase().includes('cutter') ||
+    (machine.name || '').toLowerCase().includes('qzyk')
   );
 
-  const isPostPressMachine = machine.category !== 'Printer' && machine.category !== 'PRINTER';
+  let machineUnitLabel = isGuillotine ? 'ຮອບຕັດ (Cuts)' : (isCutter || isLaminator) ? 'ແມັດ (m)' : isBinder ? 'ຫົວ (Book)' : 'ໜ້າ (Page)';
+  let machineUnitEn = isGuillotine ? 'cuts' : (isCutter || isLaminator) ? 'meter' : isBinder ? 'book' : 'page';
 
   const postPressSubtypeMap: Record<string, string> = {
     guillotine: 'Guillotine Cutter',
@@ -162,18 +207,22 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
 
   const lifespanYears = Number(machine.lifespanYears || machine.specs?.lifespanYears || 5);
   const estMonthlyVolume = Number(machine.estMonthlyVolume || machine.specs?.estMonthlyVolume || 50000);
-  const maintenanceRatePct = Number(machine.maintenanceRatePercent || machine.specs?.maintenanceRatePercent || 15);
+  const maintenanceRatePct = Number(machine.maintenanceRatePercent || machine.specs?.maintenanceRatePercent || 0);
   const maintCostPerPage = Number(machine.specs?.fixedMaintenanceCostPerPage || 0);
 
   const totalMonths = lifespanYears * 12;
-  const targetLifetimeCapacity = Number(
+  const explicitCapacity = Number(
+    machine.specs?.expectedLife ||
+    machine.specs?.expectedLifeA4Pages ||
+    machine.expectedLifeA4Pages ||
     machine.TargetTotalPages || 
     machine.printedPagesCapacity || 
-    machine.expectedLifeA4Pages || 
-    machine.lifetimePagesA4 || 
-    (estMonthlyVolume * totalMonths) || 
-    3000000
+    machine.lifetimePagesA4 ||
+    machine.expected_life_pages ||
+    0
   );
+  const fallbackCapacity = isInkjet ? 200000 : isLaser ? 500000 : isGuillotine ? 100000 : isBinder ? 30000 : 50000;
+  const targetLifetimeCapacity = explicitCapacity > 0 ? explicitCapacity : fallbackCapacity;
 
   const currentMeterCount = Number(
     machine.currentMeterCount || 
@@ -182,22 +231,271 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
     0
   );
 
-  const monthlyDepr = totalMonths > 0 ? (assetValue / totalMonths) : 0;
-  const baseCostPerUnit = (estMonthlyVolume > 0 && monthlyDepr > 0)
-    ? (monthlyDepr / estMonthlyVolume)
-    : (targetLifetimeCapacity > 0 ? (assetValue / targetLifetimeCapacity) : 0);
+  const baseCostPerUnit = (assetValue > 0 && targetLifetimeCapacity > 0)
+    ? (assetValue / targetLifetimeCapacity)
+    : 0;
 
-  const wearAllowancePerUnit = Math.round(baseCostPerUnit * (maintenanceRatePct / 100) * 1000) / 1000 + maintCostPerPage;
+  // 5 Critical Wear Parts Model (Bound to real purchase cost & specs from Inbound)
+  const getStandard5WearParts = () => {
+    const existingComponents = machine.components || [];
+    const existingMap = new Map();
+    existingComponents.forEach((c: any) => {
+      existingMap.set(c.name?.toLowerCase(), c);
+    });
+
+    const specs = machine.specs || {};
+
+    let defaults: Array<{ 
+      name: string; 
+      nameLo: string; 
+      usage: number; 
+      threshold: number; 
+      lifespan: string;
+      cost: number;
+      lifeVal: number;
+      unitLabel: string;
+      costPerUnit: number;
+      keyCost?: string;
+      keyLife?: string;
+    }> = [];
+
+    if (isCutter) {
+      const sharpCost = Number(specs.wearSharpeningCost || machine.wearSharpeningCost || 150000);
+      const sharpLife = Number(specs.wearSharpeningIntervalCuts || machine.wearSharpeningIntervalCuts || 10000);
+      const stickCost = Number(specs.wearCuttingStickCost || machine.wearCuttingStickCost || 100000);
+      const stickLife = Number(specs.wearCuttingStickLifeCuts || machine.wearCuttingStickLifeCuts || 20000);
+      const bladeCost = Number(specs.wearBladeCost || machine.wearBladeCost || 250000);
+      const bladeLife = Number(specs.wearBladeLifeMeters || machine.wearBladeLifeMeters || 5000);
+
+      defaults = [
+        { name: 'Sharpening Blade Service', nameLo: 'ຄ່າຈ້າງລັບຄົມໃບມີດຕັດເຈ້ຍ', usage: 18, threshold: 90, lifespan: `${sharpLife.toLocaleString()} cuts`, cost: sharpCost, lifeVal: sharpLife, unitLabel: 'cuts', costPerUnit: sharpLife > 0 ? (sharpCost / sharpLife) : 0, keyCost: 'wearSharpeningCost', keyLife: 'wearSharpeningIntervalCuts' },
+        { name: 'Cutting Stick Pad', nameLo: 'ໄມ້ຮອງໃບມີດຕັດ (Cutting Stick)', usage: 42, threshold: 85, lifespan: `${stickLife.toLocaleString()} cuts`, cost: stickCost, lifeVal: stickLife, unitLabel: 'cuts', costPerUnit: stickLife > 0 ? (stickCost / stickLife) : 0, keyCost: 'wearCuttingStickCost', keyLife: 'wearCuttingStickLifeCuts' },
+        { name: 'Plotter Cutting Blade', nameLo: 'ໃບມີດພລັອດເຕີ (Plotter Blade)', usage: 25, threshold: 90, lifespan: `${bladeLife.toLocaleString()} m`, cost: bladeCost, lifeVal: bladeLife, unitLabel: 'm', costPerUnit: bladeLife > 0 ? (bladeCost / bladeLife) : 0, keyCost: 'wearBladeCost', keyLife: 'wearBladeLifeMeters' },
+      ];
+    } else if (isLaminator) {
+      const rollerCost = Number(specs.wearSiliconeRollerCost || machine.wearSiliconeRollerCost || 1200000);
+      const rollerLife = Number(specs.wearSiliconeRollerLifeMeters || machine.wearSiliconeRollerLifeMeters || 20000);
+      const heatCost = Number(specs.wearHeatingElementCost || machine.wearHeatingElementCost || 800000);
+      const heatLife = Number(specs.wearHeatingElementHours || machine.wearHeatingElementHours || 5000);
+
+      defaults = [
+        { name: 'Silicone Heat Rollers', nameLo: 'ລູກກິ້ງຢາງຄວາມຮ້ອນ (Silicone Rollers)', usage: 35, threshold: 85, lifespan: `${rollerLife.toLocaleString()} m`, cost: rollerCost, lifeVal: rollerLife, unitLabel: 'm', costPerUnit: rollerLife > 0 ? (rollerCost / rollerLife) : 0, keyCost: 'wearSiliconeRollerCost', keyLife: 'wearSiliconeRollerLifeMeters' },
+        { name: 'Heating Element Core', nameLo: 'ແທ່ງຄວາມຮ້ອນ (Heating Element)', usage: 20, threshold: 90, lifespan: `${heatLife.toLocaleString()} hours`, cost: heatCost, lifeVal: heatLife, unitLabel: 'hours', costPerUnit: heatLife > 0 ? (heatCost / heatLife) : 0, keyCost: 'wearHeatingElementCost', keyLife: 'wearHeatingElementHours' },
+      ];
+    } else if (isBinder) {
+      const millCost = Number(specs.wearMillingCutterCost || machine.wearMillingCutterCost || 800000);
+      const millLife = Number(specs.wearMillingCutterLifeBooks || machine.wearMillingCutterLifeBooks || 10000);
+      const punchCost = Number(specs.wearPunchingPinsCost || machine.wearPunchingPinsCost || 600000);
+      const punchLife = Number(specs.wearPunchingPinsLifePunches || machine.wearPunchingPinsLifePunches || 20000);
+
+      defaults = [
+        { name: 'Spine Milling Cutter', nameLo: 'ໃບມີດປາດສັນປຶ້ມ (Milling Cutter)', usage: 40, threshold: 85, lifespan: `${millLife.toLocaleString()} books`, cost: millCost, lifeVal: millLife, unitLabel: 'books', costPerUnit: millLife > 0 ? (millCost / millLife) : 0, keyCost: 'wearMillingCutterCost', keyLife: 'wearMillingCutterLifeBooks' },
+        { name: 'Wire Punching Pins Set', nameLo: 'ຊຸດເຂັມເຈາະຮູສັນລວດ (Punching Pins)', usage: 22, threshold: 90, lifespan: `${punchLife.toLocaleString()} punches`, cost: punchCost, lifeVal: punchLife, unitLabel: 'punches', costPerUnit: punchLife > 0 ? (punchCost / punchLife) : 0, keyCost: 'wearPunchingPinsCost', keyLife: 'wearPunchingPinsLifePunches' },
+      ];
+    } else if (isInkjet) {
+      const maintCost = Number(specs.wearMaintBoxCost || machine.wearMaintBoxCost || 450000);
+      const maintLife = Number(specs.wearMaintBoxLife || machine.wearMaintBoxLife || 25000);
+      const headCost = Number(specs.wearPrintheadCost || machine.wearPrintheadCost || 4500000);
+      const headLife = Number(specs.wearPrintheadLife || machine.wearPrintheadLife || 100000);
+      const pickupCost = Number(specs.wearPickupRollerCost || machine.wearPickupRollerCost || 150000);
+      const pickupLife = Number(specs.wearPickupRollerLife || machine.wearPickupRollerLife || 30000);
+      const beltCost = Number(specs.wearCarriageBeltCost || machine.wearCarriageBeltCost || 500000);
+      const beltLife = Number(specs.wearCarriageBeltLife || machine.wearCarriageBeltLife || 50000);
+
+      defaults = [
+        { name: 'Maintenance Waste Box', nameLo: 'ຊຸດຊັບໝຶກ (Maintenance Box)', usage: 35, threshold: 85, lifespan: `${maintLife.toLocaleString()} pages`, cost: maintCost, lifeVal: maintLife, unitLabel: 'pages', costPerUnit: maintLife > 0 ? (maintCost / maintLife) : 0, keyCost: 'wearMaintBoxCost', keyLife: 'wearMaintBoxLife' },
+        { name: 'Precision Inkjet Printhead', nameLo: 'ຫົວພິມຄວາມລະອຽດສູງ (Printhead)', usage: 20, threshold: 90, lifespan: `${headLife.toLocaleString()} pages`, cost: headCost, lifeVal: headLife, unitLabel: 'pages', costPerUnit: headLife > 0 ? (headCost / headLife) : 0, keyCost: 'wearPrintheadCost', keyLife: 'wearPrintheadLife' },
+        { name: 'Feed Pickup Roller', nameLo: 'ຢາງດຶງເຈ້ຍ (Pickup Roller)', usage: 50, threshold: 85, lifespan: `${pickupLife.toLocaleString()} pages`, cost: pickupCost, lifeVal: pickupLife, unitLabel: 'pages', costPerUnit: pickupLife > 0 ? (pickupCost / pickupLife) : 0, keyCost: 'wearPickupRollerCost', keyLife: 'wearPickupRollerLife' },
+        { name: 'Carriage Drive Belt', nameLo: 'ສາຍພານຫົວພິມ (Carriage Belt)', usage: 25, threshold: 90, lifespan: `${beltLife.toLocaleString()} pages`, cost: beltCost, lifeVal: beltLife, unitLabel: 'pages', costPerUnit: beltLife > 0 ? (beltCost / beltLife) : 0, keyCost: 'wearCarriageBeltCost', keyLife: 'wearCarriageBeltLife' },
+      ];
+    } else {
+      // Laser Production Press
+      const drumCost = Number(specs.wearDrumUnitCost || machine.wearDrumUnitCost || 1500000);
+      const drumLife = Number(specs.wearDrumUnitLife || machine.wearDrumUnitLife || 50000);
+      const fuserCost = Number(specs.wearFuserUnitCost || machine.wearFuserUnitCost || specs.wearFuserCost || 2000000);
+      const fuserLife = Number(specs.wearFuserUnitLife || machine.wearFuserUnitLife || specs.wearFuserLife || 100000);
+      const itbCost = Number(specs.wearTransferBeltCost || machine.wearTransferBeltCost || 1800000);
+      const itbLife = Number(specs.wearTransferBeltLife || machine.wearTransferBeltLife || 100000);
+      const rollerCost = Number(specs.wearPickupRollerCost || machine.wearPickupRollerCost || specs.wearRollerCost || 150000);
+      const rollerLife = Number(specs.wearPickupRollerLife || machine.wearPickupRollerLife || specs.wearRollerLife || 30000);
+      const wasteBoxCost = Number(specs.wearWasteTonerBoxCost || machine.wearWasteTonerBoxCost || 350000);
+      const wasteBoxLife = Number(specs.wearWasteTonerBoxLife || machine.wearWasteTonerBoxLife || 30000);
+
+      defaults = [
+        { name: 'OPC Drum Unit', nameLo: 'ຊຸດດຣັມສ້າງພາບ (Drum Unit)', usage: 65, threshold: 85, lifespan: `${drumLife.toLocaleString()} pages`, cost: drumCost, lifeVal: drumLife, unitLabel: 'pages', costPerUnit: drumLife > 0 ? (drumCost / drumLife) : 0, keyCost: 'wearDrumUnitCost', keyLife: 'wearDrumUnitLife' },
+        { name: 'Fuser Fixing Assembly', nameLo: 'ຊຸດຄວາມຮ້ອນ (Fuser Unit)', usage: 72, threshold: 90, lifespan: `${fuserLife.toLocaleString()} pages`, cost: fuserCost, lifeVal: fuserLife, unitLabel: 'pages', costPerUnit: fuserLife > 0 ? (fuserCost / fuserLife) : 0, keyCost: 'wearFuserUnitCost', keyLife: 'wearFuserUnitLife' },
+        { name: 'Intermediate Transfer Belt (ITB)', nameLo: 'ສາຍພານຖ່າຍທອດພາບ (Transfer Belt)', usage: 38, threshold: 90, lifespan: `${itbLife.toLocaleString()} pages`, cost: itbCost, lifeVal: itbLife, unitLabel: 'pages', costPerUnit: itbLife > 0 ? (itbCost / itbLife) : 0, keyCost: 'wearTransferBeltCost', keyLife: 'wearTransferBeltLife' },
+        { name: 'Paper Feed Pickup Rollers', nameLo: 'ຊຸດລູກກິ້ງດຶງເຈ້ຍ (Pickup Roller)', usage: 82, threshold: 85, lifespan: `${rollerLife.toLocaleString()} pages`, cost: rollerCost, lifeVal: rollerLife, unitLabel: 'pages', costPerUnit: rollerLife > 0 ? (rollerCost / rollerLife) : 0, keyCost: 'wearPickupRollerCost', keyLife: 'wearPickupRollerLife' },
+        { name: 'Waste Toner Box', nameLo: 'ກ່ອງເກັບຜົງໝຶກເສຍ (Waste Toner Box)', usage: 45, threshold: 90, lifespan: `${wasteBoxLife.toLocaleString()} pages`, cost: wasteBoxCost, lifeVal: wasteBoxLife, unitLabel: 'pages', costPerUnit: wasteBoxLife > 0 ? (wasteBoxCost / wasteBoxLife) : 0, keyCost: 'wearWasteTonerBoxCost', keyLife: 'wearWasteTonerBoxLife' },
+      ];
+    }
+
+    return defaults.map(def => {
+      const match = existingMap.get(def.name.toLowerCase());
+      if (match) {
+        return {
+          ...def,
+          ...match,
+          keyCost: def.keyCost,
+          keyLife: def.keyLife,
+          cost: match.cost !== undefined ? match.cost : def.cost,
+          lifeVal: match.lifeVal !== undefined ? match.lifeVal : def.lifeVal,
+          unitLabel: match.unitLabel || def.unitLabel,
+          costPerUnit: match.costPerUnit !== undefined ? match.costPerUnit : def.costPerUnit,
+        };
+      }
+      return def;
+    });
+  };
+
+  const criticalWearParts = getStandard5WearParts();
+  const actualPartsWearPerUnit = criticalWearParts.reduce((acc, p) => acc + (Number(p.costPerUnit) || 0), 0);
+  const formulaWearRate = calculateMachineWearPartsRate(machine);
+
+  const wearAllowancePerUnit = formulaWearRate > 0 
+    ? formulaWearRate 
+    : (actualPartsWearPerUnit > 0 
+        ? Math.round(actualPartsWearPerUnit * 1000) / 1000 
+        : (maintenanceRatePct > 0 ? Math.round(baseCostPerUnit * (maintenanceRatePct / 100) * 1000) / 1000 : 0));
+
   const calculatedNetRate = Math.round((baseCostPerUnit + wearAllowancePerUnit) * 1000) / 1000;
   const netCostPerUnit = calculatedNetRate > 0
     ? calculatedNetRate
     : (machine.costPerConsumptionUnit || machine.calculatedCostPerPage || 0);
 
+  // Direct updater for wear components in Master Data
+  const handleUpdateWearPart = (part: any, newCost?: number, newLife?: number) => {
+    const updatedCost = newCost !== undefined ? Number(newCost) : Number(part.cost);
+    const updatedLife = newLife !== undefined ? Number(newLife) : Number(part.lifeVal);
+    const costPerUnit = updatedLife > 0 ? (updatedCost / updatedLife) : 0;
+
+    const currentComponents = Array.isArray(machine.components) ? [...machine.components] : [];
+    const existingIndex = currentComponents.findIndex((c: any) => c.name?.toLowerCase() === part.name.toLowerCase());
+
+    const updatedComponentObj = {
+      ...part,
+      cost: updatedCost,
+      lifeVal: updatedLife,
+      costPerUnit,
+    };
+
+    if (existingIndex >= 0) {
+      currentComponents[existingIndex] = {
+        ...currentComponents[existingIndex],
+        ...updatedComponentObj,
+      };
+    } else {
+      currentComponents.push(updatedComponentObj);
+    }
+
+    const updatedSpecs = {
+      ...(machine.specs || {}),
+      ...(part.keyCost ? { [part.keyCost]: updatedCost } : {}),
+      ...(part.keyLife ? { [part.keyLife]: updatedLife } : {}),
+    };
+
+    const newWearRate = currentComponents.reduce((acc: number, c: any) => acc + (Number(c.costPerUnit) || 0), 0);
+    const newNetRate = Math.round((baseCostPerUnit + newWearRate) * 1000) / 1000;
+
+    updateEquipment(machine.id, {
+      specs: updatedSpecs,
+      components: currentComponents,
+      ...(part.keyCost ? { [part.keyCost]: updatedCost } : {}),
+      ...(part.keyLife ? { [part.keyLife]: updatedLife } : {}),
+      costPerConsumptionUnit: newNetRate,
+      calculatedCostPerPage: newNetRate,
+      maintenanceCostPerPage: newNetRate,
+    });
+  };
+
+  useEffect(() => {
+    if (!isEditingCoreParams) {
+      setEditPrice(assetValue);
+      setEditCapacity(targetLifetimeCapacity);
+    }
+  }, [assetValue, targetLifetimeCapacity, isEditingCoreParams]);
+
+  const handleSaveCoreParams = () => {
+    const finalPrice = Math.max(0, Number(editPrice));
+    const finalCap = Math.max(1, Number(editCapacity));
+    const newBase = finalCap > 0 ? (finalPrice / finalCap) : 0;
+    const nRate = Math.round((newBase + wearAllowancePerUnit) * 1000) / 1000;
+
+    updateEquipment(machine.id, {
+      price: finalPrice,
+      unitPrice: finalPrice,
+      MachinePrice: finalPrice,
+      purchaseCost: finalPrice,
+      purchasePrice: finalPrice,
+      totalPrice: finalPrice,
+      TargetTotalPages: finalCap,
+      printedPagesCapacity: finalCap,
+      expectedLifeA4Pages: isPrinter ? finalCap : undefined,
+      specs: {
+        ...(machine.specs || {}),
+        price: finalPrice,
+        purchaseCost: finalPrice,
+        expectedLife: finalCap,
+        expectedLifeA4Pages: isPrinter ? finalCap : undefined,
+      },
+      costPerConsumptionUnit: nRate,
+      calculatedCostPerPage: nRate,
+      maintenanceCostPerPage: nRate
+    });
+
+    setIsEditingCoreParams(false);
+    showToast(currentLang === 'lo' ? 'ບັນທຶກພາຣາມິເຕີຕົ້ນທຶນເຄື່ອງຈັກສຳເລັດ' : 'Saved core machine parameters successfully', 'success');
+  };
+
+  const handleSaveAllWearParts = () => {
+    const currentComponents = Array.isArray(machine.components) ? [...machine.components] : [];
+    const updatedSpecs = { ...(machine.specs || {}) };
+
+    criticalWearParts.forEach((part: any) => {
+      const draft = wearPartsDraft[part.name];
+      if (draft) {
+        const updatedCost = draft.cost;
+        const updatedLife = draft.life;
+        const costPerUnit = updatedLife > 0 ? (updatedCost / updatedLife) : 0;
+
+        const existingIndex = currentComponents.findIndex((c: any) => c.name?.toLowerCase() === part.name.toLowerCase());
+        const updatedObj = {
+          ...part,
+          cost: updatedCost,
+          lifeVal: updatedLife,
+          costPerUnit
+        };
+        if (existingIndex >= 0) {
+          currentComponents[existingIndex] = { ...currentComponents[existingIndex], ...updatedObj };
+        } else {
+          currentComponents.push(updatedObj);
+        }
+
+        if (part.keyCost) updatedSpecs[part.keyCost] = updatedCost;
+        if (part.keyLife) updatedSpecs[part.keyLife] = updatedLife;
+      }
+    });
+
+    const newWearRate = currentComponents.reduce((acc: number, c: any) => acc + (Number(c.costPerUnit) || 0), 0);
+    const newNetRate = Math.round((baseCostPerUnit + newWearRate) * 1000) / 1000;
+
+    updateEquipment(machine.id, {
+      specs: updatedSpecs,
+      components: currentComponents,
+      costPerConsumptionUnit: newNetRate,
+      calculatedCostPerPage: newNetRate,
+      maintenanceCostPerPage: newNetRate
+    });
+
+    setIsEditingWearParts(false);
+    showToast(currentLang === 'lo' ? 'ບັນທຶກລາຄາ ແລະ ອາຍຸອະໄຫຼ່ສຳເລັດ' : 'Saved wear parts successfully', 'success');
+  };
+
   // Comprehensive Live Inks from PostgreSQL Database for accurate real-time costing
   const [dbInks, setDbInks] = useState<any[]>([]);
 
   useEffect(() => {
-    const p1 = fetch('/api/inbound')
+    const p1 = fetch('/api/inbound', { headers: getAuthHeaders() })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         const items = Array.isArray(data) ? data : (data?.data || []);
@@ -207,9 +505,9 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
           const name = (i.itemName || i.name || '').toUpperCase();
           return c.includes('INK') || name.includes('INK') || name.includes('TONER') || name.includes('ໝຶກ') || sku.startsWith('INK');
         }).map((m: any) => ({
-          id: m.skuCode || m.id,
-          sku: m.skuCode || m.id,
-          skuCode: m.skuCode || m.id,
+          id: m.specs?.sku || m.specs?.inkCode || m.skuCode || m.id,
+          sku: m.specs?.sku || m.specs?.inkCode || m.skuCode || m.id,
+          skuCode: m.specs?.sku || m.specs?.inkCode || m.skuCode || m.id,
           name: m.itemName || m.name || m.skuCode || m.id,
           category: m.category || 'Ink',
           colorGroup: m.specs?.colorGroup || m.colorGroup || 'Black',
@@ -223,7 +521,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
       })
       .catch(() => []);
 
-    const p2 = fetch('/api/inventory/items')
+    const p2 = fetch('/api/inventory/items', { headers: getAuthHeaders() })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         const items = Array.isArray(data) ? data : (data?.data || []);
@@ -233,9 +531,9 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
           const name = (i.name || '').toUpperCase();
           return c.includes('INK') || name.includes('INK') || name.includes('TONER') || name.includes('ໝຶກ') || sku.startsWith('INK');
         }).map((m: any) => ({
-          id: m.id || m.sku || m.inkCode,
-          sku: m.sku || m.inkCode || m.id,
-          skuCode: m.sku || m.inkCode || m.id,
+          id: m.specs?.sku || m.specs?.inkCode || m.id || m.sku || m.inkCode,
+          sku: m.specs?.sku || m.specs?.inkCode || m.sku || m.inkCode || m.id,
+          skuCode: m.specs?.sku || m.specs?.inkCode || m.sku || m.inkCode || m.id,
           name: m.name || m.id,
           category: m.category || 'Ink',
           colorGroup: m.specs?.colorGroup || m.colorGroup || 'Black',
@@ -268,79 +566,36 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
       { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 }
     ];
 
-  let totalActualCostPerPage = 0;
-  const linkedInksDetails = !isPostPressMachine ? oemBaselineSlots.map((oemSlot: any, idx: number) => {
-    const slotPos = oemSlot.slotPosition || `Slot ${idx + 1}`;
-    const isBlack = (oemSlot.colorGroup || '').toLowerCase().includes('black') || (oemSlot.colorGroup || '').toLowerCase().includes('k') || slotPos.toLowerCase().includes('black') || slotPos.toLowerCase().includes('slot 1');
-    const colorGroupName = isBlack ? 'Black' : (oemSlot.colorGroup || (idx === 1 ? 'Cyan' : idx === 2 ? 'Magenta' : idx === 3 ? 'Yellow' : `Color ${idx + 1}`));
-    const defaultYield = isBlack ? 7500 : 6000;
-    const defaultPrice = isBlack ? 450000 : 320000;
-    const defaultVol = isBlack ? 127 : 70;
+  const equipmentCostResult = calculateEquipmentPrintCost(
+    machine,
+    printerColorLinks,
+    allAvailableInks,
+    machine?.category
+  );
 
-    const oemVol = Number(oemSlot.oemStandardVolumeMl || oemSlot.volume || defaultVol);
-    const rawYield = Number(oemSlot.oemStandardIsoYieldA4 || oemSlot.isoYield || defaultYield);
-    const oemYield = rawYield > 500 ? rawYield : defaultYield;
-    const oemPrice = Number(oemSlot.oemPrice || defaultPrice);
+  // Authoritative ink cost: prioritize persistent actual linked ink cost from machine (e.g. 60.17 LAK)
+  const persistentColorInkCost = Number(
+    machine?.colorInkCost || 
+    machine?.linkedInkCostPerPage || 
+    (machine?.specs as any)?.colorInkCost || 
+    (machine?.specs as any)?.linkedInkCostPerPage || 
+    0
+  );
+  
+  const cachedBreakdown = (machine?.specs as any)?.inkSlotsBreakdown || [];
 
-    const isoRateMlPerSheet = oemYield > 0 ? (oemVol / oemYield) : 0.0169;
-    const oemCostPerPage = oemYield > 0 ? (oemPrice / oemYield) : ((oemPrice / oemVol) * isoRateMlPerSheet);
+  // Effective cost: persistent actual linked cost takes precedence over fallback estimation
+  const effectiveInkCost = persistentColorInkCost > 0 
+    ? persistentColorInkCost 
+    : equipmentCostResult.linkedInkRatePerPage;
 
-    const activeLink = linkedLinks.find((lnk: any) => 
-      lnk.slotPosition === slotPos || 
-      (lnk.slotPosition && slotPos && (lnk.slotPosition.includes(slotPos) || slotPos.includes(lnk.slotPosition))) ||
-      (lnk.colorGroup && colorGroupName && lnk.colorGroup.toLowerCase() === colorGroupName.toLowerCase()) ||
-      (idx === 0 && (lnk.slotPosition?.includes('Slot 1') || lnk.colorGroup?.toLowerCase().includes('black') || lnk.colorGroup?.toLowerCase().includes('k'))) ||
-      (idx === 1 && (lnk.slotPosition?.includes('Slot 2') || lnk.colorGroup?.toLowerCase().includes('cyan') || lnk.colorGroup?.toLowerCase().includes('c'))) ||
-      (idx === 2 && (lnk.slotPosition?.includes('Slot 3') || lnk.colorGroup?.toLowerCase().includes('magenta') || lnk.colorGroup?.toLowerCase().includes('m'))) ||
-      (idx === 3 && (lnk.slotPosition?.includes('Slot 4') || lnk.colorGroup?.toLowerCase().includes('yellow') || lnk.colorGroup?.toLowerCase().includes('y')))
-    );
+  const totalLinkedInkCostPerPage = !isPostPressMachine ? effectiveInkCost : 0;
 
-    const linkedInkItem = activeLink ? allAvailableInks.find((inv: any) => inv.id === activeLink.inkCode || inv.skuCode === activeLink.inkCode || inv.sku === activeLink.inkCode) : null;
+  // Breakdown details: prioritize cached actual breakdown from linked slots
+  const linkedInksDetails = cachedBreakdown.length > 0 
+    ? cachedBreakdown 
+    : equipmentCostResult.inkSlotsBreakdown;
 
-    let actualCostPerPage = oemCostPerPage;
-    let actualInkPrice = oemPrice;
-    let actualVol = oemVol;
-
-    if (linkedInkItem) {
-      actualInkPrice = Number(linkedInkItem.unitPrice || linkedInkItem.costPerPurchaseUnit || defaultPrice);
-      const resolvedVol = Number(
-        linkedInkItem.volume || 
-        linkedInkItem.specs?.volume || 
-        linkedInkItem.specs?.volume_ml || 
-        linkedInkItem.specs?.oemStandardVolumeMl || 
-        defaultVol
-      );
-      actualVol = resolvedVol > 1 ? resolvedVol : defaultVol;
-
-      const rawLinkedYield = Number(
-        linkedInkItem.yield ||
-        linkedInkItem.standard_page_yield ||
-        linkedInkItem.standardPageYield ||
-        linkedInkItem.specs?.yield ||
-        linkedInkItem.specs?.expectedYield ||
-        linkedInkItem.specs?.standard_page_yield ||
-        linkedInkItem.specs?.isoYield ||
-        0
-      );
-      const actualYield = rawLinkedYield > 500 ? rawLinkedYield : oemYield;
-      actualCostPerPage = actualYield > 0 ? (actualInkPrice / actualYield) : ((actualInkPrice / actualVol) * isoRateMlPerSheet);
-    }
-
-    totalActualCostPerPage += actualCostPerPage;
-
-    return {
-      slot: slotPos,
-      colorGroup: colorGroupName,
-      sku: activeLink?.inkCode || oemSlot.oemInkCode,
-      name: linkedInkItem?.name || oemSlot.oemInkCode || slotPos,
-      bottlePrice: actualInkPrice,
-      standardVolume: actualVol,
-      isoYield: oemYield,
-      costPerPage: Math.round(actualCostPerPage * 100) / 100
-    };
-  }) : [];
-
-  const totalLinkedInkCostPerPage = !isPostPressMachine ? Math.round(totalActualCostPerPage * 100) / 100 : 0;
   const grandTotalCostPerPage = Math.round((netCostPerUnit + totalLinkedInkCostPerPage) * 100) / 100;
 
 
@@ -421,7 +676,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
               {currentLang === 'lo' ? 'ຕົ້ນທຶນລວມການພິມສຸດທິ / ໜ້າ' : 'Grand Total Direct Cost / Page'}
             </span>
             <span className="text-xl font-black font-mono text-sky-700">
-              {formatUnitLAK(grandTotalCostPerPage)} <span className="text-xs font-bold text-slate-500">/ {isPostPressMachine ? 'ແຜ່ນ' : 'ໜ້າ'}</span>
+              {formatUnitLAK(grandTotalCostPerPage)} <span className="text-xs font-bold text-slate-500">/ {machineUnitLabel}</span>
             </span>
           </div>
         </div>
@@ -434,7 +689,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
             </span>
             <div className="flex items-baseline justify-between">
               <span className="text-sm font-black font-mono text-slate-900">{formatUnitLAK(baseCostPerUnit)}</span>
-              <span className="text-[10px] text-slate-400 font-bold">/ {isPostPressMachine ? 'ແຜ່ນ' : 'ໜ້າ'}</span>
+              <span className="text-[10px] text-slate-400 font-bold">/ {machineUnitLabel}</span>
             </div>
             <span className="text-[9px] text-slate-400 block truncate">
               {formatLAK(assetValue)} / {targetLifetimeCapacity.toLocaleString()}
@@ -443,21 +698,23 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
 
           <div className="bg-indigo-50/60 p-4 rounded-2xl border border-indigo-100 space-y-1">
             <span className="text-[10px] text-indigo-700 uppercase font-black block">
-              {currentLang === 'lo' ? `2. ບຳລຸງຮັກສາ (+${maintenanceRatePct}%)` : `2. Maint. (+${maintenanceRatePct}%)`}
+              {currentLang === 'lo' ? '2. ອະໄຫຼ່ສິ້ນເປືອງ (Wear Parts)' : '2. Wear Parts Rate'}
             </span>
             <div className="flex items-baseline justify-between">
               <span className="text-sm font-black font-mono text-indigo-700">+{formatUnitLAK(wearAllowancePerUnit)}</span>
-              <span className="text-[10px] text-indigo-400 font-bold">/ {isPostPressMachine ? 'ແຜ່ນ' : 'ໜ້າ'}</span>
+              <span className="text-[10px] text-indigo-400 font-bold">/ {machineUnitLabel}</span>
             </div>
             <span className="text-[9px] text-indigo-500 block truncate">
-              {currentLang === 'lo' ? 'ສຳຮອງຊິ້ນສ່ວນ & ຊ່າງສ້ອມ' : 'Spare parts & repair clause'}
+              {currentLang === 'lo' ? 'ໄລ່ຕາມຕົ້ນທຶນອະໄຫຼ່ສິ້ນເປືອງຕາມຈິງ' : 'Itemized wear parts rate'}
             </span>
           </div>
 
           {!isPostPressMachine ? (
             <div className="bg-purple-50/60 p-4 rounded-2xl border border-purple-100 space-y-1">
               <span className="text-[10px] text-purple-700 uppercase font-black block">
-                {currentLang === 'lo' ? `3. ຕົ້ນທຶນນ້ຳໝຶກ (${linkedInksDetails.length} ສີ)` : `3. Linked Inks Cost`}
+                {currentLang === 'lo' 
+                  ? `3. ຕົ້ນທຶນນ້ຳໝຶກ (${linkedInksDetails.length > 0 ? linkedInksDetails.length : 4} ສີ)` 
+                  : `3. Linked Inks Cost (${linkedInksDetails.length > 0 ? linkedInksDetails.length : 4} Colors)`}
               </span>
               <div className="flex items-baseline justify-between">
                 <span className="text-sm font-black font-mono text-purple-700">+{formatUnitLAK(totalLinkedInkCostPerPage)}</span>
@@ -466,7 +723,9 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
               <span className="text-[9px] text-purple-500 block truncate">
                 {linkedInksDetails.length > 0 
                   ? linkedInksDetails.map(i => `${i.colorGroup || i.slot}: ${formatUnitLAK(i.costPerPage)}`).join(' | ') 
-                  : (currentLang === 'lo' ? 'ຍັງບໍ່ໄດ້ຜູກໝຶກ' : 'No inks linked')}
+                  : (totalLinkedInkCostPerPage > 0 
+                      ? `${currentLang === 'lo' ? 'ຕົ້ນທຶນສະເລ່ຍ' : 'Average cost'}: ${formatUnitLAK(totalLinkedInkCostPerPage)}` 
+                      : (currentLang === 'lo' ? 'ຍັງບໍ່ໄດ້ຜູກໝຶກ' : 'No inks linked'))}
               </span>
 
             </div>
@@ -500,31 +759,39 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
         </div>
 
 
-        {/* Financial Reserve & Planning Matrix */}
+        {/* Machine Lifetime Utilization & Financial Matrix */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs border-t border-slate-100">
           <div>
             <span className="text-[10px] text-slate-400 uppercase font-bold block">
-              {currentLang === 'lo' ? 'ເປົ້າໝາຍການຜະລິດລາຍເດືອນ' : 'Monthly Target'}
+              {currentLang === 'lo' ? 'ຍອດຜະລິດສະສົມຕົວຈິງ' : 'Current Output Reading'}
             </span>
             <span className="text-xs font-mono font-black text-slate-900 mt-0.5 block">
-              {estMonthlyVolume.toLocaleString()} {isPostPressMachine ? 'ແຜ່ນ' : 'ໜ້າ'}/ເດືອນ
+              {currentMeterCount.toLocaleString()} {machineUnitLabel}
             </span>
           </div>
           <div>
             <span className="text-[10px] text-slate-400 uppercase font-bold block">
-              {currentLang === 'lo' ? 'ເປົ້າໝາຍຕະຫຼອດອາຍຸງານ' : 'Lifetime Target'}
+              {currentLang === 'lo' ? 'ເປົ້າໝາຍຕະຫຼອດອາຍຸງານ' : 'Rated Lifetime Capacity'}
             </span>
             <span className="text-xs font-mono font-black text-slate-900 mt-0.5 block">
-              {targetLifetimeCapacity.toLocaleString()} {isPostPressMachine ? 'ແຜ່ນ' : 'ໜ້າ'} ({lifespanYears} ປີ)
+              {targetLifetimeCapacity.toLocaleString()} {machineUnitLabel}
             </span>
           </div>
           <div>
             <span className="text-[10px] text-slate-400 uppercase font-bold block">
-              {currentLang === 'lo' ? 'ກອງທຶນສຳຮອງບຳລຸງຮັກສາສະສົມ' : 'Accrued Maint. Reserve'}
+              {currentLang === 'lo' ? 'ອັດຕາການໃຊ້ງານສະສົມ' : 'Lifetime Utilization'}
             </span>
-            <span className="text-xs font-mono font-black text-indigo-700 mt-0.5 block">
-              {formatLAK(maintenanceReserveAccrued)}
-            </span>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-xs font-mono font-black text-indigo-700">
+                {roiPercent.toFixed(1)}%
+              </span>
+              <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden max-w-[80px]">
+                <div 
+                  className="bg-indigo-600 h-full rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(100, roiPercent)}%` }}
+                />
+              </div>
+            </div>
           </div>
           <div>
             <span className="text-[10px] text-slate-400 uppercase font-bold block">
@@ -532,92 +799,6 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
             </span>
             <span className="text-xs font-mono font-black text-emerald-700 mt-0.5 block">
               {formatLAK(remainingValue)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ROI & Amortization Progress Card */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-6 rounded-3xl shadow-lg space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-700 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-sky-500/20 rounded-2xl border border-sky-400/30">
-              <TrendingUp className="w-6 h-6 text-sky-400" />
-            </div>
-            <div>
-              <h3 className="text-sm font-black uppercase tracking-wider text-slate-200 flex items-center gap-2">
-                <span>{currentLang === 'lo' ? 'ຕົວຊີ້ວັດ ROI & ຄ່າເສື່ອມລາຄາເຄື່ອງຈັກ (Asset ROI & Amortization)' : 'Asset ROI & Amortization Metrics'}</span>
-              </h3>
-              <p className="text-xs text-slate-400 font-medium mt-0.5">
-                {currentLang === 'lo' 
-                  ? `ສູດຄິດໄລ່: ລາຄາຊື້ / (${lifespanYears} ປີ × 12 ເດືອນ × ${estMonthlyVolume.toLocaleString()} ໜ່ວຍ) + ອັດຕາບຳລຸງຮັກສາ ${maintenanceRatePct}%`
-                  : `Calculation Model: Asset Price / (${lifespanYears} Yrs × 12 Mos × ${estMonthlyVolume.toLocaleString()} Units) + ${maintenanceRatePct}% Maint.`}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4 text-right">
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                {currentLang === 'lo' ? 'ຕົ້ນທຶນຄ່າເສື່ອມສຸດທິ / ໜ່ວຍ' : 'Net Effective Rate / Unit'}
-              </span>
-              <span className="text-base font-black font-mono text-emerald-400">
-                {formatUnitLAK(netCostPerUnit)} / {isPostPressMachine ? (currentLang === 'lo' ? 'ແຜ່ນ' : 'unit') : (currentLang === 'lo' ? 'ໜ້າ' : 'unit')}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* ROI Progress Bar */}
-        <div className="space-y-2">
-          <div className="flex justify-between items-center text-xs font-bold">
-            <span className="text-slate-300">
-              {currentLang === 'lo' ? 'ຈຳນວນທີ່ຜະລິດແລ້ວ: ' : 'Usage Count: '}
-              <strong className="font-mono text-white text-sm">{currentMeterCount.toLocaleString()}</strong> / {targetLifetimeCapacity.toLocaleString()} {currentLang === 'lo' ? 'ໜ່ວຍເປົ້າໝາຍ' : 'units target'}
-            </span>
-            <span className="font-mono text-sky-400 font-black text-sm">
-              {roiPercent.toFixed(1)}% {currentLang === 'lo' ? 'ຄືນທຶນແລ້ວ' : 'Amortized'}
-            </span>
-          </div>
-          <div className="w-full h-3 bg-slate-700 rounded-full overflow-hidden p-0.5 border border-slate-600">
-            <div 
-              className="h-full bg-gradient-to-r from-sky-400 to-emerald-400 rounded-full transition-all duration-500"
-              style={{ width: `${Math.min(100, roiPercent)}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Financial Stat Pills */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
-          <div className="bg-slate-800/80 p-3 rounded-2xl border border-slate-700/80 space-y-1">
-            <span className="text-[10px] text-slate-400 uppercase font-bold block">
-              {currentLang === 'lo' ? 'ມູນຄ່າເຄື່ອງຈັກ' : 'Asset Price'}
-            </span>
-            <span className="font-mono font-black text-slate-100">{formatLAK(assetValue)}</span>
-          </div>
-          <div className="bg-slate-800/80 p-3 rounded-2xl border border-slate-700/80 space-y-1">
-            <span className="text-[10px] text-slate-400 uppercase font-bold block">
-              {currentLang === 'lo' ? 'ຄ່າເສື່ອມພື້ນຖານ' : 'Base Depreciation'}
-            </span>
-            <span className="font-mono font-black text-sky-400">
-              {formatUnitLAK(baseCostPerUnit)} / {isPostPressMachine ? 'ແຜ່ນ' : 'ໜ້າ'}
-            </span>
-          </div>
-          <div className="bg-slate-800/80 p-3 rounded-2xl border border-slate-700/80 space-y-1">
-            <span className="text-[10px] text-slate-400 uppercase font-bold block">
-              {currentLang === 'lo' ? `ບຳລຸງຮັກສາ (+${maintenanceRatePct}%)` : `Maint. & Wear (+${maintenanceRatePct}%)`}
-            </span>
-            <span className="font-mono font-black text-emerald-400">
-              +{formatUnitLAK(wearAllowancePerUnit)} / {isPostPressMachine ? 'ແຜ່ນ' : 'ໜ້າ'}
-            </span>
-          </div>
-
-          <div className="bg-slate-800/80 p-3 rounded-2xl border border-slate-700/80 space-y-1">
-            <span className="text-[10px] text-slate-400 uppercase font-bold block">
-              {currentLang === 'lo' ? 'ເປົ້າໝາຍຜະລິດ / ເດືອນ' : 'Target Volume / Month'}
-            </span>
-            <span className="font-mono font-black text-amber-400">
-              {estMonthlyVolume.toLocaleString()} / {currentLang === 'lo' ? 'ເດືອນ' : 'mo'}
             </span>
           </div>
         </div>
@@ -689,9 +870,9 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
               <div className="md:col-span-4 flex justify-center">
-                {machine.imageUrl || machine.itemPhoto ? (
+                {resolveMachineImage(machine) ? (
                   <img 
-                    src={machine.imageUrl || machine.itemPhoto} 
+                    src={resolveMachineImage(machine)!} 
                     alt={machine.name} 
                     className="w-full max-h-60 object-contain rounded-2xl border border-slate-200 bg-slate-50 p-2 shadow-inner"
                   />
@@ -810,7 +991,22 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                     maxBookSheets: 'ຈຳນວນແຜ່ນສູງສຸດຕໍ່ເລັ້ມ (Max Sheets/Book)',
                     avgTimePerBook: 'ເວລາສະເລ່ຍຕໍ່ເລັ້ມ (Avg Mins/Book)',
                     cutCapacity: 'ຄວາມຈຸໃນການຕັດສູງສຸດ (Max Cut Capacity)',
-                    bladeDepreciationPerCut: 'ຄ່າຫຼຸ້ຍຫ້ຽນໃບມີດຕໍ່ຄັ້ງ (Blade Wear/Cut LAK)'
+                    bladeDepreciationPerCut: 'ຄ່າຫຼຸ້ຍຫ້ຽນໃບມີດຕໍ່ຄັ້ງ (Blade Wear/Cut LAK)',
+                    maxCuttingWidthMm: 'ຄວາມກວ້າງການຕັດສູງສຸດ (Max Cut Width mm)',
+                    maxCuttingDepthMm: 'ຄວາມເລິກການຕັດສູງສຸດ (Max Cut Depth mm)',
+                    minCuttingDepthMm: 'ຄວາມເລິກການຕັດຕໍ່າສຸດ (Min Cut Depth mm)',
+                    clampPressureKn: 'ແຮງກົດທັບໄຮໂດຼລິກ (Clamp Pressure kN)',
+                    opticalCutLine: 'ເສັ້ນແສງນຳຕັດ (Optical Cut Line)',
+                    maxLaminatingWidthMm: 'ຄວາມກວ້າງເຄືອບສູງສຸດ (Max Laminating Width mm)',
+                    maxSpeedMMin: 'ຄວາມໄວການເຄືອບສູງສຸດ (Max Speed m/min)',
+                    rollerTempMaxC: 'ອຸນຫະພູມລູກກິ້ງສູງສຸດ (Max Temp °C)',
+                    supportsHotCold: 'ລະບົບເຄືອບ (Hot/Cold Support)',
+                    maxBindingLengthMm: 'ຄວາມຍາວເຂົ້າເລັ້ມສູງສຸດ (Max Binding Length mm)',
+                    maxBindingThicknessMm: 'ຄວາມໜາສູງສຸດ (Max Thickness mm)',
+                    millingCutterIncluded: 'ຊຸດກີດສັນເຈ້ຍ (Milling Cutter)',
+                    bindingSpeedBooksPerHr: 'ຄວາມໄວເຂົ້າເລັ້ມ (Speed Books/Hr)',
+                    operatingPowerWatts: 'ກຳລັງໄຟຟ້າຂະນະແລ່ນ (Operating Power Watts)',
+                    warmupSeconds: 'ເວລາອຸ່ນເຄື່ອງ (Warm-up Seconds)'
                   };
 
                   return (
@@ -834,11 +1030,54 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-xs font-bold text-slate-600">
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">{currentLang === 'lo' ? 'ຄວາມໄວໃນການພິມ (Print Speed)' : 'Print Speed (PPM)'}</span>
-                  <span className="text-xs text-slate-900 block mt-1">{machine.speedPpm || machine.printSpeedColor || machine.printSpeed || machine.specs?.speedPpm || '25 ppm (A4)'}</span>
+                  <span className="text-xs text-slate-900 font-bold block mt-1">
+                    {machine.specs?.speedPpmBlack || machine.speedPpmBlack ? (
+                      <span className="font-mono text-sky-800">
+                        {machine.specs?.speedPpmBlack || machine.speedPpmBlack} PPM (B&W) / {machine.specs?.speedPpmColor || machine.speedPpmColor || machine.specs?.speedPpmBlack || machine.speedPpmBlack} PPM (Color)
+                      </span>
+                    ) : (
+                      machine.speedPpm || machine.printSpeedColor || machine.printSpeed || machine.specs?.speedPpm || '70 PPM (B&W) / 65 PPM (Color)'
+                    )}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 uppercase text-[10px] block">{currentLang === 'lo' ? 'ລະບົບສອງໜ້າ (Duplex)' : 'Duplex Support'}</span>
+                  <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <CheckCircle className="w-3 h-3 text-emerald-600" />
+                    {machine.specs?.duplexSupport === false || machine.duplexSupport === false ? 'Manual 1-Sided' : 'Auto-Duplex (2-Sided)'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 uppercase text-[10px] block">{currentLang === 'lo' ? 'ຊ່ວງຄວາມໜາກະດາດ' : 'Supported Grammage'}</span>
+                  <span className="text-xs text-slate-900 font-mono block mt-1">
+                    {machine.specs?.minPaperGsm || 52} - {machine.specs?.maxPaperGsm || 350} GSM
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">{currentLang === 'lo' ? 'ຂະໜາດເຈ້ຍສູງສຸດ' : 'Max Paper Size'}</span>
-                  <span className="text-xs text-slate-900 block mt-1">{machine.maxWidth || machine.paperSizes || machine.specs?.maxWidth || 'A3+ (329 x 483 mm)'}</span>
+                  <span className="text-xs text-slate-900 block mt-1">
+                    {machine.specs?.maxPrintWidth && machine.specs?.maxPrintLength 
+                      ? `${machine.specs.maxPrintWidth} x ${machine.specs.maxPrintLength} mm`
+                      : (machine.maxWidth || machine.paperSizes || machine.specs?.maxWidth || 'A3+ (329 x 483 mm)')}
+                    {(machine.specs?.sra3Support || machine.sra3Support) && (
+                      <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-200 font-mono">
+                        SRA3 Ready
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 uppercase text-[10px] block">
+                    {!isInkjet && !isCutter 
+                      ? (currentLang === 'lo' ? 'ກຳລັງໄຟ & ອຸ່ນເຄື່ອງ' : 'Power & Warm-up') 
+                      : (currentLang === 'lo' ? 'ກຳລັງໄຟຟ້າຂະນະແລ່ນ' : 'Operating Power')}
+                  </span>
+                  <span className="text-xs text-slate-900 font-mono block mt-1">
+                    {machine.specs?.operatingWatts || machine.specs?.machineOperatingWatts || machine.specs?.operatingPowerWatts || (isInkjet ? 350 : 1500)} W
+                    {!isInkjet && !isCutter && (
+                      ` (${machine.specs?.warmupSeconds || (machine.specs?.warmUpTimeMins ? machine.specs.warmUpTimeMins * 60 : 60)}s Warmup)`
+                    )}
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">{currentLang === 'lo' ? 'ປະເພດໝຶກພິມ (Ink Type)' : 'Ink Type'}</span>
@@ -846,7 +1085,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                 </div>
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">{currentLang === 'lo' ? 'ເທັກໂນໂລຢີການພິມ' : 'Print Tech'}</span>
-                  <span className="text-xs text-slate-900 block mt-1">{machine.printTech || machine.specs?.printTech || 'PrecisionCore Heat-Free'}</span>
+                  <span className="text-xs text-slate-900 block mt-1">{machine.printTech || machine.specs?.printTech || 'Production Digital Press'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">{currentLang === 'lo' ? 'ປະລິມານພິມໝຶກດຳ ISO' : 'Black ISO Yield (A4 5%)'}</span>
@@ -855,14 +1094,6 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                 <div>
                   <span className="text-slate-400 uppercase text-[10px] block">{currentLang === 'lo' ? 'ປະລິມານພິມໝຶກສີ ISO' : 'Color ISO Yield (A4 5%)'}</span>
                   <span className="text-xs text-slate-900 font-mono block mt-1">{machine.colorYieldPages ? `${Number(machine.colorYieldPages).toLocaleString()} pages` : (machine.specs?.colorYieldPages ? `${Number(machine.specs.colorYieldPages).toLocaleString()} pages` : '6,000 pages')}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 uppercase text-[10px] block">{currentLang === 'lo' ? 'ຄ່າ Click Rate ສີ' : 'Click Rate (Color)'}</span>
-                  <span className="text-xs text-emerald-600 font-mono block mt-1">{machine.clickRateColor ? `${formatLAK(machine.clickRateColor)} / click` : '-'}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 uppercase text-[10px] block">{currentLang === 'lo' ? 'ຄ່າ Click Rate ຂາວດຳ' : 'Click Rate (B/W)'}</span>
-                  <span className="text-xs text-emerald-600 font-mono block mt-1">{machine.clickRateBW ? `${formatLAK(machine.clickRateBW)} / click` : '-'}</span>
                 </div>
               </div>
             )}
@@ -911,148 +1142,347 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
               <span>{currentLang === 'lo' ? 'ໝວດ 5: ຕົ້ນທຶນ & ຄ່າເສື່ອມລາຄາ (Financial & Depreciation Metrics)' : 'Category 5: Financial & Depreciation Metrics'}</span>
             </h3>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 text-xs font-bold text-slate-600">
+            {/* Procurement Metadata Grid (Cleaned - No duplicate rate badges) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-bold text-slate-600 bg-slate-50/60 p-4 rounded-2xl border border-slate-200/70">
               <div>
                 <span className="text-slate-400 uppercase text-[10px] block">{currentLang === 'lo' ? 'ວັນທີຊື້ / ນຳເຂົ້າ' : 'Purchase Date'}</span>
-                <span className="text-xs text-slate-900 block mt-1">{machine.purchaseDate || machine.importDate || machine.createdAt?.split('T')[0] || '-'}</span>
+                <span className="text-xs font-black text-slate-900 block mt-1">{machine.purchaseDate || machine.importDate || machine.createdAt?.split('T')[0] || '-'}</span>
               </div>
               <div>
                 <span className="text-slate-400 uppercase text-[10px] block">{currentLang === 'lo' ? 'ຜູ້ສະໜອງ / ຕົວແທນ' : 'Vendor / Supplier'}</span>
-                <span className="text-xs text-slate-900 block mt-1 truncate">{machine.vendor || machine.importVendor || machine.supplier || 'Official Distributor'}</span>
+                <span className="text-xs font-black text-slate-900 block mt-1 truncate">{machine.vendor || machine.importVendor || machine.supplier || 'Official Distributor'}</span>
               </div>
               <div>
                 <span className="text-slate-400 uppercase text-[10px] block">{currentLang === 'lo' ? 'ໝົດອາຍຸການຮັບປະກັນ' : 'Warranty Expiry'}</span>
-                <span className="text-xs text-slate-900 block mt-1">{machine.warrantyExpirationYear || machine.warrantyExpiration || '2028'}</span>
+                <span className="text-xs font-black text-slate-900 block mt-1">{machine.warrantyExpirationYear || machine.warrantyExpiration || '2028'}</span>
               </div>
-              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                <span className="text-slate-500 uppercase text-[9px] font-black block">{currentLang === 'lo' ? '1. ຄ່າເສື່ອມເຄື່ອງຈັກສຸດທິ' : '1. Net Machine Depreciation'}</span>
-                <span className="text-xs text-emerald-700 font-mono font-black block mt-0.5">
-                  {formatUnitLAK(netCostPerUnit)} / {currentLang === 'lo' ? 'ແຜ່ນ' : 'unit'}
-                </span>
+              <div>
+                <span className="text-slate-400 uppercase text-[10px] block">{currentLang === 'lo' ? 'ສະຖານທີ່ຕິດຕັ້ງ' : 'Location'}</span>
+                <span className="text-xs font-black text-slate-900 block mt-1 truncate">{machine.location || machine.specs?.location || 'Main Press Floor'}</span>
               </div>
-              <div className="bg-sky-50 p-2.5 rounded-xl border border-sky-200">
-                <span className="text-sky-800 uppercase text-[9px] font-black block">{currentLang === 'lo' ? '2. ຕົ້ນທຶນພິມລວມ (+ ໝຶກ)' : '2. Grand Total (+ Inks)'}</span>
-                <span className="text-xs text-sky-800 font-mono font-black block mt-0.5">
-                  {formatUnitLAK(grandTotalCostPerPage)} / {isPostPressMachine ? (currentLang === 'lo' ? 'ແຜ່ນ' : 'unit') : (currentLang === 'lo' ? 'ໜ້າ' : 'page')}
-                </span>
-              </div>
-
             </div>
 
-
-            {/* Quick update financial fields */}
+            {/* Core Asset & Lifetime Capacity Parameters */}
             <div className="bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 space-y-4">
-              <span className="text-xs font-black text-slate-800 block uppercase tracking-wider">
-                {currentLang === 'lo' ? 'ປັບປຸງພາຣາມິເຕີຕົ້ນທຶນ & ຄ່າເສື່ອມລາຄາ (Inline Financial Parameters Update)' : 'Inline Financial Parameters Update'}
-              </span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/60 pb-3">
+                <span className="text-xs font-black text-slate-800 block uppercase tracking-wider">
+                  {currentLang === 'lo' ? '1. ພາຣາມິເຕີຕົ້ນທຶນເຄື່ອງຈັກ & ອາຍຸການໃຊ້ງານ (Core Machine Asset & Lifetime)' : 'Core Machine Asset & Lifetime Parameters'}
+                </span>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                {!isEditingCoreParams ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditPrice(assetValue);
+                      setEditCapacity(targetLifetimeCapacity);
+                      setIsEditingCoreParams(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-xs rounded-xl border border-sky-200 transition cursor-pointer active:scale-95 shadow-2xs self-start sm:self-auto"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>{currentLang === 'lo' ? 'ແກ້ໄຂພາຣາມິເຕີ' : 'Edit Parameters'}</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={handleSaveCoreParams}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition cursor-pointer active:scale-95 shadow-xs"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{currentLang === 'lo' ? 'ບັນທຶກ' : 'Save'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingCoreParams(false)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer active:scale-95"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>{currentLang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">
                     {currentLang === 'lo' ? '1. ລາຄາຊື້ເຄື່ອງຈັກ (LAK)' : '1. Purchase Price (LAK)'}
                   </label>
-                  <input
-                    type="number"
-                    value={assetValue}
-                    onChange={(e) => {
-                      const newCost = Number(e.target.value);
-                      const mDepr = totalMonths > 0 ? (newCost / totalMonths) : 0;
-                      const bRate = estMonthlyVolume > 0 ? (mDepr / estMonthlyVolume) : 0;
-                      const wearRate = Math.round(bRate * (maintenanceRatePct / 100) * 100) / 100 + maintCostPerPage;
-                      const nRate = Math.round((bRate + wearRate) * 100) / 100;
-                      updateEquipment(machine.id, { 
-                        price: newCost,
-                        unitPrice: newCost,
-                        MachinePrice: newCost, 
-                        purchaseCost: newCost, 
-                        purchasePrice: newCost,
-                        costPerConsumptionUnit: nRate,
-                        calculatedCostPerPage: nRate,
-                        maintenanceCostPerPage: nRate
-                      });
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all duration-200 shadow-2xs"
-                  />
+                  {isEditingCoreParams ? (
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={0}
+                        step={100000}
+                        value={editPrice === 0 ? '' : editPrice}
+                        placeholder="0"
+                        onChange={(e) => setEditPrice(Number(e.target.value))}
+                        className="w-full px-3.5 py-2.5 pr-12 bg-white border-2 border-sky-400 rounded-xl font-mono text-xs font-black text-slate-900 focus:outline-none focus:ring-4 focus:ring-sky-500/10 transition shadow-2xs"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">LAK</span>
+                    </div>
+                  ) : (
+                    <div className="px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-black text-slate-900 flex items-center justify-between shadow-2xs h-[42px]">
+                      <span>{formatLAK(assetValue)}</span>
+                      <span className="text-[10px] text-slate-400 font-bold">LAK</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">
-                    {currentLang === 'lo' ? '2. ອາຍຸການໃຊ້ງານ (ປີ)' : '2. Lifespan (Years)'}
+                    {currentLang === 'lo' ? `2. ອາຍຸການໃຊ້ງານລວມ (${machineUnitLabel})` : `2. Lifetime Capacity (${machineUnitEn})`}
                   </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={30}
-                    value={lifespanYears}
-                    onChange={(e) => {
-                      const newYears = Math.max(1, Number(e.target.value));
-                      const newMonths = newYears * 12;
-                      const mDepr = newMonths > 0 ? (assetValue / newMonths) : 0;
-                      const bRate = estMonthlyVolume > 0 ? (mDepr / estMonthlyVolume) : 0;
-                      const wearRate = Math.round(bRate * (maintenanceRatePct / 100) * 100) / 100 + maintCostPerPage;
-                      const nRate = Math.round((bRate + wearRate) * 100) / 100;
-                      updateEquipment(machine.id, { 
-                        lifespanYears: newYears,
-                        TargetTotalPages: estMonthlyVolume * newMonths,
-                        printedPagesCapacity: estMonthlyVolume * newMonths,
-                        costPerConsumptionUnit: nRate,
-                        calculatedCostPerPage: nRate,
-                        maintenanceCostPerPage: nRate
-                      });
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all duration-200 shadow-2xs"
-                  />
+                  {isEditingCoreParams ? (
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={100}
+                        step={1000}
+                        value={editCapacity === 0 ? '' : editCapacity}
+                        placeholder="200000"
+                        onChange={(e) => setEditCapacity(Number(e.target.value))}
+                        className="w-full px-3.5 py-2.5 pr-16 bg-white border-2 border-sky-400 rounded-xl font-mono text-xs font-black text-slate-900 focus:outline-none focus:ring-4 focus:ring-sky-500/10 transition shadow-2xs"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 truncate max-w-[50px]">{machineUnitEn}</span>
+                    </div>
+                  ) : (
+                    <div className="px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-black text-slate-900 flex items-center justify-between shadow-2xs h-[42px]">
+                      <span>{targetLifetimeCapacity.toLocaleString()}</span>
+                      <span className="text-[10px] text-slate-400 font-bold">{machineUnitLabel}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">
-                    {currentLang === 'lo' ? '3. ຍອດຜະລິດ/ເດືອນ (ແຜ່ນ ຫຼື ໜ້າ)' : '3. Monthly Vol (Units/mo)'}
+                    {currentLang === 'lo' ? '3. ຄ່າເສື່ອມເຄື່ອງຈັກພື້ນຖານ' : '3. Base Machine Rate'}
                   </label>
-                  <input
-                    type="number"
-                    min={100}
-                    value={estMonthlyVolume}
-                    onChange={(e) => {
-                      const newVol = Math.max(1, Number(e.target.value));
-                      const mDepr = totalMonths > 0 ? (assetValue / totalMonths) : 0;
-                      const bRate = newVol > 0 ? (mDepr / newVol) : 0;
-                      const wearRate = Math.round(bRate * (maintenanceRatePct / 100) * 100) / 100 + maintCostPerPage;
-                      const nRate = Math.round((bRate + wearRate) * 100) / 100;
-                      updateEquipment(machine.id, { 
-                        estMonthlyVolume: newVol,
-                        TargetTotalPages: newVol * totalMonths,
-                        printedPagesCapacity: newVol * totalMonths,
-                        costPerConsumptionUnit: nRate,
-                        calculatedCostPerPage: nRate,
-                        maintenanceCostPerPage: nRate
-                      });
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all duration-200 shadow-2xs"
-                  />
+                  <div className="px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-900 flex items-center justify-between shadow-2xs h-[42px]">
+                    <span className="text-emerald-700 font-black">
+                      {isEditingCoreParams
+                        ? formatUnitLAK(editCapacity > 0 ? (editPrice / editCapacity) : 0)
+                        : formatUnitLAK(baseCostPerUnit)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold">LAK / {machineUnitLabel}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Itemized Wear Parts Table (ອະໄຫຼ່ສິ້ນເປືອງປະຈຳເຄື່ອງຈັກ) */}
+            <div className="bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 shadow-2xs">
+                    <Wrench className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                      {currentLang === 'lo' ? '2. ລາຍການອະໄຫຼ່ສິ້ນເປືອງ & ອັດຕາຕົ້ນທຶນບຳລຸງຮັກສາ (Itemized Wear Parts)' : 'Itemized Wear Parts & Maintenance Allowance'}
+                    </h4>
+                    <p className="text-[10px] font-semibold text-slate-500">
+                      {currentLang === 'lo' 
+                        ? 'ດຶງຂໍ້ມູນອະໄຫຼ່ຕາມສູດ Master Data: ຕົ້ນທຶນຕໍ່ໜ່ວຍ = ລາຄາຊື້ອະໄຫຼ່ ÷ ຮອບອາຍຸການໃຊ້ງານ' 
+                        : 'Derived from Master Data: Unit Rate = Replacement Cost ÷ Rated Lifespan'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {!isEditingWearParts ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const initDraft: Record<string, { cost: number; life: number }> = {};
+                        criticalWearParts.forEach((p: any) => {
+                          initDraft[p.name] = { cost: p.cost, life: p.lifeVal };
+                        });
+                        setWearPartsDraft(initDraft);
+                        setIsEditingWearParts(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 transition cursor-pointer active:scale-95 shadow-2xs"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>{currentLang === 'lo' ? 'ແກ້ໄຂອະໄຫຼ່' : 'Edit Parts'}</span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveAllWearParts}
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition cursor-pointer active:scale-95 shadow-xs"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>{currentLang === 'lo' ? 'ບັນທຶກ' : 'Save'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingWearParts(false)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer active:scale-95"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>{currentLang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Table of Wear Parts */}
+              <div className="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-2xs">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-100/70 text-slate-600 text-[10px] font-black uppercase tracking-wider border-b border-slate-200">
+                      <th className="py-2.5 px-3 w-10 text-center">#</th>
+                      <th className="py-2.5 px-3">{currentLang === 'lo' ? 'ຊື່ຊິ້ນສ່ວນອະໄຫຼ່' : 'Wear Component'}</th>
+                      <th className="py-2.5 px-3 text-right">{currentLang === 'lo' ? 'ລາຄາຊື້ປ່ຽນໃໝ່ (LAK)' : 'Replacement Cost (LAK)'}</th>
+                      <th className="py-2.5 px-3 text-right">{currentLang === 'lo' ? 'ຮອບອາຍຸການໃຊ້ງານ' : 'Rated Lifespan'}</th>
+                      <th className="py-2.5 px-3 text-right">{currentLang === 'lo' ? 'ຕົ້ນທຶນສະເລ່ຍ / ໜ່ວຍ' : 'Rate / Unit'}</th>
+                      <th className="py-2.5 px-3 text-center">{currentLang === 'lo' ? 'ສະຖານະ SLA' : 'SLA Status'}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {criticalWearParts.map((part: any, idx: number) => {
+                      const usage = Number(part.usage || 0);
+                      const isCritical = usage >= 90;
+                      const isWarning = usage >= 70 && usage < 90;
+                      const badgeClass = isCritical
+                        ? 'bg-rose-50 text-rose-700 border-rose-200'
+                        : isWarning
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                      const statusLabel = isCritical
+                        ? (currentLang === 'lo' ? 'ຕ້ອງປ່ຽນທັນທີ' : 'Critical')
+                        : isWarning
+                        ? (currentLang === 'lo' ? 'ໃກ້ຮອດກຳນົດ' : 'Warning')
+                        : (currentLang === 'lo' ? 'ປົກກະຕິ' : 'Good');
+
+                      const currentCost = isEditingWearParts ? (wearPartsDraft[part.name]?.cost ?? part.cost) : part.cost;
+                      const currentLife = isEditingWearParts ? (wearPartsDraft[part.name]?.life ?? part.lifeVal) : part.lifeVal;
+                      const currentRate = currentLife > 0 ? (currentCost / currentLife) : 0;
+
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-2.5 px-3 text-center font-mono text-[11px] text-slate-400 font-bold">
+                            {idx + 1}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="font-bold text-slate-900 block text-xs">
+                              {part.nameLo || part.name}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                              {part.name}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            {isEditingWearParts ? (
+                              <div className="inline-flex items-center justify-end gap-1.5">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={10000}
+                                  value={currentCost}
+                                  onChange={(e) => {
+                                    const val = Number(e.target.value);
+                                    setWearPartsDraft(prev => ({
+                                      ...prev,
+                                      [part.name]: {
+                                        cost: val,
+                                        life: prev[part.name]?.life ?? part.lifeVal
+                                      }
+                                    }));
+                                  }}
+                                  className="w-28 px-2 py-1 bg-white border-2 border-amber-400 rounded-lg font-mono text-xs font-bold text-right text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition"
+                                />
+                                <span className="text-[10px] text-slate-400 font-bold">LAK</span>
+                              </div>
+                            ) : (
+                              <span className="font-mono font-bold text-slate-900">
+                                {formatLAK(part.cost)} <span className="text-[10px] text-slate-400 font-normal">LAK</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            {isEditingWearParts ? (
+                              <div className="inline-flex items-center justify-end gap-1.5">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  step={1000}
+                                  value={currentLife}
+                                  onChange={(e) => {
+                                    const val = Number(e.target.value);
+                                    setWearPartsDraft(prev => ({
+                                      ...prev,
+                                      [part.name]: {
+                                        cost: prev[part.name]?.cost ?? part.cost,
+                                        life: val
+                                      }
+                                    }));
+                                  }}
+                                  className="w-24 px-2 py-1 bg-white border-2 border-amber-400 rounded-lg font-mono text-xs font-bold text-right text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition"
+                                />
+                                <span className="text-[10px] text-slate-400 font-bold">{part.unitLabel || machineUnitEn}</span>
+                              </div>
+                            ) : (
+                              <span className="font-mono font-bold text-slate-900">
+                                {part.lifeVal.toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">{part.unitLabel || machineUnitEn}</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-700">
+                            +{formatUnitLAK(currentRate)} LAK
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black border ${badgeClass}`}>
+                              {statusLabel} ({usage}%)
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-50 border-t-2 border-slate-200 font-black text-xs text-slate-800">
+                      <td colSpan={4} className="py-3 px-4 text-right">
+                        {currentLang === 'lo' ? 'ລວມອັດຕາຕົ້ນທຶນອະໄຫຼ່ສິ້ນເປືອງທັງໝົດ (Total Wear Rate):' : 'Total Wear Parts Rate:'}
+                      </td>
+                      <td className="py-3 px-3 text-right font-mono text-sm text-amber-700">
+                        +{formatUnitLAK(wearAllowancePerUnit)} LAK
+                      </td>
+                      <td className="py-3 px-3 text-center text-[10px] text-slate-500 font-normal">
+                        / {machineUnitLabel}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Consolidated Machine Rate Summary Strip (Clean Non-Repetitive Equation) */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-700">
+                  <span className="font-black text-slate-900">
+                    {currentLang === 'lo' ? 'ສະຫຼຸບອັດຕາຕົ້ນທຶນເຄື່ອງຈັກ:' : 'Consolidated Machine Rate:'}
+                  </span>
+                  <span className="bg-slate-100 text-slate-800 px-3 py-1.5 rounded-xl font-mono font-bold border border-slate-200 shadow-2xs">
+                    1. ຄ່າເສື່ອມ {formatUnitLAK(baseCostPerUnit)} LAK
+                  </span>
+                  <span className="font-black text-slate-400 text-sm">+</span>
+                  <span className="bg-amber-50 text-amber-900 border border-amber-200 px-3 py-1.5 rounded-xl font-mono font-bold shadow-2xs">
+                    2. ອະໄຫຼ່ລວມ +{formatUnitLAK(wearAllowancePerUnit)} LAK
+                  </span>
+                  <span className="font-black text-slate-400 text-sm">=</span>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">
-                    {currentLang === 'lo' ? '4. ອັດຕາບຳລຸງຮັກສາ (%)' : '4. Maintenance Rate (%)'}
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={maintenanceRatePct}
-                    onChange={(e) => {
-                      const newRatePct = Math.max(0, Number(e.target.value));
-                      const wearRate = Math.round(baseCostPerUnit * (newRatePct / 100) * 100) / 100 + maintCostPerPage;
-                      const nRate = Math.round((baseCostPerUnit + wearRate) * 100) / 100;
-                      updateEquipment(machine.id, { 
-                        maintenanceRatePercent: newRatePct,
-                        costPerConsumptionUnit: nRate,
-                        calculatedCostPerPage: nRate,
-                        maintenanceCostPerPage: nRate
-                      });
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all duration-200 shadow-2xs"
-                  />
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider text-right">
+                    {currentLang === 'lo' ? '3. ຕົ້ນທຶນເຄື່ອງຈັກສຸດທິ' : '3. Net Effective Rate'}
+                  </span>
+                  <div className="bg-emerald-50 text-emerald-900 border border-emerald-300 px-4 py-2 rounded-xl font-mono font-black text-base shadow-2xs flex items-baseline gap-1.5">
+                    <span className="text-emerald-700 font-black">{formatUnitLAK(netCostPerUnit)}</span>
+                    <span className="text-xs text-emerald-600 font-bold">LAK / {machineUnitLabel}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1185,42 +1615,105 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
               </button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {machine.components && machine.components.map((comp: any, idx: number) => (
-                <div key={idx} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
-                  <div className="flex justify-between text-xs font-bold">
-                    <span className="text-slate-700">{comp.name}</span>
-                    <span className={comp.usage >= (comp.threshold || 90) ? 'text-red-600 font-black' : 'text-slate-700 font-mono'}>
-                      {comp.usage}% / {comp.threshold || 90}%
-                    </span>
+              {criticalWearParts.map((comp: any, idx: number) => {
+                const usage = Number(comp.usage || 0);
+                const threshold = Number(comp.threshold || 90);
+                const isCritical = usage >= 90;
+                const isWarning = usage >= 70 && usage < 90;
+
+                const gaugeBarClass = isCritical ? 'bg-rose-500' : isWarning ? 'bg-amber-500' : 'bg-emerald-500';
+                const badgeClass = isCritical
+                  ? 'bg-rose-50 text-rose-700 border-rose-200 animate-pulse'
+                  : isWarning
+                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                  : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                const statusLabel = isCritical
+                  ? (currentLang === 'lo' ? 'ຕ້ອງປ່ຽນທັນທີ' : 'Critical')
+                  : isWarning
+                  ? (currentLang === 'lo' ? 'ໃກ້ຮອດກຳນົດ' : 'Warning')
+                  : (currentLang === 'lo' ? 'ປົກກະຕິ' : 'Good');
+
+                return (
+                  <div key={idx} className="bg-slate-50 p-4.5 rounded-2xl border border-slate-200/80 space-y-3 shadow-2xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="font-extrabold text-slate-900 text-xs block">
+                          {comp.nameLo ? `${comp.nameLo}` : comp.name}
+                        </span>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[10px] font-mono font-semibold text-slate-500">
+                            {comp.name}
+                          </span>
+                          {comp.lifespan && (
+                            <span className="text-[9px] font-bold text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-200 font-mono">
+                              {comp.lifespan}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                          {comp.cost > 0 && (
+                            <span className="text-[10px] font-mono font-bold text-slate-700 bg-slate-200/70 px-1.5 py-0.5 rounded">
+                              ຕົ້ນທຶນຊື້: {formatLAK(comp.cost)}
+                            </span>
+                          )}
+                          {comp.costPerUnit > 0 && (
+                            <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                              +{formatUnitLAK(comp.costPerUnit)} / {comp.unitLabel || 'ໜ້າ'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase border ${badgeClass}`}>
+                        {statusLabel}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className="text-slate-500 text-[11px]">
+                          {currentLang === 'lo' ? 'ລະດັບການສວມໃສ່ / ສຶກຫ້ຼາ:' : 'Wear Level:'}
+                        </span>
+                        <span className={`font-mono text-xs font-black ${
+                          isCritical ? 'text-rose-600' : isWarning ? 'text-amber-600' : 'text-slate-800'
+                        }`}>
+                          {usage}% / {threshold}%
+                        </span>
+                      </div>
+                      <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden p-0.5 border border-slate-300/60">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-500 ${gaugeBarClass}`}
+                          style={{ width: `${Math.min(100, usage)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/50">
+                      <div className="text-[10px] text-slate-500 font-bold">
+                        <span>{currentLang === 'lo' ? 'ອາຍຸຄົງເຫຼືອ: ' : 'Remaining: '}</span>
+                        <strong className="text-slate-800 font-mono">{Math.max(0, 100 - usage)}%</strong>
+                        {comp.lifeVal > 0 && (
+                          <span className="text-slate-400 font-mono ml-1">
+                            (~{Math.max(0, Math.round(comp.lifeVal * (1 - usage / 100))).toLocaleString()} {comp.unitLabel})
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSwapModalConfig({
+                          isOpen: true,
+                          mode: 'component',
+                          componentName: comp.name,
+                          currentUsage: usage
+                        })}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-black rounded-xl border border-indigo-200 transition cursor-pointer active:scale-95"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>{currentLang === 'lo' ? 'ປ່ຽນອະໄຫຼ່' : 'Swap Part'}</span>
+                      </button>
+                    </div>
                   </div>
-                  <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full rounded-full transition-all ${
-                        comp.usage >= (comp.threshold || 90) ? 'bg-red-500' : 'bg-emerald-500'
-                      }`}
-                      style={{ width: `${Math.min(100, comp.usage)}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-[10px] text-slate-500 font-bold">
-                      {currentLang === 'lo' ? 'ເຫຼືອ: ' : 'Remaining: '}{Math.max(0, 100 - comp.usage)}%
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSwapModalConfig({
-                        isOpen: true,
-                        mode: 'component',
-                        componentName: comp.name,
-                        currentUsage: comp.usage
-                      })}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-black rounded-lg border border-indigo-200 transition cursor-pointer active:scale-95"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                      <span>{currentLang === 'lo' ? 'ປ່ຽນອະໄຫຼ່' : 'Swap Part'}</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

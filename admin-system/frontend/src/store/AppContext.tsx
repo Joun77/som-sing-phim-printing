@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import type { AppContextValue, EarningRecord } from '../types';
+import { getAuthHeaders } from '@utils/authHeaders';
 
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -17,406 +18,272 @@ const getPastDateTimeString = (daysAgo, hour = 9, minute = 30) => {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-const initialInventory: any[] = [
+// Rich Default Seed Master Data - guarantees shop floor continuity if PostgreSQL or LocalStorage reset
+export const DEFAULT_MACHINERY_SEED = [
   {
-    id: 'PAP-ART-260',
-    sku: 'PAP-ART-260',
-    name: 'Art Card Paper 260gsm (A3+ 320x480mm)',
-    category: 'Paper',
-    supplier: 'SCG Paper Thailand',
-    stockQty: 2500,
-    minStockThreshold: 500,
-    costPerPurchaseUnit: 950000,
-    costPerConsumptionUnit: 1900,
-    purchaseMultiplier: 500,
-    purchaseUnit: 'ແພັກ',
-    consumptionUnit: 'ແຜ່ນ',
-    specs: {
-      brand: 'Double A / SCG Premium',
-      paperType: 'Art Card Gloss',
-      grammage: '260 gsm',
-      size: 'A3+ (320 x 480 mm)',
-      sheetsPerPack: '500'
-    },
-    batches: [
-      {
-        id: 'LOT-260-01',
-        purchaseDate: '2026-08-01',
-        supplierName: 'SCG Paper Thailand',
-        purchasePricePerReam: 950000,
-        costPerSheet: 1900,
-        initialQty: 2500,
-        currentQty: 2500
-      }
-    ]
-  },
-  {
-    id: 'PAP-WF-80',
-    sku: 'PAP-WF-80',
-    name: 'Woodfree Bond Paper 80gsm (A4 210x297mm)',
-    category: 'Paper',
-    supplier: 'Double A Lao Distributor',
-    stockQty: 5000,
-    minStockThreshold: 1000,
-    costPerPurchaseUnit: 190000,
-    costPerConsumptionUnit: 380,
-    purchaseMultiplier: 500,
-    purchaseUnit: 'ແພັກ',
-    consumptionUnit: 'ແຜ່ນ',
-    specs: {
-      brand: 'Double A 80g',
-      paperType: 'Woodfree Bond',
-      grammage: '80 gsm',
-      size: 'A4 (210 x 297 mm)',
-      sheetsPerPack: '500'
-    },
-    batches: [
-      {
-        id: 'LOT-80-01',
-        purchaseDate: '2026-08-02',
-        supplierName: 'Double A Lao Distributor',
-        purchasePricePerReam: 190000,
-        costPerSheet: 380,
-        initialQty: 5000,
-        currentQty: 5000
-      }
-    ]
-  },
-  {
-    id: 'INK-FUJI-CMYK',
-    sku: 'INK-FUJI-CMYK',
-    name: 'Fuji Xerox EA-Eco Toner Set (CMYK)',
-    category: 'Ink',
-    supplier: 'FujiFilm Business Innovation',
-    stockQty: 4,
-    minStockThreshold: 1,
-    costPerPurchaseUnit: 6800000,
-    costPerConsumptionUnit: 1700000,
-    purchaseMultiplier: 1,
-    purchaseUnit: 'ຂວດ',
-    consumptionUnit: 'ຂວດ',
-    specs: {
-      brand: 'Fuji Xerox OEM',
-      colorSystem: '4 Colors (C, M, Y, K)'
-    },
-    batches: [
-      {
-        id: 'LOT-INK-01',
-        purchaseDate: '2026-08-03',
-        supplierName: 'FujiFilm Business Innovation',
-        purchasePricePerReam: 6800000,
-        costPerSheet: 1700000,
-        initialQty: 4,
-        currentQty: 4
-      }
-    ]
-  },
-  {
-    id: 'PKG-BOX-01',
-    sku: 'PKG-BOX-01',
-    name: 'ກ່ອງພັດສະດຸເບີ 00 (Box Size 00 9.7x14x6cm)',
-    category: 'Packaging',
-    supplier: 'Lao Packaging Solution',
-    stockQty: 250,
-    minStockThreshold: 50,
-    costPerPurchaseUnit: 1500,
-    costPerConsumptionUnit: 1500,
-    purchaseMultiplier: 1,
-    purchaseUnit: 'ກ່ອງ',
-    consumptionUnit: 'ກ່ອງ',
-    specs: {
-      brand: 'Standard Carton',
-      size: 'Size 00 (9.7 x 14 x 6 cm)'
-    },
-    batches: [
-      {
-        id: 'LOT-BOX-01',
-        purchaseDate: '2026-08-01',
-        supplierName: 'Lao Packaging Solution',
-        purchasePricePerReam: 1500,
-        costPerSheet: 1500,
-        initialQty: 250,
-        currentQty: 250
-      }
-    ]
-  },
-  {
-    id: 'PKG-BOX-02',
-    sku: 'PKG-BOX-02',
-    name: 'ກ່ອງພັດສະດຸເບີ A (Box Size A 14x20x6cm)',
-    category: 'Packaging',
-    supplier: 'Lao Packaging Solution',
-    stockQty: 180,
-    minStockThreshold: 40,
-    costPerPurchaseUnit: 2500,
-    costPerConsumptionUnit: 2500,
-    purchaseMultiplier: 1,
-    purchaseUnit: 'ກ່ອງ',
-    consumptionUnit: 'ກ່ອງ',
-    specs: {
-      brand: 'Standard Carton',
-      size: 'Size A (14 x 20 x 6 cm)'
-    },
-    batches: [
-      {
-        id: 'LOT-BOX-02',
-        purchaseDate: '2026-08-01',
-        supplierName: 'Lao Packaging Solution',
-        purchasePricePerReam: 2500,
-        costPerSheet: 2500,
-        initialQty: 180,
-        currentQty: 180
-      }
-    ]
-  },
-  {
-    id: 'PKG-ENV-01',
-    sku: 'PKG-ENV-01',
-    name: 'ຊອງກັນກະແທກ Bubble Envelope (A5 18x23cm)',
-    category: 'Packaging',
-    supplier: 'Lao Packaging Solution',
-    stockQty: 120,
-    minStockThreshold: 30,
-    costPerPurchaseUnit: 2000,
-    costPerConsumptionUnit: 2000,
-    purchaseMultiplier: 1,
-    purchaseUnit: 'ຊອງ',
-    consumptionUnit: 'ຊອງ',
-    specs: {
-      brand: 'Bubble Safe',
-      size: 'A5 (18 x 23 cm)'
-    },
-    batches: [
-      {
-        id: 'LOT-ENV-01',
-        purchaseDate: '2026-08-01',
-        supplierName: 'Lao Packaging Solution',
-        purchasePricePerReam: 2000,
-        costPerSheet: 2000,
-        initialQty: 120,
-        currentQty: 120
-      }
-    ]
-  },
-  {
-    id: 'OFF-ART-260-A5',
-    sku: 'OFF-ART-260-A5',
-    name: 'ເສດເຈ້ຍ Art Card 260gsm (A5 148×210mm)',
-    category: 'Offcut',
-    supplier: 'Production Scrap Reclaim',
-    stockQty: 120,
-    minStockThreshold: 20,
-    costPerPurchaseUnit: 450,
-    costPerConsumptionUnit: 450,
-    purchaseMultiplier: 1,
-    purchaseUnit: 'ແຜ່ນ',
-    consumptionUnit: 'ແຜ່ນ',
-    isOffcut: true,
-    specs: {
-      widthMm: 148,
-      heightMm: 210,
-      dimensionFormatted: '148 × 210 mm (A5)',
-      grammageGsm: 260,
-      paperType: 'Art Card',
-      usableFor: ['Namecards', 'Hangtags', 'Small Prints']
-    },
-    batches: [
-      {
-        id: 'LOT-OFF-01',
-        purchaseDate: '2026-08-15',
-        supplierName: 'Production Scrap Reclaim',
-        purchasePricePerReam: 450,
-        costPerSheet: 450,
-        initialQty: 120,
-        currentQty: 120
-      }
-    ]
-  },
-  {
-    id: 'OFF-KRAFT-150-A6',
-    sku: 'OFF-KRAFT-150-A6',
-    name: 'ເສດເຈ້ຍ Kraft 150gsm (A6 105×148mm)',
-    category: 'Offcut',
-    supplier: 'Production Scrap Reclaim',
-    stockQty: 80,
-    minStockThreshold: 15,
-    costPerPurchaseUnit: 250,
-    costPerConsumptionUnit: 250,
-    purchaseMultiplier: 1,
-    purchaseUnit: 'ແຜ່ນ',
-    consumptionUnit: 'ແຜ່ນ',
-    isOffcut: true,
-    specs: {
-      widthMm: 105,
-      heightMm: 148,
-      dimensionFormatted: '105 × 148 mm (A6)',
-      grammageGsm: 150,
-      paperType: 'Kraft Paper',
-      usableFor: ['Tags', 'Mini Envelopes']
-    },
-    batches: [
-      {
-        id: 'LOT-OFF-02',
-        purchaseDate: '2026-08-18',
-        supplierName: 'Production Scrap Reclaim',
-        purchasePricePerReam: 250,
-        costPerSheet: 250,
-        initialQty: 80,
-        currentQty: 80
-      }
-    ]
-  }
-];
-const initialEquipment: any[] = [
-  {
-    id: 'PRN-FUJI-V180',
-    name: 'Fuji Xerox Versant 180 Press',
-    brand: 'Fuji Xerox',
-    model: 'Versant 180',
-    serialNumber: 'FXV180-202401',
-    category: 'Printer',
-    printerCategory: 'Digital Color Press',
-    status: 'In Use',
-    location: 'Main Press Floor (Room A)',
-    purchaseCost: 450000000,
-    lifespanYears: 5,
-    printedPagesCapacity: 1500000,
-    printedCount: 234500,
-    calculatedCostPerPage: 300,
-    purchaseDate: '2024-01-15',
-    warrantyExpiration: '2027-01-15',
-    lastMaintenanceDate: '2026-07-20',
-    components: [
-      { name: 'Drum Unit Black', usage: 35, threshold: 90 },
-      { name: 'Drum Unit Color (CMY)', usage: 42, threshold: 90 },
-      { name: 'Fuser Unit 220V', usage: 50, threshold: 90 },
-      { name: 'Transfer Belt Assembly', usage: 28, threshold: 85 }
-    ]
-  },
-  {
-    id: 'PRN-EPSON-L1800',
-    name: 'Epson L1800 6-Color Photo',
+    id: 'MAC-5707',
+    name: 'Epson EcoTank L15150',
     brand: 'Epson',
-    model: 'L1800',
-    serialNumber: 'EP-L1800-8832',
+    model: 'EcoTank L15150',
+    serialNumber: 'SN-EPS-15150-01',
     category: 'Printer',
-    printerCategory: 'Inkjet Photo',
+    printerCategory: 'Inkjet Printer',
+    postPressSubtype: 'inkjet',
     status: 'In Use',
-    location: 'Digital Finishing Room',
-    purchaseCost: 18500000,
-    lifespanYears: 3,
-    printedPagesCapacity: 200000,
-    printedCount: 42100,
-    calculatedCostPerPage: 92.5,
-    purchaseDate: '2024-06-10',
-    warrantyExpiration: '2026-06-10',
-    lastMaintenanceDate: '2026-08-01',
+    price: 18500057,
+    unitPrice: 18500057,
+    purchaseCost: 18500057,
+    purchasePrice: 18500057,
+    MachinePrice: 18500057,
+    expectedLifeA4Pages: 300000,
+    TargetTotalPages: 300000,
+    printedPagesCapacity: 300000,
+    totalColorSlots: 4,
+    colorSchemeType: 'CMYK',
+    lifespanYears: 5,
+    location: 'Main Press Floor (ຊັ້ນ 1)',
+    vendor: 'Lao IT Distribution',
+    warrantyExpirationYear: 2028,
+    wearPickupRollerCost: 600000,
+    wearPickupRollerLife: 50000,
+    wearMaintBoxCost: 700000,
+    wearMaintBoxLife: 50000,
+    wearCarriageBeltCost: 600000,
+    wearCarriageBeltLife: 50000,
+    wearPrintheadCost: 4000000,
+    wearPrintheadLife: 100000,
+    colorInkCost: 60.17,
+    bwInkCost: 12.67,
+    linkedInkCostPerPage: 60.17,
+    inkCostPerPage: 60.17,
     components: [
-      { name: 'MicroPiezo Printhead', usage: 25, threshold: 85 },
-      { name: 'Waste Ink Pad', usage: 48, threshold: 90 }
-    ]
+      { name: 'Pickup Roller', nameLo: 'ລູກຢາງດຶງເຈ້ຍ', usage: 12, threshold: 90, cost: 600000, lifeVal: 50000, unitLabel: 'ໜ້າ' },
+      { name: 'Maintenance Box', nameLo: 'ກ່ອງຊັບໝຶກເສຍ', usage: 24, threshold: 90, cost: 700000, lifeVal: 50000, unitLabel: 'ໜ້າ' },
+      { name: 'Carriage Belt', nameLo: 'ສາຍພານຫົວພິມ', usage: 8, threshold: 90, cost: 600000, lifeVal: 50000, unitLabel: 'ໜ້າ' },
+      { name: 'PrecisionCore Printhead', nameLo: 'ຫົວພິມ Micro Piezo', usage: 15, threshold: 90, cost: 4000000, lifeVal: 100000, unitLabel: 'ໜ້າ' },
+    ],
+    oemBaselineInks: [
+      { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500, oemPrice: 450000 },
+      { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+      { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+      { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+    ],
+    specs: {
+      brand: 'Epson',
+      model: 'EcoTank L15150',
+      category: 'Printer',
+      printerCategory: 'Inkjet Printer',
+      colorSchemeType: 'CMYK',
+      totalColorSlots: 4,
+      purchaseCost: 18500057,
+      price: 18500057,
+      expectedLifeA4Pages: 300000,
+      feedType: 'Sheet-fed',
+      resolution: '4800 x 2400 dpi',
+      maxPrintWidthMm: 329,
+      maxPrintLengthMm: 483,
+      colorInkCost: 60.17,
+      bwInkCost: 12.67,
+      linkedInkCostPerPage: 60.17,
+      inkCostPerPage: 60.17,
+      inkSlotsBreakdown: [
+        { slot: 'Slot 1 (K - Black)', colorGroup: 'Black', costPerPage: 12.67, inkSku: 'INK-9826' },
+        { slot: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', costPerPage: 15.83, inkSku: 'INK-8713' },
+        { slot: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', costPerPage: 15.83, inkSku: 'INK-0365' },
+        { slot: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', costPerPage: 15.83, inkSku: 'INK-6588' }
+      ]
+    }
   },
   {
-    id: 'MAC-CUTTER-920',
-    name: 'QZYK920 Hydraulic Paper Guillotine',
+    id: 'MAC-6821',
+    name: 'QZYK 920 Programmed Paper Cutter',
     brand: 'QZYK',
-    model: '920-Program Control',
-    serialNumber: 'QZ-920-1102',
+    model: '920 Hydraulic Program-Control',
+    serialNumber: 'SN-QZYK-920-02',
     category: 'Cutter',
     postPressSubtype: 'guillotine',
     status: 'In Use',
-    location: 'Cutting & Binding Section',
-    purchaseCost: 85000000,
+    price: 45000000,
+    unitPrice: 45000000,
+    purchaseCost: 45000000,
+    purchasePrice: 45000000,
+    MachinePrice: 45000000,
+    TargetTotalPages: 500000,
+    printedPagesCapacity: 500000,
+    expectedLifeA4Pages: 500000,
     lifespanYears: 10,
-    printedPagesCapacity: 3000000,
-    printedCount: 520000,
-    calculatedCostPerPage: 28.3,
-    purchaseDate: '2023-03-20',
-    warrantyExpiration: '2028-03-20',
-    lastMaintenanceDate: '2026-08-10',
+    location: 'Post-Press Finishing Floor',
+    vendor: 'Industrial Print Tech Vientiane',
+    warrantyExpirationYear: 2030,
     components: [
-      { name: 'High-Speed Steel Blade (ໃບມີດ)', usage: 30, threshold: 95 },
-      { name: 'Cutting Stick (ແທ່ງຮອງຕັດ)', usage: 45, threshold: 90 },
-      { name: 'Hydraulic Oil Pressure (ນ້ຳມັນໄຮໂດຼລິກ)', usage: 20, threshold: 90 }
-    ]
+      { name: 'HSS Guillotine Blade', nameLo: 'ໃບມີດຕັດເຫຼັກກ້າ HSS', usage: 35, threshold: 90, cost: 2500000, lifeVal: 30000, unitLabel: 'ຮອບຕັດ' },
+      { name: 'Cutting Stick Plastic', nameLo: 'ເຂຽງຮອງຕັດພລາສຕິກ', usage: 20, threshold: 90, cost: 150000, lifeVal: 10000, unitLabel: 'ຮອບຕັດ' }
+    ],
+    specs: {
+      brand: 'QZYK',
+      model: '920',
+      category: 'Cutter',
+      postPressSubtype: 'guillotine',
+      purchaseCost: 45000000,
+      price: 45000000,
+      maxCutWidthMm: 920
+    }
   },
   {
-    id: 'MAC-LAM-FM360',
-    name: 'FM-360 Roll Laminator Hot & Cold',
+    id: 'MAC-4190',
+    name: 'Boway K5 Perfect Glue Binder',
     brand: 'Boway',
-    model: 'FM-360',
-    serialNumber: 'BW-FM360-449',
-    category: 'Laminator',
-    postPressSubtype: 'laminator',
-    status: 'In Use',
-    location: 'Lamination Bay',
-    purchaseCost: 22000000,
-    lifespanYears: 5,
-    printedPagesCapacity: 800000,
-    printedCount: 115000,
-    calculatedCostPerPage: 27.5,
-    purchaseDate: '2024-02-01',
-    warrantyExpiration: '2027-02-01',
-    lastMaintenanceDate: '2026-07-15',
-    components: [
-      { name: 'Silicon Heating Roller (ລູກກິ້ງຄວາມຮ້ອນ)', usage: 22, threshold: 85 },
-      { name: 'Temperature Sensor SLA', usage: 15, threshold: 90 }
-    ]
-  },
-  {
-    id: 'MAC-BIND-WD50',
-    name: 'WD-50A Perfect Glue Thermal Binder',
-    brand: 'Superbind',
-    model: 'WD-50A',
-    serialNumber: 'SB-WD50-992',
+    model: 'K5 Heavy Duty Auto Binder',
+    serialNumber: 'SN-BW-K5-01',
     category: 'Binder',
     postPressSubtype: 'binder',
     status: 'In Use',
-    location: 'Book Binding Workshop',
-    purchaseCost: 35000000,
-    lifespanYears: 6,
-    printedPagesCapacity: 600000,
-    printedCount: 78000,
-    calculatedCostPerPage: 58.3,
-    purchaseDate: '2023-11-10',
-    warrantyExpiration: '2026-11-10',
-    lastMaintenanceDate: '2026-08-05',
+    price: 28000000,
+    unitPrice: 28000000,
+    purchaseCost: 28000000,
+    purchasePrice: 28000000,
+    MachinePrice: 28000000,
+    TargetTotalPages: 100000,
+    printedPagesCapacity: 100000,
+    lifespanYears: 8,
+    location: 'Post-Press Finishing Floor',
+    vendor: 'Industrial Print Tech Vientiane',
+    warrantyExpirationYear: 2029,
     components: [
-      { name: 'Milling Cutter Head (ຫົວປາດສັນປຶ້ມ)', usage: 28, threshold: 90 },
-      { name: 'Hot Melt Glue Tank (ໝໍ້ຕົ້ມກາວ)', usage: 35, threshold: 90 },
-      { name: 'Side Glue Roller (ລູກກິ້ງກາວຂ້າງ)', usage: 20, threshold: 85 }
-    ]
+      { name: 'Milling Cutter Tooth', nameLo: 'ໃບເລື່ອຍກີດສັນປຶ້ມ', usage: 18, threshold: 90, cost: 1200000, lifeVal: 25000, unitLabel: 'ຫົວ' },
+      { name: 'Glue Tank Heater Element', nameLo: 'ຂົດລວດຄວາມຮ້ອນອ່າງກາວ', usage: 10, threshold: 90, cost: 850000, lifeVal: 40000, unitLabel: 'ຫົວ' }
+    ],
+    specs: {
+      brand: 'Boway',
+      model: 'K5',
+      category: 'Binder',
+      postPressSubtype: 'binder',
+      purchaseCost: 28000000,
+      price: 28000000,
+      maxSpineWidthMm: 50
+    }
   }
 ];
-const initialCustomers: any[] = [];
-const initialOffcuts: any[] = [
+
+export const DEFAULT_PRINTER_COLOR_LINKS_SEED = [
+  { id: 'lnk-001', assetId: 'MAC-5707', slotPosition: 'Slot 1 (K - Black)', inkCode: 'INK-9826', colorGroup: 'Black' },
+  { id: 'lnk-002', assetId: 'MAC-5707', slotPosition: 'Slot 2 (C - Cyan)', inkCode: 'INK-8713', colorGroup: 'Cyan' },
+  { id: 'lnk-003', assetId: 'MAC-5707', slotPosition: 'Slot 3 (M - Magenta)', inkCode: 'INK-0365', colorGroup: 'Magenta' },
+  { id: 'lnk-004', assetId: 'MAC-5707', slotPosition: 'Slot 4 (Y - Yellow)', inkCode: 'INK-6588', colorGroup: 'Yellow' }
+];
+
+export const DEFAULT_INKS_SEED = [
   {
-    id: 'OFF-ART-260-A5',
-    name: 'ເສດເຈ້ຍ Art Card 260gsm (A5 148×210mm)',
-    qty: 120,
-    paperId: 'PAP-ART-260',
-    costPerSheet: 450,
-    widthMm: 148,
-    heightMm: 210,
-    dimensionFormatted: '148 × 210 mm (A5)',
-    grammageGsm: 260,
-    paperType: 'Art Card',
-    notes: 'ຊັ້ນວາງເສດເຈ້ຍ A-01'
+    id: 'INK-9826',
+    sku: 'INK-9826',
+    skuCode: 'INK-9826',
+    name: 'Epson 008 Black Pigment Ink (127ml)',
+    category: 'Ink',
+    stockQty: 25,
+    unitPrice: 95000,
+    costPerPurchaseUnit: 95000,
+    costPerConsumptionUnit: 95000,
+    consumptionUnit: 'ຕຸກ',
+    purchaseUnit: 'ຕຸກ',
+    brand: 'Epson',
+    volume: 127,
+    specs: {
+      sku: 'INK-9826',
+      brand: 'Epson',
+      model: '008',
+      colorGroup: 'Black',
+      volume: 127,
+      volume_ml: 127,
+      expectedYield: 7500,
+      standard_page_yield: 7500,
+      inkBaseType: 'Pigment'
+    }
   },
   {
-    id: 'OFF-KRAFT-150-A6',
-    name: 'ເສດເຈ້ຍ Kraft 150gsm (A6 105×148mm)',
-    qty: 80,
-    paperId: 'PAP-KRAFT-150',
-    costPerSheet: 250,
-    widthMm: 105,
-    heightMm: 148,
-    dimensionFormatted: '105 × 148 mm (A6)',
-    grammageGsm: 150,
-    paperType: 'Kraft Paper',
-    notes: 'ຊັ້ນວາງເສດເຈ້ຍ B-02'
+    id: 'INK-8713',
+    sku: 'INK-8713',
+    skuCode: 'INK-8713',
+    name: 'Epson 008 Cyan Pigment Ink (70ml)',
+    category: 'Ink',
+    stockQty: 20,
+    unitPrice: 95000,
+    costPerPurchaseUnit: 95000,
+    costPerConsumptionUnit: 95000,
+    consumptionUnit: 'ຕຸກ',
+    purchaseUnit: 'ຕຸກ',
+    brand: 'Epson',
+    volume: 70,
+    specs: {
+      sku: 'INK-8713',
+      brand: 'Epson',
+      model: '008',
+      colorGroup: 'Cyan',
+      volume: 70,
+      volume_ml: 70,
+      expectedYield: 6000,
+      standard_page_yield: 6000,
+      inkBaseType: 'Pigment'
+    }
+  },
+  {
+    id: 'INK-0365',
+    sku: 'INK-0365',
+    skuCode: 'INK-0365',
+    name: 'Epson 008 Magenta Pigment Ink (70ml)',
+    category: 'Ink',
+    stockQty: 20,
+    unitPrice: 95000,
+    costPerPurchaseUnit: 95000,
+    costPerConsumptionUnit: 95000,
+    consumptionUnit: 'ຕຸກ',
+    purchaseUnit: 'ຕຸກ',
+    brand: 'Epson',
+    volume: 70,
+    specs: {
+      sku: 'INK-0365',
+      brand: 'Epson',
+      model: '008',
+      colorGroup: 'Magenta',
+      volume: 70,
+      volume_ml: 70,
+      expectedYield: 6000,
+      standard_page_yield: 6000,
+      inkBaseType: 'Pigment'
+    }
+  },
+  {
+    id: 'INK-6588',
+    sku: 'INK-6588',
+    skuCode: 'INK-6588',
+    name: 'Epson 008 Yellow Pigment Ink (70ml)',
+    category: 'Ink',
+    stockQty: 20,
+    unitPrice: 95000,
+    costPerPurchaseUnit: 95000,
+    costPerConsumptionUnit: 95000,
+    consumptionUnit: 'ຕຸກ',
+    purchaseUnit: 'ຕຸກ',
+    brand: 'Epson',
+    volume: 70,
+    specs: {
+      sku: 'INK-6588',
+      brand: 'Epson',
+      model: '008',
+      colorGroup: 'Yellow',
+      volume: 70,
+      volume_ml: 70,
+      expectedYield: 6000,
+      standard_page_yield: 6000,
+      inkBaseType: 'Pigment'
+    }
   }
 ];
+
+// Empty default data - all inventory, equipment, and offcuts are pulled live from PostgreSQL Database
+const initialInventory: any[] = DEFAULT_INKS_SEED;
+const initialEquipment: any[] = DEFAULT_MACHINERY_SEED;
+const initialCustomers: any[] = [];
+const initialOffcuts: any[] = [];
 const initialPurchaseOrders: any[] = [];
 const initialOrders: any[] = [];
 const initialSpoilageLogs: any[] = [];
@@ -426,7 +293,21 @@ const initialMachineStatus: any = {};
 const initialDowntimeLogs: any[] = [];
 const initialPurchaseRequisitions: any[] = [];
 const initialDeliveries: any[] = [];
-const initialPrinterColorLinks: any[] = [];
+const initialPrinterColorLinks: any[] = DEFAULT_PRINTER_COLOR_LINKS_SEED;
+
+// Obsolete legacy mock IDs that must never be loaded into live state
+export const LEGACY_MOCK_IDS = new Set([
+  'prn-fuji-v180',
+  'prn-epson-l1800',
+  'mac-cutter-920',
+  'mac-lam-fm360',
+  'mac-bind-wd50',
+  'pap-art-260',
+  'pap-wf-80',
+  'ink-fuji-cmyk',
+  'off-art-260-a5',
+  'off-kraft-150-a6',
+]);
 
 const initialCouriers = [
   {
@@ -898,8 +779,19 @@ export const AppProvider = ({ children }) => {
       currentStockSheets = multiplier;
     }
 
-    const costPerPurchase = Number(item.costPerPurchaseUnit || item.cost_per_purchase_unit || item.price || (isInk ? 80000 : 95000));
-    const rawCostPerCons = Number(item.costPerConsumptionUnit || item.cost_per_consumption_unit || 0);
+    let costPerPurchase = Number(item.costPerPurchaseUnit || item.cost_per_purchase_unit || item.price || (isInk ? 80000 : 95000));
+    let rawCostPerCons = Number(item.costPerConsumptionUnit || item.cost_per_consumption_unit || 0);
+
+    // Auto-heal: If rawCostPerCons was previously corrupted by dividing total lot cost by 500 instead of total sheets
+    // e.g., 5 packs bought for 300,000 -> total stock = 2,500 sheets.
+    // If rawCostPerCons == 600 and costPerPurchase == 300,000 (meaning 600 * 500 = 300,000):
+    if (isPaper && currentStockSheets >= (2 * multiplier) && costPerPurchase > 0 && rawCostPerCons > 0 && Math.round(rawCostPerCons * multiplier) === Math.round(costPerPurchase)) {
+      rawCostPerCons = Math.round((costPerPurchase / currentStockSheets) * 100) / 100;
+      costPerPurchase = Math.round(rawCostPerCons * multiplier);
+    } else if (isPaper && rawCostPerCons > 0 && costPerPurchase > 0 && costPerPurchase >= (rawCostPerCons * multiplier * 1.5)) {
+      costPerPurchase = Math.round(rawCostPerCons * multiplier);
+    }
+
     const costPerConsumption = (isPaper || isInk)
       ? ((rawCostPerCons > 0 && rawCostPerCons < (costPerPurchase / 2)) ? rawCostPerCons : (multiplier > 0 ? (costPerPurchase / multiplier) : costPerPurchase))
       : (rawCostPerCons > 0 ? rawCostPerCons : costPerPurchase);
@@ -928,10 +820,15 @@ export const AppProvider = ({ children }) => {
           bQty = multiplier;
         }
 
-        const bPurchasePrice = Number(b.purchasePricePerReam || b.purchasePrice || costPerPurchase);
-        const bCostPerSheet = (isPaper || isInk)
-          ? (Number(b.costPerSheet) > 0 && Number(b.costPerSheet) < (bPurchasePrice / 2) ? Number(b.costPerSheet) : (multiplier > 0 ? bPurchasePrice / multiplier : costPerConsumption))
-          : Number(b.costPerSheet || costPerConsumption);
+        let bPurchasePrice = Number(b.purchasePricePerReam || b.purchasePrice || costPerPurchase);
+        let bCostPerSheet = Number(b.costPerSheet || b.cost_per_consumption_unit || costPerConsumption);
+        
+        if (isPaper && bInit >= (2 * multiplier) && bCostPerSheet > 0 && Math.round(bCostPerSheet * multiplier) === Math.round(bPurchasePrice)) {
+          bCostPerSheet = Math.round((bPurchasePrice / bInit) * 100) / 100;
+          bPurchasePrice = Math.round(bCostPerSheet * multiplier);
+        } else if (isPaper && bCostPerSheet > 0 && bPurchasePrice >= (bCostPerSheet * multiplier * 1.5)) {
+          bPurchasePrice = Math.round(bCostPerSheet * multiplier);
+        }
 
         realBatches.push({
           ...b,
@@ -1011,7 +908,7 @@ export const AppProvider = ({ children }) => {
           const unique = [];
           const seen = new Set();
           for (const item of parsed) {
-            if (item && item.id && !seen.has(item.id) && !deletedIds.has(item.id) && !deletedIds.has(item.id.toLowerCase())) {
+            if (item && item.id && !seen.has(item.id) && !deletedIds.has(item.id) && !deletedIds.has(item.id.toLowerCase()) && !LEGACY_MOCK_IDS.has(item.id.toLowerCase())) {
               seen.add(item.id);
               unique.push(sanitizeInventoryItem(item));
             }
@@ -1029,12 +926,42 @@ export const AppProvider = ({ children }) => {
     if (saved !== null) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase()));
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const valid = parsed.filter(i => 
+            i && i.id && 
+            !deletedIds.has(i.id) && 
+            !deletedIds.has(i.id.toLowerCase()) && 
+            !LEGACY_MOCK_IDS.has(i.id.toLowerCase())
+          ).map(i => {
+            // Self-healing: if an item was corrupted with empty name/price, restore from default seed
+            const seed = DEFAULT_MACHINERY_SEED.find(s => s.id === i.id);
+            if (seed && (!i.name || i.name === i.id || !i.price || i.price === 0)) {
+              return { 
+                ...seed, 
+                ...i, 
+                name: seed.name, 
+                brand: seed.brand, 
+                model: seed.model, 
+                category: seed.category, 
+                printerCategory: seed.printerCategory,
+                price: seed.price, 
+                purchaseCost: seed.price, 
+                purchasePrice: seed.price, 
+                MachinePrice: seed.price, 
+                printedPagesCapacity: seed.printedPagesCapacity, 
+                expectedLifeA4Pages: seed.expectedLifeA4Pages, 
+                components: (i.components && i.components.length > 0) ? i.components : seed.components, 
+                oemBaselineInks: (i.oemBaselineInks && i.oemBaselineInks.length > 0) ? i.oemBaselineInks : seed.oemBaselineInks,
+                specs: { ...(seed.specs || {}), ...(i.specs || {}) }
+              };
+            }
+            return i;
+          });
+          if (valid.length > 0) return valid;
         }
       } catch (e) {}
     }
-    return [];
+    return DEFAULT_MACHINERY_SEED;
   });
 
   const normalizeBackendOrder = (serverItem: any) => {
@@ -1108,7 +1035,7 @@ export const AppProvider = ({ children }) => {
 
     // Pre-fetch inbound transactions for assets & inventory merging
     try {
-      const inbRes = await fetch('/api/inbound');
+      const inbRes = await fetch('/api/inbound', { headers: getAuthHeaders() });
       if (inbRes && inbRes.ok) {
         const inbData = await inbRes.json();
         inbItems = Array.isArray(inbData) ? inbData : (inbData?.data || []);
@@ -1117,9 +1044,9 @@ export const AppProvider = ({ children }) => {
 
     // 1. Assets / Equipment & Inbound Printers (Database Fetch)
     try {
-      let res = await fetch('/api/equipment');
+      let res = await fetch('/api/equipment', { headers: getAuthHeaders() });
       if (!res.ok) {
-        res = await fetch('/api/v1/assets');
+        res = await fetch('/api/v1/assets', { headers: getAuthHeaders() });
       }
       const resData = (res && res.ok) ? await res.json() : null;
       const rawItems = Array.isArray(resData) ? resData : (resData?.data || []);
@@ -1127,29 +1054,57 @@ export const AppProvider = ({ children }) => {
       const printerInbounds = inbItems.filter((i: any) => {
         const c = (i.category || '').toUpperCase();
         const sku = (i.skuCode || i.id || '').toUpperCase();
-        return c === 'PRINTER' || c === 'MACHINERY' || c === 'EQUIPMENT' || sku.startsWith('PRN');
-      }).map((p: any) => ({
-        id: p.id || p.skuCode,
-        name: p.itemName || p.name || `${p.specs?.brand || ''} ${p.specs?.model || ''}`.trim() || p.id,
-        brand: p.specs?.brand || p.brand || '',
-        model: p.specs?.model || p.model || '',
-        serialNumber: p.specs?.serialNumber || p.serialNumber || p.skuCode || '',
-        category: 'Printer',
-        printerCategory: p.specs?.printerCategory || p.printerCategory || 'Digital Press',
-        colorSchemeType: p.specs?.colorSchemeType || p.colorSchemeType || 'CMYK',
-        totalColorSlots: Number(p.specs?.totalColorSlots || p.totalColorSlots || 4),
-        purchaseCost: Number(p.totalPrice || p.price || p.purchaseCost || 0),
-        expectedLifeA4Pages: Number(p.specs?.expectedLifeA4Pages || p.expectedLifeA4Pages || 3000000),
-        TargetTotalPages: Number(p.specs?.expectedLifeA4Pages || p.TargetTotalPages || 3000000),
-        printedPagesCapacity: Number(p.specs?.expectedLifeA4Pages || p.printedPagesCapacity || 3000000),
-        lifespanYears: Number(p.specs?.lifespanYears || p.lifespanYears || 5),
-        maintenanceRatePercent: Number(p.specs?.maintenanceRatePercent || p.maintenanceRatePercent || 15),
-        costPerConsumptionUnit: Number(p.specs?.costPerConsumptionUnit || p.calculatedCostPerPage || 0),
-        calculatedCostPerPage: Number(p.specs?.calculatedCostPerPage || p.calculatedCostPerPage || 0),
-        status: 'In Use',
-        location: p.specs?.location || p.location || 'Main Press Floor',
-        specs: p.specs || {}
-      }));
+        return c === 'PRINTER' || c === 'MACHINERY' || c === 'EQUIPMENT' || c === 'CUTTER' || c === 'BINDER' || c === 'LAMINATOR' || sku.startsWith('PRN') || sku.startsWith('MAC');
+      }).map((p: any) => {
+        const cat = (p.category || '').toLowerCase();
+        const sub = (p.postPressSubtype || p.specs?.postPressSubtype || p.specs?.category || '').toLowerCase();
+        const name = (p.itemName || p.name || `${p.specs?.brand || ''} ${p.specs?.model || ''}`).toLowerCase();
+
+        const isCutter = cat.includes('cutter') || sub.includes('cutter') || sub.includes('guillotine') || sub.includes('plotter') || name.includes('cutter') || name.includes('guillotine');
+        const isBinder = cat.includes('binder') || sub.includes('binder') || name.includes('binder');
+        const isLaminator = cat.includes('laminat') || sub.includes('laminat') || name.includes('laminat');
+        const isPrinter = !isCutter && !isBinder && !isLaminator;
+
+        const resolvedCategory = isPrinter ? 'Printer' : isCutter ? 'Cutter' : isBinder ? 'Binder' : 'Laminator';
+        const resolvedPhoto = p.imageUrl || p.itemPhoto || p.productPhoto || p.image || p.docs?.productPhoto || p.specs?.productPhoto || p.specs?.productImage || (Array.isArray(p.actual_images) && p.actual_images[0]) || (Array.isArray(p.specs?.actual_images) && p.specs?.actual_images[0]) || null;
+
+        const defaultLife = isPrinter ? 200000 : isCutter ? 100000 : isBinder ? 30000 : 50000;
+        const realLife = Number(p.specs?.expectedLife || p.specs?.expectedLifeA4Pages || p.expectedLifeA4Pages || p.TargetTotalPages || p.printedPagesCapacity || defaultLife);
+
+        return {
+          id: p.id || p.skuCode,
+          name: p.itemName || p.name || `${p.specs?.brand || ''} ${p.specs?.model || ''}`.trim() || p.id,
+          brand: p.specs?.brand || p.brand || '',
+          model: p.specs?.model || p.model || '',
+          serialNumber: p.specs?.serialNumber || p.serialNumber || p.skuCode || '',
+          category: resolvedCategory,
+          postPressSubtype: sub || (isPrinter ? 'laser' : isCutter ? 'guillotine' : isBinder ? 'binder' : 'laminator'),
+          printerCategory: isPrinter ? (p.specs?.printerCategory || p.printerCategory || 'Digital Press') : undefined,
+          colorSchemeType: p.specs?.colorSchemeType || p.colorSchemeType || 'CMYK',
+          totalColorSlots: Number(p.specs?.totalColorSlots || p.totalColorSlots || 4),
+          purchaseCost: Number(p.totalPrice || p.price || p.purchaseCost || p.unitPrice || 0),
+          expectedLifeA4Pages: isPrinter ? realLife : undefined,
+          TargetTotalPages: realLife,
+          printedPagesCapacity: realLife,
+          lifespanYears: Number(p.specs?.lifespanYears || p.lifespanYears || 5),
+          maintenanceRatePercent: Number(p.specs?.maintenanceRatePercent || p.maintenanceRatePercent || 0),
+          costPerConsumptionUnit: Number(p.specs?.costPerConsumptionUnit || p.costPerConsumptionUnit || p.calculatedCostPerPage || 0),
+          calculatedCostPerPage: Number(p.specs?.calculatedCostPerPage || p.calculatedCostPerPage || 0),
+          status: 'In Use',
+          location: p.specs?.location || p.location || 'Main Press Floor',
+          imageUrl: resolvedPhoto,
+          itemPhoto: resolvedPhoto,
+          productPhoto: resolvedPhoto,
+          docs: {
+            productPhoto: resolvedPhoto,
+            paymentSlip: p.payment_slip || p.docs?.paymentSlip || null
+          },
+          specs: {
+            ...p.specs,
+            productPhoto: resolvedPhoto
+          }
+        };
+      });
 
       const combinedAssets = [...rawItems, ...printerInbounds];
 
@@ -1158,16 +1113,67 @@ export const AppProvider = ({ children }) => {
           const mapById = new Map();
           (prevEq || []).filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach(item => mapById.set(item.id, item));
           combinedAssets.filter((i: any) => !deletedIds.has(i.id) && !deletedIds.has(i.id?.toLowerCase())).forEach((item: any) => {
+            const resolvedPhoto = item.imageUrl || item.itemPhoto || item.productPhoto || item.image || item.docs?.productPhoto || item.specs?.productPhoto || item.specs?.productImage || (Array.isArray(item.actual_images) && item.actual_images[0]) || (Array.isArray(item.specs?.actual_images) && item.specs?.actual_images[0]) || null;
+            const resolvedPrice = Number(item.price || item.purchaseCost || item.purchasePrice || item.priceCost || item.unitPrice || item.totalPrice || 0);
             const formattedItem = {
               ...item,
               name: item.name || `${item.brand || ''} ${item.model || ''}`.trim() || item.id,
-              purchaseCost: Number(item.price || item.purchaseCost || item.purchasePrice || item.priceCost || 0),
-              printedPagesCapacity: Number(item.expectedLifeA4Pages || item.printedPagesCapacity || item.TargetTotalPages || 3000000),
-              maintenanceRatePercent: Number(item.maintenanceRatePercent || 15),
-              colorSchemeType: item.colorSchemeType || item.specs?.colorScheme || 'CMYK'
+              purchaseCost: resolvedPrice,
+              purchasePrice: resolvedPrice,
+              price: resolvedPrice,
+              unitPrice: resolvedPrice,
+              MachinePrice: resolvedPrice,
+              printedPagesCapacity: Number(item.expectedLifeA4Pages || item.printedPagesCapacity || item.TargetTotalPages || item.specs?.expectedLife || 200000),
+              colorSchemeType: item.colorSchemeType || item.specs?.colorScheme || 'CMYK',
+              imageUrl: resolvedPhoto,
+              itemPhoto: resolvedPhoto,
+              productPhoto: resolvedPhoto,
             };
             if (mapById.has(item.id)) {
-              mapById.set(item.id, { ...mapById.get(item.id), ...formattedItem });
+              const existing = mapById.get(item.id);
+              const bestPrice = resolvedPrice > 0 ? resolvedPrice : (existing.purchaseCost || existing.price || existing.unitPrice || 0);
+              const bestName = (item.name && item.name.trim() !== '' && item.name !== item.id) ? item.name : (existing.name || item.name || item.id);
+              const bestBrand = (item.brand && item.brand.trim() !== '') ? item.brand : (existing.brand || '');
+              const bestModel = (item.model && item.model.trim() !== '') ? item.model : (existing.model || '');
+              const bestCategory = (item.category && item.category.trim() !== '') ? item.category : (existing.category || 'Printer');
+              const bestPrinterCategory = item.printerCategory || existing.printerCategory;
+              const bestSubtype = item.postPressSubtype || existing.postPressSubtype;
+              const bestCapacity = (Number(item.expectedLifeA4Pages || item.printedPagesCapacity || 0) > 0) 
+                ? Number(item.expectedLifeA4Pages || item.printedPagesCapacity) 
+                : (Number(existing.expectedLifeA4Pages || existing.printedPagesCapacity || 0) > 0 ? Number(existing.expectedLifeA4Pages || existing.printedPagesCapacity) : 200000);
+              const bestPhoto = resolvedPhoto || existing.imageUrl || existing.itemPhoto || existing.productPhoto;
+              const mergedSpecs = { ...(existing.specs || {}), ...(item.specs || {}) };
+              const mergedComponents = (item.components && item.components.length > 0) ? item.components : (existing.components || []);
+              const mergedOemBaseline = (item.oemBaselineInks && item.oemBaselineInks.length > 0) ? item.oemBaselineInks : (existing.oemBaselineInks || []);
+
+              mapById.set(item.id, {
+                ...existing,
+                ...formattedItem,
+                name: bestName,
+                brand: bestBrand,
+                model: bestModel,
+                category: bestCategory,
+                printerCategory: bestPrinterCategory,
+                postPressSubtype: bestSubtype,
+                purchaseCost: bestPrice,
+                purchasePrice: bestPrice,
+                price: bestPrice,
+                unitPrice: bestPrice,
+                MachinePrice: bestPrice,
+                expectedLifeA4Pages: bestCapacity,
+                TargetTotalPages: bestCapacity,
+                printedPagesCapacity: bestCapacity,
+                imageUrl: bestPhoto,
+                itemPhoto: bestPhoto,
+                productPhoto: bestPhoto,
+                specs: mergedSpecs,
+                components: mergedComponents,
+                oemBaselineInks: mergedOemBaseline,
+                colorInkCost: item.colorInkCost || existing.colorInkCost,
+                bwInkCost: item.bwInkCost || existing.bwInkCost,
+                linkedInkCostPerPage: item.linkedInkCostPerPage || existing.linkedInkCostPerPage,
+                inkCostPerPage: item.inkCostPerPage || existing.inkCostPerPage
+              });
             } else {
               mapById.set(item.id, formattedItem);
             }
@@ -1181,7 +1187,7 @@ export const AppProvider = ({ children }) => {
 
     // 2. Inventory Items
     try {
-      const res = await fetch('/api/inventory/items');
+      const res = await fetch('/api/inventory/items', { headers: getAuthHeaders() });
       let dbInventory: any[] = [];
       if (res && res.ok) {
         const resData = await res.json();
@@ -1206,8 +1212,27 @@ export const AppProvider = ({ children }) => {
         }
         const qty = Number(m.quantity || m.importQty || 1);
         const totalSheets = isPaper ? (qty > 0 && qty <= 100 ? qty * multiplier : qty) : qty;
-        const pPrice = m.totalPrice && qty ? (Number(m.totalPrice) / qty) : Number(m.unitPrice || m.totalPrice || 95000);
-        const cPrice = isPaper ? (pPrice / multiplier) : pPrice;
+        
+        // Prioritize direct stored costPerConsumptionUnit / costPerSheet
+        const directConsCost = Number(
+          m.costPerConsumptionUnit || 
+          m.cost_per_consumption_unit || 
+          m.costPerSheet || 
+          m.specs?.costPerConsumptionUnit || 
+          m.specs?.costPerSheet || 
+          0
+        );
+
+        let pPrice = Number(m.costPerPurchaseUnit || m.unitPrice || 0);
+        if (pPrice <= 0 && m.totalPrice && qty > 0) {
+          pPrice = Math.round(Number(m.totalPrice) / qty);
+        }
+        if (pPrice <= 0) pPrice = isPaper ? 60000 : 95000;
+
+        let cPrice = directConsCost;
+        if (cPrice <= 0) {
+          cPrice = isPaper && multiplier > 0 ? Math.round((pPrice / multiplier) * 100) / 100 : pPrice;
+        }
 
         return sanitizeInventoryItem({
           id: m.skuCode || m.id,
@@ -1256,8 +1281,8 @@ export const AppProvider = ({ children }) => {
 
     // 3. Orders (DB-First Single Source of Truth Safe Merge Strategy)
     try {
-      let res = await fetch('/api/v1/orders');
-      if (!res.ok) res = await fetch('/api/orders');
+      let res = await fetch('/api/v1/orders', { headers: getAuthHeaders() });
+      if (!res.ok) res = await fetch('/api/orders', { headers: getAuthHeaders() });
       if (res && res.ok) {
         const data = await res.json();
         const serverList = Array.isArray(data) ? data : (data?.data && Array.isArray(data.data) ? data.data : []);
@@ -1288,8 +1313,8 @@ export const AppProvider = ({ children }) => {
 
     // 3.5. Quotations (DB-First Single Source of Truth Safe Merge Strategy)
     try {
-      let res = await fetch('/api/v1/quotations');
-      if (!res.ok) res = await fetch('/api/quotations');
+      let res = await fetch('/api/v1/quotations', { headers: getAuthHeaders() });
+      if (!res.ok) res = await fetch('/api/quotations', { headers: getAuthHeaders() });
       if (res && res.ok) {
         const data = await res.json();
         const serverList = Array.isArray(data) ? data : (data?.data && Array.isArray(data.data) ? data.data : []);
@@ -1319,7 +1344,7 @@ export const AppProvider = ({ children }) => {
 
     // 4. Customers
     try {
-      const res = await fetch('/api/customers');
+      const res = await fetch('/api/customers', { headers: getAuthHeaders() });
       if (res && res.ok) {
         const resData = await res.json();
         if (resData && resData.status === 'success' && Array.isArray(resData.data)) {
@@ -1330,7 +1355,7 @@ export const AppProvider = ({ children }) => {
 
     // 5. Spoilage
     try {
-      const res = await fetch('/api/spoilage');
+      const res = await fetch('/api/spoilage', { headers: getAuthHeaders() });
       if (res && res.ok) {
         const resData = await res.json();
         if (resData && resData.status === 'success' && Array.isArray(resData.data)) {
@@ -1341,7 +1366,7 @@ export const AppProvider = ({ children }) => {
 
     // 6. Inbound Transactions
     try {
-      const res = await fetch('/api/inbound');
+      const res = await fetch('/api/inbound', { headers: getAuthHeaders() });
       if (res && res.ok) {
         const resData = await res.json();
         if (resData && resData.status === 'success' && Array.isArray(resData.data)) {
@@ -1460,8 +1485,8 @@ export const AppProvider = ({ children }) => {
 
     // 4. Offcuts Scrap Registry (Backend Sync)
     try {
-      let offRes = await fetch('/api/inventory/offcuts');
-      if (!offRes.ok) offRes = await fetch('/api/inventory/offcuts');
+      let offRes = await fetch('/api/inventory/offcuts', { headers: getAuthHeaders() });
+      if (!offRes.ok) offRes = await fetch('/api/inventory/offcuts', { headers: getAuthHeaders() });
       if (offRes && offRes.ok) {
         const offList = await offRes.json();
         if (Array.isArray(offList) && offList.length > 0) {
@@ -1943,26 +1968,60 @@ export const AppProvider = ({ children }) => {
           return sum + (packQty * sheetsPerPack);
         }, 0);
 
-        const latestPrice = Number(matches[0].totalPrice || matches[0].unitPrice || item.costPerPurchaseUnit || (isInk ? 80000 : 95000));
-        const perSheetPrice = sheetsPerPack > 0 ? Math.round(latestPrice / sheetsPerPack) : latestPrice;
+        const match0 = matches[0];
+        const m0PackQty = Number(match0.importQty || match0.quantity || match0.currentQty || 1);
+        const m0TotalPrice = Number(match0.totalPrice || (match0.unitPrice ? match0.unitPrice * m0PackQty : 0));
 
-        const constructedBatches = matches.map(e => ({
-          id: e.poNumber || e.id || `LOT-${item.id}`,
-          purchaseDate: e.receiptDate || e.importDate || new Date().toISOString().split('T')[0],
-          supplierName: e.supplier || e.vendor || e.supplierName || '',
-          purchasePricePerReam: Number(e.totalPrice || e.unitPrice || latestPrice),
-          costPerSheet: perSheetPrice,
-          initialQty: Number(e.importQty || e.quantity || 1) * sheetsPerPack,
-          currentQty: Number(e.importQty || e.quantity || 1) * sheetsPerPack
-        }));
+        // 1. Direct field resolution (prioritize stored costPerConsumptionUnit / costPerSheet)
+        const directConsCost = Number(
+          match0.costPerConsumptionUnit || 
+          match0.costPerSheet || 
+          match0.specs?.costPerConsumptionUnit || 
+          match0.specs?.costPerSheet || 
+          item.costPerConsumptionUnit || 
+          0
+        );
+
+        // 2. Direct purchase unit price (price per ream/pack/bottle, NOT total lot cost)
+        const directPurchaseCost = Number(
+          match0.costPerPurchaseUnit || 
+          match0.unitPrice || 
+          (m0PackQty > 0 && m0TotalPrice > 0 ? Math.round(m0TotalPrice / m0PackQty) : 0) ||
+          item.costPerPurchaseUnit || 
+          (isInk ? 80000 : 95000)
+        );
+
+        let perSheetPrice = directConsCost;
+        if (perSheetPrice <= 0 || (isPaper && sheetsPerPack > 1 && perSheetPrice >= directPurchaseCost && directPurchaseCost > 0)) {
+          perSheetPrice = sheetsPerPack > 0 ? Math.round((directPurchaseCost / sheetsPerPack) * 100) / 100 : directPurchaseCost;
+        }
+
+        const purchasePricePerReam = directPurchaseCost > 0 ? directPurchaseCost : (perSheetPrice * sheetsPerPack);
+
+        const constructedBatches = matches.map(e => {
+          const ePackQty = Number(e.importQty || e.quantity || e.currentQty || 1);
+          const eTotalPrice = Number(e.totalPrice || (e.unitPrice ? e.unitPrice * ePackQty : 0));
+          const eConsCost = Number(e.costPerConsumptionUnit || e.costPerSheet || e.specs?.costPerConsumptionUnit || e.specs?.costPerSheet || perSheetPrice);
+          const ePackPrice = Number(e.costPerPurchaseUnit || e.unitPrice || (ePackQty > 0 && eTotalPrice > 0 ? Math.round(eTotalPrice / ePackQty) : purchasePricePerReam));
+
+          return {
+            id: e.poNumber || e.id || `LOT-${item.id}`,
+            purchaseDate: e.receiptDate || e.importDate || new Date().toISOString().split('T')[0],
+            supplierName: e.supplier || e.vendor || e.supplierName || '',
+            purchasePricePerReam: ePackPrice,
+            costPerSheet: eConsCost,
+            initialQty: ePackQty * sheetsPerPack,
+            currentQty: ePackQty * sheetsPerPack
+          };
+        });
 
         const hasRealBatches = (item.batches || []).some(b => b.id && !b.id.includes('-EMPTY'));
-        if (item.stockQty !== totalSheetsFromInbound || !hasRealBatches || (isInk && item.consumptionUnit !== 'ml')) {
+        if (item.stockQty !== totalSheetsFromInbound || !hasRealBatches || (isInk && item.consumptionUnit !== 'ml') || item.costPerConsumptionUnit !== perSheetPrice) {
           updated = true;
           return {
             ...item,
             stockQty: totalSheetsFromInbound,
-            costPerPurchaseUnit: latestPrice,
+            costPerPurchaseUnit: purchasePricePerReam,
             costPerConsumptionUnit: perSheetPrice,
             consumptionUnit: isPaper ? 'ແຜ່ນ' : (isInk ? 'ml' : item.consumptionUnit),
             purchaseUnit: isPaper ? 'ແພັກ' : (isInk ? 'ຂວດ' : item.purchaseUnit),
@@ -1999,8 +2058,31 @@ export const AppProvider = ({ children }) => {
           const sheetsPerPack = isPaper ? Number(e.sheetsPerPack || e.specs?.sheetsPerPack || 500) : (isInk ? inkVol : 1);
           const packQty = Number(e.importQty || e.quantity || e.currentQty || 1);
           const totalStock = packQty * sheetsPerPack;
-          const price = Number(e.totalPrice || e.unitPrice || (isInk ? 80000 : 95000));
-          const unitPrice = sheetsPerPack > 0 ? Math.round(price / sheetsPerPack) : price;
+          const eTotalPrice = Number(e.totalPrice || (e.unitPrice ? e.unitPrice * packQty : 0));
+
+          // Direct stored consumption unit cost
+          const directConsCost = Number(
+            e.costPerConsumptionUnit || 
+            e.costPerSheet || 
+            e.specs?.costPerConsumptionUnit || 
+            e.specs?.costPerSheet || 
+            0
+          );
+
+          // Direct stored purchase unit cost (price per pack)
+          const directPurchaseCost = Number(
+            e.costPerPurchaseUnit || 
+            e.unitPrice || 
+            (packQty > 0 && eTotalPrice > 0 ? Math.round(eTotalPrice / packQty) : 0) ||
+            (isInk ? 80000 : 95000)
+          );
+
+          let finalConsCost = directConsCost;
+          if (finalConsCost <= 0 || (isPaper && sheetsPerPack > 1 && finalConsCost >= directPurchaseCost && directPurchaseCost > 0)) {
+            finalConsCost = sheetsPerPack > 0 ? Math.round((directPurchaseCost / sheetsPerPack) * 100) / 100 : directPurchaseCost;
+          }
+
+          const finalPackCost = directPurchaseCost > 0 ? directPurchaseCost : (finalConsCost * sheetsPerPack);
 
           newlyDiscoveredItems.push(sanitizeInventoryItem({
             id: sku || `SKU-${Date.now()}`,
@@ -2010,8 +2092,8 @@ export const AppProvider = ({ children }) => {
             consumptionUnit: isPaper ? 'ແຜ່ນ' : (isInk ? 'ml' : (e.unit || 'Units')),
             purchaseUnit: isPaper ? 'ແພັກ' : (isInk ? 'ຂວດ' : (e.unit || 'Units')),
             purchaseMultiplier: sheetsPerPack,
-            costPerPurchaseUnit: price,
-            costPerConsumptionUnit: unitPrice,
+            costPerPurchaseUnit: finalPackCost,
+            costPerConsumptionUnit: finalConsCost,
             reorderThreshold: isInk ? 100 : 50,
             specs: e.specs || {},
             batches: [
@@ -2019,8 +2101,8 @@ export const AppProvider = ({ children }) => {
                 id: `LOT-${sku || Date.now()}`,
                 purchaseDate: e.receiptDate || e.importDate || new Date().toISOString().split('T')[0],
                 supplierName: e.supplier || e.vendor || e.supplierName || '',
-                purchasePricePerReam: price,
-                costPerSheet: unitPrice,
+                purchasePricePerReam: finalPackCost,
+                costPerSheet: finalConsCost,
                 initialQty: totalStock,
                 currentQty: totalStock
               }
@@ -2178,9 +2260,9 @@ export const AppProvider = ({ children }) => {
       const bQty = Number(batch.currentQty) || 0;
       const bReamPrice = Number(batch.purchasePricePerReam || batch.purchasePrice || pCost);
       const rawBatchCost = Number(batch.costPerSheet || batch.cost_per_sheet || 0);
-      const bCost = (rawBatchCost > 0 && (mult <= 1 || rawBatchCost < (bReamPrice / 2)))
+      const bCost = (rawBatchCost > 0 && rawBatchCost < (bReamPrice / 2))
         ? rawBatchCost
-        : (mult > 0 && bReamPrice > 0 ? (bReamPrice / mult) : baseCost);
+        : (baseCost > 0 ? baseCost : (mult > 0 && bReamPrice > 0 ? (bReamPrice / mult) : baseCost));
 
       const take = Math.min(remainingNeeded, bQty);
       accumulatedCost += take * bCost;
@@ -3514,12 +3596,14 @@ export const AppProvider = ({ children }) => {
     // Send JSON payload to Equipment Backend API
     fetch(`/api/equipment/${newEq.id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(newEq)
     }).catch(err => console.log('API equipment sync notice:', err));
   };
 
   const updateEquipment = (eqId: string, updatedFields: Record<string, any>) => {
+    let fullPayload: any = { id: eqId, ...updatedFields };
+
     setEquipment(prev => {
       const next = prev.map(eq => {
         if (eq.id === eqId || eq.id?.toLowerCase() === eqId?.toLowerCase() || eq.serialNumber === eqId) {
@@ -3527,6 +3611,7 @@ export const AppProvider = ({ children }) => {
           if (merged.purchaseCost && merged.printedPagesCapacity) {
             merged.calculatedCostPerPage = merged.purchaseCost / merged.printedPagesCapacity;
           }
+          fullPayload = { ...merged };
           return merged;
         }
         return eq;
@@ -3535,16 +3620,15 @@ export const AppProvider = ({ children }) => {
       return next;
     });
 
-    const payload = { id: eqId, ...updatedFields };
     fetch(`/api/equipment/${eqId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      headers: getAuthHeaders(),
+      body: JSON.stringify(fullPayload)
     }).catch(err => console.log('API equipment update notice:', err));
     fetch(`/api/v1/assets/${eqId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      headers: getAuthHeaders(),
+      body: JSON.stringify(fullPayload)
     }).catch(err => console.log('API assets update notice:', err));
   };
 
@@ -3556,10 +3640,12 @@ export const AppProvider = ({ children }) => {
       return next;
     });
     fetch(`/api/equipment/${eqId}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: getAuthHeaders(),
     }).catch(err => console.log('API equipment delete notice:', err));
     fetch(`/api/v1/assets/${eqId}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: getAuthHeaders(),
     }).catch(err => console.log('API assets delete notice:', err));
   };
 
@@ -3833,7 +3919,8 @@ export const AppProvider = ({ children }) => {
 
     // 4. Send API DELETE to Backend
     fetch(`/api/inbound/${id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: getAuthHeaders(),
     }).catch(err => console.log('API inbound delete notice:', err));
   };
 
@@ -4009,12 +4096,15 @@ export const AppProvider = ({ children }) => {
     const qArtworkFileName = quotation.artworkFileName || quotation.artwork_file_name || quotation.fileName || (quotation.items && quotation.items.find((it: any) => it.fileName)?.fileName) || (qArtworkUrl ? qArtworkUrl.split('/').pop()?.split('?')[0] : '');
     const qArtworkFileSize = quotation.artworkFileSize || quotation.artwork_file_size || (quotation.items && quotation.items.find((it: any) => it.fileSize)?.fileSize) || 0;
 
+    const defaultPaper = inventory.find(i => i.category === 'Paper') || inventory[0];
+    const defaultPrinter = equipment.find(e => e.type === 'Printer') || equipment[0];
+
     const orderItems = (quotation.items || []).map((item: any, idx: number) => {
       const invPaper = inventory.find(i => i.id === item.paperId || (i.category === 'Paper' && (i.id === item.id || i.name === item.paperType)));
-      const paperName = invPaper?.name || item.paperName || item.paperType || item.paper_name || 'Art Card 260g';
-      const paperBrand = invPaper?.specs?.brand || invPaper?.brand || item.paperBrand || item.paper_brand || (paperName.includes('Double A') ? 'Double A' : 'SCG Premium');
-      const paperWeight = invPaper?.specs?.grammage || invPaper?.weight_gsm || item.weight_gsm || item.paperWeight || '260 gsm';
-      const paperSku = invPaper?.sku || item.paperSku || item.paper_sku || 'PAP-ART-260';
+      const paperName = invPaper?.name || item.paperName || item.paperType || item.paper_name || defaultPaper?.name || '';
+      const paperBrand = invPaper?.specs?.brand || invPaper?.brand || item.paperBrand || item.paper_brand || (defaultPaper as any)?.brand || '';
+      const paperWeight = invPaper?.specs?.grammage || invPaper?.weight_gsm || item.weight_gsm || item.paperWeight || (defaultPaper as any)?.weight_gsm || '';
+      const paperSku = invPaper?.sku || item.paperSku || item.paper_sku || defaultPaper?.sku || '';
 
       const batchFiles = Array.isArray(item.batchFiles) ? item.batchFiles : (Array.isArray(item.batch_files) ? item.batch_files : []);
       const galleryUrls = Array.isArray(item.galleryUrls) ? item.galleryUrls : (Array.isArray(item.gallery_urls) ? item.gallery_urls : []);
@@ -4063,14 +4153,14 @@ export const AppProvider = ({ children }) => {
         },
         specifications: {
           ...(item.specifications || item.specs || item),
-          paper_id: item.paperId || invPaper?.id || 'PAP-ART-260',
+          paper_id: item.paperId || invPaper?.id || defaultPaper?.id || '',
           paper_name: paperName,
           paper_brand: paperBrand,
           paper_weight: paperWeight,
           paper_sku: paperSku,
           color_mode: item.colorPrintMode || item.colorMode || 'CMYK',
-          printer_id: item.printerId || quotation.printerId || 'EQ-CANON-C165',
-          printer_name: item.printerName || quotation.printerName || 'Canon imagePRESS C165',
+          printer_id: item.printerId || quotation.printerId || defaultPrinter?.id || '',
+          printer_name: item.printerName || quotation.printerName || defaultPrinter?.name || '',
           binding: item.bindingMethod || item.binding,
           coating: item.coating || item.lamination,
           pages: Number(item.pageCount || item.pages || (batchFiles.length > 0 ? batchFiles.length : 1)),
@@ -4098,8 +4188,8 @@ export const AppProvider = ({ children }) => {
     const depositAmt = Math.round(totalPrice * 0.5);
     const orderNo = `ORD-${new Date().toISOString().replace(/\D/g, '').slice(2, 8)}-${Date.now().toString().slice(-3)}`;
 
-    const allocatedPrinterId = quotation.printerId || 'EQ-CANON-C165';
-    const allocatedPrinterName = quotation.printerName || 'Canon imagePRESS C165';
+    const allocatedPrinterId = quotation.printerId || defaultPrinter?.id || '';
+    const allocatedPrinterName = quotation.printerName || defaultPrinter?.name || '';
 
     const orderPayload = {
       order_no: orderNo,
@@ -4636,7 +4726,7 @@ export const AppProvider = ({ children }) => {
 
     fetch(`/api/inbound/${updatedEntry.id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(updatedEntry)
     }).catch(err => console.warn('Update Inbound API notice:', err));
 

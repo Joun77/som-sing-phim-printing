@@ -21,17 +21,23 @@ import {
   Layers,
   FileSpreadsheet,
   Filter,
-  RefreshCw
+  RefreshCw,
+  Wrench,
+  ArrowUpDown,
+  ArrowDownWideNarrow,
+  ArrowUpNarrowWide
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApp } from '@store/AppContext';
 import { FormModalTemplate } from '@components/common';
+import { getAuthHeaders } from '@utils/authHeaders';
 import ImportForm from './ImportForm';
 import DynamicSpecDetail from '@features/inventory/components/details/DynamicSpecDetail';
 import ProcurementDetailCard from '@features/inventory/components/details/ProcurementDetailCard';
 import InboundEditModal from './modals/InboundEditModal';
 import RestockBatchModal from './modals/RestockBatchModal';
+import InboundItemDetailsPage from './details/InboundItemDetailsPage';
 import type { InboundEntry } from '../types';
 import { formatCompositeItemName } from '@utils/costCalculator';
 
@@ -96,11 +102,13 @@ export default function InboundManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [dateSortOrder, setDateSortOrder] = useState<'desc' | 'asc'>('desc');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Drawers & Modals state
   const [selectedDrawerItem, setSelectedDrawerItem] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [initialInboundType, setInitialInboundType] = useState<string>('PAPER');
   const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [lightboxImg, setLightboxImg] = useState(null);
@@ -143,7 +151,7 @@ export default function InboundManagement() {
 
   const fetchInbound = async () => {
     try {
-      const res = await fetch('/api/inbound');
+      const res = await fetch('/api/inbound', { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         const deletedIds = getDeletedIds();
@@ -166,7 +174,7 @@ export default function InboundManagement() {
             try {
               await fetch('/api/inbound', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getAuthHeaders(),
                 body: JSON.stringify({
                   id: item.id,
                   poNumber: item.poNumber || item.id,
@@ -191,7 +199,7 @@ export default function InboundManagement() {
           }
 
           // Re-fetch after syncing all missing records to get full DB state
-          const reRes = await fetch('/api/inbound');
+          const reRes = await fetch('/api/inbound', { headers: getAuthHeaders() });
           if (reRes.ok) {
             const reData = await reRes.json();
             if (reData.status === 'success' && Array.isArray(reData.data)) {
@@ -449,7 +457,7 @@ export default function InboundManagement() {
     setIsModalOpen(true);
   };
 
-  const saveInboundToBackend = (item: any, isUpdate = false) => {
+  const saveInboundToBackend = async (item: any, isUpdate = false) => {
     const resolvedName = resolveInboundItemName(item);
     const resolvedSku = item.specs?.materialId || item.specs?.skuCode || item.specs?.sku || item.skuCode || item.sku || item.id;
     const apiPayload = {
@@ -473,23 +481,35 @@ export default function InboundManagement() {
     const url = isUpdate ? `/api/inbound/${item.id}` : '/api/inbound';
     const method = isUpdate ? 'PUT' : 'POST';
 
-    fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(apiPayload)
-    }).catch(err => console.log('Inbound API save error', err));
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: getAuthHeaders(),
+        body: JSON.stringify(apiPayload)
+      });
+      if (!res.ok) {
+        console.warn('Inbound API save warning:', await res.text());
+      }
+    } catch (err) {
+      console.error('Inbound API save error:', err);
+    }
   };
 
   const deleteInboundFromBackend = (id: string) => {
     fetch(`/api/inbound/${id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: getAuthHeaders(),
     }).catch(err => console.log('Inbound API delete error', err));
   };
 
-  const processSingleImportItem = (type: string, data: any, batchIndex?: number) => {
-    const logId = data.id || `INB-${Date.now().toString().slice(-4)}${batchIndex !== undefined ? `-${batchIndex}` : ''}`;
+  const processSingleImportItem = async (type: string, data: any, batchIndex?: number) => {
+    if (!data) return null;
+    const logId = (data.inboundId || (data.id && data.id.startsWith('INB-'))) 
+      ? data.id 
+      : `INB-${Date.now().toString().slice(-6)}${batchIndex !== undefined ? `-${batchIndex}` : ''}`;
     const calcTotal = Number(data.totalPrice) || Number(data.price) || (Number(data.unitPrice || 0) * Number(data.importQty || 1)) || Number(data.rawImportCost) || 0;
-    const resolvedItemName = resolveInboundItemName(data);
+    const resolvedItemName = resolveInboundItemName(data) || data.name || data.itemName || 'Unspecified Item';
+    const resolvedSku = data.paperCode || data.inkCode || data.sku || data.skuCode || data.id || logId;
 
     unrecordDeletedId(logId);
     if (data.id) unrecordDeletedId(data.id);
@@ -508,25 +528,26 @@ export default function InboundManagement() {
       categoryPill: type,
       name: resolvedItemName,
       itemName: resolvedItemName,
-      sku: data.sku || data.id,
-      currentQty: (type === 'PRINTER' || type === 'MACHINERY') ? 1 : data.importQty || 1,
-      initialQty: (type === 'PRINTER' || type === 'MACHINERY') ? 1 : data.importQty || 1,
-      unit: data.unit || 'Unit',
-      subUnit: (type === 'PRINTER' || type === 'MACHINERY') ? '(1 Unit)' : `(${data.importQty} ${data.unit})`,
-      supplier: data.supplier || data.vendor || '',
+      sku: resolvedSku,
+      currentQty: (type === 'PRINTER' || type === 'MACHINERY') ? 1 : Number(data.importQty || 1),
+      initialQty: (type === 'PRINTER' || type === 'MACHINERY') ? 1 : Number(data.importQty || 1),
+      unit: data.unit || data.importUnit || 'Unit',
+      subUnit: (type === 'PRINTER' || type === 'MACHINERY') ? '(1 Unit)' : `(${data.importQty || 1} ${data.unit || data.importUnit || 'Unit'})`,
+      supplier: data.supplier || data.vendor || data.supplierName || '',
       totalPrice: calcTotal,
       paymentMethod: data.paymentMethod || 'TRANSFER',
-      supplier_phone: data.supplier_phone || data.specs?.supplier_phone || '',
-      purchase_link: data.purchase_link || data.specs?.purchase_link || '',
+      supplier_phone: data.supplier_phone || data.supplierPhone || data.specs?.supplier_phone || '',
+      purchase_link: data.purchase_link || data.purchaseLink || data.specs?.purchase_link || '',
       specs: data.specs || { ...data },
       docs: {
-        productPhoto: data.imageUrl || (Array.isArray(data.actual_images) && data.actual_images[0]) || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='100%25' height='100%25' fill='%23f1f5f9'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%2364748b'%3EProduct Photo%3C/text%3E%3C/svg%3E",
-        paymentSlip: data.receiptUrl || data.payment_slip || ''
+        productPhoto: data.imageUrl || data.productPhoto || (Array.isArray(data.actual_images) && data.actual_images[0]) || (Array.isArray(data.actualImages) && data.actualImages[0]) || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='100%25' height='100%25' fill='%23f1f5f9'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%2364748b'%3EProduct Photo%3C/text%3E%3C/svg%3E",
+        paymentSlip: data.receiptUrl || data.payment_slip || data.paymentSlip || ''
       },
-      receiptUrl: data.receiptUrl || data.payment_slip || ''
+      receiptUrl: data.receiptUrl || data.payment_slip || data.paymentSlip || ''
     };
 
-    saveInboundToBackend(newLog);
+    await saveInboundToBackend(newLog);
+    updateInboundEntry(newLog);
 
     if (type === 'PRINTER' || type === 'MACHINERY') {
       addEquipment({
@@ -582,11 +603,11 @@ export default function InboundManagement() {
       } else {
         const newItem = {
           id: data.id || logId,
-          name: data.name,
+          name: data.name || resolvedItemName,
           category: isSheetPaper ? 'Paper' : (isInk ? 'Ink' : 'Finishing'),
           stockQty: totalUnits,
           consumptionUnit: isSheetPaper ? 'ແຜ່ນ' : (isInk ? 'ml' : (data.unit || 'Units')),
-          purchaseUnit: isSheetPaper ? 'ແພັກ' : (isInk ? (data.unit || 'ຂວດ') : (data.unit || 'Units')),
+          purchaseUnit: isSheetPaper ? (data.unit || 'ແພັກ') : (isInk ? (data.unit || 'ຂວດ') : (data.unit || 'Units')),
           purchaseMultiplier: multiplier,
           costPerPurchaseUnit: unitPrice,
           costPerConsumptionUnit: perUnitConsumptionPrice,
@@ -621,27 +642,42 @@ export default function InboundManagement() {
     return newLog;
   };
 
-  const handleImportSubmit = (type, data) => {
+  const handleImportSubmit = async (type: string, data: any) => {
     if (type === 'BATCH' && Array.isArray(data)) {
-      const createdLogs = data.map((item, idx) => processSingleImportItem(item.type, item.data, idx + 1));
+      const createdLogs: any[] = [];
+      for (let idx = 0; idx < data.length; idx++) {
+        const item = data[idx];
+        const itemPayload = item.finalData || item.data || item;
+        const itemType = item.type || type;
+        const newLog = await processSingleImportItem(itemType, itemPayload, idx + 1);
+        if (newLog) createdLogs.push(newLog);
+      }
       setInboundList(prev => {
         const newList = [...createdLogs, ...prev];
         localStorage.setItem('som_sing_inbound_list', JSON.stringify(newList));
         return newList;
       });
-      showToast(currentLang === 'lo' ? `ບັນທຶກ ${data.length} ລາຍການຮຽບຮ້ອຍແລ້ວ!` : `Successfully recorded ${data.length} items!`, 'success');
+      showToast(currentLang === 'lo' ? `ບັນທຶກ ${createdLogs.length} ລາຍການຮຽບຮ້ອຍແລ້ວ!` : `Successfully recorded ${createdLogs.length} items!`, 'success');
     } else {
-      const newLog = processSingleImportItem(type, data);
-      setInboundList(prev => {
-        const newList = [newLog, ...prev];
-        localStorage.setItem('som_sing_inbound_list', JSON.stringify(newList));
-        return newList;
-      });
-      showToast(`${type} recorded successfully!`, 'success');
+      const itemPayload = data.finalData || data.data || data;
+      const newLog = await processSingleImportItem(type, itemPayload);
+      if (newLog) {
+        setInboundList(prev => {
+          const newList = [newLog, ...prev];
+          localStorage.setItem('som_sing_inbound_list', JSON.stringify(newList));
+          return newList;
+        });
+        showToast(currentLang === 'lo' ? 'ບັນທຶກລາຍການນຳເຂົ້າຮຽບຮ້ອຍແລ້ວ!' : `${type} recorded successfully!`, 'success');
+      }
     }
 
     invalidateInboundAndInventory();
     setIsModalOpen(false);
+
+    // Auto re-fetch from database to ensure absolute consistency with PostgreSQL
+    setTimeout(() => {
+      fetchInbound();
+    }, 400);
   };
 
   // Submit Add / Edit
@@ -763,33 +799,64 @@ export default function InboundManagement() {
   const isCategoryMatch = (itemCat: string, filterId: string) => {
     if (filterId === 'ALL') return true;
     const cat = (itemCat || '').toUpperCase();
-    if (filterId === 'MATERIAL') return cat === 'MATERIAL' || cat === 'PAPER';
+    if (filterId === 'MACHINERY') return cat === 'MACHINERY' || cat === 'PRINTER' || cat === 'CUTTER' || cat === 'LAMINATOR' || cat === 'BINDER';
+    if (filterId === 'PAPER') return cat === 'PAPER' || cat === 'MATERIAL';
     if (filterId === 'INK') return cat === 'INK' || cat === 'TONER';
-    if (filterId === 'PRINTER') return cat === 'PRINTER' || cat === 'MACHINERY';
-    if (filterId === 'CUTTER') return cat === 'CUTTER' || cat === 'LAMINATOR' || cat === 'BINDER';
+    if (filterId === 'LAMINATION') return cat === 'LAMINATION' || cat === 'FILM';
+    if (filterId === 'BINDING') return cat === 'BINDING' || cat === 'GLUE';
+    if (filterId === 'CUTTING_SUPPLIES') return cat === 'CUTTING_SUPPLIES' || cat === 'CUTTING';
+    if (filterId === 'RIGID_SUBSTRATES') return cat === 'RIGID_SUBSTRATES' || cat === 'RIGID';
+    if (filterId === 'PACKAGING') return cat === 'PACKAGING';
+    if (filterId === 'SPARE_PARTS') return cat === 'SPARE_PARTS' || cat === 'SPAREPARTS' || cat === 'HARDWARE';
     return cat === filterId.toUpperCase();
   };
 
-  // Filtered dataset including date range, category, and search query
-  const filteredData = inboundList.filter(item => {
-    if (!item) return false;
-    const matchCategory = isCategoryMatch(item.category, activeCategoryFilter);
-    const po = (item.poNumber || item.id || '').toLowerCase();
-    const name = (item.name || item.itemName || '').toLowerCase();
-    const sku = (item.sku || '').toLowerCase();
-    const q = (searchQuery || '').toLowerCase();
-    const matchQuery = !q || po.includes(q) || name.includes(q) || sku.includes(q);
-    
-    let matchDate = true;
-    if (startDate && item.receiptDate < startDate) matchDate = false;
-    if (endDate && item.receiptDate > endDate) matchDate = false;
+  // Filtered dataset including date range, category, search query, and date sorting
+  const filteredData = inboundList
+    .filter(item => {
+      if (!item) return false;
+      const matchCategory = isCategoryMatch(item.category, activeCategoryFilter);
+      const po = (item.poNumber || item.id || '').toLowerCase();
+      const name = (item.name || item.itemName || '').toLowerCase();
+      const sku = (item.sku || '').toLowerCase();
+      const q = (searchQuery || '').toLowerCase();
+      const matchQuery = !q || po.includes(q) || name.includes(q) || sku.includes(q);
+      
+      const rawDate = item.inboundDate || item.receiptDate || item.createdAt || '';
+      const itemDate = rawDate.slice(0, 10);
 
-    return matchCategory && matchQuery && matchDate;
-  });
+      let matchDate = true;
+      if (startDate && itemDate < startDate) matchDate = false;
+      if (endDate && itemDate > endDate) matchDate = false;
+
+      return matchCategory && matchQuery && matchDate;
+    })
+    .sort((a, b) => {
+      const dateA = a.inboundDate || a.receiptDate || a.createdAt || '';
+      const dateB = b.inboundDate || b.receiptDate || b.createdAt || '';
+      return dateSortOrder === 'desc' ? dateB.localeCompare(dateA) : dateA.localeCompare(dateB);
+    });
 
   // Calculate summary KPIs
   const totalInboundQty = filteredData.reduce((sum, item) => sum + (Number(item.initialQty) || 1), 0);
   const totalInboundValue = filteredData.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
+  // Render standalone detail page if an inbound item is selected (full-screen like Machinery page)
+  if (selectedDrawerItem) {
+    return (
+      <InboundItemDetailsPage
+        item={selectedDrawerItem}
+        onBack={() => setSelectedDrawerItem(null)}
+        onEdit={(item) => {
+          setSelectedDrawerItem(null);
+          setEditingItem(item);
+        }}
+        onDelete={(id) => {
+          handleDeleteItem(id);
+          setSelectedDrawerItem(null);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 text-slate-800 antialiased">
@@ -828,13 +895,16 @@ export default function InboundManagement() {
             <span className="whitespace-nowrap">{currentLang === 'lo' ? 'ເຕີມສະຕັອກເດີມ (Restock)' : 'Restock Existing'}</span>
           </button>
 
-          {/* Button 2: New Item Batch Inbound */}
+          {/* Button 2: Unified New Inbound (Goods, Paper, Inks, Machines & Spare Parts) */}
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setInitialInboundType('PAPER');
+              setIsModalOpen(true);
+            }}
             className="flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white rounded-2xl font-bold shadow-lg shadow-indigo-200 transition cursor-pointer text-xs sm:text-sm"
           >
             <PackagePlus className="w-4 h-4 shrink-0" />
-            <span className="whitespace-nowrap">{currentLang === 'lo' ? 'ນຳເຂົ້າສິນຄ້າໃໝ່ (New Items)' : 'New Inbound'}</span>
+            <span className="whitespace-nowrap">{currentLang === 'lo' ? 'ນຳເຂົ້າສິນຄ້າ & ອະໄຫຼ່ (New Inbound)' : 'New Inbound'}</span>
           </button>
         </div>
       </div>
@@ -922,12 +992,16 @@ export default function InboundManagement() {
         {/* Category Filter Tabs */}
         <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 lg:pb-0 scrollbar-none no-scrollbar">
           {[
-            { id: 'ALL', label: 'All Items' },
-            { id: 'MATERIAL', label: 'Paper / Material' },
-            { id: 'INK', label: 'Printing Ink' },
-            { id: 'HARDWARE', label: 'Hardware & Tools' },
-            { id: 'PRINTER', label: 'Printer' },
-            { id: 'CUTTER', label: 'Cutter' }
+            { id: 'ALL', label: currentLang === 'lo' ? 'ທັງໝົດ' : 'All Items' },
+            { id: 'MACHINERY', label: currentLang === 'lo' ? '1. ເຄື່ອງຈັກ' : '1. Machines' },
+            { id: 'PAPER', label: currentLang === 'lo' ? '2. ເຈ້ຍ' : '2. Paper' },
+            { id: 'INK', label: currentLang === 'lo' ? '3. ໝຶກ' : '3. Ink' },
+            { id: 'LAMINATION', label: currentLang === 'lo' ? '4. ເຄືອບ' : '4. Lamination' },
+            { id: 'BINDING', label: currentLang === 'lo' ? '5. ເຂົ້າເຫຼັ້ມ' : '5. Binding' },
+            { id: 'CUTTING_SUPPLIES', label: currentLang === 'lo' ? '6. ຊ່ວຍຕັດ' : '6. Cutting' },
+            { id: 'RIGID_SUBSTRATES', label: currentLang === 'lo' ? '7. ແຜ່ນບອດ' : '7. Rigid' },
+            { id: 'PACKAGING', label: currentLang === 'lo' ? '8. ບັນຈຸພັນ' : '8. Packaging' },
+            { id: 'SPARE_PARTS', label: currentLang === 'lo' ? 'ອະໄຫຼ່ຊ້ອມ' : 'Spare Parts' }
           ].map(tab => (
             <button
               key={tab.id}
@@ -961,13 +1035,93 @@ export default function InboundManagement() {
         </div>
       </div>
 
+      {/* Date Range Filtering & Date Sorting Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-2xs">
+        {/* Date Pickers */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs">
+          <div className="flex items-center gap-2 font-bold text-slate-500">
+            <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
+            <span>{currentLang === 'lo' ? 'ຊ່ວງວັນທີນຳເຂົ້າ:' : 'Date Range:'}</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 transition cursor-pointer"
+              title={currentLang === 'lo' ? 'ວັນທີເລີ່ມຕົ້ນ' : 'Start Date'}
+            />
+            <span className="text-slate-400 font-bold">-</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 transition cursor-pointer"
+              title={currentLang === 'lo' ? 'ວັນທີສິ້ນສຸດ' : 'End Date'}
+            />
+          </div>
+
+          {(startDate || endDate) && (
+            <button
+              onClick={() => { setStartDate(''); setEndDate(''); }}
+              className="flex items-center gap-1 px-2.5 py-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-xl text-[11px] font-bold transition cursor-pointer"
+            >
+              <X className="w-3 h-3" />
+              <span>{currentLang === 'lo' ? 'ລ້າງວັນທີ' : 'Clear Dates'}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Date Sort Toggle Button */}
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
+          <span className="text-xs font-bold text-slate-400">
+            {currentLang === 'lo' ? 'ຮຽງຕາມ:' : 'Sort:'}
+          </span>
+          <button
+            onClick={() => setDateSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+              dateSortOrder === 'desc'
+                ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100/80'
+                : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100/80'
+            }`}
+            title={dateSortOrder === 'desc' ? 'Currently Newest First (Click to switch)' : 'Currently Oldest First (Click to switch)'}
+          >
+            {dateSortOrder === 'desc' ? (
+              <>
+                <ArrowDownWideNarrow className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>{currentLang === 'lo' ? 'ວັນທີລ່າສຸດ (ໃຫມ່ → ເກົ່າ)' : 'Newest First'}</span>
+              </>
+            ) : (
+              <>
+                <ArrowUpNarrowWide className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>{currentLang === 'lo' ? 'ວັນທີເກົ່າສຸດ (ເກົ່າ → ໃຫມ່)' : 'Oldest First'}</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
       {/* Main Inbound Data Table */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto scrollbar-thin">
           <table className="w-full min-w-[940px] text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider whitespace-nowrap">
-                <th className="py-4 px-5">{currentLang === 'lo' ? 'ວັນທີ & ເວລານຳເຂົ້າ' : 'Import Date & Time'}</th>
+                <th 
+                  onClick={() => setDateSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+                  className="py-4 px-5 cursor-pointer hover:text-slate-800 hover:bg-slate-100/60 transition select-none group/th"
+                  title="Click to toggle Newest/Oldest sort"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>{currentLang === 'lo' ? 'ວັນທີ & ເວລານຳເຂົ້າ' : 'Import Date & Time'}</span>
+                    {dateSortOrder === 'desc' ? (
+                      <ArrowDownWideNarrow className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    ) : (
+                      <ArrowUpNarrowWide className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    )}
+                  </div>
+                </th>
                 <th className="py-4 px-4 text-center">{currentLang === 'lo' ? 'ປະເພດ' : 'Type'}</th>
                 <th className="py-4 px-5">{currentLang === 'lo' ? 'ລະຫັດສິນຄ້າ' : 'Item Code'}</th>
                 <th className="py-4 px-5">{currentLang === 'lo' ? 'ຊື່ / ລຸ້ນ' : 'Name/Model'}</th>
@@ -1013,29 +1167,59 @@ export default function InboundManagement() {
                       </span>
                     </td>
                     <td className="py-4 px-5 text-right whitespace-nowrap">
-                      <span className="font-mono font-black text-slate-900 block">
-                        {(() => {
-                          const cat = (item.category || '').toUpperCase();
-                          const rawQty = Number(item.initialQty || item.currentQty) || 1;
-                          if (cat === 'PRINTER' || cat === 'MACHINERY' || cat === 'EQUIPMENT') {
-                            return `${rawQty} ${currentLang === 'lo' ? 'ເຄື່ອງ' : 'Unit'}`;
+                      {(() => {
+                        const cat = (item.category || '').toUpperCase();
+                        const rawQty = Number(item.initialQty || item.currentQty) || 1;
+                        if (cat === 'PRINTER' || cat === 'MACHINERY' || cat === 'EQUIPMENT') {
+                          return (
+                            <span className="font-mono font-black text-slate-900 block">
+                              {rawQty} {currentLang === 'lo' ? 'ເຄື່ອງ' : 'Unit'}
+                            </span>
+                          );
+                        }
+                        if (cat === 'INK') {
+                          const vol = Number(item.specs?.volume || item.specs?.volumePerBottle || item.specs?.inkVolume || 70);
+                          return (
+                            <div>
+                              <span className="font-mono font-black text-slate-900 block">
+                                {rawQty} {item.unit || (currentLang === 'lo' ? 'ຂວດ' : 'Bottle')}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-bold block">
+                                ({(rawQty * vol).toLocaleString()} ml @ {vol}ml/{currentLang === 'lo' ? 'ຂວດ' : 'btl'})
+                              </span>
+                            </div>
+                          );
+                        }
+                        if (cat === 'PAPER' || cat === 'MATERIAL') {
+                          const isSheet = (item.specs?.paperFormat || item.paperFormat || 'sheet').toLowerCase() === 'sheet';
+                          if (isSheet) {
+                            const sheetsPerPack = Number(item.specs?.sheetsPerPack || item.specs?.sheets_per_ream || item.specs?.sheets_per_pack || item.sheetsPerPack || item.sheets_per_ream) || 500;
+                            const totalSheets = rawQty * sheetsPerPack;
+                            const packUnit = item.unit || (currentLang === 'lo' ? 'ແພັກ' : 'pack');
+                            return (
+                              <div>
+                                <span className="font-mono font-black text-slate-900 block">
+                                  {rawQty} {packUnit}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-bold block">
+                                  ({totalSheets.toLocaleString()} {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'} @ {sheetsPerPack} {currentLang === 'lo' ? 'ແຜ່ນ/ແພັກ' : 'sh/pk'})
+                                </span>
+                              </div>
+                            );
+                          } else {
+                            return (
+                              <span className="font-mono font-black text-slate-900 block">
+                                {rawQty} {currentLang === 'lo' ? 'ມ້ວນ' : 'roll'}
+                              </span>
+                            );
                           }
-                          if (cat === 'INK') {
-                            return `${rawQty} ${currentLang === 'lo' ? 'ຂວດ' : 'Bottle'}`;
-                          }
-                          if (cat === 'PAPER' || cat === 'MATERIAL') {
-                            const isSheet = (item.specs?.paperFormat || item.paperFormat || 'sheet').toLowerCase() === 'sheet';
-                            if (isSheet) {
-                              const sheetsPerPack = Number(item.specs?.sheetsPerPack || item.specs?.sheets_per_ream || item.sheetsPerPack || item.sheets_per_ream) || 500;
-                              const totalSheets = rawQty * sheetsPerPack;
-                              return `${totalSheets.toLocaleString()} ${currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'}`;
-                            } else {
-                              return `${rawQty} ${currentLang === 'lo' ? 'ມ້ວນ' : 'roll'}`;
-                            }
-                          }
-                          return `${rawQty} ${item.unit || ''}`;
-                        })()}
-                      </span>
+                        }
+                        return (
+                          <span className="font-mono font-black text-slate-900 block">
+                            {rawQty} {item.unit || ''}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-4 px-5 text-right whitespace-nowrap">
                       <span className="font-mono font-black text-emerald-600 block">
@@ -1081,220 +1265,6 @@ export default function InboundManagement() {
         </div>
       </div>
 
-      {/* Slide-Over Item Detail Drawer */}
-      {selectedDrawerItem && (
-        <div className="fixed inset-0 z-50 overflow-hidden">
-          <div 
-            onClick={() => setSelectedDrawerItem(null)}
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
-          />
-          <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-            <div className="w-screen max-w-2xl bg-white border-l border-slate-200 shadow-2xl flex flex-col">
-              {/* Drawer Header */}
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono font-extrabold text-blue-900 bg-blue-50 px-3 py-1 rounded-xl border border-blue-100">
-                      {selectedDrawerItem.poNumber}
-                    </span>
-                    <span className="px-3 py-0.5 rounded-full text-xs font-bold bg-sky-50 text-sky-700 border border-sky-200">
-                      {selectedDrawerItem.categoryPill || selectedDrawerItem.category}
-                    </span>
-                  </div>
-                  <h2 className="text-lg font-black text-slate-900">{selectedDrawerItem.name}</h2>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => {
-                      const item = selectedDrawerItem;
-                      setSelectedDrawerItem(null);
-                      setEditingItem(item);
-                    }}
-                    className="p-2.5 text-slate-400 hover:text-sky-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                  <button 
-                    onClick={() => handleDeleteItem(selectedDrawerItem.id)}
-                    className="p-2.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                  <button 
-                    onClick={() => setSelectedDrawerItem(null)}
-                    className="p-2.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer ml-2"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Drawer Body */}
-              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 scrollbar-thin">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                    <span className="text-[11px] text-slate-400 font-extrabold block mb-1">Total Import Cost</span>
-                    <span className="text-sm md:text-base font-black text-slate-900">{formatLAK(selectedDrawerItem.totalPrice || 0)}</span>
-                  </div>
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                    <span className="text-[11px] text-slate-400 font-extrabold block mb-1">Total Inbound Qty</span>
-                    <div className="text-sm md:text-base font-black text-sky-700">
-                      {(() => {
-                        const cat = (selectedDrawerItem.category || '').toUpperCase();
-                        const rawQty = Number(selectedDrawerItem.initialQty || selectedDrawerItem.currentQty) || 1;
-                        if (cat === 'PRINTER' || cat === 'MACHINERY' || cat === 'EQUIPMENT') {
-                          return `${rawQty} ${currentLang === 'lo' ? 'ເຄື່ອງ' : 'Unit'}`;
-                        }
-                        if (cat === 'INK') {
-                          return `${rawQty} ${currentLang === 'lo' ? 'ຂວດ' : 'Bottle'}`;
-                        }
-                        const isPaper = cat === 'PAPER' || cat === 'MATERIAL' || (selectedDrawerItem.name || '').toLowerCase().includes('paper');
-                        if (isPaper) {
-                          const isSheet = (selectedDrawerItem.specs?.paperFormat || selectedDrawerItem.paperFormat || 'sheet').toLowerCase() === 'sheet';
-                          if (isSheet) {
-                            let sheetsPerPack = Number(
-                              selectedDrawerItem.specs?.sheetsPerPack || 
-                              selectedDrawerItem.specs?.sheets_per_ream || 
-                              selectedDrawerItem.specs?.sheets_per_pack || 
-                              selectedDrawerItem.sheetsPerPack || 
-                              selectedDrawerItem.sheets_per_ream ||
-                              selectedDrawerItem.purchaseMultiplier
-                            );
-                            if (!sheetsPerPack || sheetsPerPack <= 1) {
-                              const invItem = inventory.find(i => i.id === selectedDrawerItem.specs?.materialId || i.sku === selectedDrawerItem.sku || i.id === selectedDrawerItem.id || (i.name && selectedDrawerItem.name && i.name.toLowerCase().trim() === selectedDrawerItem.name.toLowerCase().trim()));
-                              sheetsPerPack = Number(invItem?.purchaseMultiplier || invItem?.purchase_multiplier || invItem?.specs?.sheetsPerPack || 500);
-                            }
-                            if (sheetsPerPack <= 1) sheetsPerPack = 500;
-                            const totalSheets = rawQty * sheetsPerPack;
-                            return (
-                              <div>
-                                <span className="block">{totalSheets.toLocaleString()} {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'}</span>
-                                <span className="text-[10px] text-slate-400 font-bold block mt-0.5 font-sans">({rawQty} {currentLang === 'lo' ? 'ແພັກ' : 'packs'} x {sheetsPerPack} {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'})</span>
-                              </div>
-                            );
-                          } else {
-                            return `${rawQty} ${currentLang === 'lo' ? 'ມ້ວນ' : 'roll'}`;
-                          }
-                        }
-                        return `${rawQty} ${selectedDrawerItem.unit || ''}`;
-                      })()}
-                    </div>
-                  </div>
-                  <div className="bg-blue-50/60 p-4 rounded-2xl border border-blue-100">
-                    <span className="text-[11px] text-blue-900 font-extrabold block mb-1">
-                      {(() => {
-                        const cat = (selectedDrawerItem.category || '').toUpperCase();
-                        const isPaper = cat === 'PAPER' || cat === 'MATERIAL' || (selectedDrawerItem.name || '').toLowerCase().includes('paper');
-                        if (isPaper) {
-                          return currentLang === 'lo' ? 'ຕົ້ນທຶນຕໍ່ແຜ່ນ (Cost/Sheet)' : 'Cost Per Sheet';
-                        }
-                        return currentLang === 'lo' ? 'ຕົ້ນທຶນຕໍ່ໜ່ວຍ (Unit Cost)' : 'Unit Cost';
-                      })()}
-                    </span>
-                    <div className="text-sm md:text-base font-black text-blue-950">
-                      {(() => {
-                        const cat = (selectedDrawerItem.category || '').toUpperCase();
-                        const rawQty = Number(selectedDrawerItem.initialQty || selectedDrawerItem.currentQty) || 1;
-                        const totalPrice = Number(selectedDrawerItem.totalPrice) || 0;
-                        const isPaper = cat === 'PAPER' || cat === 'MATERIAL' || (selectedDrawerItem.name || '').toLowerCase().includes('paper');
-                        if (isPaper) {
-                          const isSheet = (selectedDrawerItem.specs?.paperFormat || selectedDrawerItem.paperFormat || 'sheet').toLowerCase() === 'sheet';
-                          if (isSheet) {
-                            let sheetsPerPack = Number(
-                              selectedDrawerItem.specs?.sheetsPerPack || 
-                              selectedDrawerItem.specs?.sheets_per_ream || 
-                              selectedDrawerItem.specs?.sheets_per_pack || 
-                              selectedDrawerItem.sheetsPerPack || 
-                              selectedDrawerItem.sheets_per_ream ||
-                              selectedDrawerItem.purchaseMultiplier
-                            );
-                            if (!sheetsPerPack || sheetsPerPack <= 1) {
-                              const invItem = inventory.find(i => i.id === selectedDrawerItem.specs?.materialId || i.sku === selectedDrawerItem.sku || i.id === selectedDrawerItem.id || (i.name && selectedDrawerItem.name && i.name.toLowerCase().trim() === selectedDrawerItem.name.toLowerCase().trim()));
-                              sheetsPerPack = Number(invItem?.purchaseMultiplier || invItem?.purchase_multiplier || invItem?.specs?.sheetsPerPack || 500);
-                            }
-                            if (sheetsPerPack <= 1) sheetsPerPack = 500;
-                            const totalSheets = rawQty * sheetsPerPack;
-                            const costPerSheet = totalPrice / Math.max(1, totalSheets);
-                            const costPerPack = totalPrice / Math.max(1, rawQty);
-                            return (
-                              <div>
-                                <span className="block text-emerald-700">{formatLAK(costPerSheet)} <span className="text-xs font-bold text-slate-500">/ {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheet'}</span></span>
-                                <span className="text-[10px] text-slate-400 font-bold block mt-0.5 font-sans">({formatLAK(costPerPack)} / {currentLang === 'lo' ? 'ແພັກ' : 'pack'})</span>
-                              </div>
-                            );
-                          }
-                        }
-                        return `${formatLAK(totalPrice / Math.max(1, rawQty))} / ${selectedDrawerItem.unit || 'Unit'}`;
-                      })()}
-
-                    </div>
-                  </div>
-                </div>
-
-                {/* Procurement Details */}
-                <ProcurementDetailCard item={selectedDrawerItem} currentLang={currentLang} />
-
-                {/* Dynamic Technical Specs */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 flex items-center gap-2">
-                    <Microchip className="w-4 h-4 text-purple-600" />
-                    <span>{currentLang === 'lo' ? 'ສະເປັກທາງເຕັກນິກ (ERP Technical Specs)' : 'ERP Technical Specs'}</span>
-                  </h3>
-                  <DynamicSpecDetail item={selectedDrawerItem} currentLang={currentLang} />
-                </div>
-
-                {/* Document Vault Attachments */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                    <Vault className="w-4 h-4 text-blue-900" />
-                    <span>Document Vault Attachments</span>
-                  </h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Product Photo */}
-                    <div 
-                      onClick={() => selectedDrawerItem.docs?.productPhoto && setLightboxImg(selectedDrawerItem.docs.productPhoto)}
-                      className="group relative rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 aspect-video flex flex-col items-center justify-center cursor-pointer shadow-2xs"
-                    >
-                      {selectedDrawerItem.docs?.productPhoto ? (
-                        <img src={selectedDrawerItem.docs.productPhoto} alt="Product Photo" className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
-                      ) : (
-                        <div className="text-center p-3 text-slate-400 text-xs">
-                          <ImageIcon className="w-6 h-6 mx-auto mb-1" />
-                          <span>{currentLang === 'lo' ? 'ບໍ່ມີຮູບພາບສິນຄ້າ' : 'No image'}</span>
-                        </div>
-                      )}
-                      <span className="absolute bottom-1.5 left-1.5 right-1.5 text-[10px] font-bold bg-white/90 text-slate-700 text-center py-0.5 rounded-lg shadow-2xs backdrop-blur-xs">
-                        {currentLang === 'lo' ? 'ຮູບພາບສິນຄ້າ (Product Photo)' : 'Product Photo'}
-                      </span>
-                    </div>
-
-                    {/* Payment Slip (if TRANSFER) */}
-                    {selectedDrawerItem.paymentMethod === 'TRANSFER' && (
-                      <div 
-                        onClick={() => selectedDrawerItem.docs?.paymentSlip && setLightboxImg(selectedDrawerItem.docs.paymentSlip)}
-                        className="group relative rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 aspect-video flex flex-col items-center justify-center cursor-pointer shadow-2xs"
-                      >
-                        {selectedDrawerItem.docs?.paymentSlip ? (
-                          <img src={selectedDrawerItem.docs.paymentSlip} alt="Payment Slip" className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
-                        ) : (
-                          <div className="text-center p-3 text-slate-400 text-xs">
-                            <CreditCard className="w-6 h-6 mx-auto mb-1" />
-                            <span>{currentLang === 'lo' ? 'ບໍ່ມີສະລິບໂອນເງິນ' : 'No payment slip'}</span>
-                          </div>
-                        )}
-                        <span className="absolute bottom-1.5 left-1.5 right-1.5 text-[10px] font-bold bg-white/90 text-slate-700 text-center py-0.5 rounded-lg shadow-2xs backdrop-blur-xs">
-                          {currentLang === 'lo' ? 'ສະລິບໂອນເງິນ (Payment Slip)' : 'Payment Slip'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Restock Existing Inventory Batch Modal */}
       {isRestockModalOpen && (
         <RestockBatchModal
@@ -1321,9 +1291,11 @@ export default function InboundManagement() {
           title={currentLang === 'lo' ? 'ນຳເຂົ້າສິນຄ້າ / ອຸປະກອນໃໝ່ (New Inbound Workspace)' : 'New Inbound Procurement Workspace'}
           subtitle={currentLang === 'lo' ? 'ເພີ່ມວັດຖຸດິບ, ເຈ້ຍ, ໝຶກ, ເຄື່ອງຈັກ ແລະ ອຸປະກອນເຂົ້າສະຕ໋ອກ ERP ພ້ອມກັນຫຼາຍລາຍການ' : 'Add Paper, Ink, Equipment & Materials to Stock with Independent Split-Pane Control'}
           badgeText="NEW ITEMS WORKSPACE"
-          maxWidthClass="max-w-[96vw] w-[96vw] max-h-[94vh]"
+          maxWidthClass="max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]"
+          bodyClassName="p-2 sm:p-4 flex-1 overflow-hidden min-h-0 bg-slate-50/70 flex flex-col"
         >
           <ImportForm 
+            initialType={initialInboundType}
             onSubmit={(type, data) => {
               handleImportSubmit(type, data);
               setIsModalOpen(false);

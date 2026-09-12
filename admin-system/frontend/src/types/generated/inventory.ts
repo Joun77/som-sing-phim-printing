@@ -52,6 +52,10 @@ export interface EquipmentItem {
   receipt_invoice_url?: string;
   technical_specs?: { [key: string]: any};
   oem_baseline_specs?: { [key: string]: any};
+  colorInkCost?: number /* float64 */;
+  bwInkCost?: number /* float64 */;
+  linkedInkCostPerPage?: number /* float64 */;
+  inkCostPerPage?: number /* float64 */;
   printerColorLinks?: any[];
   components?: any[];
   updatedAt: string;

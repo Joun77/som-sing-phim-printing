@@ -33,6 +33,7 @@ type InventoryItem struct {
 	Volume                 float64                `json:"volume,omitempty"`
 	InkBaseType            string                 `json:"inkBaseType,omitempty"`
 	IsCompatible           bool                   `json:"isCompatible"`
+	AssignedPrinterID      string                 `json:"assigned_printer_id,omitempty"`
 	TechnicalSpecs         map[string]interface{} `json:"technical_specs,omitempty"`
 	Specs                  map[string]interface{} `json:"specs,omitempty"`
 	Batches                []interface{}          `json:"batches,omitempty"`
@@ -57,6 +58,10 @@ type EquipmentItem struct {
 	WarrantyExpirationYear int                    `json:"warrantyExpirationYear"`
 	Location               string                 `json:"location"`
 	Status                 string                 `json:"status"`
+	ColorInkCost           float64                `json:"colorInkCost,omitempty"`
+	BwInkCost              float64                `json:"bwInkCost,omitempty"`
+	LinkedInkCostPerPage   float64                `json:"linkedInkCostPerPage,omitempty"`
+	InkCostPerPage         float64                `json:"inkCostPerPage,omitempty"`
 	ProductImageUrl        string                 `json:"product_image_url,omitempty"`
 	ReceiptInvoiceUrl      string                 `json:"receipt_invoice_url,omitempty"`
 	TechnicalSpecs         map[string]interface{} `json:"technical_specs,omitempty"`
@@ -93,10 +98,15 @@ type InboundAssetRequest struct {
 	Origin                 string                 `json:"origin"`
 	TariffFee              float64                `json:"tariffFee"`
 	FreightFee             float64                `json:"freightFee"`
+	CostPerPurchaseUnit    float64                `json:"costPerPurchaseUnit"`
+	CostPerConsumptionUnit float64                `json:"costPerConsumptionUnit"`
+	PurchaseMultiplier     int                    `json:"purchaseMultiplier"`
+	SheetsPerPack          int                    `json:"sheetsPerPack"`
 	Location               string                 `json:"location"`
 	Status                 string                 `json:"status"`
 	ImgProduct             string                 `json:"imgProduct"`
 	ImgSlip                string                 `json:"imgSlip"`
+	AssignedPrinterID      string                 `json:"assigned_printer_id"`
 	TechnicalSpecs         map[string]interface{} `json:"technical_specs"`
 	OemBaselineSpecs       map[string]interface{} `json:"oem_baseline_specs"`
 	Components             []interface{}          `json:"components"`
@@ -108,6 +118,186 @@ var (
 	equipmentStore  = make(map[string]EquipmentItem)
 	assetStoreMutex sync.RWMutex
 )
+
+func init() {
+	seedEquipmentInStore()
+	seedInventoryInStore()
+}
+
+func seedEquipmentInStore() {
+	now := time.Now().Format(time.RFC3339)
+	equipmentStore["MAC-5707"] = EquipmentItem{
+		ID:                     "MAC-5707",
+		Name:                   "Epson EcoTank L15150",
+		SerialNumber:           "SN-EPS-15150-01",
+		Brand:                  "Epson",
+		Model:                  "EcoTank L15150",
+		Category:               "Printer",
+		PrinterCategory:        "Inkjet Printer",
+		ColorSchemeType:        "CMYK",
+		TotalColorSlots:        4,
+		ExpectedLifeA4Pages:    300000,
+		MaintenanceRatePercent: 0,
+		Price:                  18500057,
+		Vendor:                 "Lao IT Distribution",
+		WarrantyExpirationYear: 2028,
+		Location:               "Main Press Floor (ຊັ້ນ 1)",
+		Status:                 "In Use",
+		ColorInkCost:           56.09,
+		BwInkCost:              8.59,
+		LinkedInkCostPerPage:   56.09,
+		InkCostPerPage:         56.09,
+		UpdatedAt:              now,
+		Components: []interface{}{
+			map[string]interface{}{"name": "Pickup Roller", "nameLo": "ລູກຢາງດຶງເຈ້ຍ", "usage": 12, "threshold": 90, "cost": 600000, "lifeVal": 50000, "unitLabel": "ໜ້າ"},
+			map[string]interface{}{"name": "Maintenance Box", "nameLo": "ກ່ອງຊັບໝຶກເສຍ", "usage": 24, "threshold": 90, "cost": 700000, "lifeVal": 50000, "unitLabel": "ໜ້າ"},
+			map[string]interface{}{"name": "Carriage Belt", "nameLo": "ສາຍພານຫົວພິມ", "usage": 8, "threshold": 90, "cost": 600000, "lifeVal": 50000, "unitLabel": "ໜ້າ"},
+			map[string]interface{}{"name": "PrecisionCore Printhead", "nameLo": "ຫົວພິມ Micro Piezo", "usage": 15, "threshold": 90, "cost": 4000000, "lifeVal": 100000, "unitLabel": "ໜ້າ"},
+		},
+		OemBaselineSpecs: map[string]interface{}{
+			"slots": []interface{}{
+				map[string]interface{}{"slotPosition": "Slot 1 (K - Black)", "colorGroup": "Black", "oemInkCode": "EPSON-008-BK", "oemStandardVolumeMl": 127, "oemStandardIsoYieldA4": 7500, "oemPrice": 450000},
+				map[string]interface{}{"slotPosition": "Slot 2 (C - Cyan)", "colorGroup": "Cyan", "oemInkCode": "EPSON-008-C", "oemStandardVolumeMl": 70, "oemStandardIsoYieldA4": 6000, "oemPrice": 320000},
+				map[string]interface{}{"slotPosition": "Slot 3 (M - Magenta)", "colorGroup": "Magenta", "oemInkCode": "EPSON-008-M", "oemStandardVolumeMl": 70, "oemStandardIsoYieldA4": 6000, "oemPrice": 320000},
+				map[string]interface{}{"slotPosition": "Slot 4 (Y - Yellow)", "colorGroup": "Yellow", "oemInkCode": "EPSON-008-Y", "oemStandardVolumeMl": 70, "oemStandardIsoYieldA4": 6000, "oemPrice": 320000},
+			},
+		},
+		TechnicalSpecs: map[string]interface{}{
+			"brand":                "Epson",
+			"model":                "EcoTank L15150",
+			"category":             "Printer",
+			"printerCategory":      "Inkjet Printer",
+			"colorSchemeType":      "CMYK",
+			"totalColorSlots":      4,
+			"purchaseCost":         18500057,
+			"price":                18500057,
+			"expectedLifeA4Pages":  300000,
+			"feedType":             "Sheet-fed",
+			"resolution":           "4800 x 2400 dpi",
+			"maxPrintWidthMm":      329,
+			"maxPrintLengthMm":     483,
+			"colorInkCost":         60.17,
+			"bwInkCost":            12.67,
+			"linkedInkCostPerPage": 60.17,
+			"inkCostPerPage":       60.17,
+			"wearPickupRollerCost": 600000,
+			"wearPickupRollerLife": 50000,
+			"wearMaintBoxCost":     700000,
+			"wearMaintBoxLife":     50000,
+			"wearCarriageBeltCost": 600000,
+			"wearCarriageBeltLife": 50000,
+			"wearPrintheadCost":    4000000,
+			"wearPrintheadLife":    100000,
+		},
+	}
+
+	equipmentStore["MAC-6821"] = EquipmentItem{
+		ID:                     "MAC-6821",
+		Name:                   "QZYK 920 Programmed Paper Cutter",
+		SerialNumber:           "SN-QZYK-920-02",
+		Brand:                  "QZYK",
+		Model:                  "920 Hydraulic Program-Control",
+		Category:               "Cutter",
+		PrinterCategory:        "",
+		ColorSchemeType:        "",
+		TotalColorSlots:        0,
+		ExpectedLifeA4Pages:    500000,
+		MaintenanceRatePercent: 0,
+		Price:                  45000000,
+		Vendor:                 "Industrial Print Tech Vientiane",
+		WarrantyExpirationYear: 2030,
+		Location:               "Post-Press Finishing Floor",
+		Status:                 "In Use",
+		UpdatedAt:              now,
+		Components: []interface{}{
+			map[string]interface{}{"name": "HSS Guillotine Blade", "nameLo": "ໃບມີດຕັດເຫຼັກກ້າ HSS", "usage": 35, "threshold": 90, "cost": 2500000, "lifeVal": 30000, "unitLabel": "ຮອບຕັດ"},
+			map[string]interface{}{"name": "Cutting Stick Plastic", "nameLo": "ເຂຽງຮອງຕັດພລາສຕິກ", "usage": 20, "threshold": 90, "cost": 150000, "lifeVal": 10000, "unitLabel": "ຮອບຕັດ"},
+		},
+		TechnicalSpecs: map[string]interface{}{
+			"brand":            "QZYK",
+			"model":            "920",
+			"category":         "Cutter",
+			"postPressSubtype": "guillotine",
+			"purchaseCost":     45000000,
+			"price":            45000000,
+			"maxCutWidthMm":    920,
+		},
+	}
+
+	equipmentStore["MAC-4190"] = EquipmentItem{
+		ID:                     "MAC-4190",
+		Name:                   "Boway K5 Perfect Glue Binder",
+		SerialNumber:           "SN-BW-K5-01",
+		Brand:                  "Boway",
+		Model:                  "K5 Heavy Duty Auto Binder",
+		Category:               "Binder",
+		PrinterCategory:        "",
+		ColorSchemeType:        "",
+		TotalColorSlots:        0,
+		ExpectedLifeA4Pages:    100000,
+		MaintenanceRatePercent: 0,
+		Price:                  28000000,
+		Vendor:                 "Industrial Print Tech Vientiane",
+		WarrantyExpirationYear: 2029,
+		Location:               "Post-Press Finishing Floor",
+		Status:                 "In Use",
+		UpdatedAt:              now,
+		Components: []interface{}{
+			map[string]interface{}{"name": "Milling Cutter Tooth", "nameLo": "ໃບເລື່ອຍກີດສັນປຶ້ມ", "usage": 18, "threshold": 90, "cost": 1200000, "lifeVal": 25000, "unitLabel": "ຫົວ"},
+			map[string]interface{}{"name": "Glue Tank Heater Element", "nameLo": "ຂົດລວດຄວາມຮ້ອນອ່າງກາວ", "usage": 10, "threshold": 90, "cost": 850000, "lifeVal": 40000, "unitLabel": "ຫົວ"},
+		},
+		TechnicalSpecs: map[string]interface{}{
+			"brand":            "Boway",
+			"model":            "K5",
+			"category":         "Binder",
+			"postPressSubtype": "binder",
+			"purchaseCost":     28000000,
+			"price":            28000000,
+			"maxSpineWidthMm":  50,
+		},
+	}
+}
+
+func seedInventoryInStore() {
+	now := time.Now().Format(time.RFC3339)
+	inks := []InventoryItem{
+		{
+			ID: "INK-9826", Name: "Epson 008 Black Pigment Ink (127ml)", Category: "Ink",
+			StockQty: 25, ConsumptionUnit: "ຕຸກ", PurchaseUnit: "ຕຸກ", PurchaseMultiplier: 1,
+			CostPerPurchaseUnit: 95000, CostPerConsumptionUnit: 95000, ReorderThreshold: 5,
+			InkCode: "INK-9826", ColorName: "Black", ColorGroup: "Black", Volume: 127,
+			InkBaseType: "Pigment", IsCompatible: false, AssignedPrinterID: "MAC-5707", UpdatedAt: now,
+			Specs: map[string]interface{}{"sku": "INK-9826", "brand": "Epson", "model": "008", "colorGroup": "Black", "volume": 127, "volume_ml": 127, "expectedYield": 7500, "standard_page_yield": 7500, "inkBaseType": "Pigment"},
+		},
+		{
+			ID: "INK-8713", Name: "Epson 008 Cyan Pigment Ink (70ml)", Category: "Ink",
+			StockQty: 20, ConsumptionUnit: "ຕຸກ", PurchaseUnit: "ຕຸກ", PurchaseMultiplier: 1,
+			CostPerPurchaseUnit: 95000, CostPerConsumptionUnit: 95000, ReorderThreshold: 5,
+			InkCode: "INK-8713", ColorName: "Cyan", ColorGroup: "Cyan", Volume: 70,
+			InkBaseType: "Pigment", IsCompatible: false, AssignedPrinterID: "MAC-5707", UpdatedAt: now,
+			Specs: map[string]interface{}{"sku": "INK-8713", "brand": "Epson", "model": "008", "colorGroup": "Cyan", "volume": 70, "volume_ml": 70, "expectedYield": 6000, "standard_page_yield": 6000, "inkBaseType": "Pigment"},
+		},
+		{
+			ID: "INK-0365", Name: "Epson 008 Magenta Pigment Ink (70ml)", Category: "Ink",
+			StockQty: 20, ConsumptionUnit: "ຕຸກ", PurchaseUnit: "ຕຸກ", PurchaseMultiplier: 1,
+			CostPerPurchaseUnit: 95000, CostPerConsumptionUnit: 95000, ReorderThreshold: 5,
+			InkCode: "INK-0365", ColorName: "Magenta", ColorGroup: "Magenta", Volume: 70,
+			InkBaseType: "Pigment", IsCompatible: false, AssignedPrinterID: "MAC-5707", UpdatedAt: now,
+			Specs: map[string]interface{}{"sku": "INK-0365", "brand": "Epson", "model": "008", "colorGroup": "Magenta", "volume": 70, "volume_ml": 70, "expectedYield": 6000, "standard_page_yield": 6000, "inkBaseType": "Pigment"},
+		},
+		{
+			ID: "INK-6588", Name: "Epson 008 Yellow Pigment Ink (70ml)", Category: "Ink",
+			StockQty: 20, ConsumptionUnit: "ຕຸກ", PurchaseUnit: "ຕຸກ", PurchaseMultiplier: 1,
+			CostPerPurchaseUnit: 95000, CostPerConsumptionUnit: 95000, ReorderThreshold: 5,
+			InkCode: "INK-6588", ColorName: "Yellow", ColorGroup: "Yellow", Volume: 70,
+			InkBaseType: "Pigment", IsCompatible: false, AssignedPrinterID: "MAC-5707", UpdatedAt: now,
+			Specs: map[string]interface{}{"sku": "INK-6588", "brand": "Epson", "model": "008", "colorGroup": "Yellow", "volume": 70, "volume_ml": 70, "expectedYield": 6000, "standard_page_yield": 6000, "inkBaseType": "Pigment"},
+		},
+	}
+	for _, ink := range inks {
+		inventoryStore[ink.ID] = ink
+	}
+}
 
 // HandleGetEquipment returns list of equipment / printers (queries DB first)
 func HandleGetEquipment(c *gin.Context) {
@@ -218,6 +408,31 @@ func HandleInboundAssetV1(c *gin.Context) {
 				log.Printf("[DB SUCCESS] Inbound printer/machinery %s saved to PostgreSQL!", assetID)
 			}
 		} else {
+			if req.AssignedPrinterID != "" && req.TechnicalSpecs != nil {
+				req.TechnicalSpecs["assigned_printer_id"] = req.AssignedPrinterID
+			}
+			mult := req.PurchaseMultiplier
+			if mult <= 0 && req.SheetsPerPack > 0 {
+				mult = req.SheetsPerPack
+			}
+			if mult <= 0 {
+				mult = 1
+			}
+
+			pCost := req.CostPerPurchaseUnit
+			if pCost <= 0 {
+				pCost = req.Price
+			}
+
+			cCost := req.CostPerConsumptionUnit
+			if cCost <= 0 {
+				if mult > 1 && pCost > 0 {
+					cCost = pCost / float64(mult)
+				} else {
+					cCost = pCost
+				}
+			}
+
 			invItem := InventoryItem{
 				ID:                     assetID,
 				Name:                   req.Name,
@@ -225,11 +440,12 @@ func HandleInboundAssetV1(c *gin.Context) {
 				StockQty:               int(req.Quantity),
 				ConsumptionUnit:        req.Unit,
 				PurchaseUnit:           req.Unit,
-				PurchaseMultiplier:     1,
-				CostPerPurchaseUnit:    req.Price,
-				CostPerConsumptionUnit: req.Price,
+				PurchaseMultiplier:     mult,
+				CostPerPurchaseUnit:    pCost,
+				CostPerConsumptionUnit: cCost,
 				ReorderThreshold:       10,
 				InkCode:                req.SKU,
+				AssignedPrinterID:      req.AssignedPrinterID,
 				TechnicalSpecs:         req.TechnicalSpecs,
 				Specs:                  req.TechnicalSpecs,
 				UpdatedAt:              time.Now().Format(time.RFC3339),
@@ -309,6 +525,86 @@ func HandleUpdateAssetV1(c *gin.Context) {
 	item.ID = id
 	item.UpdatedAt = time.Now().Format(time.RFC3339)
 
+	assetStoreMutex.Lock()
+	existingItem, exists := equipmentStore[id]
+	if !exists && db.DB != nil {
+		existingItem, _ = getEquipmentByIDFromDB(id)
+	}
+
+	// Merge partial fields: do not let 0 or blank values wipe out existing data
+	if item.Price == 0 && existingItem.Price > 0 {
+		item.Price = existingItem.Price
+	}
+	if item.Name == "" && existingItem.Name != "" {
+		item.Name = existingItem.Name
+	}
+	if item.Brand == "" && existingItem.Brand != "" {
+		item.Brand = existingItem.Brand
+	}
+	if item.Model == "" && existingItem.Model != "" {
+		item.Model = existingItem.Model
+	}
+	if item.SerialNumber == "" && existingItem.SerialNumber != "" {
+		item.SerialNumber = existingItem.SerialNumber
+	}
+	if item.Category == "" && existingItem.Category != "" {
+		item.Category = existingItem.Category
+	}
+	if item.PrinterCategory == "" && existingItem.PrinterCategory != "" {
+		item.PrinterCategory = existingItem.PrinterCategory
+	}
+	if item.ColorSchemeType == "" && existingItem.ColorSchemeType != "" {
+		item.ColorSchemeType = existingItem.ColorSchemeType
+	}
+	if item.TotalColorSlots == 0 && existingItem.TotalColorSlots > 0 {
+		item.TotalColorSlots = existingItem.TotalColorSlots
+	}
+	if item.ExpectedLifeA4Pages == 0 && existingItem.ExpectedLifeA4Pages > 0 {
+		item.ExpectedLifeA4Pages = existingItem.ExpectedLifeA4Pages
+	}
+	if item.MaintenanceRatePercent == 0 && existingItem.MaintenanceRatePercent > 0 {
+		item.MaintenanceRatePercent = existingItem.MaintenanceRatePercent
+	}
+	if item.Vendor == "" && existingItem.Vendor != "" {
+		item.Vendor = existingItem.Vendor
+	}
+	if item.Location == "" && existingItem.Location != "" {
+		item.Location = existingItem.Location
+	}
+	if item.Status == "" && existingItem.Status != "" {
+		item.Status = existingItem.Status
+	}
+	if item.ColorInkCost == 0 && existingItem.ColorInkCost > 0 {
+		item.ColorInkCost = existingItem.ColorInkCost
+	}
+	if item.BwInkCost == 0 && existingItem.BwInkCost > 0 {
+		item.BwInkCost = existingItem.BwInkCost
+	}
+	if item.LinkedInkCostPerPage == 0 && existingItem.LinkedInkCostPerPage > 0 {
+		item.LinkedInkCostPerPage = existingItem.LinkedInkCostPerPage
+	}
+	if item.InkCostPerPage == 0 && existingItem.InkCostPerPage > 0 {
+		item.InkCostPerPage = existingItem.InkCostPerPage
+	}
+	if item.ProductImageUrl == "" && existingItem.ProductImageUrl != "" {
+		item.ProductImageUrl = existingItem.ProductImageUrl
+	}
+	if item.ReceiptInvoiceUrl == "" && existingItem.ReceiptInvoiceUrl != "" {
+		item.ReceiptInvoiceUrl = existingItem.ReceiptInvoiceUrl
+	}
+	if len(item.Components) == 0 && len(existingItem.Components) > 0 {
+		item.Components = existingItem.Components
+	}
+	if len(item.OemBaselineSpecs) == 0 && len(existingItem.OemBaselineSpecs) > 0 {
+		item.OemBaselineSpecs = existingItem.OemBaselineSpecs
+	}
+	if len(item.TechnicalSpecs) == 0 && len(existingItem.TechnicalSpecs) > 0 {
+		item.TechnicalSpecs = existingItem.TechnicalSpecs
+	}
+
+	equipmentStore[id] = item
+	assetStoreMutex.Unlock()
+
 	if db.DB != nil {
 		err := updateEquipmentInDB(id, item)
 		if err != nil {
@@ -317,10 +613,6 @@ func HandleUpdateAssetV1(c *gin.Context) {
 			log.Printf("[DB SUCCESS] Printer %s updated in PostgreSQL!", id)
 		}
 	}
-
-	assetStoreMutex.Lock()
-	equipmentStore[id] = item
-	assetStoreMutex.Unlock()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
@@ -671,6 +963,10 @@ func saveInventoryItemToDB(item InventoryItem) error {
 		item.CostPerConsumptionUnit, item.ReorderThreshold, string(techBytes),
 	)
 
+	if err == nil && item.AssignedPrinterID != "" {
+		_, _ = db.DB.Exec("UPDATE materials SET assigned_printer_id = $1 WHERE id = $2", item.AssignedPrinterID, item.ID)
+	}
+
 	return err
 }
 
@@ -791,9 +1087,9 @@ func updateEquipmentInDB(id string, item EquipmentItem) error {
 			category = EXCLUDED.category,
 			color_scheme_type = EXCLUDED.color_scheme_type,
 			total_color_slots = EXCLUDED.total_color_slots,
-			expected_life_a4_pages = EXCLUDED.expected_life_a4_pages,
+			expected_life_a4_pages = CASE WHEN EXCLUDED.expected_life_a4_pages > 0 THEN EXCLUDED.expected_life_a4_pages ELSE printers.expected_life_a4_pages END,
 			maintenance_rate_percent = EXCLUDED.maintenance_rate_percent,
-			price_cost = EXCLUDED.price_cost,
+			price_cost = CASE WHEN EXCLUDED.price_cost > 0 THEN EXCLUDED.price_cost ELSE printers.price_cost END,
 			vendor_supplier = COALESCE(NULLIF(EXCLUDED.vendor_supplier, ''), printers.vendor_supplier),
 			warranty_expiry_year = EXCLUDED.warranty_expiry_year,
 			status = EXCLUDED.status,

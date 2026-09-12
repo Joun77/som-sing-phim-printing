@@ -15,77 +15,69 @@ import {
 
 import { formatLaoNotificationMessage } from '../../../utils/richToastNotification';
 import AddOffcutModal from '@features/inventory/components/modals/AddOffcutModal';
+import { getAuthHeaders } from '../../../utils/authHeaders';
 
-export default function ProductionBoard({ showToast, formatLAK }) {
-  const [orders, setOrders] = useState([]);
-  const [machines, setMachines] = useState([]);
+export default function ProductionBoard({ showToast, formatLAK }: any) {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [machines, setMachines] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'machines'
   const [isOffcutModalOpen, setIsOffcutModalOpen] = useState(false);
 
-  const fetchOrders = () => {
-    setLoading(true);
-    fetch('/api/orders')
+  const loadEquipmentAsMachines = () => {
+    fetch('/api/equipment', { headers: getAuthHeaders() })
       .then(res => res.json())
       .then(data => {
-        setOrders(data);
+        const eqList = Array.isArray(data) ? data : (data?.data || []);
+        const mapped = eqList.map((eq: any) => ({
+          machine_id: eq.id || eq.machine_id,
+          machine_name: eq.name || eq.machine_name,
+          category: eq.type || eq.category || 'Printing Machine',
+          status: eq.status === 'Active' ? 'In Use' : (eq.status || 'Idle'),
+          queued_jobs_count: 0,
+          estimated_free_at: 'Ready Now',
+          tickets: []
+        }));
+        setMachines(mapped);
+      })
+      .catch(() => {
+        setMachines([]);
+      });
+  };
+
+  const fetchOrders = () => {
+    setLoading(true);
+    fetch('/api/orders', { headers: getAuthHeaders() })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setOrders(data);
+        } else if (data && Array.isArray(data.orders)) {
+          setOrders(data.orders);
+        } else {
+          setOrders([]);
+        }
       })
       .catch(err => {
-        console.error(err);
-        showToast('Offline: Using mockup production cards.', 'warning');
-        // Fallback mockup
-        setOrders([
-          { id: 'order-001', order_number: 'SO-2026-0001', customer_name: 'Vientiane Book Center', status: 'PREPRESS_CHECK', total_price: 1250000 },
-          { id: 'order-002', order_number: 'SO-2026-0002', customer_name: 'Sengsavanh School', status: 'READY_TO_PRINT', total_price: 450000 },
-          { id: 'order-003', order_number: 'SO-2026-0003', customer_name: 'Phongsavanh Bank', status: 'IN_PRODUCTION', total_price: 980000 }
-        ]);
+        console.error('Failed to load orders for production board:', err);
+        setOrders([]);
       })
       .finally(() => setLoading(false));
 
-    fetch('/api/v1/production/machines/schedule')
-      .then(res => res.json())
+    fetch('/api/v1/production/machines/schedule', { headers: getAuthHeaders() })
+      .then(res => {
+        if (!res.ok) throw new Error('Schedule API not available');
+        return res.json();
+      })
       .then(resData => {
-        if (resData?.data) setMachines(resData.data);
+        if (resData?.data && Array.isArray(resData.data)) {
+          setMachines(resData.data);
+        } else {
+          loadEquipmentAsMachines();
+        }
       })
       .catch(() => {
-        setMachines([
-          {
-            machine_id: 'M-OFFSET-01',
-            machine_name: 'Heidelberg Speedmaster SM52',
-            category: 'Offset Press',
-            status: 'In Use',
-            queued_jobs_count: 3,
-            estimated_free_at: '14:30 Today',
-            tickets: [{ ticket_number: 'JT-SO-2026-0001-1', status: 'PRINTING', duration_mins: 45 }]
-          },
-          {
-            machine_id: 'M-DIGITAL-01',
-            machine_name: 'Konica Minolta AccurioPress C4080',
-            category: 'Digital Sheet Press',
-            status: 'In Use',
-            queued_jobs_count: 2,
-            estimated_free_at: '11:15 Today',
-            tickets: [{ ticket_number: 'JT-SO-2026-0002-1', status: 'QUEUED', duration_mins: 20 }]
-          },
-          {
-            machine_id: 'M-FINISH-LAM01',
-            machine_name: 'Foliant Vega 400A Laminator',
-            category: 'Thermal Laminator',
-            status: 'Idle',
-            queued_jobs_count: 0,
-            estimated_free_at: 'Ready Now',
-            tickets: []
-          },
-          {
-            machine_id: 'M-FINISH-CUT01',
-            machine_name: 'Polar 78 ECO Guillotine Cutter',
-            category: 'Precision Cutter',
-            status: 'In Use',
-            queued_jobs_count: 2,
-            estimated_free_at: '12:00 Today',
-            tickets: [{ ticket_number: 'JT-SO-2026-0003-1', status: 'QUEUED', duration_mins: 15 }]
-          }
-        ]);
+        loadEquipmentAsMachines();
       });
   };
 
@@ -110,7 +102,10 @@ export default function ProductionBoard({ showToast, formatLAK }) {
 
     fetch(`/api/orders/${orderId}/status`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ status: nextStatus })
     })
     .then(res => {

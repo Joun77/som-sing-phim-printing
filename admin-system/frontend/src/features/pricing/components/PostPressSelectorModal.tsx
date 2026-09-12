@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Check, Wrench, AlertCircle, ShieldCheck, Filter } from 'lucide-react';
 import { FormModalTemplate } from '@components/common/FormModalTemplate';
+import { getEquipmentAccurateCost } from '@utils/machineCostCalculator';
 import type { Equipment } from '../../../types';
 
 interface PostPressSelectorModalProps {
@@ -141,7 +142,11 @@ export const PostPressSelectorModal: React.FC<PostPressSelectorModalProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[52vh] overflow-y-auto pr-1">
               {filteredEquipment.map(mach => {
                 const isSelected = selectedEquipmentIds.includes(mach.id);
-                const rate = Number((mach as any).costPerPage) || Number((mach as any).calculatedCostPerPage) || 300;
+                const accCost = getEquipmentAccurateCost(mach);
+                const rate = accCost.totalMachineCost > 0
+                  ? accCost.totalMachineCost
+                  : (Number((mach as any).costPerPage) || Number((mach as any).calculatedCostPerPage) || 0);
+                const unitLabel = accCost.unitLabel || 'ໜ້າ';
 
                 return (
                   <div
@@ -181,9 +186,16 @@ export const PostPressSelectorModal: React.FC<PostPressSelectorModalProps> = ({
                     </div>
 
                     <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-[11px] text-slate-500 font-medium">ຄ່າໃຊ້ຈ່າຍຕໍ່ຊິ້ນ/ໜ້າ:</span>
+                      <div className="text-left">
+                        <span className="text-[11px] text-slate-500 font-medium">ຄ່າໃຊ້ຈ່າຍຕໍ່{unitLabel}:</span>
+                        {accCost.depreciation > 0 && accCost.maintenance > 0 && (
+                          <div className="text-[9px] text-slate-400 font-mono">
+                            (ຄ່າເຄື່ອງ {formatCurrency(accCost.depreciation)} + ສ້ອມແປງ {formatCurrency(accCost.maintenance)})
+                          </div>
+                        )}
+                      </div>
                       <span className="text-xs font-black text-slate-950 font-sans">
-                        {formatCurrency(rate)}
+                        {formatCurrency(rate)} <span className="text-[10px] text-slate-400 font-normal">/{unitLabel}</span>
                       </span>
                     </div>
                   </div>

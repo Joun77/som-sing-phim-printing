@@ -720,6 +720,92 @@ func TestCalculateMachineOverhead(t *testing.T) {
 	}
 }
 
+func TestElectricityAndGuillotineCuttingPricing(t *testing.T) {
+	req := baseReq()
+	req.MachinePowerWatts = 3000.0  // 3 kW
+	req.MachineRuntimeHours = 2.0   // 2 hours -> 6 kWh
+	req.RequiresGuillotineCut = true // Flat 10,000 LAK
+
+	res, err := CalculateJobPricing(req)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	// Electricity: 3 kW * 2h * 1,700 LAK = 10,200 LAK
+	expectedElectricity := 10200.0
+	if res.ElectricityCost != expectedElectricity {
+		t.Errorf("Expected ElectricityCost %f, got %f", expectedElectricity, res.ElectricityCost)
+	}
+
+	// Guillotine Cutting fee: 10,000 LAK
+	expectedCutting := 10000.0
+	if res.GuillotineCuttingCost != expectedCutting {
+		t.Errorf("Expected GuillotineCuttingCost %f, got %f", expectedCutting, res.GuillotineCuttingCost)
+	}
+}
+
+func Test31x43ParentSheetImpositionPricing(t *testing.T) {
+	req := baseReq()
+	req.Use31x43ParentSheet = true
+	req.JobWidth = 148 // A5
+	req.JobHeight = 210
+	req.CutsPerSheet = 0 // Auto calculate from 31x43" (787 x 1092 mm)
+
+	res, err := CalculateJobPricing(req)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if res.Imposition == nil {
+		t.Fatal("Expected imposition grid to be calculated")
+	}
+
+	if res.Imposition.TotalCuts <= 0 {
+		t.Errorf("Expected positive total cuts on 31x43 sheet, got %d", res.Imposition.TotalCuts)
+	}
+	if res.Imposition.TotalCuts < 20 {
+		t.Errorf("Expected at least 20 cuts on 31x43 sheet for A5, got %d", res.Imposition.TotalCuts)
+	}
+}
+
+func TestRigidBoardSubstratePricing(t *testing.T) {
+	req := baseReq()
+	req.IsRigidSubstrate = true
+	req.RigidBoardPricePerM2 = 80000.0 // 80,000 LAK / m² (e.g. 5mm foam board)
+	req.JobWidth = 500  // 0.5m
+	req.JobHeight = 1000 // 1.0m -> 0.5 m² per piece
+	req.Quantity = 10   // 10 pieces -> 5.0 m² total
+
+	res, err := CalculateJobPricing(req)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	// Paper/Substrate cost: 80,000 LAK * 0.5 m² * 10 = 400,000 LAK
+	expectedCost := 400000.0
+	if res.PaperCost != expectedCost {
+		t.Errorf("Expected PaperCost %f for rigid board, got %f", expectedCost, res.PaperCost)
+	}
+}
+
+func TestPackagingPricing(t *testing.T) {
+	req := baseReq()
+	req.IncludePackaging = true
+	req.PackagingType = "BOX_LARGE" // 5,000 LAK per unit
+	req.Quantity = 20
+
+	res, err := CalculateJobPricing(req)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	// 5,000 * 20 = 100,000 LAK
+	expectedPackaging := 100000.0
+	if res.PackagingCost != expectedPackaging {
+		t.Errorf("Expected PackagingCost %f, got %f", expectedPackaging, res.PackagingCost)
+	}
+}
+
 
 
 

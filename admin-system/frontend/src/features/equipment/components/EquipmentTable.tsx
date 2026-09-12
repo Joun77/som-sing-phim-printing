@@ -3,6 +3,8 @@ import { ShieldAlert, CheckCircle, Eye, Edit, Trash2, Layers } from 'lucide-reac
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import type { Equipment } from '../types';
+import { calculateEquipmentPrintCost, resolveMachineImage } from '@utils/machineCostCalculator';
+import { getAuthHeaders } from '@utils/authHeaders';
 
 interface EquipmentTableProps {
   machines: Equipment[];
@@ -21,7 +23,7 @@ export default function EquipmentTable({ machines, onViewDetails, onEdit, onDele
   const [dbInks, setDbInks] = useState<any[]>([]);
 
   useEffect(() => {
-    const p1 = fetch('/api/inbound')
+    const p1 = fetch('/api/inbound', { headers: getAuthHeaders() })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         const items = Array.isArray(data) ? data : (data?.data || []);
@@ -47,7 +49,7 @@ export default function EquipmentTable({ machines, onViewDetails, onEdit, onDele
       })
       .catch(() => []);
 
-    const p2 = fetch('/api/inventory/items')
+    const p2 = fetch('/api/inventory/items', { headers: getAuthHeaders() })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         const items = Array.isArray(data) ? data : (data?.data || []);
@@ -81,9 +83,11 @@ export default function EquipmentTable({ machines, onViewDetails, onEdit, onDele
 
   const formatUnitLAK = (val: number) => {
     if (!val || isNaN(val)) return 'LAK 0';
-    if (Math.abs(val) < 1) return `LAK ${val.toFixed(2)}`;
-    if (Math.abs(val) < 10) return `LAK ${val.toFixed(2)}`;
-    return formatLAK(Math.round(val * 100) / 100);
+    const rounded = Math.round(val * 100) / 100;
+    if (Math.abs(rounded) < 1000 && rounded % 1 !== 0) {
+      return `LAK ${rounded.toFixed(2)}`;
+    }
+    return formatLAK(rounded);
   };
 
   const subtypeLabelMap: Record<string, string> = {
@@ -116,7 +120,7 @@ export default function EquipmentTable({ machines, onViewDetails, onEdit, onDele
               <tr>
                 <td colSpan={8} className="py-12 text-center text-slate-400 font-bold">
                   {currentLang === 'lo' 
-                    ? 'ບໍ່ມີລາຍການເຄື່ອງຈັກໃນລະບົບ. ສາມາດເພີ່ມໄດ້ຜ່ານເມນູນຳເຂົ້າສິນຄ້າ (Inbound Procurement).' 
+                    ? 'ບໍ່ມີລາຍການເຄື່ອງຈັກในລະບົບ. ສາມາດເພີ່ມໄດ້ຜ່ານເມນູນຳເຂົ້າສິນຄ້າ (Inbound Procurement).' 
                     : 'No machinery registered. Use Inbound Procurement to purchase new assets.'}
                 </td>
               </tr>
@@ -129,107 +133,23 @@ export default function EquipmentTable({ machines, onViewDetails, onEdit, onDele
                 const subTypeKey = eq.postPressSubtype || eq.specs?.postPressSubtype || '';
                 const subTypeLabel = subtypeLabelMap[subTypeKey] || eq.printerCategory || eq.category || (isPostPress ? 'POST-PRESS' : 'INKJET');
 
-                // Specs calculation
-                const lifespanYears = Number(eq.lifespanYears || eq.specs?.lifespanYears || 5);
-                const estMonthlyVolume = Number(eq.estMonthlyVolume || eq.specs?.estMonthlyVolume || 50000);
-                const maintenanceRatePct = Number(eq.maintenanceRatePercent || eq.specs?.maintenanceRatePercent || 15);
-                const maintCostPerPage = Number(eq.specs?.fixedMaintenanceCostPerPage || 0);
-                
-                const assetValue = Number(
-                  eq.MachinePrice ?? 
-                  eq.price ?? 
-                  eq.unitPrice ?? 
-                  eq.purchaseCost ?? 
-                  eq.purchasePrice ?? 
-                  eq.unitCost ?? 
-                  0
-                );
-                const totalMonths = lifespanYears * 12;
-                const targetPages = Number(
-                  eq.TargetTotalPages || 
-                  eq.printedPagesCapacity || 
-                  eq.expectedLifeA4Pages || 
-                  eq.lifetimePagesA4 || 
-                  (estMonthlyVolume * totalMonths) || 
-                  3000000
-                );
-                const monthlyDepr = totalMonths > 0 ? (assetValue / totalMonths) : 0;
-                const baseCostPerUnit = (estMonthlyVolume > 0 && monthlyDepr > 0)
-                  ? (monthlyDepr / estMonthlyVolume)
-                  : (targetPages > 0 ? (assetValue / targetPages) : 0);
-
-                const wearAllowancePerUnit = Math.round(baseCostPerUnit * (maintenanceRatePct / 100) * 1000) / 1000 + maintCostPerPage;
-                const netCostPerUnit = Math.round((baseCostPerUnit + wearAllowancePerUnit) * 1000) / 1000;
-
-                // Ink calculations for printer
-                const links = printerColorLinks.filter(lnk => lnk.assetId === eq.id);
-                let linkedInkRatePerPage = 0;
-                if (!isPostPress) {
-                  const oemSlots = 
-                    eq.oem_baseline_specs?.slots || 
-                    eq.specs?.oem_baseline_specs?.slots || 
-                    eq.oemBaselineInks || 
-                    eq.specs?.oemBaselineInks || 
-                    [
-                      { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500, oemPrice: 450000 },
-                      { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
-                      { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
-                      { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 }
-                    ];
-
-                  if (oemSlots && oemSlots.length > 0) {
-                    linkedInkRatePerPage = oemSlots.reduce((sum: number, oemSlot: any, idx: number) => {
-                      const slotPos = oemSlot.slotPosition || `Slot ${idx + 1}`;
-                      const isBlack = (oemSlot.colorGroup || '').toLowerCase().includes('black') || (oemSlot.colorGroup || '').toLowerCase().includes('k') || slotPos.toLowerCase().includes('black') || slotPos.toLowerCase().includes('slot 1');
-                      const colorGroupName = isBlack ? 'Black' : (oemSlot.colorGroup || (idx === 1 ? 'Cyan' : idx === 2 ? 'Magenta' : idx === 3 ? 'Yellow' : `Color ${idx + 1}`));
-                      const defaultYield = isBlack ? 7500 : 6000;
-                      const defaultPrice = isBlack ? 450000 : 320000;
-                      const defaultVol = isBlack ? 127 : 70;
-
-                      const activeLink = links.find((lnk: any) => 
-                        lnk.slotPosition === slotPos || 
-                        (lnk.slotPosition && slotPos && (lnk.slotPosition.includes(slotPos) || slotPos.includes(lnk.slotPosition))) ||
-                        (lnk.colorGroup && colorGroupName && lnk.colorGroup.toLowerCase() === colorGroupName.toLowerCase()) ||
-                        (idx === 0 && (lnk.slotPosition?.includes('Slot 1') || lnk.colorGroup?.toLowerCase().includes('black') || lnk.colorGroup?.toLowerCase().includes('k'))) ||
-                        (idx === 1 && (lnk.slotPosition?.includes('Slot 2') || lnk.colorGroup?.toLowerCase().includes('cyan') || lnk.colorGroup?.toLowerCase().includes('c'))) ||
-                        (idx === 2 && (lnk.slotPosition?.includes('Slot 3') || lnk.colorGroup?.toLowerCase().includes('magenta') || lnk.colorGroup?.toLowerCase().includes('m'))) ||
-                        (idx === 3 && (lnk.slotPosition?.includes('Slot 4') || lnk.colorGroup?.toLowerCase().includes('yellow') || lnk.colorGroup?.toLowerCase().includes('y')))
-                      );
-                      const ink = activeLink ? allAvailableInks.find((i: any) => i.id === activeLink.inkCode || i.skuCode === activeLink.inkCode || i.sku === activeLink.inkCode) : null;
-
-                      
-                      const oemVol = Number(oemSlot.oemStandardVolumeMl || oemSlot.volume || defaultVol);
-                      const rawYield = Number(oemSlot.oemStandardIsoYieldA4 || (oemSlot.colorGroup === 'Black' ? (eq.blackYieldPages || defaultYield) : (eq.colorYieldPages || defaultYield)));
-                      const yld = rawYield > 500 ? rawYield : defaultYield;
-                      const isoRate = yld > 0 ? (oemVol / yld) : 0.0169;
-                      
-                      let slotCost = yld > 0 ? (Number(oemSlot.oemPrice || defaultPrice) / yld) : ((Number(oemSlot.oemPrice || defaultPrice) / oemVol) * isoRate);
-
-                      if (ink) {
-                        const bPrice = Number(ink.unitPrice || ink.costPerPurchaseUnit || defaultPrice);
-                        const rawInkVol = Number(ink.volume || ink.specs?.volume || ink.specs?.volume_ml || defaultVol);
-                        const actualVol = rawInkVol > 1 ? rawInkVol : defaultVol;
-
-                        const rawInkYield = Number(ink.yield || ink.standard_page_yield || ink.specs?.yield || ink.specs?.isoYield || 0);
-                        const inkYield = rawInkYield > 500 ? rawInkYield : yld;
-                        slotCost = inkYield > 0 ? (bPrice / inkYield) : ((bPrice / actualVol) * isoRate);
-                      }
-                      
-                      return sum + slotCost;
-                    }, 0);
-                  }
-
-                }
-
+                // Specs & Cost calculation: directly prioritize persistent saved fields on equipment
+                const costCalc = calculateEquipmentPrintCost(eq, printerColorLinks, allAvailableInks, eq.category);
+                const netCostPerUnit = costCalc.netCostPerUnit;
+                const linkedInkRatePerPage = Number(eq.colorInkCost || eq.linkedInkCostPerPage || costCalc.linkedInkRatePerPage || 0);
                 const finalCostPerPage = isPostPress 
-                  ? (eq.costPerConsumptionUnit || netCostPerUnit) 
-                  : (netCostPerUnit + Math.round(linkedInkRatePerPage * 1000) / 1000);
+                  ? costCalc.finalCostPerPage 
+                  : (Number(eq.totalPrintCostPerPage || (eq.specs as any)?.totalPrintCostPerPage) > 0
+                      ? Number(eq.totalPrintCostPerPage || (eq.specs as any)?.totalPrintCostPerPage)
+                      : (netCostPerUnit + linkedInkRatePerPage));
 
+                const links = printerColorLinks.filter(lnk => lnk.assetId === eq.id);
                 const linkedInksSummary = links.map(lnk => {
                   const ink = allAvailableInks.find(i => i.id === lnk.inkCode || i.skuCode === lnk.inkCode || i.sku === lnk.inkCode);
                   return `${lnk.slotPosition} (${ink ? ink.name : lnk.inkCode})`;
                 }).join(', ') || '-';
 
+                const machineImg = resolveMachineImage(eq);
 
                 return (
                   <tr 
@@ -244,8 +164,8 @@ export default function EquipmentTable({ machines, onViewDetails, onEdit, onDele
 
                     <td className="py-4 px-5">
                       <div className="flex items-center gap-3">
-                        {eq.imageUrl ? (
-                          <img src={eq.imageUrl} alt={eq.name} className="w-9 h-9 object-cover rounded-xl border border-slate-200" />
+                        {machineImg ? (
+                          <img src={machineImg} alt={eq.name} className="w-9 h-9 object-cover rounded-xl border border-slate-200" />
                         ) : (
                           <div className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 font-extrabold text-xs">
                             {eq.name.slice(0, 2).toUpperCase()}
@@ -295,7 +215,7 @@ export default function EquipmentTable({ machines, onViewDetails, onEdit, onDele
                         <div>
                           <span className="text-sm font-extrabold">{formatUnitLAK(finalCostPerPage)}</span>
                           <span className="text-[10px] font-normal text-slate-400 block">
-                            / {isPostPress ? (currentLang === 'lo' ? 'ແຜ່ນ (sheet)' : 'sheet') : (currentLang === 'lo' ? 'ໜ້າ (page)' : 'page')}
+                            / {currentLang === 'lo' ? costCalc.unitLabel : costCalc.unitLabelEn}
                           </span>
                           {!isPostPress && linkedInkRatePerPage > 0 && (
                             <span className="text-[9px] font-semibold text-emerald-600 block">

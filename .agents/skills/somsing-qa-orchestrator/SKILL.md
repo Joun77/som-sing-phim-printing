@@ -11,8 +11,9 @@ End-to-end QA auditing, domain verification, and phased task decomposition speci
 
 - When auditing modules, features, or workflows in Som Sing Phim Printing (Admin ERP, Customer Service, or Go backend).
 - When verifying printing domain formulas (paper unit cost, ink coverage, machine depreciation, inventory moving average cost).
-- When diagnosing order lifecycle transitions, artwork file binding, quotation-to-order mapping, or multi-currency handling.
-- When generating structured, phased execution prompt files in `.agents/tasks/PROMPT_PHASE{N}_*.md` for downstream AI coding agents.
+- When diagnosing order lifecycle transitions, artwork file binding, quotation-to-order mapping, or multi-currency handling).
+- When generating structured, phased execution prompt files in `.agents/tasks/TASK_{FEATURE}.md` for downstream AI coding agents.
+- When verifying completed tasks, running unit tests, and archiving completed task files from `.agents/tasks/` into `.agents/reports/`.
 
 ## Somsin Printing Domain Guardrails
 
@@ -66,72 +67,59 @@ Order state flow:
 - Identify bugs, edge cases, and schema mismatches with exact file paths and line numbers.
 - Categorize findings by severity: Critical, High, Medium, Low.
 
-### Step 3: Dependency Mapping and Phasing Strategy
+### Step 3: Feature-Driven Phasing Strategy (Vertical Slicing)
 
-Group fixes into sequential, logical phases:
+- **Do NOT slice horizontally** by tech layer (Phase 1 DB, Phase 2 API, Phase 3 UI) as this wastes token context and creates integration friction.
+- **Group tasks into complete vertical slices per problem/feature:**
+  - **Phase 1: Core Priority Problem** (e.g. Printer Dashboard Data Incompleteness) -> Includes full-stack delivery:
+    - 🗄️ Database: Schema migrations, missing columns
+    - ⚙️ Backend: API handlers, pricing services
+    - 🎨 Frontend: UI components, data tables, responsive cards
+  - **Phase 2: Secondary Feature or Workflow Enhancement** (Next cohesive problem slice)
+- Every phase must deliver an independently testable, working feature slice.
 
-- **Phase 1: Data Contracts and Backend Foundations** (DB models, Go structs, API endpoints, core calculation formulas).
-- **Phase 2: Data Mapping and State Management** (API clients, mappers, stores, query hooks, data sanitization).
-- **Phase 3: User Interface and Component Integration** (Modals, forms, cards, user feedback, responsive layout).
-- **Phase 4: Polish, Localization, and E2E Validation** (Lao/Thai language keys, edge cases, boundary testing).
+### Step 4: Compose Phased Task Files
 
-### Step 4: Compose Phased Prompt Files
-
-For each phase, write a Markdown prompt file following this template:
+Before coding begins, compose the structured Task File following this template in `.agents/tasks/TASK_{FEATURE}.md`:
 
 ```markdown
-# Phase {N}: {Phase Title}
+# Task: {Feature / Problem Title}
 
-## 1. Role and Identity
-{Targeted engineer persona and technology stack}
-
-## 2. Objective
-{High-level goal and specific problems solved}
-
----
-
-## 3. Target Files to Modify
-- `{path/to/file1}`
-- `{path/to/file2}`
-
----
-
-## 4. STRICT CONSTRAINTS (DO NOT TOUCH)
-- **DO NOT TOUCH** {unrelated files or sensitive modules}
-- **DO NOT TOUCH** {critical core formulas, auth, or migrations not in scope}
-- {Compatibility and architectural guardrails}
-
----
-
-## 5. Detailed Tasks and Implementation Instructions
-
-### Task {N}.1: {Subtask Title}
+## 1. Problem & Objective
 - **Problem:** {Clear explanation of the issue}
-- **Action:**
-  - {Step-by-step modification}
-  - {Interface, signature, or code example}
+- **Objective:** {High-level goal and expected end-to-end outcome}
 
----
+## 2. Phase Breakdown (Complete Full-Stack Slices)
+### Phase 1: {Core Feature Name}
+- 🗄️ **Database:** {Exact tables, migrations, constraints}
+- ⚙️ **Backend:** {Handlers, services, calculation engine}
+- 🎨 **Frontend:** {UI components, hooks, table columns}
 
-## 6. Verification and Acceptance Criteria
+## 3. STRICT CONSTRAINTS (DO NOT TOUCH)
+- **DO NOT TOUCH** {unrelated files or sensitive modules}
+- **DO NOT TOUCH** {critical core formulas or auth not in scope}
+
+## 4. Verification and Acceptance Criteria
 1. {Concrete, verifiable criteria}
 2. {Expected UI or data behavior}
 ```
 
-### Step 5: Save Task Files and QA Reports to Repository
+### Step 5: Verification and Task Archiving (Tasks -> Reports)
 
-- **Task Files:** Save all generated task prompt files into `.agents/tasks/` in the project root.
-  - Follow the naming standard: `PROMPT_PHASE{N}_{DESCRIPTIVE_UPPERCASE_NAME}.md` or `TASK_{NAME}.md`.
-- **QA & Verification Reports:** Save all audit and test verification reports into `.agents/reports/`.
-  - Follow the naming standard: `REPORT_{TASK_NAME}.md` (e.g. `REPORT_PHASE3_CROSS_BROWSER_SYNC.md`).
-  - The report must summarize: Changes Made, Unit Test Results (Vitest / Go test), API Status, UX/UI Usability Checklist, and Final Sign-off.
-- Present a clear summary of findings and the generated phases to the user.
+1. **Strict Verification Check:**
+   - Compile Check: `go build ./...` and `npm run build` (or `tsc --noEmit`)
+   - Unit Tests: Run `go test ./...` and `npm run test:unit:frontend` (Vitest)
+2. **Task Archiving Workflow:**
+   - When all acceptance criteria and tests pass 100%:
+   - Move the completed task file from `.agents/tasks/TASK_{NAME}.md` to `.agents/reports/REPORT_{NAME}.md`
+   - In the report file, append the execution summary: Changes Made, Unit Test Results, Verification Status, and Final Sign-off
+   - Notify `somsing-coordinator` that the phase is certified complete so Coordinator can deliver the final briefing to the user.
 
 ## Gotchas and Guardrails
 
+- **Strict Rule: Never start coding before the task file in `.agents/tasks/` is finalized.**
 - **Enforce Negative Constraints:** Always explicitly state what downstream agents must NOT touch.
 - **Preserve Business Logic:** Never alter core pricing formulas or inventory deduction logic unless the task specifically targets them.
 - **Strict Testing Policy (No Playwright):**
   - **Unit Testing:** ห้ามสั่งรันหรือติดตั้ง Playwright โดยเด็ดขาด ให้ใช้ `go test` หรือ `vitest` เท่านั้น
   - **Fast & Reliable:** การทดสอบความถูกต้องของระบบให้ใช้ Compile Check (`go build`, `npm run build`), Unit Tests และ Direct API Verification
-- **Independent Verifiability:** Each phase must have clear acceptance criteria that can be validated before proceeding to the next phase.

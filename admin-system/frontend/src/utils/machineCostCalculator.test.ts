@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { calculateMachineUnitCost, calculateTotalJobMachineCost, getEquipmentAccurateCost, calculateEquipmentPrintCost } from './machineCostCalculator.ts';
+import { calculateMachineUnitCost, calculateTotalJobMachineCost, getEquipmentAccurateCost, calculateEquipmentPrintCost, calculateMachineWearPartsRate, resolveMachineImage, formatUnitPrecisionLAK } from './machineCostCalculator.ts';
 
 describe('machineCostCalculator Unit Tests', () => {
   it('correctly calculates depreciation and maintenance per sheet for printer', () => {
@@ -80,7 +80,8 @@ describe('machineCostCalculator Unit Tests', () => {
     assert.strictEqual(cutter.depreciation, 28.33);
     assert.strictEqual(cutter.maintenance, 4.25);
     assert.strictEqual(cutter.totalMachineCost, 32.58);
-    assert.strictEqual(cutter.unitLabel, 'ແຜ່ນ');
+    assert.strictEqual(cutter.unitLabel, 'ຮອບຕັດ');
+    assert.strictEqual(cutter.unitLabelEn, 'cut');
     assert.strictEqual(cutter.inkCost, 0);
     assert.strictEqual(cutter.isPrinter, false);
 
@@ -96,6 +97,7 @@ describe('machineCostCalculator Unit Tests', () => {
     assert.strictEqual(binder.maintenance, 8.75);
     assert.strictEqual(binder.totalMachineCost, 67.08);
     assert.strictEqual(binder.unitLabel, 'ຫົວ');
+    assert.strictEqual(binder.unitLabelEn, 'book');
     assert.strictEqual(binder.inkCost, 0);
 
     // 4. Laminator: FM-360 Roll Laminator
@@ -109,8 +111,45 @@ describe('machineCostCalculator Unit Tests', () => {
     assert.strictEqual(lam.depreciation, 27.5);
     assert.strictEqual(lam.maintenance, 4.13);
     assert.strictEqual(lam.totalMachineCost, 31.63);
-    assert.strictEqual(lam.unitLabel, 'ແຜ່ນ');
+    assert.strictEqual(lam.unitLabel, 'ແມັດ');
+    assert.strictEqual(lam.unitLabelEn, 'meter');
     assert.strictEqual(lam.inkCost, 0);
+  });
+
+  it('correctly calculates exact itemized wear parts rate from Data Material specifications', () => {
+    // Inkjet: Maintenance Box (450k / 25k = 18) + Printhead (4.5M / 100k = 45) + Pickup Roller (150k / 30k = 5) + Carriage Belt (500k / 50k = 10) = 78 LAK/page
+    const inkjetEq = {
+      name: 'Epson L15150 EcoTank',
+      category: 'Printer',
+      postPressSubtype: 'inkjet',
+      specs: {
+        wearMaintBoxCost: 450000,
+        wearMaintBoxLife: 25000,
+        wearPrintheadCost: 4500000,
+        wearPrintheadLife: 100000,
+        wearPickupRollerCost: 150000,
+        wearPickupRollerLife: 30000,
+        wearCarriageBeltCost: 500000,
+        wearCarriageBeltLife: 50000,
+      }
+    };
+    const inkjetWear = calculateMachineWearPartsRate(inkjetEq);
+    assert.strictEqual(inkjetWear, 78);
+
+    // Guillotine Cutter: Sharpening (150k / 10k = 15) + Cutting Stick (100k / 20k = 5) = 20 LAK/cut
+    const guillotineEq = {
+      name: 'QZYK920 Hydraulic Paper Guillotine',
+      category: 'Cutter',
+      postPressSubtype: 'guillotine',
+      specs: {
+        wearSharpeningCost: 150000,
+        wearSharpeningIntervalCuts: 10000,
+        wearCuttingStickCost: 100000,
+        wearCuttingStickLifeCuts: 20000,
+      }
+    };
+    const guillotineWear = calculateMachineWearPartsRate(guillotineEq);
+    assert.strictEqual(guillotineWear, 20);
   });
 
   it('correctly calculates print cost matching EquipmentTable for Epson L15150 and Brother MFC-J2740DW', () => {
@@ -189,4 +228,134 @@ describe('machineCostCalculator Unit Tests', () => {
     assert.strictEqual(cost.formattedInk, 'LAK 220');
     assert.strictEqual(cost.formattedTotal, 'LAK 328');
   });
+
+  it('correctly calculates linked actual ink cost and breakdown for Epson L15150 matching inventory linker', () => {
+    const epsonMachine = {
+      id: 'MAC-5707',
+      name: 'Epson EcoTank L15150',
+      category: 'Printer',
+      price: 18500057,
+      expectedLifeA4Pages: 300000,
+      wearPickupRollerCost: 600000,
+      wearPickupRollerLife: 50000, // 12
+      wearMaintBoxCost: 700000,
+      wearMaintBoxLife: 50000, // 14
+      wearCarriageBeltCost: 600000,
+      wearCarriageBeltLife: 50000, // 12
+      wearPrintheadCost: 4000000,
+      wearPrintheadLife: 100000, // 40
+      // Itemized wear = 12 + 14 + 12 + 40 = 78 LAK
+      oemBaselineInks: [
+        { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500, oemPrice: 450000 },
+        { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+        { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+        { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+      ]
+    };
+
+    const printerColorLinks = [
+      { assetId: 'MAC-5707', slotPosition: 'Slot 1 (K - Black)', inkCode: 'INK-9826', colorGroup: 'Black' },
+      { assetId: 'MAC-5707', slotPosition: 'Slot 2 (C - Cyan)', inkCode: 'INK-8713', colorGroup: 'Cyan' },
+      { assetId: 'MAC-5707', slotPosition: 'Slot 3 (M - Magenta)', inkCode: 'INK-0365', colorGroup: 'Magenta' },
+      { assetId: 'MAC-5707', slotPosition: 'Slot 4 (Y - Yellow)', inkCode: 'INK-6588', colorGroup: 'Yellow' },
+    ];
+
+    const inventory = [
+      { id: 'INB-7677', sku: 'INB-7677', specs: { sku: 'INK-9826', volume: 127 }, unitPrice: 95000, volume: 127 },
+      { id: 'INK-8713', sku: 'INK-8713', specs: { volume: 70 }, unitPrice: 95000, volume: 70 },
+      { id: 'INK-0365', sku: 'INK-0365', specs: { volume: 70 }, unitPrice: 95000, volume: 70 },
+      { id: 'INK-6588', sku: 'INK-6588', specs: { volume: 70 }, unitPrice: 95000, volume: 70 },
+    ];
+
+    const result = calculateEquipmentPrintCost(epsonMachine, printerColorLinks, inventory, 'Printer');
+    
+    // Slot 1: 95,000 / 7,500 = 12.67 LAK
+    // Slot 2: 95,000 / 6,000 = 15.83 LAK
+    // Slot 3: 95,000 / 6,000 = 15.83 LAK
+    // Slot 4: 95,000 / 6,000 = 15.83 LAK
+    // Total Ink = 12.67 + 15.83 * 3 = 60.17 LAK
+    assert.strictEqual(result.linkedInkRatePerPage, 60.17);
+    assert.strictEqual(result.inkSlotsBreakdown.length, 4);
+    assert.strictEqual(result.inkSlotsBreakdown[0].costPerPage, 12.67);
+    assert.strictEqual(result.inkSlotsBreakdown[1].costPerPage, 15.83);
+    assert.strictEqual(result.inkSlotsBreakdown[2].costPerPage, 15.83);
+    assert.strictEqual(result.inkSlotsBreakdown[3].costPerPage, 15.83);
+    assert.strictEqual(result.inkSlotsBreakdown[0].isLinked, true);
+    assert.strictEqual(result.inkSlotsBreakdown[1].isLinked, true);
+    
+    // Precision formatters
+    assert.strictEqual(formatUnitPrecisionLAK(result.linkedInkRatePerPage), 'LAK 60.17');
+    assert.strictEqual(formatUnitPrecisionLAK(result.inkSlotsBreakdown[0].costPerPage), 'LAK 12.67');
+    assert.strictEqual(formatUnitPrecisionLAK(result.inkSlotsBreakdown[1].costPerPage), 'LAK 15.83');
+    assert.strictEqual(formatUnitPrecisionLAK(result.baseCostPerUnit), 'LAK 61.67');
+    assert.strictEqual(formatUnitPrecisionLAK(result.wearAllowancePerUnit), 'LAK 78');
+  });
+
+  it('correctly calculates 1,000ml bulk refill ink (INK-2376) and adopts direct colorInkCost field yielding 195.76 LAK', () => {
+    const epsonMachine = {
+      id: 'MAC-5707',
+      name: 'Epson EcoTank L15150',
+      category: 'Printer',
+      price: 18500057,
+      expectedLifeA4Pages: 300000,
+      specs: {
+        wearPickupRollerCost: 600000,
+        wearPickupRollerLife: 50000, // 12
+        wearMaintBoxCost: 700000,
+        wearMaintBoxLife: 50000, // 14
+        wearCarriageBeltCost: 600000,
+        wearCarriageBeltLife: 50000, // 12
+        wearPrintheadCost: 4000000,
+        wearPrintheadLife: 100000, // 40
+      },
+      oemBaselineInks: [
+        { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500, oemPrice: 450000 },
+        { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+        { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+        { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+      ]
+    };
+
+    const printerColorLinks = [
+      { assetId: 'MAC-5707', slotPosition: 'Slot 1 (K - Black)', inkCode: 'INK-2376', colorGroup: 'Black' },
+      { assetId: 'MAC-5707', slotPosition: 'Slot 2 (C - Cyan)', inkCode: 'INK-8713', colorGroup: 'Cyan' },
+      { assetId: 'MAC-5707', slotPosition: 'Slot 3 (M - Magenta)', inkCode: 'INK-0365', colorGroup: 'Magenta' },
+      { assetId: 'MAC-5707', slotPosition: 'Slot 4 (Y - Yellow)', inkCode: 'INK-6588', colorGroup: 'Yellow' },
+    ];
+
+    // 1000ml bulk ink bottle INK-2376 at 507,500 LAK
+    const inventory = [
+      { id: 'INK-2376', sku: 'INK-2376', name: 'ໝຶກ Epson Inktec-Black (Pigment)', unitPrice: 507500, volume: 1000 },
+      { id: 'INK-8713', sku: 'INK-8713', specs: { volume: 70 }, unitPrice: 95000, volume: 70 },
+      { id: 'INK-0365', sku: 'INK-0365', specs: { volume: 70 }, unitPrice: 95000, volume: 70 },
+      { id: 'INK-6588', sku: 'INK-6588', specs: { volume: 70 }, unitPrice: 95000, volume: 70 },
+    ];
+
+    const result = calculateEquipmentPrintCost(epsonMachine, printerColorLinks, inventory, 'Printer');
+    
+    // Slot 1 (Black 1000ml): 507,500 / 1000 * (127 / 7500) = 8.59 LAK
+    // Slot 2, 3, 4 (Cyan, Magenta, Yellow 70ml): 95,000 / 6000 = 15.83 LAK
+    // Total Ink = 8.59 + 15.83 * 3 = 56.09 LAK
+    // Machine = 61.67 (depr) + 78 (wear) = 139.67 LAK
+    // Grand Total = 139.67 + 56.09 = 195.76 LAK
+    assert.strictEqual(result.inkSlotsBreakdown[0].costPerPage, 8.59);
+    assert.strictEqual(result.inkSlotsBreakdown[1].costPerPage, 15.83);
+    assert.strictEqual(result.linkedInkRatePerPage, 56.09);
+    assert.strictEqual(result.netCostPerUnit, 139.67);
+    assert.strictEqual(result.finalCostPerPage, 195.76);
+    assert.strictEqual(formatUnitPrecisionLAK(result.finalCostPerPage), 'LAK 195.76');
+
+    // Direct Field Verification: when machine already has colorInkCost = 56.09 directly stored
+    const machineWithDirectField = {
+      ...epsonMachine,
+      colorInkCost: 56.09,
+      bwInkCost: 8.59,
+      totalPrintCostPerPage: 195.76,
+    };
+    const directResult = calculateEquipmentPrintCost(machineWithDirectField, [], [], 'Printer');
+    assert.strictEqual(directResult.linkedInkRatePerPage, 56.09);
+    assert.strictEqual(directResult.finalCostPerPage, 195.76);
+    assert.strictEqual(formatUnitPrecisionLAK(directResult.finalCostPerPage), 'LAK 195.76');
+  });
 });
+

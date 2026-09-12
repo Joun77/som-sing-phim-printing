@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, Plus, ChevronDown, Trash2 } from 'lucide-react';
+import { Layers, Plus, Trash2, X } from 'lucide-react';
 import { InboundItemFormData, CATEGORY_MENU_OPTIONS } from './types';
 
 interface BatchSidebarProps {
@@ -23,12 +23,12 @@ export const BatchSidebar: React.FC<BatchSidebarProps> = ({
   formatCurrency,
   onSelectTab,
   onAddNewItemTab,
-  onRemoveItemTab
+  onRemoveItemTab,
 }) => {
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
 
   return (
-    <div className="w-full lg:w-80 h-full bg-slate-100/70 p-4 rounded-3xl border border-slate-200/90 flex flex-col justify-between shrink-0 overflow-hidden">
+    <div className="w-full lg:w-64 xl:w-72 2xl:w-80 h-full bg-slate-100/70 p-3 sm:p-4 rounded-3xl border border-slate-200/90 flex flex-col justify-between shrink-0 min-h-0">
       <div className="flex-1 flex flex-col min-h-0 space-y-3">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5 shrink-0">
@@ -43,48 +43,80 @@ export const BatchSidebar: React.FC<BatchSidebarProps> = ({
           </span>
         </div>
 
-        {/* Dropdown Add Button (No duplicate plus symbol) */}
-        <div className="relative shrink-0">
+        {/* Add Item Button -> Opens Category Selection Modal */}
+        <div className="shrink-0">
           <button
             type="button"
-            onClick={() => setIsAddMenuOpen(!isAddMenuOpen)}
+            onClick={() => setIsAddMenuOpen(true)}
             className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white rounded-2xl text-xs font-black flex items-center justify-between transition shadow-md shadow-indigo-600/20 cursor-pointer"
           >
             <div className="flex items-center gap-2">
               <Plus className="w-4 h-4" />
-              <span>{currentLang === 'lo' ? 'ເພີ່ມສິນຄ້າໃນຊຸດ' : 'Add Item to Batch'}</span>
+              <span>{currentLang === 'lo' ? 'ເພີ່ມສິນຄ້າໃນຊຸດ (11 ໝວດ)' : 'Add Item to Batch'}</span>
             </div>
-            <ChevronDown className={`w-4 h-4 transition-transform ${isAddMenuOpen ? 'rotate-180' : ''}`} />
+            <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-md font-extrabold">
+              11 ໝວດ
+            </span>
           </button>
 
-          {/* Floating Dropdown Menu with Lucide Icons (No emojis) */}
+          {/* Clean Category Picker Modal displaying ALL 11 categories in 2 columns */}
           {isAddMenuOpen && (
-            <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-white border border-slate-200 rounded-2xl p-2 shadow-2xl space-y-1 animate-fade-in max-h-80 overflow-y-auto">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider px-2.5 py-1 block">
-                {currentLang === 'lo' ? 'ເລືອກປະເພດສິນຄ້າທີ່ຕ້ອງການເພີ່ມ:' : 'Select Category to Add:'}
-              </span>
-              {CATEGORY_MENU_OPTIONS.map(cat => {
-                const IconComp = cat.icon;
-                return (
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in">
+              <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[88vh] animate-scale-up">
+                {/* Modal Header */}
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                      <Plus className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-slate-800">
+                        {currentLang === 'lo' ? 'ເລືອກປະເພດສິນຄ້າທີ່ຕ້ອງການນຳເຂົ້າ (11 ໝວດ)' : 'Select Category to Add to Inbound (11 Categories)'}
+                      </h3>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        {currentLang === 'lo' ? 'ກົດເລືອກປະເພດວັດສະດຸ ຫຼື ເຄື່ອງຈັກ ເພື່ອກຳນົດສະເປັກ' : 'Click category to add item specifications'}
+                      </p>
+                    </div>
+                  </div>
                   <button
-                    key={cat.id}
                     type="button"
-                    onClick={() => {
-                      onAddNewItemTab(cat.id);
-                      setIsAddMenuOpen(false);
-                    }}
-                    className="w-full text-left p-2.5 rounded-xl hover:bg-slate-50 text-slate-700 hover:text-indigo-950 transition flex items-center gap-3 cursor-pointer group"
+                    onClick={() => setIsAddMenuOpen(false)}
+                    className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition cursor-pointer"
                   >
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${cat.color}`}>
-                      <IconComp className="w-4 h-4" />
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-extrabold text-xs text-slate-800 group-hover:text-indigo-700">{cat.label}</span>
-                      <span className="text-[10px] text-slate-400 font-normal truncate">{cat.desc}</span>
-                    </div>
+                    <X className="w-5 h-5" />
                   </button>
-                );
-              })}
+                </div>
+
+                {/* 11 Categories in 2-Column Responsive Grid */}
+                <div className="p-5 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {CATEGORY_MENU_OPTIONS.map((cat) => {
+                    const IconComp = cat.icon;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          onAddNewItemTab(cat.id);
+                          setIsAddMenuOpen(false);
+                        }}
+                        className="text-left p-3.5 rounded-2xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/40 transition flex items-start gap-3 cursor-pointer group shadow-2xs hover:shadow-xs"
+                      >
+                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${cat.color} group-hover:scale-105 transition-transform`}>
+                          <IconComp className="w-5 h-5" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-black text-xs text-slate-800 group-hover:text-indigo-700">
+                            {cat.label}
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-medium line-clamp-2 mt-0.5">
+                            {cat.desc}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -95,12 +127,24 @@ export const BatchSidebar: React.FC<BatchSidebarProps> = ({
             const isSelected = idx === activeIdx;
             const itemRate = exchangeRates[item.importCurrency] || 1;
             const qty = Number(item.importQty) || 1;
-            const rawTotal = (item.costInputMode === 'TOTAL' && Number(item.totalLotCost) > 0)
-              ? Number(item.totalLotCost)
-              : (Number(item.importCost) || 0) * qty;
+            const rawTotal =
+              item.costInputMode === 'TOTAL' && Number(item.totalLotCost) > 0
+                ? Number(item.totalLotCost)
+                : (Number(item.importCost) || 0) * qty;
             const rowSubtotal = rawTotal * itemRate;
-            
-            let label = item.paperName || item.inkColorName || item.printerModel || item.machineryName || item.bindingName || item.laminationName || item.sparePartName || item.offcutName;
+
+            let label =
+              item.paperName ||
+              item.inkColorName ||
+              item.machineModel ||
+              item.machineBrand ||
+              item.bindingName ||
+              item.laminationName ||
+              item.sparePartName ||
+              (item.rigidSubstrateType ? `Rigid ${item.rigidSubstrateType}` : null) ||
+              (item.packagingCategory ? `Packaging ${item.packagingCategory}` : null) ||
+              (item.cuttingSupplyType ? `Cutting ${item.cuttingSupplyType}` : null);
+
             if (!label) label = `${item.importType} Item #${idx + 1}`;
 
             return (
@@ -115,15 +159,18 @@ export const BatchSidebar: React.FC<BatchSidebarProps> = ({
               >
                 <div className="flex items-center justify-between gap-1">
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <span className={`w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 ${
-                      isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700'
-                    }`}>
+                    <span
+                      className={`w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 ${
+                        isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
                       {idx + 1}
                     </span>
                     <span className="text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
                       {item.importType}
                     </span>
                   </div>
+
                   {items.length > 1 && (
                     <button
                       type="button"
@@ -131,21 +178,25 @@ export const BatchSidebar: React.FC<BatchSidebarProps> = ({
                         e.stopPropagation();
                         onRemoveItemTab(idx);
                       }}
-                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                      title="Delete Tab"
+                      className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer"
+                      title={currentLang === 'lo' ? 'ລຶບລາຍການນີ້' : 'Delete item'}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
 
-                <div className="truncate font-extrabold text-xs text-slate-800">
+                <div className="font-extrabold text-xs text-slate-800 truncate" title={label}>
                   {label}
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 pt-1.5 border-t border-slate-100">
-                  <span>{item.importQty} {item.importUnit}</span>
-                  <span className="text-slate-900 font-extrabold">{formatCurrency(rowSubtotal)}</span>
+                <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px] font-semibold text-slate-500">
+                  <span>
+                    {qty} {item.importUnit}
+                  </span>
+                  <span className="font-mono font-bold text-indigo-600">
+                    {formatCurrency(rowSubtotal)}
+                  </span>
                 </div>
               </div>
             );
@@ -153,12 +204,12 @@ export const BatchSidebar: React.FC<BatchSidebarProps> = ({
         </div>
       </div>
 
-      {/* Sidebar Batch Grand Summary */}
-      <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-1 shrink-0 mt-3 shadow-md">
-        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
-          {currentLang === 'lo' ? 'ຍອດລວມທັງໝົດໃນຊຸດ' : 'Batch Grand Total'}
-        </span>
-        <div className="text-base font-black text-emerald-400">
+      {/* Footer Subtotal */}
+      <div className="pt-3 border-t border-slate-200/80 shrink-0 space-y-1">
+        <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+          <span>{currentLang === 'lo' ? 'ຍອດລວມທັງໝົດໃນຊຸດ' : 'Grand Total'}</span>
+        </div>
+        <div className="text-base font-black text-indigo-600 font-mono">
           {formatCurrency(grandTotalAllItemsLAK)}
         </div>
       </div>

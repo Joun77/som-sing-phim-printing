@@ -35,6 +35,20 @@ export const QuickSwapConsumableModal: React.FC<QuickSwapConsumableModalProps> =
   const [remarks, setRemarks] = useState('');
   const [shouldDeductPart, setShouldDeductPart] = useState(true);
   const [selectedPartSku, setSelectedPartSku] = useState('');
+  const [backendSpareParts, setBackendSpareParts] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    if (isOpen && mode === 'component') {
+      fetch('/api/v1/inventory/spare-parts')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data && data.data && Array.isArray(data.data)) {
+            setBackendSpareParts(data.data);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen, mode]);
 
   if (!isOpen || !equipmentItem) return null;
 
@@ -45,21 +59,44 @@ export const QuickSwapConsumableModal: React.FC<QuickSwapConsumableModalProps> =
   const currentInkStock = linkedInkItem ? Number(linkedInkItem.stockQty || 0) : 0;
   const isInkOutOfStock = mode === 'ink' && currentInkStock <= 0;
 
-  // In component mode: candidate spare parts from inventory
-  const sparePartsList = inventory.filter(i => 
-    i.category?.toLowerCase().includes('spare') ||
-    i.category?.toLowerCase().includes('part') ||
-    i.category?.toLowerCase().includes('consumable') ||
-    i.name?.toLowerCase().includes(componentName.toLowerCase())
-  );
+  // In component mode: candidate spare parts from inventory & backend
+  const allCandidatePool = [
+    ...backendSpareParts.map((p: any) => ({
+      id: p.id || p.sku,
+      skuCode: p.sku || p.id,
+      name: p.name,
+      category: p.category,
+      stockQty: Number(p.stock_qty ?? 0),
+      assignedPrinterId: p.assigned_printer_id || p.technical_specs?.assigned_printer_id || ''
+    })),
+    ...inventory
+  ];
+
+  // Deduplicate pool by ID
+  const uniquePartsMap = new Map();
+  allCandidatePool.forEach(p => {
+    if (p && p.id && !uniquePartsMap.has(p.id)) {
+      uniquePartsMap.set(p.id, p);
+    }
+  });
+  const uniqueCandidatePool = Array.from(uniquePartsMap.values());
+
+  const sparePartsList = uniqueCandidatePool.filter((i: any) => {
+    const isAssigned = i.assignedPrinterId === equipmentItem.id;
+    const isSpare = (i.category || '').toLowerCase().includes('spare') ||
+                    (i.category || '').toLowerCase().includes('part') ||
+                    (i.category || '').toLowerCase().includes('consumable') ||
+                    (i.name || '').toLowerCase().includes((componentName || '').toLowerCase());
+    return isAssigned || isSpare;
+  });
 
   const activeSelectedPart = selectedPartSku 
-    ? inventory.find(i => i.id === selectedPartSku || i.skuCode === selectedPartSku)
-    : sparePartsList[0] || inventory[0];
+    ? uniqueCandidatePool.find((i: any) => i.id === selectedPartSku || i.skuCode === selectedPartSku)
+    : sparePartsList[0] || uniqueCandidatePool[0];
   const currentPartStock = activeSelectedPart ? Number(activeSelectedPart.stockQty || 0) : 0;
   const isPartOutOfStock = mode === 'component' && shouldDeductPart && activeSelectedPart && currentPartStock <= 0;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (mode === 'ink') {
@@ -85,6 +122,26 @@ export const QuickSwapConsumableModal: React.FC<QuickSwapConsumableModalProps> =
         return;
       }
       const partSkuToDeduct = shouldDeductPart ? (activeSelectedPart?.id || activeSelectedPart?.skuCode) : undefined;
+      
+      // Trigger backend transactional stock deduction & wear part logging
+      if (shouldDeductPart && partSkuToDeduct) {
+        try {
+          await fetch(`/api/v1/equipment/${equipmentItem.id}/install-part`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              material_id: partSkuToDeduct,
+              part_name: componentName,
+              quantity: quantity,
+              replaced_by: 'Operator',
+              notes: remarks,
+            }),
+          });
+        } catch (err) {
+          console.warn('Backend install-part warning:', err);
+        }
+      }
+
       const success = replaceEquipmentComponent(equipmentItem.id, componentName, partSkuToDeduct, quantity, remarks);
       if (success) onClose();
     }

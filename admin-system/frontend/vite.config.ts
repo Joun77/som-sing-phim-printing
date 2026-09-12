@@ -5,7 +5,7 @@ import { fileURLToPath, URL } from 'node:url'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/admin',
+  base: '/',
 
   resolve: {
     dedupe: ['react', 'react-dom'],
@@ -26,6 +26,8 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
+    port: 5174,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8080',

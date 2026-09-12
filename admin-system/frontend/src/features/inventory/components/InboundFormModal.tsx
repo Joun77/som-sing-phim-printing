@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { X, PackagePlus, RefreshCw, AlertCircle, CheckCircle2, DollarSign, Layers, Search, Zap } from 'lucide-react';
 import { MaterialMaster, CreateInboundPayload } from '../types';
 import { createInbound } from '../api/inventoryApi';
+import DynamicSpecForm from './forms/DynamicSpecForm';
 
 interface InboundFormModalProps {
   isOpen: boolean;
@@ -37,6 +38,7 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
   const [origin, setOrigin] = useState('TH');
   const [tariffFee, setTariffFee] = useState<number | string>(0);
   const [freightFee, setFreightFee] = useState<number | string>(0);
+  const [technicalSpecs, setTechnicalSpecs] = useState<Record<string, any>>({});
 
   // Filtered materials for easy search
   const filteredMaterials = useMemo(() => {
@@ -147,6 +149,7 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
         origin: origin,
         tariff_fee: numTariff,
         freight_fee: numFreight,
+        technical_specs: technicalSpecs,
       };
 
       await createInbound(payload);
@@ -308,11 +311,14 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
                 disabled={mode === 'existing'}
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               >
-                <option value="paper">กระดาษ (Paper)</option>
-                <option value="ink">น้ำหมึก (Ink)</option>
-                <option value="lamination">ฟิล์มเคลือบ (Lamination)</option>
-                <option value="binding">อุปกรณ์เข้าเล่ม (Binding)</option>
-                <option value="spare_parts">อะไหล่เครื่องพิมพ์ (Spare Parts)</option>
+                <option value="paper">ເຈ້ຍ & ສື່ພິມ (Paper & Media)</option>
+                <option value="ink">ນ້ຳໝຶກ & ຜົງໝຶກ (Ink & Toner)</option>
+                <option value="lamination">ຟີມເຄືອບ & ນ້ຳຢາ (Lamination Films)</option>
+                <option value="binding">ອຸປະກອນເຂົ້າເຫຼັ້ມ (Binding Supplies)</option>
+                <option value="rigid_substrate">ແຜ່ນບອດ & ວັດສະດຸແຂງ (Rigid Boards)</option>
+                <option value="cutting_supplies">ວັດສະດຸຊ່ວຍຕັດ & ແຜ່ນຮອງ (Cutting Supplies)</option>
+                <option value="packaging">ບັນຈຸພັນ & ກ່ອງ (Packaging Consumables)</option>
+                <option value="spare_parts">ອະໄຫຼ່ສິ້ນເປືອງ (Machine Wear Parts)</option>
               </select>
             </div>
             <div>
@@ -359,6 +365,26 @@ export default function InboundFormModal({ isOpen, onClose, onSuccess, materials
               />
             </div>
           </div>
+
+          {/* Mode 2: Dynamic Technical Specifications */}
+          {mode === 'new' && (
+            <div className="space-y-2 pt-1">
+              <DynamicSpecForm
+                categoryType={category}
+                formData={{ ...technicalSpecs, name: itemName, sku: skuCode }}
+                onChange={(updated) => {
+                  setTechnicalSpecs(updated);
+                  if (updated.sheetsPerPack) {
+                    setPurchaseMultiplier(updated.sheetsPerPack);
+                    setPurchaseUnit('ຣີມ/ແພັກ');
+                  } else if (updated.volumeMl) {
+                    setPurchaseMultiplier(updated.volumeMl);
+                    setPurchaseUnit('ແກ້ວ');
+                  }
+                }}
+              />
+            </div>
+          )}
 
           {/* Quantity, Unit & Multiplier */}
           <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">

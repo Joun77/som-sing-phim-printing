@@ -10,12 +10,14 @@ import {
   RefreshCw,
   History,
   Sparkles,
-  ChevronDown
+  ChevronDown,
+  AlertTriangle
 } from 'lucide-react';
 import type { Equipment } from '../../../equipment/types';
 import type { MachineChangeLog } from './types';
 import { MachineSelectModal } from './MachineSelectModal';
 import { calculateEquipmentPrintCost } from '../../../../utils/machineCostCalculator';
+import { getAuthHeaders } from '../../../../utils/authHeaders';
 import { useApp } from '../../../../store/AppContext';
 
 interface EquipmentSpecCardProps {
@@ -35,7 +37,7 @@ export const EquipmentSpecCard: React.FC<EquipmentSpecCardProps> = ({
   const [dbInks, setDbInks] = useState<any[]>([]);
 
   React.useEffect(() => {
-    fetch('/api/inbound')
+    fetch('/api/inbound', { headers: getAuthHeaders() })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         const items = Array.isArray(data) ? data : data?.data || [];
@@ -194,6 +196,37 @@ export const EquipmentSpecCard: React.FC<EquipmentSpecCardProps> = ({
     return finishMachine;
   };
 
+  // Machine Specs & Capabilities
+  const pressSpecs = (pressObj as any)?.specs || {};
+  const speedBW = pressSpecs.speedMonoPpm || pressSpecs.speedPpmBlack || (pressObj as any)?.speedPpmBlack || (pressObj as any)?.speedPpm || 70;
+  const speedColor = pressSpecs.speedColorPpm || pressSpecs.speedPpmColor || (pressObj as any)?.speedPpmColor || (pressObj as any)?.speedPpm || 65;
+  const isDuplex = pressSpecs.duplexMode === 'Auto-Duplex' || pressSpecs.duplexSupport === true || (pressObj as any)?.duplexSupport === true;
+  const minGsm = pressSpecs.supportedGsmMin || pressSpecs.minPaperGsm || 52;
+  const maxGsm = pressSpecs.supportedGsmMax || pressSpecs.maxPaperGsm || 350;
+
+  // Derive wear part alerts (usage >= 85% or threshold)
+  const getMachineWearAlerts = (machineObj: any) => {
+    if (!machineObj || !machineObj.name || machineObj.name.includes('ບໍ່ໃຊ້ງານ')) return [];
+    const comps = Array.isArray(machineObj.components) ? machineObj.components : [];
+    if (comps.length > 0) {
+      return comps.filter((c: any) => Number(c.usage || 0) >= (Number(c.threshold) || 85));
+    }
+    const meter = Number(machineObj.currentMeterCount || machineObj.printedCount || 0);
+    if (meter > 85000) {
+      return [{ name: 'Paper Feed Pick-up Rollers', nameLo: 'ລູກກິ້ງດຶງເຈ້ຍ (Pick-up Rollers)', usage: 88, threshold: 85 }];
+    }
+    return [];
+  };
+
+  const pressWearAlerts = getMachineWearAlerts(pressObj);
+  const cutterWearAlerts = hasCutting && cutterMachine ? getMachineWearAlerts(cutterObj) : [];
+  const finishWearAlerts = hasFinishing && finishMachine ? getMachineWearAlerts(finishObj) : [];
+  const allWearAlerts = [
+    ...pressWearAlerts.map(a => ({ ...a, machineName: pressMachine, machineType: 'Printer' })),
+    ...cutterWearAlerts.map(a => ({ ...a, machineName: cutterMachine, machineType: 'Cutter' })),
+    ...finishWearAlerts.map(a => ({ ...a, machineName: finishMachine, machineType: 'Finishing' }))
+  ];
+
   return (
     <div className="bg-white border border-sky-100 rounded-3xl p-5 sm:p-6 shadow-xs space-y-4 font-sans">
       <div className="flex flex-wrap items-center justify-between border-b border-sky-100 pb-3 gap-2">
@@ -230,6 +263,32 @@ export const EquipmentSpecCard: React.FC<EquipmentSpecCardProps> = ({
         </div>
       </div>
 
+      {/* Wear Parts Health Warning Banner before production */}
+      {allWearAlerts.length > 0 && (
+        <div className="p-3 bg-amber-50/90 border border-amber-300/80 rounded-2xl flex items-start gap-2.5 text-xs shadow-2xs">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5 animate-pulse" />
+          <div className="space-y-1 flex-1">
+            <div className="flex items-center justify-between">
+              <strong className="text-amber-950 font-black">
+                ເຕືອນອະໄຫຼ່ສິ້ນເປືອງໃກ້ໝົດອາຍຸ (Wear Parts Alert) - ກວດສອບກ່ອນຜະລິດງານໃຫຍ່
+              </strong>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900 font-mono">
+                {allWearAlerts.length} ລາຍການເກີນເກນ
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2 pt-0.5">
+              {allWearAlerts.map((al, idx) => (
+                <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white text-amber-900 text-[11px] font-semibold border border-amber-200 shadow-2xs font-mono">
+                  <span className="text-slate-500 font-bold">{al.machineType}:</span>
+                  <span>{al.nameLo || al.name}</span>
+                  <strong className="text-rose-600 font-black">({al.usage}%)</strong>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 3 Machine Specification Tiles with Search & Change Trigger */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* 1. Printing Press Tile */}
@@ -242,7 +301,7 @@ export const EquipmentSpecCard: React.FC<EquipmentSpecCardProps> = ({
             <strong className="text-xs font-black text-slate-900 block truncate mt-1" title={pressMachine}>
               {pressMachine}
             </strong>
-            <div className="mt-1 space-y-0.5">
+            <div className="mt-1 space-y-1">
               <div className="flex items-baseline gap-1">
                 <span className="text-[11px] font-bold text-sky-800">ຄ່າພິມ 1 ໜ້າ:</span>
                 <strong className="text-xs font-black text-sky-700 font-mono">
@@ -255,16 +314,36 @@ export const EquipmentSpecCard: React.FC<EquipmentSpecCardProps> = ({
                   (ເຄື່ອງ {pressCost.formattedMachine} + ໝຶກ {pressCost.formattedInk})
                 </span>
               )}
-              <span className="text-[10px] text-slate-400 block truncate">
-                ຄວາມລະອຽດສູງ • CMYK 300 DPI
-              </span>
+              
+              {/* Operator Live Specs: PPM & Auto-Duplex */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-sky-100 text-sky-800 font-mono">
+                  {speedBW} PPM B&W / {speedColor} PPM Color
+                </span>
+                <span className={`px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1 ${
+                  isDuplex ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
+                }`}>
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  {isDuplex ? 'Auto-Duplex' : '1-Sided'}
+                </span>
+                <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 text-slate-600 font-mono">
+                  {minGsm}-{maxGsm} GSM
+                </span>
+              </div>
+
+              {pressWearAlerts.length > 0 && (
+                <div className="mt-1 p-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[10px] font-bold flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                  <span>ອະໄຫຼ່ໃກ້ໝົດ: {pressWearAlerts[0].nameLo || pressWearAlerts[0].name} ({pressWearAlerts[0].usage}%)</span>
+                </div>
+              )}
             </div>
           </div>
 
           <button
             type="button"
             onClick={() => handleOpenSelect('Printer')}
-            className="w-full py-1.5 px-2.5 bg-white hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
+            className="w-full py-1.5 px-2.5 bg-white hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs mt-2"
           >
             <RefreshCw className="w-3 h-3" />
             <span>ຄົ້ນຫາ / ປ່ຽນເຄື່ອງພິມ</span>
@@ -324,13 +403,20 @@ export const EquipmentSpecCard: React.FC<EquipmentSpecCardProps> = ({
                 <span className="text-[10px] text-slate-400 block truncate">
                   ຕັດຂອບສາກ • ຕັດ Bleed 3mm
                 </span>
+
+                {cutterWearAlerts.length > 0 && (
+                  <div className="mt-1 p-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[10px] font-bold flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                    <span>ອະໄຫຼ່ໃກ້ໝົດ: {cutterWearAlerts[0].nameLo || cutterWearAlerts[0].name} ({cutterWearAlerts[0].usage}%)</span>
+                  </div>
+                )}
               </div>
             </div>
 
             <button
               type="button"
               onClick={() => handleOpenSelect('Cutter')}
-              className="w-full py-1.5 px-2.5 bg-white hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
+              className="w-full py-1.5 px-2.5 bg-white hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs mt-2"
             >
               <RefreshCw className="w-3 h-3" />
               <span>ຄົ້ນຫາ / ປ່ຽນເຄື່ອງຕັດ</span>
@@ -393,13 +479,20 @@ export const EquipmentSpecCard: React.FC<EquipmentSpecCardProps> = ({
                 <span className="text-[10px] text-slate-400 block truncate">
                   ສັນປຶ້ມ: {item.spine_width_mm || 0} ມມ
                 </span>
+
+                {finishWearAlerts.length > 0 && (
+                  <div className="mt-1 p-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[10px] font-bold flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                    <span>ອະໄຫຼ່ໃກ້ໝົດ: {finishWearAlerts[0].nameLo || finishWearAlerts[0].name} ({finishWearAlerts[0].usage}%)</span>
+                  </div>
+                )}
               </div>
             </div>
 
             <button
               type="button"
               onClick={() => handleOpenSelect(item.binding_type === 'NONE' ? 'Laminator' : 'Binder')}
-              className="w-full py-1.5 px-2.5 bg-white hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
+              className="w-full py-1.5 px-2.5 bg-white hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs mt-2"
             >
               <RefreshCw className="w-3 h-3" />
               <span>ຄົ້ນຫາ / ປ່ຽນເຄື່ອງເຂົ້າເຫຼັ້ມ</span>

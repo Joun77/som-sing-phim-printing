@@ -29,16 +29,54 @@ type DimensionPreset struct {
 
 // HandleGetDimensionPresets returns all print dimension presets from DB
 func HandleGetDimensionPresets(c *gin.Context) {
+	category := c.Query("category")
+
 	if db.DB == nil {
-		c.JSON(http.StatusOK, gin.H{"status": "success", "data": getFallbackPresets()})
+		all := getFallbackPresets()
+		if category != "" && category != "ALL" {
+			var filtered []DimensionPreset
+			for _, p := range all {
+				if p.Category == category {
+					filtered = append(filtered, p)
+				}
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "success", "data": filtered})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "success", "data": all})
 		return
 	}
 
-	rows, err := db.DB.Query(`
-		SELECT id, name, category, unit, width, height, width_mm, height_mm, is_default, created_at, updated_at
-		FROM print_dimension_presets
-		ORDER BY is_default DESC, width_mm ASC, name ASC
-	`)
+	var query string
+	var args []interface{}
+
+	if category != "" && category != "ALL" {
+		query = `
+			SELECT id, name, category, unit, width, height, width_mm, height_mm, is_default, created_at, updated_at
+			FROM print_dimension_presets
+			WHERE category = $1
+			ORDER BY is_default DESC, width_mm ASC, name ASC
+		`
+		args = append(args, category)
+	} else {
+		query = `
+			SELECT id, name, category, unit, width, height, width_mm, height_mm, is_default, created_at, updated_at
+			FROM print_dimension_presets
+			ORDER BY 
+				CASE category
+					WHEN 'DOCUMENT' THEN 1
+					WHEN 'PHOTO' THEN 2
+					WHEN 'CARD' THEN 3
+					WHEN 'STICKER' THEN 4
+					ELSE 5
+				END,
+				is_default DESC, 
+				width_mm ASC, 
+				name ASC
+		`
+	}
+
+	rows, err := db.DB.Query(query, args...)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"status": "success", "data": getFallbackPresets()})
 		return
@@ -55,6 +93,15 @@ func HandleGetDimensionPresets(c *gin.Context) {
 
 	if len(presets) == 0 {
 		presets = getFallbackPresets()
+		if category != "" && category != "ALL" {
+			var filtered []DimensionPreset
+			for _, p := range presets {
+				if p.Category == category {
+					filtered = append(filtered, p)
+				}
+			}
+			presets = filtered
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": presets})
@@ -136,7 +183,7 @@ func HandleCreateDimensionPreset(c *gin.Context) {
 	})
 }
 
-// HandleDeleteDimensionPreset deletes a preset by ID
+// HandleDeleteDimensionPreset deletes a preset by ID (custom presets only)
 func HandleDeleteDimensionPreset(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -145,10 +192,20 @@ func HandleDeleteDimensionPreset(c *gin.Context) {
 	}
 
 	if db.DB != nil {
-		_, err := db.DB.Exec("DELETE FROM print_dimension_presets WHERE id = $1", id)
+		res, err := db.DB.Exec("DELETE FROM print_dimension_presets WHERE id = $1 AND is_default = FALSE", id)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete preset", "details": err.Error()})
 			return
+		}
+		rowsAffected, _ := res.RowsAffected()
+		if rowsAffected == 0 {
+			// Check if it's default
+			var isDef bool
+			errDef := db.DB.QueryRow("SELECT is_default FROM print_dimension_presets WHERE id = $1", id).Scan(&isDef)
+			if errDef == nil && isDef {
+				c.JSON(http.StatusForbidden, gin.H{"error": "Cannot delete default master data preset"})
+				return
+			}
 		}
 	}
 
@@ -211,12 +268,37 @@ func HandleSetShopDefaults(c *gin.Context) {
 
 func getFallbackPresets() []DimensionPreset {
 	return []DimensionPreset{
-		{ID: "preset-4x6", Name: "4x6\" (A6)", Category: "PHOTO", Unit: "INCH", Width: 4, Height: 6, WidthMM: 101.6, HeightMM: 152.4, IsDefault: true},
-		{ID: "preset-5x7", Name: "5x7\" (Photo)", Category: "PHOTO", Unit: "INCH", Width: 5, Height: 7, WidthMM: 127.0, HeightMM: 177.8, IsDefault: false},
-		{ID: "preset-3x4", Name: "3x4\" (Pocket)", Category: "PHOTO", Unit: "INCH", Width: 3, Height: 4, WidthMM: 76.2, HeightMM: 101.6, IsDefault: false},
-		{ID: "preset-2x3", Name: "2x3\" (Polaroid)", Category: "PHOTO", Unit: "INCH", Width: 2, Height: 3, WidthMM: 50.8, HeightMM: 76.2, IsDefault: false},
-		{ID: "preset-8x10", Name: "8x10\" (Portrait)", Category: "PHOTO", Unit: "INCH", Width: 8, Height: 10, WidthMM: 203.2, HeightMM: 254.0, IsDefault: false},
-		{ID: "preset-a4", Name: "8x12\" (A4 Full)", Category: "PHOTO", Unit: "INCH", Width: 8.27, Height: 11.69, WidthMM: 210.0, HeightMM: 297.0, IsDefault: false},
+		// Documents (ເອກະສານ)
+		{ID: "preset-doc-a4", Name: "A4 (210x297)", Category: "DOCUMENT", Unit: "MM", Width: 210, Height: 297, WidthMM: 210.0, HeightMM: 297.0, IsDefault: true},
+		{ID: "preset-doc-a3", Name: "A3 (297x420)", Category: "DOCUMENT", Unit: "MM", Width: 297, Height: 420, WidthMM: 297.0, HeightMM: 420.0, IsDefault: true},
+		{ID: "preset-doc-a5", Name: "A5 (148x210)", Category: "DOCUMENT", Unit: "MM", Width: 148, Height: 210, WidthMM: 148.0, HeightMM: 210.0, IsDefault: true},
+		{ID: "preset-doc-a6", Name: "A6 (105x148)", Category: "DOCUMENT", Unit: "MM", Width: 105, Height: 148, WidthMM: 105.0, HeightMM: 148.0, IsDefault: true},
+		{ID: "preset-doc-b5", Name: "B5 (176x250)", Category: "DOCUMENT", Unit: "MM", Width: 176, Height: 250, WidthMM: 176.0, HeightMM: 250.0, IsDefault: true},
+		{ID: "preset-doc-letter", Name: "Letter (8.5x11\")", Category: "DOCUMENT", Unit: "INCH", Width: 8.5, Height: 11, WidthMM: 215.9, HeightMM: 279.4, IsDefault: true},
+		{ID: "preset-doc-f4", Name: "Folio / F4 (8.5x13\")", Category: "DOCUMENT", Unit: "INCH", Width: 8.5, Height: 13, WidthMM: 215.9, HeightMM: 330.2, IsDefault: true},
+
+		// Photos (ຮູບພາບ)
+		{ID: "preset-photo-4x6", Name: "4x6\" (4R / Postcard)", Category: "PHOTO", Unit: "INCH", Width: 4, Height: 6, WidthMM: 101.6, HeightMM: 152.4, IsDefault: true},
+		{ID: "preset-photo-5x7", Name: "5x7\" (5R / Desk Frame)", Category: "PHOTO", Unit: "INCH", Width: 5, Height: 7, WidthMM: 127.0, HeightMM: 177.8, IsDefault: true},
+		{ID: "preset-photo-6x8", Name: "6x8\" (6R)", Category: "PHOTO", Unit: "INCH", Width: 6, Height: 8, WidthMM: 152.4, HeightMM: 203.2, IsDefault: true},
+		{ID: "preset-photo-8x10", Name: "8x10\" (8R / Portrait)", Category: "PHOTO", Unit: "INCH", Width: 8, Height: 10, WidthMM: 203.2, HeightMM: 254.0, IsDefault: true},
+		{ID: "preset-photo-8x12", Name: "8x12\" (A4 Full Photo)", Category: "PHOTO", Unit: "INCH", Width: 8.27, Height: 11.69, WidthMM: 210.0, HeightMM: 297.0, IsDefault: true},
+		{ID: "preset-photo-3x4", Name: "3x4\" (Pocket / ກະເປົາ)", Category: "PHOTO", Unit: "INCH", Width: 3, Height: 4, WidthMM: 76.2, HeightMM: 101.6, IsDefault: true},
+		{ID: "preset-photo-2x3", Name: "2x3\" (Polaroid / ຕິດບັດ)", Category: "PHOTO", Unit: "INCH", Width: 2, Height: 3, WidthMM: 50.8, HeightMM: 76.2, IsDefault: true},
+		{ID: "preset-photo-12x18", Name: "12x18\" (A3+ Photo)", Category: "PHOTO", Unit: "INCH", Width: 12, Height: 18, WidthMM: 304.8, HeightMM: 457.2, IsDefault: true},
+
+		// Cards & Invitations (ນາມບັດ & ກາດ)
+		{ID: "preset-card-std", Name: "ນາມບັດມາດຕະຖານ (90x54mm)", Category: "CARD", Unit: "MM", Width: 90, Height: 54, WidthMM: 90.0, HeightMM: 54.0, IsDefault: true},
+		{ID: "preset-card-slim", Name: "ນາມບັດ Slim (90x50mm)", Category: "CARD", Unit: "MM", Width: 90, Height: 50, WidthMM: 90.0, HeightMM: 50.0, IsDefault: true},
+		{ID: "preset-card-inv", Name: "ກາດເຊີນ 4x6\" (Invitation)", Category: "CARD", Unit: "INCH", Width: 4, Height: 6, WidthMM: 101.6, HeightMM: 152.4, IsDefault: true},
+		{ID: "preset-card-wed", Name: "ກາດແຕ່ງງານ 5x7\" (Wedding)", Category: "CARD", Unit: "INCH", Width: 5, Height: 7, WidthMM: 127.0, HeightMM: 177.8, IsDefault: true},
+
+		// Stickers & Labels (ສະຕິກເກີ)
+		{ID: "preset-stk-a3plus", Name: "ແຜ່ນ A3+ (329x483mm)", Category: "STICKER", Unit: "MM", Width: 329, Height: 483, WidthMM: 329.0, HeightMM: 483.0, IsDefault: true},
+		{ID: "preset-stk-a4", Name: "ແຜ່ນ A4 (210x297mm)", Category: "STICKER", Unit: "MM", Width: 210, Height: 297, WidthMM: 210.0, HeightMM: 297.0, IsDefault: true},
+		{ID: "preset-stk-3x3", Name: "ດວງມົນ 3x3 cm", Category: "STICKER", Unit: "CM", Width: 3, Height: 3, WidthMM: 30.0, HeightMM: 30.0, IsDefault: true},
+		{ID: "preset-stk-4x4", Name: "ດວງມົນ 4x4 cm", Category: "STICKER", Unit: "CM", Width: 4, Height: 4, WidthMM: 40.0, HeightMM: 40.0, IsDefault: true},
+		{ID: "preset-stk-5x5", Name: "ດວງມົນ 5x5 cm", Category: "STICKER", Unit: "CM", Width: 5, Height: 5, WidthMM: 50.0, HeightMM: 50.0, IsDefault: true},
 	}
 }
 

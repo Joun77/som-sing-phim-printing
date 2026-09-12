@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import { FormModalTemplate } from '@components/common';
+import { getAuthHeaders } from '@utils/authHeaders';
 import { 
   RefreshCw, 
   Search, 
@@ -11,7 +12,9 @@ import {
   Layers, 
   DollarSign, 
   PackageCheck,
-  AlertCircle
+  AlertCircle,
+  Wrench,
+  Clock
 } from 'lucide-react';
 
 interface RestockBatchModalProps {
@@ -23,6 +26,7 @@ interface RestockBatchModalProps {
 export default function RestockBatchModal({ isOpen, onClose, onSuccess }: RestockBatchModalProps) {
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
+  const isLao = currentLang === 'lo';
   const { inventory, addInventoryBatch, formatCurrency, showToast, saveInventoryToBackend } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,11 +36,39 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
   const [selectedMap, setSelectedMap] = useState<Record<string, { qty: number; unitPrice: number; supplier: string; date: string }>>({});
 
   const filteredInventory = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
     return inventory.filter(item => {
-      const matchSearch = (item.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (item.id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (item.sku || '').toLowerCase().includes(searchQuery.toLowerCase());
-      const matchCat = categoryFilter === 'ALL' || (item.category || '').toUpperCase() === categoryFilter;
+      const catLower = (item.category || '').toLowerCase();
+      const isSpare = catLower.includes('spare') || catLower.includes('part') || catLower.includes('ອະໄຫຼ່') || Boolean(item.isSparePart);
+      const assignedMachine = String(item.assignedPrinterId || item.assignedMachineName || item.specs?.assignedPrinterId || item.specs?.assignedMachineName || '').toLowerCase();
+      const modelRef = String(item.modelRef || item.partModelRef || item.specs?.modelRef || item.specs?.partModelRef || '').toLowerCase();
+      const partCat = String(item.partCategory || item.specs?.partCategory || '').toLowerCase();
+
+      const matchSearch = !q ||
+                          (item.name || '').toLowerCase().includes(q) ||
+                          (item.id || '').toLowerCase().includes(q) ||
+                          (item.sku || '').toLowerCase().includes(q) ||
+                          assignedMachine.includes(q) ||
+                          modelRef.includes(q) ||
+                          partCat.includes(q);
+
+      let matchCat = true;
+      if (categoryFilter !== 'ALL') {
+        if (categoryFilter === 'SPARE_PARTS') {
+          matchCat = isSpare;
+        } else if (categoryFilter === 'PAPER') {
+          matchCat = catLower === 'paper' || catLower === 'material';
+        } else if (categoryFilter === 'INK') {
+          matchCat = catLower.includes('ink') || catLower.includes('toner');
+        } else if (categoryFilter === 'LAMINATION') {
+          matchCat = catLower.includes('lamination') || catLower.includes('film') || catLower.includes('ເຄືອບ');
+        } else if (categoryFilter === 'FINISHING') {
+          matchCat = catLower.includes('finishing') || catLower.includes('binding') || catLower.includes('ຕັດ') || catLower.includes('ເຂົ້າເຫຼັ້ມ');
+        } else {
+          matchCat = catLower === categoryFilter.toLowerCase();
+        }
+      }
+
       return matchSearch && matchCat;
     });
   }, [inventory, searchQuery, categoryFilter]);
@@ -124,13 +156,16 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
       });
 
       const originalSku = originalItem.sku || originalItem.id;
+      const catLower = (originalItem.category || '').toLowerCase();
+      const isSpare = catLower.includes('spare') || catLower.includes('part') || catLower.includes('ອະໄຫຼ່') || Boolean(originalItem.isSparePart);
+
       const inboundLog = {
         id: logId,
         poNumber: logId,
         inboundDate: fullDateTime,
         receiptDate: fullDateTime,
-        category: isPaper ? 'PAPER' : (originalItem.category?.toUpperCase() || 'MATERIAL'),
-        categoryPill: 'RESTOCK',
+        category: isPaper ? 'PAPER' : (isSpare ? 'SPARE_PARTS' : (originalItem.category?.toUpperCase() || 'MATERIAL')),
+        categoryPill: isSpare ? 'SPARE PARTS' : 'RESTOCK',
         name: originalItem.name,
         itemName: originalItem.name,
         sku: originalSku,
@@ -138,8 +173,8 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
         currentQty: packQty,
         initialQty: packQty,
         quantity: packQty,
-        unit: originalItem.purchaseUnit || (isPaper ? 'ແພັກ' : 'Unit'),
-        subUnit: `(${packQty} ${originalItem.purchaseUnit || (isPaper ? 'ແພັກ' : 'Unit')} x ${multiplier} ${originalItem.consumptionUnit || (isPaper ? 'ແຜ່ນ' : 'Unit')})`,
+        unit: originalItem.purchaseUnit || (isPaper ? 'ແພັກ' : (isSpare ? 'ອັນ' : 'Unit')),
+        subUnit: `(${packQty} ${originalItem.purchaseUnit || (isPaper ? 'ແພັກ' : (isSpare ? 'ອັນ' : 'Unit'))} x ${multiplier} ${originalItem.consumptionUnit || (isPaper ? 'ແຜ່ນ' : 'Unit')})`,
         supplier: data.supplier || 'Restock Supplier',
         supplierName: data.supplier || 'Restock Supplier',
         totalPrice: unitPrice * packQty,
@@ -155,7 +190,13 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
           sheets_per_pack: isPaper ? multiplier : null,
           sheets_per_ream: isPaper ? multiplier : null,
           purchaseMultiplier: multiplier,
-          paperFormat: isPaper ? 'Sheet' : null
+          paperFormat: isPaper ? 'Sheet' : null,
+          assignedPrinterId: originalItem.assignedPrinterId || originalItem.specs?.assignedPrinterId,
+          assignedMachineName: originalItem.assignedMachineName || originalItem.specs?.assignedMachineName,
+          partCategory: originalItem.partCategory || originalItem.specs?.partCategory,
+          partYield: originalItem.partYield || originalItem.specs?.partYield || originalItem.specs?.expectedLifespanUnits,
+          modelRef: originalItem.modelRef || originalItem.specs?.modelRef || originalItem.specs?.partModelRef,
+          unitType: originalItem.consumptionUnit || originalItem.specs?.unitType
         }
       };
 
@@ -170,7 +211,7 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
 
       fetch('/api/inbound', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(inboundLog)
       }).catch(err => console.log('Restock inbound API sync error:', err));
 
@@ -213,22 +254,30 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={currentLang === 'lo' ? 'ຄົ້ນຫາຊື່ສິນຄ້າ, SKU, ລະຫັດ...' : 'Search items by name, SKU, code...'}
+              placeholder={currentLang === 'lo' ? 'ຄົ້ນຫາຊື່ສິນຄ້າ, SKU, ລະຫັດ, ຊື່ເຄື່ອງຈັກ...' : 'Search items by name, SKU, machine...'}
               className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none"
             />
           </div>
 
           <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto">
-            {['ALL', 'PAPER', 'INK', 'FINISHING', 'LAMINATION'].map(cat => (
+            {[
+              { id: 'ALL', labelLo: 'ທັງໝົດ', labelEn: 'ALL' },
+              { id: 'PAPER', labelLo: 'ເຈ້ຍ (Paper)', labelEn: 'Paper' },
+              { id: 'INK', labelLo: 'ໝຶກ (Ink)', labelEn: 'Ink' },
+              { id: 'SPARE_PARTS', labelLo: 'ອະໄຫຼ່ (Spare Parts)', labelEn: 'Spare Parts' },
+              { id: 'FINISHING', labelLo: 'ແປຮູບ (Finishing)', labelEn: 'Finishing' },
+              { id: 'LAMINATION', labelLo: 'ເຄືອບ (Lamination)', labelEn: 'Lamination' }
+            ].map(cat => (
               <button
                 type="button"
-                key={cat}
-                onClick={() => setCategoryFilter(cat)}
-                className={`px-3.5 py-2 rounded-xl text-[11px] font-black transition cursor-pointer shrink-0 ${
-                  categoryFilter === cat ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white text-slate-600 hover:bg-slate-200'
+                key={cat.id}
+                onClick={() => setCategoryFilter(cat.id)}
+                className={`px-3.5 py-2 rounded-xl text-[11px] font-black transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                  categoryFilter === cat.id ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                {cat === 'ALL' ? (currentLang === 'lo' ? 'ທັງໝົດ' : 'ALL') : cat}
+                {cat.id === 'SPARE_PARTS' && <Wrench className="w-3 h-3 text-emerald-100" />}
+                <span>{currentLang === 'lo' ? cat.labelLo : cat.labelEn}</span>
               </button>
             ))}
           </div>
@@ -260,6 +309,14 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
                   filteredInventory.map(item => {
                     const isSelected = !!selectedMap[item.id];
                     const selectedData = selectedMap[item.id];
+                    const catLower = (item.category || '').toLowerCase();
+                    const isSpare = catLower.includes('spare') || catLower.includes('part') || catLower.includes('ອະໄຫຼ່') || Boolean(item.isSparePart);
+                    const assignedMachine = item.assignedPrinterId || item.assignedMachineName || item.specs?.assignedPrinterId || item.specs?.assignedMachineName;
+                    const modelRef = item.modelRef || item.partModelRef || item.specs?.modelRef || item.specs?.partModelRef;
+                    const partYield = Number(item.partYield || item.specs?.partYield || item.specs?.expectedLifespanUnits || 0);
+                    const stockQty = Number(item.stockQty ?? item.stock_qty ?? 0);
+                    const reorderAlert = Number(item.reorderThreshold ?? item.min_stock_alert ?? item.specs?.reorderThreshold ?? 5);
+                    const isLowStock = stockQty <= reorderAlert;
 
                     return (
                       <tr 
@@ -281,18 +338,40 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
                         </td>
 
                         <td className="p-3.5">
-                          <div className="font-extrabold text-slate-900">{item.name}</div>
-                          <div className="text-[10px] text-slate-400 font-mono">
-                            [{item.category}] SKU: {item.sku || item.id}
+                          <div className="font-extrabold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                            <span>{item.name}</span>
+                            {isSpare && assignedMachine && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                <Wrench className="w-3 h-3" />
+                                <span>{isLao ? 'ເຄື່ອງ:' : 'Machine:'} {assignedMachine}</span>
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono flex items-center gap-2 flex-wrap mt-0.5">
+                            <span>[{item.category}] SKU: {item.sku || item.id}</span>
+                            {isSpare && modelRef && (
+                              <span className="text-violet-600 font-bold">OEM: {modelRef}</span>
+                            )}
+                            {isSpare && partYield > 0 && (
+                              <span className="text-slate-500 font-sans flex items-center gap-0.5">
+                                <Clock className="w-2.5 h-2.5 text-sky-500" />
+                                <span>{isLao ? 'ອາຍຸງານ:' : 'Yield:'} {partYield.toLocaleString()} {item.consumptionUnit || 'ແຜ່ນ'}</span>
+                              </span>
+                            )}
                           </div>
                         </td>
 
                         <td className="p-3.5 font-bold">
-                          <span className={`px-2 py-1 rounded-lg text-xs ${
-                            (item.stockQty || 0) <= 50 ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'
+                          <span className={`px-2 py-1 rounded-lg text-xs inline-flex items-center gap-1 ${
+                            isLowStock ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'
                           }`}>
-                            {item.stockQty || 0} {item.consumptionUnit || item.purchaseUnit || 'Unit'}
+                            {stockQty} {item.consumptionUnit || item.purchaseUnit || 'Unit'}
                           </span>
+                          {isSpare && (
+                            <div className="text-[10px] text-slate-400 font-normal mt-0.5">
+                              {isLao ? 'ເກນເຕືອນ:' : 'Alert:'} {reorderAlert} {item.purchaseUnit || 'ອັນ'}
+                            </div>
+                          )}
                         </td>
 
                         <td className="p-3.5">

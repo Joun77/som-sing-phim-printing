@@ -1437,9 +1437,9 @@ export default function CreateOrderPage({
                   )}
                 </div>
 
-                {/* 3. Depreciation & Power Fee */}
+                {/* 3. Depreciation & Wear Parts Fee */}
                 <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-1">
-                  <span className="text-slate-500 text-[10px] uppercase font-black block">3. ຄ່າເສື່ອມເຄື່ອງ & ໄຟຟ້າລວມ</span>
+                  <span className="text-slate-500 text-[10px] uppercase font-black block">3. ເຄື່ອງຈັກ & ອາໄຫຼ່ລວມ (Machine Overhead)</span>
                   {isCustomOverhead ? (
                     <input
                       type="number"

@@ -31,6 +31,7 @@ import { Step3MaterialInventory } from './components/steps/Step3MaterialInventor
 import { Step4PostPressFinishing } from './components/steps/Step4PostPressFinishing';
 import { Step5DiscountsAndTabs } from './components/steps/Step5DiscountsAndTabs';
 import { Step6CustomerPreview } from './components/steps/Step6CustomerPreview';
+import { useApp } from '@store/AppContext';
 
 export interface ProductStudioPageProps {
   editingProduct: PublicProduct | null;
@@ -49,6 +50,11 @@ export const ProductStudioPage: React.FC<ProductStudioPageProps> = ({
   isSaving,
   showToast,
 }) => {
+  const { equipment = [] } = useApp();
+  const firstPrinter = (equipment || []).find(e => e.category === 'Printer' || e.category === 'PRINTER') || (equipment || [])[0];
+  const fallbackMachineId = firstPrinter?.id || '';
+  const fallbackMachineName = firstPrinter?.name || 'ມາດຕະຖານໂຮງພິມ (Standard Machine)';
+
   const [currentStep, setCurrentStep] = useState<number>(1);
 
   // Step 1: General Info State
@@ -87,8 +93,8 @@ export const ProductStudioPage: React.FC<ProductStudioPageProps> = ({
     15
   );
   const [targetMarginPercent, setTargetMarginPercent] = useState<number>(editingProduct?.targetMarginPercent || 35);
-  const [defaultMachineId, setDefaultMachineId] = useState<string>(editingProduct?.defaultMachineId || 'PRN-FUJI-V180');
-  const [defaultMachineName, setDefaultMachineName] = useState<string>(editingProduct?.defaultMachineName || 'Fuji Xerox Versant 180 Press');
+  const [defaultMachineId, setDefaultMachineId] = useState<string>(editingProduct?.defaultMachineId || fallbackMachineId);
+  const [defaultMachineName, setDefaultMachineName] = useState<string>(editingProduct?.defaultMachineName || fallbackMachineName);
   const [specGroups, setSpecGroups] = useState<SpecGroup[]>(() => {
     if (editingProduct?.specGroups && editingProduct.specGroups.length > 0) {
       return editingProduct.specGroups;
@@ -103,8 +109,8 @@ export const ProductStudioPage: React.FC<ProductStudioPageProps> = ({
         options: [
           {
             optionType: 'printing_mode',
-            machineId: editingProduct?.defaultMachineId || 'PRN-FUJI-V180',
-            machineName: editingProduct?.defaultMachineName || 'Fuji Xerox Versant 180 Press',
+            machineId: editingProduct?.defaultMachineId || fallbackMachineId,
+            machineName: editingProduct?.defaultMachineName || fallbackMachineName,
             label: 'ພິມ 4 ສີ (Full Color CMYK)',
             labelLo: 'ພິມ 4 ສີ (Full Color CMYK)',
             labelEn: 'Full Color CMYK',
@@ -115,8 +121,8 @@ export const ProductStudioPage: React.FC<ProductStudioPageProps> = ({
           },
           {
             optionType: 'printing_mode',
-            machineId: editingProduct?.defaultMachineId || 'PRN-FUJI-V180',
-            machineName: editingProduct?.defaultMachineName || 'Fuji Xerox Versant 180 Press',
+            machineId: editingProduct?.defaultMachineId || fallbackMachineId,
+            machineName: editingProduct?.defaultMachineName || fallbackMachineName,
             label: 'ພິມຂາວດຳ (Monochrome K)',
             labelLo: 'ພິມຂາວດຳ (Monochrome K)',
             labelEn: 'Monochrome Black & White',
@@ -162,8 +168,8 @@ export const ProductStudioPage: React.FC<ProductStudioPageProps> = ({
         setFeaturesConfig(editingProduct.featuresConfig);
       }
       setTargetMarginPercent(editingProduct.targetMarginPercent || 35);
-      setDefaultMachineId(editingProduct.defaultMachineId || 'PRN-FUJI-V180');
-      setDefaultMachineName(editingProduct.defaultMachineName || 'Fuji Xerox Versant 180 Press');
+      setDefaultMachineId(editingProduct.defaultMachineId || fallbackMachineId);
+      setDefaultMachineName(editingProduct.defaultMachineName || fallbackMachineName);
       if (editingProduct.specGroups && editingProduct.specGroups.length > 0) {
         setSpecGroups(editingProduct.specGroups);
       }

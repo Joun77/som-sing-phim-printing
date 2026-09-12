@@ -1,8 +1,7 @@
 import React from 'react';
-import { Layers3, ChevronUp, ChevronDown, Maximize2 } from 'lucide-react';
+import { Layers3, ChevronUp, ChevronDown } from 'lucide-react';
 import type { QuotationItem } from './QuotationManager';
-import { getPresetDimensions } from './QuotationManager';
-import { CustomDimensionInput } from './CustomDimensionInput';
+import { JobSizeSelectorCard } from './JobSizeSelectorCard';
 
 interface JobQuantityAndPagesSectionProps {
   activeItem: QuotationItem;
@@ -12,13 +11,6 @@ interface JobQuantityAndPagesSectionProps {
   onToggle: () => void;
   currentLang: string;
 }
-
-const PRESET_SIZES: Record<string, { w: number; h: number }> = {
-  'A3': { w: 297, h: 420 },
-  'A4': { w: 210, h: 297 },
-  'A5': { w: 148, h: 210 },
-  'A6': { w: 105, h: 148 },
-};
 
 export const JobQuantityAndPagesSection: React.FC<JobQuantityAndPagesSectionProps> = ({
   activeItem,
@@ -192,46 +184,20 @@ export const JobQuantityAndPagesSection: React.FC<JobQuantityAndPagesSectionProp
             })()}
 
             {/* Box 3: Job Size & Dimensions (ຂະໜາດຊິ້ນງານ / ຂະໜາດເຈ້ຍ) */}
-            <div className="space-y-2.5 p-4 bg-amber-50/60 border border-amber-200 rounded-2xl shadow-xs">
-              <div className="flex justify-between items-center gap-1.5">
-                <label className="text-xs font-black text-amber-950 uppercase tracking-wider flex items-center gap-1">
-                  <Maximize2 className="w-3.5 h-3.5 text-amber-700" />
-                  <span>{currentLang === 'lo' ? '3. ຂະໜາດງານ (SIZE & PRESET)' : 'JOB SIZE & PRESET'}</span>
-                  <span className="text-amber-700 font-black">*</span>
-                </label>
-                <span className="text-[10px] font-black text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-md font-sans">
-                  {activeItem.jobSizePreset || 'A4'}
-                </span>
-              </div>
-
-              {/* Multi-unit & DB Preset Component */}
-              <CustomDimensionInput
-                widthMM={currentW}
-                heightMM={currentH}
-                currentLang={currentLang}
-                onChangeMM={(wMM, hMM, presetName) => {
-                  updateActiveItem({
-                    jobWidth: wMM,
-                    jobHeight: hMM,
-                    jobSizePreset: presetName || 'Custom',
-                  });
-                }}
-              />
-
-              {/* Area Factor & Ratio Summary */}
-              <div className="p-2 bg-amber-100/70 border border-amber-200/80 rounded-xl text-[11px] text-amber-950 font-medium space-y-0.5">
-                <div className="flex justify-between">
-                  <span>ຂະໜາດງານ (ມມ):</span>
-                  <span className="font-bold font-sans">{Math.round(currentW)} × {Math.round(currentH)} mm</span>
-                </div>
-                <div className="flex justify-between border-t border-amber-200/60 pt-0.5">
-                  <span>ອັດຕาส່ວນທຽບ A4:</span>
-                  <span className="font-bold font-sans text-amber-900">
-                    {(areaRatio * 100).toFixed(0)}% ({areaRatio.toFixed(2)}x)
-                  </span>
-                </div>
-              </div>
-            </div>
+            <JobSizeSelectorCard
+              widthMM={currentW}
+              heightMM={currentH}
+              presetName={activeItem.jobSizePreset}
+              currentLang={currentLang}
+              title={currentLang === 'lo' ? '3. ຂະໜາດງານ (SIZE & PRESET)' : 'JOB SIZE & PRESET'}
+              onChange={(wMM, hMM, name) => {
+                updateActiveItem({
+                  jobWidth: wMM,
+                  jobHeight: hMM,
+                  jobSizePreset: name,
+                });
+              }}
+            />
 
           </div>
         </div>
