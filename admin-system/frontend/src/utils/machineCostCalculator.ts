@@ -88,6 +88,8 @@ export interface FormattedMachineCost {
   unitLabel: string; // 'ໜ້າ' | 'ແຜ່ນ' | 'ຮອບຕັດ' | 'ແມັດ' | 'ຫົວ'
   unitLabelEn: string; // 'page' | 'sheet' | 'cut' | 'meter' | 'book'
   isPrinter: boolean;
+  isLaser?: boolean;
+  isInkjet?: boolean;
 }
 
 /**
@@ -122,12 +124,46 @@ export function calculateMachineWearPartsRate(eq: any): number {
   const isCutter = cat.includes('cutter') || sub.includes('cutter') || sub.includes('guillotine') || sub.includes('plotter') || name.includes('cutter');
   const isBinder = cat.includes('binder') || sub.includes('binder') || name.includes('binder');
   const isLaminator = cat.includes('laminat') || sub.includes('laminat') || name.includes('laminat');
-  const isInkjet = sub.includes('inkjet') || cat.includes('inkjet') || specs.feedType !== undefined || (!isCutter && !isBinder && !isLaminator && (name.includes('tank') || name.includes('ecotank') || name.includes('l15150')));
-  const isLaser = !isCutter && !isBinder && !isLaminator && !isInkjet;
+
+  const isExplicitLaser = 
+    cat.includes('laser') || 
+    sub.includes('laser') || 
+    String(eq.printerCategory || '').toLowerCase().includes('laser') ||
+    String(specs.printerCategory || '').toLowerCase().includes('laser') ||
+    specs.inkType === 'Toner' ||
+    specs.baseType === 'Toner' ||
+    (specs.wearDrumUnitCost !== undefined && Number(specs.wearDrumUnitCost) > 0) ||
+    /xerox|laser|c8055|c5005|versant|docu|bizhub|imagepress/i.test(name);
+
+  const isExplicitInkjet = 
+    cat.includes('inkjet') || 
+    sub.includes('inkjet') || 
+    String(eq.printerCategory || '').toLowerCase().includes('inkjet') ||
+    String(specs.printerCategory || '').toLowerCase().includes('inkjet') ||
+    (specs.wearPrintheadCost !== undefined && Number(specs.wearPrintheadCost) > 0) ||
+    /inkjet|ecotank|tank|l15150|epson|maxify/i.test(name);
+
+  // 1. Dynamic Components Priority: If machine has explicit components with cost & lifeVal, sum directly!
+  if (Array.isArray(eq.components) && eq.components.length > 0) {
+    const validParts = eq.components.filter((c: any) => {
+      const cost = Number(c.cost || 0);
+      const life = Number(c.lifeVal || c.life || 0);
+      return cost > 0 && life > 0;
+    });
+
+    if (validParts.length > 0) {
+      const dynamicTotal = validParts.reduce((acc: number, c: any) => {
+        const cost = Number(c.cost || 0);
+        const life = Number(c.lifeVal || c.life || 0);
+        return acc + (life > 0 ? (cost / life) : 0);
+      }, 0);
+      return Math.round(dynamicTotal * 1000) / 1000;
+    }
+  }
 
   let totalWear = 0;
 
-  if (isInkjet) {
+  if (isExplicitInkjet) {
     // 4 Wear parts for Inkjet from Data Material
     const maintBoxCost = Number(specs.wearMaintBoxCost || eq.wearMaintBoxCost || 0);
     const maintBoxLife = Number(specs.wearMaintBoxLife || eq.wearMaintBoxLife || 0);
@@ -144,7 +180,7 @@ export function calculateMachineWearPartsRate(eq: any): number {
     const headCost = Number(specs.wearPrintheadCost || eq.wearPrintheadCost || 0);
     const headLife = Number(specs.wearPrintheadLife || eq.wearPrintheadLife || 0);
     if (headCost > 0 && headLife > 0) totalWear += (headCost / headLife);
-  } else if (isLaser) {
+  } else if (isExplicitLaser) {
     // 5 Wear parts for Laser from Data Material
     const drumCost = Number(specs.wearDrumUnitCost || eq.wearDrumUnitCost || 0);
     const drumLife = Number(specs.wearDrumUnitLife || eq.wearDrumUnitLife || 0);
@@ -227,8 +263,32 @@ export function getEquipmentAccurateCost(eq: any): FormattedMachineCost {
   const isCutter = !isExplicitPrinter && (cat.includes('cutter') || sub.includes('cutter') || sub.includes('guillotine') || sub.includes('plotter') || name.includes('cutter') || name.includes('guillotine') || name.includes('qzyk') || name.includes('polar'));
   const isBinder = !isExplicitPrinter && (cat.includes('binder') || sub.includes('binder') || name.includes('binder') || name.includes('horizon') || name.includes('superbind'));
   const isLaminator = !isExplicitPrinter && (cat.includes('laminat') || sub.includes('laminat') || name.includes('laminat') || name.includes('foliant'));
-  const isInkjet = isExplicitPrinter && (sub.includes('inkjet') || cat.includes('inkjet') || eq.specs?.feedType !== undefined || name.includes('tank') || name.includes('ecotank') || name.includes('l15150') || name.includes('epson'));
   const isPrinter = isExplicitPrinter || (!isCutter && !isBinder && !isLaminator);
+
+  const isExplicitInkjet = 
+    cat.includes('inkjet') || 
+    sub.includes('inkjet') || 
+    String(eq.printerCategory || '').toLowerCase().includes('inkjet') ||
+    String(eq.specs?.printerCategory || '').toLowerCase().includes('inkjet') ||
+    String(eq.specs?.machineryTypeCategory || '').toLowerCase().includes('inkjet') ||
+    (eq.specs?.wearPrintheadCost !== undefined && Number(eq.specs?.wearPrintheadCost) > 0) ||
+    /inkjet|ecotank|tank|l15150|epson|maxify/i.test(name);
+
+  const isExplicitLaser = 
+    !isExplicitInkjet && (
+      cat.includes('laser') || 
+      sub.includes('laser') || 
+      String(eq.printerCategory || '').toLowerCase().includes('laser') ||
+      String(eq.specs?.printerCategory || '').toLowerCase().includes('laser') ||
+      String(eq.specs?.machineryTypeCategory || '').toLowerCase().includes('laser') ||
+      eq.specs?.inkType === 'Toner' ||
+      eq.specs?.baseType === 'Toner' ||
+      /xerox|laser|c8055|c5005|versant|docu|bizhub|imagepress/i.test(name) ||
+      (eq.specs?.wearDrumUnitCost !== undefined && Number(eq.specs?.wearDrumUnitCost) > 0)
+    );
+
+  const isLaser = isPrinter && isExplicitLaser;
+  const isInkjet = isPrinter && !isLaser;
 
   const isGuillotine = isCutter && (sub.includes('guillotine') || name.includes('guillotine') || cat.includes('guillotine'));
   const unitLabel = isGuillotine ? 'ຮອບຕັດ' : (isCutter || isLaminator) ? 'ແມັດ' : isBinder ? 'ຫົວ' : 'ໜ້າ';
@@ -259,6 +319,10 @@ export function getEquipmentAccurateCost(eq: any): FormattedMachineCost {
     eq.specs?.expectedLife ||
     eq.expectedLifeA4Pages ||
     eq.specs?.expectedLifeA4Pages ||
+    eq.totalLifespanUnits ||
+    eq.specs?.totalLifespanUnits ||
+    eq.expectedLifeUnits ||
+    eq.specs?.expectedLifeUnits ||
     eq.TargetTotalPages ||
     eq.printedPagesCapacity ||
     eq.expected_life_pages ||
@@ -324,6 +388,8 @@ export function getEquipmentAccurateCost(eq: any): FormattedMachineCost {
     unitLabel,
     unitLabelEn,
     isPrinter,
+    isLaser,
+    isInkjet,
   };
 }
 
@@ -463,8 +529,6 @@ export function calculateEquipmentPrintCost(
 
   const persistentTotalCost = Number(
     eq.totalPrintCostPerPage ?? 
-    eq.calculatedCostPerPage ?? 
-    eq.costPerPage ?? 
     eq.specs?.totalPrintCostPerPage ?? 
     0
   );
@@ -475,26 +539,35 @@ export function calculateEquipmentPrintCost(
   const inkSlotsBreakdown: LinkedInkSlotDetail[] = [];
 
   if (!isPostPress) {
+    const isLaser = accurate.isLaser;
+
     const oemSlots = 
       eq.oem_baseline_specs?.slots || 
       eq.specs?.oem_baseline_specs?.slots || 
       eq.oemBaselineInks || 
       eq.specs?.oemBaselineInks || 
-      [
+      eq.printerInkSlots ||
+      eq.specs?.printerInkSlots ||
+      (isLaser ? [
+        { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'DOCU-C5005-K', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 26000, oemPrice: 450000 },
+        { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'DOCU-C5005-C', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 25000, oemPrice: 350000 },
+        { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'DOCU-C5005-M', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 25000, oemPrice: 350000 },
+        { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'DOCU-C5005-Y', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 25000, oemPrice: 350000 }
+      ] : [
         { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500, oemPrice: 450000 },
         { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
         { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
         { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 }
-      ];
+      ]);
 
     if (oemSlots && oemSlots.length > 0) {
       oemSlots.forEach((oemSlot: any, idx: number) => {
         const slotPos = oemSlot.slotPosition || `Slot ${idx + 1}`;
         const isBlack = (oemSlot.colorGroup || '').toLowerCase().includes('black') || (oemSlot.colorGroup || '').toLowerCase().includes('k') || slotPos.toLowerCase().includes('black') || slotPos.toLowerCase().includes('slot 1');
         const colorGroupName = isBlack ? 'Black' : (oemSlot.colorGroup || (idx === 1 ? 'Cyan' : idx === 2 ? 'Magenta' : idx === 3 ? 'Yellow' : `Color ${idx + 1}`));
-        const defaultYield = isBlack ? 7500 : 6000;
-        const defaultPrice = isBlack ? 450000 : 320000;
-        const defaultVol = isBlack ? 127 : 70;
+        const defaultYield = isLaser ? (isBlack ? 26000 : 25000) : (isBlack ? 7500 : 6000);
+        const defaultPrice = isLaser ? (isBlack ? 450000 : 350000) : (isBlack ? 450000 : 320000);
+        const defaultVol = isLaser ? 100 : (isBlack ? 127 : 70);
 
         const activeLink = links.find((lnk: any) => 
           lnk.slotPosition === slotPos || 
@@ -516,7 +589,7 @@ export function calculateEquipmentPrintCost(
         const oemVol = Number(oemSlot.oemStandardVolumeMl || oemSlot.volume || defaultVol);
         const rawYield = Number(oemSlot.oemStandardIsoYieldA4 || (oemSlot.colorGroup === 'Black' ? (eq.blackYieldPages || defaultYield) : (eq.colorYieldPages || defaultYield)));
         const yld = rawYield > 500 ? rawYield : defaultYield;
-        const isoRate = yld > 0 ? (oemVol / yld) : 0.0169;
+        const isoRate = yld > 0 ? (oemVol / yld) : (isLaser ? 0.00385 : 0.0169);
         
         let slotCost = yld > 0 ? (Number(oemSlot.oemPrice || defaultPrice) / yld) : ((Number(oemSlot.oemPrice || defaultPrice) / oemVol) * isoRate);
         let actualInkPrice = Number(oemSlot.oemPrice || defaultPrice);
@@ -549,22 +622,25 @@ export function calculateEquipmentPrintCost(
             0
           );
 
-          const actualCostPerMl = actualVol > 0 ? (actualInkPrice / actualVol) : 0;
-          let actualRateMlPerSheet: number;
+          const actualCostPerUnit = Number(
+            ink.costPerConsumptionUnit || 
+            (actualVol > 0 ? (actualInkPrice / actualVol) : 0)
+          );
+          let actualRatePerSheet: number;
           if (rawInkYield > 500) {
-            actualRateMlPerSheet = actualVol / rawInkYield;
+            actualRatePerSheet = actualVol / rawInkYield;
             slotYield = rawInkYield;
           } else if (actualVol > oemVol * 1.5) {
-            // Bulk ink refill container (e.g. 500ml, 1000ml) without explicit page yield
+            // Bulk ink refill container (e.g. 500ml, 1000g) without explicit page yield
             // Consumes ink at printer's standard ISO baseline rate
-            actualRateMlPerSheet = isoRate;
-            slotYield = actualRateMlPerSheet > 0 ? Math.round(actualVol / actualRateMlPerSheet) : yld;
+            actualRatePerSheet = isoRate;
+            slotYield = actualRatePerSheet > 0 ? Math.round(actualVol / actualRatePerSheet) : yld;
           } else {
             // Standard cartridge / bottle capacity matching OEM
-            actualRateMlPerSheet = yld > 0 ? (actualVol / yld) : isoRate;
+            actualRatePerSheet = yld > 0 ? (actualVol / yld) : isoRate;
             slotYield = yld;
           }
-          slotCost = actualCostPerMl * actualRateMlPerSheet;
+          slotCost = actualCostPerUnit * actualRatePerSheet;
         }
         
         const roundedSlotCost = Math.round(slotCost * 100) / 100;

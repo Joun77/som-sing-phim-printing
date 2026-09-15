@@ -61,15 +61,22 @@ export const MaterialInventorySearchModal: React.FC<MaterialInventorySearchModal
     const multiplier = Number(item.purchaseMultiplier || 1);
     const unitPrice = multiplier > 1 ? Math.round(pkgPrice / multiplier) : (Number(item.costPerConsumptionUnit || item.unitCost || 50));
 
+    const isRollSqm = (item.consumptionUnit || '').toLowerCase().includes('m²') ||
+      (item.consumptionUnit || '').toLowerCase().includes('m2') ||
+      (item.consumptionUnit || '').toLowerCase().includes('ຕລ.ມ') ||
+      (item.consumptionUnit || '').toLowerCase().includes('ຕາຕະລາງແມັດ') ||
+      (item.name || '').toLowerCase().includes('ມ້ວນ') ||
+      (item.name || '').toLowerCase().includes('roll');
+
     const finishingItem: FinishingMaterialItem = {
       id: `mat-${Date.now()}-${Math.random().toString().slice(-4)}`,
       name: item.name,
-      calcMode: multiplier > 1 ? 'box' : 'unit',
+      calcMode: isRollSqm ? 'sqm' : (multiplier > 1 ? 'box' : 'unit'),
       packagePrice: pkgPrice,
       unitsPerPackage: multiplier > 1 ? multiplier : 100,
       unitCost: unitPrice,
       qtyPerItem: 1,
-      unitName: item.consumptionUnit || 'ອັນ',
+      unitName: isRollSqm ? 'm²' : (item.consumptionUnit || 'ອັນ'),
       category: (item.category as any) || 'other',
     };
 

@@ -62,9 +62,10 @@ type CalculationRequest struct {
 	Quantity         int                 `json:"quantity" binding:"required,gt=0"`
 	PaperSku         string              `json:"paper_sku"`
 	PaperName        string              `json:"paper_name"`
-	PaperCostPerUnit float64             `json:"paper_cost_per_unit"` // Cost per ream/pack or unit
-	PaperFormat      string              `json:"paper_format"`        // "sheet" | "roll"
-	SheetsPerPack    int                 `json:"sheets_per_pack"`     // Sheets per pack/ream (default 500)
+	PaperCostPerUnit    float64             `json:"paper_cost_per_unit"` // Cost per ream/pack or unit
+	PaperCostIsPerSheet bool                `json:"paper_cost_is_per_sheet"` // If true, PaperCostPerUnit is already per parent sheet
+	PaperFormat         string              `json:"paper_format"`        // "sheet" | "roll"
+	SheetsPerPack       int                 `json:"sheets_per_pack"`     // Sheets per pack/ream (default 500 if pack cost)
 	CutsPerSheet     int                 `json:"cuts_per_sheet"`      // Number of brochure/job pieces cut per large sheet (default 1)
 	Allocations      []PrinterAllocation `json:"allocations"`
 
@@ -528,14 +529,17 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		totalLargeSheets := decimal.NewFromFloat(math.Ceil(reqSheets * (1.0 + spoilPct)))
 
 		sheetsPerPack := req.SheetsPerPack
-		if sheetsPerPack <= 0 {
-			sheetsPerPack = 500
-		}
-
 		dCostPerPack := decimal.NewFromFloat(req.PaperCostPerUnit)
 		dCostPerSheet := dCostPerPack
-		if req.PaperCostPerUnit > 0 && sheetsPerPack > 1 {
-			dCostPerSheet = dCostPerPack.Div(decimal.NewFromInt(int64(sheetsPerPack)))
+
+		// Only divide if explicitly marked as pack/ream cost AND sheetsPerPack > 1
+		if !req.PaperCostIsPerSheet && req.PaperCostPerUnit > 0 {
+			if sheetsPerPack <= 0 {
+				sheetsPerPack = 500
+			}
+			if sheetsPerPack > 1 {
+				dCostPerSheet = dCostPerPack.Div(decimal.NewFromInt(int64(sheetsPerPack)))
+			}
 		}
 		dPaperCost = totalLargeSheets.Mul(dCostPerSheet)
 	}

@@ -3,17 +3,15 @@ import { Settings, Plus, Wrench, ShieldAlert, AlertTriangle, ArrowRight, Sparkle
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import EquipmentTable from './EquipmentTable';
-import AddEquipmentModal from './modals/AddEquipmentModal';
 import EditEquipmentModal from './modals/EditEquipmentModal';
 import EquipmentDetailsPage from './details/EquipmentDetailsPage';
 
 export default function EquipmentManagement() {
-  const { equipment, deleteEquipment, updateEquipmentMaintenance, showToast, askConfirmation, formatCurrency } = useApp();
+  const { equipment, deleteEquipment, updateEquipmentMaintenance, showToast, askConfirmation, formatCurrency, setActiveTab } = useApp();
   const { i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
 
   const [activeCategory, setActiveCategory] = useState('All'); // All, Printer, Cutter, Binder, Laminator
-  const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(null);
 
   // Predictive Maintenance Detection (Components wear >= 90% or overdue interval)
@@ -116,6 +114,19 @@ export default function EquipmentManagement() {
               : 'Track SLA operation parameters, equipment wear, & component metrics'}
           </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (setActiveTab) {
+              setActiveTab('inbound');
+            }
+          }}
+          className="px-5 py-2.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white rounded-2xl text-xs font-black shadow-lg shadow-sky-600/25 transition flex items-center gap-2 cursor-pointer active:scale-95 border-none shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          <span>{currentLang === 'lo' ? 'ນຳເຂົ້າເຄື່ອງຈັກຜ່ານການຈັດຊື້ (New Inbound Machinery)' : 'New Inbound Machinery'}</span>
+        </button>
       </div>
 
       {/* Predictive Maintenance & Critical Component Wear Alert Banner */}

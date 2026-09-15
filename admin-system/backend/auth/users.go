@@ -139,6 +139,10 @@ func HandleGetAdminUsers(c *gin.Context) {
 		users = append(users, u)
 	}
 
+	if err := rows.Err(); err != nil {
+		log.Printf("[DB ERROR] Users rows error: %v", err)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": users})
 }
 

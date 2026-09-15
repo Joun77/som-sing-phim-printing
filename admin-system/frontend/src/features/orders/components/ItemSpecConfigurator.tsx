@@ -250,6 +250,15 @@ export function calculateItemCosting(item: any, inventory: any[] = [], equipment
     finishingMaterialsCost = (item.finishingMaterials || []).reduce((sum: number, mat: FinishingMaterialItem) => {
       const uCost = Number(mat.unitCost) || 0;
       const q = Number(mat.qtyPerItem) || 1;
+      const isSqm = mat.calcMode === 'sqm' || 
+        (mat.unitName || '').toLowerCase().includes('m²') || 
+        (mat.unitName || '').toLowerCase().includes('m2') || 
+        (mat.unitName || '').toLowerCase().includes('ຕລ.ມ') || 
+        (mat.unitName || '').toLowerCase().includes('ຕາຕະລາງແມັດ');
+      if (isSqm) {
+        const itemAreaM2 = (Number(jobW || 210) * Number(jobH || 297)) / 1000000.0;
+        return sum + Math.round(uCost * itemAreaM2 * q * qty);
+      }
       return sum + Math.round(uCost * q * qty);
     }, 0);
   }

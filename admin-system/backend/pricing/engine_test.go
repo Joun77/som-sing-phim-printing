@@ -806,6 +806,30 @@ func TestPackagingPricing(t *testing.T) {
 	}
 }
 
+func TestPaperCostIsPerSheetDirect(t *testing.T) {
+	// Verifies that when PaperCostIsPerSheet is true, a sheet cost from warehouse inventory
+	// (e.g. 184 LAK/sheet) is NOT divided by 500 even when SheetsPerPack is unspecified (0)
+	req := baseReq()
+	req.Quantity = 500
+	req.CutsPerSheet = 20 // 500 / 20 = 25 parent sheets
+	req.SpoilagePercent = 0.0
+	req.PaperCostPerUnit = 184.0 // 184 LAK per parent sheet directly from warehouse
+	req.PaperCostIsPerSheet = true
+	req.SheetsPerPack = 0 // Unspecified, should NOT default to dividing by 500
+
+	res, err := CalculateJobPricing(req)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	// Expected: 25 parent sheets * 184 LAK = 4,600 LAK (NOT 9.2 LAK from 4600/500)
+	expectedPaperCost := 4600.0
+	if res.PaperCost != expectedPaperCost {
+		t.Errorf("Expected PaperCost %f (direct sheet cost), got %f (likely double divided by 500)", expectedPaperCost, res.PaperCost)
+	}
+}
+
+
 
 
 

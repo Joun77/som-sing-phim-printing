@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import CustomerCombobox from '@components/common/CustomerCombobox';
 import ManualPrinterAllocator from '@features/orders/components/ManualPrinterAllocator';
 import { PrinterAllocation } from '@features/orders/types';
+import type { Equipment } from '@features/equipment/types';
 import { calculateMachineUnitCost, getEquipmentAccurateCost, calculateEquipmentPrintCost } from '@utils/machineCostCalculator';
 import { ArtworkColorPreviewModal } from './ArtworkColorPreviewModal';
 import { CustomerCategoryModal } from '@features/customers/components/CustomerCategoryModal';
@@ -32,6 +33,7 @@ import {
 
 export type { FinishingMaterialItem, PricingTemplatePreset };
 export { DEFAULT_PRICING_TEMPLATES };
+import { getAuthHeaders } from '@utils/authHeaders';
 import { 
   Calculator, 
   ShieldAlert, 
@@ -103,6 +105,15 @@ export interface ItemModuleToggles {
   laborAndSetup: boolean;       // 5. Labor & Setup
   packagingDelivery: boolean;   // 6. Packaging & Delivery
 }
+
+export const DEFAULT_MODULE_TOGGLES: ItemModuleToggles = {
+  paper: true,
+  printEngine: true,
+  postPressMachinery: false,
+  finishingMaterials: false,
+  laborAndSetup: true,
+  packagingDelivery: false
+};
 
 const DEFAULT_CHANNELS = [
   { channel_name: 'C', density_pct: 15, is_spot_color: false },
@@ -226,7 +237,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   const [quotationSearchQuery, setQuotationSearchQuery] = useState('');
   const itemFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Dynamic 1-Click Fast Presets (LocalStorage synced)
+  // Dynamic 1-Click Fast Presets (PostgreSQL DB + LocalStorage fallback)
   const [customFastPresets, setCustomFastPresets] = useState<PricingTemplatePreset[]>(() => {
     try {
       const saved = localStorage.getItem('somsing_custom_fast_presets');
@@ -236,6 +247,37 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     }
     return DEFAULT_PRICING_TEMPLATES.slice(0, 5);
   });
+
+  useEffect(() => {
+    fetch('/api/v1/quotations/templates', { headers: getAuthHeaders() })
+      .then(res => res.ok ? res.json() : null)
+      .then(resData => {
+        const list = Array.isArray(resData) ? resData : (resData?.data || []);
+        if (list && list.length > 0) {
+          const mapped: PricingTemplatePreset[] = list.map((item: any) => {
+            const spec = item.spec || {};
+            return {
+              id: item.id,
+              name: item.name || item.nameEn || item.nameLao,
+              nameLao: item.nameLao || item.name,
+              nameEn: item.nameEn || item.name,
+              category: item.category || 'General',
+              iconName: item.iconName || 'Sparkles',
+              description: item.description || '',
+              ...spec
+            };
+          });
+          setCustomFastPresets(mapped);
+          try {
+            localStorage.setItem('somsing_custom_fast_presets', JSON.stringify(mapped));
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      })
+      .catch(console.error);
+  }, []);
+
   const [isSavePresetModalOpen, setIsSavePresetModalOpen] = useState(false);
   const [newPresetName, setNewPresetName] = useState('');
   const [newPresetIcon, setNewPresetIcon] = useState('Sparkles');
@@ -408,7 +450,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const covK = specs ? (specs.kCoverage !== undefined ? Number(specs.kCoverage) : (specs.avgCovK !== undefined ? Number(specs.avgCovK) : 5)) : 5;
     const avgCov = Math.round((covC + covM + covY + covK) / (isMono ? 1 : 4));
 
-    const defaultPrinter = printers[0] || { id: 'PRN-DEFAULT', name: 'Default Printer' };
+    const defaultPrinter: Equipment = printers[0] || ({ id: 'PRN-DEFAULT', name: 'Default Printer' } as unknown as Equipment);
     const defaultPaper = papers[0]?.id || '';
     const defaultPostPress = (isBook && postPressEquipment.length > 0) ? [postPressEquipment[0].id] : [];
     const defPrnCost = calculateEquipmentPrintCost(defaultPrinter, printerColorLinks, inventory, 'Printer');
@@ -1031,6 +1073,22 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       console.error(e);
     }
 
+    // Persist to PostgreSQL backend database
+    fetch('/api/v1/quotations/templates', {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: newTpl.id,
+        name: newTpl.nameEn || (newTpl as any).name || '',
+        nameLao: newTpl.nameLao || (newTpl as any).name || '',
+        nameEn: newTpl.nameEn || (newTpl as any).name || '',
+        category: newTpl.category || 'Custom',
+        iconName: newTpl.iconName || 'Sparkles',
+        description: newTpl.description || '',
+        spec: newTpl
+      })
+    }).catch(console.error);
+
     setIsSavePresetModalOpen(false);
     setNewPresetName('');
     if (showToast) showToast(`ບັນທຶກແມ່ແບບດ່ວນ "${newTpl.nameLao}" ສຳເລັດ!`, 'success');
@@ -1045,6 +1103,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     } catch (e) {
       console.error(e);
     }
+    fetch(`/api/v1/quotations/templates/${tplId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    }).catch(console.error);
     if (showToast) showToast('ລຶບແມ່ແບບດ່ວນສຳເລັດ!', 'info');
   };
 
@@ -1630,9 +1692,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const rawInkCost = Math.round(totalInkCostAccum);
     const rawMachineOverhead = machDepr + machMaint;
 
-    // Guillotine cutting flat setup fee: 10,000 LAK when explicitly enabled by user
-    const isGuillotine = Boolean(item.requiresGuillotineCut);
-    const guillotineFee = isGuillotine ? 10000 : 0;
+    // Guillotine cutting setup fee: 0 LAK (Cutting is handled 100% via post-press machinery selection)
+    const guillotineFee = 0;
 
     const rawPostPressCost = (item.selectedPostPressIds || []).reduce((sum, machId) => {
       const mach = equipment.find(e => e.id === machId);
@@ -1642,11 +1703,20 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         ? accCost.totalMachineCost
         : (Number((mach as any).costPerPage) || Number((mach as any).calculatedCostPerPage) || 0);
       return sum + Math.round(rate * item.printVolume);
-    }, 0) + guillotineFee;
+    }, 0);
 
     const rawFinishingMaterialsCost = (item.finishingMaterials || []).reduce((sum, mat) => {
       const uCost = Number(mat.unitCost) || 0;
       const q = Number(mat.qtyPerItem) || 1;
+      const isSqm = mat.calcMode === 'sqm' || 
+        (mat.unitName || '').toLowerCase().includes('m²') || 
+        (mat.unitName || '').toLowerCase().includes('m2') || 
+        (mat.unitName || '').toLowerCase().includes('ຕລ.ມ') || 
+        (mat.unitName || '').toLowerCase().includes('ຕາຕະລາງແມັດ');
+      if (isSqm) {
+        const itemAreaM2 = (Number(jobW || 210) * Number(jobH || 297)) / 1000000.0;
+        return sum + Math.round(uCost * itemAreaM2 * q * item.printVolume);
+      }
       return sum + Math.round(uCost * q * item.printVolume);
     }, 0);
 
@@ -3580,7 +3650,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                               const nextState = !isLaborActive;
                               updateActiveItem({
                                 activeModules: {
-                                  ...(activeItem.activeModules || {}),
+                                  ...(activeItem.activeModules || DEFAULT_MODULE_TOGGLES),
                                   laborAndSetup: nextState
                                 },
                                 laborPercent: nextState ? (activeItem.laborPercent || 10) : 0
@@ -3606,7 +3676,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                             type="button"
                             onClick={() => updateActiveItem({ 
                               laborMode: 'percent',
-                              activeModules: { ...(activeItem.activeModules || {}), laborAndSetup: true }
+                              activeModules: { ...(activeItem.activeModules || DEFAULT_MODULE_TOGGLES), laborAndSetup: true }
                             })}
                             className={`px-2 py-1 rounded-md transition cursor-pointer ${
                               (activeItem.laborMode || 'percent') === 'percent'
@@ -3620,7 +3690,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                             type="button"
                             onClick={() => updateActiveItem({ 
                               laborMode: 'manual',
-                              activeModules: { ...(activeItem.activeModules || {}), laborAndSetup: true }
+                              activeModules: { ...(activeItem.activeModules || DEFAULT_MODULE_TOGGLES), laborAndSetup: true }
                             })}
                             className={`px-2 py-1 rounded-md transition cursor-pointer ${
                               (activeItem.laborMode || 'percent') === 'manual'
@@ -3657,7 +3727,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                                   const val = Math.max(0, Number(e.target.value));
                                   updateActiveItem({ 
                                     laborPercent: val,
-                                    activeModules: { ...(activeItem.activeModules || {}), laborAndSetup: true }
+                                    activeModules: { ...(activeItem.activeModules || DEFAULT_MODULE_TOGGLES), laborAndSetup: true }
                                   });
                                 }}
                                 className="w-16 px-2 py-1 bg-white border border-blue-300 rounded-lg text-right font-black font-sans text-blue-950 text-xs shadow-2xs focus:outline-none focus:border-blue-500"
@@ -3680,7 +3750,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                               type="button"
                               onClick={() => updateActiveItem({ 
                                 laborPercent: chip.val,
-                                activeModules: { ...(activeItem.activeModules || {}), laborAndSetup: true }
+                                activeModules: { ...(activeItem.activeModules || DEFAULT_MODULE_TOGGLES), laborAndSetup: true }
                               })}
                               className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
                                 (activeItem.laborPercent ?? 0) === chip.val
@@ -3711,7 +3781,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                                   const val = Math.max(0, Number(e.target.value));
                                   updateActiveItem({ 
                                     laborCostManual: val,
-                                    activeModules: { ...(activeItem.activeModules || {}), laborAndSetup: true }
+                                    activeModules: { ...(activeItem.activeModules || DEFAULT_MODULE_TOGGLES), laborAndSetup: true }
                                   });
                                 }}
                                 className="w-28 px-2 py-1 bg-white border border-blue-300 rounded-lg text-right font-black font-mono text-blue-950 text-xs shadow-2xs focus:outline-none focus:border-blue-500"
@@ -3727,7 +3797,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                               type="button"
                               onClick={() => updateActiveItem({ 
                                 laborCostManual: cash,
-                                activeModules: { ...(activeItem.activeModules || {}), laborAndSetup: true }
+                                activeModules: { ...(activeItem.activeModules || DEFAULT_MODULE_TOGGLES), laborAndSetup: true }
                               })}
                               className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
                                 (activeItem.laborCostManual || 50000) === cash

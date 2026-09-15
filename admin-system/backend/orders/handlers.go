@@ -800,6 +800,11 @@ func dischargeFIFOStockForOrder(o Order, allowNegativeStock bool) error {
 				spoilageCost = c
 			}
 
+			usedOffcutLot, _ := item.Specs["used_offcut_lot_id"].(string)
+			if usedOffcutLot == "" {
+				usedOffcutLot, _ = item.Specs["usedOffcutLotId"].(string)
+			}
+
 			// Deduct Paper and Ink using inventory.DeductInventoryForJob inside DB transaction
 			err := inventory.DeductInventoryForJob(tx, inventory.JobDeductionSpec{
 				OrderID:                 o.ID,
@@ -809,6 +814,7 @@ func dischargeFIFOStockForOrder(o Order, allowNegativeStock bool) error {
 				PageCount:               item.PageCount,
 				CoverPaperID:            item.CoverPaperID,
 				InnerPaperID:            item.InnerPaperID,
+				UsedOffcutLotID:         usedOffcutLot,
 				ColorMode:               colorMode,
 				MachineID:               item.MachineID,
 				AvgCovC:                 item.AvgCovC,

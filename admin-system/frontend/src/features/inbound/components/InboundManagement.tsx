@@ -25,7 +25,8 @@ import {
   Wrench,
   ArrowUpDown,
   ArrowDownWideNarrow,
-  ArrowUpNarrowWide
+  ArrowUpNarrowWide,
+  History
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
@@ -210,32 +211,58 @@ export default function InboundManagement() {
 
         // 2. Map directly from PostgreSQL (Database as Single Source of Truth)
         if (dbRows.length > 0) {
-          const mapped = dbRows
-            .filter((item: any) => !deletedIds.has(item.id) && !deletedIds.has(item.id?.toLowerCase()))
-            .map((item: any) => ({
-              id: item.id,
-              poNumber: item.poNumber || item.id,
-              receiptDate: item.inboundDate || new Date().toISOString().split('T')[0],
-              category: item.category,
-              categoryPill: item.category,
-              name: resolveInboundItemName(item),
-              itemName: resolveInboundItemName(item),
-              sku: item.skuCode,
-              currentQty: item.quantity || 1,
-              initialQty: item.quantity || 1,
-              unit: (item.category === 'PRINTER' || item.category === 'MACHINERY') ? 'ເຄື່ອງ' : item.category === 'INK' ? 'ຂວດ' : (item.unit || 'ແຜ່ນ'),
-              subUnit: `(${item.quantity} ${item.unit || 'Unit'})`,
-              supplier: item.supplierName || 'Supplier',
-              totalPrice: item.totalPrice || 0,
-              paymentMethod: item.paymentMethod || 'TRANSFER',
-              origin: item.origin || 'TH',
-              specs: item.specs || {},
-              docs: {
-                productPhoto: item.productImage || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='100%25' height='100%25' fill='%23f1f5f9'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%2364748b'%3EProduct Photo%3C/text%3E%3C/svg%3E",
-                paymentSlip: item.receiptSlip || ''
-              },
-              receiptUrl: item.receiptSlip || ''
-            }));
+          const mapped = dbRows.map((item: any) => {
+              const isMachinery = item.category === 'PRINTER' || item.category === 'MACHINERY' || item.category === 'EQUIPMENT';
+              const isInkItem = item.category === 'INK';
+              const isPaperItem = item.category === 'PAPER' || item.category === 'MATERIAL';
+
+              let resolvedUnit = item.unit || 'Unit';
+              if (isMachinery) {
+                resolvedUnit = 'ເຄື່ອງ';
+              } else if (isInkItem) {
+                resolvedUnit = 'ຂວດ';
+              } else if (isPaperItem) {
+                const fmt = (item.specs?.paperFormat || item.paperFormat || item.specs?.formFactor || '').toLowerCase();
+                const rawUnit = item.unit || item.specs?.packagingType || '';
+                const sheetsPerPack = Number(item.specs?.sheetsPerPack || item.specs?.sheets_per_ream || item.specs?.sheets_per_pack || 500);
+                if (rawUnit && rawUnit !== 'Unit' && rawUnit !== 'undefined') {
+                  if ((fmt.includes('cut') || fmt.includes('sheet') || fmt.includes('parent')) && (rawUnit === 'ມ້ວນ' || rawUnit.toLowerCase() === 'roll')) {
+                    resolvedUnit = sheetsPerPack >= 500 ? 'ຣີມ' : 'ແພັກ';
+                  } else {
+                    resolvedUnit = rawUnit;
+                  }
+                } else {
+                  resolvedUnit = sheetsPerPack >= 500 ? 'ຣີມ' : 'ແພັກ';
+                }
+              }
+
+              return {
+                id: item.id,
+                poNumber: item.poNumber || item.id,
+                receiptDate: item.inboundDate || new Date().toISOString().split('T')[0],
+                category: item.category,
+                categoryPill: item.category,
+                name: resolveInboundItemName(item),
+                itemName: resolveInboundItemName(item),
+                sku: item.skuCode,
+                currentQty: item.quantity || 1,
+                initialQty: item.quantity || 1,
+                unit: resolvedUnit,
+                subUnit: `(${item.quantity} ${resolvedUnit})`,
+                supplier: item.supplierName || 'Supplier',
+                totalPrice: item.totalPrice || 0,
+                paymentMethod: item.paymentMethod || 'TRANSFER',
+                origin: item.origin || 'TH',
+                specs: item.specs || {},
+                isEdited: Boolean(item.isEdited || item.is_edited),
+                editReason: item.editReason || item.edit_reason || '',
+                docs: {
+                  productPhoto: item.productImage || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='100%25' height='100%25' fill='%23f1f5f9'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%2364748b'%3EProduct Photo%3C/text%3E%3C/svg%3E",
+                  paymentSlip: item.receiptSlip || ''
+                },
+                receiptUrl: item.receiptSlip || ''
+              };
+            });
 
           setInboundList(mapped);
           localStorage.setItem('som_sing_inbound_list', JSON.stringify(mapped));
@@ -475,7 +502,8 @@ export default function InboundManagement() {
       origin: item.origin || 'TH',
       productImage: item.productImage || item.docs?.productPhoto || '',
       receiptSlip: item.receiptSlip || item.docs?.paymentSlip || item.receiptUrl || '',
-      specs: item.specs || {}
+      specs: item.specs || {},
+      editReason: item.editReason || ''
     };
 
     const url = isUpdate ? `/api/inbound/${item.id}` : '/api/inbound';
@@ -488,7 +516,12 @@ export default function InboundManagement() {
         body: JSON.stringify(apiPayload)
       });
       if (!res.ok) {
-        console.warn('Inbound API save warning:', await res.text());
+        const errData = await res.json().catch(() => ({}));
+        if (errData.code === 'REASON_REQUIRED') {
+          showToast(errData.message || 'Edit reason is mandatory', 'warning');
+        } else {
+          console.warn('Inbound API save warning:', errData);
+        }
       }
     } catch (err) {
       console.error('Inbound API save error:', err);
@@ -550,19 +583,23 @@ export default function InboundManagement() {
     updateInboundEntry(newLog);
 
     if (type === 'PRINTER' || type === 'MACHINERY') {
+      const resolvedCategory = data.category || (type === 'PRINTER' ? 'Printer' : 'Processing Tools');
       addEquipment({
         ...data,
-        category: type === 'PRINTER' ? 'Printer' : 'Processing Tools',
+        id: logId,
+        inboundId: logId,
+        sku: resolvedSku,
+        category: resolvedCategory,
         status: 'In Use'
       });
 
-      if (type === 'PRINTER' && Array.isArray(data.printerColorLinks)) {
+      if ((type === 'PRINTER' || resolvedCategory === 'Printer') && Array.isArray(data.printerColorLinks)) {
         data.printerColorLinks.forEach((link: any) => {
           const vol = Number(link.oemStandardVolumeMl) || 100;
           const yieldPages = Number(link.oemStandardIsoYieldA4) || 5000;
           const baseRate = vol / yieldPages;
           addPrinterColorLink({
-            assetId: data.id,
+            assetId: logId,
             inkCode: link.oemInkCode || link.inkCode,
             slotPosition: link.slotPosition,
             oemStandardVolumeMl: vol,
@@ -606,8 +643,8 @@ export default function InboundManagement() {
           name: data.name || resolvedItemName,
           category: isSheetPaper ? 'Paper' : (isInk ? 'Ink' : 'Finishing'),
           stockQty: totalUnits,
-          consumptionUnit: isSheetPaper ? 'ແຜ່ນ' : (isInk ? 'ml' : (data.unit || 'Units')),
-          purchaseUnit: isSheetPaper ? (data.unit || 'ແພັກ') : (isInk ? (data.unit || 'ຂວດ') : (data.unit || 'Units')),
+          consumptionUnit: data.consumptionUnit || (isSheetPaper ? 'ແຜ່ນ' : (isInk ? 'ml' : (data.unit || 'Units'))),
+          purchaseUnit: data.purchaseUnit || (isSheetPaper ? (data.unit || 'ແພັກ') : (isInk ? (data.unit || 'ຂວດ') : (data.unit || 'Units'))),
           purchaseMultiplier: multiplier,
           costPerPurchaseUnit: unitPrice,
           costPerConsumptionUnit: perUnitConsumptionPrice,
@@ -1162,9 +1199,20 @@ export default function InboundManagement() {
                       {item.specs?.materialId || item.sku || item.skuCode || item.specs?.skuCode || item.specs?.sku || item.poNumber}
                     </td>
                     <td className="py-4 px-5 max-w-[280px]">
-                      <span className="font-bold text-slate-900 block group-hover:text-sky-600 transition truncate" title={resolveInboundItemName(item)}>
-                        {resolveInboundItemName(item)}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 block group-hover:text-sky-600 transition truncate" title={resolveInboundItemName(item)}>
+                          {resolveInboundItemName(item)}
+                        </span>
+                        {item.isEdited && (
+                          <span
+                            title={item.editReason ? `ແກ້ໄຂແລ້ວ: ${item.editReason}` : 'ແກ້ໄຂແລ້ວ (Edited)'}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-50 text-amber-700 border border-amber-300 shrink-0"
+                          >
+                            <History className="w-2.5 h-2.5" />
+                            EDITED
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-4 px-5 text-right whitespace-nowrap">
                       {(() => {
@@ -1191,26 +1239,49 @@ export default function InboundManagement() {
                           );
                         }
                         if (cat === 'PAPER' || cat === 'MATERIAL') {
-                          const isSheet = (item.specs?.paperFormat || item.paperFormat || 'sheet').toLowerCase() === 'sheet';
+                          const formatStr = (item.specs?.paperFormat || item.paperFormat || item.specs?.formFactor || '').toLowerCase();
+                          const rawUnitStr = (item.unit || '').toLowerCase();
+                          const isExplicitRoll = formatStr === 'roll' || rawUnitStr.includes('ມ້ວນ') || rawUnitStr.includes('roll');
+                          const isSheet = !isExplicitRoll || formatStr.includes('cut') || formatStr.includes('sheet') || formatStr.includes('parent');
+
                           if (isSheet) {
-                            const sheetsPerPack = Number(item.specs?.sheetsPerPack || item.specs?.sheets_per_ream || item.specs?.sheets_per_pack || item.sheetsPerPack || item.sheets_per_ream) || 500;
-                            const totalSheets = rawQty * sheetsPerPack;
-                            const packUnit = item.unit || (currentLang === 'lo' ? 'ແພັກ' : 'pack');
+                            const sheetsPerPack = Number(
+                              item.specs?.sheetsPerPack || 
+                              item.specs?.sheets_per_ream || 
+                              item.specs?.sheets_per_pack || 
+                              item.sheetsPerPack || 
+                              item.sheets_per_ream ||
+                              item.purchaseMultiplier ||
+                              500
+                            );
+                            const totalSheets = Number(item.specs?.totalSheetsCalculated) || (rawQty * sheetsPerPack);
+                            let packUnit = item.unit || item.specs?.packagingType || (sheetsPerPack >= 500 ? 'ຣີມ' : 'ແພັກ');
+                            if (packUnit === 'ມ້ວນ' || packUnit.toLowerCase() === 'roll') {
+                              packUnit = sheetsPerPack >= 500 ? 'ຣີມ' : 'ແພັກ';
+                            }
                             return (
                               <div>
                                 <span className="font-mono font-black text-slate-900 block">
                                   {rawQty} {packUnit}
                                 </span>
                                 <span className="text-[10px] text-slate-400 font-bold block">
-                                  ({totalSheets.toLocaleString()} {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'} @ {sheetsPerPack} {currentLang === 'lo' ? 'ແຜ່ນ/ແພັກ' : 'sh/pk'})
+                                  ({totalSheets.toLocaleString()} {currentLang === 'lo' ? 'ແຜ່ນ' : 'sheets'} @ {sheetsPerPack} {currentLang === 'lo' ? `ແຜ່ນ/${packUnit}` : `sh/${packUnit}`})
                                 </span>
                               </div>
                             );
                           } else {
+                            const sqm = Number(item.specs?.totalSqmCalculated) || 0;
                             return (
-                              <span className="font-mono font-black text-slate-900 block">
-                                {rawQty} {currentLang === 'lo' ? 'ມ້ວນ' : 'roll'}
-                              </span>
+                              <div>
+                                <span className="font-mono font-black text-slate-900 block">
+                                  {rawQty} {currentLang === 'lo' ? 'ມ້ວນ' : 'roll'}
+                                </span>
+                                {sqm > 0 && (
+                                  <span className="text-[10px] text-slate-400 font-bold block">
+                                    ({sqm.toLocaleString()} m²)
+                                  </span>
+                                )}
+                              </div>
                             );
                           }
                         }

@@ -425,10 +425,10 @@ export const createDefaultItem = (type: string = 'PAPER'): InboundItemFormData =
     inkColorGroup: 'Cyan',
     inkVolume: '100',
     inkBaseType: 'Dye',
-    isCompatible: false,
+    isCompatible: true,
     inkTargetPrinter: '',
     inkKind: 'inkjet',
-    inkGrade: 'genuine',
+    inkGrade: 'compatible',
     inkPackageForm: 'bottle',
     inkWeightGrams: 250,
 

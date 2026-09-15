@@ -16,31 +16,13 @@ import {
   Loader2,
   BookOpen,
   Layers,
-  ZoomIn
+  ZoomIn,
+  Clock
 } from 'lucide-react';
 import type { MasterOrderItem } from '../../../orders/types';
 import { generateAndDownloadImposedPdf } from '../../../../utils/impositionPdfGenerator';
 import { downloadPhotosAsZip } from '../../../../utils/zipDownloader';
 import { FormModalTemplate } from '../../../../components/common/FormModalTemplate';
-
-const SAMPLE_PREVIEWS = [
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=800',
-  'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=800',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=800',
-  'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=800',
-  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&q=80&w=800',
-  'https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?auto=format&fit=crop&q=80&w=800',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=800',
-  'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&q=80&w=800',
-  'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&q=80&w=800',
-  'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?auto=format&fit=crop&q=80&w=800',
-  'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=800',
-  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=800',
-  'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&q=80&w=800',
-  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=800',
-  'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?auto=format&fit=crop&q=80&w=800',
-  'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?auto=format&fit=crop&q=80&w=800',
-];
 
 interface ArtworkFilesCardProps {
   item: MasterOrderItem;
@@ -58,13 +40,19 @@ export const ArtworkFilesCard: React.FC<ArtworkFilesCardProps> = ({
   item,
   onPreviewArtwork,
 }) => {
-  const coverUrl = item.cover_file_url || `/api/v1/orders/files/orders/${item.order_id}/cover.pdf`;
-  const innerUrl = item.inner_file_url || `/api/v1/orders/files/orders/${item.order_id}/inner.pdf`;
+  const hasRealCover = Boolean(item.cover_file_url && !item.cover_file_url.includes('/orders/null') && !item.cover_file_url.endsWith('/cover.pdf'));
+  const hasRealInner = Boolean(item.inner_file_url && !item.inner_file_url.includes('/orders/null') && !item.inner_file_url.endsWith('/inner.pdf'));
+  const itemAny = item as any;
+  const realArtworkUrl = itemAny.artworkUrl || itemAny.artwork_url || '';
+  const coverUrl = hasRealCover ? item.cover_file_url! : (realArtworkUrl || '');
+  const innerUrl = hasRealInner ? item.inner_file_url! : (realArtworkUrl || '');
+  const hasPrimaryArtwork = Boolean(coverUrl || innerUrl);
 
-  const covC = item.avg_cov_c || 2.5;
-  const covM = item.avg_cov_m || 2.5;
-  const covY = item.avg_cov_y || 2.5;
-  const covK = item.avg_cov_k || 5.0;
+  const covC = Number(item.avg_cov_c || 0);
+  const covM = Number(item.avg_cov_m || 0);
+  const covY = Number(item.avg_cov_y || 0);
+  const covK = Number(item.avg_cov_k || 0);
+  const isPreflightAnalyzed = Boolean(covK > 0 || covC > 0 || covM > 0 || covY > 0 || itemAny.preflight_report_url);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
@@ -84,7 +72,7 @@ export const ArtworkFilesCard: React.FC<ArtworkFilesCardProps> = ({
     (Array.isArray(item.specs?.batch_files) && item.specs.batch_files.length > 0) ||
     (Array.isArray(item.specs?.gallery_urls) && item.specs.gallery_urls.length > 0);
 
-  // Initialize or mock batch photo list for photo jobs
+  // Initialize strictly from real database items (NO mock Unsplash photos)
   const initialPhotos: PhotoItem[] = (() => {
     const rawBatch = (Array.isArray(item.batch_files) && item.batch_files.length > 0)
       ? item.batch_files
@@ -95,14 +83,10 @@ export const ArtworkFilesCard: React.FC<ArtworkFilesCardProps> = ({
     if (rawBatch.length > 0) {
       return rawBatch.map((f: any, idx: number) => {
         const rawUrl = f.file_url || f.url || f.artworkUrl || f.link || '';
-        const validUrl = (rawUrl && !rawUrl.startsWith('/uploads/'))
-          ? rawUrl
-          : SAMPLE_PREVIEWS[idx % SAMPLE_PREVIEWS.length];
-
         return {
           id: f.asset_id || f.id || `photo-${idx + 1}`,
           name: f.file_name || f.fileName || f.name || `Photo_${String(idx + 1).padStart(2, '0')}.jpg`,
-          url: validUrl,
+          url: rawUrl,
           size: f.file_size || f.size,
         };
       });
@@ -116,27 +100,14 @@ export const ArtworkFilesCard: React.FC<ArtworkFilesCardProps> = ({
 
     if (rawGallery.length > 0) {
       return rawGallery.map((url: string, idx: number) => {
-        const validUrl = (url && !url.startsWith('/uploads/'))
-          ? url
-          : SAMPLE_PREVIEWS[idx % SAMPLE_PREVIEWS.length];
-
         return {
           id: `photo-${idx + 1}`,
           name: `Photo_${String(idx + 1).padStart(2, '0')}.jpg`,
-          url: validUrl,
+          url: url,
         };
       });
     }
 
-    if (isPhotoBatch) {
-      // Provide standard count if it's a photo job
-      const count = Math.min(item.quantity || 16, 40);
-      return Array.from({ length: count }).map((_, i) => ({
-        id: `photo-${i + 1}`,
-        name: `Photo_${String(i + 1).padStart(2, '0')}.jpg`,
-        url: SAMPLE_PREVIEWS[i % SAMPLE_PREVIEWS.length],
-      }));
-    }
     return [];
   })();
 
@@ -262,10 +233,17 @@ export const ArtworkFilesCard: React.FC<ArtworkFilesCardProps> = ({
               Dual-Component
             </span>
           )}
-          <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3" />
-            Preflight OK
-          </span>
+          {isPreflightAnalyzed ? (
+            <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" />
+              Preflight OK
+            </span>
+          ) : (
+            <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              ລໍຖ້າກວດສອບໄຟລ໌
+            </span>
+          )}
         </div>
       </div>
 
@@ -318,73 +296,96 @@ export const ArtworkFilesCard: React.FC<ArtworkFilesCardProps> = ({
                 </span>
               </div>
 
-              {/* Contact Sheet Mini-Grid (With real image previews and zoom) */}
-              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1 bg-white/70 rounded-xl border border-sky-100">
-                {photos.slice(0, 24).map((p, idx) => (
-                  <div
-                    key={p.id || idx}
-                    onClick={() => onPreviewArtwork(p.name, p.url)}
-                    className="group relative aspect-square rounded-lg bg-slate-100 border border-slate-200 overflow-hidden cursor-pointer hover:border-sky-400 hover:shadow-xs transition"
-                    title={p.name}
+              {photos.length === 0 ? (
+                <div className="p-6 bg-white border border-dashed border-sky-200 rounded-2xl flex flex-col items-center justify-center text-center space-y-2">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800">ລໍຖ້າໄຟລ໌ຈາກລູກຄ້າ (Pending Artwork)</h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">ຍັງບໍ່ມີໄຟລ໌ຮູບພາບທີ່ອັບໂຫຼດເຂົ້າມາໃນລະບົບ</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="mt-2 px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
                   >
-                    {p.url ? (
-                      <img
-                        src={p.url}
-                        alt={p.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLElement).style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center p-1 text-center">
-                        <ImageIcon className="w-4 h-4 text-slate-400 group-hover:text-sky-600 mb-0.5" />
-                        <span className="text-[9px] font-mono text-slate-600 truncate w-full">
+                    {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
+                    <span>{isUploading ? 'ກຳລັງອັບໂຫຼດ...' : 'ອັບໂຫຼດໄຟລ໌ຮູບພາບດຽວນີ້'}</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Contact Sheet Mini-Grid (With real image previews and zoom) */}
+                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1 bg-white/70 rounded-xl border border-sky-100">
+                    {photos.slice(0, 24).map((p, idx) => (
+                      <div
+                        key={p.id || idx}
+                        onClick={() => onPreviewArtwork(p.name, p.url)}
+                        className="group relative aspect-square rounded-lg bg-slate-100 border border-slate-200 overflow-hidden cursor-pointer hover:border-sky-400 hover:shadow-xs transition"
+                        title={p.name}
+                      >
+                        {p.url ? (
+                          <img
+                            src={p.url}
+                            alt={p.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center p-1 text-center">
+                            <ImageIcon className="w-4 h-4 text-slate-400 group-hover:text-sky-600 mb-0.5" />
+                            <span className="text-[9px] font-mono text-slate-600 truncate w-full">
+                              {p.name.replace(/\.[^/.]+$/, '')}
+                            </span>
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-sky-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
+                          <ZoomIn className="w-4 h-4" />
+                        </div>
+                        <span className="absolute bottom-0 inset-x-0 bg-slate-900/70 text-white text-[8px] font-mono truncate px-1 py-0.5 text-center group-hover:bg-sky-950/90 transition">
                           {p.name.replace(/\.[^/.]+$/, '')}
                         </span>
                       </div>
+                    ))}
+                    {photos.length > 24 && (
+                      <div
+                        onClick={() => setIsUniversalGalleryOpen(true)}
+                        className="aspect-square rounded-lg bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-700 font-bold text-xs cursor-pointer hover:bg-sky-100 transition"
+                      >
+                        +{photos.length - 24}
+                      </div>
                     )}
-                    <div className="absolute inset-0 bg-sky-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
-                      <ZoomIn className="w-4 h-4" />
-                    </div>
-                    <span className="absolute bottom-0 inset-x-0 bg-slate-900/70 text-white text-[8px] font-mono truncate px-1 py-0.5 text-center group-hover:bg-sky-950/90 transition">
-                      {p.name.replace(/\.[^/.]+$/, '')}
-                    </span>
                   </div>
-                ))}
-                {photos.length > 24 && (
-                  <div
-                    onClick={() => setIsUniversalGalleryOpen(true)}
-                    className="aspect-square rounded-lg bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-700 font-bold text-xs cursor-pointer hover:bg-sky-100 transition"
-                  >
-                    +{photos.length - 24}
+
+                  {/* Action Buttons: Download ZIP & View All Files (Universal Preview) */}
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleDownloadAllZip}
+                      disabled={isZipping || photos.length === 0}
+                      className="px-3 py-2 bg-white hover:bg-sky-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+                      title="ດາວໂຫຼດຮູບທັງໝົດເປັນ ZIP"
+                    >
+                      {isZipping ? <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" /> : <Archive className="w-3.5 h-3.5 text-amber-600" />}
+                      <span>{isZipping ? 'ກຳລັງບີບອັດ ZIP...' : 'ໂຫຼດທັງໝົດ (ZIP)'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsUniversalGalleryOpen(true)}
+                      className="px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                      title="ເບິ່ງໄຟລ໌ທັງໝົດໃນຮູບແບບພຣີວິວຍູນິເວີແຊວ"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>ເບິ່ງໄຟລ໌ທັງໝົດ ({photos.length} ຮູບ)</span>
+                    </button>
                   </div>
-                )}
-              </div>
-
-              {/* Action Buttons: Download ZIP & View All Files (Universal Preview) */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={handleDownloadAllZip}
-                  disabled={isZipping || photos.length === 0}
-                  className="px-3 py-2 bg-white hover:bg-sky-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
-                  title="ດາວໂຫຼດຮູບທັງໝົດເປັນ ZIP"
-                >
-                  {isZipping ? <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" /> : <Archive className="w-3.5 h-3.5 text-amber-600" />}
-                  <span>{isZipping ? 'ກຳລັງບີບອັດ ZIP...' : 'ໂຫຼດທັງໝົດ (ZIP)'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsUniversalGalleryOpen(true)}
-                  className="px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-                  title="ເບິ່ງໄຟລ໌ທັງໝົດໃນຮູບແບບພຣີວິວຍູນິເວີແຊວ"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>ເບິ່ງໄຟລ໌ທັງໝົດ ({photos.length} ຮູບ)</span>
-                </button>
-              </div>
+                </>
+              )}
             </div>
           ) : isBook ? (
             /* Section 2: Book Cover & Inner Split Dual Control Box */
@@ -482,41 +483,76 @@ export const ArtworkFilesCard: React.FC<ArtworkFilesCardProps> = ({
                 ໄຟລ໌ອັດຕະໂນມັດພ້ອມພິມ (Artwork Assets)
               </span>
 
-              <div className="p-3.5 bg-sky-50/50 border border-sky-100 rounded-2xl flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-9 h-9 rounded-xl bg-white border border-sky-200 flex items-center justify-center text-sky-600 shrink-0">
-                    <FileText className="w-5 h-5" />
+              {hasPrimaryArtwork ? (
+                <div className="p-3.5 bg-sky-50/50 border border-sky-100 rounded-2xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-white border border-sky-200 flex items-center justify-center text-sky-600 shrink-0">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div className="truncate">
+                      <strong className="text-xs font-black text-slate-900 block truncate">
+                        ໄຟລ໌ງານພິມຫຼັກ (Primary Artwork)
+                      </strong>
+                      <span className="text-[10px] text-sky-700 font-bold block truncate">
+                        {item.paper_size || 'A4'} • {item.page_count || 1} ໜ້າ • ບໍ່ມີການເຂົ້າເລ່ມ
+                      </span>
+                    </div>
                   </div>
-                  <div className="truncate">
-                    <strong className="text-xs font-black text-slate-900 block truncate">
-                      ໄຟລ໌ງານພິມຫຼັກ (Primary Artwork)
-                    </strong>
-                    <span className="text-[10px] text-sky-700 font-bold block truncate">
-                      {item.paper_size || 'A4'} • {item.page_count || 1} ໜ້າ • ບໍ່ມີການເຂົ້າເລ່ມ
-                    </span>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onPreviewArtwork('ໄຟລ໌ງານພິມ (Artwork)', innerUrl || coverUrl)}
+                      className="px-2.5 py-1.5 bg-white hover:bg-sky-50 text-sky-700 border border-sky-200 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>ເບິ່ງ</span>
+                    </button>
+                    <a
+                      href={innerUrl || coverUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1.5 bg-white hover:bg-sky-50 text-slate-600 border border-slate-200 rounded-xl transition cursor-pointer"
+                      title="Download Artwork"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </a>
                   </div>
                 </div>
+              ) : (
+                <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                    <div className="truncate">
+                      <strong className="text-xs font-black text-slate-800 block truncate">
+                        ລໍຖ້າໄຟລ໌ຈາກລູກຄ້າ (Pending Artwork)
+                      </strong>
+                      <span className="text-[10px] text-slate-500 font-medium block truncate">
+                        {item.paper_size || 'A4'} • {item.page_count || 1} ໜ້າ • ຍັງບໍ່ມີໄຟລ໌ອັບໂຫຼດ
+                      </span>
+                    </div>
+                  </div>
 
-                <div className="flex items-center gap-1.5 shrink-0">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept=".pdf,.ai,.psd,.jpg,.png,.tiff"
+                    className="hidden"
+                    onChange={handleBatchFilesChange}
+                  />
                   <button
                     type="button"
-                    onClick={() => onPreviewArtwork('ໄຟລ໌ງານພິມ (Artwork)', innerUrl || coverUrl)}
-                    className="px-2.5 py-1.5 bg-white hover:bg-sky-50 text-sky-700 border border-sky-200 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs disabled:opacity-50"
                   >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>ເບິ່ງ</span>
+                    {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
+                    <span>{isUploading ? 'ກຳລັງອັບໂຫຼດ...' : 'ອັບໂຫຼດໄຟລ໌'}</span>
                   </button>
-                  <a
-                    href={innerUrl || coverUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1.5 bg-white hover:bg-sky-50 text-slate-600 border border-slate-200 rounded-xl transition cursor-pointer"
-                    title="Download Artwork"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                  </a>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>

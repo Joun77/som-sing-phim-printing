@@ -3,6 +3,7 @@ package settings
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -93,6 +94,10 @@ func HandleGetMachineWearParts(c *gin.Context) {
 			totalWearCostPerUnit += p.WearCostPerUnitLak
 			parts = append(parts, p)
 		}
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("[DB ERROR] Wear parts rows error: %v", err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{

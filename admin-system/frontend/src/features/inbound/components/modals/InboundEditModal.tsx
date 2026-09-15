@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Save, Edit3, DollarSign, Calendar, CreditCard, Phone, Link as LinkIcon } from 'lucide-react';
+import { Save, Edit3, DollarSign, Calendar, CreditCard, Phone, Link as LinkIcon, AlertCircle } from 'lucide-react';
 import DynamicSpecForm from '@features/inventory/components/forms/DynamicSpecForm';
 import { FormModalTemplate } from '@components/common';
 
@@ -25,6 +25,8 @@ export default function InboundEditModal({ item, onSave, onClose }: InboundEditM
   const [initialQty, setInitialQty] = useState(item.initialQty || item.currentQty || item.quantity || 1);
   const [supplierPhone, setSupplierPhone] = useState(item.supplier_phone || item.specs?.supplier_phone || item.supplierPhone || '');
   const [purchaseLink, setPurchaseLink] = useState(item.purchase_link || item.specs?.purchase_link || item.purchaseLink || '');
+  const [editReason, setEditReason] = useState(item.editReason || '');
+  const [reasonError, setReasonError] = useState('');
 
   const handleSpecChange = (updatedSpecs: any) => {
     setFormData(prev => ({
@@ -51,6 +53,12 @@ export default function InboundEditModal({ item, onSave, onClose }: InboundEditM
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!editReason.trim()) {
+      setReasonError(currentLang === 'lo' ? 'ກະລຸນາລະບຸເຫດຜົນໃນການແກ້ໄຂຂໍ້ມູນ (Edit reason is required)' : 'Please provide a reason for editing this record');
+      return;
+    }
+    setReasonError('');
 
     const masterSku = item.specs?.materialId || item.specs?.skuCode || item.specs?.sku || item.skuCode || item.sku || '';
 
@@ -86,6 +94,8 @@ export default function InboundEditModal({ item, onSave, onClose }: InboundEditM
       currentQty: Number(initialQty),
       supplier_phone: supplierPhone,
       purchase_link: purchaseLink,
+      editReason: editReason.trim(),
+      isEdited: true,
       specs: specsData,
       technical_specs: specsData
     };
@@ -244,6 +254,45 @@ export default function InboundEditModal({ item, onSave, onClose }: InboundEditM
               />
             </div>
           </div>
+        </div>
+
+        {/* Audit Trail: Mandatory Edit Reason */}
+        <div className="bg-amber-50/70 border border-amber-200/90 p-5 rounded-2xl space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+              <span>{currentLang === 'lo' ? 'ເຫດຜົນໃນການແກ້ໄຂ (Reason for Revision)' : 'Reason for Revision / Audit Trail'}</span>
+              <span className="text-rose-600 font-black">*</span>
+            </label>
+            <span className="text-[10px] text-amber-800 font-bold bg-amber-100/90 px-2.5 py-0.5 rounded-full">
+              {currentLang === 'lo' ? 'ບັງຄັບລະບຸ (Audit Trail)' : 'Mandatory'}
+            </span>
+          </div>
+          <p className="text-[11px] text-amber-800/80 font-medium">
+            {currentLang === 'lo'
+              ? 'ລະບົບຈະບັນທຶກປະຫວັດການແກ້ໄຂ, ຜູ້ແກ້ໄຂ ແລະ ປັບຍອດສະຕັອກສ່ວນຕ່າງ (Delta) ໂດຍອັດຕະໂນມັດ'
+              : 'The system will record this revision in audit logs and adjust material stock by the delta quantity automatically.'}
+          </p>
+          <textarea
+            required
+            rows={3}
+            value={editReason}
+            onChange={(e) => {
+              setEditReason(e.target.value);
+              if (e.target.value.trim()) setReasonError('');
+            }}
+            placeholder={currentLang === 'lo' 
+              ? 'ຕົວຢ່າງ: ແກ້ໄຂຈຳນວນນຳເຂົ້າຜິດຈາກ 10 ເປັນ 15 ລີມ, ປັບປຸງລາຄາຕົ້ນທຶນໃໝ່ຕາມໃບບິນ...' 
+              : 'e.g. Corrected inbound quantity from 10 to 15 reams, updated total invoice price...'}
+            className={`w-full px-3.5 py-2.5 rounded-xl border bg-white text-xs font-semibold text-slate-800 focus:outline-none transition ${
+              reasonError ? 'border-rose-400 focus:border-rose-500' : 'border-amber-300 focus:border-amber-500'
+            }`}
+          />
+          {reasonError && (
+            <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1">
+              <AlertCircle className="w-3.5 h-3.5" />
+              <span>{reasonError}</span>
+            </p>
+          )}
         </div>
       </form>
     </FormModalTemplate>

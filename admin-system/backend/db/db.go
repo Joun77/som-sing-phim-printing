@@ -133,6 +133,10 @@ func RunMigrations(db *sql.DB) error {
 		"migrations/033_print_dimension_presets.sql",
 		"../migrations/034_order_performance_indexes.sql",
 		"migrations/034_order_performance_indexes.sql",
+		"../migrations/037_inbound_revisions_and_offcuts_enhancement.sql",
+		"migrations/037_inbound_revisions_and_offcuts_enhancement.sql",
+		"../migrations/038_quotation_templates.sql",
+		"migrations/038_quotation_templates.sql",
 		"../schema.sql",
 		"schema.sql",
 	}

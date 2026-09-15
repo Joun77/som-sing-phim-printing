@@ -119,6 +119,9 @@ func HandleGetWorkflowTemplates(c *gin.Context) {
 					list = append(list, r)
 				}
 			}
+			if err := rows.Err(); err != nil {
+				log.Printf("[DB ERROR] Workflow templates rows error: %v", err)
+			}
 			if len(list) > 0 {
 				c.JSON(http.StatusOK, gin.H{
 					"success": true,

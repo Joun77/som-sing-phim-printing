@@ -357,5 +357,161 @@ describe('machineCostCalculator Unit Tests', () => {
     assert.strictEqual(directResult.finalCostPerPage, 195.76);
     assert.strictEqual(formatUnitPrecisionLAK(directResult.finalCostPerPage), 'LAK 195.76');
   });
+
+  it('correctly calculates laser printer toner cost using OEM baseline and linked kg toner inventory', () => {
+    const laserMachine = {
+      id: 'MAC-8055',
+      name: 'Fuji Xerox AltaLink C8055',
+      category: 'Printer',
+      specs: {
+        printerCategory: 'Laser',
+        oemBaselineInks: [
+          { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'DOCU-C5005-K', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 26000, oemPrice: 450000 },
+          { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'DOCU-C5005-C', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 25000, oemPrice: 350000 },
+          { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'DOCU-C5005-M', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 25000, oemPrice: 350000 },
+          { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'DOCU-C5005-Y', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 25000, oemPrice: 350000 },
+        ]
+      },
+      price: 65000000,
+      printedPagesCapacity: 1000000
+    };
+
+    // 1. Unlinked test: Should calculate from OEM baseline specs
+    // Black: 450,000 / 26,000 = 17.31 LAK
+    // Colors: 350,000 / 25,000 = 14.00 LAK each
+    // Total Ink = 17.31 + 14 * 3 = 59.31 LAK
+    const unlinkedResult = calculateEquipmentPrintCost(laserMachine, [], [], 'Printer');
+    assert.strictEqual(unlinkedResult.inkSlotsBreakdown[0].costPerPage, 17.31);
+    assert.strictEqual(unlinkedResult.inkSlotsBreakdown[1].costPerPage, 14.00);
+    assert.strictEqual(unlinkedResult.linkedInkRatePerPage, 59.31);
+
+    // 2. Linked test: 1 kg (1,000g) toner powder purchased for 350,000 LAK
+    // Cost per consumption unit (g) = 350,000 / 1000 = 350 LAK/g
+    // Black consumption rate: 100g / 26,000 pages = 0.003846 g/page
+    // Black slot cost = 350 * 0.003846 = 1.35 LAK/page
+    const laserLinks = [
+      { assetId: 'MAC-8055', slotPosition: 'Slot 1 (K - Black)', inkCode: 'TONER-KG-BK', colorGroup: 'Black' }
+    ];
+    const inventory = [
+      {
+        id: 'TONER-KG-BK',
+        sku: 'TONER-KG-BK',
+        name: 'Toner Powder Black (1 kg)',
+        unitPrice: 350000,
+        volume: 1000,
+        consumptionUnit: 'g',
+        costPerConsumptionUnit: 350
+      }
+    ];
+
+    const linkedResult = calculateEquipmentPrintCost(laserMachine, laserLinks, inventory, 'Printer');
+    assert.strictEqual(linkedResult.inkSlotsBreakdown[0].costPerPage, 1.35);
+    assert.strictEqual(linkedResult.inkSlotsBreakdown[0].isLinked, true);
+    assert.strictEqual(linkedResult.inkSlotsBreakdown[1].costPerPage, 14.00); // Unlinked slots keep OEM baseline
+  });
+
+  it('correctly calculates 5 itemized wear parts for Laser Printer (Fuji Xerox AltaLink C8055) without inkjet mock data', () => {
+    // Specs from user inbound screen:
+    // 1. Drum Unit: 350,000 LAK / 125,000 pages = 2.80 LAK
+    // 2. Fuser Unit: 2,100,000 LAK / 200,000 pages = 10.50 LAK
+    // 3. Transfer Belt: 580,000 LAK / 200,000 pages = 2.90 LAK
+    // 4. Pickup Roller: 80,000 LAK / 150,000 pages = 0.533 LAK
+    // 5. Waste Toner Box: 110,000 LAK / 50,000 pages = 2.20 LAK
+    // Expected Total Wear Rate: 2.80 + 10.50 + 2.90 + 0.5333 + 2.20 = 18.933 LAK/page
+    const c8055 = {
+      name: 'Fuji Xerox AltaLink C8055',
+      category: 'Printer',
+      printerCategory: 'Laser',
+      purchaseCost: 35000000,
+      printedPagesCapacity: 1500000,
+      specs: {
+        printerCategory: 'Laser',
+        feedType: 'Cut-sheet', // Formerly caused false-positive inkjet detection
+        wearDrumUnitCost: 350000,
+        wearDrumUnitLife: 125000,
+        wearFuserUnitCost: 2100000,
+        wearFuserUnitLife: 200000,
+        wearTransferBeltCost: 580000,
+        wearTransferBeltLife: 200000,
+        wearPickupRollerCost: 80000,
+        wearPickupRollerLife: 150000,
+        wearWasteTonerBoxCost: 110000,
+        wearWasteTonerBoxLife: 50000
+      }
+    };
+
+    const wearRate = calculateMachineWearPartsRate(c8055);
+    // 2.80 + 10.50 + 2.90 + 0.5333 + 2.20 = 18.933... -> rounded to 18.93
+    assert.strictEqual(Math.round(wearRate * 100) / 100, 18.93);
+
+    // Verify getEquipmentAccurateCost:
+    // Depreciation: 35,000,000 / 1,500,000 = 23.33 LAK/page
+    // Maintenance / Wear Rate: 18.93 LAK/page
+    // Total Machine Cost: 23.33 + 18.93 = 42.26 LAK/page (previously 96.87 with inkjet mock data!)
+    const accurateCost = getEquipmentAccurateCost(c8055);
+    assert.strictEqual(accurateCost.depreciation, 23.33);
+    assert.strictEqual(accurateCost.maintenance, 18.93);
+    assert.strictEqual(accurateCost.totalMachineCost, 42.27);
+    assert.strictEqual(accurateCost.isPrinter, true);
+  });
+
+  it('correctly calculates wear rate dynamically from eq.components with custom added or deleted parts', () => {
+    // 1. Initial 3-component Cutter
+    const cutterMachine = {
+      id: 'EQ-CUT-001',
+      name: 'Electric Guillotine Cutter 450V+',
+      category: 'Cutter',
+      purchaseCost: 20000000,
+      totalLifespanUnits: 500000,
+      components: [
+        { id: 'p1', name: 'Sharpening Cost', cost: 150000, lifeVal: 10000, unitLabel: 'Cuts' },     // 15.00 LAK/cut
+        { id: 'p2', name: 'Blade Replacement', cost: 1200000, lifeVal: 100000, unitLabel: 'Cuts' }, // 12.00 LAK/cut
+        { id: 'p3', name: 'Cutting Stick', cost: 80000, lifeVal: 20000, unitLabel: 'Cuts' }         // 4.00 LAK/cut
+      ]
+    };
+
+    // Expected Wear Rate: 15 + 12 + 4 = 31 LAK/cut
+    const wearRate1 = calculateMachineWearPartsRate(cutterMachine);
+    assert.strictEqual(wearRate1, 31);
+
+    // Depreciation: 20,000,000 / 500,000 = 40 LAK/cut
+    // Total Machine Cost: 40 + 31 = 71 LAK/cut
+    const accurate1 = getEquipmentAccurateCost(cutterMachine);
+    assert.strictEqual(accurate1.depreciation, 40);
+    assert.strictEqual(accurate1.maintenance, 31);
+    assert.strictEqual(accurate1.totalMachineCost, 71);
+    assert.strictEqual(accurate1.unitLabel, 'ຮອບຕັດ');
+    assert.strictEqual(accurate1.unitLabelEn, 'cut');
+
+    // 2. User dynamically adds a 4th custom wear part (e.g. Hydraulic Oil & Seal, cost: 500,000, life: 50,000 cuts -> 10 LAK/cut)
+    const cutterWithCustomPart = {
+      ...cutterMachine,
+      components: [
+        ...cutterMachine.components,
+        { id: 'p4', name: 'Hydraulic Seal Kit', cost: 500000, lifeVal: 50000, unitLabel: 'Cuts' }
+      ]
+    };
+
+    // Expected Wear Rate: 31 + 10 = 41 LAK/cut
+    const wearRate2 = calculateMachineWearPartsRate(cutterWithCustomPart);
+    assert.strictEqual(wearRate2, 41);
+
+    const accurate2 = getEquipmentAccurateCost(cutterWithCustomPart);
+    assert.strictEqual(accurate2.totalMachineCost, 81);
+
+    // 3. User deletes a wear part (e.g. removes p3 Cutting Stick)
+    const cutterDeletedPart = {
+      ...cutterMachine,
+      components: cutterMachine.components.filter(p => p.id !== 'p3')
+    };
+
+    // Expected Wear Rate: 15 + 12 = 27 LAK/cut
+    const wearRate3 = calculateMachineWearPartsRate(cutterDeletedPart);
+    assert.strictEqual(wearRate3, 27);
+
+    const accurate3 = getEquipmentAccurateCost(cutterDeletedPart);
+    assert.strictEqual(accurate3.totalMachineCost, 67);
+  });
 });
+
 

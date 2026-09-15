@@ -347,6 +347,23 @@
         "cancel": "Cancel"
       }
     },
+    "ink": {
+      "title": "Ink & Toner Specifications",
+      "code": "Ink SKU / Code",
+      "name": "Ink / Color Name",
+      "group": "Color Group",
+      "type_selector": "Consumable Type",
+      "type_liquid": "Liquid Ink (Inkjet / Plotter - ml / L)",
+      "type_toner": "Laser Toner (Powder - g / kg)",
+      "volume": "Capacity / Volume",
+      "volume_ml": "Liquid Volume (ml)",
+      "weight_g": "Toner Net Weight (g)",
+      "base_type": "Base Type",
+      "target_printer": "Target Printer",
+      "select_printer": "-- Select Target Printer --",
+      "toner_kg_hint": "1 kg = 1,000 g (Deducted in grams)",
+      "liquid_ml_hint": "1 Bottle / Litre (Deducted in ml)"
+    },
     "paper": {
       "sheets_per_pack": "SHEETS PER PACK",
       "sheets_per_ream": "SHEETS PER PACK",

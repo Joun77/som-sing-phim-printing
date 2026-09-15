@@ -2,6 +2,7 @@ package settings
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 	"time"
 
@@ -42,6 +43,9 @@ func HandleGetNotificationConfig(c *gin.Context) {
 					}
 					list = append(list, item)
 				}
+			}
+			if err := rows.Err(); err != nil {
+				log.Printf("[DB ERROR] Notification config rows error: %v", err)
 			}
 		}
 	}
@@ -104,11 +108,12 @@ func HandleTestNotification(c *gin.Context) {
 	}
 
 	var err error
-	if req.Channel == "telegram" {
+	switch req.Channel {
+	case "telegram":
 		if disp.Telegram != nil {
 			err = disp.Telegram.SendAdminMessage("🧪 *Test Notification from Som Sing Phim Admin*\n\nລະບົບແຈ້ງເຕືອນ Telegram Bot ເຊື່ອມຕໍ່ສຳເລັດແລ້ວ!", "TEST", "TEST-001")
 		}
-	} else if req.Channel == "whatsapp" {
+	case "whatsapp":
 		phone := req.Recipient
 		if phone == "" {
 			phone = "2055558888"

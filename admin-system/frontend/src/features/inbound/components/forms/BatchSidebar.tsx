@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, Plus, Trash2, X } from 'lucide-react';
+import { Layers, Plus, Trash2, X, Copy } from 'lucide-react';
 import { InboundItemFormData, CATEGORY_MENU_OPTIONS } from './types';
 
 interface BatchSidebarProps {
@@ -11,7 +11,9 @@ interface BatchSidebarProps {
   formatCurrency: (val: number) => string;
   onSelectTab: (idx: number) => void;
   onAddNewItemTab: (type: string) => void;
+  onDuplicateItem: (idx: number) => void;
   onRemoveItemTab: (idx: number) => void;
+  onOpenExcelModal: () => void;
 }
 
 export const BatchSidebar: React.FC<BatchSidebarProps> = ({
@@ -23,7 +25,9 @@ export const BatchSidebar: React.FC<BatchSidebarProps> = ({
   formatCurrency,
   onSelectTab,
   onAddNewItemTab,
+  onDuplicateItem,
   onRemoveItemTab,
+  onOpenExcelModal,
 }) => {
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
 
@@ -43,8 +47,8 @@ export const BatchSidebar: React.FC<BatchSidebarProps> = ({
           </span>
         </div>
 
-        {/* Add Item Button -> Opens Category Selection Modal */}
-        <div className="shrink-0">
+        {/* Action Buttons: Add Item & Excel Tools */}
+        <div className="shrink-0 space-y-2">
           <button
             type="button"
             onClick={() => setIsAddMenuOpen(true)}
@@ -52,14 +56,24 @@ export const BatchSidebar: React.FC<BatchSidebarProps> = ({
           >
             <div className="flex items-center gap-2">
               <Plus className="w-4 h-4" />
-              <span>{currentLang === 'lo' ? 'ເພີ່ມສິນຄ້າໃນຊຸດ (11 ໝວດ)' : 'Add Item to Batch'}</span>
+              <span>{currentLang === 'lo' ? 'ເພີ່ມສິນຄ້າໃນຊຸດ (9 ໝວດ)' : 'Add Item to Batch (9 Cats)'}</span>
             </div>
             <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-md font-extrabold">
-              11 ໝວດ
+              9 ໝວດ
             </span>
           </button>
 
-          {/* Clean Category Picker Modal displaying ALL 11 categories in 2 columns */}
+          {/* Excel Import / Export Button */}
+          <button
+            type="button"
+            onClick={onOpenExcelModal}
+            className="w-full py-2 px-3 bg-white hover:bg-emerald-50 hover:border-emerald-300 border border-slate-200 text-slate-700 hover:text-emerald-700 active:scale-98 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition cursor-pointer shadow-2xs"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>{currentLang === 'lo' ? 'Excel Template & ນຳເຂົ້າ' : 'Excel Template & Import'}</span>
+          </button>
+
+          {/* Clean Category Picker Modal displaying ALL 9 categories in 2 columns */}
           {isAddMenuOpen && (
             <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in">
               <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[88vh] animate-scale-up">
@@ -71,7 +85,7 @@ export const BatchSidebar: React.FC<BatchSidebarProps> = ({
                     </div>
                     <div>
                       <h3 className="text-sm font-black text-slate-800">
-                        {currentLang === 'lo' ? 'ເລືອກປະເພດສິນຄ້າທີ່ຕ້ອງການນຳເຂົ້າ (11 ໝວດ)' : 'Select Category to Add to Inbound (11 Categories)'}
+                        {currentLang === 'lo' ? 'ເລືອກປະເພດສິນຄ້າທີ່ຕ້ອງການນຳເຂົ້າ (9 ໝວດ)' : 'Select Category to Add to Inbound (9 Categories)'}
                       </h3>
                       <p className="text-[11px] text-slate-500 font-medium">
                         {currentLang === 'lo' ? 'ກົດເລືອກປະເພດວັດສະດຸ ຫຼື ເຄື່ອງຈັກ ເພື່ອກຳນົດສະເປັກ' : 'Click category to add item specifications'}
@@ -133,19 +147,31 @@ export const BatchSidebar: React.FC<BatchSidebarProps> = ({
                 : (Number(item.importCost) || 0) * qty;
             const rowSubtotal = rawTotal * itemRate;
 
-            let label =
-              item.paperName ||
-              item.inkColorName ||
-              item.machineModel ||
-              item.machineBrand ||
-              item.bindingName ||
-              item.laminationName ||
-              item.sparePartName ||
-              (item.rigidSubstrateType ? `Rigid ${item.rigidSubstrateType}` : null) ||
-              (item.packagingCategory ? `Packaging ${item.packagingCategory}` : null) ||
-              (item.cuttingSupplyType ? `Cutting ${item.cuttingSupplyType}` : null);
-
-            if (!label) label = `${item.importType} Item #${idx + 1}`;
+            let label = '';
+            if (item.importType === 'PAPER') {
+              label = item.paperName || `Paper #${idx + 1}`;
+            } else if (item.importType === 'INK') {
+              const isTnr = item.inkBaseType === 'Toner';
+              label = item.inkColorName 
+                ? (isTnr ? `ຜົງໝຶກ ${item.inkColorName}` : `ໝຶກ ${item.inkColorName}`) 
+                : (isTnr ? `Toner Item #${idx + 1}` : `Ink Item #${idx + 1}`);
+            } else if (item.importType === 'MACHINERY' || item.importType === 'MACHINERY_INKJET') {
+              label = item.machineModel || item.machineBrand || `Machine #${idx + 1}`;
+            } else if (item.importType === 'BINDING_SUPPLY') {
+              label = item.bindingName || `Binding #${idx + 1}`;
+            } else if (item.importType === 'LAMINATION_FILM') {
+              label = item.laminationName || `Film #${idx + 1}`;
+            } else if (item.importType === 'SPARE_PART') {
+              label = item.sparePartName || `Spare Part #${idx + 1}`;
+            } else if (item.importType === 'RIGID_SUBSTRATE') {
+              label = item.rigidSubstrateType ? `Rigid ${item.rigidSubstrateType}` : `Rigid #${idx + 1}`;
+            } else if (item.importType === 'PACKAGING') {
+              label = item.packagingCategory ? `Packaging ${item.packagingCategory}` : `Packaging #${idx + 1}`;
+            } else if (item.importType === 'CUTTING_BLADE') {
+              label = item.cuttingSupplyType ? `Cutting ${item.cuttingSupplyType}` : `Cutting #${idx + 1}`;
+            } else {
+              label = `${item.importType} Item #${idx + 1}`;
+            }
 
             return (
               <div
@@ -171,19 +197,35 @@ export const BatchSidebar: React.FC<BatchSidebarProps> = ({
                     </span>
                   </div>
 
-                  {items.length > 1 && (
+                  <div className="flex items-center gap-1">
+                    {/* Duplicate Button */}
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onRemoveItemTab(idx);
+                        onDuplicateItem(idx);
                       }}
-                      className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer"
-                      title={currentLang === 'lo' ? 'ລຶບລາຍການນີ້' : 'Delete item'}
+                      className="p-1 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition cursor-pointer"
+                      title={currentLang === 'lo' ? 'ຄັດລອກລາຍການນີ້ (ສຳເນົາສະເປັກ)' : 'Duplicate item'}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Copy className="w-3.5 h-3.5" />
                     </button>
-                  )}
+
+                    {/* Delete Button */}
+                    {items.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveItemTab(idx);
+                        }}
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer"
+                        title={currentLang === 'lo' ? 'ລຶບລາຍການນີ້' : 'Delete item'}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="font-extrabold text-xs text-slate-800 truncate" title={label}>

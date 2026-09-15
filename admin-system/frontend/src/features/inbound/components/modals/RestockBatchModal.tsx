@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import { FormModalTemplate } from '@components/common';
 import { getAuthHeaders } from '@utils/authHeaders';
+import { useLookups } from '@features/master-data';
 import { 
   RefreshCw, 
   Search, 
@@ -17,6 +18,16 @@ import {
   Clock
 } from 'lucide-react';
 
+interface SelectedRestockItem {
+  qty: number;
+  unitPrice: number;
+  supplier: string;
+  date: string;
+  purchaseUnit: string;
+  multiplier: number;
+  isCustomMultiplier?: boolean;
+}
+
 interface RestockBatchModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -28,12 +39,13 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
   const currentLang = i18n.language || 'lo';
   const isLao = currentLang === 'lo';
   const { inventory, addInventoryBatch, formatCurrency, showToast, saveInventoryToBackend } = useApp();
+  const { data: uomLookups = [] } = useLookups('unit_of_measure', true);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   
-  // Selected items map: { [id: string]: { qty: number; unitPrice: number; supplier: string; date: string } }
-  const [selectedMap, setSelectedMap] = useState<Record<string, { qty: number; unitPrice: number; supplier: string; date: string }>>({});
+  // Selected items map with purchase unit & multiplier
+  const [selectedMap, setSelectedMap] = useState<Record<string, SelectedRestockItem>>({});
 
   const filteredInventory = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -73,24 +85,55 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
     });
   }, [inventory, searchQuery, categoryFilter]);
 
-  const toggleSelect = (id: string, defaultPrice: number = 0) => {
+  const toggleSelect = (item: any) => {
+    const id = item.id;
     setSelectedMap(prev => {
       const copy = { ...prev };
       if (copy[id]) {
         delete copy[id];
       } else {
+        const catLower = (item.category || '').toLowerCase();
+        const isPaper = catLower === 'paper' || catLower === 'material';
+        
+        let initialMultiplier = Number(
+          item.purchaseMultiplier || 
+          item.purchase_multiplier || 
+          item.specs?.sheets_per_pack || 
+          item.specs?.sheets_per_ream || 
+          item.specs?.sheetsPerPack || 
+          item.specs?.sheetsPerReam ||
+          (isPaper ? 500 : 1)
+        );
+        if (!initialMultiplier || initialMultiplier <= 0) {
+          initialMultiplier = isPaper ? 500 : 1;
+        }
+
+        let initialUnit = item.purchaseUnit;
+        if (!initialUnit) {
+          if (isPaper) {
+            initialUnit = initialMultiplier === 500 ? 'ຣີມ' : (initialMultiplier === 1 ? 'ແຜ່ນ' : 'ແພັກ');
+          } else {
+            initialUnit = 'ອັນ';
+          }
+        }
+
+        const defaultPrice = Number(item.costPerPurchaseUnit || item.cost_per_purchase_unit || item.costPerConsumptionUnit || 0);
+
         copy[id] = {
           qty: 1,
-          unitPrice: defaultPrice || 0,
+          unitPrice: defaultPrice,
           supplier: '',
-          date: new Date().toISOString().split('T')[0]
+          date: new Date().toISOString().split('T')[0],
+          purchaseUnit: initialUnit,
+          multiplier: initialMultiplier,
+          isCustomMultiplier: false
         };
       }
       return copy;
     });
   };
 
-  const updateItemField = (id: string, field: 'qty' | 'unitPrice' | 'supplier' | 'date', value: any) => {
+  const updateItemField = (id: string, field: keyof SelectedRestockItem, value: any) => {
     setSelectedMap(prev => {
       if (!prev[id]) return prev;
       return {
@@ -123,18 +166,7 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
 
       const packQty = Number(data.qty) || 1;
       const isPaper = (originalItem.category || '').toLowerCase() === 'paper' || (originalItem.category || '').toLowerCase() === 'material';
-      let sheetsPerPack = Number(
-        originalItem.purchaseMultiplier || 
-        originalItem.purchase_multiplier || 
-        originalItem.specs?.sheets_per_pack || 
-        originalItem.specs?.sheets_per_ream || 
-        originalItem.specs?.sheetsPerPack || 
-        originalItem.specs?.sheetsPerReam
-      );
-      if (isPaper && (!sheetsPerPack || sheetsPerPack <= 1)) {
-        sheetsPerPack = 500;
-      }
-      const multiplier = isPaper ? sheetsPerPack : (Number(originalItem.purchaseMultiplier || originalItem.purchase_multiplier) || 1);
+      const multiplier = Number(data.multiplier) > 0 ? Number(data.multiplier) : (isPaper ? 500 : 1);
       const totalUnitsAdded = packQty * multiplier;
       const unitPrice = Number(data.unitPrice) || Number(originalItem.cost_per_purchase_unit || originalItem.costPerPurchaseUnit || 0);
       const perUnitCost = multiplier > 0 ? unitPrice / multiplier : unitPrice;
@@ -173,8 +205,10 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
         currentQty: packQty,
         initialQty: packQty,
         quantity: packQty,
-        unit: originalItem.purchaseUnit || (isPaper ? 'ແພັກ' : (isSpare ? 'ອັນ' : 'Unit')),
-        subUnit: `(${packQty} ${originalItem.purchaseUnit || (isPaper ? 'ແພັກ' : (isSpare ? 'ອັນ' : 'Unit'))} x ${multiplier} ${originalItem.consumptionUnit || (isPaper ? 'ແຜ່ນ' : 'Unit')})`,
+        unit: data.purchaseUnit || originalItem.purchaseUnit || (isPaper ? 'ຣີມ' : (isSpare ? 'ອັນ' : 'Unit')),
+        subUnit: isPaper 
+          ? `(${packQty} ${data.purchaseUnit || 'ຣີມ'} x ${multiplier} ແຜ່ນ = ${totalUnitsAdded.toLocaleString()} ແຜ່ນ)`
+          : `(${packQty} ${data.purchaseUnit || originalItem.purchaseUnit || 'Unit'} x ${multiplier})`,
         supplier: data.supplier || 'Restock Supplier',
         supplierName: data.supplier || 'Restock Supplier',
         totalPrice: unitPrice * packQty,
@@ -186,11 +220,13 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
           skuCode: originalSku,
           restockQty: packQty,
           unitPrice: unitPrice,
+          purchaseUnit: data.purchaseUnit || originalItem.purchaseUnit || (isPaper ? 'ຣີມ' : 'Unit'),
           sheetsPerPack: isPaper ? multiplier : null,
           sheets_per_pack: isPaper ? multiplier : null,
           sheets_per_ream: isPaper ? multiplier : null,
           purchaseMultiplier: multiplier,
-          paperFormat: isPaper ? 'Sheet' : null,
+          totalSheetsAdded: totalUnitsAdded,
+          paperFormat: isPaper ? (originalItem.specs?.paperFormat || 'cut_sheet') : null,
           assignedPrinterId: originalItem.assignedPrinterId || originalItem.specs?.assignedPrinterId,
           assignedMachineName: originalItem.assignedMachineName || originalItem.specs?.assignedMachineName,
           partCategory: originalItem.partCategory || originalItem.specs?.partCategory,
@@ -291,8 +327,8 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
                 <tr>
                   <th className="p-3.5 w-12 text-center">{currentLang === 'lo' ? 'ເລືອກ' : 'Select'}</th>
                   <th className="p-3.5">{currentLang === 'lo' ? 'ລາຍການສິນຄ້າ / SKU' : 'Item / SKU'}</th>
-                  <th className="p-3.5">{currentLang === 'lo' ? 'ສະຕັອກປັດຈຸບັນ' : 'Current Stock'}</th>
-                  <th className="p-3.5 w-36">{currentLang === 'lo' ? 'ຈຳນວນເຕີມ (Qty)' : 'Restock Qty'}</th>
+                  <th className="p-3.5 w-28">{currentLang === 'lo' ? 'ສະຕັອກປັດຈຸບັນ' : 'Current Stock'}</th>
+                  <th className="p-3.5 min-w-[210px]">{currentLang === 'lo' ? 'ຈຳນວນ & ຫົວໜ່ວຍຊື້' : 'Qty & Purchase Unit'}</th>
                   <th className="p-3.5 w-44">{currentLang === 'lo' ? 'ລາຄາຊື້ / ຫົວໜ່ວຍ (LAK)' : 'Unit Cost (LAK)'}</th>
                   <th className="p-3.5 w-48">{currentLang === 'lo' ? 'ຜູ້ສະໜອງ (Supplier)' : 'Supplier'}</th>
                 </tr>
@@ -310,6 +346,7 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
                     const isSelected = !!selectedMap[item.id];
                     const selectedData = selectedMap[item.id];
                     const catLower = (item.category || '').toLowerCase();
+                    const isPaper = catLower === 'paper' || catLower === 'material';
                     const isSpare = catLower.includes('spare') || catLower.includes('part') || catLower.includes('ອະໄຫຼ່') || Boolean(item.isSparePart);
                     const assignedMachine = item.assignedPrinterId || item.assignedMachineName || item.specs?.assignedPrinterId || item.specs?.assignedMachineName;
                     const modelRef = item.modelRef || item.partModelRef || item.specs?.modelRef || item.specs?.partModelRef;
@@ -326,7 +363,7 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
                         <td className="p-3.5 text-center">
                           <button
                             type="button"
-                            onClick={() => toggleSelect(item.id, item.costPerPurchaseUnit || item.costPerConsumptionUnit || 0)}
+                            onClick={() => toggleSelect(item)}
                             className="cursor-pointer text-emerald-600 hover:text-emerald-700 transition"
                           >
                             {isSelected ? (
@@ -365,7 +402,7 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
                           <span className={`px-2 py-1 rounded-lg text-xs inline-flex items-center gap-1 ${
                             isLowStock ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'
                           }`}>
-                            {stockQty} {item.consumptionUnit || item.purchaseUnit || 'Unit'}
+                            {stockQty.toLocaleString()} {item.consumptionUnit || item.purchaseUnit || 'Unit'}
                           </span>
                           {isSpare && (
                             <div className="text-[10px] text-slate-400 font-normal mt-0.5">
@@ -376,13 +413,80 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
 
                         <td className="p-3.5">
                           {isSelected ? (
-                            <input
-                              type="number"
-                              min="1"
-                              value={selectedData?.qty || 1}
-                              onChange={(e) => updateItemField(item.id, 'qty', Number(e.target.value))}
-                              className="w-full px-2.5 py-1.5 rounded-xl border border-emerald-300 bg-white font-bold text-xs focus:outline-none"
-                            />
+                            <div className="space-y-1.5 min-w-[190px]">
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={selectedData?.qty ?? 1}
+                                  onChange={(e) => updateItemField(item.id, 'qty', Math.max(1, Number(e.target.value)))}
+                                  className="w-18 px-2 py-1.5 rounded-xl border border-emerald-300 bg-white font-bold text-xs text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                />
+                                {isPaper ? (
+                                  <select
+                                    value={
+                                      selectedData?.isCustomMultiplier
+                                        ? 'CUSTOM'
+                                        : `${selectedData?.purchaseUnit || 'ຣີມ'}_${selectedData?.multiplier || 500}`
+                                    }
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      if (val === 'CUSTOM') {
+                                        updateItemField(item.id, 'isCustomMultiplier', true);
+                                      } else {
+                                        const [u, mStr] = val.split('_');
+                                        const m = Number(mStr) || 500;
+                                        setSelectedMap(prev => ({
+                                          ...prev,
+                                          [item.id]: {
+                                            ...prev[item.id],
+                                            purchaseUnit: u,
+                                            multiplier: m,
+                                            isCustomMultiplier: false
+                                          }
+                                        }));
+                                      }
+                                    }}
+                                    className="flex-1 px-2 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50/50 font-bold text-xs text-emerald-950 focus:outline-none"
+                                  >
+                                    <option value="ຣີມ_500">{isLao ? 'ຣີມ (500 ແຜ່ນ)' : 'Ream (500 sheets)'}</option>
+                                    <option value={`ແພັກ_${item.sheetsPerPack || item.specs?.sheetsPerPack || 100}`}>
+                                      {isLao ? `ແພັກ (${item.sheetsPerPack || item.specs?.sheetsPerPack || 100} ແຜ່ນ)` : `Pack (${item.sheetsPerPack || item.specs?.sheetsPerPack || 100} sheets)`}
+                                    </option>
+                                    <option value="ລັງ_2500">{isLao ? 'ລັງ / ກ່ອງ (2,500 ແຜ່ນ)' : 'Carton (2,500 sheets)'}</option>
+                                    <option value="ແຜ່ນ_1">{isLao ? 'ແຜ່ນ (1 ແຜ່ນ)' : 'Sheet (1 sheet)'}</option>
+                                    <option value="CUSTOM">{isLao ? 'ກຳນົດເອງ...' : 'Custom...'}</option>
+                                  </select>
+                                ) : (
+                                  <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1.5 rounded-xl border border-slate-200 shrink-0">
+                                    {selectedData?.purchaseUnit || item.purchaseUnit || 'ອັນ'}
+                                  </span>
+                                )}
+                              </div>
+
+                              {isPaper && selectedData?.isCustomMultiplier && (
+                                <div className="flex items-center gap-1 text-[11px] bg-amber-50 p-1.5 rounded-lg border border-amber-200">
+                                  <span className="text-amber-800 font-bold">1 {selectedData?.purchaseUnit || 'ຫົວໜ່ວຍ'} =</span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={selectedData?.multiplier || 1}
+                                    onChange={(e) => updateItemField(item.id, 'multiplier', Math.max(1, Number(e.target.value)))}
+                                    className="w-16 px-1.5 py-0.5 rounded border border-amber-300 bg-white font-bold text-xs text-center"
+                                  />
+                                  <span className="text-amber-800 font-bold">ແຜ່ນ</span>
+                                </div>
+                              )}
+
+                              <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50/80 px-2 py-0.5 rounded-md border border-emerald-100/80 flex items-center justify-between">
+                                <span>= {((Number(selectedData?.qty) || 0) * (Number(selectedData?.multiplier) || 1)).toLocaleString()} {item.consumptionUnit || (isPaper ? 'ແຜ່ນ' : 'Unit')}</span>
+                                {Number(selectedData?.multiplier) > 1 && (
+                                  <span className="text-[10px] text-emerald-600 font-normal">
+                                    (@ {selectedData?.multiplier} / {selectedData?.purchaseUnit || 'ໜ່ວຍ'})
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           ) : (
                             <span className="text-slate-300">-</span>
                           )}
@@ -390,15 +494,22 @@ export default function RestockBatchModal({ isOpen, onClose, onSuccess }: Restoc
 
                         <td className="p-3.5">
                           {isSelected ? (
-                            <input
-                              type="number"
-                              value={selectedData?.unitPrice || ''}
-                              onChange={(e) => updateItemField(item.id, 'unitPrice', Number(e.target.value))}
-                              placeholder="0"
-                              className="w-full px-2.5 py-1.5 rounded-xl border border-emerald-300 bg-white font-bold text-xs focus:outline-none"
-                            />
+                            <div>
+                              <input
+                                type="number"
+                                value={selectedData?.unitPrice || ''}
+                                onChange={(e) => updateItemField(item.id, 'unitPrice', Number(e.target.value))}
+                                placeholder="0"
+                                className="w-full px-2.5 py-1.5 rounded-xl border border-emerald-300 bg-white font-bold text-xs focus:outline-none"
+                              />
+                              {isPaper && (Number(selectedData?.multiplier) || 1) > 1 && (
+                                <span className="text-[10px] text-slate-500 block font-normal mt-0.5">
+                                  ≈ {formatCurrency((Number(selectedData?.unitPrice) || 0) / (Number(selectedData?.multiplier) || 1))} / ແຜ່ນ
+                                </span>
+                              )}
+                            </div>
                           ) : (
-                            <span className="text-slate-400">{formatCurrency(item.costPerPurchaseUnit || 0)}</span>
+                            <span className="text-slate-400">{formatCurrency(item.costPerPurchaseUnit || item.cost_per_purchase_unit || 0)}</span>
                           )}
                         </td>
 

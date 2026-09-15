@@ -20,6 +20,10 @@ type Offcut struct {
 	LengthMm         float64   `json:"length_mm"`
 	Quantity         float64   `json:"quantity"`
 	Location         string    `json:"location"`
+	CostPerSheet     float64   `json:"cost_per_sheet"`
+	GrammageGsm      int       `json:"grammage_gsm"`
+	PaperType        string    `json:"paper_type"`
+	PaperSurface     string    `json:"paper_surface"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 
@@ -111,7 +115,9 @@ func HandleRegisterOffcut(c *gin.Context) {
 	if req.Location == "" {
 		req.Location = "Main Stock"
 	}
-	req.CreatedAt = time.Now()
+	if req.CreatedAt.IsZero() {
+		req.CreatedAt = time.Now()
+	}
 
 	if db.DB != nil {
 		err := saveOffcutToDB(req)
@@ -127,8 +133,63 @@ func HandleRegisterOffcut(c *gin.Context) {
 	c.JSON(http.StatusCreated, req)
 }
 
+// HandleUpdateOffcut updates an existing offcut
+func HandleUpdateOffcut(c *gin.Context) {
+	id := c.Param("id")
+	var req Offcut
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid offcut input", "details": err.Error()})
+		return
+	}
+	req.ID = id
+	if req.CreatedAt.IsZero() {
+		req.CreatedAt = time.Now()
+	}
+
+	if db.DB != nil {
+		err := saveOffcutToDB(req)
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to update offcut: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update offcut in DB", "details": err.Error()})
+			return
+		}
+	}
+
+	storeMutex.Lock()
+	offcutsStore[id] = req
+	storeMutex.Unlock()
+
+	c.JSON(http.StatusOK, req)
+}
+
+// HandleDeleteOffcut deletes an offcut scrap
+func HandleDeleteOffcut(c *gin.Context) {
+	id := c.Param("id")
+
+	if db.DB != nil {
+		_, err := db.DB.Exec(`DELETE FROM offcuts WHERE id = $1`, id)
+		if err != nil {
+			log.Printf("[DB ERROR] Failed to delete offcut: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete offcut from DB", "details": err.Error()})
+			return
+		}
+	}
+
+	storeMutex.Lock()
+	delete(offcutsStore, id)
+	storeMutex.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Offcut deleted successfully"})
+}
+
 func getOffcutsFromDB() ([]Offcut, error) {
-	rows, err := db.DB.Query(`SELECT id, material_sku, material_name, width_mm, height_mm, quantity, location, created_at FROM offcuts`)
+	rows, err := db.DB.Query(`
+		SELECT id, COALESCE(material_sku, ''), COALESCE(material_name, ''),
+		       width_mm, height_mm, quantity, COALESCE(location, 'Main Stock'),
+		       COALESCE(cost_per_sheet, 0), COALESCE(grammage_gsm, 0),
+		       COALESCE(paper_type, 'Standard'), COALESCE(paper_surface, ''),
+		       COALESCE(parent_material_id, ''), created_at
+		FROM offcuts ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -137,9 +198,14 @@ func getOffcutsFromDB() ([]Offcut, error) {
 	var result []Offcut
 	for rows.Next() {
 		var o Offcut
-		err := rows.Scan(&o.ID, &o.ParentMaterialID, &o.Name, &o.WidthMm, &o.LengthMm, &o.Quantity, &o.Location, &o.CreatedAt)
+		var matSku string
+		err := rows.Scan(&o.ID, &matSku, &o.Name, &o.WidthMm, &o.LengthMm, &o.Quantity, &o.Location,
+			&o.CostPerSheet, &o.GrammageGsm, &o.PaperType, &o.PaperSurface, &o.ParentMaterialID, &o.CreatedAt)
 		if err != nil {
 			continue
+		}
+		if o.ParentMaterialID == "" {
+			o.ParentMaterialID = matSku
 		}
 		result = append(result, o)
 	}
@@ -150,16 +216,29 @@ func getOffcutsFromDB() ([]Offcut, error) {
 }
 
 func saveOffcutToDB(o Offcut) error {
+	parentMat := o.ParentMaterialID
+	if parentMat == "" {
+		parentMat = "Standard"
+	}
+	if o.CreatedAt.IsZero() {
+		o.CreatedAt = time.Now()
+	}
 	_, err := db.DB.Exec(`
-		INSERT INTO offcuts (id, material_sku, material_name, width_mm, height_mm, quantity, location, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO offcuts (id, material_sku, material_name, width_mm, height_mm, quantity, location, cost_per_sheet, grammage_gsm, paper_type, paper_surface, parent_material_id, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (id) DO UPDATE SET
 			material_sku = EXCLUDED.material_sku,
 			material_name = EXCLUDED.material_name,
 			width_mm = EXCLUDED.width_mm,
 			height_mm = EXCLUDED.height_mm,
 			quantity = EXCLUDED.quantity,
-			location = EXCLUDED.location`,
-		o.ID, o.ParentMaterialID, o.Name, o.WidthMm, o.LengthMm, int(o.Quantity), o.Location, o.CreatedAt)
+			location = EXCLUDED.location,
+			cost_per_sheet = EXCLUDED.cost_per_sheet,
+			grammage_gsm = EXCLUDED.grammage_gsm,
+			paper_type = EXCLUDED.paper_type,
+			paper_surface = EXCLUDED.paper_surface,
+			parent_material_id = EXCLUDED.parent_material_id`,
+		o.ID, parentMat, o.Name, o.WidthMm, o.LengthMm, int(o.Quantity), o.Location,
+		o.CostPerSheet, o.GrammageGsm, o.PaperType, o.PaperSurface, parentMat, o.CreatedAt)
 	return err
 }

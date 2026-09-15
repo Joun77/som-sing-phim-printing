@@ -644,10 +644,72 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
                   </div>
                 )}
               </div>
-              <div className="flex justify-between text-slate-900 font-bold border-t border-sky-200/70 pt-1.5">
-                <span>ຈຳນວນແຜ່ນລວມທີ່ຕ້ອງຕັດ (FIFO Draw):</span>
-                <span className="font-sans font-black text-slate-950 text-sm">{activeCalc.totalParentSheets?.toLocaleString()} ແຜ່ນ</span>
-              </div>
+              {/* Clear Distinction: Customer Pieces vs Imposition Cuts vs Warehouse Parent Sheets */}
+              {(() => {
+                const name = (activeItem.name || '').toLowerCase();
+                const tpl = (activeItem.selectedTemplateId || '').toLowerCase();
+                let jobUnit = activeItem.unitName || 'ຊິ້ນ';
+                if (!activeItem.unitName) {
+                  if (name.includes('card') || name.includes('ບັດ') || tpl.includes('card')) jobUnit = 'ໃບ';
+                  else if (name.includes('book') || name.includes('ປຶ້ມ') || tpl.includes('book') || activeItem.includeCover) jobUnit = 'ຫົວ';
+                  else if (name.includes('photo') || name.includes('ຮູບ') || tpl.includes('photo')) jobUnit = 'ຮູບ';
+                }
+
+                const totalPieces = Number(activeItem.printVolume || 1);
+                const cuts = Math.max(1, Number(activeCalc.cutsPerSheet || 1));
+                const reqSheets = Math.ceil(totalPieces / cuts);
+                const totalSheets = Number(activeCalc.totalParentSheets || reqSheets);
+                const spoilSheets = Math.max(0, totalSheets - reqSheets);
+
+                return (
+                  <div className="bg-white border border-sky-200/80 rounded-2xl p-3 space-y-2.5 shadow-2xs mt-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5 font-black text-slate-800">
+                        <Layers className="w-3.5 h-3.5 text-sky-600" />
+                        <span>ອັດຕາສ່ວນການຈັດວາງຕັດ (Job Items ⟶ Parent Sheets)</span>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-sky-800 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-md">
+                        {cuts} {jobUnit}/ແຜ່ນແມ່
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                      <div className="p-2 bg-slate-50 border border-slate-200/80 rounded-xl">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase block">1. ຍອດສັ່ງລູກຄ້າ</span>
+                        <strong className="text-sm font-black text-slate-900 font-sans block mt-0.5">
+                          {totalPieces.toLocaleString()} {jobUnit}
+                        </strong>
+                        <span className="text-[10px] text-slate-400">ຊິ້ນງານສຳເລັດຮູບ</span>
+                      </div>
+
+                      <div className="p-2 bg-slate-50 border border-slate-200/80 rounded-xl">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase block">2. ອັດຕາການຕັດ</span>
+                        <strong className="text-sm font-black text-sky-700 font-sans block mt-0.5">
+                          ຕັດໄດ້ {cuts} {jobUnit}
+                        </strong>
+                        <span className="text-[10px] text-slate-400">ຕໍ່ 1 ແຜ່ນແມ່ໃຫຍ່</span>
+                      </div>
+
+                      <div className="p-2 bg-sky-50 border border-sky-300 rounded-xl">
+                        <span className="text-[10px] font-bold text-sky-800 uppercase block">3. ແຜ່ນແມ່ທີ່ຕ້ອງຕັດ</span>
+                        <strong className="text-sm font-black text-indigo-700 font-sans block mt-0.5">
+                          {totalSheets.toLocaleString()} ແຜ່ນແມ່
+                        </strong>
+                        <span className="text-[10px] text-slate-600">
+                          (ພິມ {reqSheets} + ເສຍ {spoilSheets})
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="px-2.5 py-1.5 bg-sky-50/70 border border-sky-100 rounded-lg text-[11px] font-mono text-sky-950 font-bold flex items-center justify-between">
+                      <span>ສູດ: ⌈ {totalPieces.toLocaleString()} {jobUnit} ÷ {cuts} ⌉ + ເຜື່ອເສຍ {spoilSheets} = {totalSheets.toLocaleString()} ແຜ່ນແມ່</span>
+                      <span className="text-[10px] text-emerald-700 font-sans font-black flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> ແຍກຊັດເຈນ
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {Boolean(activeItem.useOffcutRebate && (activeCalc.offcutRebate || activeItem.offcutRebateAmount)) && (
                 <div className="flex justify-between items-center text-emerald-800 font-bold border-t border-emerald-200/80 pt-1.5">

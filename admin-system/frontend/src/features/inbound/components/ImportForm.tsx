@@ -17,6 +17,7 @@ import {
   PackagingSpecsForm,
   SparePartsSpecsForm
 } from './forms/OtherSpecsForms';
+import { InboundExcelModal } from './modals/InboundExcelModal';
 
 interface ImportFormProps {
   initialType?: string;
@@ -35,6 +36,8 @@ export default function ImportForm({ initialType, onSubmit, onClose }: ImportFor
   ]);
   const [activeIdx, setActiveIdx] = useState(0);
 
+  const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+
   // Active Item Helper
   const currentItem = items[activeIdx] || items[0];
 
@@ -51,6 +54,40 @@ export default function ImportForm({ initialType, onSubmit, onClose }: ImportFor
     const newItem = createDefaultItem(type);
     setItems(prev => [...prev, newItem]);
     setActiveIdx(items.length);
+  };
+
+  const handleDuplicateItemTab = (indexToDuplicate: number) => {
+    const sourceItem = items[indexToDuplicate];
+    if (!sourceItem) return;
+
+    const rand = Math.floor(100 + Math.random() * 900);
+    const duplicatedItem: InboundItemFormData = {
+      ...JSON.parse(JSON.stringify(sourceItem)),
+      id: `ITEM-${Date.now()}-${rand}`,
+      // Append duplicate marker to identifiable fields
+      paperName: sourceItem.paperName ? `${sourceItem.paperName} (ສຳເນົາ)` : sourceItem.paperName,
+      inkColorName: sourceItem.inkColorName ? `${sourceItem.inkColorName} (ສຳເນົາ)` : sourceItem.inkColorName,
+      machineModel: sourceItem.machineModel ? `${sourceItem.machineModel} (ສຳເນົາ)` : sourceItem.machineModel,
+      bindingName: sourceItem.bindingName ? `${sourceItem.bindingName} (ສຳເນົາ)` : sourceItem.bindingName,
+      laminationName: sourceItem.laminationName ? `${sourceItem.laminationName} (ສຳເນົາ)` : sourceItem.laminationName,
+      sparePartName: sourceItem.sparePartName ? `${sourceItem.sparePartName} (ສຳເນົາ)` : sourceItem.sparePartName,
+    };
+
+    setItems(prev => [...prev, duplicatedItem]);
+    setActiveIdx(items.length);
+    showToast(currentLang === 'lo' ? 'ຄັດລອກລາຍການສຳເລັດ' : 'Item duplicated successfully', 'success');
+  };
+
+  const handleBulkAddItems = (newItems: InboundItemFormData[]) => {
+    if (!newItems || newItems.length === 0) return;
+    setItems(prev => [...prev, ...newItems]);
+    setActiveIdx(items.length); // switch to first imported item
+    showToast(
+      currentLang === 'lo' 
+        ? `ເພີ່ມສິນຄ້າຈາກ Excel ຈຳນວນ ${newItems.length} ລາຍການຮຽບຮ້ອຍແລ້ວ` 
+        : `Added ${newItems.length} items from Excel`,
+      'success'
+    );
   };
 
   const handleRemoveItemTab = (indexToRemove: number) => {
@@ -176,24 +213,27 @@ export default function ImportForm({ initialType, onSubmit, onClose }: ImportFor
         duplexMode: item.printerDuplexMode,
         inkType: item.printerInkType,
 
-        // Wear parts embedded
-        wearDrumUnitCost: item.wearDrumUnitCost,
-        wearDrumUnitLife: item.wearDrumUnitLife,
-        wearFuserUnitCost: item.wearFuserUnitCost,
-        wearFuserUnitLife: item.wearFuserUnitLife,
-        wearTransferBeltCost: item.wearTransferBeltCost,
-        wearTransferBeltLife: item.wearTransferBeltLife,
-        wearPickupRollerCost: item.wearPickupRollerCost,
-        wearPickupRollerLife: item.wearPickupRollerLife,
-        wearWasteTonerBoxCost: item.wearWasteTonerBoxCost,
-        wearWasteTonerBoxLife: item.wearWasteTonerBoxLife,
+        printerCategory: isPrinter ? (machineType === 'inkjet' ? 'Inkjet Printer' : 'Laser Printer') : undefined,
+        machineryTypeCategory: machineType,
 
-        wearMaintBoxCost: item.wearMaintBoxCost,
-        wearMaintBoxLife: item.wearMaintBoxLife,
-        wearCarriageBeltCost: item.wearCarriageBeltCost,
-        wearCarriageBeltLife: item.wearCarriageBeltLife,
-        wearPrintheadCost: item.wearPrintheadCost,
-        wearPrintheadLife: item.wearPrintheadLife,
+        // Wear parts embedded - strictly isolated by machine type
+        wearDrumUnitCost: machineType === 'laser' ? item.wearDrumUnitCost : undefined,
+        wearDrumUnitLife: machineType === 'laser' ? item.wearDrumUnitLife : undefined,
+        wearFuserUnitCost: machineType === 'laser' ? item.wearFuserUnitCost : undefined,
+        wearFuserUnitLife: machineType === 'laser' ? item.wearFuserUnitLife : undefined,
+        wearTransferBeltCost: machineType === 'laser' ? item.wearTransferBeltCost : undefined,
+        wearTransferBeltLife: machineType === 'laser' ? item.wearTransferBeltLife : undefined,
+        wearPickupRollerCost: (machineType === 'laser' || machineType === 'inkjet') ? item.wearPickupRollerCost : undefined,
+        wearPickupRollerLife: (machineType === 'laser' || machineType === 'inkjet') ? item.wearPickupRollerLife : undefined,
+        wearWasteTonerBoxCost: machineType === 'laser' ? item.wearWasteTonerBoxCost : undefined,
+        wearWasteTonerBoxLife: machineType === 'laser' ? item.wearWasteTonerBoxLife : undefined,
+
+        wearMaintBoxCost: machineType === 'inkjet' ? item.wearMaintBoxCost : undefined,
+        wearMaintBoxLife: machineType === 'inkjet' ? item.wearMaintBoxLife : undefined,
+        wearCarriageBeltCost: machineType === 'inkjet' ? item.wearCarriageBeltCost : undefined,
+        wearCarriageBeltLife: machineType === 'inkjet' ? item.wearCarriageBeltLife : undefined,
+        wearPrintheadCost: machineType === 'inkjet' ? item.wearPrintheadCost : undefined,
+        wearPrintheadLife: machineType === 'inkjet' ? item.wearPrintheadLife : undefined,
 
         cutterMaxWidthMm: item.cutterMaxWidthMm,
         cutterMaxSpeedMms: item.cutterMaxSpeedMms,
@@ -257,18 +297,43 @@ export default function ImportForm({ initialType, onSubmit, onClose }: ImportFor
           productPhoto: machineResolvedPhoto,
           paymentSlip: item.paymentSlip || null,
         },
-        specs: machineSpecsObj
+        specs: {
+          ...machineSpecsObj,
+          oemBaselineInks: item.printerInkSlots,
+          printerInkSlots: item.printerInkSlots,
+        },
+        oemBaselineInks: item.printerInkSlots,
+        printerInkSlots: item.printerInkSlots,
       };
     } else if (item.importType === 'INK') {
-      const inkVolumeMl = Number(item.inkVolume) || 70;
+      const isToner = item.inkBaseType === 'Toner' || 
+        (item.importUnit || '').toLowerCase().includes('kg') || 
+        (item.importUnit || '').toLowerCase().includes('ກິໂລ') || 
+        (item.importUnit || '').toLowerCase().includes('ກຣາມ') ||
+        (item.importUnit || '').toLowerCase().includes('ຕລັບ') ||
+        (item.importUnit || '').toLowerCase().includes('cartridge');
+
+      const isKg = (item.importUnit || '').toLowerCase().includes('kg') || (item.importUnit || '').toLowerCase().includes('ກິໂລ');
+      const isPureGram = (item.importUnit || '').toLowerCase().includes('gram') || (item.importUnit || '').toLowerCase().includes('ກຣາມ');
+      
+      const defaultInkVol = isToner ? 500 : 70;
+      const inkVolumeVal = Number(item.inkVolume) || (isKg ? 1000 : defaultInkVol);
       const packCount = Number(item.importQty) || 1;
-      const totalMl = packCount * inkVolumeMl;
+      const consumptionMultiplier = isKg ? 1000 : (isPureGram ? 1 : inkVolumeVal);
+      const totalConsumptionStock = packCount * consumptionMultiplier;
+      const consumptionUnit = isToner ? 'g' : 'ml';
+      const costPerConsumption = totalConsumptionStock > 0 ? (totalPriceLak / totalConsumptionStock) : 0;
+
       const inkSpecsObj = {
         inkCode: item.inkCode,
         colorName: item.inkColorName,
         colorGroup: item.inkColorGroup,
-        volume: inkVolumeMl,
-        inkVolume: inkVolumeMl,
+        volume: inkVolumeVal,
+        inkVolume: inkVolumeVal,
+        netWeightGrams: isToner ? (isKg ? 1000 : inkVolumeVal) : undefined,
+        consumptionUnit: consumptionUnit,
+        costPerConsumptionUnit: costPerConsumption,
+        purchaseMultiplier: consumptionMultiplier,
         inkBaseType: item.inkBaseType,
         isCompatible: item.isCompatible,
         targetPrinterId: item.inkTargetPrinter,
@@ -281,16 +346,19 @@ export default function ImportForm({ initialType, onSubmit, onClose }: ImportFor
       finalData = {
         ...finalData,
         id: item.inkCode,
-        name: `ໝຶກ ${item.inkColorName} (${item.inkBaseType})`,
+        name: isToner ? `ຜົງໝຶກ ${item.inkColorName} (${item.inkBaseType})` : `ໝຶກ ${item.inkColorName} (${item.inkBaseType})`,
         category: 'Ink',
         inkCode: item.inkCode,
         colorName: item.inkColorName,
         colorGroup: item.inkColorGroup,
-        volume: inkVolumeMl,
-        stockQty: totalMl,
-        consumptionUnit: 'ml',
-        purchaseUnit: item.importUnit || 'ຂວດ',
-        purchaseMultiplier: inkVolumeMl,
+        volume: inkVolumeVal,
+        stockQty: totalConsumptionStock,
+        consumptionUnit: consumptionUnit,
+        purchaseUnit: item.importUnit || (isToner ? 'ກິໂລກຣາມ (kg)' : 'ຂວດ'),
+        purchaseMultiplier: consumptionMultiplier,
+        costPerConsumptionUnit: costPerConsumption,
+        unitPrice: totalPriceLak / Math.max(1, packCount),
+        costPerPurchaseUnit: totalPriceLak / Math.max(1, packCount),
         inkBaseType: item.inkBaseType,
         isCompatible: item.isCompatible,
         targetPrinterId: item.inkTargetPrinter,
@@ -513,7 +581,9 @@ export default function ImportForm({ initialType, onSubmit, onClose }: ImportFor
           formatCurrency={formatCurrency}
           onSelectTab={setActiveIdx}
           onAddNewItemTab={handleAddNewItemTab}
+          onDuplicateItem={handleDuplicateItemTab}
           onRemoveItemTab={handleRemoveItemTab}
+          onOpenExcelModal={() => setIsExcelModalOpen(true)}
         />
 
         {/* =========================================================================
@@ -532,13 +602,35 @@ export default function ImportForm({ initialType, onSubmit, onClose }: ImportFor
                   {currentLang === 'lo' ? 'ກຳລັງກຳນົດສະເປັກລາຍການທີ່' : 'Configuring Item'} #{activeIdx + 1}
                 </span>
                 <h3 className="font-black text-xs sm:text-sm text-slate-900 truncate">
-                  {currentItem.paperName || currentItem.inkColorName || currentItem.machineModel || currentItem.machineBrand || currentItem.bindingName || currentItem.laminationName || currentItem.sparePartName || `${currentItem.importType} Item`}
+                  {(() => {
+                    if (currentItem.importType === 'PAPER') return currentItem.paperName || 'Paper Item';
+                    if (currentItem.importType === 'INK') {
+                      const isTnr = currentItem.inkBaseType === 'Toner' || (currentItem.importUnit || '').toLowerCase().includes('kg');
+                      return currentItem.inkColorName 
+                        ? (isTnr ? `ຜົງໝຶກ ${currentItem.inkColorName}` : `ໝຶກ ${currentItem.inkColorName}`) 
+                        : (isTnr ? 'Laser Toner Item' : 'Ink Item');
+                    }
+                    if (currentItem.importType === 'MACHINERY' || currentItem.importType === 'MACHINERY_INKJET') return currentItem.machineModel || currentItem.machineBrand || 'Machine Item';
+                    if (currentItem.importType === 'BINDING_SUPPLY') return currentItem.bindingName || 'Binding Supply';
+                    if (currentItem.importType === 'LAMINATION_FILM') return currentItem.laminationName || 'Lamination Film';
+                    if (currentItem.importType === 'SPARE_PART') return currentItem.sparePartName || 'Spare Part';
+                    if (currentItem.importType === 'RIGID_SUBSTRATE') return currentItem.rigidSubstrateType ? `Rigid ${currentItem.rigidSubstrateType}` : 'Rigid Board';
+                    if (currentItem.importType === 'PACKAGING') return currentItem.packagingCategory ? `Packaging ${currentItem.packagingCategory}` : 'Packaging Item';
+                    if (currentItem.importType === 'CUTTING_BLADE') return currentItem.cuttingSupplyType ? `Cutting ${currentItem.cuttingSupplyType}` : 'Cutting Supply';
+                    return `${currentItem.importType} Item`;
+                  })()}
                 </h3>
               </div>
             </div>
 
-            <span className="px-2.5 sm:px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 font-extrabold text-[11px] sm:text-xs rounded-xl shrink-0 ml-2">
-              {currentItem.importType}
+            <span className={`px-2.5 sm:px-3 py-1 font-extrabold text-[11px] sm:text-xs rounded-xl shrink-0 ml-2 border ${
+              currentItem.importType === 'INK' && (currentItem.inkBaseType === 'Toner' || (currentItem.importUnit || '').toLowerCase().includes('kg'))
+                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                : 'bg-sky-50 text-sky-700 border-sky-200'
+            }`}>
+              {currentItem.importType === 'INK'
+                ? (currentItem.inkBaseType === 'Toner' || (currentItem.importUnit || '').toLowerCase().includes('kg') ? 'TONER' : 'INK')
+                : currentItem.importType}
             </span>
           </div>
 
@@ -546,17 +638,27 @@ export default function ImportForm({ initialType, onSubmit, onClose }: ImportFor
             
             {/* 1. MACHINERY & PRINTERS (ALL MACHINES WITH WEAR PARTS) */}
             {(currentItem.importType === 'MACHINERY' || currentItem.importType === 'PRINTER') && (
-              <MachinerySpecsForm item={currentItem} updateField={updateCurrentItem} />
+              <MachinerySpecsForm
+                item={currentItem}
+                updateField={updateCurrentItem}
+              />
             )}
 
             {/* 2. PAPER & MEDIA */}
             {currentItem.importType === 'PAPER' && (
-              <PaperSpecsForm item={currentItem} updateField={updateCurrentItem} />
+              <PaperSpecsForm
+                item={currentItem}
+                updateField={updateCurrentItem}
+              />
             )}
 
             {/* 3. INK & TONER */}
             {currentItem.importType === 'INK' && (
-              <InkSpecsForm item={currentItem} equipment={equipment} updateField={updateCurrentItem} />
+              <InkSpecsForm
+                item={currentItem}
+                updateField={updateCurrentItem}
+                equipment={equipment}
+              />
             )}
 
             {/* 4. LAMINATION */}
@@ -617,7 +719,7 @@ export default function ImportForm({ initialType, onSubmit, onClose }: ImportFor
           <button 
             type="button" 
             onClick={onClose} 
-            className="flex-1 sm:flex-initial px-4 sm:px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer text-center"
+            className="flex-1 sm:flex-initial px-4 sm:px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-2xl transition cursor-pointer text-center"
           >
             {t('common.cancel')}
           </button>
@@ -636,6 +738,14 @@ export default function ImportForm({ initialType, onSubmit, onClose }: ImportFor
           </button>
         </div>
       </div>
+
+      {/* Excel Template & Bulk Import Modal */}
+      <InboundExcelModal
+        isOpen={isExcelModalOpen}
+        onClose={() => setIsExcelModalOpen(false)}
+        onImportSuccess={handleBulkAddItems}
+        currentLang={currentLang}
+      />
     </div>
   );
 }

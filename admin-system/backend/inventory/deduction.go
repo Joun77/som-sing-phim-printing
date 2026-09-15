@@ -9,28 +9,29 @@ import (
 
 // JobDeductionSpec represents production requirements for paper, ink, finishing, and spoilage
 type JobDeductionSpec struct {
-	OrderID                string
-	OrderItemID            string
-	PaperSKU               string
-	Quantity               int
-	PageCount              int
-	CoverPaperID           string
-	InnerPaperID           string
-	ColorMode              string
-	MachineID              string
-	AvgCovC                float64
-	AvgCovM                float64
-	AvgCovY                float64
-	AvgCovK                float64
-	InkCoveragePct         float64
+	OrderID                 string
+	OrderItemID             string
+	PaperSKU                string
+	Quantity                int
+	PageCount               int
+	CoverPaperID            string
+	InnerPaperID            string
+	UsedOffcutLotID         string
+	ColorMode               string
+	MachineID               string
+	AvgCovC                 float64
+	AvgCovM                 float64
+	AvgCovY                 float64
+	AvgCovK                 float64
+	InkCoveragePct          float64
 	SpoilageAllowanceSheets int
-	SpoilagePercent        float64
-	SpoilageCost           float64
-	AllowNegativeStock     bool
-	CreatedBy              string
+	SpoilagePercent         float64
+	SpoilageCost            float64
+	AllowNegativeStock      bool
+	CreatedBy               string
 }
 
-// DeductInventoryForJob deducts paper sheets (via FIFO batches & materials), ink volume, and logs stock_movements inside a db.Transaction
+// DeductInventoryForJob deducts paper sheets (via FIFO batches & materials or offcuts), ink volume, and logs stock_movements inside a db.Transaction
 func DeductInventoryForJob(tx *sql.Tx, spec JobDeductionSpec) error {
 	if tx == nil {
 		return nil
@@ -41,119 +42,163 @@ func DeductInventoryForJob(tx *sql.Tx, spec JobDeductionSpec) error {
 		createdBy = "SYSTEM"
 	}
 
-	// 1. Deduct Paper Stock (using Row-Level Lock & FIFO Batches)
-	paperSku := spec.PaperSKU
-	if paperSku == "" {
-		paperSku = spec.CoverPaperID
-	}
-	if paperSku == "" {
-		paperSku = spec.InnerPaperID
-	}
-
+	var paperSku string
 	var materialID string
-	var currentStock float64
-	var unitCost float64
+	offcutHandled := false
 
-	if paperSku != "" {
+	if spec.UsedOffcutLotID != "" {
 		sheetsNeeded := spec.Quantity
 		if spec.PageCount > 0 {
-			// e.g. 2 pages per sheet (Duplex)
 			sheetsNeeded = (spec.PageCount + 1) / 2 * spec.Quantity
 		}
 		if sheetsNeeded <= 0 {
 			sheetsNeeded = 1
 		}
 
-		// Lock material row
+		var offcutQty int
+		var offcutCost float64
 		err := tx.QueryRow(`
-			SELECT id, stock_qty, cost_per_unit 
-			FROM materials 
-			WHERE (sku = $1 OR id::text = $1)
-			FOR UPDATE
-		`, paperSku).Scan(&materialID, &currentStock, &unitCost)
+			SELECT quantity, COALESCE(cost_per_sheet, 0)
+			FROM offcuts WHERE id = $1 FOR UPDATE
+		`, spec.UsedOffcutLotID).Scan(&offcutQty, &offcutCost)
 
 		if err == nil {
-			if !spec.AllowNegativeStock && currentStock < float64(sheetsNeeded) {
-				return fmt.Errorf("INSUFFICIENT_STOCK: insufficient stock for paper '%s': required %d, available %.2f", paperSku, sheetsNeeded, currentStock)
+			if !spec.AllowNegativeStock && offcutQty < sheetsNeeded {
+				return fmt.Errorf("INSUFFICIENT_OFFCUT_STOCK: insufficient scrap paper '%s': required %d, available %d", spec.UsedOffcutLotID, sheetsNeeded, offcutQty)
 			}
 
-			// Atomic update on master material
-			_, err = tx.Exec(`
-				UPDATE materials 
-				SET stock_qty = stock_qty - $1, updated_at = NOW() 
-				WHERE id = $2
-			`, sheetsNeeded, materialID)
-			if err != nil {
-				return fmt.Errorf("failed to deduct master material: %w", err)
+			newOffQty := offcutQty - sheetsNeeded
+			if newOffQty <= 0 {
+				_, _ = tx.Exec(`DELETE FROM offcuts WHERE id = $1`, spec.UsedOffcutLotID)
+			} else {
+				_, _ = tx.Exec(`UPDATE offcuts SET quantity = $1 WHERE id = $2`, newOffQty, spec.UsedOffcutLotID)
 			}
 
-			// Record in stock_movements ledger
-			movementID := fmt.Sprintf("mov-%s-%d", spec.OrderID, time.Now().UnixNano())
+			movementID := fmt.Sprintf("mov-off-%s-%d", spec.OrderID, time.Now().UnixNano())
 			_, _ = tx.Exec(`
 				INSERT INTO stock_movements (id, material_id, order_id, order_item_id, movement_type, quantity, unit_cost, notes, created_at, created_by)
-				VALUES ($1, $2, $3, $4, 'PRODUCTION_DEDUCTION', $5, $6, $7, NOW(), $8)
-			`, movementID, materialID, spec.OrderID, spec.OrderItemID, sheetsNeeded, unitCost, fmt.Sprintf("Production print deduction for order %s", spec.OrderID), createdBy)
-		}
+				VALUES ($1, $2, $3, $4, 'PRODUCTION_OFFCUT_DEDUCTION', $5, $6, $7, NOW(), $8)
+			`, movementID, spec.UsedOffcutLotID, spec.OrderID, spec.OrderItemID, sheetsNeeded, offcutCost, fmt.Sprintf("Offcut scrap paper deduction for order %s (Lot %s)", spec.OrderID, spec.UsedOffcutLotID), createdBy)
 
-		// FIFO Batches discharge
-		var remainingToDeduct = sheetsNeeded
-		rows, err := tx.Query(`
-			SELECT id, current_qty 
-			FROM inventory_batches 
-			WHERE (material_id = $1 OR sku = $2) AND current_qty > 0 
-			ORDER BY purchase_date ASC, created_at ASC
-			FOR UPDATE
-		`, materialID, paperSku)
-
-		if err == nil {
-			type batchRecord struct {
-				id  string
-				qty int
-			}
-			var batches []batchRecord
-			for rows.Next() {
-				var b batchRecord
-				if err := rows.Scan(&b.id, &b.qty); err == nil {
-					batches = append(batches, b)
-				}
-			}
-			if err := rows.Err(); err != nil {
-				rows.Close()
-				return fmt.Errorf("failed to iterate deduction batches: %w", err)
-			}
-			rows.Close()
-
-			for _, b := range batches {
-				if remainingToDeduct <= 0 {
-					break
-				}
-				deductFromThisBatch := b.qty
-				if deductFromThisBatch > remainingToDeduct {
-					deductFromThisBatch = remainingToDeduct
-				}
-
-				_, _ = tx.Exec(`
-					UPDATE inventory_batches 
-					SET current_qty = current_qty - $1, updated_at = NOW() 
-					WHERE id = $2
-				`, deductFromThisBatch, b.id)
-
-				remainingToDeduct -= deductFromThisBatch
-			}
-		}
-
-		log.Printf("[INVENTORY DEDUCTION] Deducted %d sheets for Paper SKU %s (Order %s, Item %s)", sheetsNeeded, paperSku, spec.OrderID, spec.OrderItemID)
-
-		// Low Stock Alert Check
-		var matName string
-		var remainingQty float64
-		var reorderThreshold float64
-		_ = tx.QueryRow(`SELECT name, stock_qty, reorder_threshold FROM materials WHERE sku = $1 OR id::text = $1 LIMIT 1`, paperSku).Scan(&matName, &remainingQty, &reorderThreshold)
-		if reorderThreshold > 0 && remainingQty <= reorderThreshold {
-			log.Printf("[INVENTORY ALERT] Paper '%s' (SKU: %s) is below reorder threshold! Current: %.2f, Threshold: %.2f", matName, paperSku, remainingQty, reorderThreshold)
+			log.Printf("[INVENTORY DEDUCTION] Deducted %d offcut sheets from lot %s (Order %s, Item %s)", sheetsNeeded, spec.UsedOffcutLotID, spec.OrderID, spec.OrderItemID)
+			paperSku = spec.UsedOffcutLotID
+			materialID = spec.UsedOffcutLotID
+			offcutHandled = true
 		}
 	}
 
+	if !offcutHandled {
+		paperSku = spec.PaperSKU
+		if paperSku == "" {
+			paperSku = spec.CoverPaperID
+		}
+		if paperSku == "" {
+			paperSku = spec.InnerPaperID
+		}
+
+		var currentStock float64
+		var unitCost float64
+
+		if paperSku != "" {
+			sheetsNeeded := spec.Quantity
+			if spec.PageCount > 0 {
+				// e.g. 2 pages per sheet (Duplex)
+				sheetsNeeded = (spec.PageCount + 1) / 2 * spec.Quantity
+			}
+			if sheetsNeeded <= 0 {
+				sheetsNeeded = 1
+			}
+
+			// Lock material row
+			err := tx.QueryRow(`
+				SELECT id, stock_qty, cost_per_unit 
+				FROM materials 
+				WHERE (sku = $1 OR id::text = $1)
+				FOR UPDATE
+			`, paperSku).Scan(&materialID, &currentStock, &unitCost)
+
+			if err == nil {
+				if !spec.AllowNegativeStock && currentStock < float64(sheetsNeeded) {
+					return fmt.Errorf("INSUFFICIENT_STOCK: insufficient stock for paper '%s': required %d, available %.2f", paperSku, sheetsNeeded, currentStock)
+				}
+
+				// Atomic update on master material
+				_, err = tx.Exec(`
+					UPDATE materials 
+					SET stock_qty = stock_qty - $1, updated_at = NOW() 
+					WHERE id = $2
+				`, sheetsNeeded, materialID)
+				if err != nil {
+					return fmt.Errorf("failed to deduct master material: %w", err)
+				}
+
+				// Record in stock_movements ledger
+				movementID := fmt.Sprintf("mov-%s-%d", spec.OrderID, time.Now().UnixNano())
+				_, _ = tx.Exec(`
+					INSERT INTO stock_movements (id, material_id, order_id, order_item_id, movement_type, quantity, unit_cost, notes, created_at, created_by)
+					VALUES ($1, $2, $3, $4, 'PRODUCTION_DEDUCTION', $5, $6, $7, NOW(), $8)
+				`, movementID, materialID, spec.OrderID, spec.OrderItemID, sheetsNeeded, unitCost, fmt.Sprintf("Production print deduction for order %s", spec.OrderID), createdBy)
+			}
+
+			// FIFO Batches discharge
+			var remainingToDeduct = sheetsNeeded
+			rows, err := tx.Query(`
+				SELECT id, current_qty 
+				FROM inventory_batches 
+				WHERE (material_id = $1 OR sku = $2) AND current_qty > 0 
+				ORDER BY purchase_date ASC, created_at ASC
+				FOR UPDATE
+			`, materialID, paperSku)
+
+			if err == nil {
+				type batchRecord struct {
+					id  string
+					qty int
+				}
+				var batches []batchRecord
+				for rows.Next() {
+					var b batchRecord
+					if err := rows.Scan(&b.id, &b.qty); err == nil {
+						batches = append(batches, b)
+					}
+				}
+				if err := rows.Err(); err != nil {
+					rows.Close()
+					return fmt.Errorf("failed to iterate deduction batches: %w", err)
+				}
+				rows.Close()
+
+				for _, b := range batches {
+					if remainingToDeduct <= 0 {
+						break
+					}
+					deductFromThisBatch := b.qty
+					if deductFromThisBatch > remainingToDeduct {
+						deductFromThisBatch = remainingToDeduct
+					}
+
+					_, _ = tx.Exec(`
+						UPDATE inventory_batches 
+						SET current_qty = current_qty - $1, updated_at = NOW() 
+						WHERE id = $2
+					`, deductFromThisBatch, b.id)
+
+					remainingToDeduct -= deductFromThisBatch
+				}
+			}
+
+			log.Printf("[INVENTORY DEDUCTION] Deducted %d sheets for Paper SKU %s (Order %s, Item %s)", sheetsNeeded, paperSku, spec.OrderID, spec.OrderItemID)
+
+			// Low Stock Alert Check
+			var matName string
+			var remainingQty float64
+			var reorderThreshold float64
+			_ = tx.QueryRow(`SELECT name, stock_qty, reorder_threshold FROM materials WHERE sku = $1 OR id::text = $1 LIMIT 1`, paperSku).Scan(&matName, &remainingQty, &reorderThreshold)
+			if reorderThreshold > 0 && remainingQty <= reorderThreshold {
+				log.Printf("[INVENTORY ALERT] Paper '%s' (SKU: %s) is below reorder threshold! Current: %.2f, Threshold: %.2f", matName, paperSku, remainingQty, reorderThreshold)
+			}
+		}
+	}
 	// 2. Calculate and Deduct Ink Volume (ml) based on Coverage % (Coverage % × Pages × Quantity × Baseline ml)
 	totalImpressions := float64(spec.Quantity)
 	if spec.PageCount > 0 {
@@ -290,6 +335,9 @@ func ReverseInventoryForOrder(tx *sql.Tx, orderID string, reversedBy string) err
 		if err := rows.Scan(&m.materialID, &m.qty, &m.unitCost); err == nil {
 			list = append(list, m)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 
 	for _, m := range list {

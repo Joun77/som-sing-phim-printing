@@ -39,6 +39,7 @@ import { PreflightItemCreationModal } from '@components/PreflightItemCreationMod
 import type { PreflightResult } from '../types';
 import { useInventoryStore } from '@store/useInventoryStore';
 import { useApp } from '@store/AppContext';
+import { calculateMachineUnitCost } from '@utils/machineCostCalculator';
 
 export default function CreateOrderPage({
   onBack,
@@ -358,14 +359,14 @@ export default function CreateOrderPage({
         const paperItem = inventory ? inventory.find(p => p.id === it.paperId) : null;
         const paperCost = paperItem ? (paperItem.costPerConsumptionUnit || paperItem.unitPrice || 90) : 100;
         const printerItem = equipment ? equipment.find(e => e.id === it.printerId) : null;
+        const machineUnitCost = printerItem ? calculateMachineUnitCost(printerItem as any) : { depreciation: 0, maintenance: 0, totalMachineCost: 0 };
 
         const prnPrice = Number(printerItem?.MachinePrice ?? printerItem?.purchasePrice ?? printerItem?.purchaseCost ?? printerItem?.price ?? 0);
-        const prnTargetPages = Number(printerItem?.TargetTotalPages || printerItem?.printedPagesCapacity || printerItem?.expectedLifeA4Pages || (Number(printerItem?.lifespanYears || 5) * 12 * Number(printerItem?.estMonthlyVolume || 50000)) || 3000000);
-        const prnMaintRatePct = Number(printerItem?.maintenanceRatePercent || 15);
-        const prnMaintCostPerPage = Number(printerItem?.MaintenanceCostPerPage || printerItem?.maintenanceCostPerPage || (prnTargetPages > 0 && prnPrice > 0 ? (prnPrice / prnTargetPages) * (prnMaintRatePct / 100) : 0));
+        const prnTargetPages = Number(printerItem?.expectedLifeA4Pages || printerItem?.TargetTotalPages || printerItem?.printedPagesCapacity || (Number(printerItem?.lifespanYears || 5) * 12 * Number(printerItem?.estMonthlyVolume || 50000)) || 1000000);
+        const prnMaintCostPerPage = machineUnitCost.maintenance > 0 ? machineUnitCost.maintenance : Number(printerItem?.maintenance_cost_per_page || printerItem?.MaintenanceCostPerPage || 0);
 
-        let inkCostKPerMl = 3500;
-        let inkCostCMYPerMl = 4500;
+        let inkCostKPerMl = Number(printerItem?.bwInkCost || 3500);
+        let inkCostCMYPerMl = Number(printerItem?.colorInkCost || 4500);
 
         if (printerItem) {
           const links = (printerColorLinks || []).filter((l: any) => l.assetId === printerItem.id);
@@ -393,6 +394,8 @@ export default function CreateOrderPage({
           quantity: Number(it.quantity || 1),
           paper_sku: it.paperId || 'default-paper',
           paper_cost_per_unit: paperCost,
+          paper_cost_is_per_sheet: true,
+          sheets_per_pack: 1,
           paper_format: it.mediaType === 'Roll-fed' ? 'roll' : 'sheet',
           ink_coverage_k_percent: Number(it.avgCoverageK !== undefined ? it.avgCoverageK : (it.avgCoverage || 5)),
           ink_coverage_cmy_percent: it.colorMode === 'Monochrome' ? 0.0 : Number(it.avgCoverageCMY !== undefined ? it.avgCoverageCMY : 10),

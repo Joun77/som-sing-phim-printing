@@ -44,10 +44,12 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
     deletePrinterColorLink, 
     updateEquipmentMaintenance, 
     updateEquipment,
+    updateEquipmentComponents,
     deleteEquipment,
     meterReadings,
     downtimeLogs,
     updateDowntimeLog,
+    askConfirmation,
     showToast, 
     formatCurrency 
   } = useApp();
@@ -95,7 +97,15 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
 
   // Itemized wear parts editing state
   const [isEditingWearParts, setIsEditingWearParts] = useState(false);
-  const [wearPartsDraft, setWearPartsDraft] = useState<Record<string, { cost: number; life: number }>>({});
+  const [wearPartsDraft, setWearPartsDraft] = useState<Record<string, { cost: number; life: number; name?: string; nameLo?: string; unitLabel?: string }>>({});
+
+  // Dynamic wear part creation state
+  const [isAddingPart, setIsAddingPart] = useState(false);
+  const [newPartName, setNewPartName] = useState('');
+  const [newPartNameLo, setNewPartNameLo] = useState('');
+  const [newPartCost, setNewPartCost] = useState<number | ''>('');
+  const [newPartLife, setNewPartLife] = useState<number | ''>('');
+  const [newPartUnit, setNewPartUnit] = useState('');
 
   if (!machine) {
     return (
@@ -181,9 +191,32 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
   // A machine is Post-Press only if explicitly a finishing machine (Cutter, Laminator, Binder)
   const isPostPressMachine = isCutter || isLaminator || isBinder || machineCategoryLower.includes('post_press') || machineCategoryLower.includes('postpress');
   const isPrinter = !isPostPressMachine;
-  const isInkjet = !isPostPressMachine && (subtypeLower.includes('inkjet') || machineCategoryLower.includes('inkjet') || nameLower.includes('l15150') || nameLower.includes('epson') || (machine.specs?.feedType !== undefined));
+
+  const isExplicitInkjet = 
+    machineCategoryLower.includes('inkjet') || 
+    subtypeLower.includes('inkjet') || 
+    (machine.printerCategory || '').toLowerCase().includes('inkjet') ||
+    (machine.specs?.printerCategory || '').toLowerCase().includes('inkjet') ||
+    (machine.specs?.machineryTypeCategory || '').toLowerCase().includes('inkjet') ||
+    (machine.specs?.wearPrintheadCost !== undefined && Number(machine.specs?.wearPrintheadCost) > 0) ||
+    /inkjet|ecotank|tank|l15150|epson|maxify/i.test(nameLower);
+
+  const isExplicitLaser = 
+    !isExplicitInkjet && (
+      machineCategoryLower.includes('laser') || 
+      subtypeLower.includes('laser') || 
+      (machine.printerCategory || '').toLowerCase().includes('laser') ||
+      (machine.specs?.printerCategory || '').toLowerCase().includes('laser') ||
+      (machine.specs?.machineryTypeCategory || '').toLowerCase().includes('laser') ||
+      machine.specs?.inkType === 'Toner' ||
+      machine.specs?.baseType === 'Toner' ||
+      /xerox|laser|c8055|c5005|versant|docu|bizhub|imagepress/i.test(nameLower) ||
+      (machine.specs?.wearDrumUnitCost !== undefined && Number(machine.specs?.wearDrumUnitCost) > 0)
+    );
+
+  const isLaser = isPrinter && isExplicitLaser;
+  const isInkjet = isPrinter && !isLaser;
   const accurate = getEquipmentAccurateCost(machine);
-  const isLaser = isPrinter && !isInkjet;
 
   const isGuillotine = isCutter && (
     (machine.postPressSubtype || machine.specs?.postPressSubtype || machine.category || '').toLowerCase().includes('guillotine') ||
@@ -235,116 +268,125 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
     ? (assetValue / targetLifetimeCapacity)
     : 0;
 
-  // 5 Critical Wear Parts Model (Bound to real purchase cost & specs from Inbound)
+  // Dynamic Equipment Wear Parts Model (Bound to real purchase cost, dynamic CRUD, and category templates)
   const getStandard5WearParts = () => {
-    const existingComponents = machine.components || [];
-    const existingMap = new Map();
-    existingComponents.forEach((c: any) => {
-      existingMap.set(c.name?.toLowerCase(), c);
-    });
-
     const specs = machine.specs || {};
 
-    let defaults: Array<{ 
-      name: string; 
-      nameLo: string; 
-      usage: number; 
-      threshold: number; 
-      lifespan: string;
-      cost: number;
-      lifeVal: number;
-      unitLabel: string;
-      costPerUnit: number;
-      keyCost?: string;
-      keyLife?: string;
-    }> = [];
+    const getCategoryDefaultWearParts = () => {
+      if (isCutter) {
+        const sharpCost = Number(specs.wearSharpeningCost || machine.wearSharpeningCost || 150000);
+        const sharpLife = Number(specs.wearSharpeningIntervalCuts || machine.wearSharpeningIntervalCuts || 10000);
+        const stickCost = Number(specs.wearCuttingStickCost || machine.wearCuttingStickCost || 100000);
+        const stickLife = Number(specs.wearCuttingStickLifeCuts || machine.wearCuttingStickLifeCuts || 20000);
+        const bladeCost = Number(specs.wearBladeCost || machine.wearBladeCost || 250000);
+        const bladeLife = Number(specs.wearBladeLifeMeters || machine.wearBladeLifeMeters || 5000);
 
-    if (isCutter) {
-      const sharpCost = Number(specs.wearSharpeningCost || machine.wearSharpeningCost || 150000);
-      const sharpLife = Number(specs.wearSharpeningIntervalCuts || machine.wearSharpeningIntervalCuts || 10000);
-      const stickCost = Number(specs.wearCuttingStickCost || machine.wearCuttingStickCost || 100000);
-      const stickLife = Number(specs.wearCuttingStickLifeCuts || machine.wearCuttingStickLifeCuts || 20000);
-      const bladeCost = Number(specs.wearBladeCost || machine.wearBladeCost || 250000);
-      const bladeLife = Number(specs.wearBladeLifeMeters || machine.wearBladeLifeMeters || 5000);
+        return [
+          { id: 'part-sharp', name: 'Sharpening Blade Service', nameLo: 'ຄ່າຈ້າງລັບຄົມໃບມີດຕັດເຈ້ຍ', usage: 0, threshold: 90, cost: sharpCost, lifeVal: sharpLife, unitLabel: 'cuts', costPerUnit: sharpLife > 0 ? (sharpCost / sharpLife) : 0, keyCost: 'wearSharpeningCost', keyLife: 'wearSharpeningIntervalCuts' },
+          { id: 'part-stick', name: 'Cutting Stick Pad', nameLo: 'ໄມ້ຮອງໃບມີດຕັດ (Cutting Stick)', usage: 0, threshold: 85, cost: stickCost, lifeVal: stickLife, unitLabel: 'cuts', costPerUnit: stickLife > 0 ? (stickCost / stickLife) : 0, keyCost: 'wearCuttingStickCost', keyLife: 'wearCuttingStickLifeCuts' },
+          { id: 'part-blade', name: 'Plotter Cutting Blade', nameLo: 'ໃບມີດພລັອດເຕີ (Plotter Blade)', usage: 0, threshold: 90, cost: bladeCost, lifeVal: bladeLife, unitLabel: 'm', costPerUnit: bladeLife > 0 ? (bladeCost / bladeLife) : 0, keyCost: 'wearBladeCost', keyLife: 'wearBladeLifeMeters' },
+        ];
+      } else if (isLaminator) {
+        const rollerCost = Number(specs.wearSiliconeRollerCost || machine.wearSiliconeRollerCost || 1200000);
+        const rollerLife = Number(specs.wearSiliconeRollerLifeMeters || machine.wearSiliconeRollerLifeMeters || 20000);
+        const heatCost = Number(specs.wearHeatingElementCost || machine.wearHeatingElementCost || 800000);
+        const heatLife = Number(specs.wearHeatingElementHours || machine.wearHeatingElementHours || 5000);
 
-      defaults = [
-        { name: 'Sharpening Blade Service', nameLo: 'ຄ່າຈ້າງລັບຄົມໃບມີດຕັດເຈ້ຍ', usage: 18, threshold: 90, lifespan: `${sharpLife.toLocaleString()} cuts`, cost: sharpCost, lifeVal: sharpLife, unitLabel: 'cuts', costPerUnit: sharpLife > 0 ? (sharpCost / sharpLife) : 0, keyCost: 'wearSharpeningCost', keyLife: 'wearSharpeningIntervalCuts' },
-        { name: 'Cutting Stick Pad', nameLo: 'ໄມ້ຮອງໃບມີດຕັດ (Cutting Stick)', usage: 42, threshold: 85, lifespan: `${stickLife.toLocaleString()} cuts`, cost: stickCost, lifeVal: stickLife, unitLabel: 'cuts', costPerUnit: stickLife > 0 ? (stickCost / stickLife) : 0, keyCost: 'wearCuttingStickCost', keyLife: 'wearCuttingStickLifeCuts' },
-        { name: 'Plotter Cutting Blade', nameLo: 'ໃບມີດພລັອດເຕີ (Plotter Blade)', usage: 25, threshold: 90, lifespan: `${bladeLife.toLocaleString()} m`, cost: bladeCost, lifeVal: bladeLife, unitLabel: 'm', costPerUnit: bladeLife > 0 ? (bladeCost / bladeLife) : 0, keyCost: 'wearBladeCost', keyLife: 'wearBladeLifeMeters' },
-      ];
-    } else if (isLaminator) {
-      const rollerCost = Number(specs.wearSiliconeRollerCost || machine.wearSiliconeRollerCost || 1200000);
-      const rollerLife = Number(specs.wearSiliconeRollerLifeMeters || machine.wearSiliconeRollerLifeMeters || 20000);
-      const heatCost = Number(specs.wearHeatingElementCost || machine.wearHeatingElementCost || 800000);
-      const heatLife = Number(specs.wearHeatingElementHours || machine.wearHeatingElementHours || 5000);
+        return [
+          { id: 'part-roller', name: 'Silicone Heat Rollers', nameLo: 'ລູກກິ້ງຢາງຄວາມຮ້ອນ (Silicone Rollers)', usage: 0, threshold: 85, cost: rollerCost, lifeVal: rollerLife, unitLabel: 'm', costPerUnit: rollerLife > 0 ? (rollerCost / rollerLife) : 0, keyCost: 'wearSiliconeRollerCost', keyLife: 'wearSiliconeRollerLifeMeters' },
+          { id: 'part-heat', name: 'Heating Element Core', nameLo: 'ແທ່ງຄວາມຮ້ອນ (Heating Element)', usage: 0, threshold: 90, cost: heatCost, lifeVal: heatLife, unitLabel: 'hours', costPerUnit: heatLife > 0 ? (heatCost / heatLife) : 0, keyCost: 'wearHeatingElementCost', keyLife: 'wearHeatingElementHours' },
+        ];
+      } else if (isBinder) {
+        const millCost = Number(specs.wearMillingCutterCost || machine.wearMillingCutterCost || 800000);
+        const millLife = Number(specs.wearMillingCutterLifeBooks || machine.wearMillingCutterLifeBooks || 10000);
+        const punchCost = Number(specs.wearPunchingPinsCost || machine.wearPunchingPinsCost || 600000);
+        const punchLife = Number(specs.wearPunchingPinsLifePunches || machine.wearPunchingPinsLifePunches || 20000);
 
-      defaults = [
-        { name: 'Silicone Heat Rollers', nameLo: 'ລູກກິ້ງຢາງຄວາມຮ້ອນ (Silicone Rollers)', usage: 35, threshold: 85, lifespan: `${rollerLife.toLocaleString()} m`, cost: rollerCost, lifeVal: rollerLife, unitLabel: 'm', costPerUnit: rollerLife > 0 ? (rollerCost / rollerLife) : 0, keyCost: 'wearSiliconeRollerCost', keyLife: 'wearSiliconeRollerLifeMeters' },
-        { name: 'Heating Element Core', nameLo: 'ແທ່ງຄວາມຮ້ອນ (Heating Element)', usage: 20, threshold: 90, lifespan: `${heatLife.toLocaleString()} hours`, cost: heatCost, lifeVal: heatLife, unitLabel: 'hours', costPerUnit: heatLife > 0 ? (heatCost / heatLife) : 0, keyCost: 'wearHeatingElementCost', keyLife: 'wearHeatingElementHours' },
-      ];
-    } else if (isBinder) {
-      const millCost = Number(specs.wearMillingCutterCost || machine.wearMillingCutterCost || 800000);
-      const millLife = Number(specs.wearMillingCutterLifeBooks || machine.wearMillingCutterLifeBooks || 10000);
-      const punchCost = Number(specs.wearPunchingPinsCost || machine.wearPunchingPinsCost || 600000);
-      const punchLife = Number(specs.wearPunchingPinsLifePunches || machine.wearPunchingPinsLifePunches || 20000);
+        return [
+          { id: 'part-mill', name: 'Spine Milling Cutter', nameLo: 'ໃບມີດປາດສັນປຶ້ມ (Milling Cutter)', usage: 0, threshold: 85, cost: millCost, lifeVal: millLife, unitLabel: 'books', costPerUnit: millLife > 0 ? (millCost / millLife) : 0, keyCost: 'wearMillingCutterCost', keyLife: 'wearMillingCutterLifeBooks' },
+          { id: 'part-punch', name: 'Wire Punching Pins Set', nameLo: 'ຊຸດເຂັມເຈາະຮູສັນລວດ (Punching Pins)', usage: 0, threshold: 90, cost: punchCost, lifeVal: punchLife, unitLabel: 'punches', costPerUnit: punchLife > 0 ? (punchCost / punchLife) : 0, keyCost: 'wearPunchingPinsCost', keyLife: 'wearPunchingPinsLifePunches' },
+        ];
+      } else if (isInkjet) {
+        const maintCost = Number(specs.wearMaintBoxCost || machine.wearMaintBoxCost || 450000);
+        const maintLife = Number(specs.wearMaintBoxLife || machine.wearMaintBoxLife || 25000);
+        const headCost = Number(specs.wearPrintheadCost || machine.wearPrintheadCost || 4500000);
+        const headLife = Number(specs.wearPrintheadLife || machine.wearPrintheadLife || 100000);
+        const pickupCost = Number(specs.wearPickupRollerCost || machine.wearPickupRollerCost || 150000);
+        const pickupLife = Number(specs.wearPickupRollerLife || machine.wearPickupRollerLife || 30000);
+        const beltCost = Number(specs.wearCarriageBeltCost || machine.wearCarriageBeltCost || 500000);
+        const beltLife = Number(specs.wearCarriageBeltLife || machine.wearCarriageBeltLife || 50000);
 
-      defaults = [
-        { name: 'Spine Milling Cutter', nameLo: 'ໃບມີດປາດສັນປຶ້ມ (Milling Cutter)', usage: 40, threshold: 85, lifespan: `${millLife.toLocaleString()} books`, cost: millCost, lifeVal: millLife, unitLabel: 'books', costPerUnit: millLife > 0 ? (millCost / millLife) : 0, keyCost: 'wearMillingCutterCost', keyLife: 'wearMillingCutterLifeBooks' },
-        { name: 'Wire Punching Pins Set', nameLo: 'ຊຸດເຂັມເຈາະຮູສັນລວດ (Punching Pins)', usage: 22, threshold: 90, lifespan: `${punchLife.toLocaleString()} punches`, cost: punchCost, lifeVal: punchLife, unitLabel: 'punches', costPerUnit: punchLife > 0 ? (punchCost / punchLife) : 0, keyCost: 'wearPunchingPinsCost', keyLife: 'wearPunchingPinsLifePunches' },
-      ];
-    } else if (isInkjet) {
-      const maintCost = Number(specs.wearMaintBoxCost || machine.wearMaintBoxCost || 450000);
-      const maintLife = Number(specs.wearMaintBoxLife || machine.wearMaintBoxLife || 25000);
-      const headCost = Number(specs.wearPrintheadCost || machine.wearPrintheadCost || 4500000);
-      const headLife = Number(specs.wearPrintheadLife || machine.wearPrintheadLife || 100000);
-      const pickupCost = Number(specs.wearPickupRollerCost || machine.wearPickupRollerCost || 150000);
-      const pickupLife = Number(specs.wearPickupRollerLife || machine.wearPickupRollerLife || 30000);
-      const beltCost = Number(specs.wearCarriageBeltCost || machine.wearCarriageBeltCost || 500000);
-      const beltLife = Number(specs.wearCarriageBeltLife || machine.wearCarriageBeltLife || 50000);
+        return [
+          { id: 'part-maint', name: 'Maintenance Waste Box', nameLo: 'ຊຸດຊັບໝຶກ (Maintenance Box)', usage: 0, threshold: 85, cost: maintCost, lifeVal: maintLife, unitLabel: 'pages', costPerUnit: maintLife > 0 ? (maintCost / maintLife) : 0, keyCost: 'wearMaintBoxCost', keyLife: 'wearMaintBoxLife' },
+          { id: 'part-head', name: 'Precision Inkjet Printhead', nameLo: 'ຫົວພິມຄວາມລະອຽດສູງ (Printhead)', usage: 0, threshold: 90, cost: headCost, lifeVal: headLife, unitLabel: 'pages', costPerUnit: headLife > 0 ? (headCost / headLife) : 0, keyCost: 'wearPrintheadCost', keyLife: 'wearPrintheadLife' },
+          { id: 'part-pickup', name: 'Feed Pickup Roller', nameLo: 'ຢາງດຶງເຈ້ຍ (Pickup Roller)', usage: 0, threshold: 85, cost: pickupCost, lifeVal: pickupLife, unitLabel: 'pages', costPerUnit: pickupLife > 0 ? (pickupCost / pickupLife) : 0, keyCost: 'wearPickupRollerCost', keyLife: 'wearPickupRollerLife' },
+          { id: 'part-belt', name: 'Carriage Drive Belt', nameLo: 'ສາຍພານຫົວພິມ (Carriage Belt)', usage: 0, threshold: 90, cost: beltCost, lifeVal: beltLife, unitLabel: 'pages', costPerUnit: beltLife > 0 ? (beltCost / beltLife) : 0, keyCost: 'wearCarriageBeltCost', keyLife: 'wearCarriageBeltLife' },
+        ];
+      } else {
+        // Laser Production Press
+        const drumCost = Number(specs.wearDrumUnitCost || machine.wearDrumUnitCost || 1500000);
+        const drumLife = Number(specs.wearDrumUnitLife || machine.wearDrumUnitLife || 50000);
+        const fuserCost = Number(specs.wearFuserUnitCost || machine.wearFuserUnitCost || specs.wearFuserCost || 2000000);
+        const fuserLife = Number(specs.wearFuserUnitLife || machine.wearFuserUnitLife || specs.wearFuserLife || 100000);
+        const itbCost = Number(specs.wearTransferBeltCost || machine.wearTransferBeltCost || 1800000);
+        const itbLife = Number(specs.wearTransferBeltLife || machine.wearTransferBeltLife || 100000);
+        const rollerCost = Number(specs.wearPickupRollerCost || machine.wearPickupRollerCost || specs.wearRollerCost || 150000);
+        const rollerLife = Number(specs.wearPickupRollerLife || machine.wearPickupRollerLife || specs.wearRollerLife || 30000);
+        const wasteBoxCost = Number(specs.wearWasteTonerBoxCost || machine.wearWasteTonerBoxCost || 350000);
+        const wasteBoxLife = Number(specs.wearWasteTonerBoxLife || machine.wearWasteTonerBoxLife || 30000);
 
-      defaults = [
-        { name: 'Maintenance Waste Box', nameLo: 'ຊຸດຊັບໝຶກ (Maintenance Box)', usage: 35, threshold: 85, lifespan: `${maintLife.toLocaleString()} pages`, cost: maintCost, lifeVal: maintLife, unitLabel: 'pages', costPerUnit: maintLife > 0 ? (maintCost / maintLife) : 0, keyCost: 'wearMaintBoxCost', keyLife: 'wearMaintBoxLife' },
-        { name: 'Precision Inkjet Printhead', nameLo: 'ຫົວພິມຄວາມລະອຽດສູງ (Printhead)', usage: 20, threshold: 90, lifespan: `${headLife.toLocaleString()} pages`, cost: headCost, lifeVal: headLife, unitLabel: 'pages', costPerUnit: headLife > 0 ? (headCost / headLife) : 0, keyCost: 'wearPrintheadCost', keyLife: 'wearPrintheadLife' },
-        { name: 'Feed Pickup Roller', nameLo: 'ຢາງດຶງເຈ້ຍ (Pickup Roller)', usage: 50, threshold: 85, lifespan: `${pickupLife.toLocaleString()} pages`, cost: pickupCost, lifeVal: pickupLife, unitLabel: 'pages', costPerUnit: pickupLife > 0 ? (pickupCost / pickupLife) : 0, keyCost: 'wearPickupRollerCost', keyLife: 'wearPickupRollerLife' },
-        { name: 'Carriage Drive Belt', nameLo: 'ສາຍພານຫົວພິມ (Carriage Belt)', usage: 25, threshold: 90, lifespan: `${beltLife.toLocaleString()} pages`, cost: beltCost, lifeVal: beltLife, unitLabel: 'pages', costPerUnit: beltLife > 0 ? (beltCost / beltLife) : 0, keyCost: 'wearCarriageBeltCost', keyLife: 'wearCarriageBeltLife' },
-      ];
-    } else {
-      // Laser Production Press
-      const drumCost = Number(specs.wearDrumUnitCost || machine.wearDrumUnitCost || 1500000);
-      const drumLife = Number(specs.wearDrumUnitLife || machine.wearDrumUnitLife || 50000);
-      const fuserCost = Number(specs.wearFuserUnitCost || machine.wearFuserUnitCost || specs.wearFuserCost || 2000000);
-      const fuserLife = Number(specs.wearFuserUnitLife || machine.wearFuserUnitLife || specs.wearFuserLife || 100000);
-      const itbCost = Number(specs.wearTransferBeltCost || machine.wearTransferBeltCost || 1800000);
-      const itbLife = Number(specs.wearTransferBeltLife || machine.wearTransferBeltLife || 100000);
-      const rollerCost = Number(specs.wearPickupRollerCost || machine.wearPickupRollerCost || specs.wearRollerCost || 150000);
-      const rollerLife = Number(specs.wearPickupRollerLife || machine.wearPickupRollerLife || specs.wearRollerLife || 30000);
-      const wasteBoxCost = Number(specs.wearWasteTonerBoxCost || machine.wearWasteTonerBoxCost || 350000);
-      const wasteBoxLife = Number(specs.wearWasteTonerBoxLife || machine.wearWasteTonerBoxLife || 30000);
-
-      defaults = [
-        { name: 'OPC Drum Unit', nameLo: 'ຊຸດດຣັມສ້າງພາບ (Drum Unit)', usage: 65, threshold: 85, lifespan: `${drumLife.toLocaleString()} pages`, cost: drumCost, lifeVal: drumLife, unitLabel: 'pages', costPerUnit: drumLife > 0 ? (drumCost / drumLife) : 0, keyCost: 'wearDrumUnitCost', keyLife: 'wearDrumUnitLife' },
-        { name: 'Fuser Fixing Assembly', nameLo: 'ຊຸດຄວາມຮ້ອນ (Fuser Unit)', usage: 72, threshold: 90, lifespan: `${fuserLife.toLocaleString()} pages`, cost: fuserCost, lifeVal: fuserLife, unitLabel: 'pages', costPerUnit: fuserLife > 0 ? (fuserCost / fuserLife) : 0, keyCost: 'wearFuserUnitCost', keyLife: 'wearFuserUnitLife' },
-        { name: 'Intermediate Transfer Belt (ITB)', nameLo: 'ສາຍພານຖ່າຍທອດພາບ (Transfer Belt)', usage: 38, threshold: 90, lifespan: `${itbLife.toLocaleString()} pages`, cost: itbCost, lifeVal: itbLife, unitLabel: 'pages', costPerUnit: itbLife > 0 ? (itbCost / itbLife) : 0, keyCost: 'wearTransferBeltCost', keyLife: 'wearTransferBeltLife' },
-        { name: 'Paper Feed Pickup Rollers', nameLo: 'ຊຸດລູກກິ້ງດຶງເຈ້ຍ (Pickup Roller)', usage: 82, threshold: 85, lifespan: `${rollerLife.toLocaleString()} pages`, cost: rollerCost, lifeVal: rollerLife, unitLabel: 'pages', costPerUnit: rollerLife > 0 ? (rollerCost / rollerLife) : 0, keyCost: 'wearPickupRollerCost', keyLife: 'wearPickupRollerLife' },
-        { name: 'Waste Toner Box', nameLo: 'ກ່ອງເກັບຜົງໝຶກເສຍ (Waste Toner Box)', usage: 45, threshold: 90, lifespan: `${wasteBoxLife.toLocaleString()} pages`, cost: wasteBoxCost, lifeVal: wasteBoxLife, unitLabel: 'pages', costPerUnit: wasteBoxLife > 0 ? (wasteBoxCost / wasteBoxLife) : 0, keyCost: 'wearWasteTonerBoxCost', keyLife: 'wearWasteTonerBoxLife' },
-      ];
-    }
-
-    return defaults.map(def => {
-      const match = existingMap.get(def.name.toLowerCase());
-      if (match) {
-        return {
-          ...def,
-          ...match,
-          keyCost: def.keyCost,
-          keyLife: def.keyLife,
-          cost: match.cost !== undefined ? match.cost : def.cost,
-          lifeVal: match.lifeVal !== undefined ? match.lifeVal : def.lifeVal,
-          unitLabel: match.unitLabel || def.unitLabel,
-          costPerUnit: match.costPerUnit !== undefined ? match.costPerUnit : def.costPerUnit,
-        };
+        return [
+          { id: 'part-drum', name: 'OPC Drum Unit', nameLo: 'ຊຸດດຣັມສ້າງພາບ (Drum Unit)', usage: 0, threshold: 85, cost: drumCost, lifeVal: drumLife, unitLabel: 'pages', costPerUnit: drumLife > 0 ? (drumCost / drumLife) : 0, keyCost: 'wearDrumUnitCost', keyLife: 'wearDrumUnitLife' },
+          { id: 'part-fuser', name: 'Fuser Fixing Assembly', nameLo: 'ຊຸດຄວາມຮ້ອນ (Fuser Unit)', usage: 0, threshold: 90, cost: fuserCost, lifeVal: fuserLife, unitLabel: 'pages', costPerUnit: fuserLife > 0 ? (fuserCost / fuserLife) : 0, keyCost: 'wearFuserUnitCost', keyLife: 'wearFuserUnitLife' },
+          { id: 'part-itb', name: 'Intermediate Transfer Belt (ITB)', nameLo: 'ສາຍພານຖ່າຍທອດພາບ (Transfer Belt)', usage: 0, threshold: 90, cost: itbCost, lifeVal: itbLife, unitLabel: 'pages', costPerUnit: itbLife > 0 ? (itbCost / itbLife) : 0, keyCost: 'wearTransferBeltCost', keyLife: 'wearTransferBeltLife' },
+          { id: 'part-pickup', name: 'Paper Feed Pickup Rollers', nameLo: 'ຊຸດລູກກິ້ງດຶງເຈ້ຍ (Pickup Roller)', usage: 0, threshold: 85, cost: rollerCost, lifeVal: rollerLife, unitLabel: 'pages', costPerUnit: rollerLife > 0 ? (rollerCost / rollerLife) : 0, keyCost: 'wearPickupRollerCost', keyLife: 'wearPickupRollerLife' },
+          { id: 'part-waste', name: 'Waste Toner Box', nameLo: 'ກ່ອງເກັບຜົງໝຶກເສຍ (Waste Toner Box)', usage: 0, threshold: 90, cost: wasteBoxCost, lifeVal: wasteBoxLife, unitLabel: 'pages', costPerUnit: wasteBoxLife > 0 ? (wasteBoxCost / wasteBoxLife) : 0, keyCost: 'wearWasteTonerBoxCost', keyLife: 'wearWasteTonerBoxLife' },
+        ];
       }
-      return def;
+    };
+
+    const categoryDefaults = getCategoryDefaultWearParts();
+    const rawComps = Array.isArray(machine.components) && machine.components.length > 0
+      ? machine.components
+      : categoryDefaults;
+
+    return rawComps.map((c: any) => {
+      const cName = (c.name || '').toLowerCase();
+      const matchTmpl = categoryDefaults.find(def => {
+        const dName = def.name.toLowerCase();
+        return cName === dName || cName.includes(dName) || dName.includes(cName);
+      });
+
+      const keyCost = c.keyCost || matchTmpl?.keyCost;
+      const keyLife = c.keyLife || matchTmpl?.keyLife;
+
+      const effectiveCost = (keyCost && specs[keyCost] !== undefined && Number(specs[keyCost]) > 0)
+        ? Number(specs[keyCost])
+        : (c.cost !== undefined && Number(c.cost) > 0 ? Number(c.cost) : (matchTmpl?.cost || 0));
+
+      const effectiveLife = (keyLife && specs[keyLife] !== undefined && Number(specs[keyLife]) > 0)
+        ? Number(specs[keyLife])
+        : (c.lifeVal !== undefined && Number(c.lifeVal) > 0 ? Number(c.lifeVal) : (Number(c.life || matchTmpl?.lifeVal || 0)));
+
+      const costPerUnit = effectiveLife > 0 ? (effectiveCost / effectiveLife) : 0;
+      const usage = c.usage !== undefined 
+        ? Number(c.usage) 
+        : (currentMeterCount > 0 && effectiveLife > 0 ? Math.min(100, Math.round((currentMeterCount % effectiveLife) / effectiveLife * 100)) : 0);
+
+      return {
+        ...c,
+        id: c.id || `part-${(c.name || '').toLowerCase().replace(/\s+/g, '-')}`,
+        name: c.name || 'Component',
+        nameLo: c.nameLo || matchTmpl?.nameLo || c.name,
+        cost: effectiveCost,
+        lifeVal: effectiveLife,
+        costPerUnit,
+        usage,
+        unitLabel: c.unitLabel || matchTmpl?.unitLabel || machineUnitEn || 'pages',
+        threshold: c.threshold || 90,
+        keyCost,
+        keyLife
+      };
     });
   };
 
@@ -448,40 +490,40 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
   };
 
   const handleSaveAllWearParts = () => {
-    const currentComponents = Array.isArray(machine.components) ? [...machine.components] : [];
-    const updatedSpecs = { ...(machine.specs || {}) };
-
-    criticalWearParts.forEach((part: any) => {
+    const updatedComponents = criticalWearParts.map((part: any) => {
       const draft = wearPartsDraft[part.name];
       if (draft) {
-        const updatedCost = draft.cost;
-        const updatedLife = draft.life;
+        const updatedCost = Number(draft.cost);
+        const updatedLife = Number(draft.life);
+        const updatedName = draft.name ? draft.name.trim() : part.name;
+        const updatedNameLo = draft.nameLo ? draft.nameLo.trim() : part.nameLo;
+        const updatedUnit = draft.unitLabel ? draft.unitLabel.trim() : part.unitLabel;
         const costPerUnit = updatedLife > 0 ? (updatedCost / updatedLife) : 0;
-
-        const existingIndex = currentComponents.findIndex((c: any) => c.name?.toLowerCase() === part.name.toLowerCase());
-        const updatedObj = {
+        return {
           ...part,
+          name: updatedName,
+          nameLo: updatedNameLo,
           cost: updatedCost,
           lifeVal: updatedLife,
+          unitLabel: updatedUnit,
           costPerUnit
         };
-        if (existingIndex >= 0) {
-          currentComponents[existingIndex] = { ...currentComponents[existingIndex], ...updatedObj };
-        } else {
-          currentComponents.push(updatedObj);
-        }
-
-        if (part.keyCost) updatedSpecs[part.keyCost] = updatedCost;
-        if (part.keyLife) updatedSpecs[part.keyLife] = updatedLife;
       }
+      return part;
     });
 
-    const newWearRate = currentComponents.reduce((acc: number, c: any) => acc + (Number(c.costPerUnit) || 0), 0);
+    const updatedSpecs = { ...(machine.specs || {}) };
+    updatedComponents.forEach((part: any) => {
+      if (part.keyCost) updatedSpecs[part.keyCost] = part.cost;
+      if (part.keyLife) updatedSpecs[part.keyLife] = part.lifeVal;
+    });
+
+    const newWearRate = updatedComponents.reduce((acc: number, c: any) => acc + (Number(c.costPerUnit) || 0), 0);
     const newNetRate = Math.round((baseCostPerUnit + newWearRate) * 1000) / 1000;
 
     updateEquipment(machine.id, {
       specs: updatedSpecs,
-      components: currentComponents,
+      components: updatedComponents,
       costPerConsumptionUnit: newNetRate,
       calculatedCostPerPage: newNetRate,
       maintenanceCostPerPage: newNetRate
@@ -489,6 +531,68 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
 
     setIsEditingWearParts(false);
     showToast(currentLang === 'lo' ? 'ບັນທຶກລາຄາ ແລະ ອາຍຸອະໄຫຼ່ສຳເລັດ' : 'Saved wear parts successfully', 'success');
+  };
+
+  const handleAddWearPart = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPartName.trim() || Number(newPartCost) <= 0 || Number(newPartLife) <= 0) {
+      showToast(currentLang === 'lo' ? 'ກະລຸນາປ້ອນຂໍ້ມູນອະໄຫຼ່ໃຫ້ຄົບຖ້ວນ' : 'Please fill in all part details', 'warning');
+      return;
+    }
+
+    const costNum = Number(newPartCost);
+    const lifeNum = Number(newPartLife);
+    const costPerUnit = lifeNum > 0 ? (costNum / lifeNum) : 0;
+    const newComponent = {
+      id: `part-${Date.now()}`,
+      name: newPartName.trim(),
+      nameLo: newPartNameLo.trim() || newPartName.trim(),
+      cost: costNum,
+      lifeVal: lifeNum,
+      unitLabel: newPartUnit || machineUnitEn || 'pages',
+      usage: 0,
+      threshold: 90,
+      costPerUnit
+    };
+
+    const updatedComps = [...criticalWearParts, newComponent];
+    const newWearRate = updatedComps.reduce((acc, c) => acc + (Number(c.costPerUnit) || 0), 0);
+    const newNetRate = Math.round((baseCostPerUnit + newWearRate) * 1000) / 1000;
+
+    updateEquipment(machine.id, {
+      components: updatedComps,
+      costPerConsumptionUnit: newNetRate,
+      calculatedCostPerPage: newNetRate,
+      maintenanceCostPerPage: newNetRate
+    });
+
+    setIsAddingPart(false);
+    setNewPartName('');
+    setNewPartNameLo('');
+    setNewPartCost('');
+    setNewPartLife('');
+    showToast(currentLang === 'lo' ? 'ເພີ່ມອະໄຫຼ່ໃໝ່ສຳເລັດ' : 'Added new wear part successfully', 'success');
+  };
+
+  const handleDeleteWearPart = (partName: string) => {
+    const msg = currentLang === 'lo'
+      ? `ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບອະໄຫຼ່ "${partName}" ອອກຈາກເຄື່ອງຈັກນີ້?`
+      : `Are you sure you want to remove wear part "${partName}" from this machine?`;
+
+    askConfirmation(msg, () => {
+      const updatedComps = criticalWearParts.filter((p: any) => p.name !== partName);
+      const newWearRate = updatedComps.reduce((acc, c) => acc + (Number(c.costPerUnit) || 0), 0);
+      const newNetRate = Math.round((baseCostPerUnit + newWearRate) * 1000) / 1000;
+
+      updateEquipment(machine.id, {
+        components: updatedComps,
+        costPerConsumptionUnit: newNetRate,
+        calculatedCostPerPage: newNetRate,
+        maintenanceCostPerPage: newNetRate
+      });
+
+      showToast(currentLang === 'lo' ? 'ລຶບອະໄຫຼ່ສຳເລັດ' : 'Deleted wear part successfully', 'info');
+    });
   };
 
   // Comprehensive Live Inks from PostgreSQL Database for accurate real-time costing
@@ -559,12 +663,19 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
     machine?.specs?.oem_baseline_specs?.slots || 
     machine?.oemBaselineInks || 
     machine?.specs?.oemBaselineInks || 
-    [
+    machine?.printerInkSlots ||
+    machine?.specs?.printerInkSlots ||
+    (isLaser ? [
+      { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'DOCU-C5005-K', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 26000, oemPrice: 450000 },
+      { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'DOCU-C5005-C', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 25000, oemPrice: 350000 },
+      { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'DOCU-C5005-M', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 25000, oemPrice: 350000 },
+      { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'DOCU-C5005-Y', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 25000, oemPrice: 350000 }
+    ] : [
       { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500, oemPrice: 450000 },
       { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
       { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
       { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 }
-    ];
+    ]);
 
   const equipmentCostResult = calculateEquipmentPrintCost(
     machine,
@@ -1291,21 +1402,34 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                 </div>
                 <div className="flex items-center gap-2">
                   {!isEditingWearParts ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const initDraft: Record<string, { cost: number; life: number }> = {};
-                        criticalWearParts.forEach((p: any) => {
-                          initDraft[p.name] = { cost: p.cost, life: p.lifeVal };
-                        });
-                        setWearPartsDraft(initDraft);
-                        setIsEditingWearParts(true);
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 transition cursor-pointer active:scale-95 shadow-2xs"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                      <span>{currentLang === 'lo' ? 'ແກ້ໄຂອະໄຫຼ່' : 'Edit Parts'}</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewPartUnit(machineUnitEn || 'pages');
+                          setIsAddingPart(true);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 font-bold text-xs rounded-xl border border-sky-200 transition cursor-pointer active:scale-95 shadow-2xs"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-sky-600" />
+                        <span>{currentLang === 'lo' ? 'ເພີ່ມອະໄຫຼ່' : 'Add Part'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const initDraft: Record<string, { cost: number; life: number; name?: string; nameLo?: string; unitLabel?: string }> = {};
+                          criticalWearParts.forEach((p: any) => {
+                            initDraft[p.name] = { cost: p.cost, life: p.lifeVal, name: p.name, nameLo: p.nameLo, unitLabel: p.unitLabel };
+                          });
+                          setWearPartsDraft(initDraft);
+                          setIsEditingWearParts(true);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 transition cursor-pointer active:scale-95 shadow-2xs"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+                        <span>{currentLang === 'lo' ? 'ແກ້ໄຂອະໄຫຼ່' : 'Edit Parts'}</span>
+                      </button>
+                    </>
                   ) : (
                     <div className="flex items-center gap-2">
                       <button
@@ -1329,6 +1453,98 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                 </div>
               </div>
 
+              {/* Dynamic Add Wear Part Form */}
+              {isAddingPart && (
+                <form onSubmit={handleAddWearPart} className="p-4 bg-sky-50/70 border-2 border-sky-200 rounded-2xl space-y-3 animate-fade-in shadow-xs">
+                  <div className="flex items-center justify-between pb-2 border-b border-sky-100">
+                    <div className="flex items-center gap-2 text-sky-900 font-black text-xs">
+                      <Plus className="w-4 h-4 text-sky-600" />
+                      <span>{currentLang === 'lo' ? 'ເພີ່ມລາຍການອະໄຫຼ່ສິ້ນເປືອງໃໝ່' : 'Add New Wear Component'}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingPart(false)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">
+                        {currentLang === 'lo' ? 'ຊື່ຊິ້ນສ່ວນ (EN)' : 'Part Name (EN)'} *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Bypass Pickup Roller"
+                        value={newPartName}
+                        onChange={(e) => setNewPartName(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">
+                        {currentLang === 'lo' ? 'ຊື່ຊິ້ນສ່ວນ (ພາສາລາວ)' : 'Part Name (Lao)'}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="ເຊັ່ນ: ລູກຢາງດຶງເຈ້ຍ Bypass"
+                        value={newPartNameLo}
+                        onChange={(e) => setNewPartNameLo(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">
+                        {currentLang === 'lo' ? 'ລາຄາຊື້ປ່ຽນໃໝ່ (LAK)' : 'Replacement Cost (LAK)'} *
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={10000}
+                        required
+                        placeholder="e.g. 150000"
+                        value={newPartCost}
+                        onChange={(e) => setNewPartCost(e.target.value === '' ? '' : Number(e.target.value))}
+                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl font-mono font-bold text-right focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">
+                        {currentLang === 'lo' ? `ຮອບອາຍຸ (${newPartUnit || machineUnitEn})` : `Lifespan (${newPartUnit || machineUnitEn})`} *
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1000}
+                        required
+                        placeholder="e.g. 50000"
+                        value={newPartLife}
+                        onChange={(e) => setNewPartLife(e.target.value === '' ? '' : Number(e.target.value))}
+                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl font-mono font-bold text-right focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-sky-100">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingPart(false)}
+                      className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition"
+                    >
+                      {currentLang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>{currentLang === 'lo' ? 'ຢືນຢັນເພີ່ມອະໄຫຼ່' : 'Confirm Add Part'}</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+
               {/* Table of Wear Parts */}
               <div className="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-2xs">
                 <table className="w-full text-left border-collapse text-xs">
@@ -1340,6 +1556,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                       <th className="py-2.5 px-3 text-right">{currentLang === 'lo' ? 'ຮອບອາຍຸການໃຊ້ງານ' : 'Rated Lifespan'}</th>
                       <th className="py-2.5 px-3 text-right">{currentLang === 'lo' ? 'ຕົ້ນທຶນສະເລ່ຍ / ໜ່ວຍ' : 'Rate / Unit'}</th>
                       <th className="py-2.5 px-3 text-center">{currentLang === 'lo' ? 'ສະຖານະ SLA' : 'SLA Status'}</th>
+                      <th className="py-2.5 px-3 text-center w-20">{currentLang === 'lo' ? 'ຈັດການ' : 'Actions'}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1363,17 +1580,59 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                       const currentRate = currentLife > 0 ? (currentCost / currentLife) : 0;
 
                       return (
-                        <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                        <tr key={part.id || idx} className="hover:bg-slate-50/60 transition-colors">
                           <td className="py-2.5 px-3 text-center font-mono text-[11px] text-slate-400 font-bold">
                             {idx + 1}
                           </td>
                           <td className="py-2.5 px-3">
-                            <span className="font-bold text-slate-900 block text-xs">
-                              {part.nameLo || part.name}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
-                              {part.name}
-                            </span>
+                            {isEditingWearParts ? (
+                              <div className="space-y-1">
+                                <input
+                                  type="text"
+                                  value={wearPartsDraft[part.name]?.name ?? part.name}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setWearPartsDraft(prev => ({
+                                      ...prev,
+                                      [part.name]: {
+                                        ...prev[part.name],
+                                        name: val,
+                                        cost: prev[part.name]?.cost ?? part.cost,
+                                        life: prev[part.name]?.life ?? part.lifeVal
+                                      }
+                                    }));
+                                  }}
+                                  className="w-full px-2 py-0.5 bg-white border border-amber-300 rounded font-bold text-xs"
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="ຊື່ພາສາລາວ"
+                                  value={wearPartsDraft[part.name]?.nameLo ?? part.nameLo ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setWearPartsDraft(prev => ({
+                                      ...prev,
+                                      [part.name]: {
+                                        ...prev[part.name],
+                                        nameLo: val,
+                                        cost: prev[part.name]?.cost ?? part.cost,
+                                        life: prev[part.name]?.life ?? part.lifeVal
+                                      }
+                                    }));
+                                  }}
+                                  className="w-full px-2 py-0.5 bg-white border border-slate-200 rounded text-[10px]"
+                                />
+                              </div>
+                            ) : (
+                              <>
+                                <span className="font-bold text-slate-900 block text-xs">
+                                  {part.nameLo || part.name}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                                  {part.name}
+                                </span>
+                              </>
+                            )}
                           </td>
                           <td className="py-2.5 px-3 text-right">
                             {isEditingWearParts ? (
@@ -1388,6 +1647,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                                     setWearPartsDraft(prev => ({
                                       ...prev,
                                       [part.name]: {
+                                        ...prev[part.name],
                                         cost: val,
                                         life: prev[part.name]?.life ?? part.lifeVal
                                       }
@@ -1416,6 +1676,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                                     setWearPartsDraft(prev => ({
                                       ...prev,
                                       [part.name]: {
+                                        ...prev[part.name],
                                         cost: prev[part.name]?.cost ?? part.cost,
                                         life: val
                                       }
@@ -1439,6 +1700,31 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                               {statusLabel} ({usage}%)
                             </span>
                           </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                title={currentLang === 'lo' ? 'ປ່ຽນອະໄຫຼ່ໃໝ່ (Replace Part)' : 'Replace Part'}
+                                onClick={() => setSwapModalConfig({
+                                  isOpen: true,
+                                  mode: 'component',
+                                  componentName: part.name,
+                                  currentUsage: usage
+                                })}
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                title={currentLang === 'lo' ? 'ລຶບອະໄຫຼ່' : 'Delete Part'}
+                                onClick={() => handleDeleteWearPart(part.name)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}
@@ -1453,6 +1739,9 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                       </td>
                       <td className="py-3 px-3 text-center text-[10px] text-slate-500 font-normal">
                         / {machineUnitLabel}
+                      </td>
+                      <td className="py-3 px-3 text-center text-[10px] text-slate-400">
+                        {criticalWearParts.length} {currentLang === 'lo' ? 'ລາຍການ' : 'parts'}
                       </td>
                     </tr>
                   </tfoot>
@@ -1850,8 +2139,12 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                   <th className="py-3 px-4">{currentLang === 'lo' ? 'ລະຫັດ SKU ໝຶກ' : 'Ink SKU Code'}</th>
                   <th className="py-3 px-4">{currentLang === 'lo' ? 'ຊື່ໝຶກໃນສາງສິນຄ້າ' : 'Ink Name in Inventory'}</th>
                   <th className="py-3 px-4 text-center">{currentLang === 'lo' ? 'ສະຕັອກໃນສາງ' : 'Stock Qty'}</th>
-                  <th className="py-3 px-4 text-right">{currentLang === 'lo' ? 'ຄວາມຈຸ (ml)' : 'Volume (ml)'}</th>
-                  <th className="py-3 px-4 text-right">{currentLang === 'lo' ? 'ລາຄາຕົ້ນທຶນ/ຕຸກ' : 'Unit Cost'}</th>
+                  <th className="py-3 px-4 text-right">
+                    {isLaser 
+                      ? (currentLang === 'lo' ? 'ນ້ຳໜັກ (g)' : 'Net Weight (g)') 
+                      : (currentLang === 'lo' ? 'ຄວາມຈຸ (ml)' : 'Volume (ml)')}
+                  </th>
+                  <th className="py-3 px-4 text-right">{currentLang === 'lo' ? 'ລາຄາຕົ້ນທຶນ' : 'Unit Cost'}</th>
                   <th className="py-3 px-4 text-center">{currentLang === 'lo' ? 'ຈັດການ / ປ່ຽນໝຶກ' : 'Action'}</th>
                 </tr>
               </thead>
@@ -1868,6 +2161,9 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                   linkedLinks.map((lnk: any) => {
                     const ink = inventory.find((i: any) => i.id === lnk.inkCode || i.skuCode === lnk.inkCode || i.sku === lnk.inkCode);
                     const stockCount = ink ? Number(ink.stockQty || 0) : 0;
+                    const isInkLaser = isLaser || (ink?.specs?.baseType === 'Toner') || (ink?.consumptionUnit === 'g');
+                    const unitSuffix = ink?.consumptionUnit || (isInkLaser ? 'g' : 'ຕຸກ');
+                    const volWeight = lnk.oemStandardVolumeMl || ink?.volume || (isInkLaser ? 1000 : 140);
 
                     return (
                       <tr key={lnk.id} className="hover:bg-slate-50">
@@ -1880,10 +2176,12 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
                               : 'bg-red-50 text-red-600 border border-red-200 animate-pulse'
                           }`}>
-                            {stockCount > 0 ? `${stockCount} ຕຸກ` : (currentLang === 'lo' ? '0 ຕຸກ (ໝົດສາງ)' : '0 (Out of stock)')}
+                            {stockCount > 0 
+                              ? `${stockCount.toLocaleString()} ${unitSuffix}` 
+                              : (currentLang === 'lo' ? `0 ${unitSuffix} (ໝົດສາງ)` : '0 (Out of stock)')}
                           </span>
                         </td>
-                        <td className="py-3 px-4 font-mono text-right">{lnk.oemStandardVolumeMl || ink?.volume || 100} ml</td>
+                        <td className="py-3 px-4 font-mono text-right">{volWeight} {isInkLaser ? 'g' : 'ml'}</td>
                         <td className="py-3 px-4 font-mono font-bold text-emerald-600 text-right">
                           {ink ? formatLAK(ink.unitPrice || ink.costPerPurchaseUnit || 0) : '-'}
                         </td>

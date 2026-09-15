@@ -127,11 +127,46 @@ export default function EquipmentTable({ machines, onViewDetails, onEdit, onDele
             ) : (
               machines.map(eq => {
                 const isCritical = eq.components && eq.components.some(c => c.usage >= (c.threshold || 90));
-                const isPostPress = eq.category !== 'Printer' && eq.category !== 'PRINTER';
 
-                // Subtype text
+                const nameLower = (eq.name || '').toLowerCase();
+                const catLower = (eq.category || '').toLowerCase();
+                const subLower = (eq.postPressSubtype || eq.specs?.postPressSubtype || eq.specs?.category || '').toLowerCase();
+                const prnCatLower = (eq.printerCategory || eq.specs?.printerCategory || eq.specs?.machineryTypeCategory || '').toLowerCase();
+
+                const isExplicitInkjet = 
+                  catLower.includes('inkjet') ||
+                  subLower.includes('inkjet') ||
+                  prnCatLower.includes('inkjet') ||
+                  /inkjet|ecotank|tank|l15150|epson|maxify/i.test(nameLower);
+
+                const isExplicitLaser = 
+                  !isExplicitInkjet && (
+                    catLower.includes('laser') ||
+                    subLower.includes('laser') ||
+                    prnCatLower.includes('laser') ||
+                    eq.specs?.inkType === 'Toner' ||
+                    /xerox|laser|c8055|c5005|versant|docu|bizhub|imagepress/i.test(nameLower)
+                  );
+
+                const isCutter = !isExplicitInkjet && !isExplicitLaser && (catLower.includes('cutter') || subLower.includes('cutter') || subLower.includes('guillotine') || subLower.includes('plotter') || nameLower.includes('cutter') || nameLower.includes('guillotine'));
+                const isBinder = !isExplicitInkjet && !isExplicitLaser && (catLower.includes('binder') || subLower.includes('binder') || nameLower.includes('binder'));
+                const isLaminator = !isExplicitInkjet && !isExplicitLaser && (catLower.includes('laminat') || subLower.includes('laminat') || nameLower.includes('laminat'));
+
+                const isPrinter = isExplicitInkjet || isExplicitLaser || eq.category === 'Printer' || eq.category === 'PRINTER' || Boolean(eq.printerCategory) || (!isCutter && !isBinder && !isLaminator);
+                const isPostPress = !isPrinter;
+
+                // Subtype text & badge
                 const subTypeKey = eq.postPressSubtype || eq.specs?.postPressSubtype || '';
-                const subTypeLabel = subtypeLabelMap[subTypeKey] || eq.printerCategory || eq.category || (isPostPress ? 'POST-PRESS' : 'INKJET');
+                let subTypeLabel = subtypeLabelMap[subTypeKey] || eq.printerCategory || eq.category || (isPostPress ? 'POST-PRESS' : 'INKJET');
+                if (isPrinter) {
+                  subTypeLabel = isExplicitLaser ? 'LASER' : 'INKJET PRINTER';
+                }
+
+                const badgeStyle = isPrinter 
+                  ? (isExplicitLaser 
+                      ? 'bg-purple-50 text-purple-700 border-purple-200' 
+                      : 'bg-sky-50 text-sky-700 border-sky-200')
+                  : 'bg-amber-50 text-amber-700 border-amber-200';
 
                 // Specs & Cost calculation: directly prioritize persistent saved fields on equipment
                 const costCalc = calculateEquipmentPrintCost(eq, printerColorLinks, allAvailableInks, eq.category);
@@ -179,11 +214,7 @@ export default function EquipmentTable({ machines, onViewDetails, onEdit, onDele
                     </td>
 
                     <td className="py-4 px-5">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wider uppercase border ${
-                        isPostPress 
-                          ? 'bg-sky-50 text-sky-700 border-sky-200' 
-                          : 'bg-purple-50 text-purple-700 border-purple-200'
-                      }`}>
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wider uppercase border ${badgeStyle}`}>
                         {subTypeLabel}
                       </span>
                     </td>

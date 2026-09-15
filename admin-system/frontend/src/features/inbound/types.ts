@@ -53,7 +53,18 @@ export interface InboundEntry {
   supplier_phone?: string;
   purchase_link?: string;
   specs?: Record<string, any>;
+  isEdited?: boolean;
+  editReason?: string;
   [key: string]: any;
+}
+
+export interface InboundRevisionLog {
+  id: number;
+  inboundId: string;
+  editedAt: string;
+  editedBy: string;
+  reason: string;
+  fieldChanges: Record<string, any>;
 }
 
 export interface InboundFormData {

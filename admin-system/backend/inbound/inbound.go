@@ -1,9 +1,11 @@
 package inbound
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,7 +16,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
-
 
 type InboundTransaction struct {
 	ID            string                 `json:"id"`
@@ -35,6 +36,21 @@ type InboundTransaction struct {
 	ReceiptSlip   string                 `json:"receiptSlip"`
 	Specs         map[string]interface{} `json:"specs"`
 	CreatedAt     string                 `json:"createdAt"`
+	IsEdited      bool                   `json:"isEdited"`
+	EditReason    string                 `json:"editReason,omitempty"`
+}
+
+type InboundRevisionLog struct {
+	ID          string    `json:"id"`
+	InboundID   string    `json:"inboundId"`
+	OldQuantity float64   `json:"oldQuantity"`
+	NewQuantity float64   `json:"newQuantity"`
+	OldPrice    float64   `json:"oldPrice"`
+	NewPrice    float64   `json:"newPrice"`
+	DeltaStock  float64   `json:"deltaStock"`
+	EditReason  string    `json:"editReason"`
+	EditedBy    string    `json:"editedBy"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 var (
@@ -148,7 +164,8 @@ func getInboundFromDB() ([]InboundTransaction, error) {
 		SELECT id, COALESCE(po_number,''), inbound_date, sku_code, item_name, COALESCE(supplier_name,''), category,
 		       quantity, COALESCE(unit,''), total_price, COALESCE(payment_method,'TRANSFER'), COALESCE(origin,'TH'),
 		       tariff_fee, freight_fee, COALESCE(product_image_url,''), COALESCE(receipt_slip_url,''),
-		       COALESCE(technical_specs, '{}'::jsonb), created_at
+		       COALESCE(technical_specs, '{}'::jsonb), created_at,
+		       COALESCE(is_edited, false), COALESCE(edit_reason, '')
 		FROM inbound_transactions ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -166,6 +183,7 @@ func getInboundFromDB() ([]InboundTransaction, error) {
 			&item.Quantity, &item.Unit, &item.TotalPrice, &item.PaymentMethod, &item.Origin,
 			&item.TariffFee, &item.FreightFee, &item.ProductImage, &item.ReceiptSlip,
 			&specsJSON, &createdAt,
+			&item.IsEdited, &item.EditReason,
 		)
 		if err != nil {
 			continue
@@ -184,7 +202,46 @@ func getInboundFromDB() ([]InboundTransaction, error) {
 	return result, nil
 }
 
-// HandleUpdateInboundTransaction updates an inbound log
+// getMultiplier resolves unit to consumption unit conversion rate
+func getMultiplier(category string, specs map[string]interface{}) float64 {
+	catLower := strings.ToLower(category)
+	isPaper := strings.Contains(catLower, "paper") || strings.Contains(catLower, "material") || strings.Contains(catLower, "ເຈ້ຍ")
+	isInk := strings.Contains(catLower, "ink") || strings.Contains(catLower, "ໝຶກ")
+
+	multiplier := 1.0
+	if isPaper {
+		multiplier = 500.0
+		if specs != nil {
+			if v := parseNumeric(specs["sheets_per_pack"]); v > 0 {
+				multiplier = v
+			} else if v := parseNumeric(specs["sheets_per_ream"]); v > 0 {
+				multiplier = v
+			} else if v := parseNumeric(specs["sheetsPerPack"]); v > 0 {
+				multiplier = v
+			} else if v := parseNumeric(specs["purchaseMultiplier"]); v > 0 {
+				multiplier = v
+			}
+		}
+	} else if isInk {
+		multiplier = 100.0
+		if specs != nil {
+			if v := parseNumeric(specs["purchaseMultiplier"]); v > 0 {
+				multiplier = v
+			} else if v := parseNumeric(specs["netWeightGrams"]); v > 0 {
+				multiplier = v
+			} else if v := parseNumeric(specs["volume"]); v > 0 {
+				multiplier = v
+			} else if v := parseNumeric(specs["volumePerBottle"]); v > 0 {
+				multiplier = v
+			} else if v := parseNumeric(specs["volume_ml"]); v > 0 {
+				multiplier = v
+			}
+		}
+	}
+	return multiplier
+}
+
+// HandleUpdateInboundTransaction updates an inbound log with audit trail and stock delta calculation
 func HandleUpdateInboundTransaction(c *gin.Context) {
 	id := c.Param("id")
 	var item InboundTransaction
@@ -196,20 +253,178 @@ func HandleUpdateInboundTransaction(c *gin.Context) {
 		item.ID = id
 	}
 
+	editReason := strings.TrimSpace(item.EditReason)
+	if editReason == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "error",
+			"code":    "REASON_REQUIRED",
+			"message": "Edit reason is mandatory (ກະລຸນາລະບຸສາເຫດໃນການແກ້ໄຂຂໍ້ມູນ)",
+		})
+		return
+	}
+
+	editedBy := c.GetString("username")
+	if editedBy == "" {
+		editedBy = c.GetString("user")
+	}
+	if editedBy == "" {
+		editedBy = "ADMIN"
+	}
+
 	if db.DB != nil {
-		err := saveInboundWithTx(item)
+		tx, err := db.DB.Begin()
 		if err != nil {
-			log.Printf("[DB ERROR] Failed to update inbound transaction: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to begin transaction: " + err.Error()})
+			return
+		}
+		defer tx.Rollback()
+
+		// 1. Query existing inbound record
+		var oldQty, oldTotalPrice float64
+		var oldSKU, oldCategory string
+		var oldSpecsJSON []byte
+		err = tx.QueryRow(`
+			SELECT quantity, total_price, COALESCE(sku_code, ''), COALESCE(category, ''), COALESCE(technical_specs, '{}'::jsonb)
+			FROM inbound_transactions WHERE id = $1 FOR UPDATE
+		`, id).Scan(&oldQty, &oldTotalPrice, &oldSKU, &oldCategory, &oldSpecsJSON)
+		if err != nil && err != sql.ErrNoRows {
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to lock existing record: " + err.Error()})
+			return
+		}
+
+		// Calculate multipliers
+		var oldSpecs map[string]interface{}
+		_ = json.Unmarshal(oldSpecsJSON, &oldSpecs)
+
+		oldMultiplier := getMultiplier(oldCategory, oldSpecs)
+		newMultiplier := getMultiplier(item.Category, item.Specs)
+
+		oldConsumptionQty := oldQty * oldMultiplier
+		newConsumptionQty := item.Quantity * newMultiplier
+		deltaConsumptionQty := newConsumptionQty - oldConsumptionQty
+
+		// 2. Adjust material stock by delta only
+		targetSKU := strings.TrimSpace(item.SKUCode)
+		if targetSKU == "" {
+			targetSKU = oldSKU
+		}
+		if targetSKU == "" {
+			targetSKU = item.ID
+		}
+
+		if deltaConsumptionQty != 0 && targetSKU != "" {
+			_, err = tx.Exec(`
+				UPDATE materials 
+				SET stock_qty = GREATEST(0, stock_qty + $1), updated_at = CURRENT_TIMESTAMP
+				WHERE id = $2 OR sku = $2 OR LOWER(sku) = LOWER($2)
+			`, deltaConsumptionQty, targetSKU)
+			if err != nil {
+				log.Printf("[DB WARNING] Failed to adjust material stock delta: %v", err)
+			}
+		}
+
+		// 3. Update WAC & Latest Market Cost
+		if newConsumptionQty > 0 && targetSKU != "" {
+			newUnitConsumptionCost := item.TotalPrice / newConsumptionQty
+			var curStock, curUnitCost, curMarketCost float64
+			errMat := tx.QueryRow(`
+				SELECT stock_qty, COALESCE(cost_per_consumption_unit, 0), COALESCE(latest_market_cost, cost_per_consumption_unit, 0)
+				FROM materials WHERE id = $1 OR sku = $1 OR LOWER(sku) = LOWER($1)
+			`, targetSKU).Scan(&curStock, &curUnitCost, &curMarketCost)
+			if errMat == nil {
+				marketCost := math.Max(curMarketCost, newUnitConsumptionCost)
+				if curUnitCost > marketCost {
+					marketCost = curUnitCost
+				}
+				newWAC := newUnitConsumptionCost
+				if curStock > 0 {
+					newWAC = math.Max(0, ((curStock*curUnitCost)+(deltaConsumptionQty*newUnitConsumptionCost))/curStock)
+				}
+				_, _ = tx.Exec(`
+					UPDATE materials 
+					SET cost_per_consumption_unit = $1, latest_market_cost = $2, updated_at = CURRENT_TIMESTAMP
+					WHERE id = $3 OR sku = $3 OR LOWER(sku) = LOWER($3)
+				`, newWAC, marketCost, targetSKU)
+			}
+		}
+
+		// 4. Update inbound_transactions
+		specsJSON, _ := json.Marshal(item.Specs)
+		_, err = tx.Exec(`
+			UPDATE inbound_transactions SET
+				po_number = $1, inbound_date = $2, sku_code = $3, item_name = $4, supplier_name = $5,
+				category = $6, quantity = $7, unit = $8, total_price = $9, payment_method = $10,
+				origin = $11, tariff_fee = $12, freight_fee = $13, product_image_url = $14,
+				receipt_slip_url = $15, technical_specs = $16, is_edited = TRUE, edit_reason = $17
+			WHERE id = $18
+		`, item.PONumber, item.InboundDate, item.SKUCode, item.ItemName, item.SupplierName,
+			item.Category, item.Quantity, item.Unit, item.TotalPrice, item.PaymentMethod,
+			item.Origin, item.TariffFee, item.FreightFee, item.ProductImage,
+			item.ReceiptSlip, specsJSON, editReason, id)
+		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to update inbound: " + err.Error()})
 			return
 		}
+
+		// 5. Insert revision audit log
+		revID := fmt.Sprintf("REV-%d-%d", time.Now().UnixNano(), len(item.ID))
+		_, err = tx.Exec(`
+			INSERT INTO inbound_revision_logs (
+				id, inbound_id, old_quantity, new_quantity, old_price, new_price, delta_stock, edit_reason, edited_by, created_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+		`, revID, id, oldQty, item.Quantity, oldTotalPrice, item.TotalPrice, deltaConsumptionQty, editReason, editedBy)
+		if err != nil {
+			log.Printf("[DB WARNING] Failed to insert inbound revision log: %v", err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to commit transaction: " + err.Error()})
+			return
+		}
 	}
+
+	item.IsEdited = true
+	item.EditReason = editReason
 
 	inboundMutex.Lock()
 	inboundMemoryStore[item.ID] = item
 	inboundMutex.Unlock()
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": item})
+}
+
+// HandleGetInboundRevisions returns revision history for a given inbound entry
+func HandleGetInboundRevisions(c *gin.Context) {
+	id := c.Param("id")
+	if db.DB == nil {
+		c.JSON(http.StatusOK, gin.H{"status": "success", "data": []InboundRevisionLog{}})
+		return
+	}
+	rows, err := db.DB.Query(`
+		SELECT id, inbound_id, old_quantity, new_quantity, old_price, new_price, delta_stock, edit_reason, edited_by, created_at
+		FROM inbound_revision_logs WHERE inbound_id = $1 ORDER BY created_at DESC
+	`, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	var logs []InboundRevisionLog
+	for rows.Next() {
+		var r InboundRevisionLog
+		err := rows.Scan(&r.ID, &r.InboundID, &r.OldQuantity, &r.NewQuantity, &r.OldPrice, &r.NewPrice, &r.DeltaStock, &r.EditReason, &r.EditedBy, &r.CreatedAt)
+		if err == nil {
+			logs = append(logs, r)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("[DB ERROR] Revision logs rows error: %v", err)
+	}
+	if logs == nil {
+		logs = []InboundRevisionLog{}
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": logs})
 }
 
 // HandleDeleteInboundTransaction deletes an inbound log and atomically rolls back material stock
@@ -253,9 +468,15 @@ func HandleDeleteInboundTransaction(c *gin.Context) {
 				} else if isInk {
 					multiplier = 100.0
 					if specs != nil {
-						if v, ok := specs["volume"].(float64); ok && v > 0 {
+						if v := parseNumeric(specs["purchaseMultiplier"]); v > 0 {
 							multiplier = v
-						} else if v, ok := specs["volumePerBottle"].(float64); ok && v > 0 {
+						} else if v := parseNumeric(specs["netWeightGrams"]); v > 0 {
+							multiplier = v
+						} else if v := parseNumeric(specs["volume"]); v > 0 {
+							multiplier = v
+						} else if v := parseNumeric(specs["volumePerBottle"]); v > 0 {
+							multiplier = v
+						} else if v := parseNumeric(specs["volume_ml"]); v > 0 {
 							multiplier = v
 						}
 					}
@@ -433,14 +654,37 @@ func saveBatchInboundWithTx(items []InboundTransaction) error {
 				}
 			} else if isInk {
 				consumptionUnit = "ml"
+				unitLower := strings.ToLower(unit)
+				if item.Specs != nil {
+					baseType, _ := item.Specs["inkBaseType"].(string)
+					cUnit, _ := item.Specs["consumptionUnit"].(string)
+					if strings.EqualFold(baseType, "Toner") || strings.EqualFold(cUnit, "g") || strings.EqualFold(cUnit, "gram") {
+						consumptionUnit = "g"
+					}
+				}
+				if strings.Contains(unitLower, "kg") || strings.Contains(unit, "ກິໂລ") || strings.Contains(unitLower, "gram") || strings.Contains(unit, "ກຣາມ") {
+					consumptionUnit = "g"
+				}
+
 				multiplier = 100.0
 				if item.Specs != nil {
-					if v := parseNumeric(item.Specs["volume"]); v > 0 {
+					if v := parseNumeric(item.Specs["purchaseMultiplier"]); v > 0 {
+						multiplier = v
+					} else if v := parseNumeric(item.Specs["netWeightGrams"]); v > 0 {
+						multiplier = v
+					} else if v := parseNumeric(item.Specs["volume"]); v > 0 {
 						multiplier = v
 					} else if v := parseNumeric(item.Specs["volumePerBottle"]); v > 0 {
 						multiplier = v
 					} else if v := parseNumeric(item.Specs["volume_ml"]); v > 0 {
 						multiplier = v
+					}
+				}
+				if multiplier <= 0 {
+					if consumptionUnit == "g" {
+						multiplier = 1000.0
+					} else {
+						multiplier = 100.0
 					}
 				}
 			}
@@ -458,46 +702,62 @@ func saveBatchInboundWithTx(items []InboundTransaction) error {
 
 			// Check if material already exists by SKU, ID, or (Name & Category)
 			var existingID string
-			var existingStock float64
+			var existingStock, existingCost, existingMarketCost float64
 			errCheck := tx.QueryRow(`
-				SELECT id, stock_qty 
+				SELECT id, stock_qty, COALESCE(cost_per_consumption_unit, 0), COALESCE(latest_market_cost, cost_per_consumption_unit, 0)
 				FROM materials 
 				WHERE id = $1 OR sku = $1 OR LOWER(sku) = LOWER($1) OR (LOWER(name) = LOWER($2) AND LOWER(category) = LOWER($3))
 				LIMIT 1
-			`, sku, name, cat).Scan(&existingID, &existingStock)
+			`, sku, name, cat).Scan(&existingID, &existingStock, &existingCost, &existingMarketCost)
 
 			if errCheck == nil && existingID != "" {
-				// Material already exists: atomically increment stock_qty
+				// Material already exists: atomically increment stock_qty and update WAC & latest market cost
+				newTotalStock := existingStock + stockQtyToAdd
+				newWacCost := costPerConsumption
+				if newTotalStock > 0 && existingStock > 0 {
+					newWacCost = ((existingStock * existingCost) + item.TotalPrice) / newTotalStock
+				}
+				latestMarket := costPerConsumption
+				if existingMarketCost > latestMarket {
+					latestMarket = existingMarketCost
+				}
+				if existingCost > latestMarket {
+					latestMarket = existingCost
+				}
+
 				_, err = tx.Exec(`
 					UPDATE materials 
 					SET stock_qty = stock_qty + $1,
 					    purchase_multiplier = $2,
 					    cost_per_purchase_unit = $3,
 					    cost_per_consumption_unit = $4,
+					    latest_market_cost = $5,
 					    updated_at = CURRENT_TIMESTAMP
-					WHERE id = $5
-				`, stockQtyToAdd, multiplier, costPerPurchase, costPerConsumption, existingID)
+					WHERE id = $6
+				`, stockQtyToAdd, multiplier, costPerPurchase, newWacCost, latestMarket, existingID)
 				if err != nil {
 					log.Printf("[DB WARNING] Failed to update existing material stock from inbound: %v", err)
 				}
 			} else {
 				// Create new master material
+				latestMarket := costPerConsumption
 				_, err = tx.Exec(`
 					INSERT INTO materials (
 						id, sku, name, category, stock_qty, consumption_unit,
 						purchase_unit, purchase_multiplier, cost_per_purchase_unit,
-						cost_per_consumption_unit, reorder_threshold, technical_specs, updated_at
+						cost_per_consumption_unit, latest_market_cost, reorder_threshold, technical_specs, updated_at
 					) VALUES (
-						$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 50, $11, CURRENT_TIMESTAMP
+						$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 50, $12, CURRENT_TIMESTAMP
 					)
 					ON CONFLICT (id) DO UPDATE SET
 						stock_qty = materials.stock_qty + EXCLUDED.stock_qty,
 						purchase_multiplier = EXCLUDED.purchase_multiplier,
 						cost_per_purchase_unit = EXCLUDED.cost_per_purchase_unit,
 						cost_per_consumption_unit = EXCLUDED.cost_per_consumption_unit,
+						latest_market_cost = EXCLUDED.latest_market_cost,
 						updated_at = CURRENT_TIMESTAMP`,
 					sku, sku, name, cat, stockQtyToAdd, consumptionUnit, unit,
-					multiplier, costPerPurchase, costPerConsumption, specsJSON)
+					multiplier, costPerPurchase, costPerConsumption, latestMarket, specsJSON)
 				if err != nil {
 					log.Printf("[DB WARNING] Failed to insert new material from inbound: %v", err)
 				}
@@ -506,11 +766,6 @@ func saveBatchInboundWithTx(items []InboundTransaction) error {
 	}
 
 	return tx.Commit()
-}
-
-// saveInboundWithTx performs atomic inbound save and material stock increment inside a single DB transaction
-func saveInboundWithTx(item InboundTransaction) error {
-	return saveBatchInboundWithTx([]InboundTransaction{item})
 }
 
 func parseNumeric(val interface{}) float64 {

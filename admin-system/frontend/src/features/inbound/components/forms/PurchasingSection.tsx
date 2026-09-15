@@ -97,8 +97,33 @@ export const PurchasingSection: React.FC<PurchasingSectionProps> = ({
   // Available units based on category
   const isPaper = item.importType === 'PAPER';
   const isInk = item.importType === 'INK';
+  const isToner = isInk && (
+    item.inkBaseType === 'Toner' || 
+    (item.importUnit || '').toLowerCase().includes('kg') || 
+    (item.importUnit || '').toLowerCase().includes('ກິໂລ') || 
+    (item.importUnit || '').toLowerCase().includes('ກຣາມ') ||
+    (item.importUnit || '').toLowerCase().includes('ຕລັບ') ||
+    (item.importUnit || '').toLowerCase().includes('cartridge')
+  );
+
   const paperUnits = ['ແພັກ (Pack)', 'ຣີມ (Ream)', 'ກ່ອງ/ລັງ (Carton)', 'ແຜ່ນ (Sheet)', 'ມ້ວນ (Roll)'];
-  const inkUnits = ['ຂວດ (Bottle)', 'ລິດ (Litre)', 'ຊຸດ (Set)'];
+  const inkUnits = isToner
+    ? [
+        'ກິໂລກຣາມ (Kilogram / kg)',
+        'ກຣາມ (Gram / g)',
+        'ຕຸກ/ຂວດ (Bottle)',
+        'ຕລັບ (Cartridge)',
+        'ຖົງ (Bag)',
+        'ລິດ (Litre)',
+        'ຊຸດ (Set)'
+      ]
+    : [
+        'ຂວດ (Bottle)',
+        'ລິດ (Litre)',
+        'ກິໂລກຣາມ (Kilogram / kg)',
+        'ກຣາມ (Gram / g)',
+        'ຊຸດ (Set)'
+      ];
 
   // Sheet multiplier for paper
   const sheetsPerPack = Number(item.sheetsPerPack || 500);
@@ -107,10 +132,15 @@ export const PurchasingSection: React.FC<PurchasingSectionProps> = ({
   const unitCostLAK = unitCostNum * rate;
   const costPerSheetLAK = totalSheets > 0 ? (totalCostLAK / totalSheets) : (isPaper ? unitCostLAK / sheetsPerPack : 0);
 
-  // Ink volume multiplier
-  const inkVolume = Number(item.inkVolume || 70);
-  const totalMl = isInk ? qty * inkVolume : 0;
-  const costPerMlLAK = totalMl > 0 ? (totalCostLAK / totalMl) : (isInk ? unitCostLAK / inkVolume : 0);
+  // Ink/Toner volume/weight multiplier
+  const isKg = (item.importUnit || '').toLowerCase().includes('kg') || (item.importUnit || '').toLowerCase().includes('ກິໂລ');
+  const isPureGram = (item.importUnit || '').toLowerCase().includes('gram') || (item.importUnit || '').toLowerCase().includes('ກຣາມ');
+  const defaultInkVol = isToner ? 500 : 70;
+  const inkVolume = Number(item.inkVolume || (isKg ? 1000 : defaultInkVol));
+  
+  const consumptionMultiplier = isKg ? 1000 : (isPureGram ? 1 : inkVolume);
+  const totalConsumptionStock = isInk ? qty * consumptionMultiplier : 0;
+  const costPerConsumptionLAK = totalConsumptionStock > 0 ? (totalCostLAK / totalConsumptionStock) : (isInk ? unitCostLAK / consumptionMultiplier : 0);
 
   return (
     <div className="border-t border-slate-100 pt-6 space-y-5">
@@ -189,7 +219,11 @@ export const PurchasingSection: React.FC<PurchasingSectionProps> = ({
           </div>
           <span className="text-[10px] text-slate-400 font-medium block truncate h-4 mt-1">
             {isPaper && `= ${(qty * sheetsPerPack).toLocaleString()} ແຜ່ນທັງໝົດ (${sheetsPerPack} ແຜ່ນ/ແພັກ)`}
-            {isInk && `= ${(qty * inkVolume).toLocaleString()} ml ທັງໝົດ`}
+            {isInk && (
+              isToner
+                ? `= ${(qty * (isKg ? 1000 : (isPureGram ? 1 : inkVolume))).toLocaleString()} g (ກຣາມສະຕ໋ອກຕັດໃຊ້ງານ${isKg ? ' 1 kg = 1,000 g' : ''})`
+                : `= ${(qty * inkVolume).toLocaleString()} ml ທັງໝົດ (ສະຕ໋ອກຕັດໃຊ້ງານ)`
+            )}
           </span>
         </div>
 
@@ -346,11 +380,19 @@ export const PurchasingSection: React.FC<PurchasingSectionProps> = ({
             </span>
           </div>
 
-          {/* Box 3: Consumption Unit Cost (Per Sheet / Per ml) */}
+          {/* Box 3: Consumption Unit Cost (Per Sheet / Per ml / Per g) */}
           <div className="p-3 bg-emerald-50/70 rounded-2xl border border-emerald-200 space-y-0.5 sm:col-span-2 lg:col-span-1">
             <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wider block flex items-center gap-1">
               <Layers className="w-3 h-3 text-emerald-600 shrink-0" />
-              <span className="truncate">{isPaper ? (currentLang === 'lo' ? 'ຕົ້ນທຶນຕົວຈິງຕໍ່ 1 ແຜ່ນ (Per Sheet)' : 'Cost Per Sheet') : isInk ? (currentLang === 'lo' ? 'ຕົ້ນທຶນຕໍ່ 1 ml (Per ml)' : 'Cost Per ml') : 'Unit Cost in LAK'}</span>
+              <span className="truncate">
+                {isPaper 
+                  ? (currentLang === 'lo' ? 'ຕົ້ນທຶນຕົວຈິງຕໍ່ 1 ແຜ່ນ (Per Sheet)' : 'Cost Per Sheet') 
+                  : isInk 
+                    ? (isToner 
+                        ? (currentLang === 'lo' ? 'ຕົ້ນທຶນຕໍ່ 1 g (Per Gram)' : 'Cost Per Gram') 
+                        : (currentLang === 'lo' ? 'ຕົ້ນທຶນຕໍ່ 1 ml (Per ml)' : 'Cost Per ml'))
+                    : 'Unit Cost in LAK'}
+              </span>
             </span>
             <div className="text-base font-black font-mono text-emerald-950">
               {isPaper ? (
@@ -360,8 +402,8 @@ export const PurchasingSection: React.FC<PurchasingSectionProps> = ({
                 </>
               ) : isInk ? (
                 <>
-                  {costPerMlLAK > 0 ? costPerMlLAK.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '0'}{' '}
-                  <span className="text-xs text-emerald-700 font-bold">LAK / ml</span>
+                  {costPerConsumptionLAK > 0 ? costPerConsumptionLAK.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '0'}{' '}
+                  <span className="text-xs text-emerald-700 font-bold">LAK / {isToner ? 'g' : 'ml'}</span>
                 </>
               ) : (
                 <>
@@ -372,7 +414,8 @@ export const PurchasingSection: React.FC<PurchasingSectionProps> = ({
             </div>
             <span className="text-[10px] text-emerald-700 font-medium block truncate">
               {isPaper && `(ໃຊ້ໃນສູດຄຳນວນລາຄາງານພິມອັດຕະໂນມັດ)`}
-              {isInk && `(ໃຊ້ຄຳນວນຕົ້ນທຶນນ້ຳໝຶກ CMYK)`}
+              {isInk && isToner && `(ໃຊ້ຄຳນວນຕົ້ນທຶນຜົງໝຶກ Laser Toner CMYK)`}
+              {isInk && !isToner && `(ໃຊ້ຄຳນວນຕົ້ນທຶນນ້ຳໝຶກ CMYK)`}
               {!isPaper && !isInk && `(ລາຄາຕົ້ນທຶນຕໍ່ໜ່ວຍໃນລະບົບ)`}
             </span>
           </div>

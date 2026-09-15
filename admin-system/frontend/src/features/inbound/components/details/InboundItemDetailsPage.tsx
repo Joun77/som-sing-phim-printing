@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, 
   Edit3, 
@@ -19,10 +19,12 @@ import {
   Maximize2,
   X,
   ExternalLink as LinkIcon,
-  Download
+  Download,
+  History
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
+import { getAuthHeaders } from '@utils/authHeaders';
 import DynamicSpecDetail from '@features/inventory/components/details/DynamicSpecDetail';
 import PrinterInkComparisonCard from '@features/inventory/components/details/PrinterInkComparisonCard';
 import ConfirmDeleteModal from '@components/common/ConfirmDeleteModal';
@@ -46,6 +48,22 @@ export default function InboundItemDetailsPage({
 
   const [lightboxImg, setLightboxImg] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [revisions, setRevisions] = useState<any[]>([]);
+  const [loadingRevisions, setLoadingRevisions] = useState(false);
+
+  useEffect(() => {
+    if (!item?.id) return;
+    setLoadingRevisions(true);
+    fetch(`/api/inbound/${item.id}/revisions`, { headers: getAuthHeaders() })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && data.status === 'success' && Array.isArray(data.data)) {
+          setRevisions(data.data);
+        }
+      })
+      .catch(err => console.warn('Failed to fetch revisions:', err))
+      .finally(() => setLoadingRevisions(false));
+  }, [item?.id]);
 
   const formatLAK = (amount: number) => {
     return formatCurrency ? formatCurrency(amount) : `LAK ${Number(amount || 0).toLocaleString()}`;
@@ -162,6 +180,12 @@ export default function InboundItemDetailsPage({
                     : item.paymentMethod === 'CASH' 
                     ? (currentLang === 'lo' ? 'ເງິນສົດ (Cash)' : 'Cash') 
                     : item.paymentMethod}
+                </span>
+              )}
+              {item.isEdited && (
+                <span className="inline-flex items-center gap-1 px-3 py-0.5 rounded-full text-xs font-black bg-amber-50 text-amber-700 border border-amber-300">
+                  <History className="w-3.5 h-3.5" />
+                  <span>{currentLang === 'lo' ? 'ແກ້ໄຂແລ້ວ (EDITED)' : 'EDITED'}</span>
                 </span>
               )}
             </div>
@@ -504,6 +528,100 @@ export default function InboundItemDetailsPage({
           <PrinterInkComparisonCard printerItem={item} currentLang={currentLang} />
         </div>
       )}
+
+      {/* 5. REVISION HISTORY & AUDIT TRAIL */}
+      {(item.isEdited || revisions.length > 0) && (
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-amber-50 text-amber-600 rounded-2xl border border-amber-200">
+                <History className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                  {currentLang === 'lo' ? 'ປະຫວັດການແກ້ໄຂ & ບັນທຶກກວດສອບ (Audit Trail)' : 'Revision History & Audit Trail'}
+                </h3>
+                <p className="text-xs text-slate-400 font-medium">
+                  {currentLang === 'lo' 
+                    ? 'ບັນທຶກການແກ້ໄຂທຸກຄັ້ງພ້ອມເຫດຜົນ, ວັນທີ ແລະ ຜູ້ດຳເນີນການ' 
+                    : 'Track all edits with mandatory reasons, timestamp, and editor credentials'}
+                </p>
+              </div>
+            </div>
+            <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-amber-100 text-amber-800">
+              {revisions.length} {currentLang === 'lo' ? 'ຄັ້ງ' : 'Revisions'}
+            </span>
+          </div>
+
+          {loadingRevisions ? (
+            <div className="py-6 text-center text-xs text-slate-400 font-bold">
+              {currentLang === 'lo' ? 'ກຳລັງໂຫຼດປະຫວັດການແກ້ໄຂ...' : 'Loading revision history...'}
+            </div>
+          ) : revisions.length === 0 ? (
+            <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100 text-xs text-amber-800">
+              <span className="font-bold">{currentLang === 'lo' ? 'ເຫດຜົນຫຼ້າສຸດ:' : 'Latest reason:'} </span>
+              <span>{item.editReason || '-'}</span>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 text-[11px] font-black uppercase text-slate-400 tracking-wider">
+                    <th className="py-3 px-4">ວັນທີ & ເວລາ (Timestamp)</th>
+                    <th className="py-3 px-4">ຜູ້ແກ້ໄຂ (Editor)</th>
+                    <th className="py-3 px-4">ເຫດຜົນໃນການແກ້ໄຂ (Mandatory Reason)</th>
+                    <th className="py-3 px-4 text-right">ລາຍລະອຽດການປ່ຽນແປງ (Changes)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {revisions.map((rev) => {
+                    const changes = rev.fieldChanges || rev.field_changes || {};
+                    const oldQty = changes.quantity?.old ?? changes.qty?.old;
+                    const newQty = changes.quantity?.new ?? changes.qty?.new;
+                    const oldTotal = changes.totalPrice?.old ?? changes.total_price?.old;
+                    const newTotal = changes.totalPrice?.new ?? changes.total_price?.new;
+
+                    return (
+                      <tr key={rev.id} className="hover:bg-slate-50/80 transition">
+                        <td className="py-3 px-4 font-mono font-bold text-slate-700 whitespace-nowrap">
+                          {rev.editedAt ? new Date(rev.editedAt).toLocaleString() : '-'}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <span className="px-2.5 py-0.5 rounded-md font-bold bg-slate-100 text-slate-800 text-[11px]">
+                            {rev.editedBy || 'ADMIN'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-slate-800 font-bold">
+                          {rev.reason || '-'}
+                        </td>
+                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <div className="text-[11px] text-slate-600 space-y-0.5">
+                            {oldQty !== undefined && newQty !== undefined && (
+                              <div>
+                                <span className="text-slate-400 font-normal">Qty: </span>
+                                <span className="line-through text-rose-500 font-mono">{oldQty}</span>
+                                <span className="font-bold text-emerald-600 font-mono"> → {newQty}</span>
+                              </div>
+                            )}
+                            {oldTotal !== undefined && newTotal !== undefined && (
+                              <div>
+                                <span className="text-slate-400 font-normal">Total: </span>
+                                <span className="line-through text-rose-500 font-mono">{formatLAK(oldTotal)}</span>
+                                <span className="font-bold text-emerald-600 font-mono"> → {formatLAK(newTotal)}</span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
 
       {/* 4. LIGHTBOX IMAGE PREVIEW MODAL */}
       {lightboxImg && (

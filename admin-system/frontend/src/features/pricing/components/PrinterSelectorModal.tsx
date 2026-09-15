@@ -31,11 +31,11 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
   const [dbInks, setDbInks] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch('/api/inbound', { headers: getAuthHeaders() })
+    const p1 = fetch('/api/inbound', { headers: getAuthHeaders() })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         const items = Array.isArray(data) ? data : data?.data || [];
-        const inks = items
+        return items
           .filter((i: any) => {
             const c = (i.category || '').toUpperCase();
             const sku = (i.skuCode || i.id || '').toUpperCase();
@@ -53,17 +53,58 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
             sku: m.skuCode || m.id,
             skuCode: m.skuCode || m.id,
             name: m.itemName || m.name || m.skuCode || m.id,
+            category: m.category || 'Ink',
+            colorGroup: m.specs?.colorGroup || m.colorGroup || 'Black',
+            stockQty: Number(m.quantity || 0),
             unitPrice: Number(
               m.unitPrice ||
                 m.costPerPurchaseUnit ||
                 (m.totalPrice && m.quantity ? Math.round(Number(m.totalPrice) / Number(m.quantity)) : 0)
             ),
+            costPerPurchaseUnit: Number(m.costPerPurchaseUnit || m.unitPrice || 0),
             volume: Number(m.specs?.volume || m.specs?.volume_ml || 140),
             yield: Number(m.specs?.yield || m.specs?.expectedYield || m.specs?.isoYield || m.yield || 0),
+            specs: m.specs || {}
           }));
-        if (inks.length > 0) setDbInks(inks);
       })
-      .catch(() => {});
+      .catch(() => []);
+
+    const p2 = fetch('/api/inventory/items', { headers: getAuthHeaders() })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const items = Array.isArray(data) ? data : data?.data || [];
+        return items
+          .filter((i: any) => {
+            const c = (i.category || '').toUpperCase();
+            const sku = (i.skuCode || i.sku || i.id || '').toUpperCase();
+            const name = (i.name || '').toUpperCase();
+            return (
+              c.includes('INK') ||
+              name.includes('INK') ||
+              name.includes('TONER') ||
+              name.includes('ໝຶກ') ||
+              sku.startsWith('INK')
+            );
+          })
+          .map((m: any) => ({
+            id: m.id || m.sku || m.inkCode,
+            sku: m.sku || m.inkCode || m.id,
+            skuCode: m.sku || m.inkCode || m.id,
+            name: m.name || m.id,
+            category: m.category || 'Ink',
+            colorGroup: m.specs?.colorGroup || m.colorGroup || 'Black',
+            unitPrice: Number(m.unitPrice || m.costPerPurchaseUnit || 0),
+            costPerPurchaseUnit: Number(m.costPerPurchaseUnit || m.unitPrice || 0),
+            volume: Number(m.specs?.volume || m.specs?.volume_ml || 140),
+            yield: Number(m.specs?.yield || m.specs?.expectedYield || m.specs?.isoYield || m.yield || 0),
+            specs: m.specs || {}
+          }));
+      })
+      .catch(() => []);
+
+    Promise.all([p1, p2]).then(([inbInks, matInks]) => {
+      setDbInks([...(inbInks || []), ...(matInks || [])]);
+    });
   }, []);
 
   const allAvailableInks = useMemo(() => [...inventory, ...dbInks], [inventory, dbInks]);
@@ -293,8 +334,8 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
                 const isSelected = selectedPrinterId === printer.id;
                 const costResult = calculateEquipmentPrintCost(printer, printerColorLinks, allAvailableInks, 'Printer');
                 const inkCost = Number(printer.colorInkCost || printer.linkedInkCostPerPage || costResult.linkedInkRatePerPage || 0);
-                const totalCost = Number(printer.totalPrintCostPerPage || (printer.specs as any)?.totalPrintCostPerPage || costResult.finalCostPerPage);
                 const machineCost = costResult.netCostPerUnit;
+                const totalCost = Number(printer.totalPrintCostPerPage || (printer.specs as any)?.totalPrintCostPerPage || (machineCost + inkCost));
                 const colorBadge = getPrinterColorBadge(printer);
 
                 const assetVal = costResult.assetValue || Number(printer.price || printer.purchaseCost || (printer as any).totalPrice || 0);
@@ -356,10 +397,15 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
                         <div className="flex items-baseline gap-1.5">
                           <span className="text-[11px] font-bold text-slate-600">ຕົ້ນທຶນພິມລວມ:</span>
                           <strong className="text-base font-black text-sky-700 font-sans">
-                            {formatUnitPrecisionLAK(totalCost > 0 ? totalCost : costResult.finalCostPerPage)}
+                            {formatUnitPrecisionLAK(totalCost)}
                           </strong>
                           <span className="text-[11px] text-slate-500 font-bold">/ໜ້າ</span>
                         </div>
+                        {inkCost > 0 && (
+                          <span className="text-[10px] text-slate-500 font-semibold block font-sans">
+                            (ເຄື່ອງ {formatUnitPrecisionLAK(machineCost)} + ໝຶກ {formatUnitPrecisionLAK(inkCost)})
+                          </span>
+                        )}
                         <span className="text-[10px] text-slate-400 font-medium block">
                           ລວມຄ່າເສື່ອມ, ອະໄຫຼ່ ແລະ ໝຶກພິມຈິງ (All-inclusive)
                         </span>

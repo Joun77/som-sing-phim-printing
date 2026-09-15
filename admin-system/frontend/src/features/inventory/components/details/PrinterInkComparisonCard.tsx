@@ -137,18 +137,50 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
     });
   }, []);
 
+  // Detect whether this printer uses Laser electro-photographic technology (Toner)
+  const isLaser = Boolean(
+    printerItem?.printerCategory?.toLowerCase().includes('laser') ||
+    printerItem?.category?.toLowerCase().includes('laser') ||
+    printerItem?.specs?.printerCategory?.toLowerCase().includes('laser') ||
+    printerItem?.specs?.machineryTypeCategory?.toLowerCase().includes('laser') ||
+    (printerItem?.name || '').toLowerCase().includes('laser') ||
+    (printerItem?.name || '').toLowerCase().includes('xerox') ||
+    (printerItem?.name || '').toLowerCase().includes('c8055') ||
+    (printerItem?.brand || '').toLowerCase().includes('xerox') ||
+    (printerItem?.brand || '').toLowerCase().includes('fuji')
+  );
+
+  const unitLabel = isLaser ? 'g' : 'ml';
+  const unitRateLabel = isLaser ? 'g/ແຜ່ນ' : 'ml/ແຜ່ນ';
+  const unitRateLabelEn = isLaser ? 'g/sheet' : 'ml/sheet';
+
   // Extract OEM Baseline Slots (from inbound or specs)
-  const oemBaselineSlots = 
+  const rawSlots = 
+    printerItem?.specs?.oemBaselineInks ||
+    printerItem?.specs?.printerInkSlots ||
+    printerItem?.oemBaselineInks ||
+    printerItem?.printerInkSlots ||
+    printerItem?.technical_specs?.oemBaselineInks ||
+    printerItem?.technical_specs?.printerInkSlots ||
     printerItem?.oem_baseline_specs?.slots || 
     printerItem?.specs?.oem_baseline_specs?.slots || 
-    printerItem?.oemBaselineInks || 
-    printerItem?.printerColorLinks || 
-    [
-      { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500, oemPrice: 450000 },
-      { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
-      { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
-      { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 }
-    ];
+    printerItem?.printerColorLinks;
+
+  const oemBaselineSlots = (Array.isArray(rawSlots) && rawSlots.length > 0)
+    ? rawSlots
+    : isLaser
+      ? [
+          { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'DOCU-C5005-K', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 26000, oemPrice: 450000 },
+          { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'DOCU-C5005-C', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 25000, oemPrice: 350000 },
+          { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'DOCU-C5005-M', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 25000, oemPrice: 350000 },
+          { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'DOCU-C5005-Y', oemStandardVolumeMl: 100, oemStandardIsoYieldA4: 25000, oemPrice: 350000 }
+        ]
+      : [
+          { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500, oemPrice: 450000 },
+          { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+          { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+          { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 }
+        ];
 
   // Filter and merge all inventory items and PostgreSQL inbound ink entries
   const allInkItems = [...inventory, ...dbInks];
@@ -158,7 +190,7 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
     const name = (item.name || '').toLowerCase();
     const sku = (item.skuCode || item.sku || item.id || '').toLowerCase();
     const isInk = cat.includes('ink') || cat.includes('ໝຶກ') || cat.includes('toner') || 
-                  name.includes('ink') || name.includes('ໝຶກ') || name.includes('epson') || name.includes('brother') || name.includes('canon') ||
+                  name.includes('ink') || name.includes('ໝຶກ') || name.includes('toner') || name.includes('epson') || name.includes('brother') || name.includes('canon') || name.includes('xerox') || name.includes('fuji') ||
                   sku.startsWith('ink') || sku.startsWith('ton') || item.category === 'Consumable' || item.category === 'Raw Material';
     if (isInk && item.id && !inkMap.has(item.id)) {
       inkMap.set(item.id, item);
@@ -181,15 +213,18 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
     const slotPos = oemSlot.slotPosition || `Slot ${idx + 1}`;
     
     // OEM calculations
-    const oemVol = Number(oemSlot.oemStandardVolumeMl || oemSlot.volume || 100);
-    const oemYield = Number(oemSlot.oemStandardIsoYieldA4 || oemSlot.isoYield || 5000);
-    const oemPrice = Number(oemSlot.oemPrice || 350000);
+    const oemVol = Number(oemSlot.oemStandardVolumeMl || oemSlot.volume || (isLaser ? 100 : 70));
+    const isBlackSlot = (oemSlot.colorGroup || '').toLowerCase().includes('black') || slotPos.toLowerCase().includes('black') || idx === 0;
+    const defaultOemYield = isLaser ? (isBlackSlot ? 26000 : 25000) : (isBlackSlot ? 7500 : 6000);
+    const oemYield = Number(oemSlot.oemStandardIsoYieldA4 || oemSlot.isoYield || defaultOemYield);
+    const defaultOemPrice = isLaser ? (isBlackSlot ? 450000 : 350000) : (isBlackSlot ? 450000 : 320000);
+    const oemPrice = Number(oemSlot.oemPrice || defaultOemPrice);
 
-    const isoRateMlPerSheet = oemYield > 0 ? (oemVol / oemYield) : 0.0169;
-    const scaledRateMl = isoRateMlPerSheet * coverageMultiplier;
+    const isoRatePerSheet = oemYield > 0 ? (oemVol / oemYield) : (isLaser ? 0.00385 : 0.0169);
+    const scaledRate = isoRatePerSheet * coverageMultiplier;
 
-    const oemCostPerMl = oemVol > 0 ? (oemPrice / oemVol) : 0;
-    const oemCostPerPage = oemCostPerMl * scaledRateMl;
+    const oemCostPerUnit = oemVol > 0 ? (oemPrice / oemVol) : 0;
+    const oemCostPerPage = oemCostPerUnit * scaledRate;
 
     totalOemCostPerPage += oemCostPerPage;
 
@@ -200,14 +235,24 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
     let actualCostPerPage = oemCostPerPage; // Fallback to OEM cost if not linked
     let actualInkPrice = oemPrice;
     let actualVol = oemVol;
+    let isLinked = false;
 
     if (linkedInkItem) {
+      isLinked = true;
       totalLinkedSlots += 1;
       actualInkPrice = Number(linkedInkItem.unitPrice || linkedInkItem.costPerPurchaseUnit || 0);
-      
+
+      // Check if item has pre-calculated cost per consumption unit (e.g. from kg inbound)
+      const directCostPerUnit = Number(
+        linkedInkItem.costPerConsumptionUnit || 
+        linkedInkItem.specs?.costPerConsumptionUnit || 
+        0
+      );
+
       const resolvedVol = Number(
         linkedInkItem.volume || 
         linkedInkItem.specs?.volume || 
+        linkedInkItem.specs?.netWeightGrams ||
         linkedInkItem.specs?.volume_ml || 
         linkedInkItem.specs?.oemStandardVolumeMl || 
         linkedInkItem.specs?.oemVolumeMl || 
@@ -215,8 +260,8 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
         (linkedInkItem.purchaseMultiplier > 1 ? linkedInkItem.purchaseMultiplier : null)
       );
 
-      actualVol = resolvedVol && resolvedVol > 1 ? resolvedVol : 140;
-      const actualCostPerMl = actualVol > 0 ? (actualInkPrice / actualVol) : 0;
+      actualVol = resolvedVol && resolvedVol > 1 ? resolvedVol : (isLaser ? 1000 : 140);
+      const actualCostPerUnit = directCostPerUnit > 0 ? directCostPerUnit : (actualVol > 0 ? (actualInkPrice / actualVol) : 0);
 
       const linkedYield = Number(
         linkedInkItem.yield ||
@@ -229,9 +274,9 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
         0
       );
 
-      const actualRateMlPerSheet = linkedYield > 0 ? (actualVol / linkedYield) : isoRateMlPerSheet;
-      const actualScaledRateMl = actualRateMlPerSheet * coverageMultiplier;
-      actualCostPerPage = actualCostPerMl * actualScaledRateMl;
+      const actualRatePerSheet = linkedYield > 0 ? (actualVol / linkedYield) : isoRatePerSheet;
+      const actualScaledRate = actualRatePerSheet * coverageMultiplier;
+      actualCostPerPage = actualCostPerUnit * actualScaledRate;
     }
 
     totalActualCostPerPage += actualCostPerPage;
@@ -246,9 +291,10 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
       oemPrice,
       oemVol,
       oemYield,
-      scaledRateMl,
+      scaledRateMl: scaledRate,
       linkedInkItem,
       activeLink,
+      isLinked,
       actualCostPerPage,
       actualInkPrice,
       actualVol,
@@ -470,8 +516,8 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
               </h4>
               <p className="text-[10px] text-slate-400 font-semibold">
                 {currentLang === 'lo'
-                  ? 'ນຳໃຊ້ອັດຕາສິ້ນເປືອງ ml/ແຜ່ນ ຈາກສະເປັກໂຮງງານ ຄູນກັບລາຄາໝຶກທີ່ຊື້ຈິງໃນສາງ'
-                  : 'Multiply factory baseline ml/page rates by real inventory purchase prices'}
+                  ? `ນຳໃຊ້ອັດຕາສິ້ນເປືອງ ${unitRateLabel} ຈາກສະເປັກໂຮງງານ ຄູນກັບລາຄາໝຶກທີ່ຊື້ຈິງໃນສາງ`
+                  : `Multiply factory baseline ${unitRateLabelEn} rates by real inventory purchase prices`}
               </p>
             </div>
           </div>
@@ -483,9 +529,11 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
         {/* OEM Baseline Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
           {oemBaselineSlots.map((slot: any, i: number) => {
-            const vol = Number(slot.oemStandardVolumeMl || slot.volume || 100);
-            const yld = Number(slot.oemStandardIsoYieldA4 || slot.isoYield || 5000);
-            const isoRate = yld > 0 ? (vol / yld) : 0.0169;
+            const vol = Number(slot.oemStandardVolumeMl || slot.volume || (isLaser ? 100 : 70));
+            const isBlack = (slot.colorGroup || '').toLowerCase().includes('black') || (slot.slotPosition || '').toLowerCase().includes('black') || i === 0;
+            const defaultYield = isLaser ? (isBlack ? 26000 : 25000) : (isBlack ? 7500 : 6000);
+            const yld = Number(slot.oemStandardIsoYieldA4 || slot.isoYield || defaultYield);
+            const isoRate = yld > 0 ? (vol / yld) : (isLaser ? 0.00385 : 0.0169);
 
             // Clean slot position label: e.g. "Slot 1 (K - Black)" -> "Slot 1 (K)"
             let displaySlotPos = slot.slotPosition || `Slot ${i + 1}`;
@@ -506,8 +554,8 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
                 <span className="text-white font-extrabold text-xs block truncate">{slot.oemInkCode || 'OEM Standard'}</span>
                 <div className="text-[10px] text-slate-400 space-y-0.5 font-sans pt-1 border-t border-slate-700/60">
                   <div className="flex justify-between">
-                    <span>{currentLang === 'lo' ? 'ບໍລິມາດ:' : 'Volume:'}</span>
-                    <span className="font-mono font-bold text-slate-200">{vol} ml</span>
+                    <span>{currentLang === 'lo' ? (isLaser ? 'ນ້ຳໜັກ:' : 'ບໍລິມາດ:') : (isLaser ? 'Net Weight:' : 'Volume:')}</span>
+                    <span className="font-mono font-bold text-slate-200">{vol} {unitLabel}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>{currentLang === 'lo' ? 'ຄາດວ່າພິມໄດ້:' : 'Factory Yield:'}</span>
@@ -515,7 +563,9 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-1 text-sky-300 font-bold pt-1 border-t border-slate-700/40">
                     <span className="text-[10px]">{currentLang === 'lo' ? 'ອັດຕາສິ້ນເປືອງ:' : 'Standard Rate:'}</span>
-                    <span className="font-mono text-sky-400 font-extrabold text-[11px] shrink-0">{isoRate.toFixed(4)} ml/{currentLang === 'lo' ? 'ແຜ່ນ' : 'sheet'}</span>
+                    <span className="font-mono text-sky-400 font-extrabold text-[11px] shrink-0">
+                      {isLaser ? isoRate.toFixed(5) : isoRate.toFixed(4)} {unitRateLabel}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -545,7 +595,9 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
             </span>
           </div>
           <span className="text-[10px] text-sky-600 block font-semibold">
-            {currentLang === 'lo' ? 'ຕົ້ນທຶນນີ້ຈະຖືກໃຊ້ໃນລະບົບໃບສະເໜີລາຄາ (Synced with Quotation Engine)' : 'Calculated dynamically using real inventory purchase prices & bottle sizes'}
+            {totalLinkedSlots > 0 
+              ? (currentLang === 'lo' ? 'ຕົ້ນທຶນນີ້ຈະຖືກໃຊ້ໃນລະບົບໃບສະເໜີລາຄາ (Synced with Quotation Engine)' : 'Calculated dynamically using real inventory purchase prices & bottle sizes')
+              : (currentLang === 'lo' ? 'ຄຳນວນຈາກສະເປັກຕລັບ OEM Baseline ມາດຕະຖານໂຮງງານ (OEM Standard Yield)' : 'Calculated from standard OEM baseline cartridge specs')}
           </span>
         </div>
       </div>
@@ -574,7 +626,7 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
                 <td className="py-3 px-4">
                   <span className="font-mono text-slate-800 block font-bold">{item.oemSlot.oemInkCode || 'OEM Standard'}</span>
                   <span className="text-[10px] text-slate-400 block font-normal">
-                    Vol: {item.oemVol}ml | Yield: {item.oemYield.toLocaleString()} {currentLang === 'lo' ? 'ແຜ່ນ' : 'pages'} | Rate: {(item.oemVol / item.oemYield).toFixed(4)} ml/{currentLang === 'lo' ? 'ແຜ່ນ' : 'sheet'}
+                    {isLaser ? 'Net:' : 'Vol:'} {item.oemVol}{unitLabel} | Yield: {item.oemYield.toLocaleString()} {currentLang === 'lo' ? 'ແຜ່ນ' : 'pages'} | Rate: {(item.oemVol / item.oemYield).toFixed(isLaser ? 5 : 4)} {unitRateLabel}
                   </span>
                 </td>
 
@@ -593,7 +645,7 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
                       </div>
 
                       <div className="flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-200/60 pt-1">
-                        <span>{item.actualVol} ml • {formatLAK(item.actualInkPrice)}</span>
+                        <span>{item.actualVol} {unitLabel} • {formatLAK(item.actualInkPrice)}</span>
                         <span className="font-mono font-bold text-sky-700">
                           {currentLang === 'lo' ? 'ຜົນຜະລິດ: ' : 'Yield: '}{item.scaledRateMl > 0 ? Math.round(item.actualVol / item.scaledRateMl).toLocaleString() : 0} {currentLang === 'lo' ? 'ແຜ່ນ' : 'pgs'}
                         </span>
@@ -628,8 +680,15 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
                 </td>
 
                 {/* Actual Cost per page */}
-                <td className="py-3 px-4 text-right font-mono font-black text-sky-700 text-base">
-                  {formatUnitLAK(item.actualCostPerPage)}
+                <td className="py-3 px-4 text-right">
+                  <div className="font-mono font-black text-sky-700 text-base">
+                    {formatUnitLAK(item.actualCostPerPage)}
+                  </div>
+                  {!item.linkedInkItem && (
+                    <span className="inline-block text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 mt-0.5">
+                      OEM Baseline
+                    </span>
+                  )}
                 </td>
 
               </tr>
@@ -753,14 +812,18 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5">
                 {filteredModalInks.map((ink: any) => {
                   const isCurrent = searchModalSlot.currentLinkedId === ink.id;
-                  const price = Number(ink.unitPrice || ink.costPerPurchaseUnit || 0);
-                  const vol = Number(ink.volume || ink.specs?.volume || ink.specs?.volume_ml || 140);
-                  const costPerMl = vol > 0 ? price / vol : 0;
+                  const isInkLaser = isLaser || (ink.specs?.baseType === 'Toner') || (ink.consumptionUnit === 'g') || (ink.specs?.inkType === 'Toner');
+                  const itemUnitLabel = isInkLaser ? 'g' : 'ml';
+                  const price = Number(ink.unitPrice || ink.costPerPurchaseUnit || ink.price || 0);
+                  const vol = Number(ink.volume || ink.specs?.volume || ink.specs?.volume_ml || (isInkLaser ? 1000 : 140));
+                  const costPerUnit = Number(ink.costPerConsumptionUnit || (vol > 0 ? price / vol : 0));
                   const stock = Number(ink.stockQty || 0);
 
                   // Preview estimated cost per page for target slot
-                  const isoRate = searchModalSlot.oemYield > 0 ? (searchModalSlot.oemVol / searchModalSlot.oemYield) : 0.0169;
-                  const estCostPerPage = costPerMl * (isoRate * coverageMultiplier);
+                  const isoRate = searchModalSlot.oemYield > 0 
+                    ? (searchModalSlot.oemVol / searchModalSlot.oemYield) 
+                    : (isLaser ? 0.00385 : 0.0169);
+                  const estCostPerPage = costPerUnit * (isoRate * coverageMultiplier);
 
                   // Resolved photo url from item
                   const photoUrl = ink.imageUrl || ink.productImage || ink.docs?.productPhoto || ink.specs?.productImageUrl || ink.specs?.productImage;
@@ -825,12 +888,12 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
                         {/* Pricing & Volume Strip */}
                         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 space-y-1.5 text-xs font-semibold">
                           <div className="flex justify-between items-center text-slate-700">
-                            <span className="text-slate-400 text-[11px]">{currentLang === 'lo' ? 'ລາຄາຊື້ / ຕຸກ:' : 'Purchase Price:'}</span>
+                            <span className="text-slate-400 text-[11px]">{currentLang === 'lo' ? 'ລາຄາຊື້:' : 'Purchase Price:'}</span>
                             <span className="font-mono font-black text-slate-900 text-sm">{formatLAK(price)}</span>
                           </div>
                           <div className="flex justify-between items-center text-slate-600 text-[11px] pt-1 border-t border-slate-200/60">
-                            <span>{currentLang === 'lo' ? 'ບໍລິມາດ:' : 'Volume:'} <b className="font-mono text-slate-800">{vol} ml</b></span>
-                            <span>{currentLang === 'lo' ? 'ຕົ້ນທຶນ:' : 'Rate:'} <b className="font-mono text-sky-700">{formatLAK(costPerMl)}/ml</b></span>
+                            <span>{currentLang === 'lo' ? (isInkLaser ? 'ນ້ຳໜັກ:' : 'ບໍລິມາດ:') : (isInkLaser ? 'Weight:' : 'Volume:')} <b className="font-mono text-slate-800">{vol} {itemUnitLabel}</b></span>
+                            <span>{currentLang === 'lo' ? 'ຕົ້ນທຶນ:' : 'Rate:'} <b className="font-mono text-sky-700">{formatLAK(costPerUnit)}/{itemUnitLabel}</b></span>
                           </div>
                         </div>
 
@@ -854,8 +917,8 @@ export default function PrinterInkComparisonCard({ printerItem, currentLang = 'l
                             : 'bg-rose-50 text-rose-700 border-rose-200'
                         }`}>
                           {stock > 0 
-                            ? `${currentLang === 'lo' ? 'ມີໃນສາງ: ' : 'Stock: '} ${stock} ${ink.consumptionUnit || 'ຕຸກ'}`
-                            : (currentLang === 'lo' ? 'ໝົດສາງ (0 ຕຸກ)' : 'Out of Stock')}
+                            ? `${currentLang === 'lo' ? 'ມີໃນສາງ: ' : 'Stock: '} ${stock.toLocaleString()} ${ink.consumptionUnit || (isInkLaser ? 'g' : 'ຕຸກ')}`
+                            : (currentLang === 'lo' ? `ໝົດສາງ (0 ${isInkLaser ? 'g' : 'ຕຸກ'})` : 'Out of Stock')}
                         </span>
 
                         {isCurrent ? (

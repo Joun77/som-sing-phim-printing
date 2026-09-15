@@ -3,6 +3,7 @@ package settings
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -98,6 +99,10 @@ func HandleGetLookups(c *gin.Context) {
 		}
 	}
 
+	if err := rows.Err(); err != nil {
+		log.Printf("[DB ERROR] Lookups rows error: %v", err)
+	}
+
 	if len(list) == 0 {
 		list = getFallbackLookups(lookupType)
 	}
@@ -168,6 +173,10 @@ func HandleGetLookupsByType(c *gin.Context) {
 			}
 			list = append(list, item)
 		}
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("[DB ERROR] Lookups by type rows error: %v", err)
 	}
 
 	if len(list) == 0 {

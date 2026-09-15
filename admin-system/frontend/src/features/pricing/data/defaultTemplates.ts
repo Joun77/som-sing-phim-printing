@@ -5,10 +5,10 @@ export interface FinishingMaterialItem {
   qtyPerItem: number; // quantity used per finished item (e.g. 2 staples per booklet)
   materialId?: string;
   category?: string;
-  calcMode?: 'unit' | 'box'; // 'unit' = direct unit cost, 'box' = package price / units per box
+  calcMode?: 'unit' | 'box' | 'sqm' | 'sheet'; // 'unit' = direct unit cost, 'box' = package price / units per box, 'sqm' = area in m2, 'sheet' = sheet pouches
   packagePrice?: number; // e.g. 50000 LAK per box
   unitsPerPackage?: number; // e.g. 1000 staples per box
-  unitName?: string; // e.g. 'ໂຕ', 'ຂໍ້', 'ກ່ອງ', 'ແຜ່ນ'
+  unitName?: string; // e.g. 'ໂຕ', 'ຂໍ້', 'ກ່ອງ', 'ແຜ່ນ', 'm²'
 }
 
 export interface PricingTemplatePreset {

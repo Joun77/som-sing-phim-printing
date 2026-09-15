@@ -1,7 +1,16 @@
 export interface EquipmentComponent {
+  id?: string;
   name: string;
+  nameLo?: string;
   usage: number;
   threshold: number;
+  cost?: number;
+  lifeVal?: number;
+  unitLabel?: string;
+  keyCost?: string;
+  keyLife?: string;
+  key?: string;
+  costPerUnit?: number;
 }
 
 export interface MachineSpec {

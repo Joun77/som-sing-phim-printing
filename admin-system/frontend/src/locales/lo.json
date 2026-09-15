@@ -347,6 +347,23 @@
         "cancel": "ຍົກເລີກ"
       }
     },
+    "ink": {
+      "title": "ຂໍ້ມູນສະເພາະໝຶກພິມ & ຜົງໝຶກ (Ink & Toner Specifications)",
+      "code": "ລະຫັດໝຶກ / SKU (Ink SKU)",
+      "name": "ຊື່ໝຶກ / ຊື່ສີ (Ink Name)",
+      "group": "ກຸ່ມສີ (Color Group)",
+      "type_selector": "ປະເພດໝຶກ (Consumable Type)",
+      "type_liquid": "ນ້ຳໝຶກ (Liquid Ink - ml / L)",
+      "type_toner": "ຜົງໝຶກໂທນເນີ (Laser Toner - g / kg)",
+      "volume": "ຄວາມຈຸ / ປະລິມານ (Volume)",
+      "volume_ml": "ຄວາມຈຸນ້ຳໝຶກ (Volume ml)",
+      "weight_g": "ນ້ຳໜັກສຸທິຜົງໝຶກ (Net Weight g)",
+      "base_type": "ເນື້ອໝຶກ (Base Type)",
+      "target_printer": "ເຄື່ອງພິມເປົ້າໝາຍ (Target Printer)",
+      "select_printer": "-- ເລືອກເຄື່ອງພິມ --",
+      "toner_kg_hint": "1 kg = 1,000 g (ລະບົບຕັດສະຕ໋ອກເປັນກຣາມ)",
+      "liquid_ml_hint": "1 ขวด / ລິດ (ລະບົບຕັດສະຕ໋ອກເປັນ ml)"
+    },
     "paper": {
       "sheets_per_pack": "ຈຳນວນແຜ່ນຕໍ່ 1 ແພັກ (SHEETS PER PACK)",
       "sheets_per_ream": "ຈຳນວນແຜ່ນຕໍ່ 1 ແພັກ (SHEETS PER PACK)",

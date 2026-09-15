@@ -1,10 +1,11 @@
 package settings
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"crypto/rand"
+	"log"
 	"net/http"
 	"time"
 
@@ -89,6 +90,10 @@ func HandleGetDimensionPresets(c *gin.Context) {
 		if err := rows.Scan(&p.ID, &p.Name, &p.Category, &p.Unit, &p.Width, &p.Height, &p.WidthMM, &p.HeightMM, &p.IsDefault, &p.CreatedAt, &p.UpdatedAt); err == nil {
 			presets = append(presets, p)
 		}
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("[DB ERROR] Presets rows error: %v", err)
 	}
 
 	if len(presets) == 0 {

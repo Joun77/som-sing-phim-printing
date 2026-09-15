@@ -211,6 +211,7 @@ export interface AppContextValue {
   addStock: (...args: any[]) => any;
   addEquipment: (...args: any[]) => any;
   updateEquipment?: (...args: any[]) => any;
+  updateEquipmentComponents?: (eqId: string, components: any[]) => void;
   deleteEquipment?: (...args: any[]) => any;
   meterReadings?: any[];
   addMeterReading?: (...args: any[]) => any;

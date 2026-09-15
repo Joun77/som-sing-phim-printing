@@ -171,6 +171,12 @@ func main() {
 	router.POST("/api/pricing/calculate", pricing.HandleCalculatePrice)
 	router.POST("/api/pricing/batch-imposition", pricing.HandleCalculateBatchImposition)
 	router.POST("/api/v1/pricing/batch-imposition", pricing.HandleCalculateBatchImposition)
+	router.GET("/api/quotations/templates", pricing.HandleGetQuotationTemplates)
+	router.GET("/api/v1/quotations/templates", pricing.HandleGetQuotationTemplates)
+	router.POST("/api/quotations/templates", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), pricing.HandleSaveQuotationTemplate)
+	router.POST("/api/v1/quotations/templates", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), pricing.HandleSaveQuotationTemplate)
+	router.DELETE("/api/quotations/templates/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), pricing.HandleDeleteQuotationTemplate)
+	router.DELETE("/api/v1/quotations/templates/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), pricing.HandleDeleteQuotationTemplate)
 	router.POST("/api/pricing/margin-approval", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "approved", "message": "Margin override authorized"})
 	})
@@ -369,6 +375,7 @@ func main() {
 	router.POST("/api/inbound/batch", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inbound.HandleCreateBatchInboundTransaction)
 	router.PUT("/api/inbound/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inbound.HandleUpdateInboundTransaction)
 	router.DELETE("/api/inbound/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inbound.HandleDeleteInboundTransaction)
+	router.GET("/api/inbound/:id/revisions", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inbound.HandleGetInboundRevisions)
 
 	// Phase 1 API v1 Assets & Inbound Procurement routes
 	router.GET("/api/v1/assets", inventory.HandleGetAssetsV1)
@@ -380,6 +387,8 @@ func main() {
 	// Inventory Material SKU CRUD & Stock Discharge & FIFO Batches routes
 	router.GET("/api/inventory/offcuts", inventory.HandleGetOffcuts)
 	router.POST("/api/inventory/offcuts", inventory.HandleRegisterOffcut)
+	router.PUT("/api/inventory/offcuts/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleUpdateOffcut)
+	router.DELETE("/api/inventory/offcuts/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleDeleteOffcut)
 	router.GET("/api/inventory/batches", inventory.HandleGetInventoryBatches)
 	router.GET("/api/inventory/items", inventory.HandleGetInventoryItems)
 	router.GET("/api/inventory", inventory.HandleGetInventoryItems)

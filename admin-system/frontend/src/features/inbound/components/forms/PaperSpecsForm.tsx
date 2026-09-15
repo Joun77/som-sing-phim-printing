@@ -17,10 +17,35 @@ export const PaperSpecsForm: React.FC<PaperSpecsFormProps> = ({
   const isLao = (i18n.language || 'lo') === 'lo';
 
   // Lookups from Master Data
+  const { data: paperTypeLookups = [] } = useLookups('paper_type', true);
   const { data: dimensionLookups = [] } = useLookups('standard_dimension', true);
   const { data: surfaceLookups = [] } = useLookups('surface_finish', true);
   const { data: grammageLookups = [] } = useLookups('paper_grammage_gsm', true);
   const { data: boardThicknessLookups = [] } = useLookups('board_thickness_mm', true);
+
+  const paperTypeOptions = useMemo(() => {
+    if (paperTypeLookups && paperTypeLookups.length > 0) {
+      return paperTypeLookups.map(p => ({
+        code: p.code,
+        value: p.name_en || p.code,
+        label: isLao ? p.name_lo : p.name_en,
+        nameEn: p.name_en,
+        nameLo: p.name_lo,
+        attributes: p.attributes || {}
+      }));
+    }
+    return [
+      { code: 'PLAIN', value: 'Plain Paper', label: 'Plain Paper (ເຈ້ຍປອນ / ຖ່າຍເອກະສານຂາວ - 500 ແຜ່ນ)', nameEn: 'Plain Paper', attributes: { default_gsm: [70, 80, 100, 120] } },
+      { code: 'GREEN_READ', value: 'Green Read', label: 'Green Read (ເຈ້ຍຖະໜອມສາຍຕາສີຄຣີມ - 500 ແຜ່ນ)', nameEn: 'Green Read', attributes: { default_gsm: [65, 75, 80] } },
+      { code: 'KRAFT', value: 'Kraft Paper', label: 'Kraft Paper (ເຈ້ຍຄຣາຟສີນ້ຳຕານ)', nameEn: 'Kraft Paper', attributes: { default_gsm: [125, 175, 250, 300] } },
+      { code: 'GREYBOARD', value: 'Greyboard', label: 'Greyboard (ກະດາດຈົ່ວປັງແກນປົກແຂງ)', nameEn: 'Greyboard', attributes: {} },
+      { code: 'PHOTO', value: 'Photo Paper', label: 'Photo Paper (ໂຟໂຕ້ Glossy/Matte - 20/50/100 ແຜ່ນ)', nameEn: 'Photo Paper', attributes: { default_gsm: [180, 210, 230, 260] } },
+      { code: 'SUBLIMATION', value: 'Sublimation Paper', label: 'Sublimation Paper (ເຈ້ຍຊັບລິເມຊັນ)', nameEn: 'Sublimation Paper', attributes: {} },
+      { code: 'STICKER_PAPER', value: 'Sticker Paper', label: 'Sticker / Label Paper (ສະຕິກເກີ - 50/100 ແຜ່ນ)', nameEn: 'Sticker Paper', attributes: {} },
+      { code: 'ART_PAPER', value: 'Art Paper', label: 'Art Paper / Art Card (ອາດມັນ/ດ້ານ - 100/250 ແຜ່ນ)', nameEn: 'Art Paper', attributes: { default_gsm: [105, 130, 160] } },
+      { code: 'CANVAS', value: 'Canvas', label: 'Canvas / Fabric (ຜ້າໃບແຄນວາດ)', nameEn: 'Canvas', attributes: {} },
+    ];
+  }, [paperTypeLookups, isLao]);
 
   const dimensionOptions = useMemo(() => {
     if (dimensionLookups && dimensionLookups.length > 0) {
@@ -31,9 +56,9 @@ export const PaperSpecsForm: React.FC<PaperSpecsFormProps> = ({
 
   const surfaceOptions = useMemo(() => {
     if (surfaceLookups && surfaceLookups.length > 0) {
-      return surfaceLookups.map(s => ({ value: s.code, label: isLao ? s.name_lo : s.name_en }));
+      return surfaceLookups.map(s => ({ value: s.name_en || s.code, code: s.code, label: isLao ? s.name_lo : s.name_en }));
     }
-    return ['Glossy', 'Matte', 'Soft-Touch Velvet', 'Plain Paper', 'Canvas', 'Sticker/Vinyl'].map(s => ({ value: s, label: s }));
+    return ['Glossy', 'Matte', 'Soft-Touch Velvet', 'Plain Paper', 'Canvas', 'Sticker/Vinyl'].map(s => ({ value: s, code: s, label: s }));
   }, [surfaceLookups, isLao]);
 
   const mediaForm = item.paperFormat || 'cut_sheet';
@@ -94,7 +119,8 @@ export const PaperSpecsForm: React.FC<PaperSpecsFormProps> = ({
             onChange={(e) => {
               const newType = e.target.value;
               updateField('paperType', newType);
-              if (newType === 'Photo Paper') {
+              const lower = newType.toLowerCase();
+              if (lower.includes('photo')) {
                 if (!item.sheetsPerPack || item.sheetsPerPack === 500) {
                   updateField('sheetsPerPack', 50);
                 }
@@ -103,7 +129,7 @@ export const PaperSpecsForm: React.FC<PaperSpecsFormProps> = ({
                 }
                 updateField('paperSurface', 'Glossy');
                 updateField('surfaceFinish', 'Glossy');
-              } else if (newType === 'Sticker Paper') {
+              } else if (lower.includes('sticker')) {
                 if (!item.sheetsPerPack || item.sheetsPerPack === 500) {
                   updateField('sheetsPerPack', 100);
                 }
@@ -112,13 +138,13 @@ export const PaperSpecsForm: React.FC<PaperSpecsFormProps> = ({
                 }
                 updateField('paperSurface', 'Sticker/Vinyl');
                 updateField('surfaceFinish', 'Matte');
-              } else if (newType === 'Art Paper') {
+              } else if (lower.includes('art')) {
                 if (!item.sheetsPerPack || item.sheetsPerPack === 500) {
                   updateField('sheetsPerPack', 100);
                 }
                 updateField('paperSurface', 'Glossy');
                 updateField('surfaceFinish', 'Glossy');
-              } else if (newType === 'Plain Paper' || newType === 'Green Read' || newType === 'Kraft Paper') {
+              } else if (lower.includes('plain') || lower.includes('green') || lower.includes('kraft')) {
                 if (!item.sheetsPerPack || item.sheetsPerPack === 50 || item.sheetsPerPack === 100) {
                   updateField('sheetsPerPack', 500);
                 }
@@ -129,15 +155,11 @@ export const PaperSpecsForm: React.FC<PaperSpecsFormProps> = ({
             }}
             className="w-full px-3.5 h-[42px] rounded-xl border border-slate-200 bg-white font-semibold text-xs text-slate-800 focus:ring-2 focus:ring-indigo-500/20"
           >
-            <option value="Plain Paper">Plain Paper (ເຈ້ຍປອນ / ຖ່າຍເອກະສານຂາວ - 500 ແຜ່ນ)</option>
-            <option value="Green Read">Green Read (ເຈ້ຍຖະໜອມສາຍຕາສີຄຣີມ - 500 ແຜ່ນ)</option>
-            <option value="Kraft Paper">Kraft Paper (ເຈ້ຍຄຣາຟສີນ້ຳຕານ)</option>
-            <option value="Greyboard">Greyboard (ກະດາດຈົ່ວປັງແກນປົກແຂງ)</option>
-            <option value="Photo Paper">Photo Paper (ໂຟໂຕ້ Glossy/Matte - 20/50/100 ແຜ່ນ)</option>
-            <option value="Sublimation Paper">Sublimation Paper (ເຈ້ຍຊັບລິເມຊັນ)</option>
-            <option value="Sticker Paper">Sticker / Label Paper (ສະຕິກເກີ - 50/100 ແຜ່ນ)</option>
-            <option value="Art Paper">Art Paper / Art Card (ອາດມັນ/ດ້ານ - 100/250 ແຜ່ນ)</option>
-            <option value="Canvas">Canvas / Fabric (ຜ້າໃບແຄນວາດ)</option>
+            {paperTypeOptions.map((opt) => (
+              <option key={opt.code || opt.value} value={opt.value}>
+                {opt.label || opt.nameLo || opt.nameEn || opt.value}
+              </option>
+            ))}
           </select>
         </div>
         <div>

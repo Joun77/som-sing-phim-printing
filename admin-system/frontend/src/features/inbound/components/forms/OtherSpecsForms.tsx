@@ -27,12 +27,14 @@ const ColorConfigBentoSection: React.FC<{
     updateField('totalColorSlots', newSlots.length);
     const updatedInks = newSlots.map((s, idx) => {
       const existing = (item.printerInkSlots || [])[idx];
+      const isBlack = s.code === 'K' || s.name?.toLowerCase().includes('black');
       return existing ? { ...existing, slotPosition: `Slot ${idx + 1} (${s.code} - ${s.name})` } : {
         slotPosition: `Slot ${idx + 1} (${s.code} - ${s.name})`,
         colorGroup: s.name,
         oemInkCode: `${item.machineBrand ? item.machineBrand.toUpperCase() : 'OEM'}-${s.code}`,
         oemStandardVolumeMl: isLaser ? 100 : 70,
-        oemStandardIsoYieldA4: isLaser ? 15000 : 6000
+        oemStandardIsoYieldA4: isLaser ? (isBlack ? 26000 : 25000) : (isBlack ? 7500 : 6000),
+        oemPrice: isLaser ? (isBlack ? 450000 : 350000) : (isBlack ? 450000 : 320000)
       };
     });
     updateField('printerInkSlots', updatedInks);
@@ -43,12 +45,14 @@ const ColorConfigBentoSection: React.FC<{
     updateField('totalColorSlots', newSlots.length);
     const updatedInks = newSlots.map((s, idx) => {
       const existing = (item.printerInkSlots || [])[idx];
+      const isBlack = s.code === 'K' || s.name?.toLowerCase().includes('black');
       return existing ? { ...existing, slotPosition: `Slot ${idx + 1} (${s.code} - ${s.name})` } : {
         slotPosition: `Slot ${idx + 1} (${s.code} - ${s.name})`,
         colorGroup: s.name,
         oemInkCode: `${item.machineBrand ? item.machineBrand.toUpperCase() : 'OEM'}-${s.code}`,
         oemStandardVolumeMl: isLaser ? 100 : 70,
-        oemStandardIsoYieldA4: isLaser ? 15000 : 6000
+        oemStandardIsoYieldA4: isLaser ? (isBlack ? 26000 : 25000) : (isBlack ? 7500 : 6000),
+        oemPrice: isLaser ? (isBlack ? 450000 : 350000) : (isBlack ? 450000 : 320000)
       };
     });
     updateField('printerInkSlots', updatedInks);
@@ -147,7 +151,7 @@ const ColorConfigBentoSection: React.FC<{
                     Rate: {rate} {isLaser ? 'g/p' : 'ml/p'}
                   </span>
                 </div>
-                <div className="grid grid-cols-3 gap-2.5 text-[11px]">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-[11px]">
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                       OEM SKU
@@ -193,10 +197,30 @@ const ColorConfigBentoSection: React.FC<{
                     </label>
                     <input
                       type="number"
-                      value={inkSlot.oemStandardIsoYieldA4 || (isLaser ? 15000 : 6000)}
+                      value={inkSlot.oemStandardIsoYieldA4 || (isLaser ? (slot.code === 'K' ? 26000 : 25000) : (slot.code === 'K' ? 7500 : 6000))}
                       onChange={(e) => {
                         const newSlots = [...(item.printerInkSlots || [])];
                         newSlots[index] = { ...inkSlot, oemStandardIsoYieldA4: Number(e.target.value) };
+                        updateField('printerInkSlots', newSlots);
+                      }}
+                      className={`w-full px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50/40 text-xs font-mono font-bold text-slate-800 focus:bg-white focus:ring-2 transition ${
+                        isLaser
+                          ? 'focus:border-indigo-500 focus:ring-indigo-500/10'
+                          : 'focus:border-sky-500 focus:ring-sky-500/10'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 truncate" title="ລາຄາຕລັບ/ຂວດ OEM (LAK)">
+                      ລາຄາ OEM (LAK)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder={isLaser ? '450,000' : '350,000'}
+                      value={inkSlot.oemPrice || ''}
+                      onChange={(e) => {
+                        const newSlots = [...(item.printerInkSlots || [])];
+                        newSlots[index] = { ...inkSlot, oemPrice: Number(e.target.value) };
                         updateField('printerInkSlots', newSlots);
                       }}
                       className={`w-full px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50/40 text-xs font-mono font-bold text-slate-800 focus:bg-white focus:ring-2 transition ${
