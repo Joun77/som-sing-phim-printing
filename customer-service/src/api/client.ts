@@ -113,6 +113,12 @@ export interface RemoteProduct {
   leadTimeDays?: number
   isActive: boolean
   sortOrder?: number
+  baseFloorPrice?: number
+  baselineCoveragePercent?: number
+  thresholdMode?: string
+  targetMarginPercent?: number
+  defaultMachineId?: string
+  defaultMachineName?: string
   options?: PublicProductOptionItem[]
   discountTiers?: PublicProductDiscountTier[]
 }
@@ -127,6 +133,13 @@ export interface OrderSpecs {
   size?: string
   paper?: string
   finishing?: string
+  materialSku?: string
+  paperCode?: string
+  machineId?: string
+  customWidthMm?: number
+  customHeightMm?: number
+  areaSqm?: number
+  isCustomDim?: boolean
 }
 
 export interface Order {
@@ -166,6 +179,7 @@ export interface PricingPayload {
   quantity: number
   paper_sku?: string
   paper_type?: string
+  paper_code?: string
   paper_cost_per_unit?: number
   ink_coverage_percent?: number
   ink_cost_per_ml?: number
@@ -178,6 +192,15 @@ export interface PricingPayload {
   markup_margin?: number
   target_currency?: string
   job_name?: string
+  product_slug?: string
+  default_machine_id?: string
+  base_floor_price?: number
+  baseline_coverage_percent?: number
+  threshold_mode?: string
+  target_margin_percent?: number
+  width_mm?: number
+  height_mm?: number
+  is_custom_dim?: boolean
   [key: string]: any
 }
 
@@ -186,9 +209,16 @@ export interface PricingResult {
   quantity: number
   total_cost: number
   sale_price: number
+  effective_sale_price?: number
+  base_floor_price?: number
+  baseline_coverage_percent?: number
+  threshold_mode?: string
+  is_threshold_exceeded?: boolean
+  threshold_surcharge?: number
   unit_price: number
   profit_margin: number
   currency: string
+  breakdown?: any
 }
 
 async function request<T = unknown>(path: string, { method = 'GET', body }: { method?: string; body?: unknown } = {}) {
@@ -399,14 +429,40 @@ export async function calculatePrice(payload: PricingPayload): Promise<PricingRe
         : 0
     const laborCost = (payload.labor_cost_per_hour || 0) * (payload.estimated_hours || 0)
     const totalCost = paperCost + inkCost + machineCost + laminationCost + bindingCost + laborCost
-    const salePrice = totalCost * (1 + (payload.markup_margin || 0))
+    const margin = payload.target_margin_percent !== undefined ? payload.target_margin_percent / 100 : (payload.markup_margin || 0.35)
+    const salePrice = totalCost * (1 + margin)
+
+    const floorPrice = Number(payload.base_floor_price || 0)
+    const thresholdMode = payload.threshold_mode || 'FLOOR_OR_ACTUAL'
+    let effectiveSale = salePrice
+    let isExceeded = false
+    let surcharge = 0
+
+    if (thresholdMode === 'FLOOR_OR_ACTUAL') {
+      if (salePrice < floorPrice) {
+        effectiveSale = floorPrice
+        isExceeded = false
+        surcharge = 0
+      } else {
+        effectiveSale = salePrice
+        isExceeded = floorPrice > 0 && salePrice > floorPrice
+        surcharge = isExceeded ? salePrice - floorPrice : 0
+      }
+    }
+
     return {
       job_name: payload.job_name,
       quantity: qty,
       total_cost: round2(totalCost),
       sale_price: round2(salePrice),
-      unit_price: round2(salePrice / qty),
-      profit_margin: payload.markup_margin || 0,
+      effective_sale_price: round2(effectiveSale),
+      base_floor_price: floorPrice,
+      baseline_coverage_percent: payload.baseline_coverage_percent,
+      threshold_mode: thresholdMode,
+      is_threshold_exceeded: isExceeded,
+      threshold_surcharge: round2(surcharge),
+      unit_price: round2(effectiveSale / qty),
+      profit_margin: margin,
       currency: payload.target_currency || 'LAK',
     }
   }

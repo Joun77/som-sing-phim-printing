@@ -149,8 +149,23 @@ export const Step3MaterialInventory: React.FC<Step3MaterialInventoryProps> = ({
     return materials.filter(m => {
       const matchText = (m.name || '').toLowerCase().includes(pickerTarget.search.toLowerCase()) ||
                         (m.sku || '').toLowerCase().includes(pickerTarget.search.toLowerCase());
-      if (pickerTarget.categoryTab === 'ALL') return matchText;
-      return matchText && (m.category || '').toUpperCase().includes(pickerTarget.categoryTab.toUpperCase());
+      if (!matchText) return false;
+      if (pickerTarget.categoryTab === 'ALL') return true;
+
+      const catStr = ((m.category || '') + ' ' + (m.name || '') + ' ' + (m.sku || '')).toUpperCase();
+      if (pickerTarget.categoryTab === 'Sticker') {
+        return catStr.includes('STICKER') || catStr.includes('STK') || catStr.includes('LABEL');
+      }
+      if (pickerTarget.categoryTab === 'Board') {
+        return catStr.includes('BOARD') || catStr.includes('GREY') || catStr.includes('FOAM') || catStr.includes('RIGID');
+      }
+      if (pickerTarget.categoryTab === 'Paper') {
+        return catStr.includes('PAPER') || catStr.includes('ART') || catStr.includes('KRAFT') || catStr.includes('BOND') || catStr.includes('GREEN');
+      }
+      if (pickerTarget.categoryTab === 'Ink') {
+        return catStr.includes('INK') || catStr.includes('TONER') || catStr.includes('CARTRIDGE');
+      }
+      return (m.category || '').toUpperCase().includes(pickerTarget.categoryTab.toUpperCase());
     });
   }, [materials, pickerTarget.search, pickerTarget.categoryTab]);
 
@@ -703,18 +718,25 @@ export const Step3MaterialInventory: React.FC<Step3MaterialInventoryProps> = ({
 
               {/* Category Pills */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-                {['ALL', 'Paper', 'Sticker', 'Board', 'Ink', 'Other'].map((cat) => (
+                {[
+                  { id: 'ALL', label: 'ທັງໝົດ (All)' },
+                  { id: 'Paper', label: 'ເຈ້ຍ (Paper)' },
+                  { id: 'Sticker', label: 'ສະຕິກເກີ (Sticker)' },
+                  { id: 'Board', label: 'ຈົ່ວປັງ / ແຜ່ນແຂງ (Board)' },
+                  { id: 'Ink', label: 'ນ້ຳໝຶກ (Ink)' },
+                  { id: 'Other', label: 'ອື່ນໆ (Other)' },
+                ].map((cat) => (
                   <button
-                    key={cat}
+                    key={cat.id}
                     type="button"
-                    onClick={() => setPickerTarget(prev => ({ ...prev, categoryTab: cat }))}
+                    onClick={() => setPickerTarget(prev => ({ ...prev, categoryTab: cat.id }))}
                     className={`px-3 py-1 rounded-xl font-bold transition whitespace-nowrap cursor-pointer ${
-                      pickerTarget.categoryTab === cat
+                      pickerTarget.categoryTab === cat.id
                         ? 'bg-indigo-600 text-white shadow-xs'
                         : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                     }`}
                   >
-                    {cat}
+                    {cat.label}
                   </button>
                 ))}
               </div>

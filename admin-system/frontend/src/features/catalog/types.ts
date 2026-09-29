@@ -135,6 +135,9 @@ export interface PublicProduct {
   targetMarginPercent?: number;
   defaultMachineId?: string;
   defaultMachineName?: string;
+  baseFloorPrice?: number;
+  baselineCoveragePercent?: number;
+  thresholdMode?: 'FLOOR_OR_ACTUAL' | 'FLAT_ADD_ON';
   options?: PublicProductOption[];
   discountTiers?: ProductDiscountTier[];
 }
@@ -151,6 +154,9 @@ export interface CreateProductInput {
   descriptionEn?: string;
   pricingModel: PricingModel;
   basePrice: number;
+  baseFloorPrice?: number;
+  baselineCoveragePercent?: number;
+  thresholdMode?: 'FLOOR_OR_ACTUAL' | 'FLAT_ADD_ON';
   unit: string;
   bestseller: boolean;
   targetMarginPercent?: number;

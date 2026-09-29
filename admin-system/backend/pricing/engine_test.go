@@ -829,6 +829,53 @@ func TestPaperCostIsPerSheetDirect(t *testing.T) {
 	}
 }
 
+func TestPricingThresholdLogic(t *testing.T) {
+	// Scenario 1: Standard specs -> GrandTotal (~140,038 LAK) is below BaseFloorPrice (200,000 LAK)
+	// Should return EffectiveSalePrice = BaseFloorPrice (200,000), IsThresholdExceeded = false
+	reqFloor := baseReq()
+	reqFloor.Quantity = 100
+	reqFloor.BaseFloorPrice = 200000.0 // Minimum floor of 200,000 LAK
+	reqFloor.ThresholdMode = "FLOOR_OR_ACTUAL"
+
+	resFloor, err := CalculateJobPricing(reqFloor)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if resFloor.EffectiveSalePrice != 200000.0 {
+		t.Errorf("Expected EffectiveSalePrice to be 200000.0 LAK (floor price), got %v", resFloor.EffectiveSalePrice)
+	}
+	if resFloor.IsThresholdExceeded {
+		t.Errorf("Expected IsThresholdExceeded to be false when actual cost <= floor, got true")
+	}
+	if resFloor.ThresholdSurcharge != 0.0 {
+		t.Errorf("Expected ThresholdSurcharge to be 0.0, got %v", resFloor.ThresholdSurcharge)
+	}
+
+	// Scenario 2: Standard specs -> GrandTotal (~140,038 LAK) exceeds BaseFloorPrice (100,000 LAK)
+	// Should return EffectiveSalePrice = GrandTotal, IsThresholdExceeded = true, ThresholdSurcharge = GrandTotal - BaseFloorPrice
+	reqExceeded := baseReq()
+	reqExceeded.Quantity = 100
+	reqExceeded.BaseFloorPrice = 100000.0 // Floor of 100,000 LAK
+	reqExceeded.ThresholdMode = "FLOOR_OR_ACTUAL"
+
+	resExceeded, err := CalculateJobPricing(reqExceeded)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if resExceeded.EffectiveSalePrice <= 100000.0 {
+		t.Errorf("Expected EffectiveSalePrice to exceed floor price of 100000.0, got %v", resExceeded.EffectiveSalePrice)
+	}
+	if !resExceeded.IsThresholdExceeded {
+		t.Errorf("Expected IsThresholdExceeded to be true when actual cost > floor, got false")
+	}
+	expectedSurcharge := resExceeded.GrandTotal - 100000.0
+	if math.Abs(resExceeded.ThresholdSurcharge-expectedSurcharge) > 0.01 {
+		t.Errorf("Expected ThresholdSurcharge to be %v, got %v", expectedSurcharge, resExceeded.ThresholdSurcharge)
+	}
+}
+
 
 
 

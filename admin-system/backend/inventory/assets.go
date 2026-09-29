@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -833,6 +834,23 @@ func getEquipmentByIDFromDB(id string) (EquipmentItem, error) {
 	}
 
 	return item, nil
+}
+
+// GetEquipmentByID retrieves an equipment item by ID from DB or memory fallback
+func GetEquipmentByID(id string) (EquipmentItem, error) {
+	if db.DB != nil {
+		item, err := getEquipmentByIDFromDB(id)
+		if err == nil {
+			return item, nil
+		}
+	}
+	assetStoreMutex.RLock()
+	defer assetStoreMutex.RUnlock()
+	item, exists := equipmentStore[id]
+	if exists {
+		return item, nil
+	}
+	return EquipmentItem{}, errors.New("equipment not found")
 }
 
 func getInventoryItemsFromDB() ([]InventoryItem, error) {

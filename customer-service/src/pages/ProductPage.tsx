@@ -203,6 +203,11 @@ export default function ProductPage() {
   const [materialId, setMaterialId] = useState('')
   const [finishingId, setFinishingId] = useState('')
   const [quantity, setQuantity] = useState(1)
+
+  // Custom Dimensions (SQM_CUSTOM / hasCustomDim) State
+  const [customWidthMm, setCustomWidthMm] = useState<number>(210)
+  const [customHeightMm, setCustomHeightMm] = useState<number>(297)
+  const [customUnit, setCustomUnit] = useState<'mm' | 'cm'>('cm')
   
   const [uploadMode, setUploadMode] = useState<'upload' | 'drive'>('upload')
   const [tempFile, setTempFile] = useState<File | null>(null)
@@ -582,8 +587,21 @@ export default function ProductPage() {
     }
   }
 
+  const hasCustomDim = useMemo(() => {
+    return Boolean(
+      remoteProduct?.featuresConfig?.hasCustomDim ||
+      product?.featuresConfig?.hasCustomDim ||
+      product?.pricingModel === 'SQM_CUSTOM'
+    )
+  }, [remoteProduct, product])
+
   const basePrice = useMemo(() => {
     if (!product) return null
+
+    const resolvedWidth = customWidthMm || 210
+    const resolvedHeight = customHeightMm || 297
+    const areaSqm = (resolvedWidth * resolvedHeight) / 1_000_000
+
     if (product.specGroups && product.specGroups.length > 0) {
       let unitAdd = 0
       product.specGroups.forEach((g) => {
@@ -593,7 +611,11 @@ export default function ProductPage() {
           unitAdd += opt.add
         }
       })
-      const unitTotal = (product.basePrice || 0) + unitAdd
+
+      let unitTotal = (product.basePrice || 0) + unitAdd
+      if (hasCustomDim && product.pricingModel === 'SQM_CUSTOM') {
+        unitTotal = Math.max(1, Math.round(((product.basePrice || 0) + unitAdd) * areaSqm))
+      }
       const subtotal = unitTotal * quantity
 
       let discountPct = 0
@@ -605,18 +627,68 @@ export default function ProductPage() {
         }
       }
       const discountAmount = Math.round(subtotal * (discountPct / 100))
-      const finalTotal = subtotal - discountAmount
+      let finalTotal = subtotal - discountAmount
+
+      // Base Floor Price & Dynamic Floor Threshold Protection
+      const floorPrice = Number(remoteProduct?.baseFloorPrice || 0)
+      const thresholdMode = remoteProduct?.thresholdMode || 'FLOOR_OR_ACTUAL'
+      let isThresholdExceeded = false
+      let thresholdSurcharge = 0
+
+      if (floorPrice > 0 && thresholdMode === 'FLOOR_OR_ACTUAL') {
+        if (finalTotal < floorPrice) {
+          finalTotal = floorPrice
+          isThresholdExceeded = false
+        } else {
+          isThresholdExceeded = true
+          thresholdSurcharge = finalTotal - floorPrice
+        }
+      }
 
       return {
-        unitPrice: unitTotal,
+        unitPrice: Math.round(finalTotal / Math.max(1, quantity)),
         total: finalTotal,
         totalTHB: finalTotal,
         qty: quantity,
         discount: discountPct,
+        baseFloorPrice: floorPrice,
+        thresholdMode,
+        isThresholdExceeded,
+        thresholdSurcharge,
       }
     }
-    return computePrice(product, { sizeId, materialId, finishingId, quantity })
-  }, [product, sizeId, materialId, finishingId, quantity, selectedGroupOptions])
+
+    const computed = computePrice(product, { sizeId, materialId, finishingId, quantity })
+    if (computed) {
+      const floorPrice = Number(remoteProduct?.baseFloorPrice || 0)
+      const thresholdMode = remoteProduct?.thresholdMode || 'FLOOR_OR_ACTUAL'
+      let finalTotal = computed.total
+      let isThresholdExceeded = false
+      let thresholdSurcharge = 0
+
+      if (floorPrice > 0 && thresholdMode === 'FLOOR_OR_ACTUAL') {
+        if (finalTotal < floorPrice) {
+          finalTotal = floorPrice
+          isThresholdExceeded = false
+        } else {
+          isThresholdExceeded = true
+          thresholdSurcharge = finalTotal - floorPrice
+        }
+      }
+
+      return {
+        ...computed,
+        unitPrice: Math.round(finalTotal / Math.max(1, quantity)),
+        total: finalTotal,
+        totalTHB: finalTotal,
+        baseFloorPrice: floorPrice,
+        thresholdMode,
+        isThresholdExceeded,
+        thresholdSurcharge,
+      }
+    }
+    return computed
+  }, [product, sizeId, materialId, finishingId, quantity, selectedGroupOptions, hasCustomDim, customWidthMm, customHeightMm, remoteProduct])
 
   const price = useMemo(() => {
     if (isBookProduct) {
@@ -741,6 +813,25 @@ export default function ProductPage() {
       ? bookItems.reduce((sum, b) => sum + b.quantity, 0)
       : quantity
 
+    // Resolve material and print machine specs for stock deduction at IN_PRODUCTION
+    let resolvedMaterialSku = ''
+    let resolvedPaperCode = ''
+    let resolvedMachineId = remoteProduct?.defaultMachineId || ''
+
+    if (product.specGroups) {
+      product.specGroups.forEach((g) => {
+        const selectedId = selectedGroupOptions[g.id] || g.options[0]?.id
+        const opt = g.options.find((o) => o.id === selectedId)
+        if (opt) {
+          if (opt.materialSku) resolvedMaterialSku = opt.materialSku
+          if (opt.paperCode) resolvedPaperCode = opt.paperCode
+          if ((opt as any).machineId) resolvedMachineId = (opt as any).machineId
+        }
+      })
+    }
+
+    const areaSqm = hasCustomDim ? Math.round((customWidthMm * customHeightMm / 1_000_000) * 1000) / 1000 : undefined
+
     addToCart({
       product,
       config: {
@@ -749,6 +840,13 @@ export default function ProductPage() {
         finishingId,
         quantity: effectiveQty,
         specLabels,
+        materialSku: resolvedMaterialSku,
+        paperCode: resolvedPaperCode,
+        machineId: resolvedMachineId,
+        customWidthMm: hasCustomDim ? customWidthMm : undefined,
+        customHeightMm: hasCustomDim ? customHeightMm : undefined,
+        areaSqm: areaSqm,
+        isCustomDim: hasCustomDim,
       },
       driveLink: isBookProduct
         ? bookItems[0]?.coverFileName || bookItems[0]?.innerFileName || 'multi-book-batch'
@@ -777,6 +875,25 @@ export default function ProductPage() {
       ? bookItems.reduce((sum, b) => sum + b.quantity, 0)
       : quantity
 
+    // Resolve material and print machine specs for stock deduction at IN_PRODUCTION
+    let resolvedMaterialSku = ''
+    let resolvedPaperCode = ''
+    let resolvedMachineId = remoteProduct?.defaultMachineId || ''
+
+    if (product.specGroups) {
+      product.specGroups.forEach((g) => {
+        const selectedId = selectedGroupOptions[g.id] || g.options[0]?.id
+        const opt = g.options.find((o) => o.id === selectedId)
+        if (opt) {
+          if (opt.materialSku) resolvedMaterialSku = opt.materialSku
+          if (opt.paperCode) resolvedPaperCode = opt.paperCode
+          if ((opt as any).machineId) resolvedMachineId = (opt as any).machineId
+        }
+      })
+    }
+
+    const areaSqm = hasCustomDim ? Math.round((customWidthMm * customHeightMm / 1_000_000) * 1000) / 1000 : undefined
+
     const item = {
       product,
       config: {
@@ -785,6 +902,13 @@ export default function ProductPage() {
         finishingId,
         quantity: effectiveQty,
         specLabels,
+        materialSku: resolvedMaterialSku,
+        paperCode: resolvedPaperCode,
+        machineId: resolvedMachineId,
+        customWidthMm: hasCustomDim ? customWidthMm : undefined,
+        customHeightMm: hasCustomDim ? customHeightMm : undefined,
+        areaSqm: areaSqm,
+        isCustomDim: hasCustomDim,
       },
       driveLink: isBookProduct
         ? bookItems[0]?.coverFileName || bookItems[0]?.innerFileName || 'multi-book-batch'
@@ -1201,6 +1325,112 @@ export default function ProductPage() {
 
                       {/* Configurator Form for Active Artwork */}
                       <form className="configurator space-y-4" onSubmit={handleBuyNow}>
+                        {/* Custom Dimensions Card (SQM_CUSTOM / hasCustomDim) */}
+                        {hasCustomDim && (
+                          <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3 shadow-xs">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="p-1.5 bg-sky-50 dark:bg-sky-950/50 text-sky-600 dark:text-sky-400 rounded-xl">
+                                  <Ruler className="w-4 h-4" />
+                                </span>
+                                <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                                  {language === 'en' ? 'Custom Dimensions (Width × Height)' : 'ກຳນົດຂະໜາດເອງ (ກວ້າງ × ສູງ)'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomUnit('cm')}
+                                  className={`px-2.5 py-0.5 rounded-lg transition cursor-pointer ${customUnit === 'cm' ? 'bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-xs' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                >
+                                  cm
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomUnit('mm')}
+                                  className={`px-2.5 py-0.5 rounded-lg transition cursor-pointer ${customUnit === 'mm' ? 'bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-xs' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                >
+                                  mm
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Quick Presets */}
+                            <div className="flex flex-wrap gap-1.5 text-xs">
+                              {[
+                                { label: 'A4 (21×29.7 cm)', w: 210, h: 297 },
+                                { label: 'A3 (29.7×42 cm)', w: 297, h: 420 },
+                                { label: 'A2 (42×59.4 cm)', w: 420, h: 594 },
+                                { label: '1 × 1 m', w: 1000, h: 1000 },
+                                { label: '1 × 2 m', w: 1000, h: 2000 },
+                              ].map((p) => (
+                                <button
+                                  key={p.label}
+                                  type="button"
+                                  onClick={() => {
+                                    setCustomWidthMm(p.w)
+                                    setCustomHeightMm(p.h)
+                                  }}
+                                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition cursor-pointer ${
+                                    customWidthMm === p.w && customHeightMm === p.h
+                                      ? 'bg-sky-50 dark:bg-sky-950/40 border-sky-500 text-sky-700 dark:text-sky-300'
+                                      : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800'
+                                  }`}
+                                >
+                                  {p.label}
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* Input Controls */}
+                            <div className="grid grid-cols-2 gap-3 pt-1">
+                              <div>
+                                <label className="text-[11px] font-bold text-slate-500 block mb-1">
+                                  {language === 'en' ? 'Width' : 'ລວງກວ້າງ'} ({customUnit})
+                                </label>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  step={customUnit === 'cm' ? 0.1 : 1}
+                                  value={customUnit === 'cm' ? customWidthMm / 10 : customWidthMm}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 1
+                                    setCustomWidthMm(customUnit === 'cm' ? Math.round(val * 10) : Math.round(val))
+                                  }}
+                                  className="w-full px-3 py-2 text-xs sm:text-sm font-mono font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-sky-500/20 text-slate-900 dark:text-white"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[11px] font-bold text-slate-500 block mb-1">
+                                  {language === 'en' ? 'Height' : 'ລວງສູງ'} ({customUnit})
+                                </label>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  step={customUnit === 'cm' ? 0.1 : 1}
+                                  value={customUnit === 'cm' ? customHeightMm / 10 : customHeightMm}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 1
+                                    setCustomHeightMm(customUnit === 'cm' ? Math.round(val * 10) : Math.round(val))
+                                  }}
+                                  className="w-full px-3 py-2 text-xs sm:text-sm font-mono font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-sky-500/20 text-slate-900 dark:text-white"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Area Summary Pill */}
+                            <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 dark:border-slate-800">
+                              <span className="text-slate-500 font-medium">
+                                {language === 'en' ? 'Total Surface Area:' : 'ເນື້ອທີ່ລວມ (Total Area):'}
+                              </span>
+                              <span className="font-mono font-bold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-lg border border-sky-200 dark:border-sky-800">
+                                {((customWidthMm * customHeightMm) / 1_000_000).toFixed(3)} m² (SQM)
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Dynamic Spec Groups from Admin System Database */}
                         {product.specGroups && product.specGroups.length > 0 ? (
                           product.specGroups.map((g) => {
@@ -1627,6 +1857,21 @@ export default function ProductPage() {
                                 return formatMoney(convertTo(grandTotalLAK / 630.5), currency);
                               })()}
                             </span>
+                            {remoteProduct?.baseFloorPrice && remoteProduct.baseFloorPrice > 0 ? (
+                              <div className="pt-1">
+                                {(price as any)?.isThresholdExceeded ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                                    <Sparkles className="w-3 h-3 text-amber-500" />
+                                    <span>ປັບລາຄາຕາມຕົ້ນທຶນ & Coverage ແທ້ຈິງ (Floor: {formatMoney(remoteProduct.baseFloorPrice, 'LAK')})</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                    <span>ລາຄາຂັ້ນຕ່ຳ Floor Protection: {formatMoney(remoteProduct.baseFloorPrice, 'LAK')}</span>
+                                  </span>
+                                )}
+                              </div>
+                            ) : null}
                           </div>
 
                           <div className="flex items-center gap-2">

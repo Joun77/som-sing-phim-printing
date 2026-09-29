@@ -177,6 +177,12 @@ type CalculationRequest struct {
 	PackagingCostPerUnit float64 `json:"packaging_cost_per_unit"`
 	PackagingType        string  `json:"packaging_type"` // e.g. "BOX_SMALL", "BOX_LARGE", "CORRUGATED", "KRAFT_WRAP"
 
+	// Baseline Coverage Allowance & Floor Threshold Pricing
+	BaseFloorPrice          float64 `json:"base_floor_price"`          // Flat floor price minimum (e.g. 50,000 LAK)
+	BaselineCoveragePercent float64 `json:"baseline_coverage_percent"` // Standard included coverage % (e.g. 10%)
+	ThresholdMode           string  `json:"threshold_mode"`            // "FLOOR_OR_ACTUAL" | "FLAT_ADD_ON"
+	DefaultMachineID        string  `json:"default_machine_id"`        // Linked printer asset ID (e.g. "PRN-001")
+
 	TargetCurrency string `json:"target_currency"`
 }
 
@@ -246,6 +252,14 @@ type CalculationResponse struct {
 	DepositAmount  float64 `json:"deposit_amount"`  // GrandTotal * DepositPercent / 100
 	BalanceDue     float64 `json:"balance_due"`     // GrandTotal - DepositAmount
 	UnitPrice      float64 `json:"unit_price"`      // GrandTotal / Quantity
+
+	// Baseline Threshold & Real Cost Comparison
+	BaseFloorPrice          float64 `json:"base_floor_price"`
+	BaselineCoveragePercent float64 `json:"baseline_coverage_percent"`
+	ThresholdMode           string  `json:"threshold_mode"`
+	IsThresholdExceeded     bool    `json:"is_threshold_exceeded"`
+	ThresholdSurcharge      float64 `json:"threshold_surcharge"`
+	EffectiveSalePrice      float64 `json:"effective_sale_price"`
 
 	// Meta
 	GrossMarginPercent    float64                 `json:"gross_margin_percent"`
@@ -713,12 +727,25 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 			dCostPerPage := decimal.NewFromFloat(alloc.CostPerPage)
 			dDepreciationCost = dDepreciationCost.Add(dAllocPages.Mul(dCostPerPage))
 		}
-	} else if req.MachinePrice > 0 && req.TargetTotalPages > 0 {
-		deprecPerSheet, maintPerSheet, _ := CalculateMachineOverhead(req.MachinePrice, int(req.TargetTotalPages), req.MaintenanceRatePercent)
-		dDeprec := decimal.NewFromFloat(deprecPerSheet)
-		dMaint := decimal.NewFromFloat(maintPerSheet)
-		dDepreciationCost = dDeprec.Mul(dJobPages)
-		dMaintenanceCost = dMaintenanceCost.Add(dMaint.Mul(dJobPages))
+	} else {
+		// Resolve equipment specs from database if default_machine_id is set
+		if req.DefaultMachineID != "" && (req.MachinePrice <= 0 || req.TargetTotalPages <= 0) {
+			if eq, err := inventory.GetEquipmentByID(req.DefaultMachineID); err == nil {
+				req.MachinePrice = eq.Price
+				req.TargetTotalPages = float64(eq.ExpectedLifeA4Pages)
+				if req.MaintenanceRatePercent <= 0 {
+					req.MaintenanceRatePercent = eq.MaintenanceRatePercent
+				}
+			}
+		}
+
+		if req.MachinePrice > 0 && req.TargetTotalPages > 0 {
+			deprecPerSheet, maintPerSheet, _ := CalculateMachineOverhead(req.MachinePrice, int(req.TargetTotalPages), req.MaintenanceRatePercent)
+			dDeprec := decimal.NewFromFloat(deprecPerSheet)
+			dMaint := decimal.NewFromFloat(maintPerSheet)
+			dDepreciationCost = dDeprec.Mul(dJobPages)
+			dMaintenanceCost = dMaintenanceCost.Add(dMaint.Mul(dJobPages))
+		}
 	}
 
 	if req.MaintenanceCostPerPage > 0 {
@@ -936,20 +963,41 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	dTaxAmount = dTaxAmount.Round(2)
 	dGrandTotal = dGrandTotal.Round(2)
 
+	// Baseline Allowance & Floor Threshold Evaluation
+	dEffectiveSalePrice := dGrandTotal
+	dThresholdSurcharge := decimal.Zero
+	isThresholdExceeded := false
+
+	if req.BaseFloorPrice > 0 {
+		dFloorPrice := decimal.NewFromFloat(req.BaseFloorPrice)
+		if req.ThresholdMode == "FLOOR_OR_ACTUAL" || req.ThresholdMode == "" {
+			if dGrandTotal.LessThanOrEqual(dFloorPrice) {
+				// Actual cost + margin does not exceed base floor price: charge base floor price
+				dEffectiveSalePrice = dFloorPrice
+				isThresholdExceeded = false
+				dThresholdSurcharge = decimal.Zero
+			} else {
+				// Cost exceeded baseline threshold: charge real calculated price
+				dEffectiveSalePrice = dGrandTotal
+				isThresholdExceeded = true
+				dThresholdSurcharge = dGrandTotal.Sub(dFloorPrice).Round(2)
+			}
+		}
+	}
 
 	depositPct := req.DepositPercent
 	if depositPct < 0 {
 		depositPct = 0
 	}
 	dDepositPct := decimal.NewFromFloat(depositPct)
-	dDepositAmount := dGrandTotal.Mul(dDepositPct.Div(decimal.NewFromInt(100))).Round(2)
-	dBalanceDue := dGrandTotal.Sub(dDepositAmount).Round(2)
-	dUnitPrice := dGrandTotal.Div(dQuantity).Round(2)
+	dDepositAmount := dEffectiveSalePrice.Mul(dDepositPct.Div(decimal.NewFromInt(100))).Round(2)
+	dBalanceDue := dEffectiveSalePrice.Sub(dDepositAmount).Round(2)
+	dUnitPrice := dEffectiveSalePrice.Div(dQuantity).Round(2)
 
 	// Calculate Gross Profit Margin %: ((TotalAmount - TotalCost) / TotalAmount) * 100
 	dGrossMarginPercent := decimal.Zero
-	if dGrandTotal.GreaterThan(decimal.Zero) {
-		dGrossMarginPercent = dGrandTotal.Sub(dNetInternalCost).Div(dGrandTotal).Mul(decimal.NewFromInt(100)).Round(2)
+	if dEffectiveSalePrice.GreaterThan(decimal.Zero) {
+		dGrossMarginPercent = dEffectiveSalePrice.Sub(dNetInternalCost).Div(dEffectiveSalePrice).Mul(decimal.NewFromInt(100)).Round(2)
 	} else if dSalePrice.GreaterThan(decimal.Zero) {
 		dGrossMarginPercent = dSalePrice.Sub(dNetInternalCost).Div(dSalePrice).Mul(decimal.NewFromInt(100)).Round(2)
 	}
@@ -999,6 +1047,8 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	discountFloat, _ := dDiscountAmount.Round(2).Float64()
 	taxFloat, _ := dTaxAmount.Round(2).Float64()
 	grandTotalFloat, _ := dGrandTotal.Round(2).Float64()
+	effectiveSalePriceFloat, _ := dEffectiveSalePrice.Round(2).Float64()
+	thresholdSurchargeFloat, _ := dThresholdSurcharge.Round(2).Float64()
 	netCostFloat, _ := dNetInternalCost.Round(2).Float64()
 	depositAmountFloat, _ := dDepositAmount.Round(2).Float64()
 	balanceDueFloat, _ := dBalanceDue.Round(2).Float64()
@@ -1008,56 +1058,62 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	volumeDiscountFloat, _ := dVolumeDiscountPct.Round(2).Float64()
 
 	response := CalculationResponse{
-		JobName:               req.JobName,
-		Quantity:              req.Quantity,
-		AreaFactor:            roundToTwoDecimals(dAreaFactor.InexactFloat64()),
-		TotalBreakdown:        totalBreakdown,
-		UnitBreakdown:         unitBreakdown,
-		PaperCost:             roundToTwoDecimals(dPaperCost.InexactFloat64()),
-		OffcutRebateCost:      roundToTwoDecimals(dOffcutRebate.InexactFloat64()),
-		InkCost:               roundToTwoDecimals(dInkCost.InexactFloat64()),
-		InkCostK:              roundToTwoDecimals(dInkCostK.InexactFloat64()),
-		InkCostCMY:            roundToTwoDecimals(dInkCostCMY.InexactFloat64()),
-		PlateCost:             roundToTwoDecimals(dPlateCost.InexactFloat64()),
-		DepreciationCost:      roundToTwoDecimals(dDepreciationCost.InexactFloat64()),
-		MaintenanceCost:       roundToTwoDecimals(dMaintenanceCost.InexactFloat64()),
-		MachineCost:           roundToTwoDecimals(dMachineCost.InexactFloat64()),
-		ElectricityCost:       roundToTwoDecimals(dElectricityCost.InexactFloat64()),
-		GuillotineCuttingCost: roundToTwoDecimals(dGuillotineCost.InexactFloat64()),
-		PackagingCost:         roundToTwoDecimals(dPackagingCost.InexactFloat64()),
-		CustomFinishingCost:   roundToTwoDecimals(dCustomFinishingCost.InexactFloat64()),
-		LaminationCost:        roundToTwoDecimals(dLaminationCost.InexactFloat64()),
-		BindingCost:           roundToTwoDecimals(dBindingCost.InexactFloat64()),
-		LaborCost:             roundToTwoDecimals(dLaborCost.InexactFloat64()),
-		SetupCost:             roundToTwoDecimals(dSetupCost.InexactFloat64()),
-		FinishingCost:         roundToTwoDecimals(dFinishingCost.InexactFloat64()),
-		DirectCost:            roundToTwoDecimals(dDirectCost.InexactFloat64()),
-		OverheadCost:          roundToTwoDecimals(dOverheadCost.InexactFloat64()),
-		Subtotal:              roundToTwoDecimals(dSubtotal.InexactFloat64()),
-		SpoilageCost:          roundToTwoDecimals(dSpoilageCost.InexactFloat64()),
-		NetInternalCost:       netCostFloat,
-		TotalCost:             netCostFloat,
-		SalePrice:             salePriceFloat,
-		DiscountAmount:        discountFloat,
-		TaxMode:               taxMode,
-		TaxAmount:             taxFloat,
-		GrandTotal:            grandTotalFloat,
-		DepositPercent:        depositPct,
-		DepositAmount:         depositAmountFloat,
-		BalanceDue:            balanceDueFloat,
-		UnitPrice:             unitPriceFloat,
-		GrossMarginPercent:    grossMarginPercent,
-		ProfitMargin:          effectiveMarginFloat,
-		VolumeDiscountPercent: volumeDiscountFloat,
-		Currency:              req.TargetCurrency,
-		ExchangeRate:          1.0,
-		CustomOptions:         req.CustomFinishingOptions,
-		Imposition:            impositionGrid,
-		WastePercent:          roundToTwoDecimals(calculatedWastePct),
-		UsedOffcutLotID:       usedOffcutLotID,
-		OffcutSavingsPercent:  offcutSavingsPercent,
-		OffcutRecommended:     offcutRecommended,
-		OffcutLotName:         offcutLotName,
+		JobName:                 req.JobName,
+		Quantity:                req.Quantity,
+		AreaFactor:              roundToTwoDecimals(dAreaFactor.InexactFloat64()),
+		TotalBreakdown:          totalBreakdown,
+		UnitBreakdown:           unitBreakdown,
+		PaperCost:               roundToTwoDecimals(dPaperCost.InexactFloat64()),
+		OffcutRebateCost:        roundToTwoDecimals(dOffcutRebate.InexactFloat64()),
+		InkCost:                 roundToTwoDecimals(dInkCost.InexactFloat64()),
+		InkCostK:                roundToTwoDecimals(dInkCostK.InexactFloat64()),
+		InkCostCMY:              roundToTwoDecimals(dInkCostCMY.InexactFloat64()),
+		PlateCost:               roundToTwoDecimals(dPlateCost.InexactFloat64()),
+		DepreciationCost:        roundToTwoDecimals(dDepreciationCost.InexactFloat64()),
+		MaintenanceCost:         roundToTwoDecimals(dMaintenanceCost.InexactFloat64()),
+		MachineCost:             roundToTwoDecimals(dMachineCost.InexactFloat64()),
+		ElectricityCost:         roundToTwoDecimals(dElectricityCost.InexactFloat64()),
+		GuillotineCuttingCost:   roundToTwoDecimals(dGuillotineCost.InexactFloat64()),
+		PackagingCost:           roundToTwoDecimals(dPackagingCost.InexactFloat64()),
+		CustomFinishingCost:     roundToTwoDecimals(dCustomFinishingCost.InexactFloat64()),
+		LaminationCost:          roundToTwoDecimals(dLaminationCost.InexactFloat64()),
+		BindingCost:             roundToTwoDecimals(dBindingCost.InexactFloat64()),
+		LaborCost:               roundToTwoDecimals(dLaborCost.InexactFloat64()),
+		SetupCost:               roundToTwoDecimals(dSetupCost.InexactFloat64()),
+		FinishingCost:           roundToTwoDecimals(dFinishingCost.InexactFloat64()),
+		DirectCost:              roundToTwoDecimals(dDirectCost.InexactFloat64()),
+		OverheadCost:            roundToTwoDecimals(dOverheadCost.InexactFloat64()),
+		Subtotal:                roundToTwoDecimals(dSubtotal.InexactFloat64()),
+		SpoilageCost:            roundToTwoDecimals(dSpoilageCost.InexactFloat64()),
+		NetInternalCost:         netCostFloat,
+		TotalCost:               netCostFloat,
+		SalePrice:               salePriceFloat,
+		DiscountAmount:          discountFloat,
+		TaxMode:                 taxMode,
+		TaxAmount:               taxFloat,
+		GrandTotal:              grandTotalFloat,
+		BaseFloorPrice:          req.BaseFloorPrice,
+		BaselineCoveragePercent: req.BaselineCoveragePercent,
+		ThresholdMode:           req.ThresholdMode,
+		IsThresholdExceeded:     isThresholdExceeded,
+		ThresholdSurcharge:      thresholdSurchargeFloat,
+		EffectiveSalePrice:      effectiveSalePriceFloat,
+		DepositPercent:          depositPct,
+		DepositAmount:           depositAmountFloat,
+		BalanceDue:              balanceDueFloat,
+		UnitPrice:               unitPriceFloat,
+		GrossMarginPercent:      grossMarginPercent,
+		ProfitMargin:            effectiveMarginFloat,
+		VolumeDiscountPercent:   volumeDiscountFloat,
+		Currency:                req.TargetCurrency,
+		ExchangeRate:            1.0,
+		CustomOptions:           req.CustomFinishingOptions,
+		Imposition:              impositionGrid,
+		WastePercent:            roundToTwoDecimals(calculatedWastePct),
+		UsedOffcutLotID:         usedOffcutLotID,
+		OffcutSavingsPercent:    offcutSavingsPercent,
+		OffcutRecommended:       offcutRecommended,
+		OffcutLotName:           offcutLotName,
 	}
 
 	// Cache successful calculation

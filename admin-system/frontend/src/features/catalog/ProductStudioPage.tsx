@@ -88,9 +88,14 @@ export const ProductStudioPage: React.FC<ProductStudioPageProps> = ({
 
   // Step 2 & 3 & 4 State
   const [baselineCoveragePercent, setBaselineCoveragePercent] = useState<number>(
-    editingProduct?.featuresConfig?.baselineCoveragePercent || 
-    (editingProduct as any)?.baselineCoveragePercent || 
-    15
+    editingProduct?.baselineCoveragePercent !== undefined ? editingProduct.baselineCoveragePercent :
+    (editingProduct?.featuresConfig?.baselineCoveragePercent || 15)
+  );
+  const [baseFloorPrice, setBaseFloorPrice] = useState<number>(
+    editingProduct?.baseFloorPrice !== undefined ? editingProduct.baseFloorPrice : (editingProduct?.basePrice || 0)
+  );
+  const [thresholdMode, setThresholdMode] = useState<'FLOOR_OR_ACTUAL' | 'FLAT_ADD_ON'>(
+    editingProduct?.thresholdMode || 'FLOOR_OR_ACTUAL'
   );
   const [targetMarginPercent, setTargetMarginPercent] = useState<number>(editingProduct?.targetMarginPercent || 35);
   const [defaultMachineId, setDefaultMachineId] = useState<string>(editingProduct?.defaultMachineId || fallbackMachineId);
@@ -168,6 +173,12 @@ export const ProductStudioPage: React.FC<ProductStudioPageProps> = ({
         setFeaturesConfig(editingProduct.featuresConfig);
       }
       setTargetMarginPercent(editingProduct.targetMarginPercent || 35);
+      setBaseFloorPrice(editingProduct.baseFloorPrice !== undefined ? editingProduct.baseFloorPrice : (editingProduct.basePrice || 0));
+      setBaselineCoveragePercent(
+        editingProduct.baselineCoveragePercent !== undefined ? editingProduct.baselineCoveragePercent :
+        (editingProduct.featuresConfig?.baselineCoveragePercent || 15)
+      );
+      setThresholdMode(editingProduct.thresholdMode || 'FLOOR_OR_ACTUAL');
       setDefaultMachineId(editingProduct.defaultMachineId || fallbackMachineId);
       setDefaultMachineName(editingProduct.defaultMachineName || fallbackMachineName);
       if (editingProduct.specGroups && editingProduct.specGroups.length > 0) {
@@ -260,6 +271,9 @@ export const ProductStudioPage: React.FC<ProductStudioPageProps> = ({
       descriptionEn: descriptionEn.trim(),
       description: descriptionLo.trim() || description.trim(),
       basePrice: basePrice || 0,
+      baseFloorPrice: Number(baseFloorPrice) || 0,
+      baselineCoveragePercent: Number(baselineCoveragePercent) || 15,
+      thresholdMode: thresholdMode || 'FLOOR_OR_ACTUAL',
       pricingModel: pricingModel,
       unit: 'ແຜ່ນ',
       minQuantity: Number(minQuantity) || 1,
@@ -392,6 +406,10 @@ export const ProductStudioPage: React.FC<ProductStudioPageProps> = ({
             setDefaultMachineName={setDefaultMachineName}
             baselineCoveragePercent={baselineCoveragePercent}
             setBaselineCoveragePercent={setBaselineCoveragePercent}
+            baseFloorPrice={baseFloorPrice}
+            setBaseFloorPrice={setBaseFloorPrice}
+            thresholdMode={thresholdMode}
+            setThresholdMode={setThresholdMode}
             targetMarginPercent={targetMarginPercent}
             setTargetMarginPercent={setTargetMarginPercent}
             specGroups={specGroups}

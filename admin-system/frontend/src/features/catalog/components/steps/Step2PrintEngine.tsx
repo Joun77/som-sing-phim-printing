@@ -23,7 +23,8 @@ import {
   Palette,
   FileText,
   RefreshCw,
-  Search
+  Search,
+  ArrowRight
 } from 'lucide-react';
 import { useApp } from '@store/AppContext';
 import { SpecGroup, PublicProductOption, FeaturesConfig } from '../../types';
@@ -37,6 +38,10 @@ export interface Step2PrintEngineProps {
   setDefaultMachineName: (name: string) => void;
   baselineCoveragePercent: number;
   setBaselineCoveragePercent: (coverage: number) => void;
+  baseFloorPrice?: number;
+  setBaseFloorPrice?: (price: number) => void;
+  thresholdMode?: 'FLOOR_OR_ACTUAL' | 'FLAT_ADD_ON';
+  setThresholdMode?: (mode: 'FLOOR_OR_ACTUAL' | 'FLAT_ADD_ON') => void;
   targetMarginPercent: number;
   setTargetMarginPercent: (margin: number) => void;
   specGroups: SpecGroup[];
@@ -53,6 +58,10 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
   setDefaultMachineName,
   baselineCoveragePercent,
   setBaselineCoveragePercent,
+  baseFloorPrice = 0,
+  setBaseFloorPrice,
+  thresholdMode = 'FLOOR_OR_ACTUAL',
+  setThresholdMode,
   targetMarginPercent,
   setTargetMarginPercent,
   specGroups,
@@ -499,6 +508,150 @@ export const Step2PrintEngine: React.FC<Step2PrintEngineProps> = ({
           </div>
           <span className="font-mono text-indigo-700 font-bold whitespace-nowrap bg-white px-2.5 py-1 rounded-xl border border-indigo-200">
             ΔCoverage × Ink Cost
+          </span>
+        </div>
+      </div>
+
+      {/* SECTION: BASE FLOOR PRICE & DYNAMIC FLOOR THRESHOLD ENGINE */}
+      <div className="p-6 bg-white border border-emerald-200/90 rounded-3xl space-y-4 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              </span>
+              <h3 className="text-sm font-black text-slate-900">
+                ລາຄາຂັ້ນຕ່ຳ & ລະບົບ Floor Threshold Protection:
+              </h3>
+              <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-lg text-xs font-mono font-black">
+                {formatLAK(baseFloorPrice)}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500">
+              ປ້ອງກັນການຂາດທຶນ: ຖ້າ (ຕົ້ນທຶນຈິງ + ກຳໄລ) ຍັງບໍ່ເກີນລາຄາເລີ່ມຕົ້ນ ຈະສະແດງລາຄາຂັ້ນຕ່ຳ ແຕ່ຖ້າສເປກສູງຫຼືສີໜາເກີນເກນ ລະບົບຈະປັບເປັນລາຄາຕົ້ນທຶນຈິງທັນທີ
+            </p>
+          </div>
+        </div>
+
+        {/* Base Floor Presets & Input */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-1">
+          {[
+            { val: 0, label: '0 ₭', desc: 'ບໍ່ກຳນົດ Floor Price' },
+            { val: 25000, label: '25,000 ₭', desc: 'ສິນຄ້າຂະໜາດນ້ອຍ' },
+            { val: 50000, label: '50,000 ₭', desc: 'ມາດຕະຖານໂຮງພິມ' },
+            { val: 100000, label: '100,000 ₭', desc: 'ງານພິມດ່ວນ/ພິເສດ' },
+            { val: 200000, label: '200,000 ₭', desc: 'ງານສັ່ງຜະລິດ Premium' },
+          ].map((item) => (
+            <button
+              key={item.val}
+              type="button"
+              onClick={() => {
+                if (setBaseFloorPrice) setBaseFloorPrice(item.val);
+                showToast(`ຕັ້ງຄ່າ Base Floor Price ເປັນ ${item.label}`, 'info');
+              }}
+              className={`p-3 rounded-2xl border text-left transition space-y-1 cursor-pointer ${
+                baseFloorPrice === item.val
+                  ? 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-emerald-300 hover:bg-white'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black">{item.label}</span>
+                {baseFloorPrice === item.val && <Check className="w-3.5 h-3.5 text-white" />}
+              </div>
+              <p className={`text-[10px] font-mono truncate ${baseFloorPrice === item.val ? 'text-emerald-100' : 'text-slate-400'}`}>{item.desc}</p>
+            </button>
+          ))}
+
+          {/* Custom Floor Input */}
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-center space-y-1">
+            <span className="text-[10px] font-bold text-slate-500">ກຳນົດເອງ (Custom LAK):</span>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min={0}
+                step={1000}
+                value={baseFloorPrice}
+                onChange={(e) => {
+                  const val = Math.max(0, parseInt(e.target.value, 10) || 0);
+                  if (setBaseFloorPrice) setBaseFloorPrice(val);
+                }}
+                className="w-full px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-emerald-700 text-center focus:ring-2 focus:ring-emerald-500/20"
+              />
+              <span className="text-xs font-mono text-slate-500">₭</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Threshold Mode Selector */}
+        <div className="pt-2">
+          <label className="text-xs font-bold text-slate-700 block mb-2">
+            ຮູບແບບການປັບລາຄາ (Threshold Mode):
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (setThresholdMode) setThresholdMode('FLOOR_OR_ACTUAL');
+                showToast('ເລືອກໂໝດ Floor or Actual (ແນະນຳ)', 'info');
+              }}
+              className={`p-3.5 rounded-2xl border-2 text-left transition flex items-start gap-3 cursor-pointer ${
+                thresholdMode === 'FLOOR_OR_ACTUAL'
+                  ? 'border-emerald-600 bg-emerald-50/50'
+                  : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
+            >
+              <div className={`p-2 rounded-xl mt-0.5 ${thresholdMode === 'FLOOR_OR_ACTUAL' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-slate-900">Floor or Actual (ມາດຕະຖານແນະນຳ)</span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">Auto Safe</span>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  ຖ້າ Cost + Margin &le; Floor Price &rarr; ໃຊ້ Floor Price. ຖ້າເກີນ &rarr; ປັບລາຄາເປັນ Cost + Margin ແທ້ຈິງ
+                </p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (setThresholdMode) setThresholdMode('FLAT_ADD_ON');
+                showToast('ເລືອກໂໝດ Flat Add-on', 'info');
+              }}
+              className={`p-3.5 rounded-2xl border-2 text-left transition flex items-start gap-3 cursor-pointer ${
+                thresholdMode === 'FLAT_ADD_ON'
+                  ? 'border-indigo-600 bg-indigo-50/50'
+                  : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
+            >
+              <div className={`p-2 rounded-xl mt-0.5 ${thresholdMode === 'FLAT_ADD_ON' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                <DollarSign className="w-4 h-4" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-slate-900">Flat Add-On (ບວກເພີ່ມໂດຍກົງ)</span>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  ຄິດໄລ່ຈາກລາຄາເລີ່ມຕົ້ນ + Add-ons ທຸກລາຍການຕາມຕົວເລືອກທີ່ເລືອກ
+                </p>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Live Logic Simulation Banner */}
+        <div className="p-3.5 bg-emerald-50/60 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-700">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span>
+              <strong>Dynamic Quotation Protection:</strong> ລູກຄ້າເລືອກ Coverage &le; {baselineCoveragePercent}% &rarr; ລາຄາເລີ່ມຕົ້ນ {formatLAK(baseFloorPrice)} | ຖ້າ Coverage &gt; {baselineCoveragePercent}% ຫຼື ຂະໜາດໃຫຍ່ &rarr; ລາຄາຈະປັບຂຶ້ນຕາມຕົ້ນທຶນຈິງ
+            </span>
+          </div>
+          <span className="font-mono text-emerald-800 font-bold whitespace-nowrap bg-white px-2.5 py-1 rounded-xl border border-emerald-200">
+            Effective = max(GrandTotal, FloorPrice)
           </span>
         </div>
       </div>

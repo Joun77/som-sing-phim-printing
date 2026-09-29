@@ -83,19 +83,15 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
     }
 
     return nonPrinters.map(eq => {
-      let icon = '';
       let cat: 'Cutter' | 'Laminator' | 'Binder' | 'Puncher' = 'Cutter';
       let unit = 'ແຜ່ນ';
 
       if (eq.category === 'Laminator' || eq.name?.toLowerCase().includes('laminat')) {
-        icon = '';
         cat = 'Laminator';
       } else if (eq.category === 'Binder' || eq.name?.toLowerCase().includes('binder')) {
-        icon = '';
         cat = 'Binder';
         unit = 'ເລັ້ມ';
       } else if (eq.category === 'Puncher' || eq.name?.toLowerCase().includes('punch')) {
-        icon = '';
         cat = 'Puncher';
       }
 
@@ -109,7 +105,7 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
         category: cat,
         costPerUnit: Math.round(costPerUnit),
         unit: unit,
-        icon: icon,
+        icon: '',
         defaultPrice: 0,
       };
     });
@@ -528,7 +524,12 @@ export const Step4PostPressFinishing: React.FC<Step4PostPressFinishingProps> = (
                 className="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2 shadow-xs"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-xl">{mach.icon}</span>
+                  <div className="p-2 rounded-xl bg-purple-50 text-purple-600">
+                    {mach.category === 'Cutter' && <Scissors className="w-4 h-4 text-purple-600" />}
+                    {mach.category === 'Laminator' && <Layers className="w-4 h-4 text-sky-600" />}
+                    {mach.category === 'Binder' && <BookOpen className="w-4 h-4 text-amber-600" />}
+                    {mach.category === 'Puncher' && <Wrench className="w-4 h-4 text-indigo-600" />}
+                  </div>
                   <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[10px] font-mono font-bold">
                     {mach.category}
                   </span>

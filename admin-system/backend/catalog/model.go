@@ -125,6 +125,9 @@ type PublicProduct struct {
 	DescriptionEn       string                `json:"descriptionEn"`
 	PricingModel        string                `json:"pricingModel"` // STANDARD_FLAT, BOOK_MULTIPART, SQM_CUSTOM, FIXED_UNIT
 	BasePrice           float64               `json:"basePrice"`
+	BaseFloorPrice      float64               `json:"baseFloorPrice,omitempty"`
+	BaselineCoveragePercent float64           `json:"baselineCoveragePercent,omitempty"`
+	ThresholdMode       string                `json:"thresholdMode,omitempty"`
 	Unit                string                `json:"unit"`
 	Bestseller          bool                  `json:"bestseller"`
 	TargetMarginPercent float64               `json:"targetMarginPercent,omitempty"`
@@ -192,6 +195,9 @@ type CreateProductRequest struct {
 	DescriptionEn       string               `json:"descriptionEn"`
 	PricingModel        string               `json:"pricingModel"`
 	BasePrice           float64              `json:"basePrice"`
+	BaseFloorPrice      float64              `json:"baseFloorPrice"`
+	BaselineCoveragePercent float64          `json:"baselineCoveragePercent"`
+	ThresholdMode       string               `json:"thresholdMode"`
 	Unit                string               `json:"unit"`
 	Bestseller          bool                 `json:"bestseller"`
 	TargetMarginPercent float64              `json:"targetMarginPercent"`
@@ -225,6 +231,9 @@ type UpdateProductRequest struct {
 	DescriptionEn       string               `json:"descriptionEn"`
 	PricingModel        string               `json:"pricingModel"`
 	BasePrice           float64              `json:"basePrice"`
+	BaseFloorPrice      float64              `json:"baseFloorPrice"`
+	BaselineCoveragePercent float64          `json:"baselineCoveragePercent"`
+	ThresholdMode       string               `json:"thresholdMode"`
 	Unit                string               `json:"unit"`
 	Bestseller          bool                 `json:"bestseller"`
 	TargetMarginPercent float64              `json:"targetMarginPercent"`

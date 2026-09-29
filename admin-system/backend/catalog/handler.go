@@ -518,17 +518,26 @@ func HandleAdminCreateProduct(c *gin.Context) {
 		productQuery := `
 			INSERT INTO public_products (
 				category_id, name, name_lo, name_en, slug, category, description, description_lo, description_en,
-				pricing_model, base_price, unit, bestseller, target_margin_percent, default_machine_id, default_machine_name,
+				pricing_model, base_price, base_floor_price, baseline_coverage_percent, threshold_mode, unit, bestseller, target_margin_percent, default_machine_id, default_machine_name,
 				spec_groups, features_config, info_tabs, features, thumbnail_url, gallery_urls,
 				min_quantity, is_on_demand, lead_time_days, is_active, sort_order
 			) VALUES (
-				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27
+				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30
 			) RETURNING id
 		`
+		covPct := req.BaselineCoveragePercent
+		if covPct <= 0 {
+			covPct = 10.0
+		}
+		threshMode := req.ThresholdMode
+		if threshMode == "" {
+			threshMode = "FLOOR_OR_ACTUAL"
+		}
+
 		err = tx.QueryRow(
 			productQuery,
 			req.CategoryID, req.Name, req.NameLo, req.NameEn, slug, req.Category, req.Description, req.DescriptionLo, req.DescriptionEn,
-			req.PricingModel, req.BasePrice, req.Unit, req.Bestseller, req.TargetMarginPercent, req.DefaultMachineID, req.DefaultMachineName,
+			req.PricingModel, req.BasePrice, req.BaseFloorPrice, covPct, threshMode, req.Unit, req.Bestseller, req.TargetMarginPercent, req.DefaultMachineID, req.DefaultMachineName,
 			string(specGroupsJSON), string(featuresConfigJSON), string(infoTabsJSON), pq.Array(req.Features), req.ThumbnailURL, pq.Array(req.GalleryURLs),
 			req.MinQuantity, req.IsOnDemand, req.LeadTimeDays, req.IsActive, req.SortOrder,
 		).Scan(&newID)
@@ -649,29 +658,41 @@ func HandleAdminUpdateProduct(c *gin.Context) {
 				description_en = $8,
 				pricing_model = $9,
 				base_price = $10,
-				unit = $11,
-				bestseller = $12,
-				target_margin_percent = $13,
-				default_machine_id = $14,
-				default_machine_name = $15,
-				spec_groups = $16,
-				features_config = $17,
-				info_tabs = $18,
-				features = $19,
-				thumbnail_url = $20,
-				gallery_urls = $21,
-				min_quantity = $22,
-				is_on_demand = $23,
-				lead_time_days = $24,
-				is_active = $25,
-				sort_order = $26,
+				base_floor_price = $11,
+				baseline_coverage_percent = $12,
+				threshold_mode = $13,
+				unit = $14,
+				bestseller = $15,
+				target_margin_percent = $16,
+				default_machine_id = $17,
+				default_machine_name = $18,
+				spec_groups = $19,
+				features_config = $20,
+				info_tabs = $21,
+				features = $22,
+				thumbnail_url = $23,
+				gallery_urls = $24,
+				min_quantity = $25,
+				is_on_demand = $26,
+				lead_time_days = $27,
+				is_active = $28,
+				sort_order = $29,
 				updated_at = CURRENT_TIMESTAMP
-			WHERE id = $27
+			WHERE id = $30
 		`
+		covPct := req.BaselineCoveragePercent
+		if covPct <= 0 {
+			covPct = 10.0
+		}
+		threshMode := req.ThresholdMode
+		if threshMode == "" {
+			threshMode = "FLOOR_OR_ACTUAL"
+		}
+
 		_, err = tx.Exec(
 			updateQuery,
 			req.CategoryID, req.Name, req.NameLo, req.NameEn, req.Category, req.Description, req.DescriptionLo, req.DescriptionEn,
-			req.PricingModel, req.BasePrice, req.Unit, req.Bestseller, req.TargetMarginPercent, req.DefaultMachineID, req.DefaultMachineName,
+			req.PricingModel, req.BasePrice, req.BaseFloorPrice, covPct, threshMode, req.Unit, req.Bestseller, req.TargetMarginPercent, req.DefaultMachineID, req.DefaultMachineName,
 			string(specGroupsJSON), string(featuresConfigJSON), string(infoTabsJSON), pq.Array(req.Features), req.ThumbnailURL, pq.Array(req.GalleryURLs),
 			req.MinQuantity, req.IsOnDemand, req.LeadTimeDays, req.IsActive, req.SortOrder, id,
 		)
@@ -870,7 +891,9 @@ func getAdminProductsFromDB() ([]PublicProduct, error) {
 	query := `
 		SELECT 
 			p.id, p.category_id, c.slug as category_slug, p.name, p.name_lo, p.name_en, p.slug, p.category, 
-			p.description, p.description_lo, p.description_en, p.pricing_model, p.base_price, p.unit, p.bestseller,
+			p.description, p.description_lo, p.description_en, p.pricing_model, p.base_price, 
+			COALESCE(p.base_floor_price, 0.0), COALESCE(p.baseline_coverage_percent, 10.0), COALESCE(p.threshold_mode, 'FLOOR_OR_ACTUAL'),
+			p.unit, p.bestseller,
 			p.target_margin_percent, p.default_machine_id, p.default_machine_name,
 			COALESCE(p.spec_groups, '[]'::jsonb), COALESCE(p.features_config, '{}'::jsonb), COALESCE(p.info_tabs, '[]'::jsonb),
 			p.features, p.thumbnail_url, p.gallery_urls, p.min_quantity, p.is_on_demand, p.lead_time_days,
@@ -890,8 +913,8 @@ func getAdminProductsFromDB() ([]PublicProduct, error) {
 	for rows.Next() {
 		var p PublicProduct
 		var catID sql.NullInt64
-		var catSlug, nameLo, nameEn, descLo, descEn, pricingModel, unit sql.NullString
-		var basePrice, targetMargin sql.NullFloat64
+		var catSlug, nameLo, nameEn, descLo, descEn, pricingModel, unit, threshMode sql.NullString
+		var basePrice, baseFloorPrice, baseCovPercent, targetMargin sql.NullFloat64
 		var defMachID, defMachName sql.NullString
 		var bestseller sql.NullBool
 		var desc, thumb sql.NullString
@@ -899,7 +922,7 @@ func getAdminProductsFromDB() ([]PublicProduct, error) {
 
 		err := rows.Scan(
 			&p.ID, &catID, &catSlug, &p.Name, &nameLo, &nameEn, &p.Slug, &p.Category,
-			&desc, &descLo, &descEn, &pricingModel, &basePrice, &unit, &bestseller,
+			&desc, &descLo, &descEn, &pricingModel, &basePrice, &baseFloorPrice, &baseCovPercent, &threshMode, &unit, &bestseller,
 			&targetMargin, &defMachID, &defMachName,
 			&specGroupsJSON, &featuresConfigJSON, &infoTabsJSON,
 			&p.Features, &thumb, &p.GalleryURLs, &p.MinQuantity, &p.IsOnDemand, &p.LeadTimeDays,
@@ -923,6 +946,12 @@ func getAdminProductsFromDB() ([]PublicProduct, error) {
 			p.PricingModel = "STANDARD_FLAT"
 		}
 		p.BasePrice = basePrice.Float64
+		p.BaseFloorPrice = baseFloorPrice.Float64
+		p.BaselineCoveragePercent = baseCovPercent.Float64
+		p.ThresholdMode = threshMode.String
+		if p.ThresholdMode == "" {
+			p.ThresholdMode = "FLOOR_OR_ACTUAL"
+		}
 		p.TargetMarginPercent = targetMargin.Float64
 		p.DefaultMachineID = defMachID.String
 		p.DefaultMachineName = defMachName.String
@@ -955,7 +984,9 @@ func getPublicProductsFromDB(category string) ([]PublicProduct, error) {
 	query := `
 		SELECT 
 			p.id, p.category_id, c.slug as category_slug, p.name, p.name_lo, p.name_en, p.slug, p.category, 
-			p.description, p.description_lo, p.description_en, p.pricing_model, p.base_price, p.unit, p.bestseller,
+			p.description, p.description_lo, p.description_en, p.pricing_model, p.base_price,
+			COALESCE(p.base_floor_price, 0.0), COALESCE(p.baseline_coverage_percent, 10.0), COALESCE(p.threshold_mode, 'FLOOR_OR_ACTUAL'),
+			p.unit, p.bestseller,
 			p.target_margin_percent, p.default_machine_id, p.default_machine_name,
 			COALESCE(p.spec_groups, '[]'::jsonb), COALESCE(p.features_config, '{}'::jsonb), COALESCE(p.info_tabs, '[]'::jsonb),
 			p.features, p.thumbnail_url, p.gallery_urls, p.min_quantity, p.is_on_demand, p.lead_time_days,
@@ -983,8 +1014,8 @@ func getPublicProductsFromDB(category string) ([]PublicProduct, error) {
 	for rows.Next() {
 		var p PublicProduct
 		var catID sql.NullInt64
-		var catSlug, nameLo, nameEn, descLo, descEn, pricingModel, unit sql.NullString
-		var basePrice, targetMargin sql.NullFloat64
+		var catSlug, nameLo, nameEn, descLo, descEn, pricingModel, unit, threshMode sql.NullString
+		var basePrice, baseFloorPrice, baseCovPercent, targetMargin sql.NullFloat64
 		var defMachID, defMachName sql.NullString
 		var bestseller sql.NullBool
 		var desc, thumb sql.NullString
@@ -992,7 +1023,7 @@ func getPublicProductsFromDB(category string) ([]PublicProduct, error) {
 
 		err := rows.Scan(
 			&p.ID, &catID, &catSlug, &p.Name, &nameLo, &nameEn, &p.Slug, &p.Category,
-			&desc, &descLo, &descEn, &pricingModel, &basePrice, &unit, &bestseller,
+			&desc, &descLo, &descEn, &pricingModel, &basePrice, &baseFloorPrice, &baseCovPercent, &threshMode, &unit, &bestseller,
 			&targetMargin, &defMachID, &defMachName,
 			&specGroupsJSON, &featuresConfigJSON, &infoTabsJSON,
 			&p.Features, &thumb, &p.GalleryURLs, &p.MinQuantity, &p.IsOnDemand, &p.LeadTimeDays,
@@ -1016,6 +1047,12 @@ func getPublicProductsFromDB(category string) ([]PublicProduct, error) {
 			p.PricingModel = "STANDARD_FLAT"
 		}
 		p.BasePrice = basePrice.Float64
+		p.BaseFloorPrice = baseFloorPrice.Float64
+		p.BaselineCoveragePercent = baseCovPercent.Float64
+		p.ThresholdMode = threshMode.String
+		if p.ThresholdMode == "" {
+			p.ThresholdMode = "FLOOR_OR_ACTUAL"
+		}
 		p.TargetMarginPercent = targetMargin.Float64
 		p.DefaultMachineID = defMachID.String
 		p.DefaultMachineName = defMachName.String
@@ -1047,7 +1084,9 @@ func getProductBySlugFromDB(slug string) (*PublicProduct, error) {
 	query := `
 		SELECT 
 			p.id, p.category_id, c.slug as category_slug, p.name, p.name_lo, p.name_en, p.slug, p.category, 
-			p.description, p.description_lo, p.description_en, p.pricing_model, p.base_price, p.unit, p.bestseller,
+			p.description, p.description_lo, p.description_en, p.pricing_model, p.base_price,
+			COALESCE(p.base_floor_price, 0.0), COALESCE(p.baseline_coverage_percent, 10.0), COALESCE(p.threshold_mode, 'FLOOR_OR_ACTUAL'),
+			p.unit, p.bestseller,
 			p.target_margin_percent, p.default_machine_id, p.default_machine_name,
 			COALESCE(p.spec_groups, '[]'::jsonb), COALESCE(p.features_config, '{}'::jsonb), COALESCE(p.info_tabs, '[]'::jsonb),
 			p.features, p.thumbnail_url, p.gallery_urls, p.min_quantity, p.is_on_demand, p.lead_time_days,
@@ -1059,8 +1098,8 @@ func getProductBySlugFromDB(slug string) (*PublicProduct, error) {
 	`
 	var p PublicProduct
 	var catID sql.NullInt64
-	var catSlug, nameLo, nameEn, descLo, descEn, pricingModel, unit sql.NullString
-	var basePrice, targetMargin sql.NullFloat64
+	var catSlug, nameLo, nameEn, descLo, descEn, pricingModel, unit, threshMode sql.NullString
+	var basePrice, baseFloorPrice, baseCovPercent, targetMargin sql.NullFloat64
 	var defMachID, defMachName sql.NullString
 	var bestseller sql.NullBool
 	var desc, thumb sql.NullString
@@ -1068,7 +1107,7 @@ func getProductBySlugFromDB(slug string) (*PublicProduct, error) {
 
 	err := db.DB.QueryRow(query, slug).Scan(
 		&p.ID, &catID, &catSlug, &p.Name, &nameLo, &nameEn, &p.Slug, &p.Category,
-		&desc, &descLo, &descEn, &pricingModel, &basePrice, &unit, &bestseller,
+		&desc, &descLo, &descEn, &pricingModel, &basePrice, &baseFloorPrice, &baseCovPercent, &threshMode, &unit, &bestseller,
 		&targetMargin, &defMachID, &defMachName,
 		&specGroupsJSON, &featuresConfigJSON, &infoTabsJSON,
 		&p.Features, &thumb, &p.GalleryURLs, &p.MinQuantity, &p.IsOnDemand, &p.LeadTimeDays,
@@ -1092,6 +1131,12 @@ func getProductBySlugFromDB(slug string) (*PublicProduct, error) {
 		p.PricingModel = "STANDARD_FLAT"
 	}
 	p.BasePrice = basePrice.Float64
+	p.BaseFloorPrice = baseFloorPrice.Float64
+	p.BaselineCoveragePercent = baseCovPercent.Float64
+	p.ThresholdMode = threshMode.String
+	if p.ThresholdMode == "" {
+		p.ThresholdMode = "FLOOR_OR_ACTUAL"
+	}
 	p.TargetMarginPercent = targetMargin.Float64
 	p.DefaultMachineID = defMachID.String
 	p.DefaultMachineName = defMachName.String

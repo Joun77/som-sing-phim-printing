@@ -20,6 +20,13 @@ export interface OrderConfig {
   finishingId: string
   quantity: number
   specLabels: { size: string; paper: string; finishing: string }
+  materialSku?: string
+  paperCode?: string
+  machineId?: string
+  customWidthMm?: number
+  customHeightMm?: number
+  areaSqm?: number
+  isCustomDim?: boolean
 }
 
 export interface OrderDraft {
