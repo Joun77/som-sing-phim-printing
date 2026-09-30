@@ -2,17 +2,33 @@
 -- ============================================================================
 -- Migration: 042_link_printer_inks_and_clean_material_assets.sql
 -- Description:
--- 1. Cleans up stale printer/machinery assets incorrectly stored in materials table
+-- 1. Safely archives and cleans verified printer asset rows incorrectly stored in materials
 -- 2. Populates ink_master_catalog with canonical EPSON-008 and LC-462XL inks
 -- 3. Populates printer_color_link linking PRN-9614 and PRN-6317 to CMYK ink slots
 -- 4. Links materials.assigned_printer_id to canonical printer asset IDs
--- 5. Seeds canonical wear parts into machine_wear_parts if not present
+-- 5. Seeds canonical wear parts into machine_wear_parts with unique identity idempotency
 -- ============================================================================
 
--- 1. Clean up stale asset rows from materials table
-DELETE FROM materials
-WHERE id IN ('PRN-9614', 'PRN-6317')
-   OR category IN ('PRINTER', 'MACHINERY', 'EQUIPMENT', 'CUTTER', 'BINDER', 'LAMINATOR', 'Printer', 'Machinery', 'Equipment', 'Cutter', 'Binder', 'Laminator');
+-- 1. Create archive table and safely preserve verified asset rows before deletion
+CREATE TABLE IF NOT EXISTS archived_material_assets (
+    id VARCHAR(100) PRIMARY KEY,
+    material_data JSONB NOT NULL,
+    archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Archive only verified printer asset records (PRN-9614, PRN-6317 or existing printers)
+INSERT INTO archived_material_assets (id, material_data, archived_at)
+SELECT m.id, to_jsonb(m), NOW()
+FROM materials m
+WHERE (m.id IN ('PRN-9614', 'PRN-6317') OR m.id IN (SELECT asset_id FROM printers))
+  AND NOT EXISTS (SELECT 1 FROM archived_material_assets a WHERE a.id = m.id);
+
+-- Safely clean verified asset rows only if unreferenced by foreign keys
+DELETE FROM materials m
+WHERE (m.id IN ('PRN-9614', 'PRN-6317') OR m.id IN (SELECT asset_id FROM printers))
+  AND NOT EXISTS (
+      SELECT 1 FROM machine_wear_part_logs l WHERE l.material_id = m.id
+  );
 
 -- 2. Populate ink_master_catalog with canonical ink entries
 INSERT INTO ink_master_catalog (
@@ -86,20 +102,26 @@ WHERE id IN ('INK-8306', 'INK-0093', 'INK-1160', 'INK-3389')
    OR name ILIKE '%LC-462%'
    OR name ILIKE '%LC462%';
 
--- 6. Ensure machine_wear_parts has default parts for PRN-9614 and PRN-6317
+-- 6. Ensure machine_wear_parts has unique constraint on (asset_id, part_name_en) for idempotent seeding
+CREATE UNIQUE INDEX IF NOT EXISTS uq_machine_wear_parts_asset_part_en
+ON machine_wear_parts (asset_id, part_name_en);
+
 INSERT INTO machine_wear_parts (
     id, asset_id, part_name_lo, part_name_en, part_category,
     cost_price_lak, expected_lifespan_units, unit_type, current_counter, is_active, created_at, updated_at
 ) VALUES
-    (uuid_generate_v4(), 'PRN-9614', 'ລູກຢາງດຶງເຈ້ຍ', 'Pickup Roller', 'roller', 600000, 50000, 'pages', 0, true, NOW(), NOW()),
-    (uuid_generate_v4(), 'PRN-9614', 'ກ່ອງຊັບໝຶກເສຍ', 'Maintenance Box', 'box', 700000, 50000, 'pages', 0, true, NOW(), NOW()),
-    (uuid_generate_v4(), 'PRN-9614', 'ສາຍພານຫົວພິມ', 'Carriage Belt', 'belt', 600000, 50000, 'pages', 0, true, NOW(), NOW()),
-    (uuid_generate_v4(), 'PRN-9614', 'ຫົວພິມ PrecisionCore', 'PrecisionCore Printhead', 'printhead', 4000000, 100000, 'pages', 0, true, NOW(), NOW()),
-    (uuid_generate_v4(), 'PRN-6317', 'ລູກຢາງດຶງເຈ້ຍ', 'Pickup Roller', 'roller', 450000, 40000, 'pages', 0, true, NOW(), NOW()),
-    (uuid_generate_v4(), 'PRN-6317', 'ຊຸດແຜ່ນຊັບໝຶກເສຍ', 'Waste Ink Absorber', 'box', 550000, 40000, 'pages', 0, true, NOW(), NOW()),
-    (uuid_generate_v4(), 'PRN-6317', 'ຫົວພິມ Brother Piezo', 'Brother Piezo Printhead', 'printhead', 2800000, 80000, 'pages', 0, true, NOW(), NOW())
-ON CONFLICT DO NOTHING;
-
--- +goose Down
--- Reversible idempotent down
-DELETE FROM printer_color_link WHERE asset_id IN ('PRN-9614', 'PRN-6317');
+    (gen_random_uuid(), 'PRN-9614', 'ລູກຢາງດຶງເຈ້ຍ', 'Pickup Roller', 'roller', 600000, 50000, 'pages', 0, true, NOW(), NOW()),
+    (gen_random_uuid(), 'PRN-9614', 'ກ່ອງຊັບໝຶກເສຍ', 'Maintenance Box', 'box', 700000, 50000, 'pages', 0, true, NOW(), NOW()),
+    (gen_random_uuid(), 'PRN-9614', 'ສາຍພານຫົວພິມ', 'Carriage Belt', 'belt', 600000, 50000, 'pages', 0, true, NOW(), NOW()),
+    (gen_random_uuid(), 'PRN-9614', 'ຫົວພິມ PrecisionCore', 'PrecisionCore Printhead', 'printhead', 4000000, 100000, 'pages', 0, true, NOW(), NOW()),
+    (gen_random_uuid(), 'PRN-6317', 'ລູກຢາງດຶງເຈ້ຍ', 'Pickup Roller', 'roller', 450000, 40000, 'pages', 0, true, NOW(), NOW()),
+    (gen_random_uuid(), 'PRN-6317', 'ຊຸດແຜ່ນຊັບໝຶກເສຍ', 'Waste Ink Absorber', 'box', 550000, 40000, 'pages', 0, true, NOW(), NOW()),
+    (gen_random_uuid(), 'PRN-6317', 'ຫົວພິມ Brother Piezo', 'Brother Piezo Printhead', 'printhead', 2800000, 80000, 'pages', 0, true, NOW(), NOW())
+ON CONFLICT (asset_id, part_name_en) DO UPDATE SET
+    part_name_lo = EXCLUDED.part_name_lo,
+    part_category = EXCLUDED.part_category,
+    cost_price_lak = EXCLUDED.cost_price_lak,
+    expected_lifespan_units = EXCLUDED.expected_lifespan_units,
+    unit_type = EXCLUDED.unit_type,
+    is_active = true,
+    updated_at = NOW();

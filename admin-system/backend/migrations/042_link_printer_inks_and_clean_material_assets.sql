@@ -103,7 +103,7 @@ WHERE id IN ('INK-8306', 'INK-0093', 'INK-1160', 'INK-3389')
    OR name ILIKE '%LC462%';
 
 -- 6. Ensure machine_wear_parts has unique constraint on (asset_id, part_name_en) for idempotent seeding
-CREATE UNIQUE INDEX IF NOT EXISTS uq_machine_wear_parts_asset_part_en 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_machine_wear_parts_asset_part_en
 ON machine_wear_parts (asset_id, part_name_en);
 
 INSERT INTO machine_wear_parts (

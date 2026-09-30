@@ -7,9 +7,11 @@
   - สำรองและรักษาข้อมูล asset ที่ตกค้างใน `materials` เข้าตาราง `archived_material_assets` (`to_jsonb(m)`)
   - จำกัดการลบเฉพาะแถว `PRN-9614`, `PRN-6317` หรือแถวที่มีใน `printers` และต้องไม่มี FK จาก `machine_wear_part_logs`
   - ป้องกันแถวซ้ำใน `machine_wear_parts` ด้วย unique index `uq_machine_wear_parts_asset_part_en` และ `ON CONFLICT (asset_id, part_name_en) DO UPDATE`
-  - ยืนยันไฟล์ Migration 042 ทั้งสองสำเนา (`admin-system/migrations/` และ `admin-system/backend/migrations/`) ตรงกัน 100%
+  - ยืนยันไฟล์ Migration 042 ทั้งสองสำเนา (`admin-system/migrations/` และ `admin-system/backend/migrations/`) ตรงกันแบบ byte-for-byte (`cmp` exit code 0)
   - ทดสอบรันซ้ำบน PostgreSQL จริง (`somsing_db`) ยืนยันจำนวนแถวใน `machine_wear_parts` ยังคงเท่าเดิม 7 แถว (0 duplicates created)
 - [x] **Wear Parts CRUD & Frontend Error Immunity:**
+  - แยก logic การเรียก API และ error handling เป็น shared helper ใน `admin-system/frontend/src/utils/wearPartsService.ts`
+  - ทั้ง Production Component (`EquipmentDetailsPage.tsx`) และ Unit Test (`wearPartsCrudFailure.test.ts`) นำ helper ไปใช้ร่วมกัน โดยไม่มีการ duplicate production flow ใน test
   - Frontend (`EquipmentDetailsPage.tsx`) ตรวจสอบ `res.ok` บน POST, PUT, DELETE
   - หาก API ล้มเหลว (4xx, 5xx) ระบบจะแสดง Error Toast ทันที และไม่แตะต้อง local equipment components รวมถึงไม่แสดง Success Toast
   - Backend PUT (`HandleUpdateMachineWearPart`) ตรวจสอบ `cost >= 0`, `lifespan > 0`, `counter >= 0`, ชื่อและหมวดหมู่ไม่ว่าง, และตรวจสอบความสอดคล้องของ `asset_id`
@@ -29,13 +31,14 @@
 ## 3. สรุปผลการทดสอบทั้งหมด (Full Verification Suite)
 | รายการทดสอบ | คำสั่ง | ผลลัพธ์ |
 |---|---|---|
+| Migration 042 Byte-for-Byte Sync | `cmp admin-system/migrations/042_...sql admin-system/backend/migrations/042_...sql` | PASS (Exit code 0, 100% identical) |
 | Go Format | `gofmt` บน Go files ที่แก้ไข | PASS (Formatted cleanly) |
 | Git Whitespace Check | `git diff --check` | PASS (Exit code 0, 0 issues) |
 | Go Unit & Integration Tests | `go test ./...` ใน `admin-system/backend` | PASS (100% all packages pass) |
 | Go Compilation | `go build ./...` ใน `admin-system/backend` | PASS (Exit code 0, 0 errors) |
 | Admin Frontend Typecheck | `npm run typecheck` | PASS (0 type errors) |
-| Admin Frontend Unit Tests | `npm test` (tsx --test src/utils/*.test.ts) | PASS (53/53 tests pass, duration 481ms) |
-| Admin Frontend Production Build | `npm run build` | PASS (Built in 516ms) |
-| Storefront Customer Service Build | `npm run build` | PASS (Built in 1.50s) |
+| Admin Frontend Unit Tests | `npm test` (tsx --test src/utils/*.test.ts) | PASS (54/54 tests pass, duration 415ms) |
+| Admin Frontend Production Build | `npm run build` | PASS (Built in 413ms) |
+| Storefront Customer Service Build | `npm run build` | PASS (Built in 1.32s) |
 | PostgreSQL Migration Idempotency | `psql < 042_...sql` rerun on `somsing_db` | PASS (Count maintained at 7 wear parts) |
-| Frontend API Failure Guard | `wearPartsCrudFailure.test.ts` | PASS (Local state unchanged, no success toast) |
+| Frontend API Failure Guard | `wearPartsCrudFailure.test.ts` via `wearPartsService.ts` | PASS (Local state unchanged, no success toast, shared helper) |

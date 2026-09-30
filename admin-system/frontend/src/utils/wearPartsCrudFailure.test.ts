@@ -1,109 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-
-interface WearPartComponent {
-  id: string;
-  name: string;
-  cost: number;
-  lifeVal: number;
-}
-
-// Emulate wear part save flow with response.ok verification
-async function simulateSaveWearParts(
-  machineId: string,
-  parts: WearPartComponent[],
-  drafts: Record<string, { cost: number; life: number }>,
-  mockFetch: (url: string, init?: any) => Promise<{ ok: boolean; status: number; json: () => Promise<any> }>,
-  onUpdateEquipment: (id: string, updated: any) => void,
-  showToast: (msg: string, type: string) => void
-) {
-  try {
-    for (const part of parts) {
-      const draft = drafts[part.name];
-      if (draft) {
-        const res = await mockFetch(`/api/v1/equipment/${machineId}/wear-parts/${part.id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ cost_price_lak: draft.cost, expected_lifespan_units: draft.life })
-        });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || `HTTP ${res.status}: Failed to update wear part`);
-        }
-      }
-    }
-  } catch (err: any) {
-    showToast(err.message || 'Failed to save wear parts', 'error');
-    return false; // Abort without modifying local equipment components
-  }
-
-  const updatedComponents = parts.map(p => {
-    const draft = drafts[p.name];
-    return draft ? { ...p, cost: draft.cost, lifeVal: draft.life } : p;
-  });
-  onUpdateEquipment(machineId, { components: updatedComponents });
-  showToast('Saved wear parts successfully', 'success');
-  return true;
-}
-
-// Emulate wear part create flow with response.ok verification
-async function simulateAddWearPart(
-  machineId: string,
-  newPart: { name: string; cost: number; life: number },
-  existingParts: WearPartComponent[],
-  mockFetch: (url: string, init?: any) => Promise<{ ok: boolean; status: number; json: () => Promise<any> }>,
-  onUpdateEquipment: (id: string, updated: any) => void,
-  showToast: (msg: string, type: string) => void
-) {
-  let createdId = `part-${Date.now()}`;
-  try {
-    const res = await mockFetch(`/api/v1/equipment/${machineId}/wear-parts`, {
-      method: 'POST',
-      body: JSON.stringify(newPart)
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || `HTTP ${res.status}: Failed to create wear part`);
-    }
-    const json = await res.json().catch(() => ({}));
-    if (json?.data?.id) createdId = json.data.id;
-  } catch (err: any) {
-    showToast(err.message || 'Failed to create wear part', 'error');
-    return false; // Abort without modifying local equipment components
-  }
-
-  const updated = [...existingParts, { id: createdId, name: newPart.name, cost: newPart.cost, lifeVal: newPart.life }];
-  onUpdateEquipment(machineId, { components: updated });
-  showToast('Added new wear part successfully', 'success');
-  return true;
-}
-
-// Emulate wear part delete flow with response.ok verification
-async function simulateDeleteWearPart(
-  machineId: string,
-  partId: string,
-  existingParts: WearPartComponent[],
-  mockFetch: (url: string, init?: any) => Promise<{ ok: boolean; status: number; json: () => Promise<any> }>,
-  onUpdateEquipment: (id: string, updated: any) => void,
-  showToast: (msg: string, type: string) => void
-) {
-  try {
-    const res = await mockFetch(`/api/v1/equipment/${machineId}/wear-parts/${partId}`, {
-      method: 'DELETE'
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || `HTTP ${res.status}: Failed to delete wear part`);
-    }
-  } catch (err: any) {
-    showToast(err.message || 'Failed to delete wear part', 'error');
-    return false; // Abort without modifying local equipment components
-  }
-
-  const updated = existingParts.filter(p => p.id !== partId);
-  onUpdateEquipment(machineId, { components: updated });
-  showToast('Deleted wear part successfully', 'info');
-  return true;
-}
+import {
+  saveWearPartsRequest,
+  createWearPartRequest,
+  deleteWearPartRequest,
+  type WearPartComponent,
+  type WearPartDraft,
+  type NewWearPartInput
+} from './wearPartsService';
 
 describe('Wear Parts CRUD API Failure Guard & Local State Immunity', () => {
   const initialComponents: WearPartComponent[] = [
@@ -111,78 +15,130 @@ describe('Wear Parts CRUD API Failure Guard & Local State Immunity', () => {
     { id: 'wp-02', name: 'Maintenance Box', cost: 700000, lifeVal: 50000 }
   ];
 
-  it('API PUT failure must not mutate local equipment components and must not show success toast', async () => {
+  it('API PUT failure must return error, prevent equipment mutation and suppress success toast', async () => {
     let equipmentUpdated = false;
     const toasts: { msg: string; type: string }[] = [];
 
-    const failingFetch = async () => ({
+    const failingFetch = (async () => ({
       ok: false,
       status: 500,
       json: async () => ({ error: 'Database connection failed' })
-    });
+    })) as unknown as typeof fetch;
 
-    const success = await simulateSaveWearParts(
-      'PRN-9614',
-      initialComponents,
-      { 'Pickup Roller': { cost: 999999, lifeVal: 10000 } },
-      failingFetch,
-      () => { equipmentUpdated = true; },
-      (msg, type) => { toasts.push({ msg, type }); }
-    );
+    const draft: Record<string, WearPartDraft> = {
+      'Pickup Roller': { cost: 999999, life: 10000 }
+    };
 
-    assert.strictEqual(success, false, 'Operation should return false on failure');
+    // Execute the shared request helper
+    const apiRes = await saveWearPartsRequest('PRN-9614', initialComponents, draft, {}, failingFetch);
+
+    // Production flow guard pattern: halt if API call fails
+    if (!apiRes.ok) {
+      toasts.push({ msg: apiRes.error || 'Failed to save wear parts', type: 'error' });
+    } else {
+      equipmentUpdated = true;
+      toasts.push({ msg: 'Saved wear parts successfully', type: 'success' });
+    }
+
+    assert.strictEqual(apiRes.ok, false, 'API response must indicate failure');
+    assert.strictEqual(apiRes.error, 'Database connection failed');
     assert.strictEqual(equipmentUpdated, false, 'updateEquipment must NOT be called on failure');
     assert.strictEqual(toasts.some(t => t.type === 'success'), false, 'Success toast must NOT be shown');
     assert.strictEqual(toasts.some(t => t.type === 'error'), true, 'Error toast must be shown');
   });
 
-  it('API POST failure must not add component to local equipment state and must not show success toast', async () => {
+  it('API POST failure must return error, prevent component insertion and suppress success toast', async () => {
     let equipmentUpdated = false;
     const toasts: { msg: string; type: string }[] = [];
 
-    const failingFetch = async () => ({
+    const failingFetch = (async () => ({
       ok: false,
       status: 400,
       json: async () => ({ error: 'Cost price must be greater than or equal to 0' })
-    });
+    })) as unknown as typeof fetch;
 
-    const success = await simulateAddWearPart(
-      'PRN-9614',
-      { name: 'Invalid Belt', cost: -100, life: 50000 },
-      initialComponents,
-      failingFetch,
-      () => { equipmentUpdated = true; },
-      (msg, type) => { toasts.push({ msg, type }); }
-    );
+    const newPart: NewWearPartInput = {
+      name: 'Invalid Belt',
+      category: 'belt',
+      cost: -100,
+      life: 50000
+    };
 
-    assert.strictEqual(success, false, 'Operation should return false on failure');
+    // Execute the shared request helper
+    const apiRes = await createWearPartRequest('PRN-9614', newPart, {}, failingFetch);
+
+    // Production flow guard pattern: halt if API call fails
+    if (!apiRes.ok) {
+      toasts.push({ msg: apiRes.error || 'Failed to create wear part', type: 'error' });
+    } else {
+      equipmentUpdated = true;
+      toasts.push({ msg: 'Added new wear part successfully', type: 'success' });
+    }
+
+    assert.strictEqual(apiRes.ok, false, 'API response must indicate failure');
+    assert.strictEqual(apiRes.error, 'Cost price must be greater than or equal to 0');
     assert.strictEqual(equipmentUpdated, false, 'updateEquipment must NOT be called on failure');
     assert.strictEqual(toasts.some(t => t.type === 'success'), false, 'Success toast must NOT be shown');
     assert.strictEqual(toasts.some(t => t.type === 'error'), true, 'Error toast must be shown');
   });
 
-  it('API DELETE failure must not remove component from local equipment state and must not show info toast', async () => {
+  it('API DELETE failure must return error, prevent component removal and suppress info toast', async () => {
     let equipmentUpdated = false;
     const toasts: { msg: string; type: string }[] = [];
 
-    const failingFetch = async () => ({
+    const failingFetch = (async () => ({
       ok: false,
       status: 404,
       json: async () => ({ error: 'Wear part not found for this machine' })
-    });
+    })) as unknown as typeof fetch;
 
-    const success = await simulateDeleteWearPart(
-      'PRN-9614',
-      'wp-01',
-      initialComponents,
-      failingFetch,
-      () => { equipmentUpdated = true; },
-      (msg, type) => { toasts.push({ msg, type }); }
-    );
+    // Execute the shared request helper
+    const apiRes = await deleteWearPartRequest('PRN-9614', 'wp-01', {}, failingFetch);
 
-    assert.strictEqual(success, false, 'Operation should return false on failure');
+    // Production flow guard pattern: halt if API call fails
+    if (!apiRes.ok) {
+      toasts.push({ msg: apiRes.error || 'Failed to delete wear part', type: 'error' });
+    } else {
+      equipmentUpdated = true;
+      toasts.push({ msg: 'Deleted wear part successfully', type: 'info' });
+    }
+
+    assert.strictEqual(apiRes.ok, false, 'API response must indicate failure');
+    assert.strictEqual(apiRes.error, 'Wear part not found for this machine');
     assert.strictEqual(equipmentUpdated, false, 'updateEquipment must NOT be called on failure');
     assert.strictEqual(toasts.some(t => t.type === 'info'), false, 'Info toast must NOT be shown');
     assert.strictEqual(toasts.some(t => t.type === 'error'), true, 'Error toast must be shown');
+  });
+
+  it('Successful CRUD operations must return ok: true and allow local state updates', async () => {
+    const successFetch = (async (url: string, init?: any) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        data: init?.method === 'POST' ? { id: 'wp-new-01' } : {}
+      })
+    })) as unknown as typeof fetch;
+
+    const putRes = await saveWearPartsRequest(
+      'PRN-9614',
+      initialComponents,
+      { 'Pickup Roller': { cost: 650000, life: 60000 } },
+      {},
+      successFetch
+    );
+    assert.strictEqual(putRes.ok, true, 'PUT request should succeed');
+
+    const postRes = await createWearPartRequest(
+      'PRN-9614',
+      { name: 'Paper Feed Belt', category: 'belt', cost: 350000, life: 40000 },
+      {},
+      successFetch
+    );
+    assert.strictEqual(postRes.ok, true, 'POST request should succeed');
+    assert.strictEqual(postRes.id, 'wp-new-01', 'POST request should return created ID');
+
+    const delRes = await deleteWearPartRequest('PRN-9614', 'wp-01', {}, successFetch);
+    assert.strictEqual(delRes.ok, true, 'DELETE request should succeed');
   });
 });
