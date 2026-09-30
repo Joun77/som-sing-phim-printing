@@ -94,7 +94,7 @@ export async function apiFetch<T = any>(
     console.warn(`[API 401 Unauthorized] on ${url}. Attempting silent token refresh...`);
     const newToken = await useAuthStore.getState().silentRefreshToken();
 
-    if (newToken && newToken !== 'preview-token') {
+    if (newToken) {
       requestHeaders['Authorization'] = `Bearer ${newToken}`;
       try {
         response = await fetch(url, {
@@ -156,7 +156,7 @@ export function setupGlobalFetchInterceptor(): void {
     // If 401 Unauthorized, try silent refresh and retry once
     if (response.status === 401 && !urlStr.includes('/auth/login') && !urlStr.includes('/auth/refresh')) {
       const newToken = await useAuthStore.getState().silentRefreshToken();
-      if (newToken && newToken !== 'preview-token') {
+      if (newToken) {
         headers.set('Authorization', `Bearer ${newToken}`);
         response = await originalFetch(targetInput, { ...newInit, headers });
       }

@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"somsing.local/backend/auth"
@@ -30,8 +31,13 @@ import (
 )
 
 func main() {
-	// Startup verification for production security
+	// Startup verification for production security — fail closed if JWT_SECRET missing
 	if err := auth.ValidateJWTSecretOnStartup(); err != nil {
+		env := strings.ToLower(strings.TrimSpace(os.Getenv("ENVIRONMENT")))
+		isExplicitlyDev := env == "development" || env == "dev" || env == "test"
+		if !isExplicitlyDev {
+			log.Fatalf("[SECURITY] %v", err)
+		}
 		log.Printf("[SECURITY WARNING] %v (Running with default fallback key - set JWT_SECRET in environment variables to secure tokens)", err)
 	}
 
@@ -55,12 +61,16 @@ func main() {
 	router.Use(middleware.RateLimitMiddleware(180, time.Minute))
 
 	// Static file server for uploaded order files, artworks & preflight uploads
+	// Note: static /api/v1/orders/files is auth-gated at P1.2; served here for compatibility
 	router.Static("/api/v1/orders/files", "./uploads")
 	router.Static("/uploads", "./uploads")
-	router.POST("/api/upload/artwork", orders.HandleArtworkUpload)
-	router.POST("/api/v1/upload/artwork", orders.HandleArtworkUpload)
-	router.POST("/api/upload/batch-artworks", orders.HandleBatchArtworkUpload)
-	router.POST("/api/v1/upload/batch-artworks", orders.HandleBatchArtworkUpload)
+
+	// Artwork upload routes — require authentication (sales, prepress, admin, manager)
+	artworkAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales, auth.RolePrepress)
+	router.POST("/api/upload/artwork", artworkAuth, orders.HandleArtworkUpload)
+	router.POST("/api/v1/upload/artwork", artworkAuth, orders.HandleArtworkUpload)
+	router.POST("/api/upload/batch-artworks", artworkAuth, orders.HandleBatchArtworkUpload)
+	router.POST("/api/v1/upload/batch-artworks", artworkAuth, orders.HandleBatchArtworkUpload)
 
 	// Server status health check
 	healthHandler := func(c *gin.Context) {
@@ -138,8 +148,9 @@ func main() {
 	router.POST("/api/v1/finance/verify-slip", financeAuth, finance.HandleVerifyPaymentSlip)
 	router.GET("/api/v1/finance/pending-slips", financeAuth, finance.HandleGetPendingSlips)
 	router.GET("/api/finance/pending-slips", financeAuth, finance.HandleGetPendingSlips)
-	router.POST("/api/v1/checkout/verify-slip", finance.HandleVerifySlip)
-	router.POST("/api/checkout/verify-slip", finance.HandleVerifySlip)
+	// checkout/verify-slip is a finance operation and requires authentication
+	router.POST("/api/v1/checkout/verify-slip", financeAuth, finance.HandleVerifySlip)
+	router.POST("/api/checkout/verify-slip", financeAuth, finance.HandleVerifySlip)
 	router.GET("/api/v1/finance/ar-aging", financeAuth, finance.HandleGetARAging)
 	router.GET("/api/v1/finance/pl-report", financeAuth, finance.HandleGetPLReport)
 	router.GET("/api/finance/pl-report", financeAuth, finance.HandleGetPLReport)
@@ -182,46 +193,51 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "approved", "message": "Margin override authorized"})
 	})
 
-	// Batch file ZIP download
-	router.POST("/api/orders/batch-zip", orders.HandleBatchDownloadZip)
-	router.POST("/api/v1/orders/batch-zip", orders.HandleBatchDownloadZip)
-	router.GET("/api/orders/batch-zip", orders.HandleBatchDownloadZip)
-	router.GET("/api/v1/orders/batch-zip", orders.HandleBatchDownloadZip)
+	// Batch file ZIP download — requires authentication
+	batchZipAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales, auth.RolePrepress, auth.RoleProduction)
+	router.POST("/api/orders/batch-zip", batchZipAuth, orders.HandleBatchDownloadZip)
+	router.POST("/api/v1/orders/batch-zip", batchZipAuth, orders.HandleBatchDownloadZip)
+	router.GET("/api/orders/batch-zip", batchZipAuth, orders.HandleBatchDownloadZip)
+	router.GET("/api/v1/orders/batch-zip", batchZipAuth, orders.HandleBatchDownloadZip)
 
 	// Order management, Quotation & Shop Floor Tracker routes
-	router.GET("/api/orders", orders.HandleGetOrders)
-	router.GET("/api/v1/orders", orders.HandleGetOrders)
-	router.GET("/api/orders/:id", orders.HandleGetOrderById)
-	router.GET("/api/v1/orders/:id", orders.HandleGetOrderById)
-	router.POST("/api/orders", orders.HandleCreateOrder)
-	router.POST("/api/v1/orders", orders.HandleCreateOrder)
-	router.PUT("/api/orders/:id", orders.HandleUpdateOrder)
-	router.PUT("/api/v1/orders/:id", orders.HandleUpdateOrder)
-	router.PATCH("/api/orders/:id", orders.HandleUpdateOrder)
-	router.PATCH("/api/v1/orders/:id", orders.HandleUpdateOrder)
-	router.DELETE("/api/orders/:id", orders.HandleDeleteOrder)
-	router.DELETE("/api/v1/orders/:id", orders.HandleDeleteOrder)
-	router.GET("/api/v1/quotations", orders.HandleGetQuotations)
-	router.GET("/api/quotations", orders.HandleGetQuotations)
-	router.POST("/api/v1/quotations", orders.HandleSaveQuotation)
-	router.POST("/api/quotations", orders.HandleSaveQuotation)
-	router.PUT("/api/v1/quotations/:id", orders.HandleSaveQuotation)
-	router.PUT("/api/quotations/:id", orders.HandleSaveQuotation)
-	router.DELETE("/api/v1/quotations/:id", orders.HandleDeleteQuotation)
-	router.DELETE("/api/quotations/:id", orders.HandleDeleteQuotation)
-	router.POST("/api/v1/quotations/:id/approve", orders.HandleApproveQuotation)
-	router.POST("/api/v1/quotations/:id/reject", orders.HandleRejectQuotation)
-	router.POST("/api/quotations/:id/approve", orders.HandleApproveQuotation)
-	router.POST("/api/quotations/:id/reject", orders.HandleRejectQuotation)
-	router.POST("/api/v1/quotations/:id/convert", orders.HandleConvertQuotationToOrder)
-	router.POST("/api/quotations/:id/convert", orders.HandleConvertQuotationToOrder)
-	router.POST("/api/v1/orders/upload", orders.HandleUploadOrderFile)
-	router.PATCH("/api/v1/orders/items/:id/step", orders.HandleUpdateOrderItemStep)
-	router.PUT("/api/v1/orders/items/:id/step", orders.HandleUpdateOrderItemStep)
-	router.POST("/api/v1/orders/items/:id/step", orders.HandleUpdateOrderItemStep)
-	router.PATCH("/api/v1/orders/:id/items/:item_id/step", orders.HandleUpdateOrderItemStep)
-	router.PUT("/api/v1/orders/:id/items/:item_id/step", orders.HandleUpdateOrderItemStep)
-	router.POST("/api/v1/orders/:id/items/:item_id/step", orders.HandleUpdateOrderItemStep)
+	// All order/quotation CRUD requires authentication; public tracking is separate below
+	ordersAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales, auth.RoleFinance, auth.RoleProduction, auth.RolePrepress)
+	ordersWriteAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales)
+	quotationAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales)
+	router.GET("/api/orders", ordersAuth, orders.HandleGetOrders)
+	router.GET("/api/v1/orders", ordersAuth, orders.HandleGetOrders)
+	router.GET("/api/orders/:id", ordersAuth, orders.HandleGetOrderById)
+	router.GET("/api/v1/orders/:id", ordersAuth, orders.HandleGetOrderById)
+	router.POST("/api/orders", ordersWriteAuth, orders.HandleCreateOrder)
+	router.POST("/api/v1/orders", ordersWriteAuth, orders.HandleCreateOrder)
+	router.PUT("/api/orders/:id", ordersWriteAuth, orders.HandleUpdateOrder)
+	router.PUT("/api/v1/orders/:id", ordersWriteAuth, orders.HandleUpdateOrder)
+	router.PATCH("/api/orders/:id", ordersWriteAuth, orders.HandleUpdateOrder)
+	router.PATCH("/api/v1/orders/:id", ordersWriteAuth, orders.HandleUpdateOrder)
+	router.DELETE("/api/orders/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleDeleteOrder)
+	router.DELETE("/api/v1/orders/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleDeleteOrder)
+	router.GET("/api/v1/quotations", quotationAuth, orders.HandleGetQuotations)
+	router.GET("/api/quotations", quotationAuth, orders.HandleGetQuotations)
+	router.POST("/api/v1/quotations", quotationAuth, orders.HandleSaveQuotation)
+	router.POST("/api/quotations", quotationAuth, orders.HandleSaveQuotation)
+	router.PUT("/api/v1/quotations/:id", quotationAuth, orders.HandleSaveQuotation)
+	router.PUT("/api/quotations/:id", quotationAuth, orders.HandleSaveQuotation)
+	router.DELETE("/api/v1/quotations/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleDeleteQuotation)
+	router.DELETE("/api/quotations/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleDeleteQuotation)
+	router.POST("/api/v1/quotations/:id/approve", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleApproveQuotation)
+	router.POST("/api/v1/quotations/:id/reject", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleRejectQuotation)
+	router.POST("/api/quotations/:id/approve", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleApproveQuotation)
+	router.POST("/api/quotations/:id/reject", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleRejectQuotation)
+	router.POST("/api/v1/quotations/:id/convert", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales), orders.HandleConvertQuotationToOrder)
+	router.POST("/api/quotations/:id/convert", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales), orders.HandleConvertQuotationToOrder)
+	router.POST("/api/v1/orders/upload", artworkAuth, orders.HandleUploadOrderFile)
+	router.PATCH("/api/v1/orders/items/:id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
+	router.PUT("/api/v1/orders/items/:id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
+	router.POST("/api/v1/orders/items/:id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
+	router.PATCH("/api/v1/orders/:id/items/:item_id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
+	router.PUT("/api/v1/orders/:id/items/:item_id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
+	router.POST("/api/v1/orders/:id/items/:item_id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
 
 	// Production Daily Plan & Stage Assignment routes
 	productionAdminAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleOwner, "super_admin")
@@ -240,30 +256,32 @@ func main() {
 	router.GET("/api/orders/track", orders.HandleTrackOrderQuery)
 	router.GET("/api/v1/orders/track/:order_no", orders.HandleGetOrderByOrderNo)
 	router.GET("/api/orders/track/:order_no", orders.HandleGetOrderByOrderNo)
-	router.PUT("/api/orders/:id/deposit", orders.HandleRecordDeposit)
-	router.PUT("/api/orders/:id/status", orders.HandleUpdateOrderStatus)
-	router.PATCH("/api/v1/orders/:id/status", orders.HandleUpdateOrderStatus)
-	router.POST("/api/orders/:id/reverse-stock", orders.HandleReverseOrderStock)
-	router.POST("/api/v1/orders/:id/reverse-stock", orders.HandleReverseOrderStock)
-	router.GET("/api/v1/orders/stream", orders.HandleOrderProgressSSEStream)
-	router.GET("/api/v1/orders/:id/job-ticket", orders.HandleGenerateJobTicketPDF)
-	router.GET("/api/v1/orders/by-number/:order_no/job-ticket", orders.HandleGenerateJobTicketPDF)
-	router.POST("/api/v1/orders/:id/preflight-report", orders.HandleSavePreflightReport)
-	router.GET("/api/v1/orders/:id/preflight-report", orders.HandleGetPreflightReport)
+	// Order operational actions — require admin/manager/sales/production write access
+	router.PUT("/api/orders/:id/deposit", ordersWriteAuth, orders.HandleRecordDeposit)
+	router.PUT("/api/orders/:id/status", ordersWriteAuth, orders.HandleUpdateOrderStatus)
+	router.PATCH("/api/v1/orders/:id/status", ordersWriteAuth, orders.HandleUpdateOrderStatus)
+	router.POST("/api/orders/:id/reverse-stock", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleReverseOrderStock)
+	router.POST("/api/v1/orders/:id/reverse-stock", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleReverseOrderStock)
+	router.GET("/api/v1/orders/stream", ordersAuth, orders.HandleOrderProgressSSEStream)
+	router.GET("/api/v1/orders/:id/job-ticket", ordersAuth, orders.HandleGenerateJobTicketPDF)
+	router.GET("/api/v1/orders/by-number/:order_no/job-ticket", ordersAuth, orders.HandleGenerateJobTicketPDF)
+	router.POST("/api/v1/orders/:id/preflight-report", artworkAuth, orders.HandleSavePreflightReport)
+	router.GET("/api/v1/orders/:id/preflight-report", ordersAuth, orders.HandleGetPreflightReport)
 
-	// Digital Proof Management routes
-	router.POST("/api/v1/orders/:id/send-proof", orders.HandleSendProof)
-	router.POST("/api/orders/:id/send-proof", orders.HandleSendProof)
-	router.POST("/api/v1/orders/:id/proof-action", orders.HandleProofAction)
-	router.POST("/api/orders/:id/proof-action", orders.HandleProofAction)
-	router.POST("/api/v1/orders/:id/proof", orders.HandleUploadDigitalProof)
-	router.POST("/api/orders/:id/proof", orders.HandleUploadDigitalProof)
-	router.POST("/api/v1/orders/:id/proof/approve", orders.HandleApproveDigitalProof)
-	router.POST("/api/orders/:id/proof/approve", orders.HandleApproveDigitalProof)
-	router.POST("/api/v1/orders/:id/proof/reject", orders.HandleRejectDigitalProof)
-	router.POST("/api/orders/:id/proof/reject", orders.HandleRejectDigitalProof)
-	router.GET("/api/v1/orders/:id/proof", orders.HandleGetDigitalProof)
-	router.GET("/api/orders/:id/proof", orders.HandleGetDigitalProof)
+	// Digital Proof Management routes — require authentication
+	proofAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales, auth.RolePrepress)
+	router.POST("/api/v1/orders/:id/send-proof", proofAuth, orders.HandleSendProof)
+	router.POST("/api/orders/:id/send-proof", proofAuth, orders.HandleSendProof)
+	router.POST("/api/v1/orders/:id/proof-action", proofAuth, orders.HandleProofAction)
+	router.POST("/api/orders/:id/proof-action", proofAuth, orders.HandleProofAction)
+	router.POST("/api/v1/orders/:id/proof", proofAuth, orders.HandleUploadDigitalProof)
+	router.POST("/api/orders/:id/proof", proofAuth, orders.HandleUploadDigitalProof)
+	router.POST("/api/v1/orders/:id/proof/approve", proofAuth, orders.HandleApproveDigitalProof)
+	router.POST("/api/orders/:id/proof/approve", proofAuth, orders.HandleApproveDigitalProof)
+	router.POST("/api/v1/orders/:id/proof/reject", proofAuth, orders.HandleRejectDigitalProof)
+	router.POST("/api/orders/:id/proof/reject", proofAuth, orders.HandleRejectDigitalProof)
+	router.GET("/api/v1/orders/:id/proof", ordersAuth, orders.HandleGetDigitalProof)
+	router.GET("/api/orders/:id/proof", ordersAuth, orders.HandleGetDigitalProof)
 
 	// Public Digital Proof Review routes (Secure token-verified)
 	router.GET("/api/v1/public/proof/:order_id/:token", orders.HandleGetProofDetails)
@@ -280,10 +298,11 @@ func main() {
 	router.PUT("/api/v1/public/customer/profile", customers.HandleSavePublicCustomerProfile)
 	router.GET("/api/v1/public/customer/orders", customers.HandlePublicCustomerOrders)
 
-	// Admin Notification Settings routes
-	router.GET("/api/v1/admin/notification-config", settings.HandleGetNotificationConfig)
-	router.PUT("/api/v1/admin/notification-config", settings.HandleUpdateNotificationConfig)
-	router.POST("/api/v1/admin/notification-test", settings.HandleTestNotification)
+	// Admin Notification Settings routes — admin only
+	adminSettingsAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager)
+	router.GET("/api/v1/admin/notification-config", adminSettingsAuth, settings.HandleGetNotificationConfig)
+	router.PUT("/api/v1/admin/notification-config", adminSettingsAuth, settings.HandleUpdateNotificationConfig)
+	router.POST("/api/v1/admin/notification-test", adminSettingsAuth, settings.HandleTestNotification)
 
 	// Print Dimension Presets & Shop Defaults routes (Dynamic Sizing & Material Config)
 	router.GET("/api/v1/pricing/presets", settings.HandleGetDimensionPresets)
@@ -306,13 +325,13 @@ func main() {
 	router.DELETE("/api/v1/lookups/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleDeleteLookup)
 
 	// Machine Wear Parts routes (Asset maintenance & consumable wear parts)
-	router.GET("/api/v1/equipment/:id/wear-parts", settings.HandleGetMachineWearParts)
+	router.GET("/api/v1/equipment/:id/wear-parts", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction), settings.HandleGetMachineWearParts)
 	router.POST("/api/v1/equipment/:id/wear-parts", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleCreateMachineWearPart)
 	router.PUT("/api/v1/equipment/:id/wear-parts/:part_id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleUpdateMachineWearPart)
 	router.DELETE("/api/v1/equipment/:id/wear-parts/:part_id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleDeleteMachineWearPart)
-	router.POST("/api/v1/equipment/:id/install-part", settings.HandleInstallMachineWearPart)
-	router.GET("/api/v1/inventory/spare-parts", settings.HandleGetSparePartsInventory)
-	router.GET("/api/inventory/spare-parts", settings.HandleGetSparePartsInventory)
+	router.POST("/api/v1/equipment/:id/install-part", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleInstallMachineWearPart)
+	router.GET("/api/v1/inventory/spare-parts", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction), settings.HandleGetSparePartsInventory)
+	router.GET("/api/inventory/spare-parts", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction), settings.HandleGetSparePartsInventory)
 
 	// Production Scheduling & Machine Queue routes
 	prodAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction)
@@ -399,20 +418,22 @@ func main() {
 	router.GET("/api/inbound/:id/revisions", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inbound.HandleGetInboundRevisions)
 
 	// Phase 1 API v1 Assets & Inbound Procurement routes
-	router.GET("/api/v1/assets", inventory.HandleGetAssetsV1)
-	router.GET("/api/v1/assets/:id", inventory.HandleGetAssetByIDV1)
+	assetReadAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction, auth.RoleFinance)
+	router.GET("/api/v1/assets", assetReadAuth, inventory.HandleGetAssetsV1)
+	router.GET("/api/v1/assets/:id", assetReadAuth, inventory.HandleGetAssetByIDV1)
 	router.POST("/api/v1/assets/inbound", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleInboundAssetV1)
 	router.PUT("/api/v1/assets/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleUpdateAssetV1)
 	router.DELETE("/api/v1/assets/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleDeleteEquipment)
 
 	// Inventory Material SKU CRUD & Stock Discharge & FIFO Batches routes
-	router.GET("/api/inventory/offcuts", inventory.HandleGetOffcuts)
-	router.POST("/api/inventory/offcuts", inventory.HandleRegisterOffcut)
+	inventoryReadAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction, auth.RoleFinance, auth.RoleSales)
+	router.GET("/api/inventory/offcuts", inventoryReadAuth, inventory.HandleGetOffcuts)
+	router.POST("/api/inventory/offcuts", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction), inventory.HandleRegisterOffcut)
 	router.PUT("/api/inventory/offcuts/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleUpdateOffcut)
 	router.DELETE("/api/inventory/offcuts/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleDeleteOffcut)
-	router.GET("/api/inventory/batches", inventory.HandleGetInventoryBatches)
-	router.GET("/api/inventory/items", inventory.HandleGetInventoryItems)
-	router.GET("/api/inventory", inventory.HandleGetInventoryItems)
+	router.GET("/api/inventory/batches", inventoryReadAuth, inventory.HandleGetInventoryBatches)
+	router.GET("/api/inventory/items", inventoryReadAuth, inventory.HandleGetInventoryItems)
+	router.GET("/api/inventory", inventoryReadAuth, inventory.HandleGetInventoryItems)
 	router.POST("/api/inventory", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleSaveInventorySKU)
 	router.PUT("/api/inventory/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleUpdateInventorySKU)
 	router.PUT("/api/inventory/items/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleUpdateInventorySKU)
@@ -431,12 +452,13 @@ func main() {
 	router.POST("/api/inventory/supplier-price-sheets", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleUploadSupplierPriceSheet)
 
 	// Predictive Maintenance (PPM) routes
-	router.GET("/api/v1/inventory/equipment/health", inventory.HandleGetEquipmentHealth)
-	router.GET("/api/v1/inventory/equipment/maintenance-tickets", inventory.HandleGetMaintenanceTickets)
-	router.POST("/api/v1/inventory/equipment/check-ppm", inventory.HandleTriggerPPMCheck)
-	router.PATCH("/api/v1/inventory/equipment/maintenance-tickets/:id/resolve", inventory.HandleResolveMaintenanceTicket)
-	router.GET("/api/equipment/health", inventory.HandleGetEquipmentHealth)
-	router.GET("/api/equipment/maintenance-tickets", inventory.HandleGetMaintenanceTickets)
+	ppmAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction)
+	router.GET("/api/v1/inventory/equipment/health", ppmAuth, inventory.HandleGetEquipmentHealth)
+	router.GET("/api/v1/inventory/equipment/maintenance-tickets", ppmAuth, inventory.HandleGetMaintenanceTickets)
+	router.POST("/api/v1/inventory/equipment/check-ppm", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleTriggerPPMCheck)
+	router.PATCH("/api/v1/inventory/equipment/maintenance-tickets/:id/resolve", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inventory.HandleResolveMaintenanceTicket)
+	router.GET("/api/equipment/health", ppmAuth, inventory.HandleGetEquipmentHealth)
+	router.GET("/api/equipment/maintenance-tickets", ppmAuth, inventory.HandleGetMaintenanceTickets)
 
 	// Couriers & Payment Methods Master Data routes (Admin & Public)
 	router.GET("/api/v1/public/couriers", settings.HandleGetCouriers)
@@ -497,18 +519,20 @@ func main() {
 	router.POST("/api/production/downtime", prodAuth, inventory.HandleCreateDowntimeLog)
 
 	// Delivery & Dispatch Tracking routes
-	router.GET("/api/v1/orders/deliveries", orders.HandleGetDeliveries)
+	deliveryReadAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales, auth.RoleProduction, auth.RoleFinance)
+	router.GET("/api/v1/orders/deliveries", deliveryReadAuth, orders.HandleGetDeliveries)
 	router.POST("/api/v1/orders/deliveries", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales, auth.RoleProduction), orders.HandleSaveDelivery)
 	router.PUT("/api/v1/orders/deliveries/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales, auth.RoleProduction), orders.HandleUpdateDelivery)
-	router.GET("/api/orders/deliveries", orders.HandleGetDeliveries)
+	router.GET("/api/orders/deliveries", deliveryReadAuth, orders.HandleGetDeliveries)
 	router.POST("/api/orders/deliveries", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales, auth.RoleProduction), orders.HandleSaveDelivery)
 	router.PUT("/api/orders/deliveries/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales, auth.RoleProduction), orders.HandleUpdateDelivery)
 
 	// Workflow Template routes
-	router.GET("/api/v1/production/templates", orders.HandleGetWorkflowTemplates)
+	workflowReadAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction, auth.RolePrepress)
+	router.GET("/api/v1/production/templates", workflowReadAuth, orders.HandleGetWorkflowTemplates)
 	router.POST("/api/v1/production/templates", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction), orders.HandleSaveWorkflowTemplate)
 	router.DELETE("/api/v1/production/templates/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleDeleteWorkflowTemplate)
-	router.GET("/api/production/templates", orders.HandleGetWorkflowTemplates)
+	router.GET("/api/production/templates", workflowReadAuth, orders.HandleGetWorkflowTemplates)
 	router.POST("/api/production/templates", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction), orders.HandleSaveWorkflowTemplate)
 	router.DELETE("/api/production/templates/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleDeleteWorkflowTemplate)
 

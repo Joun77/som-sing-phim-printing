@@ -1,22 +1,44 @@
 package auth
 
 import (
-	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
+
+// makeSignedToken creates a real HMAC-signed JWT for the given role using the
+// production GetJWTSecretKey() — tests import real production code, no clone.
+func makeSignedToken(t *testing.T, username, role, userID string) string {
+	t.Helper()
+	claims := &OwnerClaims{
+		Username: username,
+		UserID:   userID,
+		Role:     role,
+		FullName: "Test " + role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "som-sing-phim-erp",
+		},
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := tok.SignedString(GetJWTSecretKey())
+	if err != nil {
+		t.Fatalf("makeSignedToken: %v", err)
+	}
+	return signed
+}
 
 func setupAuthRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.POST("/api/auth/login", HandleLogin)
 
-	// Admin only endpoint
 	adminGroup := r.Group("/api/admin")
 	adminGroup.Use(RequireAuth("admin", "owner"))
 	{
@@ -25,7 +47,6 @@ func setupAuthRouter() *gin.Engine {
 		})
 	}
 
-	// Sales and Admin endpoint
 	salesGroup := r.Group("/api/sales")
 	salesGroup.Use(RequireAuth("sales", "admin"))
 	{
@@ -37,166 +58,173 @@ func setupAuthRouter() *gin.Engine {
 	return r
 }
 
-func TestHandleLogin_SuccessAndFailure(t *testing.T) {
-	r := setupAuthRouter()
-
-	// 1. Success Admin Login
-	loginBody, _ := json.Marshal(LoginRequest{
-		Username:   "admin",
-		Password:   "admin123",
-		RememberMe: true,
-	})
-	req, _ := http.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBuffer(loginBody))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("Expected 200 OK for admin login, got %d", w.Code)
-	}
-
-	var resp LoginResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("Failed to parse login response: %v", err)
-	}
-	if resp.Token == "" || resp.Role != "admin" {
-		t.Fatalf("Unexpected response payload: %+v", resp)
-	}
-
-	// 2. Failed Login
-	badBody, _ := json.Marshal(LoginRequest{
-		Username: "admin",
-		Password: "wrongpassword",
-	})
-	badReq, _ := http.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBuffer(badBody))
-	badReq.Header.Set("Content-Type", "application/json")
-	badW := httptest.NewRecorder()
-	r.ServeHTTP(badW, badReq)
-
-	if badW.Code != http.StatusUnauthorized {
-		t.Fatalf("Expected 401 Unauthorized for bad credentials, got %d", badW.Code)
-	}
-}
-
-func TestRequireAuth_RoleAccessAndForbidden(t *testing.T) {
-	r := setupAuthRouter()
-
-	// 1. Login as sales
-	salesBody, _ := json.Marshal(LoginRequest{
-		Username: "sales",
-		Password: "sales123",
-	})
-	req, _ := http.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBuffer(salesBody))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	var salesResp LoginResponse
-	json.Unmarshal(w.Body.Bytes(), &salesResp)
-
-	// 2. Sales accessing /api/sales/quotations -> Should SUCCEED (200)
-	salesReq, _ := http.NewRequest(http.MethodGet, "/api/sales/quotations", nil)
-	salesReq.Header.Set("Authorization", "Bearer "+salesResp.Token)
-	salesW := httptest.NewRecorder()
-	r.ServeHTTP(salesW, salesReq)
-
-	if salesW.Code != http.StatusOK {
-		t.Errorf("Expected 200 OK for sales on quotations, got %d", salesW.Code)
-	}
-
-	// 3. Sales accessing /api/admin/finance -> Should be FORBIDDEN (403)
-	forbiddenReq, _ := http.NewRequest(http.MethodGet, "/api/admin/finance", nil)
-	forbiddenReq.Header.Set("Authorization", "Bearer "+salesResp.Token)
-	forbiddenW := httptest.NewRecorder()
-	r.ServeHTTP(forbiddenW, forbiddenReq)
-
-	if forbiddenW.Code != http.StatusForbidden {
-		t.Errorf("Expected 403 Forbidden for sales accessing finance, got %d", forbiddenW.Code)
-	}
-
-	// 4. Missing Token accessing /api/admin/finance -> Should be UNAUTHORIZED (401)
-	unauthReq, _ := http.NewRequest(http.MethodGet, "/api/admin/finance", nil)
-	unauthW := httptest.NewRecorder()
-	r.ServeHTTP(unauthW, unauthReq)
-
-	if unauthW.Code != http.StatusUnauthorized {
-		t.Errorf("Expected 401 Unauthorized for missing token, got %d", unauthW.Code)
-	}
-}
-
-func TestHandleRefreshToken(t *testing.T) {
+// TestHandleLogin_RejectsEmptyBody verifies 400 for malformed login body.
+func TestHandleLogin_RejectsEmptyBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.POST("/api/auth/login", HandleLogin)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/auth/login", nil)
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected 400 Bad Request for empty body, got %d", w.Code)
+	}
+}
+
+// TestRequireAuth_SignedJWT verifies signed JWTs are accepted, role gating works,
+// and unsigned/preview tokens are rejected with 401.
+func TestRequireAuth_SignedJWT(t *testing.T) {
+	os.Setenv("ENVIRONMENT", "development")
+	os.Setenv("JWT_SECRET", "")
+	defer func() {
+		os.Setenv("ENVIRONMENT", "test")
+		os.Setenv("JWT_SECRET", "")
+	}()
+
+	r := setupAuthRouter()
+	adminToken := makeSignedToken(t, "admin", "admin", "usr_admin_001")
+	salesToken := makeSignedToken(t, "sales", "sales", "usr_sales_001")
+
+	check := func(method, path, token string, want int, desc string) {
+		req, _ := http.NewRequest(method, path, nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != want {
+			t.Errorf("%s: expected %d, got %d", desc, want, w.Code)
+		}
+	}
+
+	check("GET", "/api/admin/finance", adminToken, http.StatusOK, "admin -> finance 200")
+	check("GET", "/api/sales/quotations", salesToken, http.StatusOK, "sales -> quotations 200")
+	check("GET", "/api/admin/finance", salesToken, http.StatusForbidden, "sales -> finance 403")
+	check("GET", "/api/admin/finance", "", http.StatusUnauthorized, "no token -> 401")
+	check("GET", "/api/admin/finance", "mock-jwt-token-for-admin", http.StatusUnauthorized, "unsigned mock -> 401")
+	check("GET", "/api/admin/finance", "preview-token", http.StatusUnauthorized, "preview-token -> 401")
+}
+
+// TestHandleRefreshToken_RejectsUnsignedTokens verifies 401 for empty/unsigned refresh tokens.
+func TestHandleRefreshToken_RejectsUnsignedTokens(t *testing.T) {
+	os.Setenv("ENVIRONMENT", "development")
+	os.Setenv("JWT_SECRET", "")
+	defer func() {
+		os.Setenv("ENVIRONMENT", "test")
+		os.Setenv("JWT_SECRET", "")
+	}()
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
 	r.POST("/api/auth/refresh", HandleRefreshToken)
 
-	// Step 1: Login
-	loginBody, _ := json.Marshal(LoginRequest{
-		Username:   "admin",
-		Password:   "admin123",
-		RememberMe: true,
-	})
-	req, _ := http.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBuffer(loginBody))
+	// Empty body -> 401
+	req, _ := http.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
-	var loginResp LoginResponse
-	json.Unmarshal(w.Body.Bytes(), &loginResp)
-	if loginResp.RefreshToken == "" {
-		t.Fatalf("Expected non-empty refresh token from login")
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected 401 for empty refresh token, got %d", w.Code)
 	}
 
-	// Step 2: Refresh
-	refreshBody, _ := json.Marshal(RefreshRequest{
-		RefreshToken: loginResp.RefreshToken,
-	})
-	refreshReq, _ := http.NewRequest(http.MethodPost, "/api/auth/refresh", bytes.NewBuffer(refreshBody))
-	refreshReq.Header.Set("Content-Type", "application/json")
-	refreshW := httptest.NewRecorder()
-	r.ServeHTTP(refreshW, refreshReq)
-
-	if refreshW.Code != http.StatusOK {
-		t.Fatalf("Expected 200 OK for token refresh, got %d", refreshW.Code)
+	// preview-token -> 401 (must not grant admin)
+	req2, _ := http.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
+	req2.Header.Set("Authorization", "Bearer preview-token")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusUnauthorized {
+		t.Errorf("Expected 401 for preview-token on refresh, got %d -- must not grant admin", w2.Code)
 	}
+}
 
-	var refreshResp LoginResponse
-	json.Unmarshal(refreshW.Body.Bytes(), &refreshResp)
-	if refreshResp.Token == "" {
-		t.Fatalf("Expected new access token from refresh endpoint")
+// TestHandleRefreshToken_AcceptsValidSignedToken verifies 200 + new token for a real signed refresh token.
+func TestHandleRefreshToken_AcceptsValidSignedToken(t *testing.T) {
+	os.Setenv("ENVIRONMENT", "development")
+	os.Setenv("JWT_SECRET", "")
+	defer func() {
+		os.Setenv("ENVIRONMENT", "test")
+		os.Setenv("JWT_SECRET", "")
+	}()
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/auth/refresh", HandleRefreshToken)
+
+	claims := &OwnerClaims{
+		Username: "admin",
+		UserID:   "usr_admin_001",
+		Role:     "admin",
+		FullName: "Admin",
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   "usr_admin_001",
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(14 * 24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "som-sing-phim-erp-refresh",
+		},
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, _ := tok.SignedString(GetJWTSecretKey())
+
+	req, _ := http.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
+	req.Header.Set("Authorization", "Bearer "+signed)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 for valid signed refresh token, got %d", w.Code)
 	}
 }
 
 func TestValidateJWTSecretOnStartup(t *testing.T) {
-	// 1. In dev environment without secret -> no error
+	defer func() {
+		os.Setenv("ENVIRONMENT", "test")
+		os.Setenv("JWT_SECRET", "")
+	}()
+
 	os.Setenv("ENVIRONMENT", "development")
 	os.Setenv("JWT_SECRET", "")
 	if err := ValidateJWTSecretOnStartup(); err != nil {
 		t.Errorf("Expected nil in dev mode without secret, got %v", err)
 	}
 
-	// 2. In production environment with empty secret -> should fail
+	os.Setenv("ENVIRONMENT", "test")
+	os.Setenv("JWT_SECRET", "")
+	if err := ValidateJWTSecretOnStartup(); err != nil {
+		t.Errorf("Expected nil in test mode without secret, got %v", err)
+	}
+
+	// Blank ENVIRONMENT + no secret -> fail closed
+	os.Setenv("ENVIRONMENT", "")
+	os.Setenv("JWT_SECRET", "")
+	if err := ValidateJWTSecretOnStartup(); err == nil {
+		t.Errorf("Expected error when ENVIRONMENT is blank and JWT_SECRET is empty")
+	}
+
 	os.Setenv("ENVIRONMENT", "production")
 	os.Setenv("JWT_SECRET", "")
 	if err := ValidateJWTSecretOnStartup(); err == nil {
 		t.Errorf("Expected error in production mode with empty secret, got nil")
 	}
 
-	// 3. In production environment with valid secret -> should pass
 	os.Setenv("ENVIRONMENT", "production")
 	os.Setenv("JWT_SECRET", "super-secure-production-key-32-chars-long!")
 	if err := ValidateJWTSecretOnStartup(); err != nil {
 		t.Errorf("Expected nil in production mode with valid secret, got %v", err)
 	}
-
-	// Cleanup
-	os.Setenv("ENVIRONMENT", "test")
-	os.Setenv("JWT_SECRET", "")
 }
 
-func TestRequireAuth_ProductionAndFinanceRoles(t *testing.T) {
+// TestRequireAuth_RoleMatrix verifies the RBAC matrix for production, finance, HR roles.
+func TestRequireAuth_RoleMatrix(t *testing.T) {
+	os.Setenv("ENVIRONMENT", "development")
+	os.Setenv("JWT_SECRET", "")
+	defer func() {
+		os.Setenv("ENVIRONMENT", "test")
+		os.Setenv("JWT_SECRET", "")
+	}()
+
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.POST("/api/auth/login", HandleLogin)
 
 	financeRoute := r.Group("/api/v1/finance")
 	financeRoute.Use(RequireRoles("admin", "finance", "accountant"))
@@ -222,43 +250,19 @@ func TestRequireAuth_ProductionAndFinanceRoles(t *testing.T) {
 		})
 	}
 
-	// Login as production user
-	loginBody, _ := json.Marshal(LoginRequest{
-		Username: "production",
-		Password: "production123",
-	})
-	req, _ := http.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBuffer(loginBody))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
+	productionToken := makeSignedToken(t, "production", "production", "usr_prod_001")
 
-	var prodResp LoginResponse
-	json.Unmarshal(w.Body.Bytes(), &prodResp)
-
-	// Production accessing /api/v1/production/schedule -> 200 OK
-	prodReq, _ := http.NewRequest(http.MethodGet, "/api/v1/production/schedule", nil)
-	prodReq.Header.Set("Authorization", "Bearer "+prodResp.Token)
-	prodW := httptest.NewRecorder()
-	r.ServeHTTP(prodW, prodReq)
-	if prodW.Code != http.StatusOK {
-		t.Errorf("Expected 200 for production accessing production schedule, got %d", prodW.Code)
+	check := func(method, path, token string, want int, desc string) {
+		req, _ := http.NewRequest(method, path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != want {
+			t.Errorf("%s: expected %d, got %d", desc, want, w.Code)
+		}
 	}
 
-	// Production accessing /api/v1/finance/summary -> 403 Forbidden
-	finReq, _ := http.NewRequest(http.MethodGet, "/api/v1/finance/summary", nil)
-	finReq.Header.Set("Authorization", "Bearer "+prodResp.Token)
-	finW := httptest.NewRecorder()
-	r.ServeHTTP(finW, finReq)
-	if finW.Code != http.StatusForbidden {
-		t.Errorf("Expected 403 for production accessing finance summary, got %d", finW.Code)
-	}
-
-	// Production accessing /api/v1/hr/employees -> 403 Forbidden
-	hrReq, _ := http.NewRequest(http.MethodGet, "/api/v1/hr/employees", nil)
-	hrReq.Header.Set("Authorization", "Bearer "+prodResp.Token)
-	hrW := httptest.NewRecorder()
-	r.ServeHTTP(hrW, hrReq)
-	if hrW.Code != http.StatusForbidden {
-		t.Errorf("Expected 403 for production accessing HR, got %d", hrW.Code)
-	}
+	check("GET", "/api/v1/production/schedule", productionToken, http.StatusOK, "production -> schedule 200")
+	check("GET", "/api/v1/finance/summary", productionToken, http.StatusForbidden, "production -> finance 403")
+	check("GET", "/api/v1/hr/employees", productionToken, http.StatusForbidden, "production -> HR 403")
 }

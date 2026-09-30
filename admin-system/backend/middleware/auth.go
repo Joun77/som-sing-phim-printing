@@ -53,23 +53,20 @@ func CORSMiddleware() gin.HandlerFunc {
 					break
 				}
 			}
-			// Fallback: automatically allow any Som Sing Phim firebase subdomains or Tailscale domains
-			if !isAllowed && (strings.HasSuffix(origin, ".web.app") || strings.HasSuffix(origin, ".firebaseapp.com") || strings.HasSuffix(origin, ".ts.net") || strings.Contains(origin, "100.116.116.18")) {
-				isAllowed = true
-			}
+			// Note: wildcard domain-suffix bypass removed \u2014 origins must match the explicit allowlist exactly.
+			// To allow additional domains (e.g., custom Firebase hostnames), add them to ALLOWED_ORIGINS env var.
 		}
 
 		if isAllowed {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		} else if env != "production" {
-			// In dev mode with non-origin or fallback
-			if origin != "" {
+		} else if env != "production" && origin != "" {
+			// In non-production mode, allow any localhost/127.0.0.1 origin for developer convenience only
+			if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
 				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 				c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-			} else {
-				c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 			}
+			// Unknown non-localhost origins in dev mode do NOT get a wildcard CORS grant
 		}
 
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, Pragma, Expires, X-Requested-With, Idempotency-Key, X-Request-ID")

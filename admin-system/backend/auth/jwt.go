@@ -12,12 +12,18 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// ValidateJWTSecretOnStartup checks if JWT_SECRET is present when running in production
+// ValidateJWTSecretOnStartup checks if JWT_SECRET is present.
+// Only environments explicitly set to "development" or "test" may omit JWT_SECRET;
+// everything else (including blank) requires it to fail closed.
 func ValidateJWTSecretOnStartup() error {
 	secret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
 	env := strings.ToLower(strings.TrimSpace(os.Getenv("ENVIRONMENT")))
-	if env == "production" && secret == "" {
-		return fmt.Errorf("FATAL: JWT_SECRET environment variable is missing or empty in production mode")
+	isExplicitlyDev := env == "development" || env == "dev" || env == "test"
+	if !isExplicitlyDev && secret == "" {
+		return fmt.Errorf("FATAL: JWT_SECRET environment variable is missing or empty. Set ENVIRONMENT=development to bypass this check in local dev only")
+	}
+	if secret != "" && len(secret) < 32 {
+		log.Printf("[SECURITY WARNING] JWT_SECRET is shorter than 32 characters; use a longer secret in production")
 	}
 	return nil
 }
@@ -66,7 +72,8 @@ type OwnerClaims struct {
 	jwt.RegisteredClaims
 }
 
-// HandleLogin authenticates single owner / admin credentials and issues real JWT token
+// HandleLogin authenticates staff credentials via database bcrypt and issues real JWT token.
+// Hardcoded plaintext credential fallback has been removed; login requires a working database.
 func HandleLogin(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -76,70 +83,22 @@ func HandleLogin(c *gin.Context) {
 
 	var role, fullname, email, userId, employeeId string
 
-	// 1. Try real PostgreSQL database authentication with bcrypt
+	// Authenticate exclusively via database with bcrypt — no plaintext credential fallback
 	dbUser, dbErr := AuthenticateUserAgainstDB(req.Username, req.Password)
-	if dbErr == nil && dbUser != nil {
-		role = dbUser.Role
-		fullname = dbUser.FullName
-		email = dbUser.Email
-		userId = dbUser.ID
-		if dbUser.EmployeeID != nil {
-			employeeId = *dbUser.EmployeeID
-		}
-	} else if dbErr != nil && dbErr.Error() == "ACCOUNT_DEACTIVATED" {
+	if dbErr != nil && dbErr.Error() == "ACCOUNT_DEACTIVATED" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "ບັນຊີນີ້ຖືກປິດການໃຊ້ງານ ກະລຸນາຕິດຕໍ່ Super Admin (Account is deactivated)"})
 		return
-	} else {
-		// 2. Fallback to environment variables or seed accounts
-		ownerUser := os.Getenv("OWNER_USERNAME")
-		if ownerUser == "" {
-			ownerUser = "admin"
-		}
-		ownerPass := os.Getenv("OWNER_PASSWORD")
-		if ownerPass == "" {
-			ownerPass = "admin123"
-		}
-
-		if req.Username == ownerUser && req.Password == ownerPass {
-			role = "admin"
-			fullname = "Som-Sing Printing Owner (Super Admin)"
-			email = "owner@somsingphim.la"
-			userId = "usr_admin_001"
-		} else if req.Username == "admin" && req.Password == "admin123" {
-			role = "admin"
-			fullname = "Som-Sing Printing Owner (Super Admin)"
-			email = "admin@somsingphim.la"
-			userId = "usr_admin_001"
-		} else if req.Username == "manager" && req.Password == "manager123" {
-			role = "manager"
-			fullname = "Som Sing General Manager"
-			email = "manager@somsingphim.la"
-			userId = "usr_mgr_001"
-		} else if req.Username == "prepress" && req.Password == "prepress123" {
-			role = "prepress"
-			fullname = "Som Sing Prepress Specialist"
-			email = "prepress@somsingphim.la"
-			userId = "usr_prep_001"
-		} else if req.Username == "sales" && req.Password == "sales123" {
-			role = "sales"
-			fullname = "Som Sing Sales Representative"
-			email = "sales@somsingphim.la"
-			userId = "usr_sales_001"
-		} else if (req.Username == "production" && req.Password == "production123") || (req.Username == "production" && req.Password == "prod123") {
-			role = "production"
-			fullname = "Som Sing Lead Printer"
-			email = "production@somsingphim.la"
-			userId = "usr_prod_001"
-			employeeId = "EMP-001"
-		} else if (req.Username == "finance" && req.Password == "finance123") || (req.Username == "accountant" && req.Password == "acc123") {
-			role = "finance"
-			fullname = "Som Sing Lead Accountant"
-			email = "finance@somsingphim.la"
-			userId = "usr_fin_001"
-		} else {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "ຊື່ຜູ້ໃຊ້ງານ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ (Invalid username or password)"})
-			return
-		}
+	}
+	if dbErr != nil || dbUser == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ຊື່ຜູ້ໃຊ້ງານ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ (Invalid username or password)"})
+		return
+	}
+	role = dbUser.Role
+	fullname = dbUser.FullName
+	email = dbUser.Email
+	userId = dbUser.ID
+	if dbUser.EmployeeID != nil {
+		employeeId = *dbUser.EmployeeID
 	}
 
 	// 24 hours standard token expiration
@@ -200,7 +159,8 @@ func HandleLogin(c *gin.Context) {
 	})
 }
 
-// HandleRefreshToken silently issues a fresh access token without forcing user logout
+// HandleRefreshToken silently issues a fresh access token without forcing user logout.
+// Empty, missing, or unsigned tokens are rejected — no mock/preview fallback.
 func HandleRefreshToken(c *gin.Context) {
 	var req RefreshRequest
 	_ = c.ShouldBindJSON(&req)
@@ -211,16 +171,8 @@ func HandleRefreshToken(c *gin.Context) {
 		rawToken = strings.TrimPrefix(authHeader, "Bearer ")
 	}
 
-	if rawToken == "" || rawToken == "preview-token" {
-		// Mock preview token fallback
-		expirationTime := time.Now().Add(30 * time.Minute)
-		c.JSON(http.StatusOK, LoginResponse{
-			Token:        "preview-token",
-			RefreshToken: "preview-refresh-token",
-			Role:         "admin",
-			FullName:     "Som-Sing Printing Owner (Super Admin)",
-			ExpiresAt:    expirationTime.Unix(),
-		})
+	if rawToken == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token is required"})
 		return
 	}
 
@@ -270,7 +222,8 @@ func HandleRefreshToken(c *gin.Context) {
 	})
 }
 
-// RequireAuth middleware verifies JWT token and optionally checks role permissions
+// RequireAuth middleware verifies JWT token and optionally checks role permissions.
+// Unsigned mock/preview tokens are no longer accepted; all tokens must be properly HMAC-signed.
 func RequireAuth(allowedRoles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -281,28 +234,6 @@ func RequireAuth(allowedRoles ...string) gin.HandlerFunc {
 		}
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-
-		// Support fallback legacy mock tokens for local dev/testing
-		if strings.HasPrefix(tokenString, "mock-jwt-token-for-") || tokenString == "preview-token" {
-			role := "admin"
-			if strings.HasPrefix(tokenString, "mock-jwt-token-for-") {
-				role = strings.TrimPrefix(tokenString, "mock-jwt-token-for-")
-			}
-			c.Set("user_role", role)
-			c.Set("username", role)
-			c.Set("user_fullname", "Som Sing Staff")
-			if role == "production" || role == "staff" {
-				c.Set("employee_id", "EMP-001")
-				c.Set("user_id", "usr_prod_001")
-			}
-			if !CheckRole(role, allowedRoles) {
-				c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: insufficient permissions for role " + role})
-				c.Abort()
-				return
-			}
-			c.Next()
-			return
-		}
 
 		claims := &OwnerClaims{}
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
