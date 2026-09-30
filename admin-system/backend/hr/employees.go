@@ -279,3 +279,36 @@ func HandleCreateTechnicianEarning(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{"status": "success", "data": rec})
 }
+
+// GetEmployeesList returns all employees from DB or in-memory fallback
+func GetEmployeesList() ([]Employee, error) {
+	if db.DB != nil {
+		employees, err := getEmployeesFromDB()
+		if err == nil && len(employees) > 0 {
+			return employees, nil
+		}
+	}
+
+	employeeStoreMutex.RLock()
+	defer employeeStoreMutex.RUnlock()
+
+	var result []Employee
+	for _, emp := range employeeMemoryStore {
+		result = append(result, emp)
+	}
+	return result, nil
+}
+
+// GetEmployeeByID returns a single employee by ID
+func GetEmployeeByID(id string) (*Employee, error) {
+	list, err := GetEmployeesList()
+	if err != nil {
+		return nil, err
+	}
+	for _, emp := range list {
+		if emp.ID == id {
+			return &emp, nil
+		}
+	}
+	return nil, fmt.Errorf("employee %s not found", id)
+}

@@ -29,6 +29,7 @@ const FinanceDashboard = lazy(() => import('@features/finance').then(m => ({ def
 const ProfileSettingsPage = lazy(() => import('@features/profile').then(m => ({ default: m.ProfileSettingsPage })));
 const PreflightPage = lazy(() => import('./features/production/PreflightPage').then(m => ({ default: m.PreflightPage })));
 const ShopFloorTracker = lazy(() => import('./features/production/ShopFloorTracker').then(m => ({ default: m.ShopFloorTracker })));
+const DailyPlanView = lazy(() => import('./features/production').then(m => ({ default: m.DailyPlanView })));
 const WebCatalogPage = lazy(() => import('./features/catalog').then(m => ({ default: m.WebCatalogPage })));
 const MaterialManagement = lazy(() => import('./features/materials').then(m => ({ default: m.MaterialManagement })));
 const MasterDataManagement = lazy(() => import('./features/master-data').then(m => ({ default: m.MasterDataManagement })));
@@ -153,6 +154,7 @@ function AppContent() {
                     {(activeTab === 'orders' || activeTab === 'create_order' || activeTab === 'production' || activeTab === 'deliveries') && (
                       <CustomerOrders initialSubTab={activeTab === 'orders' ? 'orders' : activeTab} />
                     )}
+                    {activeTab === 'daily_plan' && <DailyPlanView />}
                     {activeTab === 'tracker' && <ShopFloorTracker />}
                     {activeTab === 'suppliers' && <SupplierManagement />}
                     {activeTab === 'inbound' && <InboundManagement />}

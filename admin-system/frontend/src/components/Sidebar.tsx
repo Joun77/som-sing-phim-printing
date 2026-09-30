@@ -26,7 +26,8 @@ import {
   ChevronRight,
   ShieldCheck,
   BookOpen,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Calendar
 } from 'lucide-react';
 
 interface NavSubItem {
@@ -143,6 +144,13 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, setCol
       icon: Printer,
       roles: ['admin', 'owner', 'super_admin', 'production'],
       items: [
+        {
+          id: 'daily_plan',
+          labelLao: 'ແຜນງານປະຈຳວັນ (Daily Plan)',
+          labelEn: 'Daily Production Plan',
+          icon: Calendar,
+          roles: ['admin', 'owner', 'super_admin', 'production', 'manager'],
+        },
         {
           id: 'tracker',
           labelLao: 'ຕິດຕາມງານພິມ (Shop Floor)',

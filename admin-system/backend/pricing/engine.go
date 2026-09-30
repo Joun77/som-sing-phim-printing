@@ -58,16 +58,16 @@ type CustomFinishingOption struct {
 
 // CalculationRequest represents the payload from the frontend spec builder
 type CalculationRequest struct {
-	JobName          string              `json:"job_name" binding:"required"`
-	Quantity         int                 `json:"quantity" binding:"required,gt=0"`
-	PaperSku         string              `json:"paper_sku"`
-	PaperName        string              `json:"paper_name"`
-	PaperCostPerUnit    float64             `json:"paper_cost_per_unit"` // Cost per ream/pack or unit
+	JobName             string              `json:"job_name" binding:"required"`
+	Quantity            int                 `json:"quantity" binding:"required,gt=0"`
+	PaperSku            string              `json:"paper_sku"`
+	PaperName           string              `json:"paper_name"`
+	PaperCostPerUnit    float64             `json:"paper_cost_per_unit"`     // Cost per ream/pack or unit
 	PaperCostIsPerSheet bool                `json:"paper_cost_is_per_sheet"` // If true, PaperCostPerUnit is already per parent sheet
-	PaperFormat         string              `json:"paper_format"`        // "sheet" | "roll"
-	SheetsPerPack       int                 `json:"sheets_per_pack"`     // Sheets per pack/ream (default 500 if pack cost)
-	CutsPerSheet     int                 `json:"cuts_per_sheet"`      // Number of brochure/job pieces cut per large sheet (default 1)
-	Allocations      []PrinterAllocation `json:"allocations"`
+	PaperFormat         string              `json:"paper_format"`            // "sheet" | "roll"
+	SheetsPerPack       int                 `json:"sheets_per_pack"`         // Sheets per pack/ream (default 500 if pack cost)
+	CutsPerSheet        int                 `json:"cuts_per_sheet"`          // Number of brochure/job pieces cut per large sheet (default 1)
+	Allocations         []PrinterAllocation `json:"allocations"`
 
 	// Multi-Printer & Channel Color Separation (Task 3)
 	PrintingProcesses  []PrinterProcessSetup   `json:"printing_processes"`
@@ -149,13 +149,13 @@ type CalculationRequest struct {
 	DepositPercent  float64 `json:"deposit_percent"`  // e.g. 0, 30, 50, 100
 
 	// Dynamic Preflight & Book Specifics
-	PageCount     int     `json:"page_count"`      // Number of pages in booklet/book (default 1)
-	AvgCovC       float64 `json:"avg_cov_c"`       // Average Cyan % from preflight
-	AvgCovM       float64 `json:"avg_cov_m"`       // Average Magenta % from preflight
-	AvgCovY       float64 `json:"avg_cov_y"`       // Average Yellow % from preflight
-	AvgCovK       float64 `json:"avg_cov_k"`       // Average Black/Key % from preflight
-	SpineWidthMM  float64 `json:"spine_width_mm"`  // Computed spine width in mm
-	PaperGSM      float64 `json:"paper_gsm"`       // Paper grammage (e.g. 80, 260)
+	PageCount             int     `json:"page_count"`              // Number of pages in booklet/book (default 1)
+	AvgCovC               float64 `json:"avg_cov_c"`               // Average Cyan % from preflight
+	AvgCovM               float64 `json:"avg_cov_m"`               // Average Magenta % from preflight
+	AvgCovY               float64 `json:"avg_cov_y"`               // Average Yellow % from preflight
+	AvgCovK               float64 `json:"avg_cov_k"`               // Average Black/Key % from preflight
+	SpineWidthMM          float64 `json:"spine_width_mm"`          // Computed spine width in mm
+	PaperGSM              float64 `json:"paper_gsm"`               // Paper grammage (e.g. 80, 260)
 	BindingLifetimeCycles float64 `json:"binding_lifetime_cycles"` // Lifecycle cycles for binding machine
 	BindingMachinePrice   float64 `json:"binding_machine_price"`   // Purchase price of binding machine
 
@@ -229,10 +229,10 @@ type CalculationResponse struct {
 	PackagingCost         float64 `json:"packaging_cost"`
 	CustomFinishingCost   float64 `json:"custom_finishing_cost"`
 	LaminationCost        float64 `json:"lamination_cost"`
-	BindingCost         float64 `json:"binding_cost"`
-	LaborCost           float64 `json:"labor_cost"`
-	SetupCost           float64 `json:"setup_cost"`
-	FinishingCost       float64 `json:"finishing_cost"`
+	BindingCost           float64 `json:"binding_cost"`
+	LaborCost             float64 `json:"labor_cost"`
+	SetupCost             float64 `json:"setup_cost"`
+	FinishingCost         float64 `json:"finishing_cost"`
 
 	// Aggregates
 	DirectCost      float64 `json:"direct_cost"`
@@ -968,19 +968,57 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	dThresholdSurcharge := decimal.Zero
 	isThresholdExceeded := false
 
+	// Calculate total job coverage across printing processes, preflight, or split/legacy fields
+	totalJobCoverage := 0.0
+	if len(req.PrintingProcesses) > 0 {
+		for _, proc := range req.PrintingProcesses {
+			if len(proc.ColorChannels) > 0 {
+				for _, ch := range proc.ColorChannels {
+					totalJobCoverage += ch.DensityPct
+				}
+			} else if proc.AverageDensity > 0 {
+				totalJobCoverage += proc.AverageDensity
+			}
+		}
+	} else if req.AvgCovC > 0 || req.AvgCovM > 0 || req.AvgCovY > 0 || req.AvgCovK > 0 {
+		totalJobCoverage = req.AvgCovC + req.AvgCovM + req.AvgCovY + req.AvgCovK
+	} else if req.InkCoverageKPercent > 0 || req.InkCoverageCMYPercent > 0 {
+		totalJobCoverage = req.InkCoverageKPercent + req.InkCoverageCMYPercent
+	} else if req.InkCoveragePercent > 0 {
+		totalJobCoverage = req.InkCoveragePercent
+	}
+
 	if req.BaseFloorPrice > 0 {
 		dFloorPrice := decimal.NewFromFloat(req.BaseFloorPrice)
 		if req.ThresholdMode == "FLOOR_OR_ACTUAL" || req.ThresholdMode == "" {
-			if dGrandTotal.LessThanOrEqual(dFloorPrice) {
-				// Actual cost + margin does not exceed base floor price: charge base floor price
-				dEffectiveSalePrice = dFloorPrice
-				isThresholdExceeded = false
-				dThresholdSurcharge = decimal.Zero
+			if req.BaselineCoveragePercent > 0 {
+				if totalJobCoverage <= req.BaselineCoveragePercent {
+					// Coverage is within baseline allowance -> qualifies for BaseFloorPrice
+					dEffectiveSalePrice = dFloorPrice
+					isThresholdExceeded = false
+					dThresholdSurcharge = decimal.Zero
+				} else {
+					// Coverage exceeded baseline allowance -> dynamic price
+					dEffectiveSalePrice = decimal.Max(dGrandTotal, dFloorPrice)
+					isThresholdExceeded = true
+					if dEffectiveSalePrice.GreaterThan(dFloorPrice) {
+						dThresholdSurcharge = dEffectiveSalePrice.Sub(dFloorPrice).Round(2)
+					} else {
+						dThresholdSurcharge = decimal.Zero
+					}
+				}
 			} else {
-				// Cost exceeded baseline threshold: charge real calculated price
-				dEffectiveSalePrice = dGrandTotal
-				isThresholdExceeded = true
-				dThresholdSurcharge = dGrandTotal.Sub(dFloorPrice).Round(2)
+				if dGrandTotal.LessThanOrEqual(dFloorPrice) {
+					// Actual cost + margin does not exceed base floor price: charge base floor price
+					dEffectiveSalePrice = dFloorPrice
+					isThresholdExceeded = false
+					dThresholdSurcharge = decimal.Zero
+				} else {
+					// Cost exceeded baseline threshold: charge real calculated price
+					dEffectiveSalePrice = dGrandTotal
+					isThresholdExceeded = true
+					dThresholdSurcharge = dGrandTotal.Sub(dFloorPrice).Round(2)
+				}
 			}
 		}
 	}

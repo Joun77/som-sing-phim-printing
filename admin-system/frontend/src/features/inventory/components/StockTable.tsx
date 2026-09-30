@@ -4,6 +4,7 @@ import { Edit3, CheckCircle2, AlertTriangle, XCircle, Search, X, Eye, Trash2, Wr
 import { MaterialMaster } from '../types';
 import { updateMaterialDirect, deleteMaterial } from '../api/inventoryApi';
 import { useApp } from '@store/AppContext';
+import { isAssetItem } from '@utils/assetClassification';
 
 interface StockTableProps {
   materials: MaterialMaster[];
@@ -66,6 +67,8 @@ export const StockTable = React.memo(function StockTable({ materials, loading, o
   };
 
   const filteredMaterials = materials.filter(m => {
+    if (!m || isAssetItem(m.category, m)) return false;
+
     const matchesSearch = 
       (m.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (m.sku || '').toLowerCase().includes(searchQuery.toLowerCase()) ||

@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { Settings, Plus, Wrench, ShieldAlert, AlertTriangle, ArrowRight, Sparkles } from 'lucide-react';
+import { Settings, Plus, Wrench, ShieldAlert, AlertTriangle, ArrowRight, Sparkles, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@store/AppContext';
 import EquipmentTable from './EquipmentTable';
 import EditEquipmentModal from './modals/EditEquipmentModal';
 import EquipmentDetailsPage from './details/EquipmentDetailsPage';
+import { resolveCanonicalEquipmentCategory, resolvePrinterSubtype } from '@utils/assetClassification';
 
 export default function EquipmentManagement() {
-  const { equipment, deleteEquipment, updateEquipmentMaintenance, showToast, askConfirmation, formatCurrency, setActiveTab } = useApp();
+  const { equipment, deleteEquipment, updateEquipmentMaintenance, showToast, askConfirmation, formatCurrency, setActiveTab, equipmentApiError, refetchEquipment } = useApp();
   const { i18n } = useTranslation();
   const currentLang = i18n.language || 'lo';
 
@@ -44,42 +45,50 @@ export default function EquipmentManagement() {
 
   const handleDeleteEquipment = (eq: any) => {
     askConfirmation(
-      currentLang === 'lo' 
-        ? `ທ່ານຕ້ອງການລຶບເຄື່ອງຈັກ "${eq.name}" (${eq.id}) ຫຼື ບໍ່?` 
+      currentLang === 'lo'
+        ? `ທ່ານຕ້ອງການລຶບເຄື່ອງຈັກ "${eq.name}" (${eq.id}) ຫຼື ບໍ່?`
         : `Are you sure you want to delete equipment "${eq.name}" (${eq.id})?`,
-      () => {
-        deleteEquipment(eq.id);
-        showToast(currentLang === 'lo' ? 'ລຶບເຄື່ອງຈັກຮຽບຮ້ອຍແລ້ວ' : 'Equipment deleted successfully', 'success');
+      async () => {
+        await deleteEquipment(eq.id);
       }
     );
   };
 
   const filteredMachines = equipment.filter(eq => {
-    const eqCat = (eq.category || '').toLowerCase();
-    const eqType = (eq.printerCategory || eq.printerType || eq.specs?.type || '').toLowerCase();
-    const isPrinter = eqCat === 'printer' || eqCat === 'press' || eqType.includes('digital') || eqType.includes('offset') || eqType.includes('inkjet') || eqType.includes('laser') || (eq.id && eq.id.toLowerCase().startsWith('prn'));
+    const canonicalCat = resolveCanonicalEquipmentCategory(eq.category, eq);
+    const resolvedSubtype = resolvePrinterSubtype(eq);
+    const isPrinter = canonicalCat === 'Printer';
 
     let matchesCategory = true;
     if (activeCategory === 'Printer') {
       matchesCategory = isPrinter;
     } else if (activeCategory === 'Cutter') {
-      matchesCategory = eqCat === 'cutter' || (eq.id && eq.id.toLowerCase().startsWith('cut')) || (eq.name && eq.name.toLowerCase().includes('cutter'));
+      matchesCategory = canonicalCat === 'Cutter';
     } else if (activeCategory === 'Binder') {
-      matchesCategory = eqCat === 'binder' || (eq.id && eq.id.toLowerCase().startsWith('bin')) || (eq.name && eq.name.toLowerCase().includes('binder'));
+      matchesCategory = canonicalCat === 'Binder';
     } else if (activeCategory === 'Laminator') {
-      matchesCategory = eqCat === 'laminator' || (eq.id && eq.id.toLowerCase().startsWith('lam')) || (eq.name && eq.name.toLowerCase().includes('laminat'));
+      matchesCategory = canonicalCat === 'Laminator';
     }
 
     const matchesStatus = statusFilter === 'All' || (eq.status || 'In Use').toLowerCase() === statusFilter.toLowerCase();
-    
+
     let matchesPrinterCategory = true;
-    if (activeCategory === 'Printer' && printerCategoryFilter !== 'All') {
-      const pcf = printerCategoryFilter.toLowerCase();
-      matchesPrinterCategory = eqType.includes(pcf) || (eq.brand && eq.brand.toLowerCase().includes(pcf)) || (eq.name && eq.name.toLowerCase().includes(pcf));
+    if (printerCategoryFilter !== 'All') {
+      if (!isPrinter) {
+        matchesPrinterCategory = false;
+      } else {
+        const pcf = printerCategoryFilter.toLowerCase();
+        const eqType = (eq.printerCategory || eq.printerType || eq.specs?.type || '').toLowerCase();
+        matchesPrinterCategory = resolvedSubtype.toLowerCase() === pcf ||
+          eqType.includes(pcf) ||
+          (eq.brand && eq.brand.toLowerCase().includes(pcf)) ||
+          (eq.name && eq.name.toLowerCase().includes(pcf)) ||
+          (eq.model && eq.model.toLowerCase().includes(pcf));
+      }
     }
 
     const matchesLocation = !locationFilter || (eq.location && eq.location.toLowerCase().includes(locationFilter.toLowerCase()));
-    const matchesSearch = !searchQuery || 
+    const matchesSearch = !searchQuery ||
       (eq.name && eq.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (eq.id && eq.id.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (eq.brand && eq.brand.toLowerCase().includes(searchQuery.toLowerCase())) ||
@@ -91,16 +100,16 @@ export default function EquipmentManagement() {
 
   if (selectedEquipmentId) {
     return (
-      <EquipmentDetailsPage 
-        equipmentId={selectedEquipmentId} 
-        onBack={() => setSelectedEquipmentId(null)} 
+      <EquipmentDetailsPage
+        equipmentId={selectedEquipmentId}
+        onBack={() => setSelectedEquipmentId(null)}
       />
     );
   }
 
   return (
     <div className="space-y-6 text-slate-800">
-      
+
       {/* Header action bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <div>
@@ -109,8 +118,8 @@ export default function EquipmentManagement() {
             <span>{currentLang === 'lo' ? 'ຈັດການເຄື່ອງຈັກ & ບຳລຸງຮັກສາ' : 'Assets & Overheads'}</span>
           </h2>
           <p className="text-sm font-semibold text-slate-400 mt-1">
-            {currentLang === 'lo' 
-              ? 'ຕິດຕາມສະຖານະການເຮັດວຽກ SLA, ອັດຕາການສວມເສຍ ແລະ ຕົ້ນທຶນຄ່າເສື່ອມລາຄາເຄື່ອງຈັກ' 
+            {currentLang === 'lo'
+              ? 'ຕິດຕາມສະຖານະການເຮັດວຽກ SLA, ອັດຕາການສວມເສຍ ແລະ ຕົ້ນທຶນຄ່າເສື່ອມລາຄາເຄື່ອງຈັກ'
               : 'Track SLA operation parameters, equipment wear, & component metrics'}
           </p>
         </div>
@@ -128,6 +137,37 @@ export default function EquipmentManagement() {
           <span>{currentLang === 'lo' ? 'ນຳເຂົ້າເຄື່ອງຈັກຜ່ານການຈັດຊື້ (New Inbound Machinery)' : 'New Inbound Machinery'}</span>
         </button>
       </div>
+
+      {/* Backend Database Connection Alert Banner */}
+      {equipmentApiError && (
+        <div className="p-4 sm:p-5 rounded-3xl bg-amber-500/10 border-2 border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-amber-500/20 text-amber-700 shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-black text-amber-950 flex items-center gap-2">
+                <span>{currentLang === 'lo' ? 'ແຈ້ງເຕືອນ: ບໍ່ສາມາດເຊື່ອມຕໍ່ຖານຂໍ້ມູນເຄື່ອງຈັກ (Database Disconnected)' : 'Warning: Equipment Database Disconnected'}</span>
+              </h4>
+              <p className="text-xs text-amber-800 font-medium mt-0.5">
+                {currentLang === 'lo'
+                  ? `ລະບົບບໍ່ສາມາດດຶງຂໍ້ມູນເຄື່ອງຈັກຈາກ PostgreSQL Backend ໄດ້ (${equipmentApiError}) — ກຳລັງສະແດງຂໍ້ມູນສຳຮອງໃນ Local Cache ຊົ່ວຄາວ`
+                  : `Unable to sync live equipment from PostgreSQL Backend (${equipmentApiError}). Displaying local cache.`}
+              </p>
+            </div>
+          </div>
+          {refetchEquipment && (
+            <button
+              type="button"
+              onClick={() => refetchEquipment()}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer active:scale-95 shrink-0"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>{currentLang === 'lo' ? 'ລອງເຊື່ອມຕໍ່ໃໝ່' : 'Retry'}</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Predictive Maintenance & Critical Component Wear Alert Banner */}
       {criticalWearMachines.length > 0 && (
@@ -255,8 +295,8 @@ export default function EquipmentManagement() {
       </div>
 
       {/* Equipment Table */}
-      <EquipmentTable 
-        machines={filteredMachines} 
+      <EquipmentTable
+        machines={filteredMachines}
         onViewDetails={handleViewDetails}
         onDelete={handleDeleteEquipment}
         formatLAK={formatCurrency}

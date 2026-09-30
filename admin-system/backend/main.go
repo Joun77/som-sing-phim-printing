@@ -21,6 +21,7 @@ import (
 	"somsing.local/backend/orders"
 	"somsing.local/backend/preflight"
 	"somsing.local/backend/pricing"
+	"somsing.local/backend/production"
 	"somsing.local/backend/settings"
 	"somsing.local/backend/spoilage"
 	"somsing.local/backend/suppliers"
@@ -216,6 +217,25 @@ func main() {
 	router.POST("/api/quotations/:id/convert", orders.HandleConvertQuotationToOrder)
 	router.POST("/api/v1/orders/upload", orders.HandleUploadOrderFile)
 	router.PATCH("/api/v1/orders/items/:id/step", orders.HandleUpdateOrderItemStep)
+	router.PUT("/api/v1/orders/items/:id/step", orders.HandleUpdateOrderItemStep)
+	router.POST("/api/v1/orders/items/:id/step", orders.HandleUpdateOrderItemStep)
+	router.PATCH("/api/v1/orders/:id/items/:item_id/step", orders.HandleUpdateOrderItemStep)
+	router.PUT("/api/v1/orders/:id/items/:item_id/step", orders.HandleUpdateOrderItemStep)
+	router.POST("/api/v1/orders/:id/items/:item_id/step", orders.HandleUpdateOrderItemStep)
+
+	// Production Daily Plan & Stage Assignment routes
+	productionAdminAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleOwner, "super_admin")
+	productionGeneralAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleOwner, auth.RoleProduction, "super_admin", "staff")
+
+	router.GET("/api/v1/production/daily-plan", productionGeneralAuth, production.HandleGetDailyPlan)
+	router.POST("/api/v1/production/daily-plan/assignments", productionAdminAuth, production.HandleCreateAssignment)
+	router.PUT("/api/v1/production/daily-plan/assignments/:id", productionAdminAuth, production.HandleUpdateAssignment)
+	router.DELETE("/api/v1/production/daily-plan/assignments/:id", productionAdminAuth, production.HandleDeleteAssignment)
+	router.PATCH("/api/v1/production/daily-plan/assignments/:id/progress", productionGeneralAuth, production.HandleUpdateAssignmentProgress)
+	router.POST("/api/v1/production/daily-plan/assignments/:id/progress", productionGeneralAuth, production.HandleUpdateAssignmentProgress)
+	router.GET("/api/v1/production/daily-plan/ready-queue", productionAdminAuth, production.HandleGetReadyOrdersQueue)
+	router.GET("/api/v1/production/daily-plan/staff", productionAdminAuth, production.HandleGetAssignableStaff)
+
 	router.GET("/api/v1/orders/track", orders.HandleTrackOrderQuery)
 	router.GET("/api/orders/track", orders.HandleTrackOrderQuery)
 	router.GET("/api/v1/orders/track/:order_no", orders.HandleGetOrderByOrderNo)
@@ -288,6 +308,7 @@ func main() {
 	// Machine Wear Parts routes (Asset maintenance & consumable wear parts)
 	router.GET("/api/v1/equipment/:id/wear-parts", settings.HandleGetMachineWearParts)
 	router.POST("/api/v1/equipment/:id/wear-parts", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleCreateMachineWearPart)
+	router.PUT("/api/v1/equipment/:id/wear-parts/:part_id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleUpdateMachineWearPart)
 	router.DELETE("/api/v1/equipment/:id/wear-parts/:part_id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleDeleteMachineWearPart)
 	router.POST("/api/v1/equipment/:id/install-part", settings.HandleInstallMachineWearPart)
 	router.GET("/api/v1/inventory/spare-parts", settings.HandleGetSparePartsInventory)

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -113,12 +115,88 @@ type InboundAssetRequest struct {
 	Components             []interface{}          `json:"components"`
 }
 
+// IsAssetCategory checks whether a category string belongs to machinery or equipment assets
+func IsAssetCategory(cat string) bool {
+	c := strings.ToUpper(strings.TrimSpace(cat))
+	return c == "PRINTER" || c == "MACHINERY" || c == "EQUIPMENT" || c == "CUTTER" || c == "BINDER" || c == "LAMINATOR" || c == "PRESS" || c == "GUILLOTINE" || c == "PLOTTER"
+}
+
+func isAssetCategory(cat string) bool {
+	return IsAssetCategory(cat)
+}
+
 // In-memory store fallback with thread safety
 var (
 	inventoryStore  = make(map[string]InventoryItem)
 	equipmentStore  = make(map[string]EquipmentItem)
 	assetStoreMutex sync.RWMutex
 )
+
+// Legacy alias map for equipment: maps old identifiers to canonical IDs
+var equipmentAliasMap = map[string]string{
+	"MAC-5707": "PRN-9614",
+	"MAC-6821": "PRN-6317",
+}
+
+// ResolveEquipmentAlias returns the canonical equipment ID for a given alias or returns the ID as is
+func ResolveEquipmentAlias(id string) string {
+	trimmed := strings.TrimSpace(id)
+	if canonical, ok := equipmentAliasMap[trimmed]; ok {
+		return canonical
+	}
+	return trimmed
+}
+
+// IsLegacyEquipmentAlias reports whether an ID is a known legacy alias
+func IsLegacyEquipmentAlias(id string) bool {
+	trimmed := strings.TrimSpace(id)
+	_, ok := equipmentAliasMap[trimmed]
+	return ok
+}
+
+// NormalizePrinterCategory standardizes printer category strings into valid printer_category_enum values
+// ("Inkjet", "Laser", "Thermal", "Dot Matrix", "MFP", "Plotter").
+// It enforces authoritative correctness so that authentic inkjet machines (e.g. PRN-9614 Epson L15150, PRN-6317 Brother)
+// and items with inkjet inks/specs are preserved as "Inkjet" and never mistakenly persisted as "Laser".
+func NormalizePrinterCategory(rawCat string, brand string, model string, specs map[string]interface{}) string {
+	lowCat := strings.ToLower(strings.TrimSpace(rawCat))
+	lowBrand := strings.ToLower(strings.TrimSpace(brand))
+	lowModel := strings.ToLower(strings.TrimSpace(model))
+
+	// Authoritative check for known inkjet models / hardware lines
+	if strings.Contains(lowModel, "l15150") || strings.Contains(lowModel, "mfc-j") ||
+		strings.Contains(lowModel, "ecotank") || (strings.Contains(lowBrand, "epson") && strings.Contains(lowModel, "l15")) {
+		return "Inkjet"
+	}
+
+	// Check if specs contain inkjet inks (e.g. EPSON-008, LC-462)
+	if specs != nil {
+		if inkCode, ok := specs["inkCode"].(string); ok && (strings.Contains(strings.ToUpper(inkCode), "EPSON-008") || strings.Contains(strings.ToUpper(inkCode), "LC-462")) {
+			return "Inkjet"
+		}
+	}
+
+	if strings.Contains(lowCat, "inkjet") {
+		return "Inkjet"
+	}
+	if strings.Contains(lowCat, "laser") {
+		return "Laser"
+	}
+	if strings.Contains(lowCat, "thermal") {
+		return "Thermal"
+	}
+	if strings.Contains(lowCat, "dot matrix") || strings.Contains(lowCat, "dotmatrix") {
+		return "Dot Matrix"
+	}
+	if strings.Contains(lowCat, "plotter") {
+		return "Plotter"
+	}
+	if strings.Contains(lowCat, "mfp") {
+		return "MFP"
+	}
+
+	return "Inkjet"
+}
 
 func init() {
 	seedEquipmentInStore()
@@ -127,27 +205,27 @@ func init() {
 
 func seedEquipmentInStore() {
 	now := time.Now().Format(time.RFC3339)
-	equipmentStore["MAC-5707"] = EquipmentItem{
-		ID:                     "MAC-5707",
-		Name:                   "Epson EcoTank L15150",
-		SerialNumber:           "SN-EPS-15150-01",
+	prn9614 := EquipmentItem{
+		ID:                     "PRN-9614",
+		Name:                   "Epson L15150",
+		SerialNumber:           "SN-PRN-9614",
 		Brand:                  "Epson",
-		Model:                  "EcoTank L15150",
+		Model:                  "L15150",
 		Category:               "Printer",
-		PrinterCategory:        "Inkjet Printer",
+		PrinterCategory:        "Inkjet",
 		ColorSchemeType:        "CMYK",
 		TotalColorSlots:        4,
-		ExpectedLifeA4Pages:    300000,
-		MaintenanceRatePercent: 0,
-		Price:                  18500057,
-		Vendor:                 "Lao IT Distribution",
+		ExpectedLifeA4Pages:    200000,
+		MaintenanceRatePercent: 20,
+		Price:                  18000000,
+		Vendor:                 "Supplier",
 		WarrantyExpirationYear: 2028,
-		Location:               "Main Press Floor (ຊັ້ນ 1)",
+		Location:               "Main Dept",
 		Status:                 "In Use",
-		ColorInkCost:           56.09,
-		BwInkCost:              8.59,
-		LinkedInkCostPerPage:   56.09,
-		InkCostPerPage:         56.09,
+		ColorInkCost:           60.17,
+		BwInkCost:              12.67,
+		LinkedInkCostPerPage:   60.17,
+		InkCostPerPage:         60.17,
 		UpdatedAt:              now,
 		Components: []interface{}{
 			map[string]interface{}{"name": "Pickup Roller", "nameLo": "ລູກຢາງດຶງເຈ້ຍ", "usage": 12, "threshold": 90, "cost": 600000, "lifeVal": 50000, "unitLabel": "ໜ້າ"},
@@ -165,14 +243,14 @@ func seedEquipmentInStore() {
 		},
 		TechnicalSpecs: map[string]interface{}{
 			"brand":                "Epson",
-			"model":                "EcoTank L15150",
+			"model":                "L15150",
 			"category":             "Printer",
-			"printerCategory":      "Inkjet Printer",
+			"printerCategory":      "Inkjet",
 			"colorSchemeType":      "CMYK",
 			"totalColorSlots":      4,
-			"purchaseCost":         18500057,
-			"price":                18500057,
-			"expectedLifeA4Pages":  300000,
+			"purchaseCost":         18000000,
+			"price":                18000000,
+			"expectedLifeA4Pages":  200000,
 			"feedType":             "Sheet-fed",
 			"resolution":           "4800 x 2400 dpi",
 			"maxPrintWidthMm":      329,
@@ -181,82 +259,40 @@ func seedEquipmentInStore() {
 			"bwInkCost":            12.67,
 			"linkedInkCostPerPage": 60.17,
 			"inkCostPerPage":       60.17,
-			"wearPickupRollerCost": 600000,
-			"wearPickupRollerLife": 50000,
-			"wearMaintBoxCost":     700000,
-			"wearMaintBoxLife":     50000,
-			"wearCarriageBeltCost": 600000,
-			"wearCarriageBeltLife": 50000,
-			"wearPrintheadCost":    4000000,
-			"wearPrintheadLife":    100000,
 		},
 	}
+	equipmentStore["PRN-9614"] = prn9614
 
-	equipmentStore["MAC-6821"] = EquipmentItem{
-		ID:                     "MAC-6821",
-		Name:                   "QZYK 920 Programmed Paper Cutter",
-		SerialNumber:           "SN-QZYK-920-02",
-		Brand:                  "QZYK",
-		Model:                  "920 Hydraulic Program-Control",
-		Category:               "Cutter",
-		PrinterCategory:        "",
-		ColorSchemeType:        "",
-		TotalColorSlots:        0,
-		ExpectedLifeA4Pages:    500000,
-		MaintenanceRatePercent: 0,
-		Price:                  45000000,
-		Vendor:                 "Industrial Print Tech Vientiane",
-		WarrantyExpirationYear: 2030,
-		Location:               "Post-Press Finishing Floor",
+	prn6317 := EquipmentItem{
+		ID:                     "PRN-6317",
+		Name:                   "Brother MFC-J2740DW",
+		SerialNumber:           "SN-PRN-6317",
+		Brand:                  "Brother",
+		Model:                  "MFC-J2740DW",
+		Category:               "Printer",
+		PrinterCategory:        "Inkjet",
+		ColorSchemeType:        "CMYK",
+		TotalColorSlots:        4,
+		ExpectedLifeA4Pages:    150000,
+		MaintenanceRatePercent: 20,
+		Price:                  7000000,
+		Vendor:                 "Supplier",
+		WarrantyExpirationYear: 2028,
+		Location:               "Main Dept",
 		Status:                 "In Use",
 		UpdatedAt:              now,
-		Components: []interface{}{
-			map[string]interface{}{"name": "HSS Guillotine Blade", "nameLo": "ໃບມີດຕັດເຫຼັກກ້າ HSS", "usage": 35, "threshold": 90, "cost": 2500000, "lifeVal": 30000, "unitLabel": "ຮອບຕັດ"},
-			map[string]interface{}{"name": "Cutting Stick Plastic", "nameLo": "ເຂຽງຮອງຕັດພລາສຕິກ", "usage": 20, "threshold": 90, "cost": 150000, "lifeVal": 10000, "unitLabel": "ຮອບຕັດ"},
-		},
 		TechnicalSpecs: map[string]interface{}{
-			"brand":            "QZYK",
-			"model":            "920",
-			"category":         "Cutter",
-			"postPressSubtype": "guillotine",
-			"purchaseCost":     45000000,
-			"price":            45000000,
-			"maxCutWidthMm":    920,
+			"brand":           "Brother",
+			"model":           "MFC-J2740DW",
+			"category":        "Printer",
+			"printerCategory": "Inkjet",
+			"colorSchemeType": "CMYK",
+			"totalColorSlots": 4,
+			"purchaseCost":    7000000,
+			"price":           7000000,
 		},
 	}
-
-	equipmentStore["MAC-4190"] = EquipmentItem{
-		ID:                     "MAC-4190",
-		Name:                   "Boway K5 Perfect Glue Binder",
-		SerialNumber:           "SN-BW-K5-01",
-		Brand:                  "Boway",
-		Model:                  "K5 Heavy Duty Auto Binder",
-		Category:               "Binder",
-		PrinterCategory:        "",
-		ColorSchemeType:        "",
-		TotalColorSlots:        0,
-		ExpectedLifeA4Pages:    100000,
-		MaintenanceRatePercent: 0,
-		Price:                  28000000,
-		Vendor:                 "Industrial Print Tech Vientiane",
-		WarrantyExpirationYear: 2029,
-		Location:               "Post-Press Finishing Floor",
-		Status:                 "In Use",
-		UpdatedAt:              now,
-		Components: []interface{}{
-			map[string]interface{}{"name": "Milling Cutter Tooth", "nameLo": "ໃບເລື່ອຍກີດສັນປຶ້ມ", "usage": 18, "threshold": 90, "cost": 1200000, "lifeVal": 25000, "unitLabel": "ຫົວ"},
-			map[string]interface{}{"name": "Glue Tank Heater Element", "nameLo": "ຂົດລວດຄວາມຮ້ອນອ່າງກາວ", "usage": 10, "threshold": 90, "cost": 850000, "lifeVal": 40000, "unitLabel": "ຫົວ"},
-		},
-		TechnicalSpecs: map[string]interface{}{
-			"brand":            "Boway",
-			"model":            "K5",
-			"category":         "Binder",
-			"postPressSubtype": "binder",
-			"purchaseCost":     28000000,
-			"price":            28000000,
-			"maxSpineWidthMm":  50,
-		},
-	}
+	equipmentStore["PRN-6317"] = prn6317
 }
 
 func seedInventoryInStore() {
@@ -267,7 +303,7 @@ func seedInventoryInStore() {
 			StockQty: 25, ConsumptionUnit: "ຕຸກ", PurchaseUnit: "ຕຸກ", PurchaseMultiplier: 1,
 			CostPerPurchaseUnit: 95000, CostPerConsumptionUnit: 95000, ReorderThreshold: 5,
 			InkCode: "INK-9826", ColorName: "Black", ColorGroup: "Black", Volume: 127,
-			InkBaseType: "Pigment", IsCompatible: false, AssignedPrinterID: "MAC-5707", UpdatedAt: now,
+			InkBaseType: "Pigment", IsCompatible: false, AssignedPrinterID: "PRN-9614", UpdatedAt: now,
 			Specs: map[string]interface{}{"sku": "INK-9826", "brand": "Epson", "model": "008", "colorGroup": "Black", "volume": 127, "volume_ml": 127, "expectedYield": 7500, "standard_page_yield": 7500, "inkBaseType": "Pigment"},
 		},
 		{
@@ -275,7 +311,7 @@ func seedInventoryInStore() {
 			StockQty: 20, ConsumptionUnit: "ຕຸກ", PurchaseUnit: "ຕຸກ", PurchaseMultiplier: 1,
 			CostPerPurchaseUnit: 95000, CostPerConsumptionUnit: 95000, ReorderThreshold: 5,
 			InkCode: "INK-8713", ColorName: "Cyan", ColorGroup: "Cyan", Volume: 70,
-			InkBaseType: "Pigment", IsCompatible: false, AssignedPrinterID: "MAC-5707", UpdatedAt: now,
+			InkBaseType: "Pigment", IsCompatible: false, AssignedPrinterID: "PRN-9614", UpdatedAt: now,
 			Specs: map[string]interface{}{"sku": "INK-8713", "brand": "Epson", "model": "008", "colorGroup": "Cyan", "volume": 70, "volume_ml": 70, "expectedYield": 6000, "standard_page_yield": 6000, "inkBaseType": "Pigment"},
 		},
 		{
@@ -283,7 +319,7 @@ func seedInventoryInStore() {
 			StockQty: 20, ConsumptionUnit: "ຕຸກ", PurchaseUnit: "ຕຸກ", PurchaseMultiplier: 1,
 			CostPerPurchaseUnit: 95000, CostPerConsumptionUnit: 95000, ReorderThreshold: 5,
 			InkCode: "INK-0365", ColorName: "Magenta", ColorGroup: "Magenta", Volume: 70,
-			InkBaseType: "Pigment", IsCompatible: false, AssignedPrinterID: "MAC-5707", UpdatedAt: now,
+			InkBaseType: "Pigment", IsCompatible: false, AssignedPrinterID: "PRN-9614", UpdatedAt: now,
 			Specs: map[string]interface{}{"sku": "INK-0365", "brand": "Epson", "model": "008", "colorGroup": "Magenta", "volume": 70, "volume_ml": 70, "expectedYield": 6000, "standard_page_yield": 6000, "inkBaseType": "Pigment"},
 		},
 		{
@@ -291,7 +327,7 @@ func seedInventoryInStore() {
 			StockQty: 20, ConsumptionUnit: "ຕຸກ", PurchaseUnit: "ຕຸກ", PurchaseMultiplier: 1,
 			CostPerPurchaseUnit: 95000, CostPerConsumptionUnit: 95000, ReorderThreshold: 5,
 			InkCode: "INK-6588", ColorName: "Yellow", ColorGroup: "Yellow", Volume: 70,
-			InkBaseType: "Pigment", IsCompatible: false, AssignedPrinterID: "MAC-5707", UpdatedAt: now,
+			InkBaseType: "Pigment", IsCompatible: false, AssignedPrinterID: "PRN-9614", UpdatedAt: now,
 			Specs: map[string]interface{}{"sku": "INK-6588", "brand": "Epson", "model": "008", "colorGroup": "Yellow", "volume": 70, "volume_ml": 70, "expectedYield": 6000, "standard_page_yield": 6000, "inkBaseType": "Pigment"},
 		},
 	}
@@ -300,28 +336,59 @@ func seedInventoryInStore() {
 	}
 }
 
+// getCanonicalEquipmentListFromStore returns unique canonical equipment without legacy aliases
+func getCanonicalEquipmentListFromStore() []EquipmentItem {
+	seen := make(map[string]bool)
+	items := make([]EquipmentItem, 0, len(equipmentStore))
+
+	keys := make([]string, 0, len(equipmentStore))
+	for k := range equipmentStore {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		if IsLegacyEquipmentAlias(k) {
+			continue
+		}
+		item := equipmentStore[k]
+		if IsLegacyEquipmentAlias(item.ID) {
+			continue
+		}
+		canonicalID := ResolveEquipmentAlias(item.ID)
+		if seen[canonicalID] {
+			continue
+		}
+		seen[canonicalID] = true
+		items = append(items, item)
+	}
+	return items
+}
+
 // HandleGetEquipment returns list of equipment / printers (queries DB first)
 func HandleGetEquipment(c *gin.Context) {
 	if db.DB != nil {
 		items, err := getEquipmentFromDB()
-		if err == nil {
-			if items == nil {
-				items = []EquipmentItem{}
-			}
-			c.JSON(http.StatusOK, gin.H{"status": "success", "data": items})
+		if err != nil {
+			log.Printf("[EQUIPMENT DB ERROR] Failed to fetch equipment from DB: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"status":  "error",
+				"message": fmt.Sprintf("Failed to query equipment from database: %v", err),
+			})
 			return
 		}
+		if items == nil {
+			items = []EquipmentItem{}
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "success", "data": items, "source": "database"})
+		return
 	}
 
 	assetStoreMutex.RLock()
 	defer assetStoreMutex.RUnlock()
 
-	items := make([]EquipmentItem, 0, len(equipmentStore))
-	for _, item := range equipmentStore {
-		items = append(items, item)
-	}
-
-	c.JSON(http.StatusOK, gin.H{"status": "success", "data": items})
+	items := getCanonicalEquipmentListFromStore()
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": items, "source": "in_memory"})
 }
 
 // HandleGetAssetsV1 returns list of assets via /api/v1/assets
@@ -329,11 +396,12 @@ func HandleGetAssetsV1(c *gin.Context) {
 	HandleGetEquipment(c)
 }
 
-// HandleGetAssetByIDV1 queries a single asset by ID
+// HandleGetAssetByIDV1 queries a single asset by ID, supporting legacy aliases
 func HandleGetAssetByIDV1(c *gin.Context) {
-	id := c.Param("id")
+	rawID := c.Param("id")
+	canonicalID := ResolveEquipmentAlias(rawID)
 	if db.DB != nil {
-		item, err := getEquipmentByIDFromDB(id)
+		item, err := getEquipmentByIDFromDB(canonicalID)
 		if err == nil {
 			c.JSON(http.StatusOK, gin.H{"status": "success", "data": item})
 			return
@@ -341,7 +409,10 @@ func HandleGetAssetByIDV1(c *gin.Context) {
 	}
 
 	assetStoreMutex.RLock()
-	item, exists := equipmentStore[id]
+	item, exists := equipmentStore[canonicalID]
+	if !exists {
+		item, exists = equipmentStore[rawID]
+	}
 	assetStoreMutex.RUnlock()
 
 	if !exists {
@@ -400,8 +471,15 @@ func HandleInboundAssetV1(c *gin.Context) {
 	}
 
 	// 1. Try DB persistence based on category
+	if isAssetCategory(req.Category) {
+		req.Category = "Printer"
+		req.PrinterCategory = NormalizePrinterCategory(req.PrinterCategory, req.Brand, req.Model, req.TechnicalSpecs)
+		req.TechnicalSpecs["category"] = "Printer"
+		req.TechnicalSpecs["printerCategory"] = req.PrinterCategory
+	}
+
 	if db.DB != nil {
-		if req.Category == "PRINTER" || req.Category == "Printer" || req.Category == "MACHINERY" || req.Category == "Machinery" {
+		if isAssetCategory(req.Category) {
 			err := saveInboundToDB(assetID, req)
 			if err != nil {
 				log.Printf("[DB ERROR] Failed to save inbound asset to DB: %v", err)
@@ -487,22 +565,26 @@ func HandleInboundAssetV1(c *gin.Context) {
 	}
 
 	assetStoreMutex.Lock()
-	equipmentStore[assetID] = equip
-	inventoryStore[assetID] = InventoryItem{
-		ID:                     assetID,
-		Name:                   req.Name,
-		Category:               req.Category,
-		StockQty:               int(req.Quantity),
-		ConsumptionUnit:        req.Unit,
-		PurchaseUnit:           req.Unit,
-		PurchaseMultiplier:     1,
-		CostPerPurchaseUnit:    req.Price,
-		CostPerConsumptionUnit: req.Price,
-		ReorderThreshold:       10,
-		InkCode:                req.SKU,
-		TechnicalSpecs:         req.TechnicalSpecs,
-		Specs:                  req.TechnicalSpecs,
-		UpdatedAt:              time.Now().Format(time.RFC3339),
+	if isAssetCategory(req.Category) {
+		equipmentStore[assetID] = equip
+		delete(inventoryStore, assetID)
+	} else {
+		inventoryStore[assetID] = InventoryItem{
+			ID:                     assetID,
+			Name:                   req.Name,
+			Category:               req.Category,
+			StockQty:               int(req.Quantity),
+			ConsumptionUnit:        req.Unit,
+			PurchaseUnit:           req.Unit,
+			PurchaseMultiplier:     1,
+			CostPerPurchaseUnit:    req.Price,
+			CostPerConsumptionUnit: req.Price,
+			ReorderThreshold:       10,
+			InkCode:                req.SKU,
+			TechnicalSpecs:         req.TechnicalSpecs,
+			Specs:                  req.TechnicalSpecs,
+			UpdatedAt:              time.Now().Format(time.RFC3339),
+		}
 	}
 	assetStoreMutex.Unlock()
 
@@ -515,7 +597,8 @@ func HandleInboundAssetV1(c *gin.Context) {
 
 // HandleUpdateAssetV1 updates master technical specs & components in PostgreSQL
 func HandleUpdateAssetV1(c *gin.Context) {
-	id := c.Param("id")
+	rawID := c.Param("id")
+	id := ResolveEquipmentAlias(rawID)
 
 	var item EquipmentItem
 	if err := c.ShouldBindJSON(&item); err != nil {
@@ -604,6 +687,9 @@ func HandleUpdateAssetV1(c *gin.Context) {
 	}
 
 	equipmentStore[id] = item
+	if rawID != id {
+		delete(equipmentStore, rawID)
+	}
 	assetStoreMutex.Unlock()
 
 	if db.DB != nil {
@@ -742,6 +828,7 @@ func getEquipmentFromDB() ([]EquipmentItem, error) {
 	defer rows.Close()
 
 	var items []EquipmentItem
+	seen := make(map[string]bool)
 	for rows.Next() {
 		var item EquipmentItem
 		var pCat, cScheme, pStatus string
@@ -761,8 +848,9 @@ func getEquipmentFromDB() ([]EquipmentItem, error) {
 			continue
 		}
 
-		item.PrinterCategory = pCat
-		item.Category = pCat
+		normCat := NormalizePrinterCategory(pCat, item.Brand, item.Model, nil)
+		item.PrinterCategory = normCat
+		item.Category = "Printer"
 		item.ColorSchemeType = cScheme
 		item.Status = pStatus
 		item.Name = item.Brand + " " + item.Model
@@ -771,6 +859,13 @@ func getEquipmentFromDB() ([]EquipmentItem, error) {
 		if len(techJSON) > 0 {
 			json.Unmarshal(techJSON, &item.TechnicalSpecs)
 		}
+		if item.TechnicalSpecs == nil {
+			item.TechnicalSpecs = make(map[string]interface{})
+		}
+		// Specs must conform to canonical Printer and normalized printerCategory
+		item.TechnicalSpecs["category"] = "Printer"
+		item.TechnicalSpecs["printerCategory"] = item.PrinterCategory
+
 		if len(oemJSON) > 0 {
 			json.Unmarshal(oemJSON, &item.OemBaselineSpecs)
 		}
@@ -778,6 +873,14 @@ func getEquipmentFromDB() ([]EquipmentItem, error) {
 			json.Unmarshal(compJSON, &item.Components)
 		}
 
+		if IsLegacyEquipmentAlias(item.ID) {
+			continue
+		}
+		canonicalID := ResolveEquipmentAlias(item.ID)
+		if seen[canonicalID] {
+			continue
+		}
+		seen[canonicalID] = true
 		items = append(items, item)
 	}
 
@@ -785,10 +888,117 @@ func getEquipmentFromDB() ([]EquipmentItem, error) {
 		return nil, err
 	}
 
+	_ = enrichEquipmentWithInkLinksFromDB(items)
+
 	return items, nil
 }
 
+func enrichEquipmentWithInkLinksFromDB(items []EquipmentItem) error {
+	if db.DB == nil || len(items) == 0 {
+		return nil
+	}
+
+	query := `
+		SELECT pcl.asset_id, pcl.slot_position, pcl.ink_code, pcl.iso_page_yield_a4,
+		       COALESCE(pcl.oem_standard_volume_ml, 0),
+		       COALESCE(imc.color_name, pcl.ink_code),
+		       COALESCE(imc.color_group, ''),
+		       COALESCE(imc.unit_price, 0),
+		       COALESCE(imc.ink_base_type::text, 'Pigment')
+		FROM printer_color_link pcl
+		LEFT JOIN ink_master_catalog imc ON pcl.ink_code = imc.ink_code
+		ORDER BY pcl.asset_id, pcl.slot_position
+	`
+	rows, err := db.DB.Query(query)
+	if err != nil {
+		log.Printf("[DB INK LINKS QUERY ERROR] %v", err)
+		return err
+	}
+	defer rows.Close()
+
+	type inkLinkRow struct {
+		assetID      string
+		slotPosition string
+		inkCode      string
+		yield        int
+		volumeMl     float64
+		colorName    string
+		colorGroup   string
+		unitPrice    float64
+		inkBaseType  string
+	}
+
+	linksByAsset := make(map[string][]inkLinkRow)
+	for rows.Next() {
+		var r inkLinkRow
+		if err := rows.Scan(&r.assetID, &r.slotPosition, &r.inkCode, &r.yield, &r.volumeMl, &r.colorName, &r.colorGroup, &r.unitPrice, &r.inkBaseType); err == nil {
+			linksByAsset[r.assetID] = append(linksByAsset[r.assetID], r)
+		}
+	}
+
+	for i := range items {
+		assetID := items[i].ID
+		linkRows, ok := linksByAsset[assetID]
+		if !ok {
+			canonical := ResolveEquipmentAlias(assetID)
+			linkRows, ok = linksByAsset[canonical]
+		}
+		if !ok {
+			continue
+		}
+
+		var bwCost, colorCost float64
+		var linkObjs []interface{}
+
+		for _, r := range linkRows {
+			costPerPage := 0.0
+			if r.yield > 0 {
+				costPerPage = r.unitPrice / float64(r.yield)
+			}
+			isBlack := strings.EqualFold(r.colorGroup, "Black") || strings.Contains(strings.ToUpper(r.slotPosition), "(K")
+			if isBlack {
+				bwCost = costPerPage
+			} else {
+				colorCost += costPerPage
+			}
+
+			linkObjs = append(linkObjs, map[string]interface{}{
+				"assetId":             r.assetID,
+				"slotPosition":        r.slotPosition,
+				"inkCode":             r.inkCode,
+				"colorGroup":          r.colorGroup,
+				"colorName":           r.colorName,
+				"volumeMl":            r.volumeMl,
+				"isoPageYieldA4":      r.yield,
+				"unitPrice":           r.unitPrice,
+				"costPerPage":         costPerPage,
+				"inkBaseType":         r.inkBaseType,
+				"baseConsumptionRate": 0.0,
+			})
+		}
+
+		totalInkCost := bwCost + colorCost
+		items[i].PrinterColorLinks = linkObjs
+		items[i].BwInkCost = math.Round(bwCost*100) / 100
+		items[i].ColorInkCost = math.Round(colorCost*100) / 100
+		items[i].LinkedInkCostPerPage = math.Round(totalInkCost*100) / 100
+		items[i].InkCostPerPage = items[i].LinkedInkCostPerPage
+
+		if items[i].TechnicalSpecs == nil {
+			items[i].TechnicalSpecs = make(map[string]interface{})
+		}
+		items[i].TechnicalSpecs["bwInkCost"] = items[i].BwInkCost
+		items[i].TechnicalSpecs["colorInkCost"] = items[i].ColorInkCost
+		items[i].TechnicalSpecs["linkedInkCostPerPage"] = items[i].LinkedInkCostPerPage
+		items[i].TechnicalSpecs["inkCostPerPage"] = items[i].InkCostPerPage
+		items[i].TechnicalSpecs["printerColorLinks"] = linkObjs
+	}
+
+	return nil
+}
+
 func getEquipmentByIDFromDB(id string) (EquipmentItem, error) {
+	canonicalID := ResolveEquipmentAlias(id)
 	var item EquipmentItem
 	query := `
 		SELECT asset_id, serial_number, brand, model, category, color_scheme_type,
@@ -797,13 +1007,14 @@ func getEquipmentByIDFromDB(id string) (EquipmentItem, error) {
 		       technical_specs, oem_baseline_specs, components,
 		       COALESCE(product_image_url, ''), COALESCE(receipt_invoice_url, ''), updated_at
 		FROM printers
-		WHERE asset_id = $1
+		WHERE asset_id = $1 OR asset_id = $2
+		LIMIT 1
 	`
 	var pCat, cScheme, pStatus string
 	var techJSON, oemJSON, compJSON []byte
 	var updatedAt time.Time
 
-	err := db.DB.QueryRow(query, id).Scan(
+	err := db.DB.QueryRow(query, canonicalID, id).Scan(
 		&item.ID, &item.SerialNumber, &item.Brand, &item.Model,
 		&pCat, &cScheme, &item.TotalColorSlots, &item.ExpectedLifeA4Pages,
 		&item.MaintenanceRatePercent, &item.Price, &item.Vendor,
@@ -816,8 +1027,9 @@ func getEquipmentByIDFromDB(id string) (EquipmentItem, error) {
 		return item, err
 	}
 
-	item.PrinterCategory = pCat
-	item.Category = pCat
+	normCat := NormalizePrinterCategory(pCat, item.Brand, item.Model, nil)
+	item.PrinterCategory = normCat
+	item.Category = "Printer"
 	item.ColorSchemeType = cScheme
 	item.Status = pStatus
 	item.Name = item.Brand + " " + item.Model
@@ -826,6 +1038,12 @@ func getEquipmentByIDFromDB(id string) (EquipmentItem, error) {
 	if len(techJSON) > 0 {
 		json.Unmarshal(techJSON, &item.TechnicalSpecs)
 	}
+	if item.TechnicalSpecs == nil {
+		item.TechnicalSpecs = make(map[string]interface{})
+	}
+	item.TechnicalSpecs["category"] = "Printer"
+	item.TechnicalSpecs["printerCategory"] = item.PrinterCategory
+
 	if len(oemJSON) > 0 {
 		json.Unmarshal(oemJSON, &item.OemBaselineSpecs)
 	}
@@ -833,20 +1051,28 @@ func getEquipmentByIDFromDB(id string) (EquipmentItem, error) {
 		json.Unmarshal(compJSON, &item.Components)
 	}
 
+	singleSlice := []EquipmentItem{item}
+	_ = enrichEquipmentWithInkLinksFromDB(singleSlice)
+	item = singleSlice[0]
+
 	return item, nil
 }
 
-// GetEquipmentByID retrieves an equipment item by ID from DB or memory fallback
+// GetEquipmentByID retrieves an equipment item by ID from DB or memory fallback, resolving legacy aliases
 func GetEquipmentByID(id string) (EquipmentItem, error) {
+	canonicalID := ResolveEquipmentAlias(id)
 	if db.DB != nil {
-		item, err := getEquipmentByIDFromDB(id)
+		item, err := getEquipmentByIDFromDB(canonicalID)
 		if err == nil {
 			return item, nil
 		}
 	}
 	assetStoreMutex.RLock()
 	defer assetStoreMutex.RUnlock()
-	item, exists := equipmentStore[id]
+	item, exists := equipmentStore[canonicalID]
+	if !exists {
+		item, exists = equipmentStore[id]
+	}
 	if exists {
 		return item, nil
 	}
@@ -859,6 +1085,8 @@ func getInventoryItemsFromDB() ([]InventoryItem, error) {
 		       purchase_multiplier, cost_per_purchase_unit, cost_per_consumption_unit,
 		       reorder_threshold, technical_specs, updated_at
 		FROM materials
+		WHERE category NOT IN ('PRINTER', 'MACHINERY', 'EQUIPMENT', 'CUTTER', 'BINDER', 'LAMINATOR', 'Printer', 'Machinery', 'Equipment', 'Cutter', 'Binder', 'Laminator')
+		  AND id NOT LIKE 'PRN-%' AND id NOT LIKE 'MAC-%'
 		ORDER BY created_at DESC
 	`
 
@@ -989,6 +1217,16 @@ func saveInventoryItemToDB(item InventoryItem) error {
 }
 
 func saveInboundToDB(assetID string, req InboundAssetRequest) error {
+	if req.TechnicalSpecs == nil {
+		req.TechnicalSpecs = make(map[string]interface{})
+	}
+	req.Category = "Printer"
+	req.TechnicalSpecs["category"] = "Printer"
+
+	pCat := NormalizePrinterCategory(req.PrinterCategory, req.Brand, req.Model, req.TechnicalSpecs)
+	req.PrinterCategory = pCat
+	req.TechnicalSpecs["printerCategory"] = pCat
+
 	techBytes, _ := json.Marshal(req.TechnicalSpecs)
 	oemBytes, _ := json.Marshal(req.OemBaselineSpecs)
 	compBytes, _ := json.Marshal(req.Components)
@@ -1054,7 +1292,7 @@ func saveInboundToDB(assetID string, req InboundAssetRequest) error {
 	if model == "" {
 		model = req.Name
 	}
-	pCat := req.PrinterCategory
+	pCat = NormalizePrinterCategory(pCat, brand, model, req.TechnicalSpecs)
 	if pCat == "" {
 		pCat = "Inkjet"
 	}
@@ -1080,6 +1318,14 @@ func saveInboundToDB(assetID string, req InboundAssetRequest) error {
 }
 
 func updateEquipmentInDB(id string, item EquipmentItem) error {
+	pCat := NormalizePrinterCategory(item.PrinterCategory, item.Brand, item.Model, item.TechnicalSpecs)
+	item.PrinterCategory = pCat
+	if item.TechnicalSpecs == nil {
+		item.TechnicalSpecs = make(map[string]interface{})
+	}
+	item.TechnicalSpecs["category"] = "Printer"
+	item.TechnicalSpecs["printerCategory"] = pCat
+
 	techBytes, _ := json.Marshal(item.TechnicalSpecs)
 	oemBytes, _ := json.Marshal(item.OemBaselineSpecs)
 	compBytes, _ := json.Marshal(item.Components)
@@ -1118,7 +1364,7 @@ func updateEquipmentInDB(id string, item EquipmentItem) error {
 			updated_at = NOW()
 	`
 
-	pCat := item.PrinterCategory
+	pCat = NormalizePrinterCategory(item.PrinterCategory, item.Brand, item.Model, item.TechnicalSpecs)
 	if pCat == "" {
 		pCat = "Inkjet"
 	}
@@ -1231,10 +1477,11 @@ func HandleDeleteInventorySKU(c *gin.Context) {
 
 // HandleDeleteEquipment deletes equipment / printer asset
 func HandleDeleteEquipment(c *gin.Context) {
-	id := c.Param("id")
+	rawID := c.Param("id")
+	id := ResolveEquipmentAlias(rawID)
 
 	if db.DB != nil {
-		_, err := db.DB.Exec(`DELETE FROM printers WHERE asset_id = $1 OR serial_number = $1`, id)
+		_, err := db.DB.Exec(`DELETE FROM printers WHERE asset_id = $1 OR serial_number = $1 OR asset_id = $2`, id, rawID)
 		if err != nil {
 			log.Printf("[DB ERROR] Failed to delete printer from DB: %v", err)
 		}
@@ -1242,6 +1489,7 @@ func HandleDeleteEquipment(c *gin.Context) {
 
 	assetStoreMutex.Lock()
 	delete(equipmentStore, id)
+	delete(equipmentStore, rawID)
 	assetStoreMutex.Unlock()
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Equipment deleted"})
@@ -1350,3 +1598,17 @@ func HandleDischargeInventoryStock(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Stock discharged cleanly with FIFO lock", "remainingStock": remaining})
 }
 
+// GetEquipmentList returns all equipment from DB or in-memory fallback
+func GetEquipmentList() ([]EquipmentItem, error) {
+	if db.DB != nil {
+		eq, err := getEquipmentFromDB()
+		if err == nil && len(eq) > 0 {
+			return eq, nil
+		}
+	}
+
+	assetStoreMutex.RLock()
+	defer assetStoreMutex.RUnlock()
+
+	return getCanonicalEquipmentListFromStore(), nil
+}

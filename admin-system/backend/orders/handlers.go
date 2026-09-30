@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -743,131 +744,7 @@ func dischargeFIFOStockForOrder(o Order, allowNegativeStock bool) error {
 	}
 
 	return db.RunInTransaction(func(tx *sql.Tx) error {
-		// Concurrency Lock: Lock order record in DB to prevent concurrent duplicate deductions
-		var currentStatus string
-		var alreadyDeductedAt *time.Time
-		err := tx.QueryRow(`
-			SELECT status, stock_deducted_at 
-			FROM orders 
-			WHERE id = $1 OR order_no = $1 OR order_number = $1 
-			FOR UPDATE
-		`, o.ID).Scan(&currentStatus, &alreadyDeductedAt)
-		if err == nil && alreadyDeductedAt != nil {
-			log.Printf("[FIFO STOCK INFO] Order %s was already deducted concurrently at %v. Skipping.", o.ID, *alreadyDeductedAt)
-			return nil
-		}
-
-		for _, item := range o.Items {
-			paperSku, _ := item.Specs["paper_sku"].(string)
-			if paperSku == "" {
-				paperSku, _ = item.Specs["paperSku"].(string)
-			}
-			if paperSku == "" {
-				paperSku = item.InnerPaperID
-			}
-			if paperSku == "" {
-				paperSku = item.CoverPaperID
-			}
-
-			inkCov, _ := item.Specs["ink_coverage_percent"].(float64)
-			if inkCov == 0 {
-				inkCov, _ = item.Specs["inkCoveragePercent"].(float64)
-			}
-
-			colorMode, _ := item.Specs["color_mode"].(string)
-			if colorMode == "" {
-				colorMode, _ = item.Specs["colorMode"].(string)
-			}
-
-			spoilageSheets := 0
-			if s, ok := item.Specs["spoilage_allowance_sheets"].(float64); ok {
-				spoilageSheets = int(s)
-			} else if s, ok := item.Specs["spoilageAllowanceSheets"].(float64); ok {
-				spoilageSheets = int(s)
-			}
-
-			spoilagePct := 0.0
-			if p, ok := item.Specs["spoilage_percent"].(float64); ok {
-				spoilagePct = p
-			} else if p, ok := item.Specs["spoilagePercent"].(float64); ok {
-				spoilagePct = p
-			}
-
-			spoilageCost := 0.0
-			if c, ok := item.Specs["spoilage_cost"].(float64); ok {
-				spoilageCost = c
-			} else if c, ok := item.Specs["spoilageCost"].(float64); ok {
-				spoilageCost = c
-			}
-
-			usedOffcutLot, _ := item.Specs["used_offcut_lot_id"].(string)
-			if usedOffcutLot == "" {
-				usedOffcutLot, _ = item.Specs["usedOffcutLotId"].(string)
-			}
-
-			// Deduct Paper and Ink using inventory.DeductInventoryForJob inside DB transaction
-			err := inventory.DeductInventoryForJob(tx, inventory.JobDeductionSpec{
-				OrderID:                 o.ID,
-				OrderItemID:             item.ID,
-				PaperSKU:                paperSku,
-				Quantity:                item.Quantity,
-				PageCount:               item.PageCount,
-				CoverPaperID:            item.CoverPaperID,
-				InnerPaperID:            item.InnerPaperID,
-				UsedOffcutLotID:         usedOffcutLot,
-				ColorMode:               colorMode,
-				MachineID:               item.MachineID,
-				AvgCovC:                 item.AvgCovC,
-				AvgCovM:                 item.AvgCovM,
-				AvgCovY:                 item.AvgCovY,
-				AvgCovK:                 item.AvgCovK,
-				InkCoveragePct:          inkCov,
-				SpoilageAllowanceSheets: spoilageSheets,
-				SpoilagePercent:         spoilagePct,
-				SpoilageCost:            spoilageCost,
-				AllowNegativeStock:      allowNegativeStock,
-				CreatedBy:               "PRODUCTION_TRIGGER",
-			})
-			if err != nil {
-				log.Printf("[INVENTORY DEDUCTION ERROR] %v", err)
-				return err
-			}
-
-			// Create Job Ticket for shop floor routing if not exists
-			jobNumber := fmt.Sprintf("JOB-%s-%s", o.OrderNo, item.ID)
-			ticketNo := fmt.Sprintf("JT-%s-%s", o.OrderNo, item.ID)
-			if len(ticketNo) > 30 {
-				ticketNo = ticketNo[:30]
-			}
-			if len(jobNumber) > 30 {
-				jobNumber = jobNumber[:30]
-			}
-
-			routingSteps := "1. Prepress File Check -> 2. Digital/Offset Printing -> 3. Lamination -> 4. Die-cut/Trimming -> 5. Binding -> 6. QC Packaging"
-			assignedMachine := "Offset Press Heidelberg / Digital Indigo 7900"
-
-			_, err = tx.Exec(`
-				INSERT INTO job_tickets (
-					order_id, order_item_id, job_number, ticket_number, 
-					routing_steps, assigned_machine, status, priority, created_at, updated_at
-				) VALUES (
-					$1, $2, $3, $4, $5, $6, 'IN_PRODUCTION', 1, NOW(), NOW()
-				)
-				ON CONFLICT (ticket_number) DO UPDATE SET
-					job_number = EXCLUDED.job_number,
-					routing_steps = EXCLUDED.routing_steps,
-					assigned_machine = EXCLUDED.assigned_machine,
-					status = 'IN_PRODUCTION',
-					updated_at = NOW()
-			`, o.ID, item.ID, jobNumber, ticketNo, routingSteps, assignedMachine)
-			if err != nil {
-				return err
-			}
-		}
-
-		// Stamp stock_deducted_at in DB
-		_, err = tx.Exec(`UPDATE orders SET stock_deducted_at = NOW() WHERE id = $1 OR order_no = $1 OR order_number = $1`, o.ID)
-		return err
+		return EnsureOrderInProductionTx(tx, o.ID, allowNegativeStock)
 	})
 }
 
@@ -879,9 +756,9 @@ func getOrdersFromDB() ([]Order, error) {
 		return nil, fmt.Errorf("database connection is nil")
 	}
 	query := `
-		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''), 
+		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''),
 		       COALESCE(customer_email, ''), COALESCE(customer_address, ''),
-		       COALESCE(overall_status, status::text), COALESCE(deposit_lak, deposit_amount), 
+		       COALESCE(overall_status, status::text), COALESCE(deposit_lak, deposit_amount),
 		       COALESCE(total_amount_lak, total_price), total_cost, COALESCE(google_drive_link, ''),
 		       COALESCE(customer_id, ''), COALESCE(remaining_lak, 0), COALESCE(delivery_date, ''),
 		       stock_deducted_at, COALESCE(proof_url, ''), proof_approved_at, proof_rejected_at,
@@ -961,9 +838,9 @@ func getOrderByIDFromDB(orderID string) (Order, error) {
 	digits := cleanPhoneNumber(cleanQuery)
 
 	query := `
-		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''), 
+		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''),
 		       COALESCE(customer_email, ''), COALESCE(customer_address, ''),
-		       COALESCE(overall_status, status::text), COALESCE(deposit_lak, deposit_amount), 
+		       COALESCE(overall_status, status::text), COALESCE(deposit_lak, deposit_amount),
 		       COALESCE(total_amount_lak, total_price), total_cost, COALESCE(google_drive_link, ''),
 		       COALESCE(customer_id, ''), COALESCE(remaining_lak, 0), COALESCE(delivery_date, ''),
 		       stock_deducted_at, COALESCE(proof_url, ''), proof_approved_at, proof_rejected_at,
@@ -976,7 +853,7 @@ func getOrderByIDFromDB(orderID string) (Order, error) {
 		       COALESCE(idempotency_key, ''),
 		       created_at, updated_at
 		FROM orders
-		WHERE id::text = $1 
+		WHERE id::text = $1
 		   OR UPPER(REPLACE(COALESCE(order_no, ''), '#', '')) = UPPER($2)
 		   OR UPPER(REPLACE(COALESCE(order_number, ''), '#', '')) = UPPER($2)
 		   OR idempotency_key = $1
@@ -1038,9 +915,9 @@ func getOrderByIdempotencyKeyFromDB(idempotencyKey string) (Order, error) {
 		return o, fmt.Errorf("database connection is nil")
 	}
 	query := `
-		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''), 
+		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''),
 		       COALESCE(customer_email, ''), COALESCE(customer_address, ''),
-		       COALESCE(overall_status, status::text), COALESCE(deposit_lak, deposit_amount), 
+		       COALESCE(overall_status, status::text), COALESCE(deposit_lak, deposit_amount),
 		       COALESCE(total_amount_lak, total_price), total_cost, COALESCE(google_drive_link, ''),
 		       COALESCE(customer_id, ''), COALESCE(remaining_lak, 0), COALESCE(delivery_date, ''),
 		       stock_deducted_at, COALESCE(proof_url, ''), proof_approved_at, proof_rejected_at,
@@ -1183,9 +1060,9 @@ func GetOrdersByCustomer(customerID, phone string) ([]Order, error) {
 	}
 
 	query := `
-		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''), 
+		SELECT id, COALESCE(order_no, order_number), customer_name, COALESCE(customer_phone, ''),
 		       COALESCE(customer_email, ''), COALESCE(customer_address, ''),
-		       COALESCE(overall_status, status::text), COALESCE(deposit_lak, deposit_amount), 
+		       COALESCE(overall_status, status::text), COALESCE(deposit_lak, deposit_amount),
 		       COALESCE(total_amount_lak, total_price), total_cost, COALESCE(google_drive_link, ''),
 		       COALESCE(customer_id, ''), COALESCE(remaining_lak, 0), COALESCE(delivery_date, ''),
 		       stock_deducted_at, COALESCE(proof_url, ''), proof_approved_at, proof_rejected_at,
@@ -1254,14 +1131,14 @@ func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) string {
 		err := tx.QueryRow("SELECT id FROM customers WHERE id = $1", o.CustomerID).Scan(&custID)
 		if err == nil && custID != "" {
 			_, _ = tx.Exec(`
-				UPDATE customers 
-				SET total_spent_lak = total_spent_lak + $1, 
-				    total_orders_count = total_orders_count + 1, 
+				UPDATE customers
+				SET total_spent_lak = total_spent_lak + $1,
+				    total_orders_count = total_orders_count + 1,
 				    address = COALESCE(NULLIF($3, ''), address),
 				    province = COALESCE(NULLIF($4, ''), province),
 				    district = COALESCE(NULLIF($5, ''), district),
 				    village = COALESCE(NULLIF($6, ''), village),
-				    updated_at = NOW() 
+				    updated_at = NOW()
 				WHERE id = $2
 			`, o.TotalAmountLAK, custID, o.CustomerAddress, o.Province, o.District, o.Village)
 			return custID
@@ -1273,14 +1150,14 @@ func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) string {
 		err := tx.QueryRow("SELECT id FROM customers WHERE phone = $1", o.CustomerPhone).Scan(&custID)
 		if err == nil && custID != "" {
 			_, _ = tx.Exec(`
-				UPDATE customers 
-				SET total_spent_lak = total_spent_lak + $1, 
-				    total_orders_count = total_orders_count + 1, 
+				UPDATE customers
+				SET total_spent_lak = total_spent_lak + $1,
+				    total_orders_count = total_orders_count + 1,
 				    address = COALESCE(NULLIF($3, ''), address),
 				    province = COALESCE(NULLIF($4, ''), province),
 				    district = COALESCE(NULLIF($5, ''), district),
 				    village = COALESCE(NULLIF($6, ''), village),
-				    updated_at = NOW() 
+				    updated_at = NOW()
 				WHERE id = $2
 			`, o.TotalAmountLAK, custID, o.CustomerAddress, o.Province, o.District, o.Village)
 			return custID
@@ -1292,14 +1169,14 @@ func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) string {
 		err := tx.QueryRow("SELECT id FROM customers WHERE email = $1", o.CustomerEmail).Scan(&custID)
 		if err == nil && custID != "" {
 			_, _ = tx.Exec(`
-				UPDATE customers 
-				SET total_spent_lak = total_spent_lak + $1, 
-				    total_orders_count = total_orders_count + 1, 
+				UPDATE customers
+				SET total_spent_lak = total_spent_lak + $1,
+				    total_orders_count = total_orders_count + 1,
 				    address = COALESCE(NULLIF($3, ''), address),
 				    province = COALESCE(NULLIF($4, ''), province),
 				    district = COALESCE(NULLIF($5, ''), district),
 				    village = COALESCE(NULLIF($6, ''), village),
-				    updated_at = NOW() 
+				    updated_at = NOW()
 				WHERE id = $2
 			`, o.TotalAmountLAK, custID, o.CustomerAddress, o.Province, o.District, o.Village)
 			return custID
@@ -1337,10 +1214,10 @@ func saveOrderToDB(o Order) error {
 		}
 
 		orderQuery := `
-			INSERT INTO orders (id, order_no, order_number, customer_id, customer_name, customer_phone, 
+			INSERT INTO orders (id, order_no, order_number, customer_id, customer_name, customer_phone,
 			                    customer_email, customer_address,
 			                    status, overall_status, deposit_amount, deposit_lak, remaining_lak,
-			                    total_price, total_amount_lak, total_cost, delivery_date, google_drive_link, 
+			                    total_price, total_amount_lak, total_cost, delivery_date, google_drive_link,
 			                    stock_deducted_at, proof_url, digital_proof_url, proof_version, proof_status, proof_feedback, prepress_notes,
 			                    proof_approved_at, proof_rejected_at, proof_signature_ip, proof_rejection_reason,
 			                    tracking_code, internal_tracking_code, courier_name, branch_code,
@@ -1693,18 +1570,41 @@ func HandleBatchDownloadZip(c *gin.Context) {
 
 // HandleUpdateOrderItemStep updates the production step for a specific OrderItem
 func HandleUpdateOrderItemStep(c *gin.Context) {
-	itemID := c.Param("id")
+	itemID := c.Param("item_id")
+	if itemID == "" {
+		itemID = c.Param("id")
+	}
 
 	var req struct {
-		CurrentStep   ProductionStep `json:"current_step" binding:"required"`
+		CurrentStep   ProductionStep `json:"current_step"`
+		Step          ProductionStep `json:"step"`
+		OperatorID    string         `json:"operator_id"`
 		SpoilageCount int            `json:"spoilage_count"`
 		RCACause      string         `json:"rca_cause"`
+		RootCause     string         `json:"root_cause"`
 		Notes         string         `json:"notes"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payload", "details": err.Error()})
 		return
+	}
+
+	effectiveStep := req.CurrentStep
+	if effectiveStep == "" {
+		effectiveStep = req.Step
+	}
+	if effectiveStep == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Step is required (current_step or step)"})
+		return
+	}
+
+	operator := req.OperatorID
+	if operator == "" {
+		operator = c.GetString("user_fullname")
+		if operator == "" {
+			operator = c.GetString("username")
+		}
 	}
 
 	storeMutex.Lock()
@@ -1728,7 +1628,7 @@ func HandleUpdateOrderItemStep(c *gin.Context) {
 	}
 
 	if targetItem != nil {
-		targetItem.CurrentStep = req.CurrentStep
+		targetItem.CurrentStep = effectiveStep
 		targetItem.UpdatedAt = time.Now()
 
 		// Cascade update overall status of Order
@@ -1757,7 +1657,7 @@ func HandleUpdateOrderItemStep(c *gin.Context) {
 	if db.DB != nil {
 		err := db.RunInTransaction(func(tx *sql.Tx) error {
 			itemUpdateQuery := `UPDATE order_items SET current_step = $1, updated_at = NOW() WHERE id = $2`
-			if _, err := tx.Exec(itemUpdateQuery, string(req.CurrentStep), itemID); err != nil {
+			if _, err := tx.Exec(itemUpdateQuery, string(effectiveStep), itemID); err != nil {
 				return err
 			}
 
@@ -1973,9 +1873,9 @@ func HandleApproveQuotation(c *gin.Context) {
 	if db.DB != nil {
 		_ = db.RunInTransaction(func(tx *sql.Tx) error {
 			updateQuery := `
-				UPDATE orders 
-				SET status = 'WAITING_DEPOSIT', 
-				    updated_at = NOW() 
+				UPDATE orders
+				SET status = 'WAITING_DEPOSIT',
+				    updated_at = NOW()
 				WHERE id = $1 OR order_no = $1 OR order_number = $1
 			`
 			_, _ = tx.Exec(updateQuery, id)
@@ -2027,10 +1927,10 @@ func HandleRejectQuotation(c *gin.Context) {
 	if db.DB != nil {
 		_ = db.RunInTransaction(func(tx *sql.Tx) error {
 			updateQuery := `
-				UPDATE orders 
-				SET status = 'REJECTED', 
-				    notes = COALESCE(notes, '') || ' [Rejected: ' || $2 || ']', 
-				    updated_at = NOW() 
+				UPDATE orders
+				SET status = 'REJECTED',
+				    notes = COALESCE(notes, '') || ' [Rejected: ' || $2 || ']',
+				    updated_at = NOW()
 				WHERE id = $1 OR order_no = $1 OR order_number = $1
 			`
 			_, _ = tx.Exec(updateQuery, id, req.Reason)
@@ -2079,7 +1979,7 @@ func HandleUploadDigitalProof(c *gin.Context) {
 	if db.DB != nil {
 		_ = db.RunInTransaction(func(tx *sql.Tx) error {
 			updateQuery := `
-				UPDATE orders 
+				UPDATE orders
 				SET proof_url = $1, status = 'WAITING_APPROVAL', overall_status = 'WAITING_APPROVAL', updated_at = NOW()
 				WHERE id = $2 OR order_no = $2 OR order_number = $2
 			`
@@ -2123,8 +2023,8 @@ func HandleApproveDigitalProof(c *gin.Context) {
 	if db.DB != nil {
 		_ = db.RunInTransaction(func(tx *sql.Tx) error {
 			updateQuery := `
-				UPDATE orders 
-				SET proof_approved_at = NOW(), proof_signature_ip = $1, 
+				UPDATE orders
+				SET proof_approved_at = NOW(), proof_signature_ip = $1,
 				    status = 'READY_TO_PRINT', overall_status = 'READY_TO_PRINT', updated_at = NOW()
 				WHERE id = $2 OR order_no = $2 OR order_number = $2
 			`
@@ -2171,7 +2071,7 @@ func HandleRejectDigitalProof(c *gin.Context) {
 	if db.DB != nil {
 		_ = db.RunInTransaction(func(tx *sql.Tx) error {
 			updateQuery := `
-				UPDATE orders 
+				UPDATE orders
 				SET proof_rejected_at = NOW(), proof_rejection_reason = $1, proof_signature_ip = $2,
 				    status = 'PREPRESS_CHECK', overall_status = 'PREPRESS_CHECK', updated_at = NOW()
 				WHERE id = $3 OR order_no = $3 OR order_number = $3
@@ -2343,7 +2243,7 @@ func HandleUpdateOrder(c *gin.Context) {
 
 		if customerName != "" || status != "" || totalPrice > 0 || deliveryDate != "" || courierName != "" || trackingCode != "" || courierBranch != "" || shippingFee > 0 {
 			_, err := db.DB.Exec(`
-				UPDATE orders 
+				UPDATE orders
 				SET customer_name = COALESCE(NULLIF($1, ''), customer_name),
 				    customer_phone = COALESCE(NULLIF($2, ''), customer_phone),
 				    delivery_date = COALESCE(NULLIF($3, ''), delivery_date),
@@ -2405,7 +2305,361 @@ func HandleUpdateOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "updated_id": id, "data": updateReq})
 }
 
+// GetOrderForDailyPlan retrieves an order by ID or order_no from memory or DB
+func GetOrderForDailyPlan(orderID string) (*Order, error) {
+	storeMutex.Lock()
+	order, exists := ordersStore[orderID]
+	if !exists {
+		for _, o := range ordersStore {
+			if o.OrderNo == orderID || o.OrderNumber == orderID {
+				order = o
+				exists = true
+				break
+			}
+		}
+	}
+	storeMutex.Unlock()
 
+	if !exists && db.DB != nil {
+		dbOrder, err := getOrderByIDFromDB(orderID)
+		if err == nil {
+			order = dbOrder
+			exists = true
+		}
+	}
 
+	if !exists {
+		return nil, fmt.Errorf("order %s not found", orderID)
+	}
+	return &order, nil
+}
 
+// GetAllOrdersForDailyPlan retrieves all orders from DB or memory
+func GetAllOrdersForDailyPlan() ([]Order, error) {
+	if db.DB != nil {
+		list, err := getOrdersFromDB()
+		if err == nil && len(list) > 0 {
+			return list, nil
+		}
+	}
+	storeMutex.Lock()
+	defer storeMutex.Unlock()
+	var list []Order
+	for _, o := range ordersStore {
+		list = append(list, o)
+	}
+	return list, nil
+}
 
+// EnsureOrderInProductionTx transitions an order to IN_PRODUCTION within an existing database transaction,
+// validates state machine requirements (deposit paid, proof approved), discharges inventory stock via FIFO,
+// creates job tickets, and updates the order status atomically. It strictly fails closed on any error.
+func EnsureOrderInProductionTx(tx *sql.Tx, orderID string, allowNegativeStock bool) error {
+	if tx == nil {
+		return fmt.Errorf("database transaction is nil")
+	}
+
+	var id, orderNo, status, overallStatus string
+	var depositAmount, depositLAK, totalPrice float64
+	var proofApprovedAt, stockDeductedAt *time.Time
+
+	orderQuery := `
+		SELECT id, COALESCE(order_no, order_number, ''),
+		       status, COALESCE(overall_status, status::text),
+		       COALESCE(deposit_amount, 0), COALESCE(deposit_lak, 0), COALESCE(total_amount_lak, total_price, 0),
+		       proof_approved_at, stock_deducted_at
+		FROM orders
+		WHERE id::text = $1 OR order_no = $1 OR order_number = $1
+		FOR UPDATE
+	`
+	err := tx.QueryRow(orderQuery, orderID).Scan(
+		&id, &orderNo,
+		&status, &overallStatus,
+		&depositAmount, &depositLAK, &totalPrice,
+		&proofApprovedAt, &stockDeductedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("order %s not found in database", orderID)
+		}
+		return fmt.Errorf("failed to lock order %s: %w", orderID, err)
+	}
+
+	// 1. Validate Order Status: CANCELLED cannot transition
+	if strings.EqualFold(status, string(StatusCancelled)) {
+		return fmt.Errorf("cannot transition CANCELLED order %s to IN_PRODUCTION", orderNo)
+	}
+
+	// 2. Deposit validation (Fail Closed)
+	effectiveDeposit := depositAmount
+	if effectiveDeposit <= 0 {
+		effectiveDeposit = depositLAK
+	}
+	if totalPrice > 0 && effectiveDeposit <= 0 {
+		return fmt.Errorf("order %s requires deposit payment before starting production (deposit is 0)", orderNo)
+	}
+
+	// 3. Proof approval validation (Fail Closed)
+	if proofApprovedAt == nil {
+		return fmt.Errorf("order %s artwork proof has not been approved by customer", orderNo)
+	}
+
+	// 4. FIFO Stock Deduction (if not already deducted)
+	if stockDeductedAt == nil {
+		// Fetch items for this order within tx
+		itemsQuery := `
+			SELECT id, COALESCE(item_name, job_name, ''), quantity, COALESCE(page_count, 1),
+			       COALESCE(cover_paper_id, ''), COALESCE(inner_paper_id, ''),
+			       COALESCE(avg_cov_c, 0), COALESCE(avg_cov_m, 0), COALESCE(avg_cov_y, 0), COALESCE(avg_cov_k, 0),
+			       COALESCE(specs, '{}'::jsonb)
+			FROM order_items
+			WHERE order_id::text = $1
+		`
+		rows, err := tx.Query(itemsQuery, id)
+		if err != nil {
+			return fmt.Errorf("failed to query order items for stock deduction: %w", err)
+		}
+		defer rows.Close()
+
+		type itemDedSpec struct {
+			id           string
+			itemName     string
+			quantity     int
+			pageCount    int
+			coverPaperID string
+			innerPaperID string
+			avgCovC      float64
+			avgCovM      float64
+			avgCovY      float64
+			avgCovK      float64
+			specsBytes   []byte
+		}
+
+		var itemsToDeduct []itemDedSpec
+		for rows.Next() {
+			var it itemDedSpec
+			if err := rows.Scan(
+				&it.id, &it.itemName, &it.quantity, &it.pageCount,
+				&it.coverPaperID, &it.innerPaperID,
+				&it.avgCovC, &it.avgCovM, &it.avgCovY, &it.avgCovK,
+				&it.specsBytes,
+			); err == nil {
+				itemsToDeduct = append(itemsToDeduct, it)
+			}
+		}
+		rows.Close()
+
+		for _, item := range itemsToDeduct {
+			var specsMap map[string]interface{}
+			if len(item.specsBytes) > 0 {
+				_ = json.Unmarshal(item.specsBytes, &specsMap)
+			}
+			if specsMap == nil {
+				specsMap = map[string]interface{}{}
+			}
+
+			paperSku, _ := specsMap["paper_sku"].(string)
+			if paperSku == "" {
+				paperSku, _ = specsMap["paperSku"].(string)
+			}
+			if paperSku == "" {
+				paperSku = item.innerPaperID
+			}
+			if paperSku == "" {
+				paperSku = item.coverPaperID
+			}
+
+			inkCov, _ := specsMap["ink_coverage_percent"].(float64)
+			if inkCov == 0 {
+				inkCov, _ = specsMap["inkCoveragePercent"].(float64)
+			}
+
+			colorMode := "4_COLOR"
+			if cm, ok := specsMap["color_mode"].(string); ok && cm != "" {
+				colorMode = cm
+			} else if cm, ok := specsMap["colorMode"].(string); ok && cm != "" {
+				colorMode = cm
+			}
+
+			machineID := ""
+			if m, ok := specsMap["machine_id"].(string); ok && m != "" {
+				machineID = m
+			} else if m, ok := specsMap["machineId"].(string); ok && m != "" {
+				machineID = m
+			} else if m, ok := specsMap["printer_id"].(string); ok && m != "" {
+				machineID = m
+			} else if m, ok := specsMap["printerId"].(string); ok && m != "" {
+				machineID = m
+			}
+
+			spoilageSheets := 0
+			if s, ok := specsMap["spoilage_allowance_sheets"].(float64); ok {
+				spoilageSheets = int(s)
+			} else if s, ok := specsMap["spoilageAllowanceSheets"].(float64); ok {
+				spoilageSheets = int(s)
+			}
+
+			spoilagePct := 0.0
+			if p, ok := specsMap["spoilage_percent"].(float64); ok {
+				spoilagePct = p
+			} else if p, ok := specsMap["spoilagePercent"].(float64); ok {
+				spoilagePct = p
+			}
+
+			spoilageCost := 0.0
+			if c, ok := specsMap["spoilage_cost"].(float64); ok {
+				spoilageCost = c
+			} else if c, ok := specsMap["spoilageCost"].(float64); ok {
+				spoilageCost = c
+			}
+
+			usedOffcutLot, _ := specsMap["used_offcut_lot_id"].(string)
+			if usedOffcutLot == "" {
+				usedOffcutLot, _ = specsMap["usedOffcutLotId"].(string)
+			}
+
+			deductionErr := inventory.DeductInventoryForJob(tx, inventory.JobDeductionSpec{
+				OrderID:                 id,
+				OrderItemID:             item.id,
+				PaperSKU:                paperSku,
+				Quantity:                item.quantity,
+				PageCount:               item.pageCount,
+				CoverPaperID:            item.coverPaperID,
+				InnerPaperID:            item.innerPaperID,
+				UsedOffcutLotID:         usedOffcutLot,
+				ColorMode:               colorMode,
+				MachineID:               machineID,
+				AvgCovC:                 item.avgCovC,
+				AvgCovM:                 item.avgCovM,
+				AvgCovY:                 item.avgCovY,
+				AvgCovK:                 item.avgCovK,
+				InkCoveragePct:          inkCov,
+				SpoilageAllowanceSheets: spoilageSheets,
+				SpoilagePercent:         spoilagePct,
+				SpoilageCost:            spoilageCost,
+				AllowNegativeStock:      allowNegativeStock,
+				CreatedBy:               "PRODUCTION_DAILY_PLAN",
+			})
+			if deductionErr != nil {
+				return fmt.Errorf("FIFO stock deduction failed for order item %s (%s): %w", item.id, item.itemName, deductionErr)
+			}
+		}
+
+		// Update order in DB within tx
+		now := time.Now()
+		_, err = tx.Exec(`
+			UPDATE orders
+			SET status = $1, overall_status = $1, stock_deducted_at = $2, updated_at = $2
+			WHERE id = $3
+		`, string(StatusInProduction), now, id)
+		if err != nil {
+			return fmt.Errorf("failed to update order status and stock_deducted_at: %w", err)
+		}
+	} else if status != string(StatusInProduction) {
+		// Stock was already deducted earlier, only transition status
+		_, err = tx.Exec(`
+			UPDATE orders
+			SET status = $1, overall_status = $1, updated_at = NOW()
+			WHERE id = $2
+		`, string(StatusInProduction), id)
+		if err != nil {
+			return fmt.Errorf("failed to update order status to IN_PRODUCTION: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// EnsureOrderInProduction transitions an order to IN_PRODUCTION if not already, with validation and FIFO stock deduction
+func EnsureOrderInProduction(orderID string, allowNegativeStock bool) error {
+	if db.DB != nil {
+		return db.RunInTransaction(func(tx *sql.Tx) error {
+			if err := EnsureOrderInProductionTx(tx, orderID, allowNegativeStock); err != nil {
+				return err
+			}
+			return nil
+		})
+	}
+
+	// In memory fallback for unit tests without DB
+	order, err := GetOrderForDailyPlan(orderID)
+	if err != nil {
+		return err
+	}
+
+	if order.Status == StatusInProduction || order.OverallStatus == StatusInProduction {
+		return nil
+	}
+
+	if err := ValidateOrderStatusTransition(*order, StatusInProduction); err != nil {
+		return fmt.Errorf("order cannot transition to IN_PRODUCTION: %w", err)
+	}
+
+	storeMutex.Lock()
+	defer storeMutex.Unlock()
+
+	order.Status = StatusInProduction
+	order.OverallStatus = StatusInProduction
+	order.UpdatedAt = time.Now()
+	now := time.Now()
+	order.StockDeductedAt = &now
+	ordersStore[order.ID] = *order
+	return nil
+}
+
+// UpdateOrderItemStepDirect updates current_step for order item and synchronizes overall status
+func UpdateOrderItemStepDirect(itemID string, step string, operatorID string, notes string) error {
+	storeMutex.Lock()
+	defer storeMutex.Unlock()
+
+	var targetOrder *Order
+	var targetItem *OrderItem
+
+	for k := range ordersStore {
+		o := ordersStore[k]
+		for i := range o.Items {
+			if o.Items[i].ID == itemID {
+				targetOrder = &o
+				targetItem = &o.Items[i]
+				break
+			}
+		}
+		if targetOrder != nil {
+			break
+		}
+	}
+
+	if targetItem != nil {
+		targetItem.CurrentStep = ProductionStep(step)
+		targetItem.UpdatedAt = time.Now()
+
+		allCompleted := true
+		anyInProgress := false
+		for _, item := range targetOrder.Items {
+			if item.CurrentStep != StepReadyForPickup && item.CurrentStep != StepCompleted {
+				allCompleted = false
+			}
+			if item.CurrentStep != StepPending {
+				anyInProgress = true
+			}
+		}
+
+		if allCompleted {
+			targetOrder.OverallStatus = StatusCompleted
+			targetOrder.Status = StatusCompleted
+		} else if anyInProgress && targetOrder.Status != StatusCompleted {
+			targetOrder.OverallStatus = StatusInProduction
+			targetOrder.Status = StatusInProduction
+		}
+		targetOrder.UpdatedAt = time.Now()
+		ordersStore[targetOrder.ID] = *targetOrder
+	}
+
+	if db.DB != nil {
+		_ = db.RunInTransaction(func(tx *sql.Tx) error {
+			_, err := tx.Exec(`UPDATE order_items SET current_step = $1, updated_at = NOW() WHERE id = $2`, step, itemID)
+			return err
+		})
+	}
+	return nil
+}

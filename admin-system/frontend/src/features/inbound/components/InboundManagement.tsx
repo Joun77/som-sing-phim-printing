@@ -38,6 +38,7 @@ import DynamicSpecDetail from '@features/inventory/components/details/DynamicSpe
 import ProcurementDetailCard from '@features/inventory/components/details/ProcurementDetailCard';
 import InboundEditModal from './modals/InboundEditModal';
 import RestockBatchModal from './modals/RestockBatchModal';
+import { isAssetItem, resolveCanonicalEquipmentCategory, resolvePrinterSubtype } from '@utils/assetClassification';
 import InboundItemDetailsPage from './details/InboundItemDetailsPage';
 import type { InboundEntry } from '../types';
 import { formatCompositeItemName } from '@utils/costCalculator';
@@ -212,7 +213,7 @@ export default function InboundManagement() {
         // 2. Map directly from PostgreSQL (Database as Single Source of Truth)
         if (dbRows.length > 0) {
           const mapped = dbRows.map((item: any) => {
-              const isMachinery = item.category === 'PRINTER' || item.category === 'MACHINERY' || item.category === 'EQUIPMENT';
+              const isMachinery = isAssetItem(item.category, item);
               const isInkItem = item.category === 'INK';
               const isPaperItem = item.category === 'PAPER' || item.category === 'MATERIAL';
 
@@ -552,6 +553,8 @@ export default function InboundManagement() {
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const fullDate = data.importDate ? (data.importDate.includes(':') ? data.importDate : `${data.importDate} ${timeStr}`) : `${now.toISOString().split('T')[0]} ${timeStr}`;
 
+    const isAsset = isAssetItem(type, data);
+
     const newLog = {
       id: logId,
       poNumber: data.poNumber || logId,
@@ -562,10 +565,10 @@ export default function InboundManagement() {
       name: resolvedItemName,
       itemName: resolvedItemName,
       sku: resolvedSku,
-      currentQty: (type === 'PRINTER' || type === 'MACHINERY') ? 1 : Number(data.importQty || 1),
-      initialQty: (type === 'PRINTER' || type === 'MACHINERY') ? 1 : Number(data.importQty || 1),
-      unit: data.unit || data.importUnit || 'Unit',
-      subUnit: (type === 'PRINTER' || type === 'MACHINERY') ? '(1 Unit)' : `(${data.importQty || 1} ${data.unit || data.importUnit || 'Unit'})`,
+      currentQty: isAsset ? 1 : Number(data.importQty || 1),
+      initialQty: isAsset ? 1 : Number(data.importQty || 1),
+      unit: data.unit || data.importUnit || (isAsset ? 'ເຄື່ອງ' : 'Unit'),
+      subUnit: isAsset ? '(1 ເຄື່ອງ)' : `(${data.importQty || 1} ${data.unit || data.importUnit || 'Unit'})`,
       supplier: data.supplier || data.vendor || data.supplierName || '',
       totalPrice: calcTotal,
       paymentMethod: data.paymentMethod || 'TRANSFER',
@@ -582,18 +585,20 @@ export default function InboundManagement() {
     await saveInboundToBackend(newLog);
     updateInboundEntry(newLog);
 
-    if (type === 'PRINTER' || type === 'MACHINERY') {
-      const resolvedCategory = data.category || (type === 'PRINTER' ? 'Printer' : 'Processing Tools');
+    if (isAsset) {
+      const canonicalCategory = resolveCanonicalEquipmentCategory(type, data);
+      const printerSubtype = canonicalCategory === 'Printer' ? resolvePrinterSubtype(data) : undefined;
       addEquipment({
         ...data,
         id: logId,
         inboundId: logId,
         sku: resolvedSku,
-        category: resolvedCategory,
+        category: canonicalCategory,
+        printerCategory: printerSubtype || data.printerCategory,
         status: 'In Use'
       });
 
-      if ((type === 'PRINTER' || resolvedCategory === 'Printer') && Array.isArray(data.printerColorLinks)) {
+      if (canonicalCategory === 'Printer' && Array.isArray(data.printerColorLinks)) {
         data.printerColorLinks.forEach((link: any) => {
           const vol = Number(link.oemStandardVolumeMl) || 100;
           const yieldPages = Number(link.oemStandardIsoYieldA4) || 5000;
@@ -835,8 +840,8 @@ export default function InboundManagement() {
 
   const isCategoryMatch = (itemCat: string, filterId: string) => {
     if (filterId === 'ALL') return true;
+    if (filterId === 'MACHINERY') return isAssetItem(itemCat);
     const cat = (itemCat || '').toUpperCase();
-    if (filterId === 'MACHINERY') return cat === 'MACHINERY' || cat === 'PRINTER' || cat === 'CUTTER' || cat === 'LAMINATOR' || cat === 'BINDER';
     if (filterId === 'PAPER') return cat === 'PAPER' || cat === 'MATERIAL';
     if (filterId === 'INK') return cat === 'INK' || cat === 'TONER';
     if (filterId === 'LAMINATION') return cat === 'LAMINATION' || cat === 'FILM';
@@ -1218,7 +1223,7 @@ export default function InboundManagement() {
                       {(() => {
                         const cat = (item.category || '').toUpperCase();
                         const rawQty = Number(item.initialQty || item.currentQty) || 1;
-                        if (cat === 'PRINTER' || cat === 'MACHINERY' || cat === 'EQUIPMENT') {
+                        if (isAssetItem(cat, item)) {
                           return (
                             <span className="font-mono font-black text-slate-900 block">
                               {rawQty} {currentLang === 'lo' ? 'ເຄື່ອງ' : 'Unit'}

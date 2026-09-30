@@ -150,6 +150,8 @@ export interface AppContextValue {
   inventory: InventoryItem[];
   lowStockAlerts: any[];
   equipment: Equipment[];
+  equipmentApiError?: string | null;
+  refetchEquipment?: () => Promise<void>;
   orders: Order[];
   spoilageLogs: SpoilageLog[];
   customers: Customer[];

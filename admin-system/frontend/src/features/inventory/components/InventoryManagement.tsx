@@ -14,6 +14,8 @@ import IssueSparePartModal from './modals/IssueSparePartModal';
 import { fetchMaterials, fetchInboundHistory } from '../api/inventoryApi';
 import { MaterialMaster, StockInboundRecord } from '../types';
 
+import { isAssetItem } from '@utils/assetClassification';
+
 export default function InventoryManagement() {
   const queryClient = useQueryClient();
   const { 
@@ -104,9 +106,8 @@ export default function InventoryManagement() {
   // Filter logic for legacy / local items
   const filteredItems = inventory.filter(item => {
     if (!item) return false;
+    if (isAssetItem(item.category, item)) return false;
     const cat = (item.category || '').toLowerCase();
-    const isMachinery = cat === 'printer' || cat === 'cutter' || cat === 'laminator' || cat === 'binder' || cat === 'equipment' || cat === 'machinery';
-    if (isMachinery) return false;
 
     let matchesTab = activeTab === 'All';
     if (activeTab === 'Paper') {

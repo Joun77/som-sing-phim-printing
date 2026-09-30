@@ -16,6 +16,8 @@ import {
   type StepConfig
 } from './components/tracker';
 import { BookOpen, Clock, AlertCircle } from 'lucide-react';
+import { useAuthStore } from '../../store/useAuthStore';
+import { getAuthHeaders } from '../../utils/authHeaders';
 
 export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initialOrderNo }) => {
   const { orders = [], equipment = [], showToast, formatCurrency } = useApp();
@@ -179,6 +181,8 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
     }
   }, [selectedOrderNo]);
 
+  const user = useAuthStore((state) => state.user);
+
   // Step advancement helper
   const getNextStep = (currentStep: ProductionStep): ProductionStep => {
     const sequence: ProductionStep[] = [
@@ -206,35 +210,56 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
     notes: string = ''
   ) => {
     setUpdating(true);
+    const operatorId = user?.username || 'OP-STAFF';
+    const operatorName = user?.fullName || user?.username || 'Staff Operator';
+
     try {
-      await fetch(`/api/v1/orders/${item.order_id}/items/${item.id}/step`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(`/api/v1/orders/items/${item.id}/step`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
         body: JSON.stringify({
+          current_step: targetStep,
           step: targetStep,
-          operator_id: 'OP-DESK-01',
+          operator_id: operatorId,
           spoilage_count: spoilage,
+          rca_cause: rca,
           root_cause: rca,
-          notes: notes,
+          notes: notes || `ອັບເດດໂດຍ ${operatorName}`,
         }),
       });
-    } catch (e) {
-      console.warn('Sync step to server warning:', e);
-    }
 
-    setOrder((prev) => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        items: prev.items.map((i) =>
-          i.id === item.id ? { ...i, current_step: targetStep } : i
-        ),
-      };
-    });
-    showToast(`ອັບເດດຂັ້ນຕອນການຜະລິດສຳເລັດ`, 'success');
-    setUpdating(false);
-    setShowSpoilageModal(false);
-    setActiveItem(null);
+      if (!res.ok) {
+        let errMessage = 'ບໍ່ສາມາດອັບເດດຂັ້ນຕອນໄດ້';
+        try {
+          const errData = await res.json();
+          errMessage = errData.error || errData.message || errMessage;
+        } catch (_) {}
+        showToast(`ອັບເດດຂັ້ນຕອນບໍ່ສຳເລັດ: ${errMessage}`, 'error');
+        setUpdating(false);
+        return;
+      }
+
+      setOrder((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          items: prev.items.map((i) =>
+            i.id === item.id ? { ...i, current_step: targetStep } : i
+          ),
+        };
+      });
+      showToast(`ອັບເດດຂັ້ນຕອນການຜະລິດສຳເລັດ`, 'success');
+      setShowSpoilageModal(false);
+      setActiveItem(null);
+    } catch (e: any) {
+      console.error('Sync step to server error:', e);
+      showToast(`ເກີດຂໍ້ຜິດພາດໃນການເຊື່ອມຕໍ່: ${e.message || 'Network error'}`, 'error');
+    } finally {
+      setUpdating(false);
+    }
   };
 
   const handleTriggerAction = (item: MasterOrderItem, action: 'START' | 'PAUSE' | 'COMPLETE') => {

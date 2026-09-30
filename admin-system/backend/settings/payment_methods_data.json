@@ -1,0 +1,17 @@
+[
+  {
+    "id": "bcel_one",
+    "bankName": "BCEL (ທະນາຄານການຄ້າຕ່າງປະເທດລາວ ມະຫາຊົນ)",
+    "accountName": "Som-Sing Phim Printing Shop",
+    "accountNumber": "160-12-00-01234567-001",
+    "branch": "Vientiane Head Office",
+    "qrCodeUrl": "",
+    "logoUrl": "",
+    "promptpayName": "Som-Sing Phim",
+    "shopName": "ຮ້ານ ສົມສິ່ງພິມ (Som-Sing Phim)",
+    "isActive": true,
+    "isDefault": true,
+    "createdAt": "2026-09-30T21:37:18.390902+07:00",
+    "updatedAt": "2026-09-30T21:37:18.390902+07:00"
+  }
+]

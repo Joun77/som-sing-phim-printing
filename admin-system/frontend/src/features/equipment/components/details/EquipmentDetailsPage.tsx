@@ -98,6 +98,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
   // Itemized wear parts editing state
   const [isEditingWearParts, setIsEditingWearParts] = useState(false);
   const [wearPartsDraft, setWearPartsDraft] = useState<Record<string, { cost: number; life: number; name?: string; nameLo?: string; unitLabel?: string }>>({});
+  const [apiWearParts, setApiWearParts] = useState<any[] | null>(null);
 
   // Dynamic wear part creation state
   const [isAddingPart, setIsAddingPart] = useState(false);
@@ -106,6 +107,26 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
   const [newPartCost, setNewPartCost] = useState<number | ''>('');
   const [newPartLife, setNewPartLife] = useState<number | ''>('');
   const [newPartUnit, setNewPartUnit] = useState('');
+
+  const fetchWearParts = async () => {
+    if (!equipmentId) return;
+    try {
+      const res = await fetch(`/api/v1/equipment/${equipmentId}/wear-parts`, {
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const parts = json.data || (Array.isArray(json) ? json : []);
+        setApiWearParts(parts);
+      }
+    } catch (err) {
+      console.error('Failed to fetch wear parts:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchWearParts();
+  }, [equipmentId]);
 
   if (!machine) {
     return (
@@ -123,15 +144,11 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
 
   const isCritical = machine.components && machine.components.some((c: any) => c.usage >= (c.threshold || 90));
 
-  const handleDeleteEquipment = () => {
-    deleteEquipment(machine.id);
-    showToast(
-      currentLang === 'lo'
-        ? `ລຶບຂໍ້ມູນເຄື່ອງຈັກ "${machine.name}" ສຳເລັດ!`
-        : `Deleted equipment "${machine.name}" successfully!`,
-      'info'
-    );
-    onBack();
+  const handleDeleteEquipment = async () => {
+    const ok = await deleteEquipment(machine.id);
+    if (ok) {
+      onBack();
+    }
   };
 
   // Get printer linked inks
@@ -346,6 +363,31 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
     };
 
     const categoryDefaults = getCategoryDefaultWearParts();
+    if (apiWearParts && apiWearParts.length > 0) {
+      return apiWearParts.map((p: any) => {
+        const cost = Number(p.cost_price_lak ?? p.cost ?? 0);
+        const life = Number(p.expected_lifespan_units ?? p.lifeVal ?? p.life ?? 1);
+        const currentCounter = Number(p.current_counter || currentMeterCount || 0);
+        const usage = (life > 0 && currentCounter > 0)
+          ? Math.min(100, Math.round((currentCounter % life) / life * 100))
+          : (p.usage !== undefined ? Number(p.usage) : 0);
+        const costPerUnit = p.wear_cost_per_unit_lak || (life > 0 ? (cost / life) : 0);
+
+        return {
+          id: p.id,
+          name: p.part_name_en || p.name || 'Component',
+          nameLo: p.part_name_lo || p.nameLo || p.part_name_en || 'ອະໄຫຼ່',
+          cost,
+          lifeVal: life,
+          costPerUnit,
+          usage,
+          unitLabel: p.unit_type || p.unitLabel || machineUnitEn || 'pages',
+          threshold: 90,
+          partCategory: p.part_category
+        };
+      });
+    }
+
     const rawComps = Array.isArray(machine.components) && machine.components.length > 0
       ? machine.components
       : categoryDefaults;
@@ -469,7 +511,6 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
       MachinePrice: finalPrice,
       purchaseCost: finalPrice,
       purchasePrice: finalPrice,
-      totalPrice: finalPrice,
       TargetTotalPages: finalCap,
       printedPagesCapacity: finalCap,
       expectedLifeA4Pages: isPrinter ? finalCap : undefined,
@@ -489,7 +530,45 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
     showToast(currentLang === 'lo' ? 'ບັນທຶກພາຣາມິເຕີຕົ້ນທຶນເຄື່ອງຈັກສຳເລັດ' : 'Saved core machine parameters successfully', 'success');
   };
 
-  const handleSaveAllWearParts = () => {
+  const handleSaveAllWearParts = async () => {
+    try {
+      for (const part of criticalWearParts) {
+        const draft = wearPartsDraft[part.name];
+        if (draft) {
+          const updatedCost = Number(draft.cost);
+          const updatedLife = Number(draft.life);
+          const updatedName = draft.name ? draft.name.trim() : part.name;
+          const updatedNameLo = draft.nameLo ? draft.nameLo.trim() : part.nameLo;
+          const updatedUnit = draft.unitLabel ? draft.unitLabel.trim() : part.unitLabel;
+
+          if (part.id && !part.id.startsWith('part-') && !part.id.startsWith('temp-')) {
+            const res = await fetch(`/api/v1/equipment/${machine.id}/wear-parts/${part.id}`, {
+              method: 'PUT',
+              headers: {
+                ...getAuthHeaders(),
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                part_name_en: updatedName,
+                part_name_lo: updatedNameLo,
+                cost_price_lak: updatedCost,
+                expected_lifespan_units: updatedLife,
+                unit_type: updatedUnit
+              })
+            });
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              throw new Error(errData.error || `HTTP ${res.status}: Failed to update wear part ${part.name}`);
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to sync wear parts to DB:', err);
+      showToast(err.message || (currentLang === 'lo' ? 'ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກອະໄຫຼ່' : 'Failed to save wear parts'), 'error');
+      return;
+    }
+
     const updatedComponents = criticalWearParts.map((part: any) => {
       const draft = wearPartsDraft[part.name];
       if (draft) {
@@ -529,11 +608,12 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
       maintenanceCostPerPage: newNetRate
     });
 
+    await fetchWearParts();
     setIsEditingWearParts(false);
     showToast(currentLang === 'lo' ? 'ບັນທຶກລາຄາ ແລະ ອາຍຸອະໄຫຼ່ສຳເລັດ' : 'Saved wear parts successfully', 'success');
   };
 
-  const handleAddWearPart = (e: React.FormEvent) => {
+  const handleAddWearPart = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPartName.trim() || Number(newPartCost) <= 0 || Number(newPartLife) <= 0) {
       showToast(currentLang === 'lo' ? 'ກະລຸນາປ້ອນຂໍ້ມູນອະໄຫຼ່ໃຫ້ຄົບຖ້ວນ' : 'Please fill in all part details', 'warning');
@@ -543,8 +623,46 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
     const costNum = Number(newPartCost);
     const lifeNum = Number(newPartLife);
     const costPerUnit = lifeNum > 0 ? (costNum / lifeNum) : 0;
+    const partCat = newPartName.toLowerCase().includes('blade') ? 'blade' :
+                    newPartName.toLowerCase().includes('drum') ? 'drum' :
+                    newPartName.toLowerCase().includes('fuser') ? 'fuser' :
+                    newPartName.toLowerCase().includes('roller') ? 'roller' :
+                    newPartName.toLowerCase().includes('belt') ? 'belt' : 'general';
+
+    let createdPartId = `part-${Date.now()}`;
+    try {
+      const res = await fetch(`/api/v1/equipment/${machine.id}/wear-parts`, {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          part_name_en: newPartName.trim(),
+          part_name_lo: newPartNameLo.trim() || newPartName.trim(),
+          part_category: partCat,
+          cost_price_lak: costNum,
+          expected_lifespan_units: lifeNum,
+          unit_type: newPartUnit || machineUnitEn || 'pages'
+        })
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${res.status}: Failed to create wear part`);
+      }
+      const json = await res.json().catch(() => ({}));
+      if (json?.data?.id) {
+        createdPartId = json.data.id;
+      }
+      await fetchWearParts();
+    } catch (err: any) {
+      console.error('Failed to create wear part in DB:', err);
+      showToast(err.message || (currentLang === 'lo' ? 'ເກີດຂໍ້ຜິດພາດໃນການເພີ່ມອະໄຫຼ່' : 'Failed to create wear part'), 'error');
+      return;
+    }
+
     const newComponent = {
-      id: `part-${Date.now()}`,
+      id: createdPartId,
       name: newPartName.trim(),
       nameLo: newPartNameLo.trim() || newPartName.trim(),
       cost: costNum,
@@ -574,13 +692,34 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
     showToast(currentLang === 'lo' ? 'ເພີ່ມອະໄຫຼ່ໃໝ່ສຳເລັດ' : 'Added new wear part successfully', 'success');
   };
 
-  const handleDeleteWearPart = (partName: string) => {
-    const msg = currentLang === 'lo'
-      ? `ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບອະໄຫຼ່ "${partName}" ອອກຈາກເຄື່ອງຈັກນີ້?`
-      : `Are you sure you want to remove wear part "${partName}" from this machine?`;
+  const handleDeleteWearPart = (partIdentifier: string) => {
+    const target = criticalWearParts.find((p: any) => p.name === partIdentifier || p.id === partIdentifier);
+    const displayName = target?.nameLo || target?.name || partIdentifier;
 
-    askConfirmation(msg, () => {
-      const updatedComps = criticalWearParts.filter((p: any) => p.name !== partName);
+    const msg = currentLang === 'lo'
+      ? `ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບອະໄຫຼ່ "${displayName}" ອອກຈາກເຄື່ອງຈັກນີ້?`
+      : `Are you sure you want to remove wear part "${displayName}" from this machine?`;
+
+    askConfirmation(msg, async () => {
+      if (target?.id && !target.id.startsWith('part-') && !target.id.startsWith('temp-')) {
+        try {
+          const res = await fetch(`/api/v1/equipment/${machine.id}/wear-parts/${target.id}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${res.status}: Failed to delete wear part`);
+          }
+          await fetchWearParts();
+        } catch (err: any) {
+          console.error('Failed to delete wear part from DB:', err);
+          showToast(err.message || (currentLang === 'lo' ? 'ເກີດຂໍ້ຜິດພາດໃນການລຶບອະໄຫຼ່' : 'Failed to delete wear part'), 'error');
+          return;
+        }
+      }
+
+      const updatedComps = criticalWearParts.filter((p: any) => p.name !== partIdentifier && p.id !== partIdentifier);
       const newWearRate = updatedComps.reduce((acc, c) => acc + (Number(c.costPerUnit) || 0), 0);
       const newNetRate = Math.round((baseCostPerUnit + newWearRate) * 1000) / 1000;
 

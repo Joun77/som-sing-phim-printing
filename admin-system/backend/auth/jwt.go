@@ -57,11 +57,12 @@ type RefreshRequest struct {
 }
 
 type OwnerClaims struct {
-	Username string `json:"username"`
-	UserID   string `json:"user_id,omitempty"`
-	Role     string `json:"role"`
-	Email    string `json:"email,omitempty"`
-	FullName string `json:"fullname"`
+	Username   string `json:"username"`
+	UserID     string `json:"user_id,omitempty"`
+	EmployeeID string `json:"employee_id,omitempty"`
+	Role       string `json:"role"`
+	Email      string `json:"email,omitempty"`
+	FullName   string `json:"fullname"`
 	jwt.RegisteredClaims
 }
 
@@ -73,7 +74,7 @@ func HandleLogin(c *gin.Context) {
 		return
 	}
 
-	var role, fullname, email, userId string
+	var role, fullname, email, userId, employeeId string
 
 	// 1. Try real PostgreSQL database authentication with bcrypt
 	dbUser, dbErr := AuthenticateUserAgainstDB(req.Username, req.Password)
@@ -82,6 +83,9 @@ func HandleLogin(c *gin.Context) {
 		fullname = dbUser.FullName
 		email = dbUser.Email
 		userId = dbUser.ID
+		if dbUser.EmployeeID != nil {
+			employeeId = *dbUser.EmployeeID
+		}
 	} else if dbErr != nil && dbErr.Error() == "ACCOUNT_DEACTIVATED" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "ບັນຊີນີ້ຖືກປິດການໃຊ້ງານ ກະລຸນາຕິດຕໍ່ Super Admin (Account is deactivated)"})
 		return
@@ -126,6 +130,7 @@ func HandleLogin(c *gin.Context) {
 			fullname = "Som Sing Lead Printer"
 			email = "production@somsingphim.la"
 			userId = "usr_prod_001"
+			employeeId = "EMP-001"
 		} else if (req.Username == "finance" && req.Password == "finance123") || (req.Username == "accountant" && req.Password == "acc123") {
 			role = "finance"
 			fullname = "Som Sing Lead Accountant"
@@ -147,11 +152,12 @@ func HandleLogin(c *gin.Context) {
 	expirationTime := time.Now().Add(accessDuration)
 
 	claims := &OwnerClaims{
-		Username: req.Username,
-		UserID:   userId,
-		Role:     role,
-		Email:    email,
-		FullName: fullname,
+		Username:   req.Username,
+		UserID:     userId,
+		EmployeeID: employeeId,
+		Role:       role,
+		Email:      email,
+		FullName:   fullname,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userId,
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
@@ -169,11 +175,12 @@ func HandleLogin(c *gin.Context) {
 
 	// Generate Refresh Token
 	refreshClaims := &OwnerClaims{
-		Username: req.Username,
-		UserID:   userId,
-		Role:     role,
-		Email:    email,
-		FullName: fullname,
+		Username:   req.Username,
+		UserID:     userId,
+		EmployeeID: employeeId,
+		Role:       role,
+		Email:      email,
+		FullName:   fullname,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userId,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(refreshDuration)),
@@ -233,11 +240,12 @@ func HandleRefreshToken(c *gin.Context) {
 	// Issue fresh token
 	newExpiration := time.Now().Add(24 * time.Hour)
 	newClaims := &OwnerClaims{
-		Username: claims.Username,
-		UserID:   claims.UserID,
-		Role:     claims.Role,
-		Email:    claims.Email,
-		FullName: claims.FullName,
+		Username:   claims.Username,
+		UserID:     claims.UserID,
+		EmployeeID: claims.EmployeeID,
+		Role:       claims.Role,
+		Email:      claims.Email,
+		FullName:   claims.FullName,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   claims.UserID,
 			ExpiresAt: jwt.NewNumericDate(newExpiration),
@@ -283,6 +291,10 @@ func RequireAuth(allowedRoles ...string) gin.HandlerFunc {
 			c.Set("user_role", role)
 			c.Set("username", role)
 			c.Set("user_fullname", "Som Sing Staff")
+			if role == "production" || role == "staff" {
+				c.Set("employee_id", "EMP-001")
+				c.Set("user_id", "usr_prod_001")
+			}
 			if !CheckRole(role, allowedRoles) {
 				c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: insufficient permissions for role " + role})
 				c.Abort()
@@ -308,6 +320,7 @@ func RequireAuth(allowedRoles ...string) gin.HandlerFunc {
 
 		c.Set("username", claims.Username)
 		c.Set("user_id", claims.UserID)
+		c.Set("employee_id", claims.EmployeeID)
 		c.Set("user_role", claims.Role)
 		c.Set("user_email", claims.Email)
 		c.Set("user_fullname", claims.FullName)

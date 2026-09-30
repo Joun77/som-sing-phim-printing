@@ -11,24 +11,24 @@ import (
 // baseReq is the shared A4 baseline request used across all tests.
 func baseReq() CalculationRequest {
 	return CalculationRequest{
-		JobName:               "Professional booklet",
-		Quantity:              100,
-		PaperSku:              "paper-a4-80",
-		PaperCostPerUnit:      100.0, // 100 LAK per sheet
-		PaperFormat:           "sheet",
-		SheetsPerPack:         1,
-		InkCoverageKPercent:   5.0,  // 5% K
-		InkCoverageCMYPercent: 10.0, // 10% CMY
-		InkCostKPerMl:         250000.0,
-		InkCostCMYPerMl:       250000.0,
-		IsoYieldK:             4000.0,
-		IsoYieldCMY:           4000.0,
-		MachinePrice:          50000000,
-		TargetTotalPages:      1000000,
+		JobName:                "Professional booklet",
+		Quantity:               100,
+		PaperSku:               "paper-a4-80",
+		PaperCostPerUnit:       100.0, // 100 LAK per sheet
+		PaperFormat:            "sheet",
+		SheetsPerPack:          1,
+		InkCoverageKPercent:    5.0,  // 5% K
+		InkCoverageCMYPercent:  10.0, // 10% CMY
+		InkCostKPerMl:          250000.0,
+		InkCostCMYPerMl:        250000.0,
+		IsoYieldK:              4000.0,
+		IsoYieldCMY:            4000.0,
+		MachinePrice:           50000000,
+		TargetTotalPages:       1000000,
 		MaintenanceCostPerPage: 10.0,
 		MaintenanceRatePercent: 20.0,
-		JobWidth:              210, // A4
-		JobHeight:             297,
+		JobWidth:               210, // A4
+		JobHeight:              297,
 		CustomFinishingOptions: []CustomFinishingOption{
 			{Name: "Custom Binding", ChargeType: "PER_UNIT", Price: 150.0},
 			{Name: "Job Setup Fee", ChargeType: "FIXED_JOB", Price: 2000.0},
@@ -141,7 +141,6 @@ func TestCalculateJobPricingA4Baseline(t *testing.T) {
 	if res.GrandTotal != 140038.46 {
 		t.Errorf("Expected GrandTotal 140038.46 (no discount/tax), got %v", res.GrandTotal)
 	}
-
 
 	t.Run("Custom_Finishing_PER_SQM", func(t *testing.T) {
 		reqSqM := baseReq()
@@ -353,8 +352,8 @@ func TestSetupCostAndVolumeDiscounts(t *testing.T) {
 		req := baseReq()
 		req.Quantity = 1
 		req.SetupCost = 50000.0   // 50,000 LAK setup fee
-		req.FinishingCost = 200.0  // 200 LAK per unit finishing
-		req.BaseProfitPct = 30.0   // 30% base profit
+		req.FinishingCost = 200.0 // 200 LAK per unit finishing
+		req.BaseProfitPct = 30.0  // 30% base profit
 
 		res, err := CalculateJobPricing(req)
 		if err != nil {
@@ -465,7 +464,6 @@ func TestLAKCurrencyDecimalPrecision(t *testing.T) {
 	}
 }
 
-
 func TestCalculateCutLayout(t *testing.T) {
 	// A4 (210x297) cut into 90x54 business cards on parent sheet 330x480
 	cuts := CalculateCutLayout(90, 54, 330, 480)
@@ -487,7 +485,7 @@ func TestMultiPrinterChannelAndFinishing(t *testing.T) {
 		UnfoldedHeightMM:    297,
 		ParentSheetWidthMM:  650,
 		ParentSheetHeightMM: 900,
-		PaperCostPerUnit:    2500.0, // 2,500 LAK per parent sheet
+		PaperCostPerUnit:    2500.0,  // 2,500 LAK per parent sheet
 		PlateCostPerUnit:    50000.0, // 50,000 LAK per plate
 		PrintingProcesses: []PrinterProcessSetup{
 			{
@@ -722,8 +720,8 @@ func TestCalculateMachineOverhead(t *testing.T) {
 
 func TestElectricityAndGuillotineCuttingPricing(t *testing.T) {
 	req := baseReq()
-	req.MachinePowerWatts = 3000.0  // 3 kW
-	req.MachineRuntimeHours = 2.0   // 2 hours -> 6 kWh
+	req.MachinePowerWatts = 3000.0   // 3 kW
+	req.MachineRuntimeHours = 2.0    // 2 hours -> 6 kWh
 	req.RequiresGuillotineCut = true // Flat 10,000 LAK
 
 	res, err := CalculateJobPricing(req)
@@ -772,9 +770,9 @@ func TestRigidBoardSubstratePricing(t *testing.T) {
 	req := baseReq()
 	req.IsRigidSubstrate = true
 	req.RigidBoardPricePerM2 = 80000.0 // 80,000 LAK / m² (e.g. 5mm foam board)
-	req.JobWidth = 500  // 0.5m
-	req.JobHeight = 1000 // 1.0m -> 0.5 m² per piece
-	req.Quantity = 10   // 10 pieces -> 5.0 m² total
+	req.JobWidth = 500                 // 0.5m
+	req.JobHeight = 1000               // 1.0m -> 0.5 m² per piece
+	req.Quantity = 10                  // 10 pieces -> 5.0 m² total
 
 	res, err := CalculateJobPricing(req)
 	if err != nil {
@@ -876,9 +874,115 @@ func TestPricingThresholdLogic(t *testing.T) {
 	}
 }
 
+func TestCoverageBaselineThreshold(t *testing.T) {
+	// Baseline coverage is 10%, Base Floor Price is 150,000 LAK
+	// Case 1: Low coverage (3% K, 0% CMY) -> total cost + margin is below 150,000 LAK -> EffectiveSalePrice = 150,000 LAK
+	reqLow := baseReq()
+	reqLow.BaselineCoveragePercent = 10.0
+	reqLow.BaseFloorPrice = 150000.0
+	reqLow.ThresholdMode = "FLOOR_OR_ACTUAL"
+	reqLow.InkCoverageKPercent = 3.0
+	reqLow.InkCoverageCMYPercent = 0.0
 
+	resLow, err := CalculateJobPricing(reqLow)
+	if err != nil {
+		t.Fatalf("unexpected error for low coverage test: %v", err)
+	}
 
+	if resLow.EffectiveSalePrice != 150000.0 {
+		t.Errorf("expected EffectiveSalePrice to be floor price 150000, got %f", resLow.EffectiveSalePrice)
+	}
+	if resLow.IsThresholdExceeded {
+		t.Errorf("expected IsThresholdExceeded to be false for low coverage")
+	}
 
+	// Case 2: High coverage (40% K, 80% CMY) -> actual dynamic cost + margin far exceeds 150,000 LAK
+	reqHigh := baseReq()
+	reqHigh.BaselineCoveragePercent = 10.0
+	reqHigh.BaseFloorPrice = 150000.0
+	reqHigh.ThresholdMode = "FLOOR_OR_ACTUAL"
+	reqHigh.InkCoverageKPercent = 40.0
+	reqHigh.InkCoverageCMYPercent = 80.0
 
+	resHigh, err := CalculateJobPricing(reqHigh)
+	if err != nil {
+		t.Fatalf("unexpected error for high coverage test: %v", err)
+	}
 
+	if resHigh.EffectiveSalePrice <= 150000.0 {
+		t.Errorf("expected EffectiveSalePrice for high coverage to exceed 150000, got %f", resHigh.EffectiveSalePrice)
+	}
+	if !resHigh.IsThresholdExceeded {
+		t.Errorf("expected IsThresholdExceeded to be true for high coverage")
+	}
+	if resHigh.ThresholdSurcharge <= 0 {
+		t.Errorf("expected positive ThresholdSurcharge for high coverage, got %f", resHigh.ThresholdSurcharge)
+	}
+}
 
+func TestBaselineCoveragePolicySensitivity(t *testing.T) {
+	// Proves that BaselineCoveragePercent genuinely governs the threshold policy,
+	// keeping identical ink coverage, identical ink costs, identical paper, and identical quantity.
+	// Actual job coverage: 15% total (5% K + 10% CMY)
+	// Base Floor Price: 130,000 LAK (below dynamic price 140,038.46 LAK)
+
+	// Case A: Product offers 20% Baseline Coverage (Job 15% <= Baseline 20%)
+	// Policy must award Base Floor Price (130,000 LAK) with IsThresholdExceeded = false
+	reqA := baseReq()
+	reqA.Quantity = 100
+	reqA.BaseFloorPrice = 130000.0
+	reqA.ThresholdMode = "FLOOR_OR_ACTUAL"
+	reqA.InkCoverageKPercent = 5.0
+	reqA.InkCoverageCMYPercent = 10.0
+	reqA.BaselineCoveragePercent = 20.0
+
+	resA, err := CalculateJobPricing(reqA)
+	if err != nil {
+		t.Fatalf("unexpected error for reqA: %v", err)
+	}
+
+	// Case B: Same exact product & job, but Baseline Coverage is only 10% (Job 15% > Baseline 10%)
+	// Policy must trigger Threshold Exceeded (IsThresholdExceeded = true) and charge dynamic price (140,038.46 LAK > 130,000 LAK)
+	reqB := baseReq()
+	reqB.Quantity = 100
+	reqB.BaseFloorPrice = 130000.0
+	reqB.ThresholdMode = "FLOOR_OR_ACTUAL"
+	reqB.InkCoverageKPercent = 5.0
+	reqB.InkCoverageCMYPercent = 10.0
+	reqB.BaselineCoveragePercent = 10.0
+
+	resB, err := CalculateJobPricing(reqB)
+	if err != nil {
+		t.Fatalf("unexpected error for reqB: %v", err)
+	}
+
+	// 1. Verify that raw ink costs and GrandTotal are 100% identical between Case A and Case B
+	if resA.InkCost != resB.InkCost || resA.InkCostK != resB.InkCostK || resA.InkCostCMY != resB.InkCostCMY {
+		t.Fatalf("Ink costs must be 100%% identical (A=%v, B=%v) to prove baseline sensitivity without ink cost variance", resA.InkCost, resB.InkCost)
+	}
+	if resA.GrandTotal != resB.GrandTotal {
+		t.Fatalf("GrandTotal before threshold must be 100%% identical (A=%v, B=%v)", resA.GrandTotal, resB.GrandTotal)
+	}
+
+	// 2. Case A (Coverage <= Baseline): EffectiveSalePrice must equal BaseFloorPrice and threshold NOT exceeded
+	if resA.IsThresholdExceeded {
+		t.Errorf("Case A (15%% coverage <= 20%% baseline): Expected IsThresholdExceeded to be false, got true")
+	}
+	if resA.EffectiveSalePrice != 130000.0 {
+		t.Errorf("Case A (15%% coverage <= 20%% baseline): Expected EffectiveSalePrice to be floor price 130000.0, got %v", resA.EffectiveSalePrice)
+	}
+	if resA.ThresholdSurcharge != 0.0 {
+		t.Errorf("Case A (15%% coverage <= 20%% baseline): Expected ThresholdSurcharge 0, got %v", resA.ThresholdSurcharge)
+	}
+
+	// 3. Case B (Coverage > Baseline): EffectiveSalePrice must be dynamic (> BaseFloorPrice) and threshold exceeded
+	if !resB.IsThresholdExceeded {
+		t.Errorf("Case B (15%% coverage > 10%% baseline): Expected IsThresholdExceeded to be true, got false")
+	}
+	if resB.EffectiveSalePrice <= 130000.0 {
+		t.Errorf("Case B (15%% coverage > 10%% baseline): Expected EffectiveSalePrice > 130000.0, got %v", resB.EffectiveSalePrice)
+	}
+	if resB.ThresholdSurcharge <= 0.0 {
+		t.Errorf("Case B (15%% coverage > 10%% baseline): Expected positive ThresholdSurcharge, got %v", resB.ThresholdSurcharge)
+	}
+}

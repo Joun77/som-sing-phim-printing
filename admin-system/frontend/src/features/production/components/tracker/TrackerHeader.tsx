@@ -66,7 +66,7 @@ export const TrackerHeader: React.FC<TrackerHeaderProps> = ({
             </span>
             <span className="text-xs font-semibold px-2.5 py-1 bg-slate-50 text-slate-500 border border-slate-200 rounded-xl flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-slate-400" />
-              <span>ກຳນົດສົ່ງ: {order.delivery_date || '2026-09-10'}</span>
+              <span>ກຳນົດສົ່ງ: {order.delivery_date || (order as any).deliveryDate || '-'}</span>
             </span>
           </div>
 
@@ -80,7 +80,7 @@ export const TrackerHeader: React.FC<TrackerHeaderProps> = ({
               className="flex items-center gap-1.5 text-sky-600 hover:text-sky-800 transition font-bold"
             >
               <Phone className="w-3.5 h-3.5" />
-              <span>{order.customer_phone || '020-5555-5555'}</span>
+              <span>{order.customer_phone || '-'}</span>
             </a>
             <span>•</span>
             <span className="text-slate-600 font-semibold">

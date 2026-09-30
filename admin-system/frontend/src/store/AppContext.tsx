@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import type { AppContextValue, EarningRecord } from '../types';
 import { getAuthHeaders } from '@utils/authHeaders';
+import { isAssetItem, resolveCanonicalEquipmentCategory, resolvePrinterSubtype } from '@utils/assetClassification';
 
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -21,28 +22,28 @@ const getPastDateTimeString = (daysAgo, hour = 9, minute = 30) => {
 // Rich Default Seed Master Data - guarantees shop floor continuity if PostgreSQL or LocalStorage reset
 export const DEFAULT_MACHINERY_SEED = [
   {
-    id: 'MAC-5707',
-    name: 'Epson EcoTank L15150',
+    id: 'PRN-9614',
+    name: 'Epson L15150',
     brand: 'Epson',
-    model: 'EcoTank L15150',
-    serialNumber: 'SN-EPS-15150-01',
+    model: 'L15150',
+    serialNumber: 'SN-PRN-9614',
     category: 'Printer',
-    printerCategory: 'Inkjet Printer',
+    printerCategory: 'Inkjet',
     postPressSubtype: 'inkjet',
     status: 'In Use',
-    price: 18500057,
-    unitPrice: 18500057,
-    purchaseCost: 18500057,
-    purchasePrice: 18500057,
-    MachinePrice: 18500057,
-    expectedLifeA4Pages: 300000,
-    TargetTotalPages: 300000,
-    printedPagesCapacity: 300000,
+    price: 18000000,
+    unitPrice: 18000000,
+    purchaseCost: 18000000,
+    purchasePrice: 18000000,
+    MachinePrice: 18000000,
+    expectedLifeA4Pages: 200000,
+    TargetTotalPages: 200000,
+    printedPagesCapacity: 200000,
     totalColorSlots: 4,
     colorSchemeType: 'CMYK',
     lifespanYears: 5,
     location: 'Main Press Floor (ຊັ້ນ 1)',
-    vendor: 'Lao IT Distribution',
+    vendor: 'Supplier',
     warrantyExpirationYear: 2028,
     wearPickupRollerCost: 600000,
     wearPickupRollerLife: 50000,
@@ -72,12 +73,12 @@ export const DEFAULT_MACHINERY_SEED = [
       brand: 'Epson',
       model: 'EcoTank L15150',
       category: 'Printer',
-      printerCategory: 'Inkjet Printer',
+      printerCategory: 'Inkjet',
       colorSchemeType: 'CMYK',
       totalColorSlots: 4,
-      purchaseCost: 18500057,
-      price: 18500057,
-      expectedLifeA4Pages: 300000,
+      purchaseCost: 18000000,
+      price: 18000000,
+      expectedLifeA4Pages: 200000,
       feedType: 'Sheet-fed',
       resolution: '4800 x 2400 dpi',
       maxPrintWidthMm: 329,
@@ -95,81 +96,48 @@ export const DEFAULT_MACHINERY_SEED = [
     }
   },
   {
-    id: 'MAC-6821',
-    name: 'QZYK 920 Programmed Paper Cutter',
-    brand: 'QZYK',
-    model: '920 Hydraulic Program-Control',
-    serialNumber: 'SN-QZYK-920-02',
-    category: 'Cutter',
-    postPressSubtype: 'guillotine',
+    id: 'PRN-6317',
+    name: 'Brother MFC-J2740DW',
+    brand: 'Brother',
+    model: 'MFC-J2740DW',
+    serialNumber: 'SN-PRN-6317',
+    category: 'Printer',
+    printerCategory: 'Inkjet',
+    postPressSubtype: 'inkjet',
     status: 'In Use',
-    price: 45000000,
-    unitPrice: 45000000,
-    purchaseCost: 45000000,
-    purchasePrice: 45000000,
-    MachinePrice: 45000000,
-    TargetTotalPages: 500000,
-    printedPagesCapacity: 500000,
-    expectedLifeA4Pages: 500000,
-    lifespanYears: 10,
-    location: 'Post-Press Finishing Floor',
-    vendor: 'Industrial Print Tech Vientiane',
-    warrantyExpirationYear: 2030,
-    components: [
-      { name: 'HSS Guillotine Blade', nameLo: 'ໃບມີດຕັດເຫຼັກກ້າ HSS', usage: 35, threshold: 90, cost: 2500000, lifeVal: 30000, unitLabel: 'ຮອບຕັດ' },
-      { name: 'Cutting Stick Plastic', nameLo: 'ເຂຽງຮອງຕັດພລາສຕິກ', usage: 20, threshold: 90, cost: 150000, lifeVal: 10000, unitLabel: 'ຮອບຕັດ' }
-    ],
+    price: 7000000,
+    unitPrice: 7000000,
+    purchaseCost: 7000000,
+    purchasePrice: 7000000,
+    MachinePrice: 7000000,
+    TargetTotalPages: 150000,
+    printedPagesCapacity: 150000,
+    expectedLifeA4Pages: 150000,
+    totalColorSlots: 4,
+    colorSchemeType: 'CMYK',
+    lifespanYears: 5,
+    location: 'Main Dept',
+    vendor: 'Supplier',
+    warrantyExpirationYear: 2028,
     specs: {
-      brand: 'QZYK',
-      model: '920',
-      category: 'Cutter',
-      postPressSubtype: 'guillotine',
-      purchaseCost: 45000000,
-      price: 45000000,
-      maxCutWidthMm: 920
-    }
-  },
-  {
-    id: 'MAC-4190',
-    name: 'Boway K5 Perfect Glue Binder',
-    brand: 'Boway',
-    model: 'K5 Heavy Duty Auto Binder',
-    serialNumber: 'SN-BW-K5-01',
-    category: 'Binder',
-    postPressSubtype: 'binder',
-    status: 'In Use',
-    price: 28000000,
-    unitPrice: 28000000,
-    purchaseCost: 28000000,
-    purchasePrice: 28000000,
-    MachinePrice: 28000000,
-    TargetTotalPages: 100000,
-    printedPagesCapacity: 100000,
-    lifespanYears: 8,
-    location: 'Post-Press Finishing Floor',
-    vendor: 'Industrial Print Tech Vientiane',
-    warrantyExpirationYear: 2029,
-    components: [
-      { name: 'Milling Cutter Tooth', nameLo: 'ໃບເລື່ອຍກີດສັນປຶ້ມ', usage: 18, threshold: 90, cost: 1200000, lifeVal: 25000, unitLabel: 'ຫົວ' },
-      { name: 'Glue Tank Heater Element', nameLo: 'ຂົດລວດຄວາມຮ້ອນອ່າງກາວ', usage: 10, threshold: 90, cost: 850000, lifeVal: 40000, unitLabel: 'ຫົວ' }
-    ],
-    specs: {
-      brand: 'Boway',
-      model: 'K5',
-      category: 'Binder',
-      postPressSubtype: 'binder',
-      purchaseCost: 28000000,
-      price: 28000000,
-      maxSpineWidthMm: 50
+      brand: 'Brother',
+      model: 'MFC-J2740DW',
+      category: 'Printer',
+      printerCategory: 'Inkjet',
+      colorSchemeType: 'CMYK',
+      totalColorSlots: 4,
+      purchaseCost: 7000000,
+      price: 7000000,
+      expectedLifeA4Pages: 150000
     }
   }
 ];
 
 export const DEFAULT_PRINTER_COLOR_LINKS_SEED = [
-  { id: 'lnk-001', assetId: 'MAC-5707', slotPosition: 'Slot 1 (K - Black)', inkCode: 'INK-9826', colorGroup: 'Black' },
-  { id: 'lnk-002', assetId: 'MAC-5707', slotPosition: 'Slot 2 (C - Cyan)', inkCode: 'INK-8713', colorGroup: 'Cyan' },
-  { id: 'lnk-003', assetId: 'MAC-5707', slotPosition: 'Slot 3 (M - Magenta)', inkCode: 'INK-0365', colorGroup: 'Magenta' },
-  { id: 'lnk-004', assetId: 'MAC-5707', slotPosition: 'Slot 4 (Y - Yellow)', inkCode: 'INK-6588', colorGroup: 'Yellow' }
+  { id: 'lnk-001', assetId: 'PRN-9614', slotPosition: 'Slot 1 (K - Black)', inkCode: 'INK-9826', colorGroup: 'Black' },
+  { id: 'lnk-002', assetId: 'PRN-9614', slotPosition: 'Slot 2 (C - Cyan)', inkCode: 'INK-8713', colorGroup: 'Cyan' },
+  { id: 'lnk-003', assetId: 'PRN-9614', slotPosition: 'Slot 3 (M - Magenta)', inkCode: 'INK-0365', colorGroup: 'Magenta' },
+  { id: 'lnk-004', assetId: 'PRN-9614', slotPosition: 'Slot 4 (Y - Yellow)', inkCode: 'INK-6588', colorGroup: 'Yellow' }
 ];
 
 export const DEFAULT_INKS_SEED = [
@@ -300,6 +268,10 @@ export const LEGACY_MOCK_IDS = new Set([
   'prn-fuji-v180',
   'prn-epson-l1800',
   'mac-cutter-920',
+  'mac-binder-k5',
+  'mac-4190',
+  'mac-5707',
+  'mac-6821',
   'mac-lam-fm360',
   'mac-bind-wd50',
   'pap-art-260',
@@ -375,6 +347,106 @@ const ROLE_OPTIONS = [
   { id: 'inventory_manager', labelLo: 'ຜູ້ຈັດການຄັງ (Inventory Manager)', labelEn: 'Inventory Manager' },
   { id: 'accountant', labelLo: 'ນັກບັນຊີ (Accountant)', labelEn: 'Accountant' }
 ];
+
+export type TombstoneScope = 'equipment' | 'inventory' | 'all';
+
+export const getDeletedIds = (scope: TombstoneScope = 'all'): Set<string> => {
+  const result = new Set<string>();
+  try {
+    if (typeof localStorage === 'undefined') return result;
+
+    if (scope === 'equipment') {
+      const eqRaw = localStorage.getItem('som_sing_deleted_equipment_ids');
+      if (eqRaw) {
+        const parsed = JSON.parse(eqRaw);
+        if (Array.isArray(parsed)) parsed.forEach(id => result.add(String(id)));
+      }
+      return result;
+    }
+
+    if (scope === 'inventory') {
+      const invRaw = localStorage.getItem('som_sing_deleted_inventory_ids');
+      if (invRaw) {
+        const parsed = JSON.parse(invRaw);
+        if (Array.isArray(parsed)) parsed.forEach(id => result.add(String(id)));
+      }
+      return result;
+    }
+
+    // scope === 'all'
+    const raw = localStorage.getItem('som_sing_deleted_item_ids');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) parsed.forEach(id => result.add(String(id)));
+    }
+    const eqRaw = localStorage.getItem('som_sing_deleted_equipment_ids');
+    if (eqRaw) {
+      const parsed = JSON.parse(eqRaw);
+      if (Array.isArray(parsed)) parsed.forEach(id => result.add(String(id)));
+    }
+    const invRaw = localStorage.getItem('som_sing_deleted_inventory_ids');
+    if (invRaw) {
+      const parsed = JSON.parse(invRaw);
+      if (Array.isArray(parsed)) parsed.forEach(id => result.add(String(id)));
+    }
+  } catch (e) {}
+  return result;
+};
+
+export const recordDeletedId = (id: string, scope: TombstoneScope = 'all') => {
+  if (!id) return;
+  const targetLower = id.toLowerCase();
+  const addMatching = (key: string) => {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const raw = localStorage.getItem(key);
+      const set = new Set<string>(raw ? JSON.parse(raw) : []);
+      set.add(id);
+      set.add(targetLower);
+      localStorage.setItem(key, JSON.stringify(Array.from(set)));
+    } catch (e) {}
+  };
+
+  if (scope === 'equipment') {
+    addMatching('som_sing_deleted_equipment_ids');
+  } else if (scope === 'inventory') {
+    addMatching('som_sing_deleted_inventory_ids');
+  } else {
+    addMatching('som_sing_deleted_item_ids');
+  }
+};
+
+export const unrecordDeletedId = (id: string, scope: TombstoneScope = 'all') => {
+  if (!id) return;
+  const targetLower = id.toLowerCase();
+  const removeMatching = (key: string) => {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const filtered = parsed.filter(item => {
+          const s = String(item);
+          return s !== id && s.toLowerCase() !== targetLower;
+        });
+        localStorage.setItem(key, JSON.stringify(filtered));
+      }
+    } catch (e) {}
+  };
+
+  if (scope === 'equipment') {
+    removeMatching('som_sing_deleted_equipment_ids');
+    removeMatching('som_sing_deleted_item_ids');
+  } else if (scope === 'inventory') {
+    removeMatching('som_sing_deleted_inventory_ids');
+    removeMatching('som_sing_deleted_item_ids');
+  } else {
+    removeMatching('som_sing_deleted_item_ids');
+    removeMatching('som_sing_deleted_equipment_ids');
+    removeMatching('som_sing_deleted_inventory_ids');
+  }
+};
 
 export const AppProvider = ({ children }) => {
   // Sync activeTab with URL search params (?tab=...) for bookmarking & refresh retention
@@ -760,7 +832,7 @@ export const AppProvider = ({ children }) => {
     const nameLower = (item.name || '').toLowerCase();
     const isPaper = cat === 'paper' || cat === 'material' || nameLower.includes('paper') || nameLower.includes('ເຈ້ຍ') || nameLower.includes('double a') || nameLower.includes('green read') || nameLower.includes('idea');
     const isInk = cat === 'ink' || cat === 'toner' || nameLower.includes('ink') || nameLower.includes('ໝຶກ') || nameLower.includes('epson-001') || nameLower.includes('epson-008') || (item.id || '').startsWith('INK-');
-    
+
     const inkVolume = Number(item.specs?.volume || item.specs?.volumePerBottle || item.specs?.inkVolume || item.volume || 70);
     let multiplier = Number(item.purchaseMultiplier || item.purchase_multiplier || item.specs?.sheetsPerPack || item.specs?.sheets_per_pack || item.specs?.sheets_per_ream || (isInk ? inkVolume : 500));
     if (isPaper && (!multiplier || multiplier <= 1)) {
@@ -768,7 +840,7 @@ export const AppProvider = ({ children }) => {
     } else if (isInk) {
       multiplier = (multiplier > 0 && multiplier <= 200) ? multiplier : inkVolume;
     }
-    
+
     let currentStockSheets = Number(item.stockQty) || Number(item.currentStock) || 0;
     if (isPaper && currentStockSheets > 0 && currentStockSheets <= 100) {
       currentStockSheets = currentStockSheets * multiplier;
@@ -806,7 +878,7 @@ export const AppProvider = ({ children }) => {
         seenBatchKeys.add(key);
         let bQty = Number(b.currentQty || b.initialQty || 0);
         let bInit = Number(b.initialQty || bQty);
-        
+
         if (isPaper && bQty > 0 && bQty <= 100) {
           bQty = bQty * multiplier;
         }
@@ -822,7 +894,7 @@ export const AppProvider = ({ children }) => {
 
         let bPurchasePrice = Number(b.purchasePricePerReam || b.purchasePrice || costPerPurchase);
         let bCostPerSheet = Number(b.costPerSheet || b.cost_per_consumption_unit || costPerConsumption);
-        
+
         if (isPaper && bInit >= (2 * multiplier) && bCostPerSheet > 0 && Math.round(bCostPerSheet * multiplier) === Math.round(bPurchasePrice)) {
           bCostPerSheet = Math.round((bPurchasePrice / bInit) * 100) / 100;
           bPurchasePrice = Math.round(bCostPerSheet * multiplier);
@@ -869,37 +941,8 @@ export const AppProvider = ({ children }) => {
     };
   };
 
-
-  const getDeletedIds = (): Set<string> => {
-    try {
-      const raw = localStorage.getItem('som_sing_deleted_item_ids');
-      if (raw) return new Set(JSON.parse(raw));
-    } catch (e) {}
-    return new Set();
-  };
-
-  const recordDeletedId = (id: string) => {
-    if (!id) return;
-    try {
-      const set = getDeletedIds();
-      set.add(id);
-      set.add(id.toLowerCase());
-      localStorage.setItem('som_sing_deleted_item_ids', JSON.stringify(Array.from(set)));
-    } catch (e) {}
-  };
-
-  const unrecordDeletedId = (id: string) => {
-    if (!id) return;
-    try {
-      const set = getDeletedIds();
-      set.delete(id);
-      set.delete(id.toLowerCase());
-      localStorage.setItem('som_sing_deleted_item_ids', JSON.stringify(Array.from(set)));
-    } catch (e) {}
-  };
-
   const [inventory, setInventory] = useState(() => {
-    const deletedIds = getDeletedIds();
+    const deletedIds = getDeletedIds('inventory');
     const saved = localStorage.getItem('ss_print_inventory_v6');
     if (saved !== null) {
       try {
@@ -908,7 +951,7 @@ export const AppProvider = ({ children }) => {
           const unique = [];
           const seen = new Set();
           for (const item of parsed) {
-            if (item && item.id && !seen.has(item.id) && !deletedIds.has(item.id) && !deletedIds.has(item.id.toLowerCase()) && !LEGACY_MOCK_IDS.has(item.id.toLowerCase())) {
+            if (item && item.id && !seen.has(item.id) && !deletedIds.has(item.id) && !deletedIds.has(item.id.toLowerCase()) && !LEGACY_MOCK_IDS.has(item.id.toLowerCase()) && !isAssetItem(item.category, item)) {
               seen.add(item.id);
               unique.push(sanitizeInventoryItem(item));
             }
@@ -920,44 +963,78 @@ export const AppProvider = ({ children }) => {
     return [];
   });
 
+  const [equipmentApiError, setEquipmentApiError] = useState<string | null>(null);
+
   const [equipment, setEquipment] = useState(() => {
-    const deletedIds = getDeletedIds();
+    const deletedEqIds = getDeletedIds('equipment');
+    // Authentic equipment backed by real PostgreSQL records should never be filtered out by initial tombstones:
+    deletedEqIds.delete('PRN-9614');
+    deletedEqIds.delete('prn-9614');
+    deletedEqIds.delete('PRN-6317');
+    deletedEqIds.delete('prn-6317');
+    deletedEqIds.delete('MAC-5707');
+    deletedEqIds.delete('mac-5707');
+    deletedEqIds.delete('MAC-6821');
+    deletedEqIds.delete('mac-6821');
+
     const saved = localStorage.getItem('ss_print_equipment_v6');
     if (saved !== null) {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const valid = parsed.filter(i => 
-            i && i.id && 
-            !deletedIds.has(i.id) && 
-            !deletedIds.has(i.id.toLowerCase()) && 
+          const map = new Map<string, any>();
+          parsed.filter(i =>
+            i && i.id &&
+            !deletedEqIds.has(i.id) &&
+            !deletedEqIds.has(i.id.toLowerCase()) &&
             !LEGACY_MOCK_IDS.has(i.id.toLowerCase())
-          ).map(i => {
-            // Self-healing: if an item was corrupted with empty name/price, restore from default seed
-            const seed = DEFAULT_MACHINERY_SEED.find(s => s.id === i.id);
-            if (seed && (!i.name || i.name === i.id || !i.price || i.price === 0)) {
-              return { 
-                ...seed, 
-                ...i, 
-                name: seed.name, 
-                brand: seed.brand, 
-                model: seed.model, 
-                category: seed.category, 
-                printerCategory: seed.printerCategory,
-                price: seed.price, 
-                purchaseCost: seed.price, 
-                purchasePrice: seed.price, 
-                MachinePrice: seed.price, 
-                printedPagesCapacity: seed.printedPagesCapacity, 
-                expectedLifeA4Pages: seed.expectedLifeA4Pages, 
-                components: (i.components && i.components.length > 0) ? i.components : seed.components, 
-                oemBaselineInks: (i.oemBaselineInks && i.oemBaselineInks.length > 0) ? i.oemBaselineInks : seed.oemBaselineInks,
-                specs: { ...(seed.specs || {}), ...(i.specs || {}) }
-              };
+          ).forEach(i => {
+            // Self-healing / reconciliation of legacy misplaced seed in localStorage:
+            let baseItem = i;
+            if (i.id === 'MAC-6821' || i.id === 'PRN-6317') {
+              const broSeed = DEFAULT_MACHINERY_SEED.find(s => s.id === 'PRN-6317');
+              baseItem = { ...broSeed, ...i, id: 'PRN-6317' };
+            } else if (i.id === 'MAC-5707' || i.id === 'PRN-9614') {
+              const epSeed = DEFAULT_MACHINERY_SEED.find(s => s.id === 'PRN-9614');
+              baseItem = { ...epSeed, ...i, id: 'PRN-9614' };
+            } else if (i.id === 'MAC-4190' || i.id === 'MAC-CUTTER-920' || i.id === 'MAC-BINDER-K5' || LEGACY_MOCK_IDS.has(i.id.toLowerCase())) {
+              // Unverified mock machinery without backing evidence in DB/inbound: skip / drop
+              return;
+            } else {
+              const seed = DEFAULT_MACHINERY_SEED.find(s => s.id === i.id);
+              if (seed && (!i.name || i.name === i.id || !i.price || i.price === 0)) {
+                baseItem = {
+                  ...seed,
+                  ...i,
+                  name: seed.name,
+                  brand: seed.brand,
+                  model: seed.model,
+                  category: seed.category,
+                  printerCategory: seed.printerCategory,
+                  price: seed.price,
+                  purchaseCost: seed.price,
+                  purchasePrice: seed.price,
+                  MachinePrice: seed.price,
+                  printedPagesCapacity: seed.printedPagesCapacity,
+                  expectedLifeA4Pages: seed.expectedLifeA4Pages,
+                  components: (i.components && i.components.length > 0) ? i.components : seed.components,
+                  oemBaselineInks: (i.oemBaselineInks && i.oemBaselineInks.length > 0) ? i.oemBaselineInks : seed.oemBaselineInks,
+                  specs: { ...(seed.specs || {}), ...(i.specs || {}) }
+                };
+              }
             }
-            return i;
+
+            const canonicalCat = resolveCanonicalEquipmentCategory(baseItem.category, baseItem);
+            const prnSubtype = canonicalCat === 'Printer' ? resolvePrinterSubtype(baseItem) : undefined;
+            const finalized = {
+              ...baseItem,
+              category: canonicalCat,
+              printerCategory: canonicalCat === 'Printer' ? (baseItem.printerCategory || prnSubtype) : undefined
+            };
+
+            map.set(finalized.id, finalized);
           });
-          if (valid.length > 0) return valid;
+          if (map.size > 0) return Array.from(map.values());
         }
       } catch (e) {}
     }
@@ -1048,262 +1125,241 @@ export const AppProvider = ({ children }) => {
       if (!res.ok) {
         res = await fetch('/api/v1/assets', { headers: getAuthHeaders() });
       }
-      const resData = (res && res.ok) ? await res.json() : null;
-      const rawItems = Array.isArray(resData) ? resData : (resData?.data || []);
 
-      const printerInbounds = inbItems.filter((i: any) => {
-        const c = (i.category || '').toUpperCase();
-        const sku = (i.skuCode || i.id || '').toUpperCase();
-        return c === 'PRINTER' || c === 'MACHINERY' || c === 'EQUIPMENT' || c === 'CUTTER' || c === 'BINDER' || c === 'LAMINATOR' || sku.startsWith('PRN') || sku.startsWith('MAC');
-      }).map((p: any) => {
-        const cat = (p.category || '').toLowerCase();
-        const sub = (p.postPressSubtype || p.specs?.postPressSubtype || p.specs?.category || '').toLowerCase();
-        const name = (p.itemName || p.name || `${p.specs?.brand || ''} ${p.specs?.model || ''}`).toLowerCase();
+      if (!res.ok) {
+        setEquipmentApiError(`API error: HTTP ${res.status} ${res.statusText}`);
+      } else {
+        setEquipmentApiError(null);
+        const resData = await res.json();
+        const rawItems = Array.isArray(resData) ? resData : (resData?.data || []);
 
-        const isCutter = cat.includes('cutter') || sub.includes('cutter') || sub.includes('guillotine') || sub.includes('plotter') || name.includes('cutter') || name.includes('guillotine');
-        const isBinder = cat.includes('binder') || sub.includes('binder') || name.includes('binder');
-        const isLaminator = cat.includes('laminat') || sub.includes('laminat') || name.includes('laminat');
-        const isPrinter = !isCutter && !isBinder && !isLaminator;
+        const printerInbounds = inbItems.filter((i: any) => {
+          return isAssetItem(i.category, i);
+        }).map((p: any) => {
+          const cat = (p.category || '').toLowerCase();
+          const sub = (p.postPressSubtype || p.specs?.postPressSubtype || p.specs?.category || '').toLowerCase();
+          const name = (p.itemName || p.name || `${p.specs?.brand || ''} ${p.specs?.model || ''}`).toLowerCase();
 
-        const resolvedCategory = isPrinter ? 'Printer' : isCutter ? 'Cutter' : isBinder ? 'Binder' : 'Laminator';
-        const resolvedPhoto = p.imageUrl || p.itemPhoto || p.productPhoto || p.image || p.docs?.productPhoto || p.specs?.productPhoto || p.specs?.productImage || (Array.isArray(p.actual_images) && p.actual_images[0]) || (Array.isArray(p.specs?.actual_images) && p.specs?.actual_images[0]) || null;
+          const resolvedCategory = resolveCanonicalEquipmentCategory(p.category, p);
+          const isPrinter = resolvedCategory === 'Printer';
+          const isCutter = resolvedCategory === 'Cutter';
+          const isBinder = resolvedCategory === 'Binder';
+          const isLaminator = resolvedCategory === 'Laminator';
+          const resolvedSubtype = isPrinter ? resolvePrinterSubtype(p) : undefined;
+          const resolvedPhoto = p.imageUrl || p.itemPhoto || p.productPhoto || p.image || p.docs?.productPhoto || p.specs?.productPhoto || p.specs?.productImage || (Array.isArray(p.actual_images) && p.actual_images[0]) || (Array.isArray(p.specs?.actual_images) && p.specs?.actual_images[0]) || null;
 
-        const defaultLife = isPrinter ? 200000 : isCutter ? 100000 : isBinder ? 30000 : 50000;
-        const realLife = Number(p.specs?.expectedLife || p.specs?.expectedLifeA4Pages || p.expectedLifeA4Pages || p.TargetTotalPages || p.printedPagesCapacity || defaultLife);
+          const defaultLife = isPrinter ? 200000 : isCutter ? 100000 : isBinder ? 30000 : 50000;
+          const realLife = Number(p.specs?.expectedLife || p.specs?.expectedLifeA4Pages || p.expectedLifeA4Pages || p.TargetTotalPages || p.printedPagesCapacity || defaultLife);
 
-        const rawOemSlots = p.specs?.oemBaselineInks || p.specs?.printerInkSlots || p.oemBaselineInks || p.printerInkSlots || [];
+          const rawOemSlots = p.specs?.oemBaselineInks || p.specs?.printerInkSlots || p.oemBaselineInks || p.printerInkSlots || [];
 
-        const explicitInkjet = 
-          (p.specs?.printerCategory || '').toLowerCase().includes('inkjet') ||
-          (p.specs?.machineryTypeCategory || '').toLowerCase().includes('inkjet') ||
-          (p.printerCategory || '').toLowerCase().includes('inkjet') ||
-          sub.includes('inkjet') ||
-          cat.includes('inkjet') ||
-          name.includes('ecotank') || name.includes('epson') || name.includes('l15150') || name.includes('inkjet') || name.includes('ink tank') || name.includes('maxify');
+          const explicitInkjet =
+            (p.specs?.printerCategory || '').toLowerCase().includes('inkjet') ||
+            (p.specs?.machineryTypeCategory || '').toLowerCase().includes('inkjet') ||
+            (p.printerCategory || '').toLowerCase().includes('inkjet') ||
+            sub.includes('inkjet') ||
+            cat.includes('inkjet') ||
+            name.includes('ecotank') || name.includes('epson') || name.includes('l15150') || name.includes('inkjet') || name.includes('ink tank') || name.includes('maxify');
 
-        const isLaserPrn = resolvedCategory === 'Printer' && !explicitInkjet && (
-          (p.specs?.printerCategory || '').toLowerCase().includes('laser') ||
-          (p.specs?.machineryTypeCategory || '').toLowerCase().includes('laser') ||
-          (p.printerCategory || '').toLowerCase().includes('laser') ||
-          sub.includes('laser') ||
-          cat.includes('laser') ||
-          p.specs?.inkType === 'Toner' ||
-          name.includes('laser') || name.includes('xerox') || name.includes('c8055') || name.includes('c5005') ||
-          (p.specs?.wearDrumUnitCost !== undefined && Number(p.specs?.wearDrumUnitCost) > 0)
-        );
-        const isInkjetPrn = resolvedCategory === 'Printer' && !isLaserPrn;
+          const isLaserPrn = resolvedCategory === 'Printer' && !explicitInkjet && (
+            (p.specs?.printerCategory || '').toLowerCase().includes('laser') ||
+            (p.specs?.machineryTypeCategory || '').toLowerCase().includes('laser') ||
+            (p.printerCategory || '').toLowerCase().includes('laser') ||
+            sub.includes('laser') ||
+            cat.includes('laser') ||
+            p.specs?.inkType === 'Toner' ||
+            name.includes('laser') || name.includes('xerox') || name.includes('c8055') || name.includes('c5005') ||
+            (p.specs?.wearDrumUnitCost !== undefined && Number(p.specs?.wearDrumUnitCost) > 0)
+          );
+          const isInkjetPrn = resolvedCategory === 'Printer' && !isLaserPrn;
 
-        let dynamicInitialComponents: any[] = [];
-        if (isLaserPrn) {
-          dynamicInitialComponents = [
-            { id: 'part-drum', name: 'OPC Drum Unit', nameLo: 'ຊຸດດຣັມສ້າງພາບ (Drum Unit)', usage: 0, threshold: 85, cost: Number(p.specs?.wearDrumUnitCost || p.wearDrumUnitCost || 1500000), lifeVal: Number(p.specs?.wearDrumUnitLife || p.wearDrumUnitLife || 50000), unitLabel: 'pages' },
-            { id: 'part-fuser', name: 'Fuser Fixing Assembly', nameLo: 'ຊຸດຄວາມຮ້ອນ (Fuser Unit)', usage: 0, threshold: 90, cost: Number(p.specs?.wearFuserUnitCost || p.wearFuserUnitCost || 2000000), lifeVal: Number(p.specs?.wearFuserUnitLife || p.wearFuserUnitLife || 100000), unitLabel: 'pages' },
-            { id: 'part-itb', name: 'Transfer Belt', nameLo: 'ສາຍພານຖ່າຍທອດພາບ (Transfer Belt)', usage: 0, threshold: 90, cost: Number(p.specs?.wearTransferBeltCost || p.wearTransferBeltCost || 1800000), lifeVal: Number(p.specs?.wearTransferBeltLife || p.wearTransferBeltLife || 100000), unitLabel: 'pages' },
-            { id: 'part-pickup', name: 'Pickup Roller', nameLo: 'ຊຸດລູກກິ້ງດຶງເຈ້ຍ (Pickup Roller)', usage: 0, threshold: 85, cost: Number(p.specs?.wearPickupRollerCost || p.wearPickupRollerCost || 150000), lifeVal: Number(p.specs?.wearPickupRollerLife || p.wearPickupRollerLife || 30000), unitLabel: 'pages' },
-            { id: 'part-waste', name: 'Waste Toner Box', nameLo: 'ກ່ອງເກັບຜົງໝຶກເສຍ (Waste Toner Box)', usage: 0, threshold: 90, cost: Number(p.specs?.wearWasteTonerBoxCost || p.wearWasteTonerBoxCost || 350000), lifeVal: Number(p.specs?.wearWasteTonerBoxLife || p.wearWasteTonerBoxLife || 30000), unitLabel: 'pages' },
-          ];
-        } else if (isInkjetPrn) {
-          dynamicInitialComponents = [
-            { id: 'part-maint', name: 'Maintenance Waste Box', nameLo: 'ຊຸດຊັບໝຶກ (Maintenance Box)', usage: 0, threshold: 85, cost: Number(p.specs?.wearMaintBoxCost || p.wearMaintBoxCost || 450000), lifeVal: Number(p.specs?.wearMaintBoxLife || p.wearMaintBoxLife || 25000), unitLabel: 'pages' },
-            { id: 'part-head', name: 'Precision Inkjet Printhead', nameLo: 'ຫົວພິມຄວາມລະອຽດສູງ (Printhead)', usage: 0, threshold: 90, cost: Number(p.specs?.wearPrintheadCost || p.wearPrintheadCost || 4500000), lifeVal: Number(p.specs?.wearPrintheadLife || p.wearPrintheadLife || 100000), unitLabel: 'pages' },
-            { id: 'part-pickup', name: 'Feed Pickup Roller', nameLo: 'ຢາງດຶງເຈ້ຍ (Pickup Roller)', usage: 0, threshold: 85, cost: Number(p.specs?.wearPickupRollerCost || p.wearPickupRollerCost || 150000), lifeVal: Number(p.specs?.wearPickupRollerLife || p.wearPickupRollerLife || 30000), unitLabel: 'pages' },
-            { id: 'part-belt', name: 'Carriage Drive Belt', nameLo: 'ສາຍພານຫົວພິມ (Carriage Belt)', usage: 0, threshold: 90, cost: Number(p.specs?.wearCarriageBeltCost || p.wearCarriageBeltCost || 500000), lifeVal: Number(p.specs?.wearCarriageBeltLife || p.wearCarriageBeltLife || 50000), unitLabel: 'pages' },
-          ];
-        } else if (isCutter) {
-          dynamicInitialComponents = [
-            { id: 'part-sharp', name: 'Sharpening Blade Service', nameLo: 'ຄ່າຈ້າງລັບຄົມໃບມີດຕັດເຈ້ຍ', usage: 0, threshold: 90, cost: Number(p.specs?.wearSharpeningCost || p.wearSharpeningCost || 150000), lifeVal: Number(p.specs?.wearSharpeningIntervalCuts || p.wearSharpeningIntervalCuts || 10000), unitLabel: 'cuts' },
-            { id: 'part-stick', name: 'Cutting Stick Pad', nameLo: 'ໄມ້ຮອງໃບມີດຕັດ (Cutting Stick)', usage: 0, threshold: 85, cost: Number(p.specs?.wearCuttingStickCost || p.wearCuttingStickCost || 100000), lifeVal: Number(p.specs?.wearCuttingStickLifeCuts || p.wearCuttingStickLifeCuts || 20000), unitLabel: 'cuts' },
-            { id: 'part-blade', name: 'Plotter Cutting Blade', nameLo: 'ໃບມີດພລັອດເຕີ (Plotter Blade)', usage: 0, threshold: 90, cost: Number(p.specs?.wearBladeCost || p.wearBladeCost || 250000), lifeVal: Number(p.specs?.wearBladeLifeMeters || p.wearBladeLifeMeters || 5000), unitLabel: 'm' },
-          ];
-        } else if (isLaminator) {
-          dynamicInitialComponents = [
-            { id: 'part-roller', name: 'Silicone Heat Rollers', nameLo: 'ລູກກິ້ງຢາງຄວາມຮ້ອນ (Silicone Rollers)', usage: 0, threshold: 85, cost: Number(p.specs?.wearSiliconeRollerCost || p.wearSiliconeRollerCost || 1200000), lifeVal: Number(p.specs?.wearSiliconeRollerLifeMeters || p.wearSiliconeRollerLifeMeters || 20000), unitLabel: 'm' },
-            { id: 'part-heat', name: 'Heating Element Core', nameLo: 'ແທ່ງຄວາມຮ້ອນ (Heating Element)', usage: 0, threshold: 90, cost: Number(p.specs?.wearHeatingElementCost || p.wearHeatingElementCost || 800000), lifeVal: Number(p.specs?.wearHeatingElementHours || p.wearHeatingElementHours || 5000), unitLabel: 'hours' },
-          ];
-        } else if (isBinder) {
-          dynamicInitialComponents = [
-            { id: 'part-mill', name: 'Spine Milling Cutter', nameLo: 'ໃບມີດປາດສັນປຶ້ມ (Milling Cutter)', usage: 0, threshold: 85, cost: Number(p.specs?.wearMillingCutterCost || p.wearMillingCutterCost || 800000), lifeVal: Number(p.specs?.wearMillingCutterLifeBooks || p.wearMillingCutterLifeBooks || 10000), unitLabel: 'books' },
-            { id: 'part-punch', name: 'Wire Punching Pins Set', nameLo: 'ຊຸດເຂັມເຈາະຮູສັນລວດ (Punching Pins)', usage: 0, threshold: 90, cost: Number(p.specs?.wearPunchingPinsCost || p.wearPunchingPinsCost || 600000), lifeVal: Number(p.specs?.wearPunchingPinsLifePunches || p.wearPunchingPinsLifePunches || 20000), unitLabel: 'punches' },
-          ];
-        }
+          let dynamicInitialComponents: any[] = [];
+          if (isLaserPrn) {
+            dynamicInitialComponents = [
+              { id: 'part-drum', name: 'OPC Drum Unit', nameLo: 'ຊຸດດຣັມສ້າງພາບ (Drum Unit)', usage: 0, threshold: 85, cost: Number(p.specs?.wearDrumUnitCost || p.wearDrumUnitCost || 1500000), lifeVal: Number(p.specs?.wearDrumUnitLife || p.wearDrumUnitLife || 50000), unitLabel: 'pages' },
+              { id: 'part-fuser', name: 'Fuser Fixing Assembly', nameLo: 'ຊຸດຄວາມຮ້ອນ (Fuser Unit)', usage: 0, threshold: 90, cost: Number(p.specs?.wearFuserUnitCost || p.wearFuserUnitCost || 2000000), lifeVal: Number(p.specs?.wearFuserUnitLife || p.wearFuserUnitLife || 100000), unitLabel: 'pages' },
+              { id: 'part-itb', name: 'Transfer Belt', nameLo: 'ສາຍພານຖ່າຍທອດພາບ (Transfer Belt)', usage: 0, threshold: 90, cost: Number(p.specs?.wearTransferBeltCost || p.wearTransferBeltCost || 1800000), lifeVal: Number(p.specs?.wearTransferBeltLife || p.wearTransferBeltLife || 100000), unitLabel: 'pages' },
+              { id: 'part-pickup', name: 'Pickup Roller', nameLo: 'ຊຸດລູກກິ້ງດຶງເຈ້ຍ (Pickup Roller)', usage: 0, threshold: 85, cost: Number(p.specs?.wearPickupRollerCost || p.wearPickupRollerCost || 150000), lifeVal: Number(p.specs?.wearPickupRollerLife || p.wearPickupRollerLife || 30000), unitLabel: 'pages' },
+              { id: 'part-waste', name: 'Waste Toner Box', nameLo: 'ກ່ອງເກັບຜົງໝຶກເສຍ (Waste Toner Box)', usage: 0, threshold: 90, cost: Number(p.specs?.wearWasteTonerBoxCost || p.wearWasteTonerBoxCost || 350000), lifeVal: Number(p.specs?.wearWasteTonerBoxLife || p.wearWasteTonerBoxLife || 30000), unitLabel: 'pages' },
+            ];
+          } else if (isInkjetPrn) {
+            dynamicInitialComponents = [
+              { id: 'part-maint', name: 'Maintenance Waste Box', nameLo: 'ຊຸດຊັບໝຶກ (Maintenance Box)', usage: 0, threshold: 85, cost: Number(p.specs?.wearMaintBoxCost || p.wearMaintBoxCost || 450000), lifeVal: Number(p.specs?.wearMaintBoxLife || p.wearMaintBoxLife || 25000), unitLabel: 'pages' },
+              { id: 'part-head', name: 'Precision Inkjet Printhead', nameLo: 'ຫົວພິມຄວາມລະອຽດສູງ (Printhead)', usage: 0, threshold: 90, cost: Number(p.specs?.wearPrintheadCost || p.wearPrintheadCost || 4500000), lifeVal: Number(p.specs?.wearPrintheadLife || p.wearPrintheadLife || 100000), unitLabel: 'pages' },
+              { id: 'part-pickup', name: 'Feed Pickup Roller', nameLo: 'ຢາງດຶງເຈ້ຍ (Pickup Roller)', usage: 0, threshold: 85, cost: Number(p.specs?.wearPickupRollerCost || p.wearPickupRollerCost || 150000), lifeVal: Number(p.specs?.wearPickupRollerLife || p.wearPickupRollerLife || 30000), unitLabel: 'pages' },
+              { id: 'part-belt', name: 'Carriage Drive Belt', nameLo: 'ສາຍພານຫົວພິມ (Carriage Belt)', usage: 0, threshold: 90, cost: Number(p.specs?.wearCarriageBeltCost || p.wearCarriageBeltCost || 500000), lifeVal: Number(p.specs?.wearCarriageBeltLife || p.wearCarriageBeltLife || 50000), unitLabel: 'pages' },
+            ];
+          } else if (isCutter) {
+            dynamicInitialComponents = [
+              { id: 'part-sharp', name: 'Sharpening Blade Service', nameLo: 'ຄ່າຈ້າງລັບຄົມໃບມີດຕັດເຈ້ຍ', usage: 0, threshold: 90, cost: Number(p.specs?.wearSharpeningCost || p.wearSharpeningCost || 150000), lifeVal: Number(p.specs?.wearSharpeningIntervalCuts || p.wearSharpeningIntervalCuts || 10000), unitLabel: 'cuts' },
+              { id: 'part-stick', name: 'Cutting Stick Pad', nameLo: 'ໄມ້ຮອງໃບມີດຕັດ (Cutting Stick)', usage: 0, threshold: 85, cost: Number(p.specs?.wearCuttingStickCost || p.wearCuttingStickCost || 100000), lifeVal: Number(p.specs?.wearCuttingStickLifeCuts || p.wearCuttingStickLifeCuts || 20000), unitLabel: 'cuts' },
+              { id: 'part-blade', name: 'Plotter Cutting Blade', nameLo: 'ໃບມີດພລັອດເຕີ (Plotter Blade)', usage: 0, threshold: 90, cost: Number(p.specs?.wearBladeCost || p.wearBladeCost || 250000), lifeVal: Number(p.specs?.wearBladeLifeMeters || p.wearBladeLifeMeters || 5000), unitLabel: 'm' },
+            ];
+          } else if (isLaminator) {
+            dynamicInitialComponents = [
+              { id: 'part-roller', name: 'Silicone Heat Rollers', nameLo: 'ລູກກິ້ງຢາງຄວາມຮ້ອນ (Silicone Rollers)', usage: 0, threshold: 85, cost: Number(p.specs?.wearSiliconeRollerCost || p.wearSiliconeRollerCost || 1200000), lifeVal: Number(p.specs?.wearSiliconeRollerLifeMeters || p.wearSiliconeRollerLifeMeters || 20000), unitLabel: 'm' },
+              { id: 'part-heat', name: 'Heating Element Core', nameLo: 'ແທ່ງຄວາມຮ້ອນ (Heating Element)', usage: 0, threshold: 90, cost: Number(p.specs?.wearHeatingElementCost || p.wearHeatingElementCost || 800000), lifeVal: Number(p.specs?.wearHeatingElementHours || p.wearHeatingElementHours || 5000), unitLabel: 'hours' },
+            ];
+          } else if (isBinder) {
+            dynamicInitialComponents = [
+              { id: 'part-mill', name: 'Spine Milling Cutter', nameLo: 'ໃບມີດປາດສັນປຶ້ມ (Milling Cutter)', usage: 0, threshold: 85, cost: Number(p.specs?.wearMillingCutterCost || p.wearMillingCutterCost || 800000), lifeVal: Number(p.specs?.wearMillingCutterLifeBooks || p.wearMillingCutterLifeBooks || 10000), unitLabel: 'books' },
+              { id: 'part-punch', name: 'Wire Punching Pins Set', nameLo: 'ຊຸດເຂັມເຈາະຮູສັນລວດ (Punching Pins)', usage: 0, threshold: 90, cost: Number(p.specs?.wearPunchingPinsCost || p.wearPunchingPinsCost || 600000), lifeVal: Number(p.specs?.wearPunchingPinsLifePunches || p.wearPunchingPinsLifePunches || 20000), unitLabel: 'punches' },
+            ];
+          }
 
-        const effectiveComponents = (Array.isArray(p.components) && p.components.length > 0)
-          ? p.components
-          : dynamicInitialComponents;
+          const effectiveComponents = (Array.isArray(p.components) && p.components.length > 0)
+            ? p.components
+            : dynamicInitialComponents;
 
-        return {
-          id: p.id || p.skuCode,
-          name: p.itemName || p.name || `${p.specs?.brand || ''} ${p.specs?.model || ''}`.trim() || p.id,
-          brand: p.specs?.brand || p.brand || '',
-          model: p.specs?.model || p.model || '',
-          serialNumber: p.specs?.serialNumber || p.serialNumber || p.skuCode || '',
-          category: resolvedCategory,
-          postPressSubtype: sub || (isPrinter ? (isLaserPrn ? 'laser' : 'inkjet') : isCutter ? 'guillotine' : isBinder ? 'binder' : 'laminator'),
-          printerCategory: isPrinter ? (p.specs?.printerCategory || p.printerCategory || (isLaserPrn ? 'Laser Printer' : 'Inkjet Printer')) : undefined,
-          colorSchemeType: p.specs?.colorSchemeType || p.colorSchemeType || 'CMYK',
-          totalColorSlots: Number(p.specs?.totalColorSlots || p.totalColorSlots || 4),
-          oemBaselineInks: rawOemSlots,
-          printerInkSlots: rawOemSlots,
-          purchaseCost: Number(p.totalPrice || p.price || p.purchaseCost || p.unitPrice || 0),
-          expectedLifeA4Pages: isPrinter ? realLife : undefined,
-          TargetTotalPages: realLife,
-          printedPagesCapacity: realLife,
-          lifespanYears: Number(p.specs?.lifespanYears || p.lifespanYears || 5),
-          maintenanceRatePercent: Number(p.specs?.maintenanceRatePercent || p.maintenanceRatePercent || 0),
-          costPerConsumptionUnit: Number(p.specs?.costPerConsumptionUnit || p.costPerConsumptionUnit || p.calculatedCostPerPage || 0),
-          calculatedCostPerPage: Number(p.specs?.calculatedCostPerPage || p.calculatedCostPerPage || 0),
-          status: 'In Use',
-          location: p.specs?.location || p.location || 'Main Press Floor',
-          imageUrl: resolvedPhoto,
-          itemPhoto: resolvedPhoto,
-          productPhoto: resolvedPhoto,
-          docs: {
-            productPhoto: resolvedPhoto,
-            paymentSlip: p.payment_slip || p.docs?.paymentSlip || null
-          },
-          components: effectiveComponents,
-          // Laser wear parts from Inbound specs
-          wearDrumUnitCost: p.specs?.wearDrumUnitCost || p.wearDrumUnitCost,
-          wearDrumUnitLife: p.specs?.wearDrumUnitLife || p.wearDrumUnitLife,
-          wearFuserUnitCost: p.specs?.wearFuserUnitCost || p.wearFuserUnitCost,
-          wearFuserUnitLife: p.specs?.wearFuserUnitLife || p.wearFuserUnitLife,
-          wearTransferBeltCost: p.specs?.wearTransferBeltCost || p.wearTransferBeltCost,
-          wearTransferBeltLife: p.specs?.wearTransferBeltLife || p.wearTransferBeltLife,
-          wearPickupRollerCost: p.specs?.wearPickupRollerCost || p.wearPickupRollerCost,
-          wearPickupRollerLife: p.specs?.wearPickupRollerLife || p.wearPickupRollerLife,
-          wearWasteTonerBoxCost: p.specs?.wearWasteTonerBoxCost || p.wearWasteTonerBoxCost,
-          wearWasteTonerBoxLife: p.specs?.wearWasteTonerBoxLife || p.wearWasteTonerBoxLife,
-          // Inkjet wear parts from Inbound specs
-          wearMaintBoxCost: p.specs?.wearMaintBoxCost || p.wearMaintBoxCost,
-          wearMaintBoxLife: p.specs?.wearMaintBoxLife || p.wearMaintBoxLife,
-          wearPrintheadCost: p.specs?.wearPrintheadCost || p.wearPrintheadCost,
-          wearPrintheadLife: p.specs?.wearPrintheadLife || p.wearPrintheadLife,
-          wearCarriageBeltCost: p.specs?.wearCarriageBeltCost || p.wearCarriageBeltCost,
-          wearCarriageBeltLife: p.specs?.wearCarriageBeltLife || p.wearCarriageBeltLife,
-          specs: {
-            ...p.specs,
-            components: effectiveComponents,
+          return {
+            id: p.id || p.skuCode,
+            name: p.itemName || p.name || `${p.specs?.brand || ''} ${p.specs?.model || ''}`.trim() || p.id,
+            brand: p.specs?.brand || p.brand || '',
+            model: p.specs?.model || p.model || '',
+            serialNumber: p.specs?.serialNumber || p.serialNumber || p.skuCode || '',
+            category: resolvedCategory,
+            postPressSubtype: sub || (isPrinter ? (isLaserPrn ? 'laser' : 'inkjet') : isCutter ? 'guillotine' : isBinder ? 'binder' : 'laminator'),
+            printerCategory: isPrinter ? (p.specs?.printerCategory || p.printerCategory || (isLaserPrn ? 'Laser Printer' : 'Inkjet Printer')) : undefined,
+            colorSchemeType: p.specs?.colorSchemeType || p.colorSchemeType || 'CMYK',
+            totalColorSlots: Number(p.specs?.totalColorSlots || p.totalColorSlots || 4),
             oemBaselineInks: rawOemSlots,
             printerInkSlots: rawOemSlots,
-            productPhoto: resolvedPhoto
-          }
-        };
-      });
+            purchaseCost: Number(p.totalPrice || p.price || p.purchaseCost || p.unitPrice || 0),
+            expectedLifeA4Pages: isPrinter ? realLife : undefined,
+            TargetTotalPages: realLife,
+            printedPagesCapacity: realLife,
+            lifespanYears: Number(p.specs?.lifespanYears || p.lifespanYears || 5),
+            maintenanceRatePercent: Number(p.specs?.maintenanceRatePercent || p.maintenanceRatePercent || 0),
+            costPerConsumptionUnit: Number(p.specs?.costPerConsumptionUnit || p.costPerConsumptionUnit || p.calculatedCostPerPage || 0),
+            calculatedCostPerPage: Number(p.specs?.calculatedCostPerPage || p.calculatedCostPerPage || 0),
+            status: 'In Use',
+            location: p.specs?.location || p.location || 'Main Press Floor',
+            imageUrl: resolvedPhoto,
+            itemPhoto: resolvedPhoto,
+            productPhoto: resolvedPhoto,
+            docs: {
+              productPhoto: resolvedPhoto,
+              paymentSlip: p.payment_slip || p.docs?.paymentSlip || null
+            },
+            components: effectiveComponents,
+            specs: {
+              ...p.specs,
+              components: effectiveComponents,
+              oemBaselineInks: rawOemSlots,
+              printerInkSlots: rawOemSlots,
+              productPhoto: resolvedPhoto
+            }
+          };
+        });
 
-      const combinedAssets = [...rawItems, ...printerInbounds];
-
-      if (combinedAssets.length > 0) {
         setEquipment(prevEq => {
           const mapById = new Map();
-          (prevEq || []).filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach(item => mapById.set(item.id, item));
-          combinedAssets.filter((i: any) => !deletedIds.has(i.id) && !deletedIds.has(i.id?.toLowerCase())).forEach((item: any) => {
-            const resolvedPhoto = item.imageUrl || item.itemPhoto || item.productPhoto || item.image || item.docs?.productPhoto || item.specs?.productPhoto || item.specs?.productImage || (Array.isArray(item.actual_images) && item.actual_images[0]) || (Array.isArray(item.specs?.actual_images) && item.specs?.actual_images[0]) || null;
-            const resolvedPrice = Number(item.price || item.purchaseCost || item.purchasePrice || item.priceCost || item.unitPrice || item.totalPrice || 0);
-            const formattedItem = {
-              ...item,
-              name: item.name || `${item.brand || ''} ${item.model || ''}`.trim() || item.id,
+
+          // 1. Authoritative Database Items overwrite local state (Database is Single Source of Truth)
+          const isDbSource = resData?.source === 'database' || (Array.isArray(rawItems) && rawItems.length > 0);
+          if (isDbSource) {
+            (rawItems || []).forEach((dbItem: any) => {
+              if (dbItem?.id) {
+                unrecordDeletedId(dbItem.id, 'all');
+                if (dbItem.serialNumber) unrecordDeletedId(dbItem.serialNumber, 'all');
+                if (dbItem.id === 'PRN-6317') unrecordDeletedId('MAC-6821', 'all');
+                if (dbItem.id === 'PRN-9614') unrecordDeletedId('MAC-5707', 'all');
+              }
+            });
+          }
+
+          (rawItems || []).forEach((dbItem: any) => {
+            if (!dbItem || !dbItem.id) return;
+            if (LEGACY_MOCK_IDS.has(dbItem.id.toLowerCase())) return;
+
+            const canonicalCat = resolveCanonicalEquipmentCategory(dbItem.category, dbItem);
+            const prnSubtype = canonicalCat === 'Printer' ? resolvePrinterSubtype(dbItem) : undefined;
+            const resolvedPrice = Number(dbItem.price || dbItem.priceCost || dbItem.purchaseCost || 0);
+            const resolvedCapacity = Number(dbItem.expectedLifeA4Pages || dbItem.printedPagesCapacity || 200000);
+
+            const authoritativeItem = {
+              ...dbItem,
+              name: dbItem.name || `${dbItem.brand || ''} ${dbItem.model || ''}`.trim() || dbItem.id,
+              brand: dbItem.brand || '',
+              model: dbItem.model || '',
+              category: canonicalCat,
+              printerCategory: canonicalCat === 'Printer' ? (dbItem.printerCategory || prnSubtype) : undefined,
+              price: resolvedPrice,
               purchaseCost: resolvedPrice,
               purchasePrice: resolvedPrice,
-              price: resolvedPrice,
-              unitPrice: resolvedPrice,
               MachinePrice: resolvedPrice,
-              printedPagesCapacity: Number(item.expectedLifeA4Pages || item.printedPagesCapacity || item.TargetTotalPages || item.specs?.expectedLife || 200000),
-              colorSchemeType: item.colorSchemeType || item.specs?.colorScheme || 'CMYK',
-              imageUrl: resolvedPhoto,
-              itemPhoto: resolvedPhoto,
-              productPhoto: resolvedPhoto,
+              unitPrice: resolvedPrice,
+              printedPagesCapacity: resolvedCapacity,
+              expectedLifeA4Pages: resolvedCapacity,
+              TargetTotalPages: resolvedCapacity,
+              colorSchemeType: dbItem.colorSchemeType || 'CMYK',
               specs: {
-                ...(item.specs || {}),
-                productPhoto: resolvedPhoto,
-                oemBaselineInks: item.oemBaselineInks || item.specs?.oemBaselineInks || [],
-                printerInkSlots: item.printerInkSlots || item.specs?.printerInkSlots || []
+                ...(dbItem.specs || {}),
+                ...(dbItem.technical_specs || {}),
+                brand: dbItem.brand,
+                model: dbItem.model,
+                category: canonicalCat,
+                printerCategory: canonicalCat === 'Printer' ? (dbItem.printerCategory || prnSubtype) : undefined
               }
             };
-            let matchKey = item.id;
-            if (!mapById.has(item.id)) {
-              for (const [k, existing] of mapById.entries()) {
-                const sameId = (item.sku && (existing.id === item.sku || existing.sku === item.id));
-                const sameSn = (item.serialNumber && item.serialNumber !== '-' && existing.serialNumber && existing.serialNumber !== '-' && item.serialNumber.toLowerCase() === existing.serialNumber.toLowerCase());
-                const sameSnSpec = (item.specs?.serialNumber && item.specs.serialNumber !== '-' && (existing.serialNumber === item.specs.serialNumber || existing.specs?.serialNumber === item.specs.serialNumber));
-                if (sameId || sameSn || sameSnSpec) {
-                  matchKey = k;
-                  break;
-                }
-              }
+
+            // DB item is source of truth!
+            mapById.set(dbItem.id, authoritativeItem);
+
+            // Reconcile and purge duplicate alias keys
+            if (dbItem.id === 'PRN-6317' || dbItem.id === 'MAC-6821') {
+              mapById.delete('MAC-6821');
+            }
+            if (dbItem.id === 'PRN-9614' || dbItem.id === 'MAC-5707') {
+              mapById.delete('MAC-5707');
+            }
+            mapById.delete('MAC-4190');
+            mapById.delete('MAC-CUTTER-920');
+            mapById.delete('MAC-BINDER-K5');
+          });
+
+          // 2. Merge Inbound Items with alias reconciliation
+          const deletedEqIds = getDeletedIds('equipment');
+          printerInbounds.forEach((inbItem: any) => {
+            let targetId = inbItem.skuCode || inbItem.id;
+            if (targetId === 'PRN-6317' || targetId === 'MAC-6821' || (inbItem.brand === 'Brother' && (inbItem.model?.includes('2740') || inbItem.name?.includes('2740')))) {
+              targetId = 'PRN-6317';
+              mapById.delete('MAC-6821');
+            } else if (targetId === 'PRN-9614' || targetId === 'MAC-5707' || (inbItem.brand === 'Epson' && (inbItem.model?.includes('15150') || inbItem.name?.includes('15150')))) {
+              targetId = 'PRN-9614';
+              mapById.delete('MAC-5707');
             }
 
-            if (mapById.has(matchKey)) {
-              const existing = mapById.get(matchKey);
-              const bestPrice = resolvedPrice > 0 ? resolvedPrice : (existing.purchaseCost || existing.price || existing.unitPrice || 0);
-              const bestName = (item.name && item.name.trim() !== '' && item.name !== item.id) ? item.name : (existing.name || item.name || item.id);
-              const bestBrand = (item.brand && item.brand.trim() !== '') ? item.brand : (existing.brand || '');
-              const bestModel = (item.model && item.model.trim() !== '') ? item.model : (existing.model || '');
-              const isPrn = item.category === 'Printer' || existing.category === 'Printer' || Boolean(item.printerCategory) || Boolean(existing.printerCategory);
-              const bestCategory = isPrn ? 'Printer' : ((item.category && item.category !== 'Processing Tools') ? item.category : (existing.category || 'Printer'));
-              const bestPrinterCategory = item.printerCategory || existing.printerCategory;
-              const bestSubtype = item.postPressSubtype || existing.postPressSubtype;
-              const bestCapacity = (Number(item.expectedLifeA4Pages || item.printedPagesCapacity || 0) > 0) 
-                ? Number(item.expectedLifeA4Pages || item.printedPagesCapacity) 
-                : (Number(existing.expectedLifeA4Pages || existing.printedPagesCapacity || 0) > 0 ? Number(existing.expectedLifeA4Pages || existing.printedPagesCapacity) : 200000);
-              const bestPhoto = resolvedPhoto || existing.imageUrl || existing.itemPhoto || existing.productPhoto;
-              const mergedSpecs = { ...(existing.specs || {}), ...(item.specs || {}) };
-              const mergedComponents = (item.components && item.components.length > 0) ? item.components : (existing.components || []);
-              const mergedOemBaseline = (item.oemBaselineInks && item.oemBaselineInks.length > 0)
-                ? item.oemBaselineInks
-                : (item.specs?.oemBaselineInks && item.specs?.oemBaselineInks.length > 0)
-                  ? item.specs.oemBaselineInks
-                  : (existing.oemBaselineInks && existing.oemBaselineInks.length > 0)
-                    ? existing.oemBaselineInks
-                    : (existing.specs?.oemBaselineInks || []);
-
-              mapById.set(matchKey, {
-                ...existing,
-                ...formattedItem,
-                name: bestName,
-                brand: bestBrand,
-                model: bestModel,
-                category: bestCategory,
-                printerCategory: bestPrinterCategory,
-                postPressSubtype: bestSubtype,
-                purchaseCost: bestPrice,
-                purchasePrice: bestPrice,
-                price: bestPrice,
-                unitPrice: bestPrice,
-                MachinePrice: bestPrice,
-                expectedLifeA4Pages: bestCapacity,
-                TargetTotalPages: bestCapacity,
-                printedPagesCapacity: bestCapacity,
-                imageUrl: bestPhoto,
-                itemPhoto: bestPhoto,
-                productPhoto: bestPhoto,
-                specs: mergedSpecs,
-                components: mergedComponents,
-                oemBaselineInks: mergedOemBaseline,
-                wearDrumUnitCost: item.wearDrumUnitCost || item.specs?.wearDrumUnitCost || existing.wearDrumUnitCost || existing.specs?.wearDrumUnitCost,
-                wearDrumUnitLife: item.wearDrumUnitLife || item.specs?.wearDrumUnitLife || existing.wearDrumUnitLife || existing.specs?.wearDrumUnitLife,
-                wearFuserUnitCost: item.wearFuserUnitCost || item.specs?.wearFuserUnitCost || existing.wearFuserUnitCost || existing.specs?.wearFuserUnitCost,
-                wearFuserUnitLife: item.wearFuserUnitLife || item.specs?.wearFuserUnitLife || existing.wearFuserUnitLife || existing.specs?.wearFuserUnitLife,
-                wearTransferBeltCost: item.wearTransferBeltCost || item.specs?.wearTransferBeltCost || existing.wearTransferBeltCost || existing.specs?.wearTransferBeltCost,
-                wearTransferBeltLife: item.wearTransferBeltLife || item.specs?.wearTransferBeltLife || existing.wearTransferBeltLife || existing.specs?.wearTransferBeltLife,
-                wearPickupRollerCost: item.wearPickupRollerCost || item.specs?.wearPickupRollerCost || existing.wearPickupRollerCost || existing.specs?.wearPickupRollerCost,
-                wearPickupRollerLife: item.wearPickupRollerLife || item.specs?.wearPickupRollerLife || existing.wearPickupRollerLife || existing.specs?.wearPickupRollerLife,
-                wearWasteTonerBoxCost: item.wearWasteTonerBoxCost || item.specs?.wearWasteTonerBoxCost || existing.wearWasteTonerBoxCost || existing.specs?.wearWasteTonerBoxCost,
-                wearWasteTonerBoxLife: item.wearWasteTonerBoxLife || item.specs?.wearWasteTonerBoxLife || existing.wearWasteTonerBoxLife || existing.specs?.wearWasteTonerBoxLife,
-                colorInkCost: item.colorInkCost || existing.colorInkCost,
-                bwInkCost: item.bwInkCost || existing.bwInkCost,
-                linkedInkCostPerPage: item.linkedInkCostPerPage || existing.linkedInkCostPerPage,
-                inkCostPerPage: item.inkCostPerPage || existing.inkCostPerPage
+            if (mapById.has(targetId)) {
+              const existing = mapById.get(targetId);
+              // DB/master item takes precedence; merge only auxiliary specs
+              mapById.set(targetId, {
+                ...inbItem,
+                ...existing, // DB item fields win
+                id: targetId,
+                specs: { ...(inbItem.specs || {}), ...(existing.specs || {}) }
               });
-            } else {
-              mapById.set(item.id, formattedItem);
+            } else if (!deletedEqIds.has(targetId) && !deletedEqIds.has(targetId.toLowerCase()) && !LEGACY_MOCK_IDS.has(targetId.toLowerCase())) {
+              mapById.set(targetId, { ...inbItem, id: targetId });
             }
           });
-          const merged = Array.from(mapById.values());
-          safeSetItem('ss_print_equipment_v6', merged);
-          return merged;
+
+          // 3. Purge all unsupported seeds and stale localStorage entries that lack DB or Inbound evidence
+          mapById.delete('MAC-CUTTER-920');
+          mapById.delete('MAC-BINDER-K5');
+          mapById.delete('MAC-4190');
+          mapById.delete('MAC-5707');
+          mapById.delete('MAC-6821');
+
+          const finalEq = Array.from(mapById.values());
+          safeSetItem('ss_print_equipment_v6', finalEq);
+          return finalEq;
         });
       }
-    } catch (e) {}
+    } catch (e: any) {
+      console.error("[EQUIPMENT FETCH ERROR]", e);
+      setEquipmentApiError(e?.message || "ERR_CONNECTION_REFUSED - ບໍ່ສາມາດເຊື່ອມຕໍ່ Backend Equipment API ໄດ້");
+    }
 
     // 2. Inventory Items
     try {
@@ -1321,7 +1377,7 @@ export const AppProvider = ({ children }) => {
         const c = (i.category || '').toUpperCase();
         const sku = (i.skuCode || i.id || '').toUpperCase();
         const name = (i.itemName || i.name || '').toUpperCase();
-        return c.includes('INK') || c.includes('PAPER') || c.includes('CONSUMABLE') || c.includes('MATERIAL') || 
+        return c.includes('INK') || c.includes('PAPER') || c.includes('CONSUMABLE') || c.includes('MATERIAL') ||
                name.includes('INK') || name.includes('TONER') || sku.startsWith('INK') || sku.startsWith('PAP') || sku.startsWith('MAT');
       }).map((m: any) => {
         const c = (m.category || '').toUpperCase();
@@ -1332,14 +1388,14 @@ export const AppProvider = ({ children }) => {
         }
         const qty = Number(m.quantity || m.importQty || 1);
         const totalSheets = isPaper ? (qty > 0 && qty <= 100 ? qty * multiplier : qty) : qty;
-        
+
         // Prioritize direct stored costPerConsumptionUnit / costPerSheet
         const directConsCost = Number(
-          m.costPerConsumptionUnit || 
-          m.cost_per_consumption_unit || 
-          m.costPerSheet || 
-          m.specs?.costPerConsumptionUnit || 
-          m.specs?.costPerSheet || 
+          m.costPerConsumptionUnit ||
+          m.cost_per_consumption_unit ||
+          m.costPerSheet ||
+          m.specs?.costPerConsumptionUnit ||
+          m.specs?.costPerSheet ||
           0
         );
 
@@ -1762,7 +1818,7 @@ export const AppProvider = ({ children }) => {
   const [orders, setOrders] = useState(() => {
     const saved = localStorage.getItem('ss_print_orders_v6');
     let baseList = saved ? JSON.parse(saved) : initialOrders;
-    
+
     // Merge any customer-service placed orders
     try {
       const existingIds = new Set(baseList.map((o: any) => o.id || o.orderNo));
@@ -2070,15 +2126,19 @@ export const AppProvider = ({ children }) => {
 
     setInventory(prev => {
       let updated = false;
-      const existingIds = new Set(prev.map(item => item.id.toLowerCase()));
-      const existingNames = new Set(prev.map(item => item.name.toLowerCase()));
+      const filteredPrev = prev.filter(item => !isAssetItem(item.category, item));
+      if (filteredPrev.length !== prev.length) {
+        updated = true;
+      }
+      const existingIds = new Set(filteredPrev.map(item => item.id.toLowerCase()));
+      const existingNames = new Set(filteredPrev.map(item => item.name.toLowerCase()));
 
-      const newInv = prev.map(item => {
+      const newInv = filteredPrev.map(item => {
         const matches = allInboundEntries.filter(
           (e: any) => e && (
-            (e.sku && e.sku.toLowerCase() === item.id.toLowerCase()) || 
-            (e.id && e.id.toLowerCase() === item.id.toLowerCase()) || 
-            (e.skuCode && e.skuCode.toLowerCase() === item.id.toLowerCase()) || 
+            (e.sku && e.sku.toLowerCase() === item.id.toLowerCase()) ||
+            (e.id && e.id.toLowerCase() === item.id.toLowerCase()) ||
+            (e.skuCode && e.skuCode.toLowerCase() === item.id.toLowerCase()) ||
             (e.name && e.name.toLowerCase() === item.name.toLowerCase()) ||
             (e.itemName && e.itemName.toLowerCase() === item.name.toLowerCase())
           )
@@ -2088,8 +2148,8 @@ export const AppProvider = ({ children }) => {
         const isPaper = (item.category || '').toLowerCase() === 'paper' || (item.category || '').toLowerCase() === 'material';
         const isInk = (item.category || '').toLowerCase() === 'ink' || (item.category || '').toLowerCase() === 'toner';
         const inkVolume = Number(item.specs?.volume || item.specs?.volumePerBottle || item.specs?.inkVolume || item.volume || matches[0].volume || matches[0].specs?.volume || 70);
-        
-        let sheetsPerPack = isPaper 
+
+        let sheetsPerPack = isPaper
           ? (item.purchaseMultiplier || matches[0].sheetsPerPack || matches[0].specs?.sheetsPerPack || 500)
           : (isInk ? inkVolume : (item.purchaseMultiplier || 1));
 
@@ -2104,20 +2164,20 @@ export const AppProvider = ({ children }) => {
 
         // 1. Direct field resolution (prioritize stored costPerConsumptionUnit / costPerSheet)
         const directConsCost = Number(
-          match0.costPerConsumptionUnit || 
-          match0.costPerSheet || 
-          match0.specs?.costPerConsumptionUnit || 
-          match0.specs?.costPerSheet || 
-          item.costPerConsumptionUnit || 
+          match0.costPerConsumptionUnit ||
+          match0.costPerSheet ||
+          match0.specs?.costPerConsumptionUnit ||
+          match0.specs?.costPerSheet ||
+          item.costPerConsumptionUnit ||
           0
         );
 
         // 2. Direct purchase unit price (price per ream/pack/bottle, NOT total lot cost)
         const directPurchaseCost = Number(
-          match0.costPerPurchaseUnit || 
-          match0.unitPrice || 
+          match0.costPerPurchaseUnit ||
+          match0.unitPrice ||
           (m0PackQty > 0 && m0TotalPrice > 0 ? Math.round(m0TotalPrice / m0PackQty) : 0) ||
-          item.costPerPurchaseUnit || 
+          item.costPerPurchaseUnit ||
           (isInk ? 80000 : 95000)
         );
 
@@ -2162,13 +2222,12 @@ export const AppProvider = ({ children }) => {
         return item;
       });
 
-      // Find any inbound item not yet represented in inventory
+      // Find any inbound item not yet represented in inventory (materials ONLY)
       const newlyDiscoveredItems: any[] = [];
       const deletedIds = getDeletedIds();
       allInboundEntries.forEach((e: any) => {
         if (!e) return;
-        const isMachinery = e.category === 'PRINTER' || e.category === 'CUTTER' || e.category === 'MACHINERY';
-        if (isMachinery) return;
+        if (isAssetItem(e.category, e)) return;
 
         const sku = (e.sku || e.skuCode || e.id || '').trim();
         const name = (e.name || e.itemName || sku).trim();
@@ -2177,7 +2236,7 @@ export const AppProvider = ({ children }) => {
         if (e.id && (deletedIds.has(e.id) || deletedIds.has(e.id.toLowerCase()))) return;
         if (e.poNumber && (deletedIds.has(e.poNumber) || deletedIds.has(e.poNumber.toLowerCase()))) return;
 
-        const alreadyExists = (sku && existingIds.has(sku.toLowerCase())) || 
+        const alreadyExists = (sku && existingIds.has(sku.toLowerCase())) ||
                               (name && existingNames.has(name.toLowerCase())) ||
                               newlyDiscoveredItems.some(it => it.id.toLowerCase() === sku.toLowerCase() || it.name.toLowerCase() === name.toLowerCase());
 
@@ -2192,17 +2251,17 @@ export const AppProvider = ({ children }) => {
 
           // Direct stored consumption unit cost
           const directConsCost = Number(
-            e.costPerConsumptionUnit || 
-            e.costPerSheet || 
-            e.specs?.costPerConsumptionUnit || 
-            e.specs?.costPerSheet || 
+            e.costPerConsumptionUnit ||
+            e.costPerSheet ||
+            e.specs?.costPerConsumptionUnit ||
+            e.specs?.costPerSheet ||
             0
           );
 
           // Direct stored purchase unit cost (price per pack)
           const directPurchaseCost = Number(
-            e.costPerPurchaseUnit || 
-            e.unitPrice || 
+            e.costPerPurchaseUnit ||
+            e.unitPrice ||
             (packQty > 0 && eTotalPrice > 0 ? Math.round(eTotalPrice / packQty) : 0) ||
             (isInk ? 80000 : 95000)
           );
@@ -2254,17 +2313,30 @@ export const AppProvider = ({ children }) => {
     // Auto-sync machinery and printers from inbound logs into equipment
     const machineryEntries = allInboundEntries.filter((e: any) => {
       if (!e) return false;
-      const cat = (e.category || '').toUpperCase();
-      return cat === 'PRINTER' || cat === 'MACHINERY' || cat === 'CUTTER' || cat === 'LAMINATOR' || cat === 'BINDER';
+      return isAssetItem(e.category, e);
     });
 
     if (machineryEntries.length > 0) {
       setEquipment(prevEq => {
         let eqUpdated = false;
-        const currentEqIds = new Set(prevEq.map(m => (m.id || '').toLowerCase()));
-        const currentEqNames = new Set(prevEq.map(m => (m.name || '').toLowerCase()));
-        const currentEqSerials = new Set(prevEq.map(m => (m.serialNumber || '').toLowerCase()));
-        const deletedIds = getDeletedIds();
+        const normalizedPrevEq = (prevEq || []).map(eq => {
+          const normCat = resolveCanonicalEquipmentCategory(eq.category, eq);
+          const normPrnCat = normCat === 'Printer' ? resolvePrinterSubtype(eq) : undefined;
+          if (eq.category !== normCat || (normCat === 'Printer' && (!eq.printerCategory || eq.printerCategory === 'Inkjet Printer'))) {
+            eqUpdated = true;
+            return {
+              ...eq,
+              category: normCat,
+              printerCategory: normCat === 'Printer' ? (normPrnCat || eq.printerCategory) : undefined
+            };
+          }
+          return eq;
+        });
+
+        const currentEqIds = new Set(normalizedPrevEq.map(m => (m.id || '').toLowerCase()));
+        const currentEqNames = new Set(normalizedPrevEq.map(m => (m.name || '').toLowerCase()));
+        const currentEqSerials = new Set(normalizedPrevEq.map(m => (m.serialNumber || '').toLowerCase()));
+        const deletedIds = getDeletedIds('equipment');
         const toAdd: any[] = [];
 
         machineryEntries.forEach((m: any) => {
@@ -2274,9 +2346,14 @@ export const AppProvider = ({ children }) => {
           const targetName = (m.name || m.itemName || '').trim();
           const targetSn = (m.serialNumber || m.sn || '').trim();
 
-          if (deletedIds.has(targetId) || deletedIds.has(targetId.toLowerCase())) return;
-          if (inboundId && (deletedIds.has(inboundId) || deletedIds.has(inboundId.toLowerCase()))) return;
-          if (targetSn && (deletedIds.has(targetSn) || deletedIds.has(targetSn.toLowerCase()))) return;
+          const isVerifiedDbMachine = targetId === 'PRN-9614' || targetId === 'PRN-6317' ||
+                                      targetId === 'MAC-5707' || targetId === 'MAC-6821' ||
+                                      skuCode === 'PRN-9614' || skuCode === 'PRN-6317';
+          if (!isVerifiedDbMachine) {
+            if (deletedIds.has(targetId) || deletedIds.has(targetId.toLowerCase())) return;
+            if (inboundId && (deletedIds.has(inboundId) || deletedIds.has(inboundId.toLowerCase()))) return;
+            if (targetSn && (deletedIds.has(targetSn) || deletedIds.has(targetSn.toLowerCase()))) return;
+          }
 
           // Check if this equipment already exists by SKU, Inbound ID, Serial Number, or exact Name
           const alreadyExists = (targetId && currentEqIds.has(targetId.toLowerCase())) ||
@@ -2293,13 +2370,10 @@ export const AppProvider = ({ children }) => {
             if (targetSn) currentEqSerials.add(targetSn.toLowerCase());
             eqUpdated = true;
 
-            const isPrn = m.category === 'PRINTER' || m.category === 'Printer' || m.category === 'MACHINERY' || targetName.toLowerCase().includes('printer') || targetName.toLowerCase().includes('xerox') || targetName.toLowerCase().includes('c8055') || (m.specs?.printerCategory !== undefined);
-            const isLaserPrn = targetName.toLowerCase().includes('laser') || 
-                               targetName.toLowerCase().includes('xerox') || 
-                               targetName.toLowerCase().includes('c8055') || 
-                               m.printerCategory?.toLowerCase().includes('laser') || 
-                               m.specs?.printerCategory?.toLowerCase().includes('laser') ||
-                               m.specs?.machineryTypeCategory === 'laser';
+            const canonicalCat = resolveCanonicalEquipmentCategory(m.category, m);
+            const isPrn = canonicalCat === 'Printer';
+            const prnSubtype = isPrn ? resolvePrinterSubtype(m) : undefined;
+            const isLaserPrn = prnSubtype === 'Laser';
 
             const rawOemSlots = m.specs?.oemBaselineInks || m.specs?.printerInkSlots || m.oemBaselineInks || m.printerInkSlots || [];
             const brand = m.brand || (targetName.split(' ')[0]) || 'Industrial';
@@ -2332,8 +2406,8 @@ export const AppProvider = ({ children }) => {
               brand: brand,
               model: model,
               serialNumber: targetSn || targetId,
-              category: isPrn ? 'Printer' : (m.category === 'CUTTER' ? 'Cutter' : (m.category === 'LAMINATOR' ? 'Laminator' : 'Binder')),
-              printerCategory: isPrn ? (isLaserPrn ? 'Laser' : (m.printerCategory || 'Inkjet')) : undefined,
+              category: canonicalCat,
+              printerCategory: prnSubtype,
               status: 'In Use',
               location: m.location || m.specs?.location || 'Main Dept',
               purchaseCost: Number(m.totalPrice || m.price || 0),
@@ -2398,11 +2472,11 @@ export const AppProvider = ({ children }) => {
   // FIFO Paper Costing functions
   const getFIFOCostPerSheet = (itemId, sheetsNeeded) => {
     if (!itemId) return 0;
-    const item = inventory.find(i => 
-      i.id === itemId || 
-      i.sku === itemId || 
-      i.id?.toLowerCase() === itemId?.toLowerCase() || 
-      (i.sku && i.sku.toLowerCase() === itemId.toLowerCase()) || 
+    const item = inventory.find(i =>
+      i.id === itemId ||
+      i.sku === itemId ||
+      i.id?.toLowerCase() === itemId?.toLowerCase() ||
+      (i.sku && i.sku.toLowerCase() === itemId.toLowerCase()) ||
       i.name === itemId
     );
     if (!item) return 0;
@@ -2455,7 +2529,7 @@ export const AppProvider = ({ children }) => {
     setInventory(prev => {
       return prev.map(item => {
         if (item.id !== itemId) return item;
-        
+
         if (!item.batches || item.batches.length === 0) {
           return {
             ...item,
@@ -2695,9 +2769,9 @@ export const AppProvider = ({ children }) => {
       const target = prev.find(item => item.id === itemId || item.id.toLowerCase() === itemId.toLowerCase());
       if (!target) return prev;
 
-      const remainingBatches = (target.batches || []).filter(b => 
-        b.id !== batchId && 
-        b.id !== `LOT-${batchId}` && 
+      const remainingBatches = (target.batches || []).filter(b =>
+        b.id !== batchId &&
+        b.id !== `LOT-${batchId}` &&
         b.poNumber !== batchId &&
         b.id !== batchId.replace('LOT-', '')
       );
@@ -2805,10 +2879,10 @@ export const AppProvider = ({ children }) => {
     setInventory(prev => {
       const next = prev.map(item => {
         if (item.id === skuId || item.sku === skuId) {
-          const updated = { 
-            ...item, 
-            minStockThreshold: threshold, 
-            reorder_threshold: threshold, 
+          const updated = {
+            ...item,
+            minStockThreshold: threshold,
+            reorder_threshold: threshold,
             reorderPoint: threshold,
             reorderThreshold: threshold
           };
@@ -2822,9 +2896,9 @@ export const AppProvider = ({ children }) => {
     });
     const currentLang = localStorage.getItem('i18nextLng') || 'lo';
     showToast(
-      currentLang === 'en' 
-        ? `Reorder point updated to ${threshold.toLocaleString()} units` 
-        : `ອັບເດດຈຸດສັ່ງຊື້ຂັ້ນຕ່ຳ (Reorder Point: ${threshold.toLocaleString()}) ສຳເລັດ!`, 
+      currentLang === 'en'
+        ? `Reorder point updated to ${threshold.toLocaleString()} units`
+        : `ອັບເດດຈຸດສັ່ງຊື້ຂັ້ນຕ່ຳ (Reorder Point: ${threshold.toLocaleString()}) ສຳເລັດ!`,
       'success'
     );
   };
@@ -2955,7 +3029,7 @@ export const AppProvider = ({ children }) => {
       if (ord.id === orderId) {
         const pf = ord.preflight || { cmyk: 'Not Checked', bleed: 'Not Checked', resolution: 'Not Checked', approvedTimestamp: null, versions: [] };
         let updatedPf = { ...pf, [field]: value };
-        
+
         // Auto stamp approval if all fields pass or when approved manually
         if (field === 'approvedTimestamp' && value) {
           updatedPf.approvedTimestamp = value;
@@ -3149,7 +3223,7 @@ export const AppProvider = ({ children }) => {
   const getDashboardStats = () => {
     // Realized Cashflow = Sum of depositPaid of all orders
     const totalRevenue = orders.reduce((sum, ord) => sum + ord.depositAmountPaid, 0); // realized cash
-    
+
     // Pending Receivables
     const outstandingPayments = orders.reduce((sum, ord) => sum + ord.remainingUnpaidBalance, 0);
 
@@ -3161,10 +3235,10 @@ export const AppProvider = ({ children }) => {
       order.items.forEach(item => {
         const invItem = inventory.find(i => i.id === item.id);
         const itemCost = item.quantity * (invItem?.costPerConsumptionUnit || item.unitCost || 0);
-        
+
         const cat = (invItem?.category || item.category || '').toLowerCase();
         const name = (invItem?.name || item.name || '').toLowerCase();
-        
+
         if (cat === 'paper' || name.includes('a4') || name.includes('a3') || name.includes('card') || name.includes('ເຈ້ຍ')) {
           paperCostTotal += itemCost;
         } else if (cat === 'ink' || name.includes('ink') || name.includes('ໝຶກ') || name.includes('cmyk')) {
@@ -3182,7 +3256,7 @@ export const AppProvider = ({ children }) => {
 
     const spoilageCostImpact = spoilageLogs.reduce((sum, log) => sum + (log.totalCost || log.costImpact || (log.quantity * 450)), 0);
     const directMaterialCost = materialCostForOrders + spoilageCostImpact;
-    
+
     let machineDepreciationFromOrders = 0;
     orders.forEach(order => {
       const pageCountItem = order.items.find(item => item.id.startsWith('paper'));
@@ -3192,11 +3266,11 @@ export const AppProvider = ({ children }) => {
     });
 
     const totalCost = directMaterialCost + machineDepreciationFromOrders;
-    
+
     // Net profit (nominal)
     const totalEarnedPrice = orders.reduce((sum, ord) => sum + ord.totalPriceCharged, 0);
     const netProfit = totalEarnedPrice - totalCost;
-    
+
     // Executive Gross Profit Margin %
     const totalRevenueBase = Math.max(1, totalEarnedPrice || totalRevenue);
     const grossProfitMargin = Math.max(0, Math.min(100, Math.round(((totalRevenueBase - paperCostTotal - inkCostTotal) / totalRevenueBase) * 1000) / 10));
@@ -3302,7 +3376,7 @@ export const AppProvider = ({ children }) => {
       ...orderData,
       items: itemsWithLots
     };
-    
+
     if (autoDeduct) {
       newOrder.items.forEach(orderedItem => {
         deductStockFIFO(orderedItem.id, orderedItem.quantity);
@@ -3315,7 +3389,7 @@ export const AppProvider = ({ children }) => {
           if (eq.category === 'Printer') {
             const paperOrdered = orderData.items.find(i => i.id.startsWith('paper'));
             const pagesCount = paperOrdered ? paperOrdered.quantity : 0;
-            
+
             const updatedComponents = comps.map(c => {
               const increment = Math.round((pagesCount / 1000) * 10) / 10;
               return {
@@ -3382,7 +3456,7 @@ export const AppProvider = ({ children }) => {
           updates.actualDeliveryTime = timeNow;
           const promDate = new Date(ord.promisedDeliveryDate);
           const actDate = new Date('2026-08-04');
-          
+
           updates.onTimeStatus = actDate <= promDate ? 'On-Time' : 'Late';
           updates.paymentStatus = 'Fully Paid';
           updates.depositAmountPaid = ord.totalPriceCharged;
@@ -3721,31 +3795,33 @@ export const AppProvider = ({ children }) => {
   };
 
   const addEquipment = (eqData) => {
+    const canonicalCat = resolveCanonicalEquipmentCategory(eqData.category, eqData);
+    const prnSubtype = canonicalCat === 'Printer' ? resolvePrinterSubtype(eqData) : undefined;
     const calculatedCostPerPage = eqData.purchaseCost / (eqData.printedPagesCapacity || 500000);
-    
+
     let defaultComponents = [
       { name: 'Drum Unit (ຊຸດດຣຳ)', usage: 0, threshold: 90 },
       { name: 'Fuser Kit (ຊຸດຄວາມຮ້ອນ)', usage: 0, threshold: 90 }
     ];
-    if (eqData.printerCategory?.toLowerCase().includes('inkjet') || eqData.postPressSubtype === 'inkjet' || /ecotank|inkjet|epson/i.test(eqData.name || '')) {
+    if (canonicalCat === 'Printer' && ((eqData.printerCategory || prnSubtype)?.toLowerCase().includes('inkjet') || /ecotank|inkjet|epson/i.test(eqData.name || ''))) {
       defaultComponents = [
         { name: 'Maintenance Box (ຊຸດຊັບໝຶກ)', usage: 0, threshold: 85 },
         { name: 'Precision Printhead (ຫົວພິມ)', usage: 0, threshold: 90 },
         { name: 'Feed Roller (ລູກກິ້ງດຶງເຈ້ຍ)', usage: 0, threshold: 85 },
         { name: 'Carriage Belt (ສາຍພານ)', usage: 0, threshold: 90 }
       ];
-    } else if (eqData.category === 'Cutter') {
+    } else if (canonicalCat === 'Cutter') {
       defaultComponents = [
         { name: 'Blade Lifespan (ໃບມີດ)', usage: 0, threshold: 95 },
         { name: 'Cutting Stick (ແທ່ງຮອງຕັດ)', usage: 0, threshold: 90 },
         { name: 'Hydraulic Oil (ນ້ຳມັນໄຮໂດຼລິກ)', usage: 0, threshold: 90 }
       ];
-    } else if (eqData.category === 'Laminator') {
+    } else if (canonicalCat === 'Laminator') {
       defaultComponents = [
         { name: 'Lamination Roller (ລູກກິ້ງເຄືອບ)', usage: 0, threshold: 90 },
         { name: 'Heating Element (ຊຸດຄວາມຮ້ອນ)', usage: 0, threshold: 90 }
       ];
-    } else if (eqData.category === 'Binder') {
+    } else if (canonicalCat === 'Binder') {
       defaultComponents = [
         { name: 'Glue Roller (ລູກກິ້ງກາວ)', usage: 0, threshold: 90 },
         { name: 'Clamp Wear (ຊຸດໜີບ)', usage: 0, threshold: 90 }
@@ -3761,12 +3837,17 @@ export const AppProvider = ({ children }) => {
       lastMaintenanceDate: new Date().toISOString().split('T')[0],
       components: eqData.components || defaultComponents,
       oem_baseline_specs: eqData.oem_baseline_specs || { slots: eqData.printerColorLinks },
-      ...eqData
+      ...eqData,
+      category: canonicalCat,
+      printerCategory: canonicalCat === 'Printer' ? (eqData.printerCategory || prnSubtype) : undefined,
     };
 
     unrecordDeletedId(newEq.id);
     if (newEq.serialNumber) unrecordDeletedId(newEq.serialNumber);
     if (newEq.name) unrecordDeletedId(newEq.name);
+
+    // Strictly ensure no equipment asset lingers in inventory ledger
+    setInventory(prev => prev.filter(inv => inv.id !== newEq.id && inv.id !== eqData.sku && inv.id !== eqData.inboundId && !isAssetItem(inv.category, inv)));
 
     setEquipment(prev => {
       const idx = prev.findIndex(e => e.id === newEq.id);
@@ -3856,21 +3937,39 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  const deleteEquipment = (eqId: string) => {
-    recordDeletedId(eqId);
-    setEquipment(prev => {
-      const next = prev.filter(eq => eq.id !== eqId && eq.serialNumber !== eqId && eq.id.toLowerCase() !== eqId.toLowerCase());
-      safeSetItem('ss_print_equipment_v6', next);
-      return next;
-    });
-    fetch(`/api/equipment/${eqId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    }).catch(err => console.log('API equipment delete notice:', err));
-    fetch(`/api/v1/assets/${eqId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    }).catch(err => console.log('API assets delete notice:', err));
+  const deleteEquipment = async (eqId: string) => {
+    try {
+      let res = await fetch(`/api/equipment/${eqId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        res = await fetch(`/api/v1/assets/${eqId}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders(),
+        });
+      }
+
+      if (res.ok) {
+        recordDeletedId(eqId, 'equipment');
+        setEquipment(prev => {
+          const next = prev.filter(eq => eq.id !== eqId && eq.serialNumber !== eqId && eq.id.toLowerCase() !== eqId.toLowerCase());
+          safeSetItem('ss_print_equipment_v6', next);
+          return next;
+        });
+        showToast('ລຶບເຄື່ອງຈັກຮຽບຮ້ອຍແລ້ວ', 'success');
+        return true;
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        const msg = errJson.error || errJson.message || `ບໍ່ສາມາດລຶບເຄື່ອງຈັກໄດ້ (HTTP ${res.status})`;
+        showToast(msg, 'error');
+        return false;
+      }
+    } catch (err: any) {
+      console.error('Failed to delete equipment from backend:', err);
+      showToast('ເກີດຂໍ້ຜິດພາດໃນການເຊື່ອມຕໍ່ ບໍ່ສາມາດລຶບເຄື່ອງຈັກໄດ້', 'error');
+      return false;
+    }
   };
 
   const addMeterReading = (readingData: {
@@ -3886,7 +3985,7 @@ export const AppProvider = ({ children }) => {
 
     // Calculate diffCount from previous meter reading for this machine
     const eqReadings = meterReadings.filter((m: any) => m.equipmentId === readingData.equipmentId);
-    const lastReading = eqReadings.length > 0 
+    const lastReading = eqReadings.length > 0
       ? Math.max(...eqReadings.map((m: any) => m.meterCount || 0))
       : 0;
 
@@ -4090,8 +4189,8 @@ export const AppProvider = ({ children }) => {
           const sheetsToDeduct = qtyInPacks * multiplier;
 
           const calculatedStockFromBatches = remainingBatches.reduce((sum, b) => sum + Number(b.currentQty || 0), 0);
-          const newStockQty = remainingBatches.length > 0 
-            ? calculatedStockFromBatches 
+          const newStockQty = remainingBatches.length > 0
+            ? calculatedStockFromBatches
             : Math.max(0, (Number(item.stockQty) || 0) - sheetsToDeduct);
 
           // If the item ID was literally the inbound ID itself (a temporary standalone item), remove it
@@ -4983,15 +5082,15 @@ export const AppProvider = ({ children }) => {
       const originalId = (updatedEntry.originalId || updatedEntry.id || '').trim();
 
       const next = prev.map(invItem => {
-        const isMatch = invItem.id === targetSku || 
-                        invItem.sku === targetSku || 
-                        invItem.id === updatedEntry.id || 
-                        invItem.sku === updatedEntry.id || 
-                        invItem.id === originalId || 
-                        invItem.sku === originalId || 
+        const isMatch = invItem.id === targetSku ||
+                        invItem.sku === targetSku ||
+                        invItem.id === updatedEntry.id ||
+                        invItem.sku === updatedEntry.id ||
+                        invItem.id === originalId ||
+                        invItem.sku === originalId ||
                         (originalSku && (invItem.id === originalSku || invItem.sku === originalSku)) ||
-                        invItem.id?.toLowerCase() === targetSku?.toLowerCase() || 
-                        (invItem.sku && invItem.sku.toLowerCase() === targetSku?.toLowerCase()) || 
+                        invItem.id?.toLowerCase() === targetSku?.toLowerCase() ||
+                        (invItem.sku && invItem.sku.toLowerCase() === targetSku?.toLowerCase()) ||
                         (itemName && invItem.name && invItem.name.toLowerCase() === itemName.toLowerCase()) ||
                         (originalName && invItem.name && invItem.name.toLowerCase() === originalName.toLowerCase()) ||
                         (invItem.batches || []).some((b: any) =>
@@ -5065,8 +5164,8 @@ export const AppProvider = ({ children }) => {
             costPerPurchaseUnit: costPerPurchase,
             costPerConsumptionUnit: costPerConsumption,
             supplier: updatedEntry.supplierName || updatedEntry.supplier || invItem.supplier,
-            specs: { 
-              ...(invItem.specs || {}), 
+            specs: {
+              ...(invItem.specs || {}),
               ...(updatedEntry.specs || {}),
               colorName: detectedColor
             },
@@ -5396,6 +5495,8 @@ export const AppProvider = ({ children }) => {
       updateEquipmentMaintenance,
       resetToDefaultData,
       refreshData,
+      equipmentApiError,
+      refetchEquipment: refreshData,
       isLive,
       connectionStatus
     }}>

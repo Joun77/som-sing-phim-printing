@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"somsing.local/backend/db"
+	"somsing.local/backend/inventory"
 
 	"github.com/gin-gonic/gin"
 )
@@ -312,7 +313,12 @@ func HandleUpdateInboundTransaction(c *gin.Context) {
 			targetSKU = item.ID
 		}
 
-		if deltaConsumptionQty != 0 && targetSKU != "" {
+		isAsset := inventory.IsAssetCategory(item.Category) || inventory.IsAssetCategory(oldCategory)
+		if isAsset {
+			deltaConsumptionQty = 0
+		}
+
+		if !isAsset && deltaConsumptionQty != 0 && targetSKU != "" {
 			_, err = tx.Exec(`
 				UPDATE materials 
 				SET stock_qty = GREATEST(0, stock_qty + $1), updated_at = CURRENT_TIMESTAMP
@@ -324,7 +330,7 @@ func HandleUpdateInboundTransaction(c *gin.Context) {
 		}
 
 		// 3. Update WAC & Latest Market Cost
-		if newConsumptionQty > 0 && targetSKU != "" {
+		if !isAsset && newConsumptionQty > 0 && targetSKU != "" {
 			newUnitConsumptionCost := item.TotalPrice / newConsumptionQty
 			var curStock, curUnitCost, curMarketCost float64
 			errMat := tx.QueryRow(`
@@ -564,7 +570,7 @@ func saveBatchInboundWithTx(items []InboundTransaction) error {
 			catLower := strings.ToLower(cat)
 			isPaper := strings.Contains(catLower, "paper") || strings.Contains(catLower, "material") || strings.Contains(catLower, "ເຈ້ຍ")
 			isInk := strings.Contains(catLower, "ink") || strings.Contains(catLower, "ໝຶກ")
-			isPrinter := strings.Contains(catLower, "printer") || strings.Contains(catLower, "machine") || strings.Contains(catLower, "press") || strings.Contains(catLower, "equipment") || strings.HasPrefix(strings.ToLower(sku), "prn") || strings.HasPrefix(strings.ToLower(item.ID), "prn")
+			isPrinter := inventory.IsAssetCategory(cat) || strings.Contains(catLower, "printer") || strings.Contains(catLower, "machine") || strings.Contains(catLower, "press") || strings.Contains(catLower, "equipment") || strings.Contains(catLower, "cutter") || strings.Contains(catLower, "binder") || strings.Contains(catLower, "laminat") || strings.HasPrefix(strings.ToLower(sku), "prn") || strings.HasPrefix(strings.ToLower(item.ID), "prn") || strings.HasPrefix(strings.ToLower(sku), "mac") || strings.HasPrefix(strings.ToLower(item.ID), "mac")
 
 			if isPrinter {
 				serial := "SN-" + item.ID
@@ -599,6 +605,13 @@ func saveBatchInboundWithTx(items []InboundTransaction) error {
 					}
 				}
 
+				pCat = inventory.NormalizePrinterCategory(pCat, brand, model, item.Specs)
+				if item.Specs != nil {
+					item.Specs["printerCategory"] = pCat
+					item.Specs["category"] = "Printer"
+					specsJSON, _ = json.Marshal(item.Specs)
+				}
+
 				_, _ = tx.Exec(`
 					INSERT INTO printers (
 						asset_id, serial_number, brand, model, category,
@@ -623,6 +636,7 @@ func saveBatchInboundWithTx(items []InboundTransaction) error {
 						technical_specs = EXCLUDED.technical_specs,
 						updated_at = NOW()
 				`, item.ID, serial, brand, model, pCat, cScheme, expLife, maintRate, priceCost, item.SupplierName, string(specsJSON), item.ProductImage, item.ReceiptSlip)
+				continue
 			}
 
 			unit := strings.TrimSpace(item.Unit)

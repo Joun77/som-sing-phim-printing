@@ -23,7 +23,8 @@ import {
   ChevronDown,
   ChevronUp,
   X,
-  ArrowRight
+  ArrowRight,
+  Calendar
 } from 'lucide-react';
 
 interface TopHeaderProps {
@@ -66,6 +67,7 @@ export default function TopHeader({ onToggleMobileSidebar, collapsed, onToggleCo
       case 'orders': return { lo: '3. ອໍເດີ & ຕິດຕາມສະຖານະ (Orders)', en: '3. Customer Orders & Production', icon: ShoppingCart };
       case 'crm': return { lo: '4. ຖານຂໍ້ມູນລູກຄ້າ (Customer CRM)', en: '4. Customer Directory & Credit', icon: User };
       case 'catalog': return { lo: '5. ສິນຄ້າໜ້າເວັບ (Web Catalog)', en: '5. Public Web Catalog', icon: Globe };
+      case 'daily_plan': return { lo: 'ແຜນງານຜະລິດປະຈຳວັນ (Daily Plan)', en: 'Daily Production Plan', icon: Calendar };
       case 'tracker': return { lo: 'ຕິດຕາມງານພິມ (Shop Floor Tracker)', en: 'Shop Floor Job Tracker', icon: Printer };
       case 'equipment': return { lo: 'ເຄື່ອງຈັກ & ຊ່າງພິມ (Equipment & PPM)', en: 'Printers & Equipment Maintenance', icon: Printer };
       case 'inventory': return { lo: 'ຄັງສິນຄ້າ & ເສດເຈ້ຍ (Inventory & Offcuts)', en: 'Warehouse Stock & FIFO Batches', icon: Boxes };

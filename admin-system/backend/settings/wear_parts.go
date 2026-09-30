@@ -101,8 +101,8 @@ func HandleGetMachineWearParts(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"status":                  "success",
-		"data":                    parts,
+		"status":                   "success",
+		"data":                     parts,
 		"total_wear_cost_per_unit": totalWearCostPerUnit,
 	})
 }
@@ -119,8 +119,8 @@ func HandleCreateMachineWearPart(c *gin.Context) {
 		PartNameLo            string  `json:"part_name_lo" binding:"required"`
 		PartNameEn            string  `json:"part_name_en" binding:"required"`
 		PartCategory          string  `json:"part_category" binding:"required"`
-		CostPriceLak          float64 `json:"cost_price_lak" binding:"required"`
-		ExpectedLifespanUnits int64   `json:"expected_lifespan_units" binding:"required"`
+		CostPriceLak          float64 `json:"cost_price_lak"`
+		ExpectedLifespanUnits int64   `json:"expected_lifespan_units"`
 		UnitType              string  `json:"unit_type"`
 	}
 
@@ -129,12 +129,31 @@ func HandleCreateMachineWearPart(c *gin.Context) {
 		return
 	}
 
+	if strings.TrimSpace(req.PartNameLo) == "" || strings.TrimSpace(req.PartNameEn) == "" || strings.TrimSpace(req.PartCategory) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Part name and category cannot be empty"})
+		return
+	}
+	if req.CostPriceLak < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cost price must be greater than or equal to 0"})
+		return
+	}
+	if req.ExpectedLifespanUnits <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Expected lifespan must be greater than 0"})
+		return
+	}
+
 	unitType := strings.TrimSpace(req.UnitType)
 	if unitType == "" {
 		unitType = "pages"
 	}
-	if req.ExpectedLifespanUnits <= 0 {
-		req.ExpectedLifespanUnits = 1
+
+	if db.DB != nil {
+		var exists bool
+		err := db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM printers WHERE asset_id = $1)", assetID).Scan(&exists)
+		if err == nil && !exists {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Printer asset not found"})
+			return
+		}
 	}
 
 	newID := generateUUID()
@@ -177,16 +196,22 @@ func HandleCreateMachineWearPart(c *gin.Context) {
 
 // HandleDeleteMachineWearPart soft deletes a wear part
 func HandleDeleteMachineWearPart(c *gin.Context) {
-	partID := c.Param("part_id")
-	if partID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Part ID is required"})
+	assetID := strings.TrimSpace(c.Param("id"))
+	partID := strings.TrimSpace(c.Param("part_id"))
+	if assetID == "" || partID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Asset ID and Part ID are required"})
 		return
 	}
 
 	if db.DB != nil {
-		_, err := db.DB.Exec("UPDATE machine_wear_parts SET is_active = false, updated_at = NOW() WHERE id = $1", partID)
+		res, err := db.DB.Exec("UPDATE machine_wear_parts SET is_active = false, updated_at = NOW() WHERE id = $1 AND asset_id = $2", partID, assetID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete wear part", "details": err.Error()})
+			return
+		}
+		rowsAffected, _ := res.RowsAffected()
+		if rowsAffected == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Wear part not found for this machine"})
 			return
 		}
 	}
@@ -194,6 +219,99 @@ func HandleDeleteMachineWearPart(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"message": "Machine wear part deactivated successfully",
+	})
+}
+
+// HandleUpdateMachineWearPart updates an existing wear part record
+func HandleUpdateMachineWearPart(c *gin.Context) {
+	assetID := strings.TrimSpace(c.Param("id"))
+	partID := strings.TrimSpace(c.Param("part_id"))
+	if assetID == "" || partID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Asset ID and Part ID are required"})
+		return
+	}
+
+	var req struct {
+		PartNameLo            *string  `json:"part_name_lo"`
+		PartNameEn            *string  `json:"part_name_en"`
+		PartCategory          *string  `json:"part_category"`
+		CostPriceLak          *float64 `json:"cost_price_lak"`
+		ExpectedLifespanUnits *int64   `json:"expected_lifespan_units"`
+		UnitType              *string  `json:"unit_type"`
+		CurrentCounter        *int64   `json:"current_counter"`
+		IsActive              *bool    `json:"is_active"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload", "details": err.Error()})
+		return
+	}
+
+	if req.CostPriceLak != nil && *req.CostPriceLak < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cost price must be greater than or equal to 0"})
+		return
+	}
+	if req.ExpectedLifespanUnits != nil && *req.ExpectedLifespanUnits <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Expected lifespan must be greater than 0"})
+		return
+	}
+	if req.CurrentCounter != nil && *req.CurrentCounter < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Current counter must be greater than or equal to 0"})
+		return
+	}
+	if req.PartNameLo != nil && strings.TrimSpace(*req.PartNameLo) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Part name (Lao) cannot be empty"})
+		return
+	}
+	if req.PartNameEn != nil && strings.TrimSpace(*req.PartNameEn) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Part name (English) cannot be empty"})
+		return
+	}
+	if req.PartCategory != nil && strings.TrimSpace(*req.PartCategory) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Part category cannot be empty"})
+		return
+	}
+
+	if db.DB != nil {
+		var currentCost float64
+		var currentLife int64
+		err := db.DB.QueryRow(`
+			SELECT cost_price_lak, expected_lifespan_units
+			FROM machine_wear_parts
+			WHERE id = $1 AND asset_id = $2
+		`, partID, assetID).Scan(&currentCost, &currentLife)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Wear part not found for this machine"})
+			return
+		}
+
+		query := `
+			UPDATE machine_wear_parts SET
+				part_name_lo = COALESCE($1, part_name_lo),
+				part_name_en = COALESCE($2, part_name_en),
+				part_category = COALESCE($3, part_category),
+				cost_price_lak = COALESCE($4, cost_price_lak),
+				expected_lifespan_units = COALESCE($5, expected_lifespan_units),
+				unit_type = COALESCE($6, unit_type),
+				current_counter = COALESCE($7, current_counter),
+				is_active = COALESCE($8, is_active),
+				updated_at = NOW()
+			WHERE id = $9 AND asset_id = $10
+		`
+		_, err = db.DB.Exec(query,
+			req.PartNameLo, req.PartNameEn, req.PartCategory,
+			req.CostPriceLak, req.ExpectedLifespanUnits, req.UnitType,
+			req.CurrentCounter, req.IsActive, partID, assetID,
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update wear part", "details": err.Error()})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Machine wear part updated successfully",
 	})
 }
 
@@ -209,16 +327,16 @@ type InstallPartRequest struct {
 
 // SparePartInventoryItem represents spare parts in warehouse inventory
 type SparePartInventoryItem struct {
-	ID                     string                 `json:"id"`
-	SKU                    string                 `json:"sku"`
-	Name                   string                 `json:"name"`
-	Category               string                 `json:"category"`
-	StockQty               float64                `json:"stock_qty"`
-	Unit                   string                 `json:"unit"`
-	CostPrice              float64                `json:"cost_price"`
-	AssignedPrinterID      string                 `json:"assigned_printer_id,omitempty"`
-	TechnicalSpecs         map[string]interface{} `json:"technical_specs,omitempty"`
-	UpdatedAt              string                 `json:"updated_at"`
+	ID                string                 `json:"id"`
+	SKU               string                 `json:"sku"`
+	Name              string                 `json:"name"`
+	Category          string                 `json:"category"`
+	StockQty          float64                `json:"stock_qty"`
+	Unit              string                 `json:"unit"`
+	CostPrice         float64                `json:"cost_price"`
+	AssignedPrinterID string                 `json:"assigned_printer_id,omitempty"`
+	TechnicalSpecs    map[string]interface{} `json:"technical_specs,omitempty"`
+	UpdatedAt         string                 `json:"updated_at"`
 }
 
 // HandleGetSparePartsInventory returns available spare parts from warehouse materials
@@ -426,4 +544,3 @@ func HandleInstallMachineWearPart(c *gin.Context) {
 		},
 	})
 }
-

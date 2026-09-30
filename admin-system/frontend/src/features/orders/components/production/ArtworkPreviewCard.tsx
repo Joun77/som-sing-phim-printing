@@ -1,19 +1,20 @@
 import React, { useState } from 'react';
-import { 
-  FileText, 
-  Download, 
-  ExternalLink, 
-  Eye, 
-  Image as ImageIcon, 
-  Sparkles, 
-  Images, 
-  CheckCircle2, 
-  ZoomIn, 
+import {
+  FileText,
+  Download,
+  ExternalLink,
+  Eye,
+  Image as ImageIcon,
+  Sparkles,
+  Images,
+  CheckCircle2,
+  ZoomIn,
   Layers,
   User,
   Phone,
   MapPin,
-  Loader2
+  Loader2,
+  FileQuestion
 } from 'lucide-react';
 import { FormModalTemplate } from '@components/common/FormModalTemplate';
 import { downloadPhotosAsZip } from '@utils/zipDownloader';
@@ -45,36 +46,40 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
 
   // Extract batch files from order items or specs
   const firstItem = order?.items?.[0] || {};
-  const rawBatch = 
-    firstItem.batch_files || 
+  const rawBatch =
+    firstItem.batch_files ||
     firstItem.batchFiles ||
-    firstItem.specifications?.batch_files || 
-    firstItem.specs?.batch_files || 
-    order?.batch_files || 
-    order?.specs?.batch_files || 
+    firstItem.specifications?.batch_files ||
+    firstItem.specs?.batch_files ||
+    order?.batch_files ||
+    order?.specs?.batch_files ||
     [];
 
-  const galleryUrls = 
-    firstItem.gallery_urls || 
+  const galleryUrls =
+    firstItem.gallery_urls ||
     firstItem.galleryUrls ||
-    firstItem.specifications?.gallery_urls || 
-    order?.gallery_urls || 
+    firstItem.specifications?.gallery_urls ||
+    order?.gallery_urls ||
     [];
 
-  // Normalize batch photo items
+    // Normalize batch photo items
   const photos: { name: string; url: string; size?: number }[] = (() => {
     if (Array.isArray(rawBatch) && rawBatch.length > 0) {
-      return rawBatch.map((f: any, idx: number) => ({
-        name: f.name || f.file_name || `Photo_${String(idx + 1).padStart(2, '0')}.jpg`,
-        url: typeof f === 'string' ? f : (f.url || f.file_url || f.preview_url || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=800`),
-        size: f.size || f.file_size,
-      }));
+      return rawBatch
+        .map((f: any, idx: number) => ({
+          name: f.name || f.file_name || `Photo_${String(idx + 1).padStart(2, '0')}.jpg`,
+          url: typeof f === 'string' ? f : (f.url || f.file_url || f.preview_url || ''),
+          size: f.size || f.file_size,
+        }))
+        .filter((item) => Boolean(item.url));
     }
     if (Array.isArray(galleryUrls) && galleryUrls.length > 0) {
-      return galleryUrls.map((url: string, idx: number) => ({
-        name: `Photo_${String(idx + 1).padStart(2, '0')}.jpg`,
-        url,
-      }));
+      return galleryUrls
+        .map((url: string, idx: number) => ({
+          name: `Photo_${String(idx + 1).padStart(2, '0')}.jpg`,
+          url,
+        }))
+        .filter((item) => Boolean(item.url));
     }
 
     // If single artwork or thumbnail exists
@@ -86,26 +91,13 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
       }];
     }
 
-    // Sample fallback for photo print job
-    const sampleImages = [
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=800',
-      'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=800',
-      'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=800',
-      'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&q=80&w=800',
-      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=800',
-      'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=800',
-    ];
-
-    return Array.from({ length: 16 }).map((_, i) => ({
-      name: `Photo_Print_${String(i + 1).padStart(2, '0')}.jpg`,
-      url: sampleImages[i % sampleImages.length],
-    }));
+    return [];
   })();
 
   const activePhoto = photos[selectedPhotoIdx] || photos[0];
-  const customerName = order?.customer_name || order?.customerName || order?.customer?.name || 'Somphavath DOUANGSVA';
-  const customerPhone = order?.customer_phone || order?.customerPhone || order?.customer?.phone || order?.phone || '020 55889900';
-  const customerAddress = order?.customer_address || order?.customerAddress || order?.customer?.address || order?.address || 'Saysettha, Vientiane';
+  const customerName = order?.customer_name || order?.customerName || order?.customer?.name || '-';
+  const customerPhone = order?.customer_phone || order?.customerPhone || order?.customer?.phone || order?.phone || '-';
+  const customerAddress = order?.customer_address || order?.customerAddress || order?.customer?.address || order?.address || '';
 
   const handleOpenPhotoInUniversalLightbox = (photoItem: { name: string; url: string }, index: number) => {
     if (setLightbox && photoItem?.url) {
@@ -134,10 +126,17 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
               </h3>
             </div>
           </div>
-          <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-            <span>Approved (CMYK)</span>
-          </span>
+          {photos.length > 0 ? (
+            <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+              <span>Approved (CMYK)</span>
+            </span>
+          ) : (
+            <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+              <FileQuestion className="w-3 h-3 text-amber-600" />
+              <span>{currentLang === 'lo' ? 'ລໍຖ້າໄຟລ໌' : 'Pending Artwork'}</span>
+            </span>
+          )}
         </div>
 
         {/* Customer Snapshot Box */}
@@ -145,7 +144,9 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
           <div className="truncate space-y-0.5">
             <div className="flex items-center gap-1.5">
               <strong className="text-slate-900 font-black">{customerName}</strong>
-              <span className="text-[11px] font-mono text-slate-500 font-semibold">• {customerPhone}</span>
+              {customerPhone && customerPhone !== '-' && (
+                <span className="text-[11px] font-mono text-slate-500 font-semibold">• {customerPhone}</span>
+              )}
             </div>
             {customerAddress && (
               <span className="text-[10.5px] text-slate-500 block truncate">{customerAddress}</span>
@@ -160,84 +161,112 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
 
         {/* Main Artwork Preview Showcase (Clean Universal Som-Sing Style) */}
         <div className="space-y-3">
-          {/* Featured Active Photo Card */}
-          <div 
-            onClick={() => handleOpenPhotoInUniversalLightbox(activePhoto, selectedPhotoIdx)}
-            className="group relative w-full h-48 sm:h-52 bg-slate-50 rounded-2xl border border-slate-200 p-2 flex items-center justify-center cursor-pointer hover:border-sky-400 hover:shadow-md transition-all overflow-hidden"
-            title={currentLang === 'lo' ? 'ຄລິກເພື່ອເບິ່ງຮູບເຕັມຈໍ (Universal Preview)' : 'Click for Universal Fullscreen Preview'}
-          >
-            <img 
-              src={activePhoto.url} 
-              alt={activePhoto.name}
-              className="max-h-full max-w-full object-contain rounded-xl transition duration-200 group-hover:scale-[1.02]"
-            />
-
-            {/* Subtle Hover Action Overlay */}
-            <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition rounded-2xl flex items-center justify-center gap-2 text-white text-xs font-bold backdrop-blur-[1px]">
-              <div className="p-2 bg-white/20 rounded-xl backdrop-blur-md flex items-center gap-1.5 shadow-md">
-                <ZoomIn className="w-4 h-4 text-sky-300" />
-                <span>{currentLang === 'lo' ? 'ຄລິກເພື່ອຂະຫຍາຍເບິ່ງເຕັມຈໍ' : 'Universal Preview'}</span>
+          {photos.length === 0 ? (
+            <div className="w-full h-48 sm:h-52 bg-slate-50/80 rounded-2xl border border-dashed border-slate-200 p-4 flex flex-col items-center justify-center text-center gap-2.5">
+              <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200 shadow-2xs">
+                <FileQuestion className="w-5 h-5" />
               </div>
-            </div>
-
-            {/* Photo Index Badge */}
-            {photos.length > 1 && (
-              <div className="absolute bottom-2.5 right-2.5 px-2.5 py-1 rounded-lg bg-slate-900/80 text-white font-mono font-bold text-[10.5px] backdrop-blur-sm border border-white/10 shadow-xs">
-                {selectedPhotoIdx + 1} / {photos.length}
+              <div className="space-y-1">
+                <h4 className="text-xs font-black text-slate-800">
+                  {currentLang === 'lo' ? 'ລໍຖ້າໄຟລ໌ຈາກລູກຄ້າ' : 'Pending Customer Artwork'}
+                </h4>
+                <p className="text-[11px] text-slate-500 font-medium max-w-xs">
+                  {currentLang === 'lo' ? 'ຍັງບໍ່ມີໄຟລ໌ງານພິມແນບໃນອໍເດີນີ້ ສາມາດເປີດລິ້ງຄ໌ Google Drive ດ້ານລຸ່ມ' : 'No artwork files uploaded yet. You can inspect external drive link if available.'}
+                </p>
               </div>
-            )}
-          </div>
-
-          {/* Batch Thumbnail Selector Row (Up to 6 thumbnails + "+N more" badge) */}
-          {photos.length > 1 && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold px-0.5">
-                <span>ເລືອກຮູບທີ່ຈະກວດສອບ ({photos.length} ຮູບ):</span>
+              {driveLink && (
                 <button
                   type="button"
-                  onClick={() => setIsGalleryModalOpen(true)}
-                  className="text-sky-600 hover:text-sky-700 font-black cursor-pointer hover:underline"
+                  onClick={onOpenDriveLink}
+                  className="mt-1 px-3.5 py-1.5 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-black flex items-center gap-1.5 border border-sky-200 cursor-pointer transition shadow-2xs"
                 >
-                  ເບິ່ງທັງໝົດ →
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>{currentLang === 'lo' ? 'ເປີດ Google Drive' : 'Open Google Drive'}</span>
                 </button>
-              </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Featured Active Photo Card */}
+              <div
+                onClick={() => handleOpenPhotoInUniversalLightbox(activePhoto, selectedPhotoIdx)}
+                className="group relative w-full h-48 sm:h-52 bg-slate-50 rounded-2xl border border-slate-200 p-2 flex items-center justify-center cursor-pointer hover:border-sky-400 hover:shadow-md transition-all overflow-hidden"
+                title={currentLang === 'lo' ? 'ຄລິກເພື່ອເບິ່ງຮູບເຕັມຈໍ (Universal Preview)' : 'Click for Universal Fullscreen Preview'}
+              >
+                <img
+                  src={activePhoto.url}
+                  alt={activePhoto.name}
+                  className="max-h-full max-w-full object-contain rounded-xl transition duration-200 group-hover:scale-[1.02]"
+                />
 
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5">
-                {photos.slice(0, 6).map((p, idx) => {
-                  const isSelected = selectedPhotoIdx === idx;
-                  return (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setSelectedPhotoIdx(idx)}
-                      className={`relative w-12 h-12 rounded-xl overflow-hidden border-2 shrink-0 transition cursor-pointer ${
-                        isSelected 
-                          ? 'border-sky-500 ring-2 ring-sky-500/20 scale-105 shadow-xs' 
-                          : 'border-slate-200 opacity-70 hover:opacity-100 hover:border-slate-300'
-                      }`}
-                      title={p.name}
-                    >
-                      <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
-                      <span className="absolute bottom-0 inset-x-0 bg-slate-900/70 text-white text-[8px] font-mono text-center font-bold">
-                        #{idx + 1}
-                      </span>
-                    </button>
-                  );
-                })}
+                {/* Subtle Hover Action Overlay */}
+                <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition rounded-2xl flex items-center justify-center gap-2 text-white text-xs font-bold backdrop-blur-[1px]">
+                  <div className="p-2 bg-white/20 rounded-xl backdrop-blur-md flex items-center gap-1.5 shadow-md">
+                    <ZoomIn className="w-4 h-4 text-sky-300" />
+                    <span>{currentLang === 'lo' ? 'ຄລິກເພື່ອຂະຫຍາຍເບິ່ງເຕັມຈໍ' : 'Universal Preview'}</span>
+                  </div>
+                </div>
 
-                {photos.length > 6 && (
-                  <button
-                    type="button"
-                    onClick={() => setIsGalleryModalOpen(true)}
-                    className="w-12 h-12 rounded-xl border border-dashed border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700 flex flex-col items-center justify-center font-black text-xs shrink-0 transition cursor-pointer shadow-2xs"
-                    title="ເບິ່ງຄັງຮູບພາບທັງໝົດ"
-                  >
-                    <span>+{photos.length - 6}</span>
-                    <span className="text-[8px] font-bold">ຮູບ</span>
-                  </button>
+                {/* Photo Index Badge */}
+                {photos.length > 1 && (
+                  <div className="absolute bottom-2.5 right-2.5 px-2.5 py-1 rounded-lg bg-slate-900/80 text-white font-mono font-bold text-[10.5px] backdrop-blur-sm border border-white/10 shadow-xs">
+                    {selectedPhotoIdx + 1} / {photos.length}
+                  </div>
                 )}
               </div>
-            </div>
+
+              {/* Batch Thumbnail Selector Row (Up to 6 thumbnails + "+N more" badge) */}
+              {photos.length > 1 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold px-0.5">
+                    <span>ເລືອກຮູບທີ່ຈະກວດສອບ ({photos.length} ຮູບ):</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsGalleryModalOpen(true)}
+                      className="text-sky-600 hover:text-sky-700 font-black cursor-pointer hover:underline"
+                    >
+                      ເບິ່ງທັງໝົດ →
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5">
+                    {photos.slice(0, 6).map((p, idx) => {
+                      const isSelected = selectedPhotoIdx === idx;
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setSelectedPhotoIdx(idx)}
+                          className={`relative w-12 h-12 rounded-xl overflow-hidden border-2 shrink-0 transition cursor-pointer ${
+                            isSelected
+                              ? 'border-sky-500 ring-2 ring-sky-500/20 scale-105 shadow-xs'
+                              : 'border-slate-200 opacity-70 hover:opacity-100 hover:border-slate-300'
+                          }`}
+                          title={p.name}
+                        >
+                          <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
+                          <span className="absolute bottom-0 inset-x-0 bg-slate-900/70 text-white text-[8px] font-mono text-center font-bold">
+                            #{idx + 1}
+                          </span>
+                        </button>
+                      );
+                    })}
+
+                    {photos.length > 6 && (
+                      <button
+                        type="button"
+                        onClick={() => setIsGalleryModalOpen(true)}
+                        className="w-12 h-12 rounded-xl border border-dashed border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700 flex flex-col items-center justify-center font-black text-xs shrink-0 transition cursor-pointer shadow-2xs"
+                        title="ເບິ່ງຄັງຮູບພາບທັງໝົດ"
+                      >
+                        <span>+{photos.length - 6}</span>
+                        <span className="text-[8px] font-bold">ຮູບ</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -253,7 +282,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
             <Images className="w-3.5 h-3.5 text-purple-600" />
             <span>{currentLang === 'lo' ? `ຄັງຮູບທັງໝົດ (${photos.length})` : `All Photos (${photos.length})`}</span>
           </button>
-        ) : (
+        ) : photos.length === 1 ? (
           <button
             type="button"
             onClick={() => handleOpenPhotoInUniversalLightbox(activePhoto, 0)}
@@ -262,10 +291,25 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
             <Eye className="w-3.5 h-3.5 text-slate-600" />
             <span>{currentLang === 'lo' ? 'ເປີດເບິ່ງໄຟລ໌' : 'View Artwork'}</span>
           </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onOpenDriveLink}
+            disabled={!driveLink}
+            className={`py-2.5 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 border ${
+              driveLink
+                ? 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200 cursor-pointer active:scale-95'
+                : 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'
+            }`}
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span>{currentLang === 'lo' ? 'Google Drive' : 'Google Drive'}</span>
+          </button>
         )}
 
         <button
           type="button"
+          disabled={photos.length === 0 && !onDownloadArtwork}
           onClick={async () => {
             if (onDownloadArtwork) {
               onDownloadArtwork();
@@ -291,10 +335,20 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
               document.body.removeChild(a);
             }
           }}
-          className="py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-black transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shadow-sm border-none"
+          className={`py-2.5 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 shadow-sm border-none ${
+            photos.length > 0 || onDownloadArtwork
+              ? 'bg-sky-600 hover:bg-sky-700 text-white cursor-pointer active:scale-95'
+              : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+          }`}
         >
           {isZipping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-          <span>{photos.length > 1 ? (currentLang === 'lo' ? 'ດາວໂຫຼດ ZIP' : 'Download ZIP') : (currentLang === 'lo' ? 'ດາວໂຫຼດໄຟລ໌' : 'Download File')}</span>
+          <span>
+            {photos.length > 1
+              ? (currentLang === 'lo' ? 'ດາວໂຫຼດ ZIP' : 'Download ZIP')
+              : photos.length === 1
+              ? (currentLang === 'lo' ? 'ດາວໂຫຼດໄຟລ໌' : 'Download File')
+              : (currentLang === 'lo' ? 'ບໍ່ມີໄຟລ໌' : 'No File')}
+          </span>
         </button>
       </div>
 
@@ -358,10 +412,10 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
                   className="group relative bg-white rounded-2xl overflow-hidden border border-slate-200 hover:border-sky-500 cursor-pointer shadow-2xs transition hover:shadow-md"
                 >
                   <div className="aspect-square w-full overflow-hidden bg-slate-100">
-                    <img 
-                      src={photo.url} 
-                      alt={photo.name} 
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-200" 
+                    <img
+                      src={photo.url}
+                      alt={photo.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-200"
                     />
                   </div>
                   <div className="p-2 bg-white">
