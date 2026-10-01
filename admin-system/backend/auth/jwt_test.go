@@ -266,3 +266,96 @@ func TestRequireAuth_RoleMatrix(t *testing.T) {
 	check("GET", "/api/v1/finance/summary", productionToken, http.StatusForbidden, "production -> finance 403")
 	check("GET", "/api/v1/hr/employees", productionToken, http.StatusForbidden, "production -> HR 403")
 }
+
+// TestHandleRefreshToken_RejectsExpiredToken verifies 401 for an expired refresh token.
+func TestHandleRefreshToken_RejectsExpiredToken(t *testing.T) {
+	os.Setenv("ENVIRONMENT", "development")
+	os.Setenv("JWT_SECRET", "")
+	defer func() {
+		os.Setenv("ENVIRONMENT", "test")
+	}()
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/auth/refresh", HandleRefreshToken)
+
+	// Create an EXPIRED refresh token
+	claims := &OwnerClaims{
+		Username: "admin",
+		UserID:   "usr_admin_001",
+		Role:     "admin",
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   "usr_admin_001",
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(-1 * time.Hour)), // Expired 1 hour ago
+			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-2 * time.Hour)),
+			Issuer:    "som-sing-phim-erp-refresh",
+		},
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, _ := tok.SignedString(GetJWTSecretKey())
+
+	req, _ := http.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
+	req.Header.Set("Authorization", "Bearer "+signed)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("Expected 401 for expired refresh token, got %d", w.Code)
+	}
+}
+
+// TestHandleRefreshToken_RejectsAccessToken verifies an Access Token cannot be used to refresh.
+func TestHandleRefreshToken_RejectsAccessToken(t *testing.T) {
+	os.Setenv("ENVIRONMENT", "development")
+	os.Setenv("JWT_SECRET", "")
+	defer func() {
+		os.Setenv("ENVIRONMENT", "test")
+	}()
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/auth/refresh", HandleRefreshToken)
+
+	// Create a valid ACCESS token (issuer is som-sing-phim-erp)
+	accessToken := makeSignedToken(t, "admin", "admin", "usr_admin_001")
+
+	req, _ := http.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("Expected 401 for access token used as refresh, got %d", w.Code)
+	}
+}
+
+// TestRequireAuth_RejectsRefreshToken verifies a Refresh Token cannot be used for API access.
+func TestRequireAuth_RejectsRefreshToken(t *testing.T) {
+	os.Setenv("ENVIRONMENT", "development")
+	os.Setenv("JWT_SECRET", "")
+	defer func() {
+		os.Setenv("ENVIRONMENT", "test")
+	}()
+
+	r := setupAuthRouter()
+
+	// Create a valid REFRESH token (issuer is som-sing-phim-erp-refresh)
+	claims := &OwnerClaims{
+		Username: "admin",
+		UserID:   "usr_admin_001",
+		Role:     "admin",
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   "usr_admin_001",
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
+			Issuer:    "som-sing-phim-erp-refresh",
+		},
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	refreshToken, _ := tok.SignedString(GetJWTSecretKey())
+
+	req, _ := http.NewRequest("GET", "/api/admin/finance", nil)
+	req.Header.Set("Authorization", "Bearer "+refreshToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected 401 for refresh token used for API access, got %d", w.Code)
+	}
+}

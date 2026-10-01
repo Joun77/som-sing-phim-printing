@@ -49,9 +49,132 @@ func main() {
 	// Initialize Notification Dispatcher
 	notifications.InitGlobalDispatcher(db.DB)
 
+	// Seed Lao Provinces & Districts to PostgreSQL
+	settings.SeedLocationsToDB(db.GetDB())
+
 	router := gin.New()
 	router.Use(gin.Recovery())
 
+	RegisterRoutes(router)
+
+	// Start Daily Predictive Maintenance Background Cron
+	inventory.StartPPMDailyCron()
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("Starting Go server on port %s...", port)
+	if err := router.Run(":" + port); err != nil {
+		log.Fatalf("Failed to run server: %v", err)
+	}
+}
+
+// RouteDecorator allows wrapping or replacing handler chains during route registration.
+type RouteDecorator func(method, path string, handlers ...gin.HandlerFunc) []gin.HandlerFunc
+
+// DefaultRouteDecorator is the production identity function.
+func DefaultRouteDecorator(method, path string, handlers ...gin.HandlerFunc) []gin.HandlerFunc {
+	return handlers
+}
+
+type routeConfig struct {
+	decorator RouteDecorator
+}
+
+// RouteOption configures route registration.
+type RouteOption func(*routeConfig)
+
+// WithRouteDecorator allows passing a custom route decorator (e.g. for testing).
+func WithRouteDecorator(decorator RouteDecorator) RouteOption {
+	return func(c *routeConfig) {
+		if decorator != nil {
+			c.decorator = decorator
+		}
+	}
+}
+
+// WithFinalHandlerSentinel wraps route registrations, preserving the entire middleware chain
+// and replacing only the final business handler with a safe sentinel response.
+func WithFinalHandlerSentinel() RouteOption {
+	return WithRouteDecorator(func(method, path string, handlers ...gin.HandlerFunc) []gin.HandlerFunc {
+		if len(handlers) == 0 {
+			return handlers
+		}
+		middlewares := handlers[:len(handlers)-1]
+		sentinel := func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"status":   "authorized",
+				"sentinel": true,
+				"method":   method,
+				"path":     path,
+			})
+		}
+		res := make([]gin.HandlerFunc, len(middlewares)+1)
+		copy(res, middlewares)
+		res[len(middlewares)] = sentinel
+		return res
+	})
+}
+
+type routeRegistrar struct {
+	engine    *gin.Engine
+	decorator RouteDecorator
+}
+
+func newRouteRegistrar(engine *gin.Engine, decorator RouteDecorator) *routeRegistrar {
+	return &routeRegistrar{
+		engine:    engine,
+		decorator: decorator,
+	}
+}
+
+func (r *routeRegistrar) Engine() *gin.Engine {
+	return r.engine
+}
+
+func (r *routeRegistrar) Use(middleware ...gin.HandlerFunc) gin.IRoutes {
+	return r.engine.Use(middleware...)
+}
+
+func (r *routeRegistrar) Static(relativePath, root string) gin.IRoutes {
+	return r.engine.Static(relativePath, root)
+}
+
+func (r *routeRegistrar) GET(relativePath string, handlers ...gin.HandlerFunc) gin.IRoutes {
+	return r.engine.GET(relativePath, r.decorator(http.MethodGet, relativePath, handlers...)...)
+}
+
+func (r *routeRegistrar) HEAD(relativePath string, handlers ...gin.HandlerFunc) gin.IRoutes {
+	return r.engine.HEAD(relativePath, r.decorator(http.MethodHead, relativePath, handlers...)...)
+}
+
+func (r *routeRegistrar) POST(relativePath string, handlers ...gin.HandlerFunc) gin.IRoutes {
+	return r.engine.POST(relativePath, r.decorator(http.MethodPost, relativePath, handlers...)...)
+}
+
+func (r *routeRegistrar) PUT(relativePath string, handlers ...gin.HandlerFunc) gin.IRoutes {
+	return r.engine.PUT(relativePath, r.decorator(http.MethodPut, relativePath, handlers...)...)
+}
+
+func (r *routeRegistrar) DELETE(relativePath string, handlers ...gin.HandlerFunc) gin.IRoutes {
+	return r.engine.DELETE(relativePath, r.decorator(http.MethodDelete, relativePath, handlers...)...)
+}
+
+func (r *routeRegistrar) PATCH(relativePath string, handlers ...gin.HandlerFunc) gin.IRoutes {
+	return r.engine.PATCH(relativePath, r.decorator(http.MethodPatch, relativePath, handlers...)...)
+}
+
+// RegisterRoutes encapsulates all route definitions for both production and testing.
+func RegisterRoutes(engine *gin.Engine, opts ...RouteOption) {
+	cfg := routeConfig{
+		decorator: DefaultRouteDecorator,
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	router := newRouteRegistrar(engine, cfg.decorator)
 	// Observability & Security Middlewares
 	router.Use(middleware.RequestLoggerMiddleware())
 	router.Use(middleware.SecurityHeadersMiddleware())
@@ -60,13 +183,16 @@ func main() {
 	// General API Rate Limiting (180 req/min per IP)
 	router.Use(middleware.RateLimitMiddleware(180, time.Minute))
 
-	// Static file server for uploaded order files, artworks & preflight uploads
-	// Note: static /api/v1/orders/files is auth-gated at P1.2; served here for compatibility
-	router.Static("/api/v1/orders/files", "./uploads")
-	router.Static("/uploads", "./uploads")
+	// Protected file serving for uploaded order files, artworks & preflight uploads (P1.2)
+	// Serves private artwork/order files only to authorized staff, with public access
+	// limited strictly to the preflight workspace.
+	router.GET("/api/v1/orders/files/*filepath", orders.HandleServeProtectedFile)
+	router.GET("/uploads/*filepath", orders.HandleServeProtectedFile)
+	router.HEAD("/api/v1/orders/files/*filepath", orders.HandleServeProtectedFile)
+	router.HEAD("/uploads/*filepath", orders.HandleServeProtectedFile)
 
-	// Artwork upload routes — require authentication (sales, prepress, admin, manager)
-	artworkAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales, auth.RolePrepress)
+	// Artwork upload routes — require authentication (sales, prepress, admin, manager, production)
+	artworkAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales, auth.RolePrepress, auth.RoleProduction)
 	router.POST("/api/upload/artwork", artworkAuth, orders.HandleArtworkUpload)
 	router.POST("/api/v1/upload/artwork", artworkAuth, orders.HandleArtworkUpload)
 	router.POST("/api/upload/batch-artworks", artworkAuth, orders.HandleBatchArtworkUpload)
@@ -232,12 +358,17 @@ func main() {
 	router.POST("/api/v1/quotations/:id/convert", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales), orders.HandleConvertQuotationToOrder)
 	router.POST("/api/quotations/:id/convert", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales), orders.HandleConvertQuotationToOrder)
 	router.POST("/api/v1/orders/upload", artworkAuth, orders.HandleUploadOrderFile)
+	router.POST("/api/orders/upload", artworkAuth, orders.HandleUploadOrderFile)
 	router.PATCH("/api/v1/orders/items/:id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
 	router.PUT("/api/v1/orders/items/:id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
 	router.POST("/api/v1/orders/items/:id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
 	router.PATCH("/api/v1/orders/:id/items/:item_id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
 	router.PUT("/api/v1/orders/:id/items/:item_id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
 	router.POST("/api/v1/orders/:id/items/:item_id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
+	
+	// Legacy order tracking issue link
+	router.POST("/api/orders/:id/issue-tracking-token", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleOwner, "super_admin"), orders.HandleIssueTrackingToken)
+	router.POST("/api/v1/orders/:id/issue-tracking-token", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleOwner, "super_admin"), orders.HandleIssueTrackingToken)
 
 	// Production Daily Plan & Stage Assignment routes
 	productionAdminAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleOwner, "super_admin")
@@ -389,26 +520,28 @@ func main() {
 	router.DELETE("/api/employees/:id", hrAuth, hr.HandleDeleteEmployee)
 
 	// Supplier Master routes
-	router.GET("/api/v1/suppliers", suppliers.HandleGetSuppliers)
+	suppliersReadAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleFinance)
+	router.GET("/api/v1/suppliers", suppliersReadAuth, suppliers.HandleGetSuppliers)
 	router.POST("/api/v1/suppliers", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), suppliers.HandleCreateSupplier)
 	router.PUT("/api/v1/suppliers/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), suppliers.HandleUpdateSupplier)
 	router.DELETE("/api/v1/suppliers/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), suppliers.HandleDeleteSupplier)
 
 	// Purchase Order (PO) & Goods Receipt routes
-	router.GET("/api/v1/purchase-orders", suppliers.HandleGetPOs)
+	poReadAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleFinance)
+	router.GET("/api/v1/purchase-orders", poReadAuth, suppliers.HandleGetPOs)
 	router.POST("/api/v1/purchase-orders", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), suppliers.HandleCreatePO)
 	router.PUT("/api/v1/purchase-orders/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), suppliers.HandleUpdatePO)
 	router.POST("/api/v1/purchase-orders/:id/send", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), suppliers.HandleSendPO)
-	router.GET("/api/v1/purchase-orders/:id/pdf", suppliers.HandleGeneratePOPDF)
+	router.GET("/api/v1/purchase-orders/:id/pdf", poReadAuth, suppliers.HandleGeneratePOPDF)
 	router.POST("/api/v1/purchase-orders/:id/receive", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), suppliers.HandleReceiveGoods)
 
 	// Inbound Procurement routes
 	invHandler := handler.NewInventoryHandler()
-	invHandler.RegisterRoutes(router)
+	invHandler.RegisterRoutes(engine)
 
 	// Pricing Template & Dynamic Coverage Engine routes
 	pricingHandler := handler.NewPricingHandler()
-	pricingHandler.RegisterRoutes(router)
+	pricingHandler.RegisterRoutes(engine)
 
 	router.GET("/api/inbound", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inbound.HandleGetInboundTransactions)
 	router.POST("/api/inbound", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), inbound.HandleCreateInboundTransaction)
@@ -487,8 +620,6 @@ func main() {
 	router.PUT("/api/v1/admin/payment-methods/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleUpdatePaymentMethod)
 	router.PUT("/api/v1/payment-methods/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleUpdatePaymentMethod)
 	router.DELETE("/api/v1/admin/payment-methods/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleDeletePaymentMethod)
-	// Seed Lao Provinces & Districts to PostgreSQL
-	settings.SeedLocationsToDB(db.GetDB())
 
 	// Lao Provinces & Districts Database routes (Public & Admin)
 	router.GET("/api/v1/public/locations/provinces", settings.HandleGetLaoProvinces)
@@ -536,16 +667,5 @@ func main() {
 	router.POST("/api/production/templates", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction), orders.HandleSaveWorkflowTemplate)
 	router.DELETE("/api/production/templates/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleDeleteWorkflowTemplate)
 
-	// Start Daily Predictive Maintenance Background Cron
-	inventory.StartPPMDailyCron()
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-	log.Printf("Starting Go server on port %s...", port)
-	if err := router.Run(":" + port); err != nil {
-		log.Fatalf("Failed to run server: %v", err)
-	}
 }
-

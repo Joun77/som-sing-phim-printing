@@ -1,0 +1,219 @@
+import { Blob as NodeBlob } from 'node:buffer';
+import React, { StrictMode, act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { beforeAll, beforeEach, afterEach, test, expect, vi } from 'vitest';
+import { jsPDF } from 'jspdf';
+import { ArtworkPreviewCard } from '../src/features/orders/components/production/ArtworkPreviewCard';
+import { CustomerInvoiceModal } from '../src/features/orders/components/modals/CustomerInvoiceModal';
+import Lightbox from '../src/features/orders/components/Lightbox';
+import { useLightboxAssetController, extractPdfPageCount } from '../src/features/orders/utils/lightboxAssetController';
+import { configurePdfWorker, getPdfWorkerSrc } from '../src/lib/pdfWorker';
+import { resolveBackendUrl } from '../src/api/client';
+import { useAuthStore } from '../src/store/useAuthStore';
+import { UniversalExportPreviewModal } from '../src/components/common/UniversalExportPreviewModal';
+
+const pdfOutputs = vi.hoisted(() => [] as { name: string; bytes: Uint8Array }[]);
+vi.mock('jspdf', async importOriginal => {
+  const actual = await importOriginal<typeof import('jspdf')>();
+  const constructor = function (options?: any) {
+    const pdf = new actual.jsPDF(options);
+    pdf.save = (name: string) => { pdfOutputs.push({ name, bytes: new Uint8Array(pdf.output('arraybuffer')) }); return pdf; };
+    return pdf;
+  };
+  return { ...actual, default: constructor, jsPDF: constructor };
+});
+function authorize(fixtureToken: string) {
+  const previous = useAuthStore.getState().token;
+  useAuthStore.setState({ token: fixtureToken });
+  return () => useAuthStore.setState({ token: previous });
+}
+
+const jpeg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==';
+const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=';
+vi.mock('html-to-image', () => ({ toPng: vi.fn(), toJpeg: vi.fn(), toBlob: vi.fn() }));
+import { toPng, toJpeg } from 'html-to-image';
+
+let root: Root;
+let container: HTMLDivElement;
+let seq = 0;
+let blobs: Map<string, Blob>;
+let revoked: string[];
+let downloads: { name: string; href: string; blob?: Blob }[];
+const origin = process.env.P12_FIXTURE_ORIGIN!;
+let token: string;
+const realFetch = globalThis.fetch;
+const tick = () => new Promise(resolve => setTimeout(resolve, 10));
+async function until(check: () => boolean) {
+  for (let i = 0; i < 200; i++) {
+    await act(async () => { await tick(); });
+    if (check()) return;
+  }
+  throw new Error(`Timed out: ${document.body.textContent}`);
+}
+async function render(node: React.ReactNode) { await act(async () => root.render(node)); }
+async function click(button: Element) { expect(button).toBeTruthy(); await act(async () => (button as HTMLElement).click()); }
+const byTitle = (title: string) => document.querySelector(`button[title="${title}"]`)!;
+const downloadButton = () => byTitle('Download exact original binary file') as HTMLButtonElement;
+function deferred<T>() { let resolve!: (v: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
+
+beforeAll(async () => {
+  globalThis.Blob = NodeBlob as typeof Blob;
+  URL.createObjectURL = () => '';
+  URL.revokeObjectURL = () => {};
+  expect(origin).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+  token = (await (await realFetch(`${origin}/fixture/token`)).json()).token;
+});
+beforeEach(() => {
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  blobs = new Map(); revoked = []; downloads = []; pdfOutputs.length = 0;
+  vi.spyOn(URL, 'createObjectURL').mockImplementation(blob => { const url = `blob:p12-${++seq}`; blobs.set(url, blob); return url; });
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(url => { revoked.push(url); });
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+    const url = String(input);
+    if (url.startsWith('blob:p12-')) { const blob = blobs.get(url); return Promise.resolve(new Response(blob, { headers: { 'Content-Type': blob!.type } })); }
+    return realFetch(input, init);
+  });
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () { downloads.push({ name: this.download, href: this.href, blob: blobs.get(this.href) }); });
+  container = document.createElement('div'); document.body.append(container); root = createRoot(container);
+  vi.mocked(toPng).mockResolvedValue(image); vi.mocked(toJpeg).mockResolvedValue(jpeg);
+});
+afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.clearAllMocks(); });
+
+test('browser branch overrides CDN with the installed version’s local worker URL', () => {
+  const old = window.Worker;
+  Object.defineProperty(window, 'Worker', { value: function Worker() {}, configurable: true });
+  const parser = { GlobalWorkerOptions: { workerSrc: 'https://cdn.invalid/worker.js' } };
+  configurePdfWorker(parser);
+  expect(parser.GlobalWorkerOptions.workerSrc).toBe(getPdfWorkerSrc());
+  expect(parser.GlobalWorkerOptions.workerSrc).not.toContain('cdn.invalid');
+  Object.defineProperty(window, 'Worker', { value: old, configurable: true });
+});
+
+test('mounted production hook under StrictMode: late A, B, empty transition and unmount cleanup', async () => {
+  const requests: { url: string; task: ReturnType<typeof deferred<any>> }[] = [];
+  const fetchBlobFn = vi.fn((url: string) => { const task = deferred<any>(); requests.push({ url, task }); return task.promise; });
+  function Probe({ url }: { url?: string }) {
+    const state = useLightboxAssetController({ activeItem: url ? { url, name: url } : undefined, fetchBlobFn, revokeUrlFn: u => revoked.push(u) });
+    return <output>{state.loadingStatus}:{state.resolvedBlobUrl}</output>;
+  }
+  await render(<StrictMode><Probe url="A" /></StrictMode>);
+  expect(requests.map(r => r.url)).toEqual(['A', 'A']);
+  await render(<StrictMode><Probe url="B" /></StrictMode>);
+  expect(requests.map(r => r.url)).toEqual(['A', 'A', 'B']);
+  await act(async () => requests[2].task.resolve({ blobUrl: 'blob:B', contentType: 'image/png', size: 1 }));
+  expect(container.textContent).toBe('success:blob:B');
+  await act(async () => { requests[0].task.resolve({ blobUrl: 'blob:A1' }); requests[1].task.resolve({ blobUrl: 'blob:A2' }); });
+  expect(container.textContent).toBe('success:blob:B');
+  expect(revoked).toEqual(expect.arrayContaining(['blob:A1', 'blob:A2']));
+  await render(<StrictMode><Probe /></StrictMode>);
+  expect(container.textContent).toBe('error:'); expect(revoked).toContain('blob:B');
+  await render(<StrictMode><Probe url="C" /></StrictMode>);
+  await act(async () => root.unmount());
+  await act(async () => requests[3].task.resolve({ blobUrl: 'blob:C' }));
+  expect(revoked).toContain('blob:C');
+  // Give afterEach a fresh root; the tested root above really was unmounted.
+  root = createRoot(container);
+});
+
+test('mounted Lightbox zoom/rotation/rerender keep fetch stable and revoke on empty transition', async () => {
+  const unregister = authorize(token);
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  try {
+    const props = { src: `${origin}/uploads/artworks/batch_02.png`, fileName: 'batch_02.png', onClose: () => {} };
+    await render(<StrictMode><Lightbox {...props} /></StrictMode>);
+    await until(() => !!document.querySelector('img[alt="batch_02.png"]'));
+    const count = fetchSpy.mock.calls.length;
+    const url = document.querySelector('img[alt="batch_02.png"]')!.getAttribute('src')!;
+    await click(byTitle('Zoom In')); await click(byTitle('Rotate Image 90° Clockwise'));
+    expect(document.querySelector('img[alt="batch_02.png"]')!.getAttribute('style')).toContain('rotate(90deg)');
+    await render(<StrictMode><Lightbox {...props} /></StrictMode>);
+    expect(fetchSpy.mock.calls).toHaveLength(count);
+    await render(<StrictMode><Lightbox onClose={props.onClose} /></StrictMode>);
+    expect(document.querySelector('img')).toBeNull(); expect(revoked).toContain(url);
+    expect(downloadButton()?.disabled ?? true).toBe(true);
+  } finally { unregister(); }
+});
+
+test('real Go upload response → mounted production PDF Lightbox → original download bytes', async () => {
+  const doc = new jsPDF(); doc.text('P1.2 artwork cover', 10, 10); doc.addPage(); doc.text('P1.2 artwork inner', 10, 10);
+  const bytes = new Uint8Array(doc.output('arraybuffer'));
+  const boundary = 'p12-real-production-upload';
+  const body = Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="master_order_doc.pdf"\r\nContent-Type: application/pdf\r\n\r\n`), Buffer.from(bytes), Buffer.from(`\r\n--${boundary}--\r\n`)]);
+  const upload = await realFetch(`${origin}/api/upload/artwork`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` }, body });
+  expect(upload.status).toBe(200); const metadata = await upload.json();
+  expect(metadata.fileName).toBe('master_order_doc.pdf'); expect(metadata.fileSize).toBe(bytes.length);
+  expect(metadata.url).toMatch(/^\/uploads\/artworks\/art-/);
+  const unregister = authorize(token);
+  try {
+    const resolved = resolveBackendUrl(metadata.url); expect(resolved).toBe(`${origin}${metadata.url}`);
+    function Journey() {
+      const [lightbox, setLightbox] = React.useState<any>(null);
+      return <><ArtworkPreviewCard orderIdDisplay="P12" currentLang="en" onOpenDriveLink={() => {}}
+        order={{ items: [{ artwork_url: metadata.url, artwork_file_name: metadata.fileName }] }} setLightbox={setLightbox} />
+        {lightbox && <Lightbox {...lightbox} onClose={() => setLightbox(null)} />}</>;
+    }
+    await render(<Journey />);
+    await until(() => Array.from(document.querySelectorAll('button')).some(b => b.textContent?.includes('View Artwork')));
+    await click(Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('View Artwork'))!);
+    await until(() => document.body.textContent!.includes('Page 1 / 2'));
+    const object = document.querySelector('object[type="application/pdf"]')!;
+    expect(object.getAttribute('data')).toMatch(/^blob:p12-.*#page=1/);
+    await click(byTitle('Next Page')); expect(object.getAttribute('data')).toContain('#page=2');
+    expect((byTitle('Next Page') as HTMLButtonElement).disabled).toBe(true);
+    const previewBlob = blobs.get(object.getAttribute('data')!.split('#')[0])!;
+    expect(new Uint8Array(await previewBlob.arrayBuffer())).toEqual(bytes);
+    await click(downloadButton()); await until(() => downloads.length === 1);
+    // Production serving intentionally returns the generated stored basename.
+    expect(downloads[0].name).toBe(metadata.url.split('/').pop());
+    expect(new Uint8Array(await downloads[0].blob!.arrayBuffer())).toEqual(bytes);
+    expect(document.querySelector('iframe')).toBeNull();
+  } finally { unregister(); }
+});
+
+test.each(['html', '401', '403', '404'])('mounted production Lightbox shows %s failure and disables download', async scenario => {
+  const tokenRes = scenario === '403' ? await (await realFetch(`${origin}/fixture/unauthorized-token`)).json() : null;
+  const unregister = authorize(scenario === '401' ? 'invalid.jwt' : tokenRes?.token || token);
+  try {
+    const url = scenario === 'html' ? `${origin}/fixture/simulate-html-fallback` : `${origin}/uploads/artworks/${scenario === '404' ? 'missing.pdf' : 'sample_document.pdf'}`;
+    await render(<Lightbox src={url} fileName="failed.pdf" onClose={() => {}} />);
+    await until(() => document.body.textContent!.includes('Failed to load artwork'));
+    expect(document.querySelector('object,embed,iframe')).toBeNull(); expect(downloadButton().disabled).toBe(true);
+    expect(downloads).toHaveLength(0);
+  } finally { unregister(); }
+});
+
+test('mounted Universal exports invoke PNG/JPEG/PDF callbacks with document DOM and produce filenames/valid PDF', async () => {
+  await render(<UniversalExportPreviewModal isOpen onClose={() => {}} title="Invoice" documentNumber="INV/1001" defaultFileName="Invoice test"><article>LO / EN invoice fixture</article></UniversalExportPreviewModal>);
+  const exportButton = (kind: string) => Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes(kind))!;
+  await click(exportButton('PNG')); await until(() => downloads.length === 1);
+  expect(downloads[0].name).toBe('Invoice_test_INV_1001.png');
+  expect(downloads[0].href).toBe(image); expect(new jsPDF().getImageProperties(downloads[0].href)).toMatchObject({ width: 1, height: 1 });
+  expect(vi.mocked(toPng).mock.calls[0][0].textContent).toContain('LO / EN invoice fixture');
+  expect(vi.mocked(toPng).mock.calls[0][1]).toMatchObject({ pixelRatio: 2.5, backgroundColor: '#ffffff', quality: 1 });
+  await click(exportButton('JPEG')); await until(() => downloads.length === 2);
+  expect(downloads[1].name).toBe('Invoice_test_INV_1001.jpg');
+  expect(downloads[1].href).toBe(jpeg); expect(new jsPDF().getImageProperties(downloads[1].href)).toMatchObject({ width: 1, height: 1 }); expect(toJpeg).toHaveBeenCalledTimes(1);
+  await click(exportButton('PDF')); await until(() => pdfOutputs.length === 1);
+  expect(pdfOutputs[0].name).toBe('Invoice_test_INV_1001.pdf');
+  expect(Buffer.from(pdfOutputs[0].bytes).subarray(0, 5).toString()).toBe('%PDF-');
+  expect(Buffer.from(pdfOutputs[0].bytes).toString()).toContain('/Subtype /Image');
+  expect(vi.mocked(toPng).mock.calls).toHaveLength(2);
+  expect(await extractPdfPageCount(pdfOutputs[0].bytes)).toBe(1);
+});
+
+
+test('mounted CustomerInvoiceModal exports follow actual language and QR toolbar state', async () => {
+  const order = { orderNo: '1001', customerName: 'P12 fixture customer', paymentStatus: 'Paid', totalPriceCharged: 10000, items: [] };
+  await render(<CustomerInvoiceModal isOpen onClose={() => {}} order={order} currentLang="lo" />);
+  const button = (text: string) => Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes(text))!;
+  expect(document.body.textContent).toContain('ໃບເສັດຮັບເງິນ');
+  expect(document.querySelector('img[src*="BCELONE_SOM_SING_PRINTING"]')).not.toBeNull();
+  await click(button('English (EN)')); await click(button('No QR'));
+  expect(document.body.textContent).toContain('OFFICIAL RECEIPT');
+  expect(document.querySelector('img[src*="BCELONE_SOM_SING_PRINTING"]')).toBeNull();
+  await click(button('PNG')); await until(() => downloads.length === 1);
+  expect(downloads[0].name).toBe('Customer_Invoice_1001_INV-1001.png');
+  const exported = vi.mocked(toPng).mock.calls[0][0];
+  expect(exported.textContent).toContain('OFFICIAL RECEIPT');
+  expect(exported.querySelector('img[src*="BCELONE_SOM_SING_PRINTING"]')).toBeNull();
+});

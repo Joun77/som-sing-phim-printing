@@ -60,10 +60,17 @@ DROP TABLE IF EXISTS printers CASCADE;`,
 
 func TestVerifyLegacyBaseline_Evaluation(t *testing.T) {
 	// If PostgreSQL is available, verify live baseline resolution
-	connStr := "host=127.0.0.1 port=5432 user=postgres password=postgres dbname=somsing_db sslmode=disable"
+	rawDSN := os.Getenv("TEST_FIXTURE_DSN")
+	if rawDSN == "" {
+		t.Skip("explicit TEST_FIXTURE_DSN required; integration is not verified")
+	}
+	connStr, guardErr := ParseAndValidateDSN(rawDSN)
+	if guardErr != nil {
+		t.Fatalf("unsafe test database: %v", guardErr)
+	}
 	db, err := sql.Open("postgres", connStr)
 	if err != nil || db.Ping() != nil {
-		t.Skip("PostgreSQL not accessible, skipping live baseline test")
+		t.Fatal("configured fixture database unavailable")
 		return
 	}
 	defer db.Close()
@@ -147,10 +154,17 @@ func TestMigration009_NoUUIDMismatch(t *testing.T) {
 }
 
 func TestRunMigrations_LiveDB_CleanNoPending(t *testing.T) {
-	connStr := "host=127.0.0.1 port=5432 user=postgres password=postgres dbname=somsing_db sslmode=disable"
+	rawDSN := os.Getenv("TEST_FIXTURE_DSN")
+	if rawDSN == "" {
+		t.Skip("explicit TEST_FIXTURE_DSN required; integration is not verified")
+	}
+	connStr, guardErr := ParseAndValidateDSN(rawDSN)
+	if guardErr != nil {
+		t.Fatalf("unsafe test database: %v", guardErr)
+	}
 	db, err := sql.Open("postgres", connStr)
 	if err != nil || db.Ping() != nil {
-		t.Skip("PostgreSQL not accessible, skipping live migration run test")
+		t.Fatal("configured fixture database unavailable")
 		return
 	}
 	defer db.Close()
@@ -192,5 +206,38 @@ func TestRunMigrations_LiveDB_CleanNoPending(t *testing.T) {
 	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'materials' AND column_name = 'assigned_printer_id')").Scan(&hasCol)
 	if err != nil || !hasCol {
 		t.Errorf("Expected column materials.assigned_printer_id to exist in PostgreSQL, but it does not")
+	}
+}
+
+func TestMigration043_UniquePartialIndex(t *testing.T) {
+	// Verify 043 migration correctly implements a partial unique index without inline UNIQUE
+	dirs := []string{
+		"../../admin-system/migrations",
+		"../migrations",
+		"../../migrations",
+		"migrations",
+	}
+
+	var content string
+	for _, dir := range dirs {
+		p := dir + "/043_add_public_tracking_token_to_orders.sql"
+		sqlBytes, err := os.ReadFile(p)
+		if err == nil {
+			content = string(sqlBytes)
+			break
+		}
+	}
+
+	if content == "" {
+		t.Skip("Could not locate 043 migration file for content inspection")
+		return
+	}
+
+	if strings.Contains(content, "VARCHAR(64) UNIQUE") {
+		t.Errorf("043 migration contains inline 'VARCHAR(64) UNIQUE' which prevents multiple legacy empty strings")
+	}
+
+	if !strings.Contains(content, "CREATE UNIQUE INDEX") || !strings.Contains(content, "WHERE public_tracking_token IS NOT NULL AND public_tracking_token !=") {
+		t.Errorf("043 migration is missing the partial unique index definition required to allow duplicate empty strings while preventing duplicate non-empty tokens")
 	}
 }

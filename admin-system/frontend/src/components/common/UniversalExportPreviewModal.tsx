@@ -29,6 +29,127 @@ export interface UniversalExportPreviewModalProps {
   toolbarExtras?: React.ReactNode;
 }
 
+export interface UniversalModalShellProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  documentNumber?: string;
+  badgeLabel?: string;
+  subtitle?: string;
+  toolbarLeft?: React.ReactNode;
+  toolbarRight?: React.ReactNode;
+  footerLeft?: React.ReactNode;
+  footerRight?: React.ReactNode;
+  children: React.ReactNode;
+  contentContainerClassName?: string;
+  zIndex?: string;
+}
+
+export const UniversalModalShell: React.FC<UniversalModalShellProps> = ({
+  isOpen,
+  onClose,
+  title,
+  documentNumber,
+  badgeLabel,
+  subtitle = 'ສະແດງຕົວຢ່າງ ແລະ ສົ່ງອອກເອກະສານຄວາມລະອຽດສູງ (High-DPI Export)',
+  toolbarLeft,
+  toolbarRight,
+  footerLeft,
+  footerRight,
+  children,
+  contentContainerClassName = 'flex-1 overflow-auto bg-slate-100/90 p-4 sm:p-8 flex justify-center items-start custom-scrollbar',
+  zIndex = 'z-[200]'
+}) => {
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  const isBrowserClient = typeof window !== 'undefined' && typeof window.document !== 'undefined' && typeof (window as any).HTMLDivElement !== 'undefined';
+
+  const modalContent = (
+    <div className={`fixed inset-0 ${zIndex} flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in`}>
+      <div 
+        className="bg-white border border-slate-200 rounded-3xl w-full max-w-[1700px] h-[96vh] flex flex-col shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header Bar */}
+        <div className="px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 shadow-xs">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-600 shrink-0">
+              <Eye className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-lg font-black text-slate-900 tracking-wide truncate">{title}</h3>
+                {(documentNumber || badgeLabel) && (
+                  <span className="px-2.5 py-0.5 text-xs font-mono font-bold rounded-lg bg-sky-50 text-sky-700 border border-sky-200 shrink-0">
+                    {documentNumber || badgeLabel}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 font-medium truncate">{subtitle}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+              title="Close (Esc)"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Action Toolbar */}
+        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center flex-wrap gap-2">
+            {toolbarLeft}
+          </div>
+          <div className="flex items-center flex-wrap gap-2">
+            {toolbarRight}
+          </div>
+        </div>
+
+        {/* Live Document / Media Preview Canvas Area */}
+        <div className={contentContainerClassName}>
+          {children}
+        </div>
+
+        {/* Footer info */}
+        <div className="px-6 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 shrink-0">
+          {footerLeft || (
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-sky-500" />
+              <span>ຄຸນນະພາບການ Export: 300 DPI Ultra Clear Rendering</span>
+            </div>
+          )}
+          {footerRight || (
+            <div>
+              <span>ຮອງຮັບການສົ່ງຕໍ່ WhatsApp / Messenger / WeChat</span>
+            </div>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+
+  if (isBrowserClient && typeof document !== 'undefined' && document.body) {
+    return createPortal(modalContent, document.body);
+  }
+
+  return modalContent;
+};
+
 export const UniversalExportPreviewModal: React.FC<UniversalExportPreviewModalProps> = ({
   isOpen,
   onClose,
@@ -159,183 +280,142 @@ export const UniversalExportPreviewModal: React.FC<UniversalExportPreviewModalPr
     window.print();
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/60 backdrop-blur-md animate-fade-in">
-      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-[1700px] h-[96vh] flex flex-col shadow-2xl overflow-hidden">
-        
-        {/* Header Bar */}
-        <div className="px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-600">
-              <Eye className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-black text-slate-900 tracking-wide">{title}</h3>
-                <span className="px-2.5 py-0.5 text-xs font-mono font-bold rounded-lg bg-sky-50 text-sky-700 border border-sky-200">
-                  {documentNumber}
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 font-medium">ສະແດງຕົວຢ່າງ ແລະ ສົ່ງອອກເອກະສານຄວາມລະອຽດສູງ (High-DPI Export)</p>
-            </div>
-          </div>
+  const zoomControls = (
+    <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 shadow-xs">
+      <button
+        onClick={() => setZoomScale(prev => Math.max(0.4, Number((prev - 0.1).toFixed(1))))}
+        className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+        title="Zoom Out"
+      >
+        <ZoomOut className="w-4 h-4" />
+      </button>
+      <span className="text-xs font-mono font-bold text-slate-700 px-2 min-w-[50px] text-center">
+        {Math.round(zoomScale * 100)}%
+      </span>
+      <button
+        onClick={() => setZoomScale(prev => Math.min(1.6, Number((prev + 0.1).toFixed(1))))}
+        className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+        title="Zoom In"
+      >
+        <ZoomIn className="w-4 h-4" />
+      </button>
+      <button
+        onClick={() => setZoomScale(0.9)}
+        className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors ml-1 cursor-pointer"
+        title="Reset Zoom"
+      >
+        <RotateCcw className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors"
-              title="Close"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+  const rightActions = (
+    <div className="flex items-center flex-wrap gap-3">
+      {/* Custom Toolbar Extras (Language, QR options, Confirm order, etc.) */}
+      {toolbarExtras && (
+        <div className="flex items-center flex-wrap gap-2 pr-3 border-r border-slate-200">
+          {toolbarExtras}
         </div>
+      )}
 
-        {/* Action Toolbar */}
-        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
-          
-          {/* Zoom Controls */}
-          <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 shadow-xs">
-            <button
-              onClick={() => setZoomScale(prev => Math.max(0.4, Number((prev - 0.1).toFixed(1))))}
-              className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              title="Zoom Out"
-            >
-              <ZoomOut className="w-4 h-4" />
-            </button>
-            <span className="text-xs font-mono font-bold text-slate-700 px-2 min-w-[50px] text-center">
-              {Math.round(zoomScale * 100)}%
-            </span>
-            <button
-              onClick={() => setZoomScale(prev => Math.min(1.6, Number((prev + 0.1).toFixed(1))))}
-              className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              title="Zoom In"
-            >
-              <ZoomIn className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setZoomScale(0.9)}
-              className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors ml-1 cursor-pointer"
-              title="Reset Zoom"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-          </div>
+      {/* Export Action Buttons */}
+      <div className="flex items-center flex-wrap gap-2">
+        {/* Copy to Clipboard */}
+        <button
+          onClick={handleCopyToClipboard}
+          disabled={isExporting}
+          className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
+        >
+          {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-500" />}
+          <span>{copied ? 'ກັອບປີ້ຮູບແລ້ວ!' : 'ກັອບປີ້ຮູບ (Clipboard)'}</span>
+        </button>
 
-          {/* Right Action Group: Document Options + Export Buttons */}
-          <div className="flex items-center flex-wrap gap-3">
-            {/* Custom Toolbar Extras (Language, QR options, Confirm order, etc.) */}
-            {toolbarExtras && (
-              <div className="flex items-center flex-wrap gap-2 pr-3 border-r border-slate-200">
-                {toolbarExtras}
-              </div>
-            )}
+        {/* PNG Image Export */}
+        <button
+          onClick={handleExportPNG}
+          disabled={isExporting}
+          className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
+        >
+          {isExporting && exportType === 'PNG' ? (
+            <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+          ) : (
+            <ImageIcon className="w-4 h-4 text-emerald-600" />
+          )}
+          <span>ດາວໂຫຼດຮູບ PNG</span>
+        </button>
 
-            {/* Export Action Buttons */}
-            <div className="flex items-center flex-wrap gap-2">
-              {/* Copy to Clipboard */}
-              <button
-                onClick={handleCopyToClipboard}
-                disabled={isExporting}
-                className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
-              >
-                {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-500" />}
-                <span>{copied ? 'ກັອບປີ້ຮູບແລ້ວ!' : 'ກັອບປີ້ຮູບ (Clipboard)'}</span>
-              </button>
+        {/* JPEG Image Export */}
+        <button
+          onClick={handleExportJPEG}
+          disabled={isExporting}
+          className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-sky-800 hover:text-sky-900 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
+        >
+          {isExporting && exportType === 'JPEG' ? (
+            <Loader2 className="w-4 h-4 animate-spin text-sky-600" />
+          ) : (
+            <ImageIcon className="w-4 h-4 text-sky-600" />
+          )}
+          <span>ດາວໂຫຼດຮູບ JPEG</span>
+        </button>
 
-              {/* PNG Image Export */}
-              <button
-                onClick={handleExportPNG}
-                disabled={isExporting}
-                className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
-              >
-                {isExporting && exportType === 'PNG' ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
-                ) : (
-                  <ImageIcon className="w-4 h-4 text-emerald-600" />
-                )}
-                <span>ດາວໂຫຼດຮູບ PNG</span>
-              </button>
+        {/* PDF Document Export */}
+        <button
+          onClick={handleExportPDF}
+          disabled={isExporting}
+          className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
+        >
+          {isExporting && exportType === 'PDF' ? (
+            <Loader2 className="w-4 h-4 animate-spin text-white" />
+          ) : (
+            <FileText className="w-4 h-4 text-white" />
+          )}
+          <span>ດາວໂຫຼດ PDF</span>
+        </button>
 
-              {/* JPEG Image Export */}
-              <button
-                onClick={handleExportJPEG}
-                disabled={isExporting}
-                className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-sky-800 hover:text-sky-900 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
-              >
-                {isExporting && exportType === 'JPEG' ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-sky-600" />
-                ) : (
-                  <ImageIcon className="w-4 h-4 text-sky-600" />
-                )}
-                <span>ດາວໂຫຼດຮູບ JPEG</span>
-              </button>
-
-              {/* PDF Document Export */}
-              <button
-                onClick={handleExportPDF}
-                disabled={isExporting}
-                className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
-              >
-                {isExporting && exportType === 'PDF' ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-white" />
-                ) : (
-                  <FileText className="w-4 h-4 text-white" />
-                )}
-                <span>ດາວໂຫຼດ PDF</span>
-              </button>
-
-              {/* Print Direct */}
-              <button
-                onClick={handlePrint}
-                disabled={isExporting}
-                className="p-2 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors active:scale-95 shadow-xs cursor-pointer"
-                title="ສັ່ງພິມທັນທີ (Print)"
-              >
-                <Printer className="w-4 h-4 text-sky-600" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Live Document Preview Canvas Area */}
-        <div className="flex-1 overflow-auto bg-slate-100/90 p-4 sm:p-8 flex justify-center items-start custom-scrollbar">
-          <div 
-            style={{ 
-              transform: `scale(${zoomScale})`, 
-              transformOrigin: 'top center',
-              transition: 'transform 0.15s ease-out'
-            }}
-            className="shrink-0 my-2"
-          >
-            {/* The Document Surface */}
-            <div 
-              ref={documentRef}
-              className="bg-white text-slate-900 shadow-xl rounded-sm overflow-hidden border border-slate-200"
-              style={{
-                width: paperOrientation === 'landscape' ? '297mm' : '210mm',
-                minHeight: paperOrientation === 'landscape' ? '210mm' : '297mm',
-                boxSizing: 'border-box'
-              }}
-            >
-              {children}
-            </div>
-          </div>
-        </div>
-
-        {/* Footer info */}
-        <div className="px-6 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 shrink-0">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-sky-500" />
-            <span>ຄຸນນະພາບການ Export: 300 DPI Ultra Clear Rendering</span>
-          </div>
-          <div>
-            <span>ຮອງຮັບການສົ່ງຕໍ່ WhatsApp / Messenger / WeChat</span>
-          </div>
-        </div>
-
+        {/* Print Direct */}
+        <button
+          onClick={handlePrint}
+          disabled={isExporting}
+          className="p-2 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors active:scale-95 shadow-xs cursor-pointer"
+          title="ສັ່ງພິມທັນທີ (Print)"
+        >
+          <Printer className="w-4 h-4 text-sky-600" />
+        </button>
       </div>
-    </div>,
-    document.body
+    </div>
+  );
+
+  return (
+    <UniversalModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      documentNumber={documentNumber}
+      subtitle="ສະແດງຕົວຢ່າງ ແລະ ສົ່ງອອກເອກະສານຄວາມລະອຽດສູງ (High-DPI Export)"
+      toolbarLeft={zoomControls}
+      toolbarRight={rightActions}
+    >
+      <div 
+        style={{ 
+          transform: `scale(${zoomScale})`, 
+          transformOrigin: 'top center',
+          transition: 'transform 0.15s ease-out'
+        }}
+        className="shrink-0 my-2"
+      >
+        <div 
+          ref={documentRef}
+          className="bg-white text-slate-900 shadow-xl rounded-sm overflow-hidden border border-slate-200"
+          style={{
+            width: paperOrientation === 'landscape' ? '297mm' : '210mm',
+            minHeight: paperOrientation === 'landscape' ? '210mm' : '297mm',
+            boxSizing: 'border-box'
+          }}
+        >
+          {children}
+        </div>
+      </div>
+    </UniversalModalShell>
   );
 };
+

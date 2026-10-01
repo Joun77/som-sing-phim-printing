@@ -34,6 +34,7 @@ const WebCatalogPage = lazy(() => import('./features/catalog').then(m => ({ defa
 const MaterialManagement = lazy(() => import('./features/materials').then(m => ({ default: m.MaterialManagement })));
 const MasterDataManagement = lazy(() => import('./features/master-data').then(m => ({ default: m.MasterDataManagement })));
 const SupplierManagement = lazy(() => import('./features/suppliers').then(m => ({ default: m.SupplierManagement })));
+const ArtworkJourneyFixturePage = lazy(() => import('./features/orders/fixtures/ArtworkJourneyFixturePage').then(m => ({ default: m.ArtworkJourneyFixturePage })));
 
 function ModuleSkeleton() {
   return (
@@ -58,6 +59,18 @@ function AppContent() {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+
+  // P1.2 R3 Gate: Disposable review fixture route is restricted exclusively to DEV and test builds.
+  // Never shipped or publicly accessible in production builds.
+  const isDevOrTest = Boolean(import.meta.env.DEV || import.meta.env.MODE === 'test');
+  const isFixtureRoute = isDevOrTest && typeof window !== 'undefined' && window.location.pathname.startsWith('/fixture/artwork-review');
+  if (isFixtureRoute) {
+    return (
+      <Suspense fallback={<ModuleSkeleton />}>
+        <ArtworkJourneyFixturePage />
+      </Suspense>
+    );
+  }
 
   const isTrackerRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/track');
   const trackerOrderNo = isTrackerRoute ? window.location.pathname.replace(/^\/track\/?/, '') : null;
@@ -88,82 +101,144 @@ function AppContent() {
             <div className="w-full">
               <Suspense fallback={<ModuleSkeleton />}>
                 {isTrackerRoute ? (
-                  <ShopFloorTracker initialOrderNo={trackerOrderNo || undefined} />
+                  <ShopFloorTracker initialOrderNo={trackerOrderNo || undefined} isPublicMode={true} />
                 ) : (
                   <>
-                    {activeTab === 'dashboard' && <DashboardOverview />}
-                    {activeTab === 'catalog' && <WebCatalogPage />}
-                    {activeTab === 'materials' && <MaterialManagement />}
-                    {activeTab === 'master_data' && <MasterDataManagement />}
+                    {activeTab === 'dashboard' && (
+                      <ProtectedRoute allowedRoles={['manager', 'sales', 'production', 'operator', 'finance', 'hr', 'inventory', 'customer_service']}>
+                        <DashboardOverview />
+                      </ProtectedRoute>
+                    )}
+                    {activeTab === 'catalog' && (
+                      <ProtectedRoute allowedRoles={['manager', 'sales', 'customer_service']}>
+                        <WebCatalogPage />
+                      </ProtectedRoute>
+                    )}
+                    {activeTab === 'materials' && (
+                      <ProtectedRoute allowedRoles={['manager', 'inventory', 'production']}>
+                        <MaterialManagement />
+                      </ProtectedRoute>
+                    )}
+                    {activeTab === 'master_data' && (
+                      <ProtectedRoute allowedRoles={['manager']}>
+                        <MasterDataManagement />
+                      </ProtectedRoute>
+                    )}
                     {activeTab === 'preflight' && (
-                      <PreflightPage
-                        onSendToQuotation={(res) => {
-                          if (setPrefilledOrderSpecs) {
-                            const isBatch = (res as any).is_batch_photo || res.file_name?.includes('Photo Prints') || !!(res as any).batch_files;
-                            const isMono = !isBatch && (res.color_pages_count || 0) === 0 && (res.mono_pages_count || 0) > 0;
-                            const covC = res.color_pages_avg_c !== undefined ? res.color_pages_avg_c : (res.avg_cov_c ?? 0);
-                            const covM = res.color_pages_avg_m !== undefined ? res.color_pages_avg_m : (res.avg_cov_m ?? 0);
-                            const covY = res.color_pages_avg_y !== undefined ? res.color_pages_avg_y : (res.avg_cov_y ?? 0);
-                            const covK = (res.color_pages_count || 0) > 0
-                              ? (res.color_pages_avg_k !== undefined ? res.color_pages_avg_k : (res.avg_cov_k ?? 0))
-                              : (res.mono_pages_avg_k !== undefined ? res.mono_pages_avg_k : (res.avg_cov_k ?? 0));
-                            const targetSize = res.target_paper_size || (isBatch ? '5x7 cm' : (res.suggested_paper || 'A4'));
-                            setPrefilledOrderSpecs({
-                              jobName: res.file_name.replace(/\.[^/.]+$/, ''),
-                              pageCount: isBatch ? 1 : res.total_pages,
-                              orderQuantity: isBatch ? 1 : 1,
-                              photoCount: isBatch ? res.total_pages : undefined,
-                              colorPages: isBatch ? res.total_pages : (res.color_pages_count || 0),
-                              monoPages: isBatch ? 0 : (res.mono_pages_count || 0),
-                              jobWidth: res.target_width_mm || (isBatch ? 50 : 210),
-                              jobHeight: res.target_height_mm || (isBatch ? 70 : 297),
-                              suggestedPaper: res.suggested_paper || (isBatch ? 'Photo Glossy 230gsm' : targetSize),
-                              selected_paper_id: res.selected_paper_id,
-                              paperId: res.selected_paper_id,
-                              jobSizePreset: targetSize,
-                              avgCovC: covC,
-                              avgCovM: covM,
-                              avgCovY: covY,
-                              avgCovK: covK,
-                              cCoverage: covC,
-                              mCoverage: covM,
-                              yCoverage: covY,
-                              kCoverage: covK,
-                              colorMode: isMono ? 'MONO_K' : (res.color_mode || 'CMYK'),
-                              fileUrl: res.file_url,
-                              fileName: res.file_name,
-                              preflightData: res,
-                              is_batch_photo: isBatch,
-                              batch_files: (res as any).batch_files,
-                              batchFiles: (res as any).batch_files,
-                              cuts_per_sheet_override: res.cuts_per_sheet_override,
-                              cutsPerSheetOverride: res.cuts_per_sheet_override,
-                              imposition_summary: res.imposition_summary,
-                              impositionSummary: res.imposition_summary,
-                              includeCover: false,
-                            });
-                          }
-                          setActiveTab('quotation');
-                          showToast('ສົ່ງຄ່າສີ, ຂະໜາດຕັດ ແລະ ຈຳນວນຮູບໄປຍັງໃບສະເໜີລາຄາຮຽບຮ້ອຍ!', 'success');
-                        }}
-                      />
+                      <ProtectedRoute allowedRoles={['manager', 'production', 'sales', 'customer_service']}>
+                        <PreflightPage
+                          onSendToQuotation={(res) => {
+                            if (setPrefilledOrderSpecs) {
+                              const isBatch = (res as any).is_batch_photo || res.file_name?.includes('Photo Prints') || !!(res as any).batch_files;
+                              const isMono = !isBatch && (res.color_pages_count || 0) === 0 && (res.mono_pages_count || 0) > 0;
+                              const covC = res.color_pages_avg_c !== undefined ? res.color_pages_avg_c : (res.avg_cov_c ?? 0);
+                              const covM = res.color_pages_avg_m !== undefined ? res.color_pages_avg_m : (res.avg_cov_m ?? 0);
+                              const covY = res.color_pages_avg_y !== undefined ? res.color_pages_avg_y : (res.avg_cov_y ?? 0);
+                              const covK = (res.color_pages_count || 0) > 0
+                                ? (res.color_pages_avg_k !== undefined ? res.color_pages_avg_k : (res.avg_cov_k ?? 0))
+                                : (res.mono_pages_avg_k !== undefined ? res.mono_pages_avg_k : (res.avg_cov_k ?? 0));
+                              const targetSize = res.target_paper_size || (isBatch ? '5x7 cm' : (res.suggested_paper || 'A4'));
+                              setPrefilledOrderSpecs({
+                                jobName: res.file_name.replace(/\.[^/.]+$/, ''),
+                                pageCount: isBatch ? 1 : res.total_pages,
+                                orderQuantity: isBatch ? 1 : 1,
+                                photoCount: isBatch ? res.total_pages : undefined,
+                                colorPages: isBatch ? res.total_pages : (res.color_pages_count || 0),
+                                monoPages: isBatch ? 0 : (res.mono_pages_count || 0),
+                                jobWidth: res.target_width_mm || (isBatch ? 50 : 210),
+                                jobHeight: res.target_height_mm || (isBatch ? 70 : 297),
+                                suggestedPaper: res.suggested_paper || (isBatch ? 'Photo Glossy 230gsm' : targetSize),
+                                selected_paper_id: res.selected_paper_id,
+                                paperId: res.selected_paper_id,
+                                jobSizePreset: targetSize,
+                                avgCovC: covC,
+                                avgCovM: covM,
+                                avgCovY: covY,
+                                avgCovK: covK,
+                                cCoverage: covC,
+                                mCoverage: covM,
+                                yCoverage: covY,
+                                kCoverage: covK,
+                                colorMode: isMono ? 'MONO_K' : (res.color_mode || 'CMYK'),
+                                fileUrl: res.file_url,
+                                fileName: res.file_name,
+                                preflightData: res,
+                                is_batch_photo: isBatch,
+                                batch_files: (res as any).batch_files,
+                                batchFiles: (res as any).batch_files,
+                                cuts_per_sheet_override: res.cuts_per_sheet_override,
+                                cutsPerSheetOverride: res.cuts_per_sheet_override,
+                                imposition_summary: res.imposition_summary,
+                                impositionSummary: res.imposition_summary,
+                                includeCover: false,
+                              });
+                            }
+                            setActiveTab('quotation');
+                            showToast('ສົ່ງຄ່າສີ, ຂະໜາດຕັດ ແລະ ຈຳນວນຮູບໄປຍັງໃບສະເໜີລາຄາຮຽບຮ້ອຍ!', 'success');
+                          }}
+                        />
+                      </ProtectedRoute>
                     )}
                     {activeTab === 'quotation' && (
-                      <QuotationManager onConvertToOrder={() => setActiveTab('orders')} />
+                      <ProtectedRoute allowedRoles={['manager', 'sales', 'customer_service']}>
+                        <QuotationManager onConvertToOrder={() => setActiveTab('orders')} />
+                      </ProtectedRoute>
                     )}
                     {(activeTab === 'orders' || activeTab === 'create_order' || activeTab === 'production' || activeTab === 'deliveries') && (
-                      <CustomerOrders initialSubTab={activeTab === 'orders' ? 'orders' : activeTab} />
+                      <ProtectedRoute allowedRoles={['manager', 'sales', 'customer_service', 'production', 'operator', 'finance', 'inventory']}>
+                        <CustomerOrders initialSubTab={activeTab === 'orders' ? 'orders' : activeTab} />
+                      </ProtectedRoute>
                     )}
-                    {activeTab === 'daily_plan' && <DailyPlanView />}
-                    {activeTab === 'tracker' && <ShopFloorTracker />}
-                    {activeTab === 'suppliers' && <SupplierManagement />}
-                    {activeTab === 'inbound' && <InboundManagement />}
-                    {activeTab === 'inventory' && <InventoryManagement />}
-                    {activeTab === 'equipment' && <EquipmentOverhead />}
-                    {activeTab === 'crm' && <CustomerManagement />}
-                    {activeTab === 'hr' && <EmployeeManagement />}
-                    {activeTab === 'finance' && <FinanceDashboard />}
-                    {(activeTab === 'settings' || activeTab === 'profile') && <ProfileSettingsPage />}
+                    {activeTab === 'daily_plan' && (
+                      <ProtectedRoute allowedRoles={['manager', 'production', 'operator']}>
+                        <DailyPlanView />
+                      </ProtectedRoute>
+                    )}
+                    {activeTab === 'tracker' && (
+                      <ProtectedRoute allowedRoles={['manager', 'sales', 'production', 'operator', 'customer_service']}>
+                        <ShopFloorTracker />
+                      </ProtectedRoute>
+                    )}
+                    {activeTab === 'suppliers' && (
+                      <ProtectedRoute allowedRoles={['manager', 'finance', 'inventory']}>
+                        <SupplierManagement />
+                      </ProtectedRoute>
+                    )}
+                    {activeTab === 'inbound' && (
+                      <ProtectedRoute allowedRoles={['manager', 'inventory']}>
+                        <InboundManagement />
+                      </ProtectedRoute>
+                    )}
+                    {activeTab === 'inventory' && (
+                      <ProtectedRoute allowedRoles={['manager', 'inventory', 'production']}>
+                        <InventoryManagement />
+                      </ProtectedRoute>
+                    )}
+                    {activeTab === 'equipment' && (
+                      <ProtectedRoute allowedRoles={['manager', 'production']}>
+                        <EquipmentOverhead />
+                      </ProtectedRoute>
+                    )}
+                    {activeTab === 'crm' && (
+                      <ProtectedRoute allowedRoles={['manager', 'sales', 'customer_service']}>
+                        <CustomerManagement />
+                      </ProtectedRoute>
+                    )}
+                    {activeTab === 'hr' && (
+                      <ProtectedRoute allowedRoles={['manager', 'hr']}>
+                        <EmployeeManagement />
+                      </ProtectedRoute>
+                    )}
+                    {activeTab === 'finance' && (
+                      <ProtectedRoute allowedRoles={['manager', 'finance']}>
+                        <FinanceDashboard />
+                      </ProtectedRoute>
+                    )}
+                    {(activeTab === 'settings' || activeTab === 'profile') && (
+                      <ProtectedRoute>
+                        <ProfileSettingsPage />
+                      </ProtectedRoute>
+                    )}
                   </>
                 )}
               </Suspense>

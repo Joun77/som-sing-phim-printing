@@ -818,32 +818,12 @@ export interface VerifySlipResult {
 }
 
 export async function verifySlipPayment(payload: VerifySlipRequest): Promise<VerifySlipResult> {
-  try {
-    const res = await fetch(`${API_BASE}/v1/checkout/verify-slip`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}))
-      throw new Error(errJson.message || `Slip verification failed with status ${res.status}`)
-    }
-    const json = await res.json()
-    return json
-  } catch (err: any) {
-    if (DEMO_MODE.enabled || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || err.message?.includes('unreachable')) {
-      return {
-        status: 'success',
-        message: 'Slip verified in demo mode',
-        order_id: payload.order_id,
-        new_status: 'PAID_PREPRESS',
-        trans_ref: payload.trans_ref || `DEMO-SLIP-${Date.now()}`,
-        amount: payload.amount,
-        verified_at: new Date().toISOString(),
-      }
-    }
-    throw err
-  }
+  const res = await fetch(`${API_BASE}/v1/checkout/verify-slip`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.message || 'Payment slip requires staff review')
+  return result
 }
 
 export async function approveDigitalProof(orderId: string, signatureName: string = 'Customer'): Promise<{ status: string; message: string; approved_at: string }> {

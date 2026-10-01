@@ -54,12 +54,14 @@ export const useAuthStore = create<AuthState>()(
         set({ isRefreshing: true });
         try {
           const activeRefreshToken = state.refreshToken || localStorage.getItem('refresh_token');
+          if (!activeRefreshToken) {
+            set({ isRefreshing: false });
+            return null;
+          }
+
           const res = await fetch('/api/v1/auth/refresh', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(state.token ? { Authorization: `Bearer ${state.token}` } : {})
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ refresh_token: activeRefreshToken })
           });
 
@@ -67,45 +69,47 @@ export const useAuthStore = create<AuthState>()(
             // Fallback legacy route
             const resLegacy = await fetch('/api/auth/refresh', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(state.token ? { Authorization: `Bearer ${state.token}` } : {})
-              },
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ refresh_token: activeRefreshToken })
             });
 
             if (!resLegacy.ok) {
+              // Both endpoints failed — the refresh token is invalid/expired; force logout.
               set({ isRefreshing: false });
-              return state.token;
+              get().logout();
+              return null;
             }
 
             const data = await resLegacy.json();
-            const newToken = data.token || state.token;
+            const newToken = data.token;
             const newRefreshToken = data.refresh_token || state.refreshToken;
-            set({
-              token: newToken,
-              refreshToken: newRefreshToken,
-              isRefreshing: false
-            });
-            if (newToken) localStorage.setItem('token', newToken);
+            if (!newToken) {
+              set({ isRefreshing: false });
+              get().logout();
+              return null;
+            }
+            set({ token: newToken, refreshToken: newRefreshToken, isRefreshing: false });
+            localStorage.setItem('token', newToken);
             if (newRefreshToken) localStorage.setItem('refresh_token', newRefreshToken);
             return newToken;
           }
 
           const data = await res.json();
-          const newToken = data.token || state.token;
+          const newToken = data.token;
           const newRefreshToken = data.refresh_token || state.refreshToken;
-          set({
-            token: newToken,
-            refreshToken: newRefreshToken,
-            isRefreshing: false
-          });
-          if (newToken) localStorage.setItem('token', newToken);
+          if (!newToken) {
+            set({ isRefreshing: false });
+            get().logout();
+            return null;
+          }
+          set({ token: newToken, refreshToken: newRefreshToken, isRefreshing: false });
+          localStorage.setItem('token', newToken);
           if (newRefreshToken) localStorage.setItem('refresh_token', newRefreshToken);
           return newToken;
         } catch {
+          // Network error — do not logout (user might be offline), but return null so caller skips retry
           set({ isRefreshing: false });
-          return state.token;
+          return null;
         }
       },
 

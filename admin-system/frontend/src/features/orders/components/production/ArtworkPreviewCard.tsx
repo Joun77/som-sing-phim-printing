@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileText,
   Download,
@@ -14,10 +14,12 @@ import {
   Phone,
   MapPin,
   Loader2,
-  FileQuestion
+  FileQuestion,
+  AlertTriangle
 } from 'lucide-react';
 import { FormModalTemplate } from '@components/common/FormModalTemplate';
 import { downloadPhotosAsZip } from '@utils/zipDownloader';
+import { fetchAuthenticatedBlobUrl, downloadAuthenticatedFile } from '@/api/client';
 
 interface ArtworkPreviewCardProps {
   orderIdDisplay: string;
@@ -26,8 +28,92 @@ interface ArtworkPreviewCardProps {
   artworkThumbnailUrl?: string;
   currentLang: string;
   onOpenDriveLink: () => void;
-  setLightbox?: (lb: { src: string; title: string } | null) => void;
+  setLightbox?: (lb: any) => void;
   onDownloadArtwork?: () => void;
+}
+
+export interface ArtworkZipDownloadState {
+  rawPhotos: { name: string; canonicalUrl: string; size?: number }[];
+  blobMap: Record<string, string>;
+  photos: { name: string; url: string; size?: number }[];
+  orderIdDisplay: string;
+  currentLang: string;
+}
+
+export interface ArtworkDownloadFeedback {
+  type: 'error' | 'warning';
+  title: string;
+  message: string;
+  failedCount: number;
+  failedFiles: string[];
+}
+
+export async function executeArtworkZipDownload(
+  state: ArtworkZipDownloadState,
+  callbacks: {
+    setIsZipping: (zipping: boolean) => void;
+    setDownloadFeedback: (feedback: ArtworkDownloadFeedback | null) => void;
+    downloadZipFn?: typeof downloadPhotosAsZip;
+  }
+) {
+  callbacks.setIsZipping(true);
+  callbacks.setDownloadFeedback(null);
+  const downloadFn = callbacks.downloadZipFn || downloadPhotosAsZip;
+  try {
+    const initialFailedAssets = state.rawPhotos.filter((p) => state.blobMap[p.canonicalUrl] === '');
+    const initialFailedNames = initialFailedAssets.map((p) => p.name);
+
+    if (state.photos.length === 0) {
+      const allFailedNames = initialFailedNames.length > 0 ? initialFailedNames : state.rawPhotos.map((p) => p.name);
+      callbacks.setDownloadFeedback({
+        type: 'error',
+        title: state.currentLang === 'lo' ? 'ດາວໂຫຼດບໍ່ສຳເລັດ' : 'Download Failed',
+        message: state.currentLang === 'lo'
+          ? `ບໍ່ມີໄຟລ໌ທີ່ສາມາດດາວໂຫຼດໄດ້ (${allFailedNames.length} ໄຟລ໌ໂຫຼດບໍ່ສຳເລັດ)`
+          : `No downloadable artwork files available (${allFailedNames.length} file${allFailedNames.length === 1 ? '' : 's'} failed to load).`,
+        failedCount: allFailedNames.length,
+        failedFiles: allFailedNames,
+      });
+      return;
+    }
+
+    const result = await downloadFn(
+      state.photos,
+      `${state.orderIdDisplay}_artworks_${state.photos.length}_photos.zip`
+    );
+
+    // Preserve initial load failures when only loaded photos are passed to the ZIP packaging
+    const totalFailedNames = [...initialFailedNames, ...(result?.failedFiles || [])];
+    const totalFailedCount = initialFailedNames.length + (result?.failedCount || 0);
+
+    if (totalFailedCount > 0) {
+      callbacks.setDownloadFeedback({
+        type: 'warning',
+        title: state.currentLang === 'lo' ? 'ດາວໂຫຼດສຳເລັດບາງສ່ວນ' : 'Partial Download Completed',
+        message: state.currentLang === 'lo'
+          ? `ດາວໂຫຼດສຳເລັດ ${result?.successCount || 0} ໄຟລ໌, ແຕ່ພົບຂໍ້ຜິດພາດ ${totalFailedCount} ໄຟລ໌:`
+          : `Downloaded ${result?.successCount || 0} file${result?.successCount === 1 ? '' : 's'}, but ${totalFailedCount} file${totalFailedCount === 1 ? '' : 's'} failed:`,
+        failedCount: totalFailedCount,
+        failedFiles: totalFailedNames,
+      });
+    } else {
+      callbacks.setDownloadFeedback(null);
+    }
+  } catch (err: any) {
+    const errorMsg = err?.message || (state.currentLang === 'lo' ? 'ເກີດຂໍ້ຜິດພາດໃນການສ້າງໄຟລ໌ ZIP' : 'Failed to generate ZIP file');
+    const initialFailedAssets = state.rawPhotos.filter((p) => state.blobMap[p.canonicalUrl] === '');
+    const initialFailedNames = initialFailedAssets.map((p) => p.name);
+    const allFailedNames = initialFailedNames.length > 0 ? initialFailedNames : state.rawPhotos.map((p) => p.name);
+    callbacks.setDownloadFeedback({
+      type: 'error',
+      title: state.currentLang === 'lo' ? 'ດາວໂຫຼດ ZIP ບໍ່ສຳເລັດ' : 'ZIP Download Failed',
+      message: errorMsg,
+      failedCount: allFailedNames.length > 0 ? allFailedNames.length : 1,
+      failedFiles: allFailedNames,
+    });
+  } finally {
+    callbacks.setIsZipping(false);
+  }
 }
 
 export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
@@ -62,24 +148,24 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
     order?.gallery_urls ||
     [];
 
-    // Normalize batch photo items
-  const photos: { name: string; url: string; size?: number }[] = (() => {
+  // Normalize batch photo items with raw canonical URLs
+  const rawPhotos: { name: string; canonicalUrl: string; size?: number }[] = (() => {
     if (Array.isArray(rawBatch) && rawBatch.length > 0) {
       return rawBatch
         .map((f: any, idx: number) => ({
           name: f.name || f.file_name || `Photo_${String(idx + 1).padStart(2, '0')}.jpg`,
-          url: typeof f === 'string' ? f : (f.url || f.file_url || f.preview_url || ''),
+          canonicalUrl: typeof f === 'string' ? f : (f.url || f.file_url || f.preview_url || ''),
           size: f.size || f.file_size,
         }))
-        .filter((item) => Boolean(item.url));
+        .filter((item) => Boolean(item.canonicalUrl));
     }
     if (Array.isArray(galleryUrls) && galleryUrls.length > 0) {
       return galleryUrls
         .map((url: string, idx: number) => ({
           name: `Photo_${String(idx + 1).padStart(2, '0')}.jpg`,
-          url,
+          canonicalUrl: url,
         }))
-        .filter((item) => Boolean(item.url));
+        .filter((item) => Boolean(item.canonicalUrl));
     }
 
     // If single artwork or thumbnail exists
@@ -87,12 +173,86 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
     if (singleUrl) {
       return [{
         name: firstItem.artwork_file_name || firstItem.artworkFileName || order?.artwork_file_name || `artwork_${orderIdDisplay}.jpg`,
-        url: singleUrl,
+        canonicalUrl: singleUrl,
       }];
     }
 
     return [];
   })();
+
+  // Cache of ephemeral authenticated Blob URLs keyed by canonical URL (prevents token leakage in DOM/history)
+  const [blobMap, setBlobMap] = useState<Record<string, string>>({});
+  const [isLoadingMedia, setIsLoadingMedia] = useState(false);
+  const [downloadFeedback, setDownloadFeedback] = useState<{
+    type: 'error' | 'warning';
+    title: string;
+    message: string;
+    failedCount: number;
+    failedFiles: string[];
+  } | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const createdBlobs: string[] = [];
+    setBlobMap({});
+    setIsLoadingMedia(rawPhotos.length > 0);
+
+    async function loadAuthenticatedBlobs() {
+      const nextMap: Record<string, string> = {};
+      for (const item of rawPhotos) {
+        if (!item.canonicalUrl) continue;
+        if (item.canonicalUrl.startsWith('blob:') || item.canonicalUrl.startsWith('data:')) {
+          nextMap[item.canonicalUrl] = item.canonicalUrl;
+          continue;
+        }
+        try {
+          const blobUrl = await fetchAuthenticatedBlobUrl(item.canonicalUrl);
+          if (!isMounted) {
+            URL.revokeObjectURL(blobUrl);
+            return;
+          }
+          createdBlobs.push(blobUrl);
+          nextMap[item.canonicalUrl] = blobUrl;
+        } catch {
+          // A failed private fetch must never fall back to a URL containing the session token.
+          nextMap[item.canonicalUrl] = '';
+        }
+      }
+      if (isMounted) {
+        setBlobMap(nextMap);
+        setIsLoadingMedia(false);
+      }
+    }
+
+    if (rawPhotos.length > 0) {
+      loadAuthenticatedBlobs();
+    } else {
+      setBlobMap({});
+    }
+
+    return () => {
+      isMounted = false;
+      createdBlobs.forEach((b) => {
+        try {
+          URL.revokeObjectURL(b);
+        } catch {}
+      });
+    };
+  }, [JSON.stringify(rawPhotos.map((p) => p.canonicalUrl))]);
+
+  const photos: { name: string; url: string; size?: number }[] = rawPhotos.map((p) => ({
+    name: p.name,
+    url: blobMap[p.canonicalUrl] || '',
+    size: p.size,
+  })).filter((photo) => Boolean(photo.url));
+
+  // Count media that attempted to load but failed (empty string in blobMap = load attempted & failed)
+  const failedCount = Object.values(blobMap).filter((v) => v === '').length;
+
+  const handleDownloadZip = () => executeArtworkZipDownload(
+    { rawPhotos, blobMap, photos, orderIdDisplay, currentLang },
+    { setIsZipping, setDownloadFeedback }
+  );
 
   const activePhoto = photos[selectedPhotoIdx] || photos[0];
   const customerName = order?.customer_name || order?.customerName || order?.customer?.name || '-';
@@ -103,7 +263,21 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
     if (setLightbox && photoItem?.url) {
       setLightbox({
         src: photoItem.url,
-        title: `${photoItem.name} (${index + 1}/${photos.length}) - #${orderIdDisplay}`
+        title: `${photoItem.name} (${index + 1}/${photos.length}) - #${orderIdDisplay}`,
+        documentNumber: `#${orderIdDisplay}`,
+        fileName: photoItem.name,
+        photos: photos.map((p, idx) => ({
+          name: p.name || `Photo #${idx + 1}`,
+          url: p.url,
+          originalUrl: rawPhotos.find((r) => r.name === p.name)?.canonicalUrl || p.url,
+          contentType: 'image/jpeg',
+        })),
+        initialPhotoIndex: index,
+        onDownloadOriginal: async (item: any) => {
+          const target = item?.originalUrl || item?.url || photoItem.url;
+          const fileName = item?.name || photoItem.name || `photo_${index + 1}.jpg`;
+          await downloadAuthenticatedFile(target, fileName);
+        }
       });
     } else if (photoItem?.url) {
       window.open(photoItem.url, '_blank');
@@ -126,10 +300,15 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
               </h3>
             </div>
           </div>
-          {photos.length > 0 ? (
+          {photos.length > 0 && failedCount === 0 ? (
             <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3 text-emerald-600" />
               <span>Approved (CMYK)</span>
+            </span>
+          ) : photos.length > 0 && failedCount > 0 ? (
+            <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3 text-amber-600" />
+              <span>{failedCount} {currentLang === 'lo' ? 'ໄຟລ໌ໂຫຼດບໍ່ໄດ້' : (failedCount === 1 ? 'file failed' : 'files failed')}</span>
             </span>
           ) : (
             <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
@@ -168,7 +347,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
               </div>
               <div className="space-y-1">
                 <h4 className="text-xs font-black text-slate-800">
-                  {currentLang === 'lo' ? 'ລໍຖ້າໄຟລ໌ຈາກລູກຄ້າ' : 'Pending Customer Artwork'}
+                  {isLoadingMedia ? (currentLang === 'lo' ? 'ກຳລັງໂຫຼດໄຟລ໌' : 'Loading artwork') : rawPhotos.length > 0 ? (currentLang === 'lo' ? `ບໍ່ສາມາດໂຫຼດໄຟລ໌ໄດ້ (${failedCount} ໄຟລ໌)` : `Unable to load artwork (${failedCount} ${failedCount === 1 ? 'file' : 'files'} failed)`) : (currentLang === 'lo' ? 'ລໍຖ້າໄຟລ໌ຈາກລູກຄ້າ' : 'Pending Customer Artwork')}
                 </h4>
                 <p className="text-[11px] text-slate-500 font-medium max-w-xs">
                   {currentLang === 'lo' ? 'ຍັງບໍ່ມີໄຟລ໌ງານພິມແນບໃນອໍເດີນີ້ ສາມາດເປີດລິ້ງຄ໌ Google Drive ດ້ານລຸ່ມ' : 'No artwork files uploaded yet. You can inspect external drive link if available.'}
@@ -271,6 +450,45 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
         </div>
       </div>
 
+      {/* Visible ZIP Download Feedback Banner (Partial or Total Failure) */}
+      {downloadFeedback && (
+        <div
+          role="alert"
+          data-testid="artwork-download-alert"
+          className={`p-3 rounded-2xl border text-xs space-y-1.5 ${
+            downloadFeedback.type === 'error'
+              ? 'bg-rose-50 border-rose-200 text-rose-800'
+              : 'bg-amber-50 border-amber-200 text-amber-800'
+          }`}
+        >
+          <div className="flex items-center justify-between font-bold">
+            <div className="flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-current" />
+              <span>{downloadFeedback.title}</span>
+            </div>
+            <button
+              type="button"
+              data-testid="dismiss-download-alert-btn"
+              onClick={() => setDownloadFeedback(null)}
+              className="text-[10px] underline font-semibold cursor-pointer opacity-75 hover:opacity-100"
+            >
+              {currentLang === 'lo' ? 'ປິດ' : 'Dismiss'}
+            </button>
+          </div>
+          <p className="text-[11px] opacity-90">{downloadFeedback.message}</p>
+          {downloadFeedback.failedFiles && downloadFeedback.failedFiles.length > 0 && (
+            <div className="text-[10px] font-mono bg-white/70 p-2 rounded-xl border border-current/10 max-h-24 overflow-y-auto space-y-0.5">
+              <div className="font-sans font-semibold text-[10px] mb-1">
+                {currentLang === 'lo' ? 'ລາຍຊື່ໄຟລ໌ທີ່ບໍ່ສຳເລັດ:' : 'Failed files:'}
+              </div>
+              {downloadFeedback.failedFiles.map((fname, i) => (
+                <div key={i} className="truncate">• {fname}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Action Buttons: Clean Universal Actions */}
       <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100">
         {photos.length > 1 ? (
@@ -309,22 +527,13 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
 
         <button
           type="button"
-          disabled={photos.length === 0 && !onDownloadArtwork}
+          data-testid="artwork-download-btn"
+          disabled={(photos.length === 0 && failedCount === 0) && !onDownloadArtwork}
           onClick={async () => {
             if (onDownloadArtwork) {
               onDownloadArtwork();
-            } else if (photos.length > 1) {
-              setIsZipping(true);
-              try {
-                await downloadPhotosAsZip(
-                  photos,
-                  `${orderIdDisplay}_artworks_${photos.length}_photos.zip`
-                );
-              } catch (err) {
-                console.error('Download all zip error:', err);
-              } finally {
-                setIsZipping(false);
-              }
+            } else if (photos.length > 1 || (photos.length === 1 && failedCount > 0) || (photos.length === 0 && failedCount > 0)) {
+              await handleDownloadZip();
             } else if (activePhoto?.url) {
               const a = document.createElement('a');
               a.href = activePhoto.url;
@@ -336,14 +545,14 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
             }
           }}
           className={`py-2.5 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 shadow-sm border-none ${
-            photos.length > 0 || onDownloadArtwork
+            photos.length > 0 || onDownloadArtwork || failedCount > 0
               ? 'bg-sky-600 hover:bg-sky-700 text-white cursor-pointer active:scale-95'
               : 'bg-slate-200 text-slate-400 cursor-not-allowed'
           }`}
         >
           {isZipping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
           <span>
-            {photos.length > 1
+            {photos.length > 1 || (photos.length === 1 && failedCount > 0) || (photos.length === 0 && failedCount > 0)
               ? (currentLang === 'lo' ? 'ດາວໂຫຼດ ZIP' : 'Download ZIP')
               : photos.length === 1
               ? (currentLang === 'lo' ? 'ດາວໂຫຼດໄຟລ໌' : 'Download File')
@@ -370,19 +579,8 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={async () => {
-                    setIsZipping(true);
-                    try {
-                      await downloadPhotosAsZip(
-                        photos,
-                        `${orderIdDisplay}_artworks_${photos.length}_photos.zip`
-                      );
-                    } catch (err) {
-                      console.error('Download zip error:', err);
-                    } finally {
-                      setIsZipping(false);
-                    }
-                  }}
+                  data-testid="modal-download-zip-btn"
+                  onClick={handleDownloadZip}
                   className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-black text-xs cursor-pointer transition flex items-center gap-1.5 shadow-sm"
                 >
                   {isZipping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
@@ -400,6 +598,43 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
           }
         >
           <div className="space-y-4">
+            {downloadFeedback && (
+              <div
+                role="alert"
+                data-testid="modal-artwork-download-alert"
+                className={`p-3 rounded-2xl border text-xs space-y-1.5 ${
+                  downloadFeedback.type === 'error'
+                    ? 'bg-rose-50 border-rose-200 text-rose-800'
+                    : 'bg-amber-50 border-amber-200 text-amber-800'
+                }`}
+              >
+                <div className="flex items-center justify-between font-bold">
+                  <div className="flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-current" />
+                    <span>{downloadFeedback.title}</span>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="dismiss-modal-download-alert-btn"
+                    onClick={() => setDownloadFeedback(null)}
+                    className="text-[10px] underline font-semibold cursor-pointer opacity-75 hover:opacity-100"
+                  >
+                    {currentLang === 'lo' ? 'ປິດ' : 'Dismiss'}
+                  </button>
+                </div>
+                <p className="text-[11px] opacity-90">{downloadFeedback.message}</p>
+                {downloadFeedback.failedFiles && downloadFeedback.failedFiles.length > 0 && (
+                  <div className="text-[10px] font-mono bg-white/70 p-2 rounded-xl border border-current/10 max-h-24 overflow-y-auto space-y-0.5">
+                    <div className="font-sans font-semibold text-[10px] mb-1">
+                      {currentLang === 'lo' ? 'ລາຍຊື່ໄຟລ໌ທີ່ບໍ່ສຳເລັດ:' : 'Failed files:'}
+                    </div>
+                    {downloadFeedback.failedFiles.map((fname, i) => (
+                      <div key={i} className="truncate">• {fname}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
               {photos.map((photo, pIdx) => (
                 <div

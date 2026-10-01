@@ -27,6 +27,7 @@ import {
 import { useApp } from '@store/AppContext';
 import { FormModalTemplate } from '@components/common/FormModalTemplate';
 import { downloadPhotosAsZip } from '@utils/zipDownloader';
+import { downloadAuthenticatedFile } from '../../../../api/client';
 
 interface ArtworkPrepressCardProps {
   orderIdDisplay: string;
@@ -55,7 +56,7 @@ interface ArtworkPrepressCardProps {
   onUploadProof?: (proofUrl: string) => void;
   onConfigureWorkflow?: () => void;
   productionWorkflow?: any;
-  setLightbox?: (lb: { src: string; title: string } | null) => void;
+  setLightbox?: (lb: any) => void;
 }
 
 export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
@@ -87,7 +88,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
   productionWorkflow,
   setLightbox,
 }) => {
-  const { customerCategories = [] } = useApp();
+  const { customerCategories = [], showToast } = useApp();
   const categoryObj = customerCategories.find((c: any) => c.id === customerTier);
   const categoryLabel = categoryObj ? categoryObj.name : customerTier;
 
@@ -98,16 +99,28 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
 
   const [galleryModalItem, setGalleryModalItem] = useState<{ name: string; photos: { name: string; url: string }[] } | null>(null);
   const [isZipping, setIsZipping] = useState(false);
+  const [isDownloadingArtwork, setIsDownloadingArtwork] = useState<string | null>(null);
 
   const handleDownloadBatchZip = async (itemPhotos: { name: string; url: string }[], itemName: string) => {
     setIsZipping(true);
     try {
-      await downloadPhotosAsZip(
+      const res = await downloadPhotosAsZip(
         itemPhotos,
         `${orderIdDisplay}_${itemName.replace(/\s+/g, '_')}_${itemPhotos.length}_images.zip`
       );
-    } catch (err) {
+      if (res.failedCount > 0) {
+        showToast(
+          currentLang === 'lo'
+            ? `ດາວໂຫຼດ ZIP ສຳເລັດແຕ່ຂາດ ${res.failedCount} ໄຟລ໌: ${res.failedFiles.join(', ')}`
+            : `ZIP downloaded with ${res.failedCount} failed items: ${res.failedFiles.join(', ')}`,
+          'warning'
+        );
+      } else {
+        showToast(currentLang === 'lo' ? 'ດາວໂຫຼດ ZIP ຮຽບຮ້ອຍແລ້ວ' : 'ZIP downloaded successfully', 'success');
+      }
+    } catch (err: any) {
       console.error('ZIP download error:', err);
+      showToast(err.message || 'ZIP download failed', 'error');
     } finally {
       setIsZipping(false);
     }
@@ -297,7 +310,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                               <div className="flex items-center gap-1.5 shrink-0">
                                 <button
                                   type="button"
-                                  onClick={(e) => {
+                                  onClick={async (e) => {
                                     e.stopPropagation();
                                     if (hasBatch) {
                                       const itemPhotos = batchFiles.map((url, i) => ({
@@ -307,41 +320,65 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                                       handleDownloadBatchZip(itemPhotos, it.name || 'photos');
                                     } else if (itArtworkUrl) {
                                       try {
-                                        const link = document.createElement('a');
-                                        link.href = itArtworkUrl;
-                                        link.download = itArtworkFileName || 'artwork.pdf';
-                                        link.target = '_blank';
-                                        document.body.appendChild(link);
-                                        link.click();
-                                        document.body.removeChild(link);
-                                      } catch (err) {
-                                        window.open(itArtworkUrl, '_blank');
+                                        setIsDownloadingArtwork(it.id || itArtworkFileName || 'artwork');
+                                        await downloadAuthenticatedFile(itArtworkUrl, itArtworkFileName || 'artwork.pdf');
+                                        showToast(currentLang === 'lo' ? 'ດາວໂຫຼດໄຟລ໌ສຳເລັດ' : 'Artwork downloaded', 'success');
+                                      } catch (err: any) {
+                                        console.error('Download artwork error:', err);
+                                        showToast(err.message || 'Download failed', 'error');
+                                      } finally {
+                                        setIsDownloadingArtwork(null);
                                       }
                                     }
                                   }}
                                   className="px-2 py-1 rounded-lg bg-white hover:bg-slate-200 text-slate-700 border border-slate-200 text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
                                   title={hasBatch ? `Download all ${batchFiles.length} photos as ZIP` : "Download Job Artwork"}
                                 >
-                                  {isZipping ? <Loader2 className="w-3 h-3 text-slate-600 animate-spin" /> : <Download className="w-3 h-3 text-slate-600" />}
+                                  {isZipping || isDownloadingArtwork === (it.id || itArtworkFileName || 'artwork') ? (
+                                    <Loader2 className="w-3 h-3 text-slate-600 animate-spin" />
+                                  ) : (
+                                    <Download className="w-3 h-3 text-slate-600" />
+                                  )}
                                   <span>{hasBatch ? 'ໂຫຼດ ZIP' : 'ໂຫຼດ'}</span>
                                 </button>
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (hasBatch) {
+                                    if (hasBatch && setLightbox) {
+                                      const itemPhotos = batchFiles.map((url, i) => ({
+                                        name: `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
+                                        url,
+                                        originalUrl: url,
+                                        contentType: 'image/jpeg',
+                                      }));
+                                      setLightbox({
+                                        src: batchFiles[0],
+                                        title: `${it.name || 'Photo Prints'} (1/${batchFiles.length}) - #${orderIdDisplay}`,
+                                        documentNumber: `#${orderIdDisplay}`,
+                                        photos: itemPhotos,
+                                        initialPhotoIndex: 0,
+                                        onDownloadOriginal: async (item) => {
+                                          await downloadAuthenticatedFile(item?.originalUrl || item?.url || batchFiles[0], item?.name || 'photo.jpg');
+                                        }
+                                      });
+                                    } else if (hasBatch) {
                                       const itemPhotos = batchFiles.map((url, i) => ({
                                         name: `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
                                         url
                                       }));
                                       setGalleryModalItem({ name: it.name || 'Photo Prints', photos: itemPhotos });
-                                    } else if (setLightbox && batchFiles[0]) {
+                                    } else if (setLightbox && (batchFiles[0] || itArtworkUrl)) {
+                                      const targetUrl = itArtworkUrl || batchFiles[0];
                                       setLightbox({
-                                        src: batchFiles[0],
-                                        title: `${it.name || 'Artwork'}`
+                                        src: targetUrl,
+                                        title: `${it.name || 'Artwork'} - #${orderIdDisplay}`,
+                                        documentNumber: `#${orderIdDisplay}`,
+                                        fileName: `${it.name || 'artwork'}.pdf`,
+                                        onDownloadOriginal: async (item) => {
+                                          await downloadAuthenticatedFile(item?.originalUrl || item?.url || targetUrl, item?.name || `${it.name || 'artwork'}.pdf`);
+                                        }
                                       });
-                                    } else if (itArtworkUrl) {
-                                      window.open(itArtworkUrl, '_blank');
                                     }
                                   }}
                                   className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold flex items-center gap-1 transition cursor-pointer shadow-xs"
@@ -362,9 +399,22 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (setLightbox) {
+                                        const itemPhotos = batchFiles.map((url, i) => ({
+                                          name: `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
+                                          url,
+                                          originalUrl: url,
+                                          contentType: 'image/jpeg',
+                                        }));
                                         setLightbox({
                                           src: imgUrl,
-                                          title: `${it.name || 'Photo'} - ຮູບທີ ${bIdx + 1}/${batchFiles.length}`
+                                          title: `${it.name || 'Photo'} (${bIdx + 1}/${batchFiles.length}) - #${orderIdDisplay}`,
+                                          documentNumber: `#${orderIdDisplay}`,
+                                          photos: itemPhotos,
+                                          initialPhotoIndex: bIdx,
+                                          fileName: `${it.name || 'photo'}_${String(bIdx + 1).padStart(2, '0')}.jpg`,
+                                          onDownloadOriginal: async (item) => {
+                                            await downloadAuthenticatedFile(item?.originalUrl || item?.url || imgUrl, item?.name || 'photo.jpg');
+                                          }
                                         });
                                       } else {
                                         window.open(imgUrl, '_blank');
@@ -522,7 +572,18 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                     if (setLightbox) {
                       setLightbox({
                         src: photo.url,
-                        title: `${galleryModalItem.name} - ຮູບທີ ${pIdx + 1}/${galleryModalItem.photos.length}`
+                        title: `${galleryModalItem.name} (${pIdx + 1}/${galleryModalItem.photos.length}) - #${orderIdDisplay}`,
+                        documentNumber: `#${orderIdDisplay}`,
+                        photos: galleryModalItem.photos.map((p, i) => ({
+                          name: p.name || `Photo #${i + 1}`,
+                          url: p.url,
+                          originalUrl: p.url,
+                          contentType: 'image/jpeg',
+                        })),
+                        initialPhotoIndex: pIdx,
+                        onDownloadOriginal: async (item) => {
+                          await downloadAuthenticatedFile(item?.originalUrl || item?.url || photo.url, item?.name || 'photo.jpg');
+                        }
                       });
                     }
                   }}

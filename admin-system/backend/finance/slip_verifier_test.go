@@ -31,50 +31,32 @@ func TestHandleVerifySlip_InvalidPayload(t *testing.T) {
 	}
 }
 
-func TestHandleVerifySlip_MockVerificationSuccess(t *testing.T) {
+func TestHandleVerifySlip_RequiresManualReview(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	r := gin.Default()
-	r.POST("/api/v1/checkout/verify-slip", HandleVerifySlip)
-
-	testAmount := 1500.00
-	payload := VerifySlipRequest{
-		OrderID:   "SSP-ORD-TEST-001",
-		QRPayload: "00020101021129370016A000000677010111011300668123456785802TH530376454071500.006304ABCD",
-		Amount:    &testAmount,
-		TransRef:  "TEST-TRANS-12345",
-	}
-	body, _ := json.Marshal(payload)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/verify-slip", bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
+	r := gin.New()
+	r.POST("/verify", HandleVerifySlip)
+	body := bytes.NewBufferString(`{"order_id":"fixture-order","qr_payload":"fake","amount":1500,"trans_ref":"client-forged"}`)
+	request := httptest.NewRequest(http.MethodPost, "/verify", body)
+	request.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-
-	r.ServeHTTP(w, req)
-
-	// When DB is nil in unit test, it returns 200 in fallback mode
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d (body: %s)", w.Code, w.Body.String())
+	r.ServeHTTP(w, request)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("want 409 got %d", w.Code)
 	}
-
-	var res VerifySlipResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
-		t.Fatalf("Failed to parse response: %v", err)
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
 	}
-
-	if res.NewStatus != "PAID_PREPRESS" {
-		t.Errorf("Expected new_status to be PAID_PREPRESS, got %s", res.NewStatus)
-	}
-
-	if res.TransRef != "TEST-TRANS-12345" {
-		t.Errorf("Expected trans_ref TEST-TRANS-12345, got %s", res.TransRef)
+	if response["status"] != "manual_review_required" || response["new_status"] != nil {
+		t.Fatalf("unexpected approval: %s", w.Body.String())
 	}
 }
 
-func TestCallSlipOKAPI_Mock(t *testing.T) {
-	resp, err := CallSlipOKAPI("dummy_qr_payload", "")
-	if err != nil {
-		t.Fatalf("CallSlipOKAPI failed: %v", err)
-	}
-	if !resp.Success {
-		t.Errorf("Expected success to be true in mock mode")
+func TestCallSlipOKAPI_MissingConfigurationFailsClosed(t *testing.T) {
+	t.Setenv("SLIPOK_API_KEY", "")
+	t.Setenv("SLIPOK_BRANCH_ID", "")
+	response, err := CallSlipOKAPI("dummy", "")
+	if err == nil || response != nil {
+		t.Fatal("missing configuration must not verify a payment")
 	}
 }

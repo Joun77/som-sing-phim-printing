@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"somsing.local/backend/orders"
 )
 
 // HandlePreflightPDF handles multipart PDF file upload and runs CMYK analysis
@@ -20,17 +21,23 @@ func HandlePreflightPDF(c *gin.Context) {
 		return
 	}
 
-	uploadDir := filepath.Join(".", "uploads", "preflight")
+	val, err := orders.ValidateAndSniffUpload(file, orders.AllowedPreflightExtensions, orders.MaxArtworkFileSize)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid uploaded preflight file", "details": err.Error()})
+		return
+	}
+
+	uploadDir := filepath.Join(orders.GetUploadStorageDir(), "preflight")
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create preflight upload directory"})
 		return
 	}
 
-	timestamp := time.Now().Format("20060102150405")
-	safeFileName := fmt.Sprintf("%s_%s", timestamp, filepath.Base(file.Filename))
+	assetID := orders.GenerateServerAssetID("pref")
+	safeFileName := fmt.Sprintf("%s_%s", assetID, val.SanitizedBaseName)
 	destinationPath := filepath.Join(uploadDir, safeFileName)
 
-	if err := c.SaveUploadedFile(file, destinationPath); err != nil {
+	if err := orders.SaveSafeUploadedFile(file, destinationPath); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save uploaded PDF file", "details": err.Error()})
 		return
 	}
@@ -95,7 +102,7 @@ func HandleBatchPreflight(c *gin.Context) {
 		return
 	}
 
-	uploadDir := filepath.Join(".", "uploads", "preflight")
+	uploadDir := filepath.Join(orders.GetUploadStorageDir(), "preflight")
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create preflight directory"})
 		return
@@ -107,19 +114,16 @@ func HandleBatchPreflight(c *gin.Context) {
 	batchTimestamp := time.Now().UnixNano() / 1e6
 
 	for idx, f := range files {
-		ext := strings.ToLower(filepath.Ext(f.Filename))
-		allowed := map[string]bool{
-			".png": true, ".jpg": true, ".jpeg": true, ".webp": true,
-			".tiff": true, ".tif": true, ".pdf": true, ".psd": true,
-		}
-		if !allowed[ext] {
+		val, err := orders.ValidateAndSniffUpload(f, orders.AllowedPreflightExtensions, orders.MaxArtworkFileSize)
+		if err != nil {
 			continue
 		}
 
-		safeFileName := fmt.Sprintf("%d_%03d_%s", batchTimestamp, idx+1, filepath.Base(f.Filename))
+		assetID := fmt.Sprintf("batch-pref-%d-%03d-%s", batchTimestamp, idx+1, orders.GenerateServerAssetID("f")[len("f-"):])
+		safeFileName := fmt.Sprintf("%s_%s", assetID, val.SanitizedBaseName)
 		destPath := filepath.Join(uploadDir, safeFileName)
 
-		if err := c.SaveUploadedFile(f, destPath); err != nil {
+		if err := orders.SaveSafeUploadedFile(f, destPath); err != nil {
 			continue
 		}
 

@@ -1,10 +1,9 @@
 import type { PreflightResult, PreflightDiagnostics } from '../features/orders/types';
 import * as pdfjsLib from 'pdfjs-dist';
+import { configurePdfWorker } from './pdfWorker';
 
-// Set up pdf.js worker URL
-if (typeof window !== 'undefined' && 'Worker' in window) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
-}
+// Set up local bundled pdf.js worker
+configurePdfWorker(pdfjsLib);
 
 /**
  * GCR (Gray Component Replacement) & TAC (Total Area Coverage) color converter for RGBA pixel buffer

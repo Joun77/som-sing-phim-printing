@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ArrowLeft,
   CheckCircle2, 
@@ -31,13 +31,20 @@ import {
   Save,
   Copy,
   PackageCheck,
-  Tag
+  Tag,
+  Link as LinkIcon
 } from 'lucide-react';
 import ShippingLabelModal from './modals/ShippingLabelModal';
 import CustomerInvoiceModal from './modals/CustomerInvoiceModal';
 import { EditOrderModal } from './modals/EditOrderModal';
 import { IndustrialJobTicket } from './production/PaperCuttingTicketCard';
 import { useApp } from '@store/AppContext';
+import { getAuthHeaders } from '@utils/authHeaders';
+import { useAuthStore } from '@store/useAuthStore';
+import { fetchAuthenticatedBlobUrl, downloadAuthenticatedFile } from '@/api/client';
+
+import { createPrivateArtworkOpener, type PrivateArtworkOpenerState } from '../utils/privateArtworkOpener';
+export { createPrivateArtworkOpener, type PrivateArtworkOpenerState };
 
 export default function OrderDetailsPage({
   order,
@@ -75,7 +82,7 @@ export default function OrderDetailsPage({
   deleteOrder: (orderId: any) => void;
   showToast: (msg: string, type?: string) => void;
   askConfirmation: (msg: string, onConfirm: () => void) => void;
-  setLightbox?: (v: { src: string; title: string } | null) => void;
+  setLightbox?: (v: any) => void;
   setIsSettleOpen?: (v: boolean) => void;
   setSettleAmount?: (v: any) => void;
   setSettleStep?: (v: any) => void;
@@ -90,7 +97,32 @@ export default function OrderDetailsPage({
   equipment?: any[];
   onEditOrder?: (order: any) => void;
 }) {
-  if (!order) return null;
+  const openedMedia = useRef<string[]>([]);
+  const mountedRef = useRef(true);
+  const orderGenerationRef = useRef(0);
+
+  // Revoke all opened blob URLs on unmount AND on order change to prevent stale private artwork.
+  // We increment orderGenerationRef both on effect run and cleanup, so that ANY pending fetch
+  // initiated during order A will see a mismatched generation if order changes to B or unmounts,
+  // even if mountedRef becomes true again in the new effect!
+  useEffect(() => {
+    mountedRef.current = true;
+    orderGenerationRef.current += 1;
+    return () => {
+      mountedRef.current = false;
+      orderGenerationRef.current += 1;
+      openedMedia.current.forEach((url) => { try { URL.revokeObjectURL(url); } catch {} });
+      openedMedia.current = [];
+    };
+  }, [order?.id]);
+
+  const openPrivateArtwork = createPrivateArtworkOpener(
+    { mountedRef, orderGenerationRef, openedMedia },
+    { showToast, currentLang }
+  );
+
+  const user = useAuthStore((state) => state.user);
+  const canIssueTrackingToken = user?.role === 'super_admin' || user?.role === 'owner' || user?.role === 'store_manager';
 
   const { 
     couriers = [], 
@@ -102,6 +134,28 @@ export default function OrderDetailsPage({
     equipment: contextEquipment = []
   } = useApp();
 
+  const [isShippingLabelOpen, setIsShippingLabelOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+
+  // Delivery & Tracking inputs state
+  const [courierName, setCourierName] = useState<string>(order?.courier || order?.deliveryMethod || 'Anousith Express');
+  const [trackingNo, setTrackingNo] = useState<string>(order?.trackingNumber || order?.trackingNo || '');
+  const [shippingFeeVal, setShippingFeeVal] = useState<number>(order?.shippingFee || 15000);
+  const [isSavingTracking, setIsSavingTracking] = useState(false);
+  const [copiedTracking, setCopiedTracking] = useState(false);
+  const [isIssuingToken, setIsIssuingToken] = useState(false);
+
+  useEffect(() => {
+    if (order) {
+      setCourierName(order.courier || order.deliveryMethod || 'Anousith Express');
+      setTrackingNo(order.trackingNumber || order.trackingNo || '');
+      setShippingFeeVal(order.shippingFee || 15000);
+    }
+  }, [order?.id, order?.trackingNumber, order?.trackingNo, order?.courier, order?.deliveryMethod, order?.shippingFee]);
+
+  if (!order) return null;
+
   const customerTier = order.customerTier || order.customer_tier || order.tier || 
     customers.find(c => (order.customerId && c.id === order.customerId) || c.name === order.customerName)?.tier || 'RETAIL';
   const categoryObj = customerCategories.find((c: any) => c.id === customerTier);
@@ -111,24 +165,41 @@ export default function OrderDetailsPage({
   const district = order.district || '';
   const province = order.province || '';
 
-  const [isShippingLabelOpen, setIsShippingLabelOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+  const handleIssueAndCopyTrackingLink = async () => {
+    try {
+      setIsIssuingToken(true);
+      let token = order.public_tracking_token || order.publicTrackingToken;
 
-  // Delivery & Tracking inputs state
-  const [courierName, setCourierName] = useState<string>(order.courier || order.deliveryMethod || 'Anousith Express');
-  const [trackingNo, setTrackingNo] = useState<string>(order.trackingNumber || order.trackingNo || '');
-  const [shippingFeeVal, setShippingFeeVal] = useState<number>(order.shippingFee || 15000);
-  const [isSavingTracking, setIsSavingTracking] = useState(false);
-  const [copiedTracking, setCopiedTracking] = useState(false);
+      if (!token) {
+        // Issue a new token
+        const res = await fetch(`/api/v1/orders/${order.id}/issue-tracking-token`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+        });
+        if (!res.ok) {
+          throw new Error('Failed to issue tracking token');
+        }
+        const data = await res.json();
+        token = data.public_tracking_token || data.tracking_token;
+        if (!token) throw new Error('Token missing in response');
+        
+        // Mutate local state so we don't have to fetch again if clicked twice
+        order.public_tracking_token = token;
+        order.publicTrackingToken = token;
+      }
 
-  useEffect(() => {
-    if (order) {
-      setCourierName(order.courier || order.deliveryMethod || 'Anousith Express');
-      setTrackingNo(order.trackingNumber || order.trackingNo || '');
-      setShippingFeeVal(order.shippingFee || 15000);
+      if (token) {
+        const trackingLink = `${window.location.origin}/track/${token}`;
+        await navigator.clipboard.writeText(trackingLink);
+        showToast(currentLang === 'lo' ? 'ຄັດລອກລິ້ງຕິດຕາມແລ້ວ' : 'Tracking link copied!', 'success');
+      }
+    } catch (err) {
+      console.error('Error generating tracking link:', err);
+      showToast(currentLang === 'lo' ? 'ເກີດຂໍ້ຜິດພາດໃນການສ້າງລິ້ງ' : 'Error generating tracking link', 'error');
+    } finally {
+      setIsIssuingToken(false);
     }
-  }, [order?.id, order?.trackingNumber, order?.trackingNo, order?.courier, order?.deliveryMethod, order?.shippingFee]);
+  };
 
   const handleSaveTracking = () => {
     setIsSavingTracking(true);
@@ -336,6 +407,19 @@ export default function OrderDetailsPage({
 
         {/* Action Buttons (Elevated Clickable) */}
         <div className="flex items-center gap-2">
+          {canIssueTrackingToken && (
+            <button
+              type="button"
+              onClick={handleIssueAndCopyTrackingLink}
+              disabled={isIssuingToken}
+              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-xl text-xs transition-all duration-150 shadow-sm shadow-emerald-500/25 active:scale-95 cursor-pointer border-none disabled:opacity-50"
+              title={currentLang === 'lo' ? 'ສຳເນົາລິ້ງຕິດຕາມສະຖານະ' : 'Copy Tracking Link'}
+            >
+              <LinkIcon className="w-3.5 h-3.5 text-white" />
+              <span>{isIssuingToken ? '...' : (currentLang === 'lo' ? 'ຄັດລອກລິ້ງຕິດຕາມ' : 'Tracking Link')}</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => {
@@ -428,22 +512,17 @@ export default function OrderDetailsPage({
                 const isPdf = resolvedFileName.toLowerCase().endsWith('.pdf') || resolvedUrl.toLowerCase().includes('pdf');
                 const isImage = /\.(jpe?g|png|webp|gif|svg)$/i.test(resolvedFileName) || /\.(jpe?g|png|webp|gif|svg)/i.test(resolvedUrl);
 
-                const handleDownload = () => {
+                const handleDownload = async () => {
                   if (!resolvedUrl) {
                     showToast(currentLang === 'lo' ? 'ບໍ່ພົບລິ້ງດາວໂຫຼດໄຟລ໌' : 'No file link available to download', 'warning');
                     return;
                   }
                   try {
-                    const link = document.createElement('a');
-                    link.href = resolvedUrl;
-                    link.download = resolvedFileName;
-                    link.target = '_blank';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
+                    await downloadAuthenticatedFile(resolvedUrl, resolvedFileName);
                     showToast(currentLang === 'lo' ? 'ດາວໂຫຼດໄຟລ໌ສຳເລັດ!' : 'Artwork file downloaded!', 'success');
-                  } catch (err) {
-                    window.open(resolvedUrl, '_blank');
+                  } catch (err: any) {
+                    console.error('Download artwork error:', err);
+                    showToast(err.message || 'Download failed', 'error');
                   }
                 };
 
@@ -466,7 +545,13 @@ export default function OrderDetailsPage({
                       {resolvedUrl && (
                         <button
                           type="button"
-                          onClick={() => window.open(resolvedUrl, '_blank')}
+                          onClick={() => {
+                            if (setLightbox) {
+                              setLightbox({ src: resolvedUrl, title: resolvedFileName });
+                            } else {
+                              openPrivateArtwork(undefined, resolvedUrl);
+                            }
+                          }}
                           className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer shadow-xs"
                         >
                           {currentLang === 'lo' ? 'ເປີດໄຟລ໌' : 'View File'}
@@ -610,6 +695,40 @@ export default function OrderDetailsPage({
                             {item.cover_file_url && (
                               <a
                                 href={item.cover_file_url}
+                                onClick={(event) => {
+                                  if (setLightbox) {
+                                    event.preventDefault();
+                                    const splitList = [
+                                      {
+                                        name: `${item.product_name || 'Item'} - ໄຟລ໌ປົກ (Cover PDF)`,
+                                        url: item.cover_file_url,
+                                        originalUrl: item.cover_file_url,
+                                        contentType: 'application/pdf',
+                                      },
+                                    ];
+                                    if (item.inner_file_url) {
+                                      splitList.push({
+                                        name: `${item.product_name || 'Item'} - ໄຟລ໌ເນື້ອໃນ (Inner PDF)`,
+                                        url: item.inner_file_url,
+                                        originalUrl: item.inner_file_url,
+                                        contentType: 'application/pdf',
+                                      });
+                                    }
+                                    setLightbox({
+                                      src: item.cover_file_url,
+                                      title: `${order.order_number || order.orderNo} - ໄຟລ໌ປົກ (Cover)`,
+                                      documentNumber: order.order_number || order.orderNo,
+                                      fileName: `${item.product_name || 'item'}_cover.pdf`,
+                                      photos: splitList,
+                                      initialPhotoIndex: 0,
+                                      onDownloadOriginal: async (selected) => {
+                                        await downloadAuthenticatedFile(selected?.originalUrl || selected?.url || item.cover_file_url, selected?.name || 'cover.pdf');
+                                      }
+                                    });
+                                  } else {
+                                    openPrivateArtwork(event, item.cover_file_url);
+                                  }
+                                }}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold hover:bg-blue-100 transition"
@@ -622,6 +741,39 @@ export default function OrderDetailsPage({
                             {item.inner_file_url && (
                               <a
                                 href={item.inner_file_url}
+                                onClick={(event) => {
+                                  if (setLightbox) {
+                                    event.preventDefault();
+                                    const splitList = [];
+                                    if (item.cover_file_url) {
+                                      splitList.push({
+                                        name: `${item.product_name || 'Item'} - ໄຟລ໌ປົກ (Cover PDF)`,
+                                        url: item.cover_file_url,
+                                        originalUrl: item.cover_file_url,
+                                        contentType: 'application/pdf',
+                                      });
+                                    }
+                                    splitList.push({
+                                      name: `${item.product_name || 'Item'} - ໄຟລ໌ເນື້ອໃນ (Inner PDF)`,
+                                      url: item.inner_file_url,
+                                      originalUrl: item.inner_file_url,
+                                      contentType: 'application/pdf',
+                                    });
+                                    setLightbox({
+                                      src: item.inner_file_url,
+                                      title: `${order.order_number || order.orderNo} - ໄຟລ໌ເນື້ອໃນ (Inner PDF)`,
+                                      documentNumber: order.order_number || order.orderNo,
+                                      fileName: `${item.product_name || 'item'}_inner.pdf`,
+                                      photos: splitList,
+                                      initialPhotoIndex: splitList.length - 1,
+                                      onDownloadOriginal: async (selected) => {
+                                        await downloadAuthenticatedFile(selected?.originalUrl || selected?.url || item.inner_file_url, selected?.name || 'inner.pdf');
+                                      }
+                                    });
+                                  } else {
+                                    openPrivateArtwork(event, item.inner_file_url);
+                                  }
+                                }}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold hover:bg-emerald-100 transition"
@@ -1643,23 +1795,18 @@ export default function OrderDetailsPage({
                       const resolvedUrl = order.artworkUrl || order.artwork_url || order.artworkLink || order.driveLink || order.googleDriveLink || (order.items && order.items[0]?.artworkUrl) || (order.items && order.items[0]?.inner_file_url) || "";
                       const resolvedFileName = order.artworkFileName || order.artwork_file_name || (order.items && order.items[0]?.artworkFileName) || (resolvedUrl ? resolvedUrl.split("/").pop()?.split("?")[0] : "") || `artwork_SSP_${orderIdDisplay}_master.pdf`;
 
-                      const handleDownload = (e: React.MouseEvent) => {
+                      const handleDownload = async (e: React.MouseEvent) => {
                         e.preventDefault();
                         if (!resolvedUrl) {
                           showToast(currentLang === "lo" ? "ບໍ່ພົບລິ້ງດາວໂຫຼດ" : "No download link available", "warning");
                           return;
                         }
                         try {
-                          const link = document.createElement("a");
-                          link.href = resolvedUrl;
-                          link.download = resolvedFileName;
-                          link.target = "_blank";
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
+                          await downloadAuthenticatedFile(resolvedUrl, resolvedFileName);
                           showToast(currentLang === "lo" ? "ດາວໂຫຼດໄຟລ໌ສຳເລັດ!" : "Artwork downloaded!", "success");
-                        } catch {
-                          window.open(resolvedUrl, "_blank");
+                        } catch (err: any) {
+                          console.error("Download artwork error:", err);
+                          showToast(err.message || "Download failed", "error");
                         }
                       };
 

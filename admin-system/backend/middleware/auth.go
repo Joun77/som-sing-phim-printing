@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -48,7 +49,13 @@ func CORSMiddleware() gin.HandlerFunc {
 		isAllowed := false
 		if origin != "" {
 			for _, o := range allowedOrigins {
-				if o == "*" || strings.EqualFold(o, origin) {
+				if o == "*" {
+					if env == "production" {
+						continue // fail closed on wildcard in production
+					}
+					isAllowed = true
+					break
+				} else if strings.EqualFold(o, origin) {
 					isAllowed = true
 					break
 				}
@@ -60,13 +67,18 @@ func CORSMiddleware() gin.HandlerFunc {
 		if isAllowed {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		} else if env != "production" && origin != "" {
-			// In non-production mode, allow any localhost/127.0.0.1 origin for developer convenience only
-			if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
-				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-				c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		} else if (env == "development" || env == "dev" || env == "test" || env == "local") && origin != "" {
+			// In explicit non-production modes, allow exact localhost or 127.0.0.1 origins.
+			// Intentionally using net/url to safely parse hostname and prevent "localhost.evil.com" bypass.
+			parsedOrigin, err := url.Parse(origin)
+			if err == nil {
+				hostname := parsedOrigin.Hostname()
+				if hostname == "localhost" || hostname == "127.0.0.1" {
+					c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+					c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+				}
 			}
-			// Unknown non-localhost origins in dev mode do NOT get a wildcard CORS grant
+			// Any other origin gets no CORS grant — do not add a wildcard fallback
 		}
 
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, Pragma, Expires, X-Requested-With, Idempotency-Key, X-Request-ID")

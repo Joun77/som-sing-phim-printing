@@ -643,8 +643,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
       <>
         {lightbox && (
           <Lightbox
-            src={lightbox.src}
-            title={lightbox.title}
+            {...lightbox}
             onClose={() => setLightbox(null)}
           />
         )}
@@ -1339,8 +1338,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
       {/* Lightbox Modal */}
       {lightbox && (
         <Lightbox
-          src={lightbox.src}
-          title={lightbox.title}
+          {...lightbox}
           onClose={() => setLightbox(null)}
         />
       )}

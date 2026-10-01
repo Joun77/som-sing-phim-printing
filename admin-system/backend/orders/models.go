@@ -146,6 +146,7 @@ type Order struct {
 	ProofRejectionReason string      `json:"proof_rejection_reason,omitempty"`
 	Items                []OrderItem `json:"items"`
 	InternalTrackingCode string      `json:"internal_tracking_code,omitempty"`
+	PublicTrackingToken  string      `json:"public_tracking_token,omitempty"`
 	TrackingCode         string      `json:"tracking_code,omitempty"`
 	CourierName          string      `json:"courier_name,omitempty"`
 	CourierBranch        string      `json:"courier_branch,omitempty"`

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -120,6 +121,7 @@ var MigrationFiles = []string{
 	"040_production_stage_assignments.sql",
 	"041_reconcile_printer_epson_inkjet_spec.sql",
 	"042_link_printer_inks_and_clean_material_assets.sql",
+	"043_add_public_tracking_token_to_orders.sql",
 }
 
 // verifyLegacyBaseline checks if a legacy migration's intended schema changes
@@ -310,4 +312,41 @@ func RunInTransaction(fn func(tx *sql.Tx) error) error {
 	}
 	return nil
 }
+
+// ParseAndValidateDSN strictly parses the input fixture DSN, rejects key-value formats,
+// rejects unauthorized hosts, requires explicitly named fixture database, prevents malicious
+// driver overrides in query parameters, and returns a safe, canonical URL string.
+func ParseAndValidateDSN(rawDSN string) (string, error) {
+	if !strings.HasPrefix(rawDSN, "postgres://") && !strings.HasPrefix(rawDSN, "postgresql://") {
+		return "", fmt.Errorf("fixture DSN must be a standard postgres:// URL, key-value format is unsupported for safety")
+	}
+
+	u, err := url.Parse(rawDSN)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse fixture DSN URL: %v", err)
+	}
+
+	host := u.Hostname()
+	if host != "localhost" && host != "127.0.0.1" {
+		return "", fmt.Errorf("fixture DSN host must be localhost or 127.0.0.1, got %s", host)
+	}
+
+	dbname := strings.TrimPrefix(u.Path, "/")
+	if dbname != "somsing_fixture_db" {
+		return "", fmt.Errorf("fixture DSN must use the explicit dedicated test database 'somsing_fixture_db', got '%s'", dbname)
+	}
+
+	// Prevent DSN query parameter overrides that lib/pq might prioritize over the URL components
+	q := u.Query()
+	for k := range q {
+		lowerK := strings.ToLower(k)
+		if lowerK == "host" || lowerK == "dbname" || lowerK == "port" || lowerK == "user" || lowerK == "password" {
+			return "", fmt.Errorf("fixture DSN URL contains unsafe overriding query parameter '%s'", k)
+		}
+	}
+
+	// Always return the re-encoded canonical URL string so no raw string injection passes to sql.Open
+	return u.String(), nil
+}
+
 

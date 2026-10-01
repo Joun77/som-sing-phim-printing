@@ -14,18 +14,18 @@ import (
 
 // FinanceSummaryResponse represents owner financial dashboard metrics
 type FinanceSummaryResponse struct {
-	TotalSalesLAK      float64 `json:"total_sales_lak"`
-	TotalSalesTHB      float64 `json:"total_sales_thb"`
-	TotalSalesUSD      float64 `json:"total_sales_usd"`
-	TotalARUnpaidLAK   float64 `json:"total_ar_unpaid_lak"`
-	TotalARUnpaidTHB   float64 `json:"total_ar_unpaid_thb"`
-	TotalARUnpaidUSD   float64 `json:"total_ar_unpaid_usd"`
-	TotalAPUnpaidLAK   float64 `json:"total_ap_unpaid_lak"`
-	PendingSlipsCount  int     `json:"pending_slips_count"`
-	GrossProfitMargin  float64 `json:"gross_profit_margin_percent"`
-	ExchangeRateTHB    float64 `json:"exchange_rate_thb"`
-	ExchangeRateUSD    float64 `json:"exchange_rate_usd"`
-	UpdatedAt          string  `json:"updated_at"`
+	TotalSalesLAK     float64 `json:"total_sales_lak"`
+	TotalSalesTHB     float64 `json:"total_sales_thb"`
+	TotalSalesUSD     float64 `json:"total_sales_usd"`
+	TotalARUnpaidLAK  float64 `json:"total_ar_unpaid_lak"`
+	TotalARUnpaidTHB  float64 `json:"total_ar_unpaid_thb"`
+	TotalARUnpaidUSD  float64 `json:"total_ar_unpaid_usd"`
+	TotalAPUnpaidLAK  float64 `json:"total_ap_unpaid_lak"`
+	PendingSlipsCount int     `json:"pending_slips_count"`
+	GrossProfitMargin float64 `json:"gross_profit_margin_percent"`
+	ExchangeRateTHB   float64 `json:"exchange_rate_thb"`
+	ExchangeRateUSD   float64 `json:"exchange_rate_usd"`
+	UpdatedAt         string  `json:"updated_at"`
 }
 
 // PaymentVerificationRequest represents slip approval or rejection
@@ -63,10 +63,10 @@ type PLReportResponse struct {
 
 // CashFlowResponse represents Inflow vs Outflow metrics
 type CashFlowResponse struct {
-	Period      string  `json:"period"`
-	TotalInflow float64 `json:"total_inflow"`
+	Period       string  `json:"period"`
+	TotalInflow  float64 `json:"total_inflow"`
 	TotalOutflow float64 `json:"total_outflow"`
-	NetCashFlow float64 `json:"net_cash_flow"`
+	NetCashFlow  float64 `json:"net_cash_flow"`
 }
 
 // ExpenseRecord represents operational expense
@@ -195,70 +195,74 @@ func HandleGetFinanceSummary(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": summary})
 }
 
-// HandleVerifyPaymentSlip handles slip approval/rejection and advances order to Paid & In Production
+// HandleVerifyPaymentSlip records an authorized human decision atomically.
+// Approval confirms payment only; production starts through the stock-aware order flow.
 func HandleVerifyPaymentSlip(c *gin.Context) {
 	var req PaymentVerificationRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid request payload: " + err.Error()})
+	if err := c.ShouldBindJSON(&req); err != nil || (req.Status != "APPROVED" && req.Status != "REJECTED") {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid payment review"})
 		return
 	}
-
-	if db.DB != nil {
-		tx, err := db.DB.Begin()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to begin transaction"})
+	if db.DB == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "Payment storage unavailable"})
+		return
+	}
+	tx, err := db.DB.BeginTx(c.Request.Context(), nil)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "Payment storage unavailable"})
+		return
+	}
+	defer tx.Rollback()
+	var id, status, amountText, slipURL string
+	err = tx.QueryRowContext(c.Request.Context(), `SELECT id, status, COALESCE(total_amount_lak, total_price, 0)::text, COALESCE(payment_slip_url, proof_url, '') FROM orders WHERE id = $1 OR order_no = $1 FOR UPDATE`, req.OrderID).Scan(&id, &status, &amountText, &slipURL)
+	if err != nil {
+		code := http.StatusInternalServerError
+		if err == sql.ErrNoRows {
+			code = http.StatusNotFound
+		}
+		c.JSON(code, gin.H{"status": "error", "message": "Unable to load payment review"})
+		return
+	}
+	if status != "PENDING_SLIP_CHECK" && status != "PENDING_PAYMENT" && status != "WAITING_DEPOSIT" && status != "Verification Required" && status != "Pending Payment" {
+		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "Order is not awaiting payment review"})
+		return
+	}
+	if slipURL == "" {
+		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "Payment slip is missing"})
+		return
+	}
+	newStatus := "PAYMENT_REJECTED"
+	var result sql.Result
+	if req.Status == "APPROVED" {
+		amount, amountErr := decimal.NewFromString(amountText)
+		if amountErr != nil || !amount.IsPositive() {
+			c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "Order amount is invalid"})
 			return
 		}
-		defer tx.Rollback()
-
-		if req.Status == "APPROVED" {
-			var totalAmt float64
-			err := tx.QueryRow(`SELECT COALESCE(total_price, total_amount_lak, 0) FROM orders WHERE id = $1 OR order_no = $1 FOR UPDATE`, req.OrderID).Scan(&totalAmt)
-			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "Order not found"})
-				return
-			}
-
-			_, err = tx.Exec(`
-				UPDATE orders 
-				SET status = 'IN_PRODUCTION', 
-				    deposit_amount = COALESCE(total_price, total_amount_lak, deposit_amount), 
-				    deposit_lak = COALESCE(total_price, total_amount_lak, deposit_lak),
-				    remaining_lak = 0,
-				    updated_at = NOW() 
-				WHERE id = $1 OR order_no = $1
-			`, req.OrderID)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to update order status"})
-				return
-			}
-
-			// Auto-Journal Payment Received
-			if totalAmt > 0 {
-				_ = CreatePaymentReceivedJournal(tx, req.OrderID, decimal.NewFromFloat(totalAmt), "BCEL Transfer")
-			}
-		} else {
-			_, _ = tx.Exec(`
-				UPDATE orders 
-				SET status = 'PAYMENT_REJECTED', 
-				    proof_rejection_reason = $2,
-				    updated_at = NOW() 
-				WHERE id = $1 OR order_no = $1
-			`, req.OrderID, req.RejectionReason)
+		newStatus = "PAID_PREPRESS"
+		result, err = tx.ExecContext(c.Request.Context(), `UPDATE orders SET status = 'PAID_PREPRESS', deposit_amount = $2, deposit_lak = $2, remaining_lak = 0, updated_at = NOW() WHERE id = $1`, id, amount.String())
+		if err == nil {
+			err = CreatePaymentReceivedJournal(tx, id, amount, "Manual QR slip review")
 		}
-
-		if err := tx.Commit(); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to commit payment verification"})
-			return
+	} else {
+		result, err = tx.ExecContext(c.Request.Context(), `UPDATE orders SET status = 'PAYMENT_REJECTED', proof_rejection_reason = $2, updated_at = NOW() WHERE id = $1`, id, req.RejectionReason)
+	}
+	if err == nil {
+		var affected int64
+		affected, err = result.RowsAffected()
+		if err == nil && affected != 1 {
+			err = fmt.Errorf("unexpected payment update count")
 		}
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"status":    "success",
-		"message":   "Payment slip verification processed successfully",
-		"orderId":   req.OrderID,
-		"newStatus": req.Status,
-	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success", "orderId": id, "newStatus": newStatus})
 }
 
 type PendingSlipOrderDTO struct {

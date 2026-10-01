@@ -2,7 +2,9 @@ package orders
 
 import (
 	"archive/zip"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,6 +34,14 @@ var (
 
 func init() {
 	orderSeq = 0
+}
+
+func generateTrackingToken() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 func cleanPhoneNumber(phone string) string {
@@ -456,9 +466,16 @@ func HandleCreateOrder(c *gin.Context) {
 		MimeType:        req.MimeType,
 		IdempotencyKey:  req.IdempotencyKey,
 		Items:           itemsList,
-		CreatedAt:       time.Now(),
-		UpdatedAt:       time.Now(),
 	}
+
+	publicToken, err := generateTrackingToken()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate security token", "details": err.Error()})
+		return
+	}
+	newOrder.PublicTrackingToken = publicToken
+	newOrder.CreatedAt = time.Now()
+	newOrder.UpdatedAt = time.Now()
 
 	if db.DB != nil {
 		err := saveOrderToDB(newOrder)
@@ -764,6 +781,7 @@ func getOrdersFromDB() ([]Order, error) {
 		       stock_deducted_at, COALESCE(proof_url, ''), proof_approved_at, proof_rejected_at,
 		       COALESCE(proof_signature_ip, ''), COALESCE(proof_rejection_reason, ''),
 		       COALESCE(tracking_code, ''), COALESCE(internal_tracking_code, ''),
+		       COALESCE(public_tracking_token, ''),
 		       COALESCE(courier_name, ''), COALESCE(branch_code, ''),
 		       COALESCE(digital_proof_url, ''), COALESCE(proof_version, 1),
 		       COALESCE(proof_status, 'NOT_SUBMITTED'), COALESCE(proof_feedback, ''),
@@ -790,7 +808,7 @@ func getOrdersFromDB() ([]Order, error) {
 			&o.CustomerID, &o.RemainingLAK, &o.DeliveryDate,
 			&o.StockDeductedAt, &o.ProofURL, &o.ProofApprovedAt, &o.ProofRejectedAt,
 			&o.ProofSignatureIP, &o.ProofRejectionReason,
-			&o.TrackingCode, &o.InternalTrackingCode,
+			&o.TrackingCode, &o.InternalTrackingCode, &o.PublicTrackingToken,
 			&o.CourierName, &o.CourierBranch,
 			&o.DigitalProofURL, &o.ProofVersion,
 			&o.ProofStatus, &o.ProofFeedback,
@@ -846,6 +864,7 @@ func getOrderByIDFromDB(orderID string) (Order, error) {
 		       stock_deducted_at, COALESCE(proof_url, ''), proof_approved_at, proof_rejected_at,
 		       COALESCE(proof_signature_ip, ''), COALESCE(proof_rejection_reason, ''),
 		       COALESCE(tracking_code, ''), COALESCE(internal_tracking_code, ''),
+		       COALESCE(public_tracking_token, ''),
 		       COALESCE(courier_name, ''), COALESCE(branch_code, ''),
 		       COALESCE(digital_proof_url, ''), COALESCE(proof_version, 1),
 		       COALESCE(proof_status, 'NOT_SUBMITTED'), COALESCE(proof_feedback, ''),
@@ -859,6 +878,7 @@ func getOrderByIDFromDB(orderID string) (Order, error) {
 		   OR idempotency_key = $1
 		   OR COALESCE(tracking_code, '') = $1
 		   OR COALESCE(internal_tracking_code, '') = $1
+		   OR COALESCE(public_tracking_token, '') = $1
 		   OR (LENGTH($3) >= 7 AND (
 		       REGEXP_REPLACE(customer_phone, '[^0-9]', '', 'g') LIKE '%' || $3
 		       OR customer_phone = $1
@@ -875,7 +895,7 @@ func getOrderByIDFromDB(orderID string) (Order, error) {
 		&o.CustomerID, &o.RemainingLAK, &o.DeliveryDate,
 		&o.StockDeductedAt, &o.ProofURL, &o.ProofApprovedAt, &o.ProofRejectedAt,
 		&o.ProofSignatureIP, &o.ProofRejectionReason,
-		&o.TrackingCode, &o.InternalTrackingCode,
+		&o.TrackingCode, &o.InternalTrackingCode, &o.PublicTrackingToken,
 		&o.CourierName, &o.CourierBranch,
 		&o.DigitalProofURL, &o.ProofVersion,
 		&o.ProofStatus, &o.ProofFeedback,
@@ -923,6 +943,7 @@ func getOrderByIdempotencyKeyFromDB(idempotencyKey string) (Order, error) {
 		       stock_deducted_at, COALESCE(proof_url, ''), proof_approved_at, proof_rejected_at,
 		       COALESCE(proof_signature_ip, ''), COALESCE(proof_rejection_reason, ''),
 		       COALESCE(tracking_code, ''), COALESCE(internal_tracking_code, ''),
+		       COALESCE(public_tracking_token, ''),
 		       COALESCE(courier_name, ''), COALESCE(branch_code, ''),
 		       COALESCE(digital_proof_url, ''), COALESCE(proof_version, 1),
 		       COALESCE(proof_status, 'NOT_SUBMITTED'), COALESCE(proof_feedback, ''),
@@ -942,7 +963,7 @@ func getOrderByIdempotencyKeyFromDB(idempotencyKey string) (Order, error) {
 		&o.CustomerID, &o.RemainingLAK, &o.DeliveryDate,
 		&o.StockDeductedAt, &o.ProofURL, &o.ProofApprovedAt, &o.ProofRejectedAt,
 		&o.ProofSignatureIP, &o.ProofRejectionReason,
-		&o.TrackingCode, &o.InternalTrackingCode,
+		&o.TrackingCode, &o.InternalTrackingCode, &o.PublicTrackingToken,
 		&o.CourierName, &o.CourierBranch,
 		&o.DigitalProofURL, &o.ProofVersion,
 		&o.ProofStatus, &o.ProofFeedback,
@@ -1068,6 +1089,7 @@ func GetOrdersByCustomer(customerID, phone string) ([]Order, error) {
 		       stock_deducted_at, COALESCE(proof_url, ''), proof_approved_at, proof_rejected_at,
 		       COALESCE(proof_signature_ip, ''), COALESCE(proof_rejection_reason, ''),
 		       COALESCE(tracking_code, ''), COALESCE(internal_tracking_code, ''),
+		       COALESCE(public_tracking_token, ''),
 		       COALESCE(courier_name, ''), COALESCE(branch_code, ''),
 		       COALESCE(digital_proof_url, ''), COALESCE(proof_version, 1),
 		       COALESCE(proof_status, 'NOT_SUBMITTED'), COALESCE(proof_feedback, ''),
@@ -1099,7 +1121,7 @@ func GetOrdersByCustomer(customerID, phone string) ([]Order, error) {
 			&o.CustomerID, &o.RemainingLAK, &o.DeliveryDate,
 			&o.StockDeductedAt, &o.ProofURL, &o.ProofApprovedAt, &o.ProofRejectedAt,
 			&o.ProofSignatureIP, &o.ProofRejectionReason,
-			&o.TrackingCode, &o.InternalTrackingCode,
+			&o.TrackingCode, &o.InternalTrackingCode, &o.PublicTrackingToken,
 			&o.CourierName, &o.CourierBranch,
 			&o.DigitalProofURL, &o.ProofVersion,
 			&o.ProofStatus, &o.ProofFeedback,
@@ -1220,9 +1242,9 @@ func saveOrderToDB(o Order) error {
 			                    total_price, total_amount_lak, total_cost, delivery_date, google_drive_link,
 			                    stock_deducted_at, proof_url, digital_proof_url, proof_version, proof_status, proof_feedback, prepress_notes,
 			                    proof_approved_at, proof_rejected_at, proof_signature_ip, proof_rejection_reason,
-			                    tracking_code, internal_tracking_code, courier_name, branch_code,
+			                    tracking_code, internal_tracking_code, public_tracking_token, courier_name, branch_code,
 			                    idempotency_key, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, NOW(), NOW())
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, NOW(), NOW())
 			ON CONFLICT (id) DO UPDATE SET
 				customer_id = EXCLUDED.customer_id,
 				customer_name = EXCLUDED.customer_name,
@@ -1252,6 +1274,7 @@ func saveOrderToDB(o Order) error {
 				proof_rejection_reason = EXCLUDED.proof_rejection_reason,
 				tracking_code = EXCLUDED.tracking_code,
 				internal_tracking_code = EXCLUDED.internal_tracking_code,
+				public_tracking_token = EXCLUDED.public_tracking_token,
 				courier_name = EXCLUDED.courier_name,
 				branch_code = EXCLUDED.branch_code,
 				idempotency_key = EXCLUDED.idempotency_key,
@@ -1272,7 +1295,7 @@ func saveOrderToDB(o Order) error {
 			o.TotalPrice, o.TotalAmountLAK, o.TotalCost, o.DeliveryDate, o.GoogleDriveLink,
 			o.StockDeductedAt, o.ProofURL, o.DigitalProofURL, proofVer, proofSt, o.ProofFeedback, o.PrepressNotes,
 			o.ProofApprovedAt, o.ProofRejectedAt, o.ProofSignatureIP, o.ProofRejectionReason,
-			o.TrackingCode, o.InternalTrackingCode, o.CourierName, o.CourierBranch,
+			o.TrackingCode, o.InternalTrackingCode, o.PublicTrackingToken, o.CourierName, o.CourierBranch,
 			o.IdempotencyKey,
 		)
 		if err != nil {
@@ -1320,7 +1343,70 @@ func updateOrderDepositAndStatusInDB(orderID string, deposit float64, status str
 	})
 }
 
-// HandleUploadOrderFile saves uploaded PDF files in ./uploads/orders/{order_no}/
+// findOrder looks up an order by ID, order_no, or order_number in memory store or database.
+// It performs a schema-safe query matching actual schema columns (order_number from schema.sql, or order_no).
+func findOrder(orderIDOrNo string) (*Order, bool) {
+	storeMutex.Lock()
+	defer storeMutex.Unlock()
+
+	// 1. Direct ID lookup in memory
+	if o, exists := ordersStore[orderIDOrNo]; exists {
+		cp := o
+		return &cp, true
+	}
+	// 2. OrderNo / OrderNumber lookup in memory
+	for _, o := range ordersStore {
+		if o.OrderNo == orderIDOrNo || o.OrderNumber == orderIDOrNo || o.ID == orderIDOrNo {
+			cp := o
+			return &cp, true
+		}
+	}
+
+	// 3. Fallback to DB if initialized
+	if db.DB != nil {
+		var dbID, orderNum string
+		// Try actual schema.sql column: order_number
+		err := db.DB.QueryRow("SELECT id::text, order_number FROM orders WHERE id::text = $1 OR order_number = $1 LIMIT 1", orderIDOrNo).Scan(&dbID, &orderNum)
+		if err != nil {
+			// Fallback: try order_no column if database table schema uses order_no
+			err = db.DB.QueryRow("SELECT id::text, order_no FROM orders WHERE id::text = $1 OR order_no = $1 LIMIT 1", orderIDOrNo).Scan(&dbID, &orderNum)
+		}
+		if err != nil {
+			// Fallback: try id alone
+			err = db.DB.QueryRow("SELECT id::text FROM orders WHERE id::text = $1 LIMIT 1", orderIDOrNo).Scan(&dbID)
+			if err == nil {
+				orderNum = dbID
+			}
+		}
+
+		if err == nil && dbID != "" {
+			ord := Order{
+				ID:          dbID,
+				OrderNo:     orderNum,
+				OrderNumber: orderNum,
+			}
+
+			// Load item IDs from order_items (id and order_id exist in schema.sql and all fixtures)
+			rows, itemErr := db.DB.Query("SELECT id::text FROM order_items WHERE order_id::text = $1", dbID)
+			if itemErr == nil {
+				defer rows.Close()
+				for rows.Next() {
+					var itmID string
+					if err := rows.Scan(&itmID); err == nil {
+						ord.Items = append(ord.Items, OrderItem{
+							ID:      itmID,
+							OrderID: dbID,
+						})
+					}
+				}
+			}
+			return &ord, true
+		}
+	}
+	return nil, false
+}
+
+// HandleUploadOrderFile saves uploaded PDF/image files in {storage_root}/orders/{order_no}/
 func HandleUploadOrderFile(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -1328,20 +1414,92 @@ func HandleUploadOrderFile(c *gin.Context) {
 		return
 	}
 
-	orderNo := c.DefaultPostForm("order_no", "temp_order")
-	itemID := c.DefaultPostForm("item_id", "item1")
-	fileType := c.DefaultPostForm("file_type", "inner") // "cover" or "inner"
+	rawOrderNo := c.DefaultPostForm("order_no", "temp_order")
+	orderNo, err := SanitizeParam(rawOrderNo)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order_no parameter", "details": err.Error()})
+		return
+	}
 
-	targetDir := fmt.Sprintf("./uploads/orders/%s", orderNo)
+	rawItemID := c.DefaultPostForm("item_id", "item1")
+	itemID, err := SanitizeParam(rawItemID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid item_id parameter", "details": err.Error()})
+		return
+	}
+
+	// Staging & Concrete Order Validation Contract (R3):
+	// 1. Inspect actual upload callers: Customer storefront pre-checkout upload (uploadArtworkFile)
+	//    calls the endpoint prior to order creation, omitting order_no which defaults to "temp_order".
+	//    Therefore, the explicit staging contract is strictly restricted to "temp_order".
+	// 2. Concrete persisted orders (found in repository or DB, regardless of whether their identifier
+	//    starts with "draft-", "QT-", etc.) must NEVER bypass validation.
+	// 3. For all concrete orders:
+	//    - The order MUST contain items. A concrete zero-item order is rejected (400 Bad Request).
+	//    - The specified item_id MUST match a stable item ID (itm.ID == itemID). Matching on ItemName
+	//      is rejected to avoid ambiguities.
+	// 4. Any unpersisted identifier other than "temp_order" is rejected with 404 Not Found.
+	// 5. This validation executes BEFORE any directory creation (os.MkdirAll) or file writes,
+	//    guaranteeing zero disk side-effects on validation failure.
+	order, exists := findOrder(orderNo)
+	if exists {
+		if len(order.Items) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "Order has no items to bind upload to",
+				"details": fmt.Sprintf("Order %s has 0 items; uploads require an existing order item", orderNo),
+			})
+			return
+		}
+
+		itemBelongs := false
+		for _, itm := range order.Items {
+			if itm.ID == itemID {
+				itemBelongs = true
+				break
+			}
+		}
+		if !itemBelongs {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "Item does not belong to order",
+				"details": fmt.Sprintf("Item %s does not belong to order %s", itemID, orderNo),
+			})
+			return
+		}
+	} else {
+		// Explicit staging contract: only unpersisted "temp_order" staging is permitted
+		if orderNo != "temp_order" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "Order not found",
+				"details": fmt.Sprintf("Order %s does not exist", orderNo),
+			})
+			return
+		}
+	}
+
+	rawFileType := c.DefaultPostForm("file_type", "inner")
+	fileType, err := SanitizeParam(rawFileType)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file_type parameter", "details": err.Error()})
+		return
+	}
+
+	val, err := ValidateAndSniffUpload(file, AllowedArtworkExtensions, MaxArtworkFileSize)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid uploaded file", "details": err.Error()})
+		return
+	}
+
+	targetDir := filepath.Join(GetUploadStorageDir(), "orders", orderNo)
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order directory"})
 		return
 	}
 
-	safeFileName := fmt.Sprintf("%s_%s_%s", itemID, fileType, filepath.Base(file.Filename))
+	assetID := GenerateServerAssetID("ordfile")
+	safeFileName := fmt.Sprintf("%s_%s_%s_%s", assetID, itemID, fileType, val.SanitizedBaseName)
 	destinationPath := filepath.Join(targetDir, safeFileName)
 
-	if err := c.SaveUploadedFile(file, destinationPath); err != nil {
+	if err := SaveSafeUploadedFile(file, destinationPath); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file", "details": err.Error()})
 		return
 	}
@@ -1349,6 +1507,7 @@ func HandleUploadOrderFile(c *gin.Context) {
 	fileURL := fmt.Sprintf("/api/v1/orders/files/orders/%s/%s", orderNo, safeFileName)
 
 	c.JSON(http.StatusOK, gin.H{
+		"asset_id":  assetID,
 		"file_name": file.Filename,
 		"file_url":  fileURL,
 		"order_no":  orderNo,
@@ -1365,17 +1524,23 @@ func HandleArtworkUpload(c *gin.Context) {
 		return
 	}
 
-	targetDir := "./uploads/artworks"
+	val, err := ValidateAndSniffUpload(file, AllowedArtworkExtensions, MaxArtworkFileSize)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid uploaded artwork file", "details": err.Error()})
+		return
+	}
+
+	targetDir := filepath.Join(GetUploadStorageDir(), "artworks")
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create artwork storage directory"})
 		return
 	}
 
-	assetID := fmt.Sprintf("art-%d", time.Now().UnixNano()/1e6)
-	safeFileName := fmt.Sprintf("%s_%s", assetID, filepath.Base(file.Filename))
+	assetID := GenerateServerAssetID("art")
+	safeFileName := fmt.Sprintf("%s_%s", assetID, val.SanitizedBaseName)
 	destinationPath := filepath.Join(targetDir, safeFileName)
 
-	if err := c.SaveUploadedFile(file, destinationPath); err != nil {
+	if err := SaveSafeUploadedFile(file, destinationPath); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save artwork file", "details": err.Error()})
 		return
 	}
@@ -1414,12 +1579,12 @@ func HandleBatchArtworkUpload(c *gin.Context) {
 	}
 
 	// Security: limit to 100 files max per request
-	if len(files) > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Too many files. Maximum allowed per batch is 100"})
+	if len(files) > MaxBatchTotalFiles {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Too many files. Maximum allowed per batch is %d", MaxBatchTotalFiles)})
 		return
 	}
 
-	targetDir := "./uploads/artworks"
+	targetDir := filepath.Join(GetUploadStorageDir(), "artworks")
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create upload directory"})
 		return
@@ -1436,26 +1601,16 @@ func HandleBatchArtworkUpload(c *gin.Context) {
 	batchTimestamp := time.Now().UnixNano() / 1e6
 
 	for idx, file := range files {
-		// Security: Validate file extension
-		ext := strings.ToLower(filepath.Ext(file.Filename))
-		validExts := map[string]bool{
-			".pdf": true, ".ai": true, ".eps": true, ".jpg": true, ".jpeg": true,
-			".png": true, ".tiff": true, ".tif": true, ".psd": true, ".webp": true,
-		}
-		if !validExts[ext] {
-			continue // Skip dangerous or unallowed extensions
+		val, err := ValidateAndSniffUpload(file, AllowedArtworkExtensions, MaxArtworkFileSize)
+		if err != nil {
+			continue // Skip dangerous or unallowed files
 		}
 
-		// Security: file size limit (50MB per file)
-		if file.Size > 50*1024*1024 {
-			continue
-		}
-
-		assetID := fmt.Sprintf("batch-%d-%03d", batchTimestamp, idx+1)
-		safeName := fmt.Sprintf("%s_%s", assetID, filepath.Base(file.Filename))
+		assetID := fmt.Sprintf("batch-%d-%03d-%s", batchTimestamp, idx+1, GenerateServerAssetID("f")[len("f-"):])
+		safeName := fmt.Sprintf("%s_%s", assetID, val.SanitizedBaseName)
 		destinationPath := filepath.Join(targetDir, safeName)
 
-		if err := c.SaveUploadedFile(file, destinationPath); err != nil {
+		if err := SaveSafeUploadedFile(file, destinationPath); err != nil {
 			continue
 		}
 
@@ -1466,6 +1621,11 @@ func HandleBatchArtworkUpload(c *gin.Context) {
 			FileURL:  fileURL,
 			FileSize: file.Size,
 		})
+	}
+
+	if len(results) == 0 && len(files) > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "None of the uploaded files could be accepted (unsupported format, oversize, or magic-byte mismatch)"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1530,27 +1690,30 @@ func HandleBatchDownloadZip(c *gin.Context) {
 		cleanURL = strings.TrimPrefix(cleanURL, "http://127.0.0.1:8080")
 
 		var localPath string
+		rootDir := GetUploadStorageDir()
 		if strings.HasPrefix(cleanURL, "/uploads/") {
-			localPath = filepath.Clean("." + cleanURL)
+			subPath := strings.TrimPrefix(cleanURL, "/uploads/")
+			localPath = filepath.Clean(filepath.Join(rootDir, subPath))
 		} else if strings.HasPrefix(cleanURL, "/api/v1/orders/files/") {
 			subPath := strings.TrimPrefix(cleanURL, "/api/v1/orders/files/")
-			localPath = filepath.Clean(filepath.Join("./uploads", subPath))
+			localPath = filepath.Clean(filepath.Join(rootDir, subPath))
 		} else {
-			localPath = filepath.Clean(filepath.Join("./uploads/artworks", filepath.Base(cleanURL)))
+			localPath = filepath.Clean(filepath.Join(rootDir, "artworks", filepath.Base(cleanURL)))
 		}
 
-		rel, err := filepath.Rel(".", localPath)
-		if err != nil || (!strings.HasPrefix(rel, "uploads/") && !strings.HasPrefix(rel, "uploads\\") && rel != "uploads") {
-			continue
-		}
-
-		fileData, err := os.ReadFile(localPath)
+		canonicalPath, _, err := ResolveContainedPath(rootDir, localPath, false)
 		if err != nil {
-			fallbackPath := filepath.Join("./uploads/artworks", filepath.Base(cleanURL))
-			fileData, err = os.ReadFile(fallbackPath)
-			if err != nil {
+			fallbackPath := filepath.Join(rootDir, "artworks", filepath.Base(cleanURL))
+			var fbErr error
+			canonicalPath, _, fbErr = ResolveContainedPath(rootDir, fallbackPath, false)
+			if fbErr != nil {
 				continue
 			}
+		}
+
+		fileData, err := os.ReadFile(canonicalPath)
+		if err != nil {
+			continue
 		}
 
 		entryName := filepath.Base(localPath)
@@ -1715,89 +1878,129 @@ func HandleUpdateOrderItemStep(c *gin.Context) {
 }
 
 // HandleTrackOrderQuery handles GET /api/orders/track?q=:query or /api/v1/orders/track?q=:query
-func HandleTrackOrderQuery(c *gin.Context) {
-	q := strings.TrimSpace(c.Query("q"))
-	if q == "" {
-		q = strings.TrimSpace(c.Query("order"))
-	}
-	if q == "" {
-		q = strings.TrimSpace(c.Query("order_id"))
-	}
-	if q == "" {
-		q = strings.TrimSpace(c.Query("phone"))
-	}
-	if q == "" {
-		q = strings.TrimSpace(c.Param("order_no"))
+func lookupOrderTracking(token string) (*OrderTrackingDTO, error) {
+	if db.DB != nil {
+		var dto OrderTrackingDTO
+		err := db.DB.QueryRow(`
+			SELECT o.id, COALESCE(o.order_no, ''), COALESCE(o.order_number, ''), 
+			       COALESCE(o.status::text, ''), COALESCE(o.overall_status, ''),
+			       COALESCE(o.delivery_date, ''), COALESCE(o.customer_name, ''),
+			       o.created_at, o.updated_at,
+			       (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) as item_count
+			FROM orders o 
+			WHERE o.public_tracking_token = $1 AND o.public_tracking_token != '' LIMIT 1
+		`, token).Scan(
+			&dto.ID, &dto.OrderNo, &dto.OrderNumber,
+			&dto.Status, &dto.OverallStatus,
+			&dto.DeliveryDate, &dto.CustomerName,
+			&dto.CreatedAt, &dto.UpdatedAt,
+			&dto.ItemCount,
+		)
+		
+		if err != nil {
+			return nil, err
+		}
+		
+		if len(dto.CustomerName) > 3 {
+			dto.CustomerName = dto.CustomerName[:3] + "***"
+		}
+		
+		return &dto, nil
 	}
 
+	storeMutex.RLock()
+	defer storeMutex.RUnlock()
+	for _, o := range ordersStore {
+		if o.PublicTrackingToken == token && o.PublicTrackingToken != "" {
+			dto := toTrackingDTO(&o)
+			return &dto, nil
+		}
+	}
+
+	return nil, sql.ErrNoRows
+}
+
+func HandleTrackOrderQuery(c *gin.Context) {
+	q := c.Query("q")
+	// Strict requirement: empty token is not allowed
 	if q == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"found": false, "error": "Missing search query parameter 'q'"})
 		return
 	}
 
-	cleanQ := strings.TrimPrefix(q, "#")
-	cleanDigits := cleanPhoneNumber(cleanQ)
-
-	// 1. Search in PostgreSQL DB first (DB-first approach for cross-browser sync)
-	if db.DB != nil {
-		order, err := getOrderByIDFromDB(cleanQ)
-		if err == nil && order.ID != "" {
-			c.JSON(http.StatusOK, order)
-			return
-		}
-
-		// Search by customer phone number
-		phoneOrders, err := GetOrdersByCustomer("", cleanQ)
-		if err == nil && len(phoneOrders) > 0 {
-			// Return the latest order
-			c.JSON(http.StatusOK, phoneOrders[0])
-			return
-		}
+	dto, err := lookupOrderTracking(q)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"found": false, "error": "Order not found for search query: " + q, "message": "Order not found"})
+		return
+	} else if err != nil {
+		log.Printf("[DB] Public tracking query failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"found": false, "error": "Database error"})
+		return
 	}
-
-	// 2. In-memory store fallback (when DB is nil or order is only in local test store)
-	storeMutex.RLock()
-	for _, o := range ordersStore {
-		cleanOrderNo := strings.TrimPrefix(o.OrderNo, "#")
-		cleanOrderNumber := strings.TrimPrefix(o.OrderNumber, "#")
-		phoneDigits := cleanPhoneNumber(o.CustomerPhone)
-		isPhoneMatch := len(cleanDigits) >= 7 && len(phoneDigits) >= 7 && (phoneDigits == cleanDigits || strings.HasSuffix(phoneDigits, cleanDigits) || strings.HasSuffix(cleanDigits, phoneDigits))
-		if strings.EqualFold(o.OrderNo, q) || strings.EqualFold(o.OrderNumber, q) || strings.EqualFold(cleanOrderNo, cleanQ) || strings.EqualFold(cleanOrderNumber, cleanQ) || strings.EqualFold(o.ID, q) || strings.EqualFold(o.IdempotencyKey, q) || strings.EqualFold(o.TrackingCode, q) || strings.EqualFold(o.InternalTrackingCode, q) || isPhoneMatch {
-			storeMutex.RUnlock()
-			c.JSON(http.StatusOK, o)
-			return
-		}
-	}
-	storeMutex.RUnlock()
-
-	c.JSON(http.StatusNotFound, gin.H{"found": false, "error": "Order not found for search query: " + q, "message": "Order not found"})
+	
+	c.JSON(http.StatusOK, dto)
 }
 
-// HandleGetOrderByOrderNo fetches order details by order_no for shop floor tracker
+// OrderTrackingDTO is the limited view of an order exposed to the public tracking endpoint.
+// It deliberately omits customer PII (phone, email, address), financial data
+// (deposit, total, cost breakdown), internal notes, artwork file URLs, and internal codes.
+type OrderTrackingDTO struct {
+	ID           string      `json:"id"`
+	OrderNo      string      `json:"order_no"`
+	OrderNumber  string      `json:"order_number,omitempty"`
+	Status       OrderStatus `json:"status"`
+	OverallStatus OrderStatus `json:"overall_status,omitempty"`
+	CreatedAt    time.Time   `json:"created_at"`
+	UpdatedAt    time.Time   `json:"updated_at,omitempty"`
+	// Delivery date only (not the full delivery address)
+	DeliveryDate string `json:"delivery_date,omitempty"`
+	// Customer first name only — strips phone/email/address
+	CustomerName string `json:"customer_name,omitempty"`
+	// Item count so customer can verify their order
+	ItemCount int `json:"item_count,omitempty"`
+}
+
+func toTrackingDTO(o *Order) OrderTrackingDTO {
+	name := o.CustomerName
+	// Expose only first word to minimise PII exposure
+	if idx := strings.Index(name, " "); idx > 0 {
+		name = name[:idx]
+	}
+	return OrderTrackingDTO{
+		ID:            o.ID,
+		OrderNo:       o.OrderNo,
+		OrderNumber:   o.OrderNumber,
+		Status:        o.Status,
+		OverallStatus: o.OverallStatus,
+		CreatedAt:     o.CreatedAt,
+		UpdatedAt:     o.UpdatedAt,
+		DeliveryDate:  o.DeliveryDate,
+		CustomerName:  name,
+		ItemCount:     len(o.Items),
+	}
+}
+
+// HandleGetOrderByOrderNo fetches limited order tracking info by tracking token (param is historically named order_no) for public shop floor tracker.
+// Returns OrderTrackingDTO (not the full Order) to avoid leaking PII and financial data.
 func HandleGetOrderByOrderNo(c *gin.Context) {
-	orderNo := c.Param("order_no")
-
-	// 1. Check PostgreSQL DB first
-	if db.DB != nil {
-		order, err := getOrderByIDFromDB(orderNo)
-		if err == nil && order.ID != "" {
-			c.JSON(http.StatusOK, order)
-			return
-		}
+	token := c.Param("order_no")
+	
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing tracking token"})
+		return
 	}
 
-	// 2. Fallback to in-memory store
-	storeMutex.RLock()
-	for _, o := range ordersStore {
-		if o.OrderNo == orderNo || o.OrderNumber == orderNo || o.ID == orderNo {
-			storeMutex.RUnlock()
-			c.JSON(http.StatusOK, o)
-			return
-		}
+	dto, err := lookupOrderTracking(token)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+		return
+	} else if err != nil {
+		log.Printf("[DB] Public tracking query failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		return
 	}
-	storeMutex.RUnlock()
 
-	c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+	c.JSON(http.StatusOK, dto)
 }
 
 // HandleGetOrderById fetches order details by ID or OrderNumber
@@ -2662,4 +2865,72 @@ func UpdateOrderItemStepDirect(itemID string, step string, operatorID string, no
 		})
 	}
 	return nil
+}
+
+// HandleIssueTrackingToken allows an admin to generate and issue a new public tracking token for an order (especially legacy orders)
+func HandleIssueTrackingToken(c *gin.Context) {
+	orderID := c.Param("id")
+	if orderID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing order ID"})
+		return
+	}
+
+	publicToken, err := generateTrackingToken()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate security token", "details": err.Error()})
+		return
+	}
+
+	if db.DB != nil {
+		var existingToken sql.NullString
+		err := db.DB.QueryRow(`
+			UPDATE orders 
+			SET public_tracking_token = COALESCE(NULLIF(public_tracking_token, ''), $1),
+				updated_at = CASE WHEN NULLIF(public_tracking_token, '') IS NULL THEN NOW() ELSE updated_at END
+			WHERE id = $2
+			RETURNING public_tracking_token
+		`, publicToken, orderID).Scan(&existingToken)
+		
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+			return
+		} else if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to issue tracking token in DB", "details": err.Error()})
+			return
+		}
+		
+		if !existingToken.Valid || existingToken.String == "" {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database failed to return a valid tracking token"})
+			return
+		}
+		publicToken = existingToken.String
+	}
+
+	storeMutex.Lock()
+	defer storeMutex.Unlock()
+
+	var targetOrder *Order
+	for k := range ordersStore {
+		o := ordersStore[k]
+		if o.ID == orderID {
+			targetOrder = &o
+			break
+		}
+	}
+
+	if targetOrder != nil {
+		if db.DB == nil && targetOrder.PublicTrackingToken != "" {
+			publicToken = targetOrder.PublicTrackingToken
+		} else {
+			targetOrder.PublicTrackingToken = publicToken
+			targetOrder.UpdatedAt = time.Now()
+			ordersStore[targetOrder.ID] = *targetOrder
+		}
+	} else if db.DB == nil {
+		// If DB is nil and not in memory, fail
+		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found in memory store"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"public_tracking_token": publicToken, "message": "Tracking link issued successfully"})
 }

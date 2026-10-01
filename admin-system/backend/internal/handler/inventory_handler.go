@@ -30,16 +30,18 @@ func (h *InventoryHandler) RegisterRoutes(r *gin.Engine) {
 	r.POST("/api/v1/inventory/inbound/:id/cancel", inboundAuth, h.HandleCancelInbound)
 	r.DELETE("/api/v1/inventory/inbound/:id", inboundAuth, h.HandleDeleteInbound)
 
-	r.GET("/api/v1/materials", h.HandleGetMaterials)
-	r.GET("/api/v1/materials/:id", h.HandleGetMaterialByID)
+	// Materials read requires authentication — internal inventory data must not be public
+	inventoryReadAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction, auth.RolePrepress, auth.RoleFinance, auth.RoleSales)
+	r.GET("/api/v1/materials", inventoryReadAuth, h.HandleGetMaterials)
+	r.GET("/api/v1/materials/:id", inventoryReadAuth, h.HandleGetMaterialByID)
 	r.PUT("/api/v1/materials/:id", inboundAuth, h.HandleUpdateMaterialDirect)
 
-	r.GET("/api/v1/inventory/materials", h.HandleGetMaterials)
-	r.GET("/api/v1/inventory/materials/:id", h.HandleGetMaterialByID)
+	r.GET("/api/v1/inventory/materials", inventoryReadAuth, h.HandleGetMaterials)
+	r.GET("/api/v1/inventory/materials/:id", inventoryReadAuth, h.HandleGetMaterialByID)
 	r.PUT("/api/v1/inventory/materials/:id", inboundAuth, h.HandleUpdateMaterialDirect)
 
 	inkAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction)
-	r.GET("/api/v1/inventory/ink-bottles", h.HandleGetInkBottles)
+	r.GET("/api/v1/inventory/ink-bottles", inkAuth, h.HandleGetInkBottles)
 	r.POST("/api/v1/inventory/ink-bottles", inkAuth, h.HandleIntakeInkBottle)
 	r.POST("/api/v1/inventory/ink-bottles/deduct", inkAuth, h.HandleDeductInkBottle)
 }

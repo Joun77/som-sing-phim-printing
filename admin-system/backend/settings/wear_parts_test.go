@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -262,10 +263,17 @@ func TestWearPartsInputValidations(t *testing.T) {
 }
 
 func TestWearPartsDatabaseLifecycleAndWrongAsset(t *testing.T) {
-	connStr := "host=127.0.0.1 port=5432 user=postgres password=postgres dbname=somsing_db sslmode=disable"
+	rawDSN := os.Getenv("TEST_FIXTURE_DSN")
+	if rawDSN == "" {
+		t.Skip("explicit TEST_FIXTURE_DSN required; integration is not verified")
+	}
+	connStr, guardErr := db.ParseAndValidateDSN(rawDSN)
+	if guardErr != nil {
+		t.Fatalf("unsafe test database: %v", guardErr)
+	}
 	dbConn, err := sql.Open("postgres", connStr)
 	if err != nil || dbConn.Ping() != nil {
-		t.Skip("PostgreSQL not accessible, skipping live database lifecycle test")
+		t.Fatal("configured fixture database unavailable")
 		return
 	}
 	defer dbConn.Close()

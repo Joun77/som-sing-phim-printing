@@ -15,11 +15,11 @@ import {
   PRODUCTION_STEPS_CONFIG,
   type StepConfig
 } from './components/tracker';
-import { BookOpen, Clock, AlertCircle } from 'lucide-react';
+import { BookOpen, Clock, AlertCircle, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { getAuthHeaders } from '../../utils/authHeaders';
 
-export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initialOrderNo }) => {
+export const ShopFloorTracker: React.FC<{ initialOrderNo?: string; isPublicMode?: boolean }> = ({ initialOrderNo, isPublicMode = false }) => {
   const { orders = [], equipment = [], showToast, formatCurrency } = useApp();
 
   const pathOrderNo = typeof window !== 'undefined' && window.location.pathname.startsWith('/track')
@@ -54,115 +54,132 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
     setLoading(true);
     setError(null);
     try {
-      // 1. Check local AppContext orders first
-      const localOrd = orders.find(
-        (o: any) =>
-          o.id?.toLowerCase() === ordNo.toLowerCase() ||
-          (o as any).orderNumber?.toLowerCase() === ordNo.toLowerCase() ||
-          (o as any).orderNo?.toLowerCase() === ordNo.toLowerCase()
-      );
+      // 1. Check local AppContext orders first (only if not public mode)
+      if (!isPublicMode) {
+        const localOrd = orders.find(
+          (o: any) =>
+            o.id?.toLowerCase() === ordNo.toLowerCase() ||
+            (o as any).orderNumber?.toLowerCase() === ordNo.toLowerCase() ||
+            (o as any).orderNo?.toLowerCase() === ordNo.toLowerCase()
+        );
 
-      if (localOrd) {
-        const totalAmt = Number(localOrd.totalPriceCharged || (localOrd as any).totalAmount || (localOrd as any).total_amount_lak || 0);
-        const depositAmt = Number((localOrd as any).deposit_lak ?? (localOrd as any).depositAmount ?? (localOrd as any).deposit ?? 0);
-        const remainingAmt = Math.max(0, totalAmt - depositAmt);
-        const rawDeliveryDate = (localOrd as any).dueDate || (localOrd as any).deliveryDate || '';
+        if (localOrd) {
+          const totalAmt = Number(localOrd.totalPriceCharged || (localOrd as any).totalAmount || (localOrd as any).total_amount_lak || 0);
+          const depositAmt = Number((localOrd as any).deposit_lak ?? (localOrd as any).depositAmount ?? (localOrd as any).deposit ?? 0);
+          const remainingAmt = Math.max(0, totalAmt - depositAmt);
+          const rawDeliveryDate = (localOrd as any).dueDate || (localOrd as any).deliveryDate || '';
 
-        const mappedOrder: MasterOrder = {
-          id: localOrd.id,
-          order_no: (localOrd as any).orderNumber || (localOrd as any).orderNo || localOrd.id,
-            order_number: (localOrd as any).orderNumber || (localOrd as any).orderNo || localOrd.id,
-            customer_name: localOrd.customerName || (localOrd as any).customer_name || 'ລູກຄ້າທົ່ວໄປ',
-            customer_phone: (localOrd as any).customerPhone || (localOrd as any).customer_phone || '-',
-            total_amount_lak: totalAmt,
-            deposit_lak: depositAmt,
-            remaining_lak: remainingAmt,
-            overall_status: localOrd.status === 'Completed' ? 'COMPLETED' : 'IN_PRODUCTION',
-            delivery_date: rawDeliveryDate,
-            created_at: (localOrd as any).createdTime || new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            items: (localOrd.items && localOrd.items.length > 0)
-              ? (localOrd.items || []).map((it: any, idx: number) => {
-                  const rawBinding = it.bindingType || it.binding_type || it.bindingMethod || it.specs?.bindingMethod || it.specs?.binding_method || it.specs?.bindingType;
-                  const isNoBinding = !rawBinding || rawBinding === 'none' || rawBinding === 'NONE' || rawBinding === 'ບໍ່ມີ' || (it.pageCount === 1 && !rawBinding);
-                  const bindingType = isNoBinding ? 'NONE' : (rawBinding || 'NONE');
-                  const spineWidth = isNoBinding ? 0 : Number(it.spineWidth || it.spine_width_mm || it.specs?.spine_width_mm || 0);
+          const mappedOrder: MasterOrder = {
+            id: localOrd.id,
+            order_no: (localOrd as any).orderNumber || (localOrd as any).orderNo || localOrd.id,
+              order_number: (localOrd as any).orderNumber || (localOrd as any).orderNo || localOrd.id,
+              customer_name: localOrd.customerName || (localOrd as any).customer_name || 'ລູກຄ້າທົ່ວໄປ',
+              customer_phone: (localOrd as any).customerPhone || (localOrd as any).customer_phone || '-',
+              total_amount_lak: totalAmt,
+              deposit_lak: depositAmt,
+              remaining_lak: remainingAmt,
+              overall_status: localOrd.status === 'Completed' ? 'COMPLETED' : 'IN_PRODUCTION',
+              delivery_date: rawDeliveryDate,
+              created_at: (localOrd as any).createdTime || new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              items: (localOrd.items && localOrd.items.length > 0)
+                ? (localOrd.items || []).map((it: any, idx: number) => {
+                    const rawBinding = it.bindingType || it.binding_type || it.bindingMethod || it.specs?.bindingMethod || it.specs?.binding_method || it.specs?.bindingType;
+                    const isNoBinding = !rawBinding || rawBinding === 'none' || rawBinding === 'NONE' || rawBinding === 'ບໍ່ມີ' || (it.pageCount === 1 && !rawBinding);
+                    const bindingType = isNoBinding ? 'NONE' : (rawBinding || 'NONE');
+                    const spineWidth = isNoBinding ? 0 : Number(it.spineWidth || it.spine_width_mm || it.specs?.spine_width_mm || 0);
 
-                  const pressMachine = it.assigned_press_name || it.press_machine || it.printerName || it.printer_name || it.specs?.printerName || it.specs?.printer_name || (localOrd as any).printer_name || (localOrd as any).allocated_printer_name || (localOrd as any).printerName || '';
+                    const pressMachine = it.assigned_press_name || it.press_machine || it.printerName || it.printer_name || it.specs?.printerName || it.specs?.printer_name || (localOrd as any).printer_name || (localOrd as any).allocated_printer_name || (localOrd as any).printerName || '';
 
-                  const batchFiles = it.batch_files || it.specs?.batch_files || (localOrd as any).batch_files || (localOrd as any).artwork_batch || (localOrd as any).photos || (localOrd as any).gallery_urls || [];
-                  const galleryUrls = it.gallery_urls || it.specs?.gallery_urls || (localOrd as any).gallery_urls || [];
+                    const batchFiles = it.batch_files || it.specs?.batch_files || (localOrd as any).batch_files || (localOrd as any).artwork_batch || (localOrd as any).photos || (localOrd as any).gallery_urls || [];
+                    const galleryUrls = it.gallery_urls || it.specs?.gallery_urls || (localOrd as any).gallery_urls || [];
 
-                  return {
-                    id: it.id || `item-${idx + 1}`,
-                    order_id: localOrd.id,
-                    item_name: it.name || it.description || it.item_name || (localOrd as any).jobName || `ລາຍການທີ ${idx + 1}`,
-                    quantity: it.quantity || (localOrd as any).totalQuantity || 1,
-                    page_count: it.pageCount || it.page_count || 1,
-                    paper_size: it.paperSize || it.paper_size || 'A4',
-                    binding_type: bindingType,
-                    spine_width_mm: spineWidth,
-                    current_step: (it.currentStep || it.current_step || 'PENDING') as ProductionStep,
-                    avg_cov_c: Number(it.avg_cov_c || it.specs?.avgCoverageC || 0),
-                    avg_cov_m: Number(it.avg_cov_m || it.specs?.avgCoverageM || 0),
-                    avg_cov_y: Number(it.avg_cov_y || it.specs?.avgCoverageY || 0),
-                    avg_cov_k: Number(it.avg_cov_k || it.specs?.avgCoverageK || it.specs?.avgCoverage || 0),
-                    unit_cost_lak: it.unitCost || it.unit_cost_lak || (it.specs?.unitCost || 0),
-                    unit_price_lak: it.unitPrice || it.unit_price_lak || 0,
-                    total_price_lak: (it.unitPrice || it.unit_price_lak || 0) * (it.quantity || 1),
-                    cover_file_url: it.cover_file_url || it.artworkUrl || it.artwork_url || '',
-                    inner_file_url: it.inner_file_url || it.artworkUrl || it.artwork_url || '',
-                    assigned_press_name: pressMachine,
-                    assigned_cutter_name: it.assigned_cutter_name || it.cutter_machine,
-                    assigned_finish_name: it.assigned_finish_name || it.finish_machine,
-                    batch_files: batchFiles,
-                    gallery_urls: galleryUrls,
-                    specs: {
-                      ...(it.specs || it),
+                    return {
+                      id: it.id || `item-${idx + 1}`,
+                      order_id: localOrd.id,
+                      item_name: it.name || it.description || it.item_name || (localOrd as any).jobName || `ລາຍການທີ ${idx + 1}`,
+                      quantity: it.quantity || (localOrd as any).totalQuantity || 1,
+                      page_count: it.pageCount || it.page_count || 1,
+                      paper_size: it.paperSize || it.paper_size || 'A4',
+                      binding_type: bindingType,
+                      spine_width_mm: spineWidth,
+                      current_step: (it.currentStep || it.current_step || 'PENDING') as ProductionStep,
+                      avg_cov_c: Number(it.avg_cov_c || it.specs?.avgCoverageC || 0),
+                      avg_cov_m: Number(it.avg_cov_m || it.specs?.avgCoverageM || 0),
+                      avg_cov_y: Number(it.avg_cov_y || it.specs?.avgCoverageY || 0),
+                      avg_cov_k: Number(it.avg_cov_k || it.specs?.avgCoverageK || it.specs?.avgCoverage || 0),
+                      unit_cost_lak: it.unitCost || it.unit_cost_lak || (it.specs?.unitCost || 0),
+                      unit_price_lak: it.unitPrice || it.unit_price_lak || 0,
+                      total_price_lak: (it.unitPrice || it.unit_price_lak || 0) * (it.quantity || 1),
+                      cover_file_url: it.cover_file_url || it.artworkUrl || it.artwork_url || '',
+                      inner_file_url: it.inner_file_url || it.artworkUrl || it.artwork_url || '',
+                      assigned_press_name: pressMachine,
+                      assigned_cutter_name: it.assigned_cutter_name || it.cutter_machine,
+                      assigned_finish_name: it.assigned_finish_name || it.finish_machine,
                       batch_files: batchFiles,
                       gallery_urls: galleryUrls,
-                      printerName: pressMachine,
-                      printer_name: pressMachine,
-                      productionWorkflow: (localOrd as any).productionWorkflow || (localOrd as any).workflow || null
+                      specs: {
+                        ...(it.specs || it),
+                        batch_files: batchFiles,
+                        gallery_urls: galleryUrls,
+                        printerName: pressMachine,
+                        printer_name: pressMachine,
+                        productionWorkflow: (localOrd as any).productionWorkflow || (localOrd as any).workflow || null
+                      }
+                    };
+                  })
+                : [
+                    {
+                      id: 'item-1',
+                      order_id: localOrd.id,
+                      item_name: (localOrd as any).jobName || (localOrd as any).customJobName || 'ງານພິມມາດຕະຖານ',
+                      quantity: (localOrd as any).totalQuantity || (localOrd as any).quantity || 1,
+                      page_count: 1,
+                      paper_size: 'A4',
+                      binding_type: 'NONE',
+                      spine_width_mm: 0,
+                      current_step: 'PENDING',
+                      avg_cov_c: 0,
+                      avg_cov_m: 0,
+                      avg_cov_y: 0,
+                      avg_cov_k: 0,
+                      unit_cost_lak: 0,
+                      unit_price_lak: totalAmt,
+                      total_price_lak: totalAmt,
+                      cover_file_url: (localOrd as any).artworkUrl || (localOrd as any).artwork_url || '',
+                      inner_file_url: (localOrd as any).artworkUrl || (localOrd as any).artwork_url || '',
+                      assigned_press_name: (localOrd as any).printer_name || (localOrd as any).allocated_printer_name || '',
+                      batch_files: (localOrd as any).batch_files || (localOrd as any).artwork_batch || (localOrd as any).photos || (localOrd as any).gallery_urls || [],
+                      gallery_urls: (localOrd as any).gallery_urls || [],
+                      specs: localOrd
                     }
-                  };
-                })
-              : [
-                  {
-                    id: 'item-1',
-                    order_id: localOrd.id,
-                    item_name: (localOrd as any).jobName || (localOrd as any).customJobName || 'ງານພິມມາດຕະຖານ',
-                    quantity: (localOrd as any).totalQuantity || (localOrd as any).quantity || 1,
-                    page_count: 1,
-                    paper_size: 'A4',
-                    binding_type: 'NONE',
-                    spine_width_mm: 0,
-                    current_step: 'PENDING',
-                    avg_cov_c: 0,
-                    avg_cov_m: 0,
-                    avg_cov_y: 0,
-                    avg_cov_k: 0,
-                    unit_cost_lak: 0,
-                    unit_price_lak: totalAmt,
-                    total_price_lak: totalAmt,
-                    cover_file_url: (localOrd as any).artworkUrl || (localOrd as any).artwork_url || '',
-                    inner_file_url: (localOrd as any).artworkUrl || (localOrd as any).artwork_url || '',
-                    assigned_press_name: (localOrd as any).printer_name || (localOrd as any).allocated_printer_name || '',
-                    batch_files: (localOrd as any).batch_files || (localOrd as any).artwork_batch || (localOrd as any).photos || (localOrd as any).gallery_urls || [],
-                    gallery_urls: (localOrd as any).gallery_urls || [],
-                    specs: localOrd
-                  }
-                ],
-          productionWorkflow: (localOrd as any).productionWorkflow || (localOrd as any).workflow || null
-        };
-        setOrder(mappedOrder);
-        setLoading(false);
-        return;
+                  ],
+            productionWorkflow: (localOrd as any).productionWorkflow || (localOrd as any).workflow || null
+          };
+          setOrder(mappedOrder);
+          setLoading(false);
+          return;
+        }
       }
 
       // 2. Fallback to API
-      const res = await fetch(`/api/v1/orders/track/${ordNo}`);
-      if (!res.ok) throw new Error('Order not found');
+      let res;
+      if (isPublicMode) {
+        // Use public tracking endpoint (expects exact tracking token)
+        res = await fetch(`/api/v1/orders/track/${encodeURIComponent(ordNo)}`);
+      } else {
+        // Use authenticated admin endpoint (expects Order ID or OrderNo)
+        res = await fetch(`/api/v1/orders/${encodeURIComponent(ordNo)}`, {
+          headers: getAuthHeaders(),
+        });
+      }
+      
+      if (!res.ok) {
+        if (res.status === 404) {
+          throw new Error('ບໍ່ພົບຂໍ້ມູນອໍເດີ (Invalid tracking link or order not found)');
+        }
+        throw new Error('Failed to fetch order');
+      }
       const data = await res.json();
       setOrder(data);
     } catch (err: any) {
@@ -329,7 +346,54 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string }> = ({ initia
           )}
 
           {/* Detailed Content */}
-          {!loading && order && (
+          {!loading && order && isPublicMode && (
+            <div className="space-y-6 animate-fade-in">
+              <section className="bg-white border border-sky-100 p-8 rounded-3xl shadow-xs space-y-5">
+                <div className="flex justify-between items-center border-b border-sky-50 pb-4">
+                  <h3 className="text-xl font-black text-slate-800">
+                    ລາຍລະອຽດອໍເດີ (Customer View)
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedOrderNo('')}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-2xl text-xs font-black transition cursor-pointer shadow-xs"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>ກັບຄືນ (Back)</span>
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8 text-sm font-medium text-slate-600">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Order No</span>
+                    <span className="text-lg text-slate-900 font-mono font-black">{(order as any).orderNo || (order as any).order_number || order.id || '-'}</span>
+                  </div>
+                  
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Customer</span>
+                    <span className="text-lg text-slate-900 font-black">{(order as any).customerName || (order as any).customer_name || 'ລູກຄ້າທົ່ວໄປ'}</span>
+                  </div>
+                  
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Status</span>
+                    <span className="inline-flex max-w-fit items-center px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl font-bold font-mono text-sm">
+                      {(order.status || (order as any).overall_status || 'IN_PRODUCTION')}
+                    </span>
+                  </div>
+                  
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Items / Delivery Date</span>
+                    <span className="text-base text-slate-700 font-semibold">
+                      {(order as any).itemCount || (order.items?.length) || 1} ລາຍການ • 
+                      ກຳນົດສົ່ງ: {(order as any).deliveryDate || (order as any).delivery_date || '-'}
+                    </span>
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {!loading && order && !isPublicMode && (
             <div className="space-y-6 animate-fade-in">
               {/* Top Header Card */}
               <TrackerHeader

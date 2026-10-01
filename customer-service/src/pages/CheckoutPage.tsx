@@ -6,7 +6,7 @@ import { BANK_ACCOUNT, COURIERS, FREE_SHIPPING_THRESHOLD } from '../data/shippin
 import { buildBcelOnePayPayload } from '../utils/promptpay.ts'
 import { formatMoney } from '../utils/currency.ts'
 import { generateOrderId } from '../utils/orderId.ts'
-import { submitOrder, verifySlipPayment, fetchCouriers, fetchPaymentMethods, fetchLaoLocations } from '../api/client.ts'
+import { submitOrder, fetchCouriers, fetchPaymentMethods, fetchLaoLocations } from '../api/client.ts'
 import ProductArt from '../components/ProductArt.tsx'
 import {
   CheckIcon,
@@ -276,29 +276,6 @@ export default function CheckoutPage() {
     [amountToPay, activeBankAccount]
   )
 
-  const triggerVerification = async (previewUrl: string) => {
-    setIsVerifyingSlip(true)
-    setSlipVerifyError(null)
-    setSlipVerified(false)
-    try {
-      const res = await verifySlipPayment({
-        order_id: 'PREVIEW-' + Date.now(),
-        qr_payload: qrPayload,
-        slip_image: previewUrl,
-        amount: amountToPay,
-      })
-      if (res.status === 'success' || res.new_status === 'PAID_PREPRESS') {
-        setSlipVerified(true)
-        setSlipTransRef(res.trans_ref || 'OK-' + Date.now())
-      }
-    } catch (err: any) {
-      console.warn('Slip verification notice:', err)
-      setSlipVerifyError(null)
-      setSlipVerified(true)
-    } finally {
-      setIsVerifyingSlip(false)
-    }
-  }
 
   const onFile = (file: File | null) => {
     if (!file) return
@@ -308,7 +285,7 @@ export default function CheckoutPage() {
     reader.onload = (e) => {
       const dataUrl = e.target?.result as string
       setSlipPreview(dataUrl)
-      triggerVerification(dataUrl)
+      setSlipVerified(false)
     }
     reader.readAsDataURL(file)
   }
@@ -474,12 +451,12 @@ export default function CheckoutPage() {
       total_amount_lak: currency === 'LAK' ? totalDisplay : Math.round(totalDisplay * 630.5),
       currency: 'LAK',
       payment_slip_url: slipPreview,
-      status: 'PAID_PREPRESS',
+      status: 'PENDING_SLIP_CHECK',
       created_at: new Date().toISOString(),
       timeline: [
         {
-          status: 'PAID_PREPRESS',
-          label: language === 'en' ? 'Slip Verified (PAID_PREPRESS)' : 'ກວດສອບສະລິບສຳເລັດ (PAID_PREPRESS)',
+          status: 'PENDING_SLIP_CHECK',
+          label: language === 'en' ? 'Payment slip awaiting staff review' : 'ລໍຖ້າພະນັກງານກວດສອບສະລິບ',
           at: Date.now(),
         },
       ],
@@ -1144,7 +1121,7 @@ export default function CheckoutPage() {
                       </span>
                     ) : (
                       <span className="badge badge--navy">
-                        <CheckIcon size={14} /> ແນບສະລິບແລ້ວ
+                        <CheckIcon size={14} /> ແນບສະລິບແລ້ວ • ລໍຖ້າກວດສອບ
                       </span>
                     )}
                     <button
@@ -1207,7 +1184,7 @@ export default function CheckoutPage() {
                             return c
                           })
                         }
-                        triggerVerification(dataUrl)
+                        setSlipVerified(false)
                       }
                     }}
                   >
@@ -1225,7 +1202,7 @@ export default function CheckoutPage() {
                     <span className="checkbox-box" aria-hidden="true">
                       <CheckIcon size={14} />
                     </span>
-                    <span>ຂ້າພະເຈົ້າຍືນຢັນວ່າໄດ້ຊຳລະເງິນຖືກຕ້ອງຕາມຍອດ ແລະ ແນບສະລິບແລ້ວ</span>
+                    <span>ຂ້າພະເຈົ້າຍືນຢັນວ່າໄດ້ຊຳລະເງິນຖືກຕ້ອງຕາມຍອດ ແລະ ແນບສະລິບແລ້ວ • ລໍຖ້າກວດສອບ</span>
                   </label>
                 </div>
               )}

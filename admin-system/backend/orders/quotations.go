@@ -390,28 +390,35 @@ func HandleConvertQuotationToOrder(c *gin.Context) {
 		convertedArtworkFileName = filepath.Base(convertedArtworkURL)
 	}
 
+	trackingToken, randErr := generateTrackingToken()
+	if randErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate tracking token"})
+		return
+	}
+
 	convertedOrder := Order{
-		ID:              newOrderID,
-		OrderNo:         orderNo,
-		OrderNumber:     orderNo,
-		CustomerName:    q.CustomerName,
-		CustomerPhone:   q.CustomerPhone,
-		CustomerAddress: q.CustomerAddress,
-		TotalAmountLAK:  q.TotalSellingPrice,
-		TotalPrice:      q.TotalSellingPrice,
-		TotalCost:       q.TotalCost,
-		GoogleDriveLink: convertedArtworkURL,
-		ArtworkURL:      convertedArtworkURL,
-		ArtworkFileName: convertedArtworkFileName,
-		ProofURL:        q.DigitalProofURL,
-		DepositAmount:   0,
-		DepositLAK:      0,
-		RemainingLAK:    q.TotalSellingPrice,
-		Status:          StatusWaitingDeposit,
-		OverallStatus:   StatusWaitingDeposit,
-		Items:           itemsList,
-		CreatedAt:       time.Now(),
-		UpdatedAt:       time.Now(),
+		ID:                  newOrderID,
+		OrderNo:             orderNo,
+		OrderNumber:         orderNo,
+		CustomerName:        q.CustomerName,
+		CustomerPhone:       q.CustomerPhone,
+		CustomerAddress:     q.CustomerAddress,
+		TotalAmountLAK:      q.TotalSellingPrice,
+		TotalPrice:          q.TotalSellingPrice,
+		TotalCost:           q.TotalCost,
+		GoogleDriveLink:     convertedArtworkURL,
+		ArtworkURL:          convertedArtworkURL,
+		ArtworkFileName:     convertedArtworkFileName,
+		ProofURL:            q.DigitalProofURL,
+		DepositAmount:       0,
+		DepositLAK:          0,
+		RemainingLAK:        q.TotalSellingPrice,
+		Status:              StatusWaitingDeposit,
+		OverallStatus:       StatusWaitingDeposit,
+		Items:               itemsList,
+		PublicTrackingToken: trackingToken,
+		CreatedAt:           time.Now(),
+		UpdatedAt:           time.Now(),
 	}
 
 	if db.DB != nil {

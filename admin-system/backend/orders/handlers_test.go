@@ -95,9 +95,13 @@ func TestMasterDetailOrderAndTrackerFlow(t *testing.T) {
 
 	firstItemID := createdOrder.Items[0].ID
 
-	// 2. Fetch Order by OrderNo for shop floor tracker
+	// 2. Fetch Order by tracking token for shop floor tracker
 	wTrack := httptest.NewRecorder()
-	reqTrack, _ := http.NewRequest("GET", "/api/v1/orders/track/ORD-TEST-001", nil)
+	// Ensure the token exists
+	if createdOrder.PublicTrackingToken == "" {
+		t.Fatalf("Expected PublicTrackingToken to be generated on order creation")
+	}
+	reqTrack, _ := http.NewRequest("GET", "/api/v1/orders/track/"+createdOrder.PublicTrackingToken, nil)
 	router.ServeHTTP(wTrack, reqTrack)
 
 	if wTrack.Code != http.StatusOK {
@@ -472,28 +476,37 @@ func TestTrackOrderQueryFlow(t *testing.T) {
 		t.Fatalf("Failed to create order for tracking test: %s", wCreate.Body.String())
 	}
 
-	// 1. Query by order_no via ?q=
-	wQ := httptest.NewRecorder()
-	reqQ, _ := http.NewRequest("GET", "/api/v1/orders/track?q=SSP-2026-9999", nil)
-	router.ServeHTTP(wQ, reqQ)
-	if wQ.Code != http.StatusOK {
-		t.Errorf("Expected 200 OK searching by order number, got %d", wQ.Code)
+	var createdOrder Order
+	if err := json.Unmarshal(wCreate.Body.Bytes(), &createdOrder); err != nil {
+		t.Fatalf("Failed to decode created order: %v", err)
+	}
+	trackingToken := createdOrder.PublicTrackingToken
+	if trackingToken == "" {
+		t.Fatalf("Expected generated tracking token, got empty")
 	}
 
-	// 1b. Query with '#' prefix (e.g. #SSP-2026-9999)
-	wHash := httptest.NewRecorder()
-	reqHash, _ := http.NewRequest("GET", "/api/v1/orders/track?q=%23SSP-2026-9999", nil)
-	router.ServeHTTP(wHash, reqHash)
-	if wHash.Code != http.StatusOK {
-		t.Errorf("Expected 200 OK searching with hash prefix, got %d", wHash.Code)
-	}
-
-	// 2. Query by phone number via ?q=
+	// 1. Verify tracking by phone number FAILS (enumeration protection)
 	wPhone := httptest.NewRecorder()
 	reqPhone, _ := http.NewRequest("GET", "/api/v1/orders/track?q=020-7788-9900", nil)
 	router.ServeHTTP(wPhone, reqPhone)
-	if wPhone.Code != http.StatusOK {
-		t.Errorf("Expected 200 OK searching by customer phone, got %d", wPhone.Code)
+	if wPhone.Code != http.StatusNotFound {
+		t.Errorf("Expected 404 Not Found searching by customer phone (enumeration denied), got %d", wPhone.Code)
+	}
+
+	// 2. Verify tracking by order_no FAILS (enumeration protection)
+	wQ := httptest.NewRecorder()
+	reqQ, _ := http.NewRequest("GET", "/api/v1/orders/track?q=SSP-2026-9999", nil)
+	router.ServeHTTP(wQ, reqQ)
+	if wQ.Code != http.StatusNotFound {
+		t.Errorf("Expected 404 Not Found searching by order number, got %d", wQ.Code)
+	}
+
+	// 3. Query with the correct tracking token MUST SUCCEED
+	wToken := httptest.NewRecorder()
+	reqToken, _ := http.NewRequest("GET", "/api/v1/orders/track?q="+trackingToken, nil)
+	router.ServeHTTP(wToken, reqToken)
+	if wToken.Code != http.StatusOK {
+		t.Errorf("Expected 200 OK searching with exact tracking token, got %d", wToken.Code)
 	}
 
 	// 3. Query non-existing order
@@ -647,7 +660,7 @@ func TestDigitalProofDispatchAndCustomerActionFlow(t *testing.T) {
 
 	// Verify order is now FILE_CONFIRMED and ready for production
 	wFinal := httptest.NewRecorder()
-	reqFinal, _ := http.NewRequest("GET", "/api/v1/orders/track?q="+createdOrder.ID, nil)
+	reqFinal, _ := http.NewRequest("GET", "/api/v1/orders/track?q="+createdOrder.PublicTrackingToken, nil)
 	router.ServeHTTP(wFinal, reqFinal)
 	var finalOrder Order
 	_ = json.Unmarshal(wFinal.Body.Bytes(), &finalOrder)
@@ -708,13 +721,25 @@ func TestQuotationSaveAndConvertToOrderFlow(t *testing.T) {
 		t.Errorf("Unexpected conversion response: %+v", convertResp)
 	}
 
-	// 3. Verify Order is trackable by customer phone
+	// 3. Get the order details to find its tracking token from ordersStore
+	storeMutex.RLock()
+	fetchedOrder, exists := ordersStore[convertResp.OrderID]
+	storeMutex.RUnlock()
+	
+	if !exists {
+		t.Fatalf("Failed to fetch converted order from ordersStore")
+	}
+	if fetchedOrder.PublicTrackingToken == "" {
+		t.Fatalf("Converted order missing tracking token")
+	}
+
+	// 4. Verify Order is trackable by its token
 	wTrack := httptest.NewRecorder()
-	reqTrack, _ := http.NewRequest("GET", "/api/v1/orders/track?q=020-9988-7766", nil)
+	reqTrack, _ := http.NewRequest("GET", "/api/v1/orders/track?q="+fetchedOrder.PublicTrackingToken, nil)
 	router.ServeHTTP(wTrack, reqTrack)
 
 	if wTrack.Code != http.StatusOK {
-		t.Fatalf("Expected converted order to be found by customer phone, got %d: %s", wTrack.Code, wTrack.Body.String())
+		t.Fatalf("Expected converted order to be found by its tracking token, got %d: %s", wTrack.Code, wTrack.Body.String())
 	}
 }
 
@@ -858,19 +883,28 @@ func TestCustomerTrackingEndToEnd(t *testing.T) {
 		reqTrack, _ := http.NewRequest("GET", "/api/v1/orders/track?q="+url.QueryEscape(q), nil)
 		router.ServeHTTP(wTrack, reqTrack)
 
-		if wTrack.Code != http.StatusOK {
-			t.Errorf("Tracking query '%s' failed with status %d: %s", q, wTrack.Code, wTrack.Body.String())
-			continue
+		if wTrack.Code != http.StatusNotFound {
+			t.Errorf("Tracking query '%s' expected 404 (denied enumeration), got %d: %s", q, wTrack.Code, wTrack.Body.String())
 		}
+	}
 
-		var tracked Order
-		if err := json.Unmarshal(wTrack.Body.Bytes(), &tracked); err != nil {
-			t.Errorf("Tracking query '%s' returned invalid JSON: %v", q, err)
-			continue
-		}
+	// 3. Track by the correct tracking token
+	if created.PublicTrackingToken == "" {
+		t.Fatalf("Expected tracking token on newly created order")
+	}
+	wTrackToken := httptest.NewRecorder()
+	reqTrackToken, _ := http.NewRequest("GET", "/api/v1/orders/track?q="+url.QueryEscape(created.PublicTrackingToken), nil)
+	router.ServeHTTP(wTrackToken, reqTrackToken)
 
-		if tracked.OrderNo != "SSP-82115" && tracked.OrderNumber != "SSP-82115" {
-			t.Errorf("Tracking query '%s' returned wrong order: %s", q, tracked.OrderNo)
-		}
+	if wTrackToken.Code != http.StatusOK {
+		t.Errorf("Tracking with exact token failed with status %d: %s", wTrackToken.Code, wTrackToken.Body.String())
+	}
+	var tracked Order
+	if err := json.Unmarshal(wTrackToken.Body.Bytes(), &tracked); err != nil {
+		t.Errorf("Tracking token query returned invalid JSON: %v", err)
+	}
+
+	if tracked.OrderNo != "SSP-82115" && tracked.OrderNumber != "SSP-82115" {
+		t.Errorf("Tracking token query returned wrong order: %s", tracked.OrderNo)
 	}
 }

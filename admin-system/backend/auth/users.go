@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -70,29 +72,37 @@ func EnsureAdminUsersTable() {
 		var count int
 		_ = db.DB.QueryRow("SELECT COUNT(*) FROM admin_users").Scan(&count)
 		if count == 0 {
-			seedAccounts := []struct {
-				id, username, pass, name, email, role string
-			}{
-				{"usr_admin_001", "admin", "admin123", "Som-Sing Printing Owner (Super Admin)", "owner@somsingphim.la", "admin"},
-				{"usr_mgr_001", "manager", "manager123", "Som Sing General Manager", "manager@somsingphim.la", "manager"},
-				{"usr_sales_001", "sales", "sales123", "Som Sing Sales Representative", "sales@somsingphim.la", "sales"},
-				{"usr_prod_001", "production", "production123", "Som Sing Lead Printer", "production@somsingphim.la", "production"},
-				{"usr_fin_001", "finance", "finance123", "Som Sing Lead Accountant", "finance@somsingphim.la", "finance"},
-				{"usr_prep_001", "prepress", "prepress123", "Som Sing Prepress Specialist", "prepress@somsingphim.la", "prepress"},
-			}
-
-			for _, sa := range seedAccounts {
-				hashed, err := bcrypt.GenerateFromPassword([]byte(sa.pass), bcrypt.DefaultCost)
-				if err != nil {
-					continue
+			env := strings.ToLower(strings.TrimSpace(os.Getenv("ENVIRONMENT")))
+			isExplicitlyDev := env == "development" || env == "dev" || env == "test" || env == ""
+			if !isExplicitlyDev {
+				// In production/staging, do NOT seed default accounts with well-known passwords.
+				// Admins must create accounts manually via the admin API after first deploy.
+				log.Printf("[AUTH INIT] Production environment detected (%s): skipping default account seeding. Create admin accounts via the API.", env)
+			} else {
+				seedAccounts := []struct {
+					id, username, pass, name, email, role string
+				}{
+					{"usr_admin_001", "admin", "admin123", "Som-Sing Printing Owner (Super Admin)", "owner@somsingphim.la", "admin"},
+					{"usr_mgr_001", "manager", "manager123", "Som Sing General Manager", "manager@somsingphim.la", "manager"},
+					{"usr_sales_001", "sales", "sales123", "Som Sing Sales Representative", "sales@somsingphim.la", "sales"},
+					{"usr_prod_001", "production", "production123", "Som Sing Lead Printer", "production@somsingphim.la", "production"},
+					{"usr_fin_001", "finance", "finance123", "Som Sing Lead Accountant", "finance@somsingphim.la", "finance"},
+					{"usr_prep_001", "prepress", "prepress123", "Som Sing Prepress Specialist", "prepress@somsingphim.la", "prepress"},
 				}
-				_, _ = db.DB.Exec(`
-					INSERT INTO admin_users (id, username, password_hash, fullname, email, role, permissions, is_active, created_at, updated_at)
-					VALUES ($1, $2, $3, $4, $5, $6, '[]'::jsonb, true, NOW(), NOW())
-					ON CONFLICT (username) DO NOTHING
-				`, sa.id, sa.username, string(hashed), sa.name, sa.email, sa.role)
+
+				for _, sa := range seedAccounts {
+					hashed, err := bcrypt.GenerateFromPassword([]byte(sa.pass), bcrypt.DefaultCost)
+					if err != nil {
+						continue
+					}
+					_, _ = db.DB.Exec(`
+						INSERT INTO admin_users (id, username, password_hash, fullname, email, role, permissions, is_active, created_at, updated_at)
+						VALUES ($1, $2, $3, $4, $5, $6, '[]'::jsonb, true, NOW(), NOW())
+						ON CONFLICT (username) DO NOTHING
+					`, sa.id, sa.username, string(hashed), sa.name, sa.email, sa.role)
+				}
+				log.Println("[AUTH INIT] Seeded default staff admin accounts into database (dev/test mode only).")
 			}
-			log.Println("[AUTH INIT] Seeded default staff admin accounts into database successfully.")
 		}
 	})
 }

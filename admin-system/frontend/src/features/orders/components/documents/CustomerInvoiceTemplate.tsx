@@ -208,9 +208,9 @@ export const CustomerInvoiceTemplate: React.FC<CustomerInvoiceTemplateProps> = (
                 : (it.jobWidth && it.jobHeight ? `${it.jobWidth}×${it.jobHeight}mm (${it.paperSize || 'Custom'})` : (it.paperSize || 'A4'));
               
               const paperText = it.paperSku || it.paperId || it.paperType || it.paper_name || (isBatchPhoto ? 'Photo Glossy 230g' : 'Art Card 260g');
-              const totalPages = it.pagesPerBook || it.page_count || it.pages || 1;
-              const bindingDesc = it.bindingMethod ? getBindingLabel(it.bindingMethod) : (it.binding ? getBindingLabel(it.binding) : null);
-              const coatingDesc = it.coating ? getCoatingLabel(it.coating) : null;
+              const totalPages = it.pagesPerBook || it.page_count || it.pages || it.specs?.pages || 1;
+              const bindingDesc = it.bindingMethod ? getBindingLabel(it.bindingMethod) : (it.binding ? getBindingLabel(it.binding) : (it.specs?.binding ? getBindingLabel(it.specs.binding) : null));
+              const coatingDesc = it.coating ? getCoatingLabel(it.coating) : (it.specs?.lamination ? getCoatingLabel(it.specs.lamination) : (it.specs?.coating ? getCoatingLabel(it.specs.coating) : null));
               const impNote = it.impositionSummary || (cutsPerSheet && cutsPerSheet > 1 ? `ຕັດ ${cutsPerSheet} ຮູບ/ແຜ່ນໃຫຍ່` : null);
 
               return (

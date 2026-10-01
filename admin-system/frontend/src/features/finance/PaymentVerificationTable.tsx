@@ -19,6 +19,8 @@ export const PaymentVerificationTable: React.FC = () => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [slips, setSlips] = useState<PendingSlipOrder[]>([]);
   const [loading, setLoading] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [error, setError] = useState('');
 
   const fetchPendingSlips = async () => {
     setLoading(true);
@@ -63,24 +65,33 @@ export const PaymentVerificationTable: React.FC = () => {
   }, [orders]);
 
   const handleApprove = async (orderId: string) => {
+    if (reviewing) return;
+    setReviewing(true);
+    setError('');
     try {
-      await fetch('/api/v1/finance/verify-slip', {
+      const response = await fetch('/api/v1/finance/verify-slip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ order_id: orderId, status: 'APPROVED' }),
       });
+      if (!response.ok) throw new Error('ບໍ່ສາມາດບັນທຶກຜົນກວດສອບໄດ້');
       setSlips((prev) => prev.filter((s) => s.id !== orderId));
       setSelectedSlip(null);
       if (refreshData) refreshData();
     } catch (err) {
-      console.error('Approve failed:', err);
+      setError(err instanceof Error ? err.message : 'Payment review failed');
+    } finally {
+      setReviewing(false);
     }
   };
 
   const handleReject = async () => {
     if (!selectedSlip) return;
+    if (reviewing) return;
+    setReviewing(true);
+    setError('');
     try {
-      await fetch('/api/v1/finance/verify-slip', {
+      const response = await fetch('/api/v1/finance/verify-slip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -89,13 +100,16 @@ export const PaymentVerificationTable: React.FC = () => {
           rejection_reason: rejectReason || 'ສລິບບໍ່ຖືກຕ້ອງ ຫຼື ຍອດເງິນບໍ່ຄົບ',
         }),
       });
+      if (!response.ok) throw new Error('ບໍ່ສາມາດບັນທຶກຜົນກວດສອບໄດ້');
       setSlips((prev) => prev.filter((s) => s.id !== selectedSlip.id));
       setShowRejectModal(false);
       setSelectedSlip(null);
       setRejectReason('');
       if (refreshData) refreshData();
     } catch (err) {
-      console.error('Reject failed:', err);
+      setError(err instanceof Error ? err.message : 'Payment review failed');
+    } finally {
+      setReviewing(false);
     }
   };
 
@@ -126,6 +140,7 @@ export const PaymentVerificationTable: React.FC = () => {
         </div>
       </div>
 
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {slips.length === 0 ? (
         <div className="text-center py-12 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 space-y-2">
           <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
@@ -166,6 +181,7 @@ export const PaymentVerificationTable: React.FC = () => {
                   <td className="p-4">
                     <div className="flex items-center justify-center gap-2">
                       <button
+                        disabled={reviewing}
                         onClick={() => handleApprove(item.id)}
                         className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/20 active:scale-95 transition flex items-center gap-1 cursor-pointer"
                       >
@@ -233,7 +249,8 @@ export const PaymentVerificationTable: React.FC = () => {
                 ປະຕິເສດສລິບນີ້
               </button>
               <button
-                onClick={() => handleApprove(selectedSlip.id)}
+                disabled={reviewing}
+                        onClick={() => handleApprove(selectedSlip.id)}
                 className="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-sm font-black shadow-lg shadow-emerald-600/25 active:scale-95 transition cursor-pointer"
               >
                 ອະນຸມັດເງິນເຂົ້າ (Approve Payment)
@@ -267,6 +284,7 @@ export const PaymentVerificationTable: React.FC = () => {
                 ຍົກເລີກ
               </button>
               <button
+                disabled={reviewing}
                 onClick={handleReject}
                 className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-sm font-black shadow-lg shadow-red-600/25"
               >

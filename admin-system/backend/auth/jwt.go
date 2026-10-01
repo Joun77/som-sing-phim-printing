@@ -12,9 +12,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// ValidateJWTSecretOnStartup checks if JWT_SECRET is present.
+// ValidateJWTSecretOnStartup checks if JWT_SECRET is present and strong enough.
 // Only environments explicitly set to "development" or "test" may omit JWT_SECRET;
-// everything else (including blank) requires it to fail closed.
+// everything else (including blank ENVIRONMENT) requires it and rejects weak secrets.
 func ValidateJWTSecretOnStartup() error {
 	secret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
 	env := strings.ToLower(strings.TrimSpace(os.Getenv("ENVIRONMENT")))
@@ -22,8 +22,12 @@ func ValidateJWTSecretOnStartup() error {
 	if !isExplicitlyDev && secret == "" {
 		return fmt.Errorf("FATAL: JWT_SECRET environment variable is missing or empty. Set ENVIRONMENT=development to bypass this check in local dev only")
 	}
+	// Weak secret is also rejected outside dev/test — prevent misconfiguration like 12-char secrets in production.
+	if !isExplicitlyDev && len(secret) < 32 {
+		return fmt.Errorf("FATAL: JWT_SECRET must be at least 32 characters long in production (got %d). Use a long random secret", len(secret))
+	}
 	if secret != "" && len(secret) < 32 {
-		log.Printf("[SECURITY WARNING] JWT_SECRET is shorter than 32 characters; use a longer secret in production")
+		log.Printf("[SECURITY WARNING] JWT_SECRET is shorter than 32 characters (%d); use a longer secret in production", len(secret))
 	}
 	return nil
 }
@@ -160,7 +164,8 @@ func HandleLogin(c *gin.Context) {
 }
 
 // HandleRefreshToken silently issues a fresh access token without forcing user logout.
-// Empty, missing, or unsigned tokens are rejected — no mock/preview fallback.
+// Requires a validly SIGNED refresh token with the correct issuer ("som-sing-phim-erp-refresh").
+// Expired tokens are rejected — access tokens are also rejected (wrong issuer).
 func HandleRefreshToken(c *gin.Context) {
 	var req RefreshRequest
 	_ = c.ShouldBindJSON(&req)
@@ -176,20 +181,18 @@ func HandleRefreshToken(c *gin.Context) {
 		return
 	}
 
+	// Parse WITHOUT tolerance for expiry — expired refresh tokens must be rejected.
 	claims := &OwnerClaims{}
-	_, err := jwt.ParseWithClaims(rawToken, claims, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
+	token, err := jwt.ParseWithClaims(rawToken, claims, func(t *jwt.Token) (interface{}, error) {
 		return GetJWTSecretKey(), nil
-	})
+	}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired(), jwt.WithIssuer("som-sing-phim-erp-refresh"))
 
-	if err != nil && !strings.Contains(err.Error(), "expired") {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
+	if err != nil || !token.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid, expired, or incorrect issuer refresh token"})
 		return
 	}
 
-	// Issue fresh token
+	// Issue fresh access token
 	newExpiration := time.Now().Add(24 * time.Hour)
 	newClaims := &OwnerClaims{
 		Username:   claims.Username,
@@ -224,6 +227,7 @@ func HandleRefreshToken(c *gin.Context) {
 
 // RequireAuth middleware verifies JWT token and optionally checks role permissions.
 // Unsigned mock/preview tokens are no longer accepted; all tokens must be properly HMAC-signed.
+// Refresh tokens (issuer == "som-sing-phim-erp-refresh") are rejected — only access tokens pass.
 func RequireAuth(allowedRoles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -237,14 +241,11 @@ func RequireAuth(allowedRoles ...string) gin.HandlerFunc {
 
 		claims := &OwnerClaims{}
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-			}
 			return GetJWTSecretKey(), nil
-		})
+		}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired(), jwt.WithIssuer("som-sing-phim-erp"))
 
 		if err != nil || !token.Valid {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid, expired, or incorrect issuer token"})
 			c.Abort()
 			return
 		}
@@ -272,7 +273,7 @@ func CheckRole(userRole string, allowedRoles []string) bool {
 		return true
 	}
 	userRoleLower := strings.ToLower(strings.TrimSpace(userRole))
-	// Super admin / Owner always has system-wide access
+	// Super admin / Owner always has system-wide access (canonical: admin, owner, super_admin)
 	if userRoleLower == "admin" || userRoleLower == "owner" || userRoleLower == "super_admin" {
 		return true
 	}

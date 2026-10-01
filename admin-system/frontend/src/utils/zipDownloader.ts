@@ -6,15 +6,25 @@ export interface DownloadablePhoto {
   size?: number;
 }
 
+/** Result returned by downloadPhotosAsZip for truthful incomplete-download presentation. */
+export interface ZipDownloadResult {
+  totalCount: number;
+  successCount: number;
+  failedCount: number;
+  failedFiles: string[];
+}
+
 /**
  * Downloads a batch of photos or files as a single compressed .zip file.
  * Safely handles data URLs, remote URLs, and blob URLs.
+ * Returns a result object so callers can present truthful partial-failure UI
+ * instead of silently claiming a complete download.
  */
 export async function downloadPhotosAsZip(
   photos: DownloadablePhoto[],
   zipFilename: string,
   onProgress?: (progressPercent: number) => void
-): Promise<void> {
+): Promise<ZipDownloadResult> {
   if (!photos || photos.length === 0) {
     throw new Error('No photos provided to download');
   }
@@ -25,6 +35,7 @@ export async function downloadPhotosAsZip(
 
   let loadedCount = 0;
   const total = photos.length;
+  const failedFiles: string[] = [];
 
   await Promise.all(
     photos.map(async (photo, idx) => {
@@ -51,13 +62,19 @@ export async function downloadPhotosAsZip(
           if (!response.ok) {
             throw new Error(`HTTP ${response.status} fetching ${photo.url}`);
           }
+          const contentType = (response.headers && typeof response.headers.get === 'function' ? response.headers.get('content-type') : '') || '';
+          if (contentType.toLowerCase().includes('text/html')) {
+            throw new Error(`Server returned HTML instead of media binary (SPA fallback)`);
+          }
           const blob = await response.blob();
           folder.file(fileName, blob);
         }
       } catch (err) {
+        const failedName = photo.name || `photo_${idx + 1}`;
+        failedFiles.push(failedName);
         console.warn(`Failed to package photo #${idx + 1} (${photo.name}):`, err);
         // Add fallback placeholder text file so the user knows what failed
-        folder.file(`${photo.name || `photo_${idx + 1}`}_error_note.txt`, `Could not package remote image: ${photo.url}`);
+        folder.file(`${failedName}_error_note.txt`, `Could not package remote image: ${photo.url}`);
       } finally {
         loadedCount++;
         if (onProgress) {
@@ -89,6 +106,13 @@ export async function downloadPhotosAsZip(
   setTimeout(() => {
     URL.revokeObjectURL(blobUrl);
   }, 1000);
+
+  return {
+    totalCount: total,
+    successCount: total - failedFiles.length,
+    failedCount: failedFiles.length,
+    failedFiles,
+  };
 }
 
 /**
