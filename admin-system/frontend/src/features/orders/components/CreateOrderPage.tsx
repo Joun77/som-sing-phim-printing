@@ -616,7 +616,7 @@ export default function CreateOrderPage({
           estimated_hours: 0.5,
           overhead_percent: Number(it.overheadPercent !== undefined ? it.overheadPercent : 15) / 100.0,
           target_margin_percent: (Number(it.targetMarginPercent) || 35) / 100.0,
-          cover_file_url: (it as any).artworkUrl || (it as any).fileUrl || artworkLink || '',
+          cover_file_url: (it as any).coverArtworkUrl || (it as any).cover_file_url || (it as any).artworkUrl || (it as any).fileUrl || artworkLink || '',
           inner_file_url: (it as any).artworkUrl || (it as any).fileUrl || artworkLink || '',
           artwork_url: (it as any).artworkUrl || (it as any).fileUrl || artworkLink || '',
           artwork_file_name: it.fileName || ((it as any).artworkUrl ? (it as any).artworkUrl.split('/').pop()?.split('?')[0] : ''),
@@ -732,7 +732,7 @@ export default function CreateOrderPage({
         artworkFileName: it.fileName || firstItemFileName,
         artworkFileSize: (it as any).fileSize || firstItemFileSize,
         inner_file_url: (it as any).artworkUrl || firstItemArtwork,
-        cover_file_url: (it as any).artworkUrl || firstItemArtwork
+        cover_file_url: (it as any).coverArtworkUrl || (it as any).cover_file_url || (it as any).artworkUrl || firstItemArtwork
       }));
       const selectedCourierObj = couriers?.find(c => c.id === selectedCourierId);
       const deliveryMethodLabel = deliveryMethod === 'Pickup' 

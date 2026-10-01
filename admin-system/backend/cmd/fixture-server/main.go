@@ -195,6 +195,37 @@ func BuildFixtureEngine(tempDir string, port string, shutdownCh chan struct{}) *
 	router.GET("/api/v1/orders/files/*filepath", serveProtectedWithRestrictedCheck)
 	router.HEAD("/api/v1/orders/files/*filepath", serveProtectedWithRestrictedCheck)
 
+	// Explicitly disposable persistence fixture storage
+	var fixtureOrders = make(map[string]map[string]interface{})
+
+	router.POST("/api/orders", func(c *gin.Context) {
+		c.Request.URL.Path = "/api/v1/orders"
+		router.HandleContext(c)
+	})
+	router.POST("/api/v1/orders", func(c *gin.Context) {
+		var payload map[string]interface{}
+		if err := c.ShouldBindJSON(&payload); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		id, _ := payload["id"].(string)
+		if id == "" {
+			id = fmt.Sprintf("ord-fixture-%d", len(fixtureOrders)+1)
+		}
+		payload["id"] = id
+		fixtureOrders[id] = payload
+		c.JSON(http.StatusOK, payload)
+	})
+
+	router.GET("/api/v1/orders/:id", func(c *gin.Context) {
+		id := c.Param("id")
+		if order, exists := fixtureOrders[id]; exists {
+			c.JSON(http.StatusOK, order)
+		} else {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+		}
+	})
+
 	// Production upload routes
 	artworkAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales, auth.RolePrepress, auth.RoleProduction)
 	router.POST("/api/upload/artwork", artworkAuth, orders.HandleArtworkUpload)

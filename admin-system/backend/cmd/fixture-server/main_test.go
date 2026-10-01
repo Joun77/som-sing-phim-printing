@@ -327,6 +327,44 @@ func TestActualMainBinaryStartupAndTeardown(t *testing.T) {
 	}
 	_ = docResp.Body.Close()
 
+	// 7.5. End-to-End Upload Integration (A8 Requirement)
+	uploadPDFBytes := makeValidPDF("Integration Test Actual PDF Upload")
+	uploadBody := &bytes.Buffer{}
+	writer := multipart.NewWriter(uploadBody)
+	part, _ := writer.CreateFormFile("file", "integration_test.pdf")
+	_, _ = part.Write(uploadPDFBytes)
+	_ = writer.Close()
+
+	uploadReq, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:%s/api/upload/artwork", testPort), uploadBody)
+	uploadReq.Header.Set("Content-Type", writer.FormDataContentType())
+	uploadReq.Header.Set("Authorization", "Bearer "+tokenData.Token)
+	uploadResp, err := client.Do(uploadReq)
+	if err != nil || uploadResp.StatusCode != http.StatusOK {
+		t.Fatalf("failed to upload artwork: %v", err)
+	}
+	var uploadResult map[string]interface{}
+	_ = json.NewDecoder(uploadResp.Body).Decode(&uploadResult)
+	_ = uploadResp.Body.Close()
+
+	assetURL, ok := uploadResult["url"].(string)
+	if !ok || assetURL == "" {
+		t.Fatalf("upload response missing valid URL: %v", uploadResult)
+	}
+
+	downloadURL := fmt.Sprintf("http://127.0.0.1:%s%s", testPort, assetURL)
+	downloadReq, _ := http.NewRequest("GET", downloadURL, nil)
+	downloadReq.Header.Set("Authorization", "Bearer "+tokenData.Token)
+	downloadResp, err := client.Do(downloadReq)
+	if err != nil || downloadResp.StatusCode != http.StatusOK {
+		t.Fatalf("failed to download uploaded artwork: %v", err)
+	}
+	downloadedBytes, _ := io.ReadAll(downloadResp.Body)
+	_ = downloadResp.Body.Close()
+
+	if !bytes.Equal(uploadPDFBytes, downloadedBytes) {
+		t.Fatalf("Downloaded bytes do not match original upload! original=%d, downloaded=%d", len(uploadPDFBytes), len(downloadedBytes))
+	}
+
 	// 8. Request graceful teardown
 	teardownResp, err := http.Post(teardownURL, "application/json", nil)
 	if err != nil || teardownResp.StatusCode != http.StatusOK {

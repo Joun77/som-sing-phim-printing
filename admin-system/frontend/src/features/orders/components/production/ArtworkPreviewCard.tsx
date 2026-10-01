@@ -168,8 +168,25 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
         .filter((item) => Boolean(item.canonicalUrl));
     }
 
+    const hasCover = firstItem.cover_file_url || firstItem.coverFileUrl;
+    const hasInner = firstItem.inner_file_url || firstItem.innerFileUrl || firstItem.artwork_url || firstItem.artworkUrl;
+    
+    // If it's a split cover/inner book
+    if (hasCover && hasInner && hasCover !== hasInner) {
+      return [
+        {
+          name: firstItem.cover_file_name || firstItem.coverFileName || `cover_${orderIdDisplay}.pdf`,
+          canonicalUrl: hasCover,
+        },
+        {
+          name: firstItem.inner_file_name || firstItem.innerFileName || firstItem.artwork_file_name || `inner_${orderIdDisplay}.pdf`,
+          canonicalUrl: hasInner,
+        }
+      ];
+    }
+
     // If single artwork or thumbnail exists
-    const singleUrl = artworkThumbnailUrl || driveLink || firstItem.artwork_url || firstItem.artworkUrl || order?.artwork_url;
+    const singleUrl = artworkThumbnailUrl || driveLink || hasInner || order?.artwork_url;
     if (singleUrl) {
       return [{
         name: firstItem.artwork_file_name || firstItem.artworkFileName || order?.artwork_file_name || `artwork_${orderIdDisplay}.jpg`,

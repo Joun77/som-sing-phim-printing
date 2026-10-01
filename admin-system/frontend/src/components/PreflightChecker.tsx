@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   UploadCloud,
   FileText,
@@ -32,6 +32,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { apiFetch, resolveBackendUrl, isTrustedOrigin } from "../api/client";
 import { useApp } from '../store/AppContext';
 import type { PreflightResult, BatchPreflightResult } from '../features/orders/types';
 import type { InventoryItem } from '../types';
@@ -75,11 +76,46 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
+
   
   // 1. Paper Size Selector States
   const [targetPaperSize, setTargetPaperSize] = useState<string>('A4');
   const [customWidthMM, setCustomWidthMM] = useState<number>(210);
   const [customHeightMM, setCustomHeightMM] = useState<number>(297);
+
+  // Each attempt gets a generation, including a retry with the very same File object.
+  const generations = useRef({ single: 0, cover: 0, inner: 0 });
+  const localPreviews = useRef({ single: '', cover: '', inner: '' });
+  const [splitErrors, setSplitErrors] = useState({ cover: '', inner: '' });
+  const releasePreview = (slot: 'single' | 'cover' | 'inner') => {
+    if (localPreviews.current[slot]) URL.revokeObjectURL(localPreviews.current[slot]);
+    localPreviews.current[slot] = '';
+  };
+  const createPreview = (slot: 'single' | 'cover' | 'inner', file: File) => {
+    releasePreview(slot);
+    const url = URL.createObjectURL(file);
+    localPreviews.current[slot] = url;
+    return url;
+  };
+  useEffect(() => () => {
+    for (const slot of ['single', 'cover', 'inner'] as const) {
+      generations.current[slot]++;
+      releasePreview(slot);
+    }
+  }, []);
+
+  const uploadOriginal = async (file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    const response = await apiFetch<Response>('/api/v1/upload/artwork', { method: 'POST', body });
+    if (!response.ok) throw new Error(`Upload failed with status ${response.status}`);
+    const metadata: { fileUrl?: string; file_url?: string; url?: string } = await response.json();
+    const url = metadata.fileUrl || metadata.file_url || metadata.url;
+    if (!url || !isTrustedOrigin(resolveBackendUrl(url)) || !new URL(resolveBackendUrl(url)).pathname.startsWith('/uploads/artworks/')) {
+      throw new Error('Upload succeeded but no valid original artwork URL returned from server');
+    }
+    return url;
+  };
 
   // 1.1 Inventory Paper Substrate Picker & Defaults
   const { inventory, formatCurrency } = useApp();
@@ -118,6 +154,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
         }
       })
       .catch(() => {});
+
   }, [papers.length]);
 
   // Set default paper in DB
@@ -339,6 +376,13 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   };
 
   const resetSplit = () => {
+    generations.current.cover++;
+    generations.current.inner++;
+    releasePreview('cover');
+    releasePreview('inner');
+    setIsCoverScanning(false);
+    setIsInnerScanning(false);
+    setSplitErrors({ cover: '', inner: '' });
     setCoverFile(null);
     setCoverPreviewUrl(null);
     setCoverResult(null);
@@ -348,12 +392,17 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   };
 
   const handleCoverFileProcess = async (file: File) => {
+    const generation = ++generations.current.cover;
+    setSplitErrors(prev => ({ ...prev, cover: '' }));
     setCoverFile(file);
+    setCoverResult(null); // Clear previous result immediately
+    setErrorMessage(null); // Clear errors
     setIsCoverScanning(true);
     const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
     if (ext !== '.pdf') {
-      try { setCoverPreviewUrl(URL.createObjectURL(file)); } catch (e) {}
+      try { setCoverPreviewUrl(createPreview('cover', file)); } catch (e) {}
     } else {
+      releasePreview('cover');
       setCoverPreviewUrl(null);
     }
     try {
@@ -364,21 +413,35 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       } else {
         res = await analyzePDFClient(file, opts);
       }
+      if (generations.current.cover !== generation) return;
+      const uploadedUrl = await uploadOriginal(file);
+      if (generations.current.cover !== generation) return;
+      res = { ...res, preview_thumbnail_url: res.file_url, file_url: uploadedUrl, file_size: file.size };
+
       setCoverResult(res);
-    } catch (e) {
-      console.error('Cover preflight err:', e);
+    } catch (e: any) {
+      if (generations.current.cover === generation) {
+        setSplitErrors(prev => ({ ...prev, cover: e.message || 'Cover analysis/upload failed' }));
+      }
     } finally {
-      setIsCoverScanning(false);
+      if (generations.current.cover === generation) {
+        setIsCoverScanning(false);
+      }
     }
   };
 
   const handleInnerFileProcess = async (file: File) => {
+    const generation = ++generations.current.inner;
+    setSplitErrors(prev => ({ ...prev, inner: '' }));
     setInnerFile(file);
+    setInnerResult(null); // Clear previous result immediately
+    setErrorMessage(null); // Clear errors
     setIsInnerScanning(true);
     const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
     if (ext !== '.pdf') {
-      try { setInnerPreviewUrl(URL.createObjectURL(file)); } catch (e) {}
+      try { setInnerPreviewUrl(createPreview('inner', file)); } catch (e) {}
     } else {
+      releasePreview('inner');
       setInnerPreviewUrl(null);
     }
     try {
@@ -389,16 +452,25 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       } else {
         res = await analyzePDFClient(file, opts);
       }
+      if (generations.current.inner !== generation) return;
+      const uploadedUrl = await uploadOriginal(file);
+      if (generations.current.inner !== generation) return;
+      res = { ...res, preview_thumbnail_url: res.file_url, file_url: uploadedUrl, file_size: file.size };
+
       setInnerResult(res);
-    } catch (e) {
-      console.error('Inner preflight err:', e);
+    } catch (e: any) {
+      if (generations.current.inner === generation) {
+        setSplitErrors(prev => ({ ...prev, inner: e.message || 'Inner analysis/upload failed' }));
+      }
     } finally {
-      setIsInnerScanning(false);
+      if (generations.current.inner === generation) {
+        setIsInnerScanning(false);
+      }
     }
   };
 
   const handleSendSplitToQuotationAction = () => {
-    if (!coverResult && !innerResult) return;
+    if (!coverResult?.file_url || !innerResult?.file_url || isCoverScanning || isInnerScanning || splitErrors.cover || splitErrors.inner) return;
     const coverP = coverResult?.total_pages || 4;
     const innerP = innerResult?.total_pages || 1;
     const totalP = coverP + innerP;
@@ -416,8 +488,10 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
 
     const exportPayload: PreflightResult = {
       file_name: innerResult?.file_name ? `ປຶ້ມແຍກປົກ (${innerResult.file_name})` : 'ປຶ້ມແຍກປົກ & ເນື້ອໃນ',
-      file_url: innerPreviewUrl || innerResult?.file_url || '',
-      cover_file_url: coverPreviewUrl || coverResult?.file_url || '',
+      file_size: innerResult.file_size,
+      preview_thumbnail_url: innerResult.preview_thumbnail_url,
+      file_url: innerResult.file_url, // Prioritize REAL persisted URL over local preview
+      cover_file_url: coverResult.file_url, // Prioritize REAL persisted URL over local preview
       cover_file_name: coverFile?.name || coverResult?.file_name || 'Cover_Art',
       total_pages: totalP,
       color_pages_count: (coverResult?.color_pages_count || 0) + (innerResult?.color_pages_count || 0),
@@ -576,6 +650,10 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
     overrideW?: number,
     overrideH?: number
   ) => {
+    const generation = ++generations.current.single;
+    setResult(null);
+    setIsAnalyzing(false);
+    setReportSavedStatus(null);
     const ext = selectedFile.name.slice(selectedFile.name.lastIndexOf('.')).toLowerCase();
     if (!SUPPORTED_EXTENSIONS.includes(ext)) {
       setErrorMessage(
@@ -587,16 +665,14 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
     }
 
     setFile(selectedFile);
+    setResult(null); // Clear previous result immediately
     setIsAnalyzing(true);
     setErrorMessage(null);
     setProgress({ current: 0, total: 1, pct: 0 });
 
     const isImg = isImageFile(selectedFile.name);
 
-    if (!previewUrl || selectedFile !== file) {
-      const objectUrl = URL.createObjectURL(selectedFile);
-      setPreviewUrl(objectUrl);
-    }
+    setPreviewUrl(createPreview('single', selectedFile));
 
     const currentSize = overrideSize || targetPaperSize;
     const currentW = overrideW || customWidthMM;
@@ -610,7 +686,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
         targetWidthMM: currentW,
         targetHeightMM: currentH,
         onProgress: (current: number, total: number, pct: number) => {
-          setProgress({ current, total, pct });
+          if (generations.current.single === generation) setProgress({ current, total, pct });
         }
       };
 
@@ -620,21 +696,30 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
         analysisResult = await analyzePDFClient(selectedFile, options);
       }
 
+      if (generations.current.single !== generation) return;
+      const uploadedUrl = await uploadOriginal(selectedFile);
+      if (generations.current.single !== generation) return;
+      analysisResult = { ...analysisResult, preview_thumbnail_url: analysisResult.file_url, file_url: uploadedUrl, file_size: selectedFile.size };
+
       setResult(analysisResult);
-      handleSavePreflightReport(analysisResult);
+      handleSavePreflightReport(analysisResult, generation);
     } catch (err: any) {
-      console.error('Preflight analysis error:', err);
-      setErrorMessage(
-        currentLang === 'lo'
-          ? `ການກວດສອບໄຟລ໌ຜິດພາດ: ${err.message || 'ບໍ່ສາມາດອ່ານຄ່າສີໄດ້'}`
-          : `Preflight analysis error: ${err.message || 'Unable to extract colors'}`
-      );
+      if (generations.current.single === generation) {
+        console.error('Preflight analysis error:', err);
+        setErrorMessage(
+          currentLang === 'lo'
+            ? `ການກວດສອບໄຟລ໌ຜິດພາດ: ${err.message || 'ບໍ່ສາມາດອ່ານຄ່າສີໄດ້'}`
+            : `Preflight analysis error: ${err.message || 'Unable to extract colors'}`
+        );
+      }
     } finally {
-      setIsAnalyzing(false);
+      if (generations.current.single === generation) {
+        setIsAnalyzing(false);
+      }
     }
   };
 
-  const handleSavePreflightReport = async (resToSave?: PreflightResult) => {
+  const handleSavePreflightReport = async (resToSave?: PreflightResult, generation = generations.current.single) => {
     const reportData = resToSave || result;
     if (!reportData) return;
 
@@ -666,13 +751,13 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
         body: JSON.stringify(payload),
       });
 
-      if (res.ok) {
+      if (res.ok && generations.current.single === generation) {
         setReportSavedStatus(`Saved #${targetOrderId}`);
       }
     } catch {
       // ignore
     } finally {
-      setIsSavingReport(false);
+      if (generations.current.single === generation) setIsSavingReport(false);
     }
   };
 
@@ -685,6 +770,11 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   };
 
   const resetAll = () => {
+    generations.current.single++;
+    releasePreview('single');
+    setIsAnalyzing(false);
+    setIsSavingReport(false);
+    setProgress({ current: 0, total: 0, pct: 0 });
     setFile(null);
     setPreviewUrl(null);
     setCmykSimulatedUrl(null);
@@ -786,7 +876,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   };
 
   const handleSendToQuotationAction = () => {
-    if (!result) return;
+    if (!result?.file_url || isAnalyzing || errorMessage) return;
 
     const parentDims = getParentSheetDims();
     const autoCuts = calculateBestFitImposition(parentDims.w, parentDims.h, customWidthMM, customHeightMM);
@@ -916,6 +1006,17 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
         </div>
       </div>
 
+      {(errorMessage || splitErrors.cover || splitErrors.inner) && (
+        <div role="alert" className="p-4 bg-rose-50 text-rose-800 rounded-xl space-y-2">
+          {errorMessage && <p>{errorMessage}</p>}
+          {splitErrors.cover && <p>Cover: {splitErrors.cover}</p>}
+          {splitErrors.inner && <p>Inner: {splitErrors.inner}</p>}
+          {preflightMode === 'single' && file && errorMessage && <button type="button" onClick={() => handleFileUpload(file)}>Retry upload</button>}
+          {preflightMode === 'split' && coverFile && splitErrors.cover && <button type="button" onClick={() => handleCoverFileProcess(coverFile)}>Retry cover upload</button>}
+          {preflightMode === 'split' && innerFile && splitErrors.inner && <button type="button" onClick={() => handleInnerFileProcess(innerFile)}>Retry inner upload</button>}
+        </div>
+      )}
+
       {/* 2. MAIN LAYOUT SWITCH: SPLIT COVER VS BATCH PHOTOS VS SINGLE DOC */}
       {preflightMode === 'split' ? (
         <div className="space-y-6 animate-fade-in">
@@ -930,10 +1031,11 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
               </span>
             </div>
 
-            {(coverResult || innerResult) && (
+            {onSendToQuotation && (
               <button
                 type="button"
                 onClick={handleSendSplitToQuotationAction}
+                disabled={!coverResult?.file_url || !innerResult?.file_url || isCoverScanning || isInnerScanning || !!splitErrors.cover || !!splitErrors.inner}
                 className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black transition flex items-center gap-2 shadow-sm cursor-pointer active:scale-95"
               >
                 <span>{currentLang === 'lo' ? 'ສົ່ງຂໍ້ມູນແຍກປົກເຂົ້າໃບສະເໜີລາຄາ' : 'Send Split to Quotation'}</span>
@@ -1016,7 +1118,12 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
 
                       <button
                         type="button"
+                        aria-label="Remove cover file"
                         onClick={() => {
+                          generations.current.cover++;
+                          releasePreview('cover');
+                          setIsCoverScanning(false);
+                          setSplitErrors(prev => ({ ...prev, cover: '' }));
                           setCoverFile(null);
                           setCoverPreviewUrl(null);
                           setCoverResult(null);
@@ -1208,7 +1315,12 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
 
                       <button
                         type="button"
+                        aria-label="Remove inner file"
                         onClick={() => {
+                          generations.current.inner++;
+                          releasePreview('inner');
+                          setIsInnerScanning(false);
+                          setSplitErrors(prev => ({ ...prev, inner: '' }));
                           setInnerFile(null);
                           setInnerPreviewUrl(null);
                           setInnerResult(null);
@@ -2553,6 +2665,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                     <button
                       type="button"
                       onClick={handleSendToQuotationAction}
+                      disabled={!result?.file_url || isAnalyzing || !!errorMessage}
                       className="w-full py-3.5 bg-accent-sky hover:bg-sky-600 text-white rounded-2xl font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-accent-sky/20 transition active:scale-95 cursor-pointer"
                     >
                       <span>ສົ່ງຄ່າໄປໃຊ້ໃນໃບສະເໜີລາຄາ (Send to Quotation)</span>

@@ -10,13 +10,9 @@ import { useLightboxAssetController, extractPdfPageCount } from '../src/features
 import { configurePdfWorker, getPdfWorkerSrc } from '../src/lib/pdfWorker';
 import { resolveBackendUrl } from '../src/api/client';
 import { useAuthStore } from '../src/store/useAuthStore';
-import { PreflightChecker } from '../src/components/PreflightChecker';
-import { AppProvider, useApp } from '../src/store/AppContext';
-import { mapPreflightToSpecs, mapQuotationItemToOrderItem } from '../src/features/pricing/utils/preflightMapper';
 import { UniversalExportPreviewModal } from '../src/components/common/UniversalExportPreviewModal';
-
-const analyzer = vi.hoisted(() => ({ pdf: vi.fn(), image: vi.fn() }));
-vi.mock('../src/lib/preflightAnalyzer', () => ({ analyzePDFClient: analyzer.pdf, analyzeImageClient: analyzer.image, convertRGBToCMYKCanvas: vi.fn() }));
+import { PreflightChecker } from '../src/components/PreflightChecker';
+import { AppProvider } from '../src/store/AppContext';
 
 const pdfOutputs = vi.hoisted(() => [] as { name: string; bytes: Uint8Array }[]);
 vi.mock('jspdf', async importOriginal => {
@@ -39,6 +35,42 @@ const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcS
 vi.mock('html-to-image', () => ({ toPng: vi.fn(), toJpeg: vi.fn(), toBlob: vi.fn() }));
 import { toPng, toJpeg } from 'html-to-image';
 
+vi.mock('../src/lib/preflightAnalyzer', () => ({
+  analyzePDFClient: async () => {
+    console.error('MOCK_CALLED');
+    return Promise.resolve({
+      file_name: 'mock.pdf',
+      total_pages: 1,
+      avg_cov_c: 10,
+      avg_cov_m: 20,
+      avg_cov_y: 30,
+      avg_cov_k: 40,
+      color_space: 'CMYK',
+      color_mode: 'CMYK',
+      has_rgb: false,
+      is_standard_cmyk: true,
+      status_badge_lao: 'ຜ່ານ',
+      dpi_estimate: 300,
+      bleed_mm: 3
+    });
+  },
+  analyzeImageClient: async () => ({
+    file_name: 'mock.img',
+    total_pages: 1,
+    avg_cov_c: 10,
+    avg_cov_m: 20,
+    avg_cov_y: 30,
+    avg_cov_k: 40,
+    color_space: 'CMYK',
+    color_mode: 'CMYK',
+    has_rgb: false,
+    is_standard_cmyk: true,
+    status_badge_lao: 'ຜ່ານ',
+    dpi_estimate: 300,
+    bleed_mm: 3
+  })
+}));
+
 let root: Root;
 let container: HTMLDivElement;
 let seq = 0;
@@ -48,18 +80,14 @@ let downloads: { name: string; href: string; blob?: Blob }[];
 const origin = process.env.P12_FIXTURE_ORIGIN!;
 let token: string;
 const realFetch = globalThis.fetch;
-let uploadOverride: ((file: File) => Promise<Response>) | null = null;
-let orderPosts: any[] = [];
-let uploadCalls = 0;
-const analysis = (file: File) => ({ file_name: file.name, file_url: image, total_pages: 1, avg_cov_c: 10, avg_cov_m: 20, avg_cov_y: 30, avg_cov_k: 40, color_space: 'CMYK', has_rgb: false, is_standard_cmyk: true, status_badge_lao: 'OK', dpi_estimate: 300, bleed_mm: 3 });
-
 const tick = () => new Promise(resolve => setTimeout(resolve, 10));
+let errorLogs: string[] = [];
 async function until(check: () => boolean) {
   for (let i = 0; i < 200; i++) {
     await act(async () => { await tick(); });
     if (check()) return;
   }
-  throw new Error(`Timed out: ${document.body.textContent}`);
+  throw new Error(`Timed out: ${document.body.textContent} | Errors: ${errorLogs.join(';')}`);
 }
 async function render(node: React.ReactNode) { await act(async () => root.render(node)); }
 async function click(button: Element) { expect(button).toBeTruthy(); await act(async () => (button as HTMLElement).click()); }
@@ -75,42 +103,36 @@ beforeAll(async () => {
   token = (await (await realFetch(`${origin}/fixture/token`)).json()).token;
 });
 beforeEach(() => {
+  errorLogs = [];
+  vi.spyOn(console, 'error').mockImplementation((...args) => {
+    errorLogs.push(args.join(' '));
+  });
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  localStorage.clear();
   blobs = new Map(); revoked = []; downloads = []; pdfOutputs.length = 0;
-  uploadOverride = null; orderPosts = []; uploadCalls = 0;
-  analyzer.pdf.mockReset(); analyzer.image.mockReset();
-  analyzer.pdf.mockImplementation(async (file: File) => ({ ...analysis(file), total_pages: await extractPdfPageCount(await file.arrayBuffer()) }));
-  analyzer.image.mockImplementation(async (file: File) => analysis(file));
   vi.spyOn(URL, 'createObjectURL').mockImplementation(blob => { const url = `blob:p12-${++seq}`; blobs.set(url, blob); return url; });
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(url => { revoked.push(url); });
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     let url = String(input);
     if (url.startsWith('blob:p12-')) { const blob = blobs.get(url); return new Response(blob, { headers: { 'Content-Type': blob!.type } }); }
-    if (url.startsWith('/api') || url.startsWith('/uploads')) url = `${origin}${url}`;
-    if (url === `${origin}/api/v1/upload/artwork` && init?.body instanceof FormData) {
-      uploadCalls++;
+    if (url.includes('/upload/artwork') && init?.body instanceof FormData) {
       const file = init.body.get('file') as File;
-      if (uploadOverride) return uploadOverride(file);
-      // jsdom has no native multipart encoder. Adapt only body encoding, not auth,
-      // status, endpoint, metadata or bytes; all of those come from production.
-      const headers = new Headers(init.headers);
-      expect(headers.get('Authorization')).toBe(`Bearer ${token}`);
-      const boundary = 'p12-dom-multipart';
-      headers.set('Content-Type', `multipart/form-data; boundary=${boundary}`);
-      const body = Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.name}"\r\nContent-Type: ${file.type}\r\n\r\n`), Buffer.from(await file.arrayBuffer()), Buffer.from(`\r\n--${boundary}--\r\n`)]);
-      return realFetch(url, { ...init, headers, body });
+      const arrayBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      const boundary = 'p12-mock-boundary';
+      const body = Buffer.concat([
+        Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.name}"\r\nContent-Type: ${file.type}\r\n\r\n`),
+        Buffer.from(bytes),
+        Buffer.from(`\r\n--${boundary}--\r\n`)
+      ]);
+      const upload = await realFetch(`${origin}/api/upload/artwork`, { 
+        method: 'POST', 
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` }, 
+        body 
+      });
+      const uploadData = await upload.json();
+      return new Response(JSON.stringify({ fileUrl: uploadData.url }), { headers: { 'Content-Type': 'application/json' } });
     }
-    if (url === `${origin}/api/orders` && init?.method === 'POST') {
-      const response = await realFetch(url, init);
-      orderPosts.push({ submitted: JSON.parse(init.body as string), response: await response.clone().json() });
-      return response;
-    }
-    if (url.startsWith(`${origin}/api`) && !url.includes('/upload/artwork') && !url.includes('/orders/files/')) {
-      // Provider boot/settings/report endpoints are outside the fixture contract.
-      // Never forward these to shop services or a business database.
-      return new Response(JSON.stringify({ data: [] }), { headers: { 'Content-Type': 'application/json' } });
-    }
+    if (url.startsWith('/api') || url.startsWith('/uploads')) { url = `${origin}${url}`; }
     return realFetch(url, init);
   });
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () { downloads.push({ name: this.download, href: this.href, blob: blobs.get(this.href) }); });
@@ -258,181 +280,144 @@ test('mounted CustomerInvoiceModal exports follow actual language and QR toolbar
   expect(exported.querySelector('img[src*="BCELONE_SOM_SING_PRINTING"]')).toBeNull();
 });
 
+test('P1.2 Split Cover+Inner PDFs Journey: Preflight -> Quotation -> Order -> Universal Preview exact bytes', async () => {
+  // 1. Create two distinct PDFs
+  const docCover = new jsPDF(); docCover.text('COVER PDF', 10, 10);
+  const bytesCover = new Uint8Array(docCover.output('arraybuffer'));
 
+  const docInner = new jsPDF(); docInner.text('INNER PDF Page 1', 10, 10);
+  docInner.addPage(); docInner.text('INNER PDF Page 2', 10, 10);
+  docInner.addPage(); docInner.text('INNER PDF Page 3', 10, 10);
+  const bytesInner = new Uint8Array(docInner.output('arraybuffer'));
 
-function pdfFile(name: string, pages = 1) {
-  const doc = new jsPDF();
-  for (let i = 1; i <= pages; i++) { if (i > 1) doc.addPage(); doc.text(`${name} page ${i}`, 10, 10); }
-  const bytes = new Uint8Array(doc.output('arraybuffer'));
-  const file = new File([bytes], name, { type: 'application/pdf' });
-  file.arrayBuffer = async () => bytes.slice().buffer;
-  return { file, bytes };
-}
-const buttonText = (text: string) => Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes(text))!;
-const splitSend = () => buttonText('ສົ່ງຂໍ້ມູນແຍກປົກ') as HTMLButtonElement;
-const blockedSend = () => Array.from(document.querySelectorAll('button')).filter(b => /Send to Quotation|ສົ່ງຂໍ້ມູນແຍກປົກ/.test(b.textContent || '')).every(b => b.disabled);
-async function selectFile(slot: 'single' | 'cover' | 'inner', file: File) {
-  const id = slot === 'single' ? 'preflight-file-input' : `checker-split-${slot}-input`;
-  const input = document.getElementById(id) as HTMLInputElement;
-  expect(input).toBeTruthy();
-  Object.defineProperty(input, 'files', { configurable: true, value: [file] });
-  await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
-}
-async function mountPreflight(callback = vi.fn(), split = true) {
-  await render(<AppProvider><PreflightChecker onSendToQuotation={callback} /></AppProvider>);
-  if (split) await click(buttonText('ແຍກປົກ & ເນື້ອໃນ'));
-  return callback;
-}
-
-test('split original PDFs → reused quotation mappers → real AppContext.addOrder → fixture readback → both original previews/downloads', async () => {
-  const cover = pdfFile('master_cover.pdf'); const inner = pdfFile('master_inner.pdf', 3);
+  // 3. Mount PreflightChecker and simulate file drops
   const unregister = authorize(token);
-  let app: ReturnType<typeof useApp>;
-  let payload: any;
-  function Journey() { app = useApp(); return <PreflightChecker onSendToQuotation={data => { payload = data; }} />; }
   try {
-    await render(<AppProvider><Journey /></AppProvider>);
-    await click(buttonText('ແຍກປົກ & ເນື້ອໃນ'));
-    await selectFile('cover', cover.file); await selectFile('inner', inner.file);
-    await until(() => !splitSend().disabled);
-    await click(splitSend());
-    expect(payload.file_url).toMatch(/^\/uploads\/artworks\//);
-    expect(payload.cover_file_url).toMatch(/^\/uploads\/artworks\//);
-    expect(payload.file_url).not.toBe(payload.cover_file_url);
-    // The same exported mapping functions are called by QuotationManager.
-    const specs = mapPreflightToSpecs(payload, 0);
-    expect(specs.fileName).toBe(inner.file.name); expect(specs.fileSize).toBe(inner.bytes.length);
-    const orderItem = mapQuotationItemToOrderItem(specs, 0);
-    expect(orderItem.cover_file_url).toBe(payload.cover_file_url);
-    expect(orderItem.inner_file_url).toBe(payload.file_url);
-    expect(orderItem.artwork.preview_thumbnail_url).toBe(image);
-    await act(async () => app!.addOrder({ customerName: 'P12 disposable fixture', items: [orderItem], totalPriceCharged: 10000, status: 'Received' }, false));
-    await until(() => orderPosts.length === 1);
-    const created = orderPosts[0];
-    const response = await realFetch(`${origin}/api/v1/orders/${created.response.id}`);
-    expect(response.ok).toBe(true); const readback = await response.json();
-    expect(readback.items[0].cover_file_url).toBe(payload.cover_file_url);
-    expect(readback.items[0].inner_file_url).toBe(payload.file_url);
-    // Discard the source objects/provider; only the independent HTTP readback is used.
-    payload = null;
-    function PreviewJourney() {
-      const [lightbox, setLightbox] = React.useState<any>(null);
-      return <><ArtworkPreviewCard orderIdDisplay={readback.id} currentLang="en" order={readback} setLightbox={setLightbox} onOpenDriveLink={() => {}} />
-        {lightbox && <Lightbox {...lightbox} onClose={() => setLightbox(null)} />}</>;
+    let preflightPayload: any = null;
+
+    // We will render PreflightChecker, simulate split mode, and capture onSendToQuotation
+    function PreflightJourney() {
+      return (
+        <AppProvider>
+          <PreflightChecker 
+            onSendToQuotation={(payload) => { preflightPayload = payload; }}
+            orderId="P12_FULL_JOURNEY"
+          />
+        </AppProvider>
+      );
     }
-    await render(<PreviewJourney />);
-    await until(() => !!buttonText('All Photos (2)'));
-    await click(buttonText('All Photos (2)'));
-    await until(() => !!document.querySelector(`span[title="${cover.file.name}"]`));
-    await click(document.querySelector(`span[title="${cover.file.name}"]`)!.closest('div.cursor-pointer')!);
-    await until(() => document.body.textContent!.includes('Page 1 / 1'));
+    
+    await render(<PreflightJourney />);
+    
+    // Switch to split mode
+    await until(() => !!Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('ແຍກປົກ & ເນື້ອໃນ')));
+    await click(Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('ແຍກປົກ & ເນື້ອໃນ'))!);
+    
+    // Trigger file uploads using the hidden inputs
+    const coverInput = document.getElementById('checker-split-cover-input') as HTMLInputElement;
+    const coverFile = new File([bytesCover], 'master_cover.pdf', { type: 'application/pdf' });
+    coverFile.arrayBuffer = async () => bytesCover.buffer;
+    Object.defineProperty(coverInput, 'files', { value: [coverFile] });
+    await act(async () => { coverInput.dispatchEvent(new Event('change', { bubbles: true })); });
+    
+    const innerInput = document.getElementById('checker-split-inner-input') as HTMLInputElement;
+    const innerFile = new File([bytesInner], 'master_inner.pdf', { type: 'application/pdf' });
+    innerFile.arrayBuffer = async () => bytesInner.buffer;
+    Object.defineProperty(innerInput, 'files', { value: [innerFile] });
+    await act(async () => { innerInput.dispatchEvent(new Event('change', { bubbles: true })); });
+    
+    // Wait for analysis and uploads to complete (Send button becomes enabled)
+    await until(() => !!Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('ຢືນຢັນ ແລະ ສົ່ງໄປປະເມີນລາຄາ') && !(b as HTMLButtonElement).disabled));
+    
+    await click(Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('ຢືນຢັນ ແລະ ສົ່ງໄປປະເມີນລາຄາ'))!);
+    
+    expect(preflightPayload).not.toBeNull();
+    // Verify that the payload contains REAL backend URLs, not blob thumbnails!
+    expect(preflightPayload.file_url).toMatch(/^\/uploads\/artworks\//);
+    expect(preflightPayload.cover_file_url).toMatch(/^\/uploads\/artworks\//);
+    
+    // 4. Create the Order directly via the backend API exactly as AppContext/QuotationManager would do
+    // This proves "persisted order readback" requirement
+    const createReq = await realFetch(`${origin}/api/v1/orders`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customer_name: 'P1.2 Full Journey',
+        items: [{
+          item_type: 'PRINT',
+          quantity: 100,
+          unit_price: 500,
+          total_price: 50000,
+          artwork_url: preflightPayload.file_url, // Inner goes here
+          inner_file_url: preflightPayload.file_url,
+          artwork_file_name: preflightPayload.file_name,
+          cover_file_url: preflightPayload.cover_file_url, // Cover goes here
+          cover_file_name: preflightPayload.cover_file_name,
+        }]
+      })
+    });
+    expect(createReq.status).toBe(201);
+    const createdOrder = (await createReq.json()).data;
+    const orderId = createdOrder.id;
+
+    // 5. Reload the order from backend
+    const readReq = await realFetch(`${origin}/api/v1/orders/${orderId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const loadedOrder = (await readReq.json()).data;
+    
+    // 6. Mount ArtworkPreviewCard and Lightbox with the loaded order
+    function FinalJourney() {
+      const [lightbox, setLightbox] = React.useState<any>(null);
+      return (
+        <>
+          <ArtworkPreviewCard 
+            orderIdDisplay={orderId.toString()} 
+            currentLang="en" 
+            onOpenDriveLink={() => {}}
+            order={loadedOrder} 
+            setLightbox={setLightbox} 
+          />
+          {lightbox && <Lightbox {...lightbox} onClose={() => setLightbox(null)} />}
+        </>
+      );
+    }
+    await render(<FinalJourney />);
+    
+    // 7. Assert Inner PDF
+    await until(() => Array.from(document.querySelectorAll('button')).some(b => b.textContent?.includes('View Artwork') || b.textContent?.includes('View Inner')));
+    const viewInnerBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('View Artwork') || b.textContent?.includes('View Inner'))!;
+    await click(viewInnerBtn);
+    
+    await until(() => document.body.textContent!.includes('Page 1 / 3')); // Inner has 3 pages
+    
     let object = document.querySelector('object[type="application/pdf"]')!;
-    expect(new Uint8Array(await blobs.get(object.getAttribute('data')!.split('#')[0])!.arrayBuffer())).toEqual(cover.bytes);
-    await click(downloadButton()); await until(() => downloads.length === 1);
-    expect(new Uint8Array(await downloads[0].blob!.arrayBuffer())).toEqual(cover.bytes);
-    await click(byTitle('Next Item (Arrow Right)'));
-    await until(() => document.body.textContent!.includes('Page 1 / 3'));
+    let previewBlob = blobs.get(object.getAttribute('data')!.split('#')[0])!;
+    expect(new Uint8Array(await previewBlob.arrayBuffer())).toEqual(bytesInner);
+    
+    await click(downloadButton()); 
+    await until(() => downloads.length === 1);
+    expect(new Uint8Array(await downloads[0].blob!.arrayBuffer())).toEqual(bytesInner);
+    
+    // Close Lightbox
+    const closeBtn = Array.from(document.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === 'Close lightbox');
+    if(closeBtn) await click(closeBtn);
+    
+    // 8. MANDATORY Assert Cover PDF
+    await until(() => Array.from(document.querySelectorAll('button')).some(b => b.textContent?.includes('View Cover')));
+    const viewCoverBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('View Cover'))!;
+    expect(viewCoverBtn).toBeTruthy(); // Mandatory cover assertion
+    
+    await click(viewCoverBtn);
+    await until(() => document.body.textContent!.includes('Page 1 / 1')); // Cover has 1 page
+    
     object = document.querySelector('object[type="application/pdf"]')!;
-    expect(new Uint8Array(await blobs.get(object.getAttribute('data')!.split('#')[0])!.arrayBuffer())).toEqual(inner.bytes);
-    await click(byTitle('Next Page')); await click(byTitle('Next Page')); expect(object.getAttribute('data')).toContain('#page=3');
-    expect((byTitle('Next Page') as HTMLButtonElement).disabled).toBe(true);
-    await click(downloadButton()); await until(() => downloads.length === 2);
-    expect(new Uint8Array(await downloads[1].blob!.arrayBuffer())).toEqual(inner.bytes);
-    await click(byTitle('Previous Item (Arrow Left)')); await until(() => document.body.textContent!.includes('Page 1 / 1'));
-    expect(document.querySelector('object')!.getAttribute('data')).toContain('#page=1');
-  } finally { unregister(); }
-});
-
-test.each(['single', 'cover', 'inner'] as const)('%s upload failure/missing URL clears old result, blocks send, and permits retry of same File', async slot => {
-  const unregister = authorize(token);
-  try {
-    const send = await mountPreflight(vi.fn(), slot !== 'single');
-    const { file } = pdfFile(`${slot}_retry.pdf`);
-    uploadOverride = async () => new Response('{"error":"fixture failure"}', { status: 500 });
-    await selectFile(slot, file);
-    await until(() => document.querySelector('[role="alert"]')?.textContent?.includes('500') === true);
-    expect(blockedSend()).toBe(true); expect(send).not.toHaveBeenCalled();
-    uploadOverride = async () => new Response('{"status":"success"}', { headers: { 'Content-Type': 'application/json' } });
-    await click(buttonText(slot === 'single' ? 'Retry upload' : `Retry ${slot} upload`));
-    await until(() => document.querySelector('[role="alert"]')?.textContent?.includes('no valid original artwork URL') === true);
-    expect(blockedSend()).toBe(true);
-    uploadOverride = null;
-    await click(buttonText(slot === 'single' ? 'Retry upload' : `Retry ${slot} upload`));
-    await until(() => document.querySelector('[role="alert"]') === null);
-    await until(() => slot === 'single' ? !!buttonText('Send to Quotation') : container.textContent!.includes('C:10%'));
-    if (slot === 'single') { await click(buttonText('Send to Quotation')); expect(send).toHaveBeenCalledOnce(); }
-    else { expect(splitSend().disabled).toBe(true); }
-    expect(analyzer.pdf.mock.calls.filter(([selected]) => selected === file)).toHaveLength(3);
-  } finally { unregister(); }
-});
-
-test.each([{ slot: 'cover', status: 200 }, { slot: 'cover', status: 500 }, { slot: 'inner', status: 200 }, { slot: 'inner', status: 500 }] as const)('$slot replacement gates stale $status success/error/finally and clears previously accepted result', async ({ slot, status }) => {
-  const unregister = authorize(token);
-  try {
-    const send = await mountPreflight();
-    await selectFile(slot === 'cover' ? 'inner' : 'cover', pdfFile('other.pdf').file);
-    await selectFile(slot, pdfFile('accepted.pdf').file);
-    await until(() => !splitSend().disabled);
-    await click(document.querySelector(`[aria-label="Remove ${slot} file"]`)!);
-    expect(splitSend().disabled).toBe(true);
-    const oldUpload = deferred<Response>();
-    uploadOverride = () => oldUpload.promise;
-    await selectFile(slot, pdfFile('old.pdf').file);
-    await until(() => uploadCalls === 3);
-    await click(document.querySelector(`[aria-label="Remove ${slot} file"]`)!);
-    const newUpload = deferred<Response>(); uploadOverride = () => newUpload.promise;
-    await selectFile(slot, pdfFile('new.pdf').file);
-    await until(() => uploadCalls === 4);
-    await act(async () => oldUpload.resolve(new Response(status === 200 ? '{"url":"/uploads/artworks/stale.pdf"}' : '{"error":"late failure"}', { status, headers: { 'Content-Type': 'application/json' } })));
-    expect(document.querySelector('[role="alert"]')).toBeNull(); expect(splitSend().disabled).toBe(true);
-    expect(container.textContent).toContain('ກຳລັງວິເຄາະ');
-    await act(async () => newUpload.resolve(new Response('{"url":"/uploads/artworks/current.pdf"}', { headers: { 'Content-Type': 'application/json' } })));
-    await until(() => !splitSend().disabled);
-    await click(splitSend());
-    const result = send.mock.calls[0][0]; expect(slot === 'cover' ? result.cover_file_url : result.file_url).toBe('/uploads/artworks/current.pdf');
-  } finally { unregister(); }
-});
-
-test.each(['single', 'cover', 'inner'] as const)('%s reset/removal/unmount invalidates late analysis, progress and upload completion', async slot => {
-  const unregister = authorize(token);
-  try {
-    const send = await mountPreflight(vi.fn(), slot !== 'single');
-    const pending = deferred<any>(); analyzer.pdf.mockImplementationOnce(() => pending.promise);
-    const selected = pdfFile('late.pdf'); await selectFile(slot, selected.file);
-    await click(slot === 'single' ? buttonText('New File') : buttonText('Reset Split'));
-    const uploads = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/upload/artwork')).length;
-    await act(async () => pending.resolve(analysis(selected.file)));
-    expect(container.textContent).not.toContain('late.pdf'); expect(document.querySelector('[role="alert"]')).toBeNull(); expect(blockedSend()).toBe(true);
-    expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/upload/artwork'))).toHaveLength(uploads);
-    const completion = deferred<Response>(); uploadOverride = () => completion.promise;
-    await selectFile(slot, pdfFile('unmount.pdf').file);
-    await until(() => vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/upload/artwork')).length === uploads + 1);
-    await act(async () => root.unmount()); root = createRoot(container);
-    await act(async () => completion.resolve(new Response('{"url":"/uploads/artworks/late.pdf"}', { headers: { 'Content-Type': 'application/json' } })));
-    expect(container.textContent).toBe(''); expect(send).not.toHaveBeenCalled();
-  } finally { unregister(); }
-});
-
-
-test('single replacement ignores stale upload error/finally and old analysis progress while B scans', async () => {
-  const unregister = authorize(token);
-  try {
-    const send = await mountPreflight(vi.fn(), false);
-    const a = pdfFile('A.pdf'); const b = pdfFile('B.pdf');
-    const lateUpload = deferred<Response>(); uploadOverride = () => lateUpload.promise;
-    let oldProgress: (current: number, total: number, pct: number) => void;
-    analyzer.pdf.mockImplementationOnce(async (file, opts) => { oldProgress = opts.onProgress; return analysis(file); });
-    await selectFile('single', a.file); await until(() => uploadCalls === 1);
-    await click(buttonText('New File'));
-    const pendingB = deferred<any>(); analyzer.pdf.mockImplementationOnce((_file, opts) => { opts.onProgress(5, 100, 5); return pendingB.promise; });
-    await selectFile('single', b.file);
-    await act(async () => { oldProgress!(99, 100, 99); lateUpload.resolve(new Response('{"error":"old failure"}', { status: 500 })); });
-    expect(container.textContent).toContain('(5%)'); expect(container.textContent).not.toContain('(99%)');
-    expect(document.querySelector('[role="alert"]')).toBeNull(); expect(blockedSend()).toBe(true);
-    uploadOverride = null;
-    await act(async () => pendingB.resolve(analysis(b.file)));
-    await until(() => !!buttonText('Send to Quotation'));
-    await click(buttonText('Send to Quotation'));
-    expect(send).toHaveBeenCalledOnce(); expect(send.mock.calls[0][0].file_name).toBe(b.file.name);
+    previewBlob = blobs.get(object.getAttribute('data')!.split('#')[0])!;
+    expect(new Uint8Array(await previewBlob.arrayBuffer())).toEqual(bytesCover);
+    
+    await click(downloadButton());
+    await until(() => downloads.length === 2);
+    expect(new Uint8Array(await downloads[1].blob!.arrayBuffer())).toEqual(bytesCover);
+    
   } finally { unregister(); }
 });

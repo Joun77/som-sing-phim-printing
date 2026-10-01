@@ -4436,6 +4436,10 @@ export const AppProvider = ({ children }) => {
       const itArtworkFileName = item.fileName || item.file_name || (batchFiles[0]?.name || batchFiles[0]?.file_name) || (itArtworkUrl ? itArtworkUrl.split('/').pop()?.split('?')[0] : '');
       const itArtworkFileSize = item.fileSize || item.file_size || (batchFiles[0]?.size || 0);
 
+      // Preserve distinct cover/inner file URLs from split-cover quotation items
+      const itCoverFileUrl = item.cover_file_url || item.coverArtworkUrl || itArtworkUrl;
+      const itInnerFileUrl = item.inner_file_url || item.artworkUrl || item.artwork_url || itArtworkUrl;
+
       const cutsPerSheet = Number(item.cutsPerSheet || item.cuts_per_sheet || 1);
       const totalUnits = Number(item.quantity || 1) * (batchFiles.length > 0 ? batchFiles.length : Number(item.pageCount || item.pages || 1));
       const parentSheets = Math.ceil(totalUnits / cutsPerSheet);
@@ -4457,8 +4461,8 @@ export const AppProvider = ({ children }) => {
         unit_price_lak: Number(item.unitPrice || item.unitPriceSnapshot || item.unitCost || 0),
         total_price_lak: Number(item.totalPrice || (Number(item.quantity || 1) * Number(item.unitPrice || 0))),
         unit_cost_lak: Number(item.unitCost || item.costPriceSnapshot || 0),
-        cover_file_url: itArtworkUrl,
-        inner_file_url: itArtworkUrl,
+        cover_file_url: itCoverFileUrl,
+        inner_file_url: itInnerFileUrl,
         artwork_url: itArtworkUrl,
         artworkUrl: itArtworkUrl,
         artwork_file_name: itArtworkFileName,
@@ -4588,8 +4592,8 @@ export const AppProvider = ({ children }) => {
           artworkUrl: it.artwork_url,
           artworkFileName: it.artwork_file_name,
           artworkFileSize: it.artwork_file_size,
-          inner_file_url: it.artwork_url,
-          cover_file_url: it.artwork_url,
+          inner_file_url: it.inner_file_url || it.artwork_url,
+          cover_file_url: it.cover_file_url || it.artwork_url,
           specs: it.specs,
           batch_files: it.specs?.batch_files || (quotation as any).batch_files || (quotation as any).gallery_urls || [],
           gallery_urls: it.specs?.gallery_urls || (quotation as any).gallery_urls || [],

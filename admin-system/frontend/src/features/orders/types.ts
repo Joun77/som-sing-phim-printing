@@ -32,6 +32,8 @@ export interface PreflightDiagnostics {
 
 export interface PreflightResult {
   file_name: string;
+  file_size?: number;
+  preview_thumbnail_url?: string;
   file_url?: string;
   file_type?: 'PDF' | 'IMAGE' | string;
   total_pages: number;
