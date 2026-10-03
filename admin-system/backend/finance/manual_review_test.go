@@ -47,6 +47,7 @@ func TestManualPaymentReview_FailClosed(t *testing.T) {
 						mock.ExpectRollback()
 					} else {
 						update.WillReturnResult(sqlmock.NewResult(0, 1))
+						mock.ExpectExec("INSERT INTO audit_logs").WillReturnResult(sqlmock.NewResult(0, 1))
 						mock.ExpectCommit()
 					}
 				} else {
@@ -54,6 +55,7 @@ func TestManualPaymentReview_FailClosed(t *testing.T) {
 				}
 			}
 			r := gin.New()
+			r.Use(fixtureReviewIdentity)
 			r.POST("/review", HandleVerifyPaymentSlip)
 			req := httptest.NewRequest(http.MethodPost, "/review", bytes.NewBufferString(`{"order_id":"fixture-order","status":"REJECTED","rejection_reason":"invalid slip"}`))
 			req.Header.Set("Content-Type", "application/json")
@@ -99,6 +101,7 @@ func TestManualPaymentApproval_RollsBackOnWriteFailure(t *testing.T) {
 			}
 			mock.ExpectRollback()
 			r := gin.New()
+			r.Use(fixtureReviewIdentity)
 			r.POST("/review", HandleVerifyPaymentSlip)
 			req := httptest.NewRequest(http.MethodPost, "/review", bytes.NewBufferString(`{"order_id":"fixture-order","status":"APPROVED"}`))
 			req.Header.Set("Content-Type", "application/json")

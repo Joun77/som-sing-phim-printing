@@ -84,6 +84,10 @@ export async function downloadPhotosAsZip(
     })
   );
 
+  if (failedFiles.length === total) {
+    throw new Error('No artwork files could be packaged');
+  }
+
   const content = await zip.generateAsync({
     type: 'blob',
     compression: 'DEFLATE',

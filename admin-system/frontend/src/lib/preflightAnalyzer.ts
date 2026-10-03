@@ -292,8 +292,8 @@ export async function analyzePDFClient(
   // Scan PDF operators for RGB objects
   const hasRGBObjects = /\b(rg|RG|\/DeviceRGB|\/CalRGB)\b/.test(rawText);
 
+  const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
   try {
-    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
     const pdf = await loadingTask.promise;
     const totalPages = pdf.numPages || 1;
 
@@ -318,6 +318,7 @@ export async function analyzePDFClient(
 
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) throw new Error('PDF analysis requires a 2D canvas context');
 
     let detectedWidthMM = 210;
     let detectedHeightMM = 297;
@@ -397,7 +398,7 @@ export async function analyzePDFClient(
             options.onProgress(pageNum, totalPages, pct);
           }
         } catch (pageErr) {
-          console.warn(`Failed to render page ${pageNum}:`, pageErr);
+          throw pageErr;
         }
       }
     }
@@ -484,63 +485,7 @@ export async function analyzePDFClient(
       is_simulated: false,
       execution_notice: `PDF.js Full-Scan Complete (${totalPages} ໜ້າ | ສີ: ${colorPagesCount} ໜ້າ, ຂາວດຳ: ${monoPagesCount} ໜ້າ | Bleed: ${measuredBleedMM}mm)`,
     };
-  } catch (err) {
-    console.warn('PDF.js loading failed, using native stream parser:', err);
-
-    let totalPages = 1;
-    const countMatch = rawText.match(/\/Type\s*\/Pages[\s\S]*?\/Count\s+(\d+)/);
-    if (countMatch && countMatch[1]) {
-      const parsed = parseInt(countMatch[1], 10);
-      if (parsed > 0) totalPages = parsed;
-    } else {
-      const pageMatches = rawText.match(/\/Type\s*\/Page\b/g);
-      if (pageMatches && pageMatches.length > 0) {
-        totalPages = pageMatches.length;
-      }
-    }
-
-    const diagnostics: PreflightDiagnostics = {
-      colorSpace: hasRGBObjects ? 'ERROR' : 'PASS',
-      bleed: 'PASS',
-      tac: 'PASS',
-      dpi: 'PASS',
-    };
-
-    return {
-      file_name: file.name,
-      file_type: 'PDF',
-      total_pages: totalPages,
-      color_pages_count: totalPages,
-      mono_pages_count: 0,
-      color_pages_avg_c: 1.25,
-      color_pages_avg_m: 1.5,
-      color_pages_avg_y: 1.0,
-      color_pages_avg_k: 7.2,
-      mono_pages_avg_k: 7.2,
-      target_paper_size: 'A4',
-      target_width_mm: 210,
-      target_height_mm: 297,
-      dpi_estimate: 300,
-      bleed_mm: 3.0,
-      has_sufficient_bleed: true,
-      tac_max_percent: 240,
-      tac_avg_percent: 15.5,
-      tac_warning: false,
-      low_dpi_error: false,
-      diagnostics,
-      avg_cov_c: 1.25,
-      avg_cov_m: 1.5,
-      avg_cov_y: 1.0,
-      avg_cov_k: 7.2,
-      color_space: hasRGBObjects ? 'RGB / CMYK Mix' : 'CMYK',
-      color_mode: 'CMYK',
-      has_rgb: hasRGBObjects,
-      is_standard_cmyk: !hasRGBObjects,
-      status_badge_lao: hasRGBObjects ? 'ພົບ RGB Object' : 'ໄຟລ໌ CMYK ມາດຕະຖານ',
-      warning_message_lao: hasRGBObjects ? 'ໄຟລ໌ມີ RGB Objects' : '',
-      suggested_paper: 'A4',
-      is_simulated: false,
-      execution_notice: `PDF Stream Counted (${totalPages} ໜ້າ)`,
-    };
+  } finally {
+    await loadingTask.destroy();
   }
 }

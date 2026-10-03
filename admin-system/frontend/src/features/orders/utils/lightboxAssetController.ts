@@ -10,7 +10,9 @@ import { configurePdfWorker } from '../../../lib/pdfWorker';
 export interface LightboxAssetControllerState {
   loadingStatus: 'idle' | 'loading' | 'success' | 'error';
   errorMessage: string;
+  errorKind?: 'missing' | 'temporary-unavailable' | 'load-failed';
   resolvedBlobUrl: string;
+  resolvedBlob?: Blob;
   resolvedType: string;
   resolvedSize: number;
   pdfPageCount: number | null;
@@ -127,11 +129,12 @@ export function createLightboxAssetController(callbacks: {
       requestGen++;
     },
     loadAsset: async (item: LightboxAssetItem | undefined) => {
+      const sourceUrl = item?.originalUrl || item?.url;
       // Increment generation immediately so any pending request is superseded
       const reqGen = ++requestGen;
 
-      if (!item || !item.url) {
-        if (currentBlobUrl && currentBlobUrl !== item?.url) {
+      if (!item || !sourceUrl) {
+        if (currentBlobUrl && currentBlobUrl !== sourceUrl) {
           try {
             callbacks.revokeUrl(currentBlobUrl);
           } catch {}
@@ -140,14 +143,14 @@ export function createLightboxAssetController(callbacks: {
         }
         callbacks.onStateChange({
           loadingStatus: 'error',
-          errorMessage: 'ບໍ່ພົບ URL ຂອງໄຟລ໌ (No media URL provided)',
-          resolvedBlobUrl: '',
+          errorMessage: 'ບໍ່ພົບ URL ຂອງໄຟລ໌ (No media URL provided)', errorKind: 'missing', resolvedType: '', resolvedSize: 0,
+          resolvedBlobUrl: '', resolvedBlob: undefined,
           pdfPageCount: null,
         });
         return;
       }
 
-      callbacks.onStateChange({ loadingStatus: 'loading', errorMessage: '', resolvedBlobUrl: '', pdfPageCount: null });
+      callbacks.onStateChange({ loadingStatus: 'loading', errorMessage: '', errorKind: undefined, resolvedType: item.contentType || '', resolvedSize: item.size || 0, resolvedBlobUrl: '', resolvedBlob: undefined, pdfPageCount: null });
 
       // Revoke previous blob if created by us and different from item.url
       if (currentBlobUrl && currentBlobUrl !== item.url) {
@@ -161,11 +164,11 @@ export function createLightboxAssetController(callbacks: {
       fetchCount++;
 
       try {
-        const result = await callbacks.fetchBlob(item.url);
+        const result = await callbacks.fetchBlob(sourceUrl);
 
         // Stale or unmounted guard
         if (!isMounted || reqGen !== requestGen) {
-          if (result.blobUrl && result.blobUrl !== item.url) {
+          if (result.blobUrl && result.blobUrl !== sourceUrl) {
             try {
               callbacks.revokeUrl(result.blobUrl);
             } catch {}
@@ -176,17 +179,10 @@ export function createLightboxAssetController(callbacks: {
         let pageCount: number | null = null;
         // Validated response bytes take precedence over stale caller MIME hints.
         const detectedType = result.contentType || item.contentType || '';
-        if (detectedType === 'application/pdf' && result.blob) {
-          try {
-            pageCount = await extractPdfPageCount(result.blob);
-          } catch {
-            // Truthful unknown/error when parsing fails; never guess 1
-            pageCount = null;
-          }
-        }
+
 
         if (!isMounted || reqGen !== requestGen) {
-          if (result.blobUrl && result.blobUrl !== item.url) {
+          if (result.blobUrl && result.blobUrl !== sourceUrl) {
             try {
               callbacks.revokeUrl(result.blobUrl);
             } catch {}
@@ -194,7 +190,7 @@ export function createLightboxAssetController(callbacks: {
           return;
         }
 
-        if (result.blobUrl && result.blobUrl !== item.url) {
+        if (result.blobUrl && result.blobUrl !== sourceUrl) {
           currentBlobUrl = result.blobUrl;
           createdBlobs.add(result.blobUrl);
         }
@@ -202,6 +198,7 @@ export function createLightboxAssetController(callbacks: {
         callbacks.onStateChange({
           loadingStatus: 'success',
           resolvedBlobUrl: result.blobUrl,
+          resolvedBlob: result.blob,
           resolvedType: detectedType,
           resolvedSize: result.size || item.size || 0,
           pdfPageCount: pageCount,
@@ -211,7 +208,8 @@ export function createLightboxAssetController(callbacks: {
         callbacks.onStateChange({
           loadingStatus: 'error',
           errorMessage: err.message || 'Failed to load artwork binary',
-          resolvedBlobUrl: '',
+          errorKind: sourceUrl.startsWith('blob:') ? 'temporary-unavailable' : 'load-failed',
+          resolvedBlobUrl: '', resolvedBlob: undefined,
           pdfPageCount: null,
         });
       }
@@ -247,7 +245,7 @@ export function useLightboxAssetController({
   const [state, setState] = useState<LightboxAssetControllerState>({
     loadingStatus: 'idle',
     errorMessage: '',
-    resolvedBlobUrl: '',
+    resolvedBlobUrl: '', resolvedBlob: undefined,
     resolvedType: activeItem?.contentType || '',
     resolvedSize: activeItem?.size || fileSize || 0,
     pdfPageCount: null,
@@ -268,7 +266,7 @@ export function useLightboxAssetController({
   }
 
   const controller = controllerRef.current;
-  const activeKey = activeItem?.url ? `${activeItem.url}::${activeItem.name || ''}` : '';
+  const activeKey = activeItem?.url ? `${activeItem.originalUrl || activeItem.url}::${activeItem.url}::${activeItem.name || ''}` : '';
 
   // Lifecycle: mount / unmount (handles React StrictMode mount -> unmount -> remount)
   useEffect(() => {

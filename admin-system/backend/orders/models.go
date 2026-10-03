@@ -1,6 +1,8 @@
 package orders
 
 import (
+	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -51,24 +53,24 @@ const (
 )
 
 type OrderItem struct {
-	ID                string                 `json:"id"`
-	OrderID           string                 `json:"order_id"`
-	JobName           string                 `json:"job_name"`
-	ItemName          string                 `json:"item_name"`
-	Quantity          int                    `json:"quantity"`
-	PageCount         int                    `json:"page_count"`
-	PaperSize         string                 `json:"paper_size"`
-	CoverPaperID      string                 `json:"cover_paper_id"`
-	InnerPaperID      string                 `json:"inner_paper_id"`
-	CoverFileURL      string                 `json:"cover_file_url"`
-	InnerFileURL      string                 `json:"inner_file_url"`
-	BindingType       BindingType            `json:"binding_type"`
-	SpineWidthMM      float64                `json:"spine_width_mm"`
-	CurrentStep       ProductionStep         `json:"current_step"`
-	AvgCovC           float64                `json:"avg_cov_c"`
-	AvgCovM           float64                `json:"avg_cov_m"`
-	AvgCovY           float64                `json:"avg_cov_y"`
-	AvgCovK           float64                `json:"avg_cov_k"`
+	ID                 string                 `json:"id"`
+	OrderID            string                 `json:"order_id"`
+	JobName            string                 `json:"job_name"`
+	ItemName           string                 `json:"item_name"`
+	Quantity           int                    `json:"quantity"`
+	PageCount          int                    `json:"page_count"`
+	PaperSize          string                 `json:"paper_size"`
+	CoverPaperID       string                 `json:"cover_paper_id"`
+	InnerPaperID       string                 `json:"inner_paper_id"`
+	CoverFileURL       string                 `json:"cover_file_url"`
+	InnerFileURL       string                 `json:"inner_file_url"`
+	BindingType        BindingType            `json:"binding_type"`
+	SpineWidthMM       float64                `json:"spine_width_mm"`
+	CurrentStep        ProductionStep         `json:"current_step"`
+	AvgCovC            float64                `json:"avg_cov_c"`
+	AvgCovM            float64                `json:"avg_cov_m"`
+	AvgCovY            float64                `json:"avg_cov_y"`
+	AvgCovK            float64                `json:"avg_cov_k"`
 	UnitCostLAK        float64                `json:"unit_cost_lak"`
 	UnitPriceLAK       float64                `json:"unit_price_lak"`
 	TotalPriceLAK      float64                `json:"total_price_lak"`
@@ -83,8 +85,8 @@ type OrderItem struct {
 	ArtworkFileSize    int64                  `json:"artwork_file_size,omitempty"`
 	Artwork            *ItemArtwork           `json:"artwork,omitempty"`
 	Specifications     map[string]interface{} `json:"specifications,omitempty"`
-	CreatedAt         time.Time              `json:"created_at"`
-	UpdatedAt         time.Time              `json:"updated_at"`
+	CreatedAt          time.Time              `json:"created_at"`
+	UpdatedAt          time.Time              `json:"updated_at"`
 }
 
 type ItemArtwork struct {
@@ -180,102 +182,102 @@ type PrinterProcessSetup struct {
 }
 
 type FinishingProcessSetup struct {
-	FinishingType           string  `json:"finishing_type"`
-	MachineAssetID          string  `json:"machine_asset_id"`
-	EstimatedSetupTimeMins  int     `json:"estimated_setup_time_mins"`
-	EstimatedRunTimeMins    int     `json:"estimated_run_time_mins"`
-	UnitCost                float64 `json:"unit_cost"`
+	FinishingType          string  `json:"finishing_type"`
+	MachineAssetID         string  `json:"machine_asset_id"`
+	EstimatedSetupTimeMins int     `json:"estimated_setup_time_mins"`
+	EstimatedRunTimeMins   int     `json:"estimated_run_time_mins"`
+	UnitCost               float64 `json:"unit_cost"`
 }
 
 type OrderItemRequest struct {
-	JobName            string                   `json:"job_name" binding:"required"`
-	QuantityRequired   int                      `json:"quantity_required" binding:"required,gt=0"`
-	UnfoldedWidthMM    float64                  `json:"unfolded_width_mm" binding:"required"`
-	UnfoldedHeightMM   float64                  `json:"unfolded_height_mm" binding:"required"`
-	PaperSetup         PaperSelectionSetup      `json:"paper_setup" binding:"required"`
+	JobName            string                  `json:"job_name" binding:"required"`
+	QuantityRequired   int                     `json:"quantity_required" binding:"required,gt=0"`
+	UnfoldedWidthMM    float64                 `json:"unfolded_width_mm" binding:"required"`
+	UnfoldedHeightMM   float64                 `json:"unfolded_height_mm" binding:"required"`
+	PaperSetup         PaperSelectionSetup     `json:"paper_setup" binding:"required"`
 	PrintingProcesses  []PrinterProcessSetup   `json:"printing_processes"`
 	FinishingProcesses []FinishingProcessSetup `json:"finishing_processes"`
 }
 
 type CreateOrderRequest struct {
-	OrderNo         string                 `json:"order_no"`
-	OrderID         string                 `json:"order_id,omitempty"`
-	OrderNumber     string                 `json:"order_number,omitempty"`
-	CustomerID      string                 `json:"customer_id"`
-	CustomerName    string                 `json:"customer_name" binding:"required"`
-	CustomerPhone   string                 `json:"customer_phone"`
-	Phone           string                 `json:"phone,omitempty"`
-	CustomerAddress string                 `json:"customer_address"`
-	Address         string                 `json:"address,omitempty"`
-	CustomerEmail   string                 `json:"customer_email"`
-	Email           string                 `json:"email,omitempty"`
-	Province        string                 `json:"province"`
-	District        string                 `json:"district"`
-	Village         string                 `json:"village"`
-	DepositLAK      float64                `json:"deposit_lak"`
-	TotalAmountLAK  float64                `json:"total_amount_lak,omitempty"`
-	TotalPrice      float64                `json:"total_price,omitempty"`
-	DeliveryDate    string                 `json:"delivery_date"`
-	GoogleDriveLink string                 `json:"google_drive_link"`
-	DriveLink       string                 `json:"drive_link,omitempty"`
-	ArtworkURL      string                 `json:"artwork_url"`
-	ArtworkFileName string                 `json:"artwork_file_name"`
-	ArtworkFileSize int64                  `json:"artwork_file_size"`
-	MimeType        string                 `json:"mime_type"`
-	IdempotencyKey  string                 `json:"idempotency_key,omitempty"`
-	Items           []CreateItemRequest    `json:"items" binding:"required,dive,required"`
+	OrderNo         string              `json:"order_no"`
+	OrderID         string              `json:"order_id,omitempty"`
+	OrderNumber     string              `json:"order_number,omitempty"`
+	CustomerID      string              `json:"customer_id"`
+	CustomerName    string              `json:"customer_name" binding:"required"`
+	CustomerPhone   string              `json:"customer_phone"`
+	Phone           string              `json:"phone,omitempty"`
+	CustomerAddress string              `json:"customer_address"`
+	Address         string              `json:"address,omitempty"`
+	CustomerEmail   string              `json:"customer_email"`
+	Email           string              `json:"email,omitempty"`
+	Province        string              `json:"province"`
+	District        string              `json:"district"`
+	Village         string              `json:"village"`
+	DepositLAK      float64             `json:"deposit_lak"`
+	TotalAmountLAK  float64             `json:"total_amount_lak,omitempty"`
+	TotalPrice      float64             `json:"total_price,omitempty"`
+	DeliveryDate    string              `json:"delivery_date"`
+	GoogleDriveLink string              `json:"google_drive_link"`
+	DriveLink       string              `json:"drive_link,omitempty"`
+	ArtworkURL      string              `json:"artwork_url"`
+	ArtworkFileName string              `json:"artwork_file_name"`
+	ArtworkFileSize int64               `json:"artwork_file_size"`
+	MimeType        string              `json:"mime_type"`
+	IdempotencyKey  string              `json:"idempotency_key,omitempty"`
+	Items           []CreateItemRequest `json:"items" binding:"required,dive,required"`
 }
 
 type CreateItemRequest struct {
-	ProductID          string                   `json:"product_id,omitempty"`
-	ProductName        string                   `json:"product_name,omitempty"`
-	JobName            string                   `json:"job_name"`
-	ItemName           string                   `json:"item_name"`
-	Name               string                   `json:"name,omitempty"`
-	Quantity           int                      `json:"quantity" binding:"required,gt=0"`
-	PageCount          int                      `json:"page_count"`
-	PaperSize          string                   `json:"paper_size"`
-	CoverPaperID       string                   `json:"cover_paper_id"`
-	InnerPaperID       string                   `json:"inner_paper_id"`
-	CoverFileURL       string                   `json:"cover_file_url"`
-	InnerFileURL       string                   `json:"inner_file_url"`
-	ArtworkURL         string                   `json:"artwork_url"`
-	ArtworkFileName    string                   `json:"artwork_file_name"`
-	ArtworkFileSize    int64                    `json:"artwork_file_size"`
-	MimeType           string                   `json:"mime_type"`
-	PaperSku           string                   `json:"paper_sku"`
-	PaperCostPerUnit   float64                  `json:"paper_cost_per_unit"`
-	PaperFormat        string                   `json:"paper_format"`
-	InkCoveragePercent float64                  `json:"ink_coverage_percent"`
-	InkCostPerMl       float64                  `json:"ink_cost_per_ml"`
-	AvgCovC            float64                  `json:"avg_cov_c"`
-	AvgCovM            float64                  `json:"avg_cov_m"`
-	AvgCovY            float64                  `json:"avg_cov_y"`
-	AvgCovK            float64                  `json:"avg_cov_k"`
-	LaminationType     string                   `json:"lamination_type"`
-	LaminationCost     float64                  `json:"lamination_cost"`
-	BindingType        string                   `json:"binding_type"`
-	BindingCost        float64                  `json:"binding_cost"`
-	SpineWidthMM       float64                  `json:"spine_width_mm"`
-	LaborCostPerHour   float64                  `json:"labor_cost_per_hour"`
-	EstimatedHours     float64                  `json:"estimated_hours"`
-	MarkupMargin       float64                  `json:"markup_margin"`
-	UnitCostLAK        float64                  `json:"unit_cost_lak"`
-	UnitPriceLAK       float64                  `json:"unit_price_lak"`
-	TotalPriceLAK      float64                  `json:"total_price_lak"`
-	UnitPrice          float64                  `json:"unit_price,omitempty"`
-	TotalPrice         float64                  `json:"total_price,omitempty"`
-	UnitPriceTHB       float64                  `json:"unit_price_thb,omitempty"`
-	TotalPriceTHB      float64                  `json:"total_price_thb,omitempty"`
-	DriveLink          string                   `json:"drive_link,omitempty"`
-	Specs              map[string]interface{}   `json:"specs"`
-	Artwork            *ItemArtwork             `json:"artwork,omitempty"`
-	Specifications     map[string]interface{}   `json:"specifications,omitempty"`
+	ProductID          string                 `json:"product_id,omitempty"`
+	ProductName        string                 `json:"product_name,omitempty"`
+	JobName            string                 `json:"job_name"`
+	ItemName           string                 `json:"item_name"`
+	Name               string                 `json:"name,omitempty"`
+	Quantity           int                    `json:"quantity" binding:"required,gt=0"`
+	PageCount          int                    `json:"page_count"`
+	PaperSize          string                 `json:"paper_size"`
+	CoverPaperID       string                 `json:"cover_paper_id"`
+	InnerPaperID       string                 `json:"inner_paper_id"`
+	CoverFileURL       string                 `json:"cover_file_url"`
+	InnerFileURL       string                 `json:"inner_file_url"`
+	ArtworkURL         string                 `json:"artwork_url"`
+	ArtworkFileName    string                 `json:"artwork_file_name"`
+	ArtworkFileSize    int64                  `json:"artwork_file_size"`
+	MimeType           string                 `json:"mime_type"`
+	PaperSku           string                 `json:"paper_sku"`
+	PaperCostPerUnit   float64                `json:"paper_cost_per_unit"`
+	PaperFormat        string                 `json:"paper_format"`
+	InkCoveragePercent float64                `json:"ink_coverage_percent"`
+	InkCostPerMl       float64                `json:"ink_cost_per_ml"`
+	AvgCovC            float64                `json:"avg_cov_c"`
+	AvgCovM            float64                `json:"avg_cov_m"`
+	AvgCovY            float64                `json:"avg_cov_y"`
+	AvgCovK            float64                `json:"avg_cov_k"`
+	LaminationType     string                 `json:"lamination_type"`
+	LaminationCost     float64                `json:"lamination_cost"`
+	BindingType        string                 `json:"binding_type"`
+	BindingCost        float64                `json:"binding_cost"`
+	SpineWidthMM       float64                `json:"spine_width_mm"`
+	LaborCostPerHour   float64                `json:"labor_cost_per_hour"`
+	EstimatedHours     float64                `json:"estimated_hours"`
+	MarkupMargin       float64                `json:"markup_margin"`
+	UnitCostLAK        float64                `json:"unit_cost_lak"`
+	UnitPriceLAK       float64                `json:"unit_price_lak"`
+	TotalPriceLAK      float64                `json:"total_price_lak"`
+	UnitPrice          float64                `json:"unit_price,omitempty"`
+	TotalPrice         float64                `json:"total_price,omitempty"`
+	UnitPriceTHB       float64                `json:"unit_price_thb,omitempty"`
+	TotalPriceTHB      float64                `json:"total_price_thb,omitempty"`
+	DriveLink          string                 `json:"drive_link,omitempty"`
+	Specs              map[string]interface{} `json:"specs"`
+	Artwork            *ItemArtwork           `json:"artwork,omitempty"`
+	Specifications     map[string]interface{} `json:"specifications,omitempty"`
 	// Extended fields for multi-printer and finishing
-	QuantityRequired   int                      `json:"quantity_required,omitempty"`
-	UnfoldedWidthMM    float64                  `json:"unfolded_width_mm,omitempty"`
-	UnfoldedHeightMM   float64                  `json:"unfolded_height_mm,omitempty"`
-	PaperSetup         *PaperSelectionSetup     `json:"paper_setup,omitempty"`
+	QuantityRequired   int                     `json:"quantity_required,omitempty"`
+	UnfoldedWidthMM    float64                 `json:"unfolded_width_mm,omitempty"`
+	UnfoldedHeightMM   float64                 `json:"unfolded_height_mm,omitempty"`
+	PaperSetup         *PaperSelectionSetup    `json:"paper_setup,omitempty"`
 	PrintingProcesses  []PrinterProcessSetup   `json:"printing_processes,omitempty"`
 	FinishingProcesses []FinishingProcessSetup `json:"finishing_processes,omitempty"`
 }
@@ -387,4 +389,20 @@ type ProofStatusResponse struct {
 	SignatureIP     string     `json:"signature_ip,omitempty"`
 }
 
-
+// UnmarshalJSON accepts the existing AppContext customer alias without changing
+// canonical precedence, required-field validation or client identity handling.
+func (r *CreateOrderRequest) UnmarshalJSON(data []byte) error {
+	type plain CreateOrderRequest
+	decoded := struct {
+		*plain
+		CustomerNameCamel string `json:"customerName"`
+	}{plain: (*plain)(r)}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	if r.CustomerName == "" {
+		r.CustomerName = decoded.CustomerNameCamel
+	}
+	r.CustomerName = strings.TrimSpace(r.CustomerName)
+	return nil
+}

@@ -1,3 +1,4 @@
+import { apiFetch } from '../../../api/client';
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '@store/AppContext';
 import { useTranslation } from 'react-i18next';
@@ -16,7 +17,12 @@ import { QuotationShareModal } from './QuotationShareModal';
 import { PricingTemplatesModal } from './PricingTemplatesModal';
 import { QuotationHistoryModal } from './QuotationHistoryModal';
 import { PreflightItemCreationModal } from '../../../components/PreflightItemCreationModal';
-import type { PreflightResult } from '@features/orders/types';
+import { parentSheetDimensions } from '@utils/impositionLayout';
+import ArtworkFileActions from '@features/orders/components/ArtworkFileActions';
+import { getArtworkFiles, formatArtworkSize } from '@features/orders/utils/artworkParts';
+import ArtworkPartsPanel from '@features/orders/components/ArtworkPartsPanel';
+import type { ArtworkPart, PreflightResult } from '@features/orders/types';
+import { itemForArtworkPart, commercialTotals, artworkEditorItem, patchArtworkEditor } from '../utils/artworkPartPricing';
 import { mapPreflightToSpecs, mapQuotationItemToOrderItem } from '../utils/preflightMapper';
 import { PaperMaterialSelectorModal } from './PaperMaterialSelectorModal';
 import { PrinterSelectorModal } from './PrinterSelectorModal';
@@ -174,11 +180,15 @@ export interface QuotationItem {
   artworkUrl?: string;
   fileSize?: number;
   mimeType?: string;
+  previewThumbnailUrl?: string;
   coverFileName?: string;
   coverArtworkUrl?: string;
   coverFileSize?: number;
+  artworkParts?: ArtworkPart[];
   preflightData?: PreflightResult;
   batchFiles?: any[];
+  multipleImagesPerSheet?: boolean;
+  imagesPerSheet?: number;
   isBatchPhoto?: boolean;
   photoCount?: number;
   suggestedPaper?: string;
@@ -227,6 +237,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     addQuotation,
     reviseQuotation,
     deleteQuotation,
+    refetchEquipment: refreshServerState,
     convertQuotationToOrder,
     currency,
     setCurrency,
@@ -495,6 +506,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       pagesPerBook: pageCount,
       unitName: isBook ? 'ຊຸດ' : 'ແຜ່ນ',
       includeCover: specs?.includeCover ?? isBook,
+      artworkParts: specs?.artworkParts?.map(part => ({ ...part, paperId: part.paperId || (part.role === 'cover' ? defaultCoverPaper : defaultPaper), paperName: part.paperName || papers.find(p => p.id === (part.paperId || (part.role === 'cover' ? defaultCoverPaper : defaultPaper)))?.name, doubleSided: part.doubleSided ?? (part.role === 'cover' ? specs?.coverPrintMode === 'CMYK_2_SIDES' : isBook), printerId: part.printerId || defaultPrinter.id })),
       coverArtworkUrl: specs?.coverArtworkUrl,
       coverFileName: specs?.coverFileName,
       coverPaperId: specs?.coverPaperId || specs?.cover_paper_id || defaultCoverPaper,
@@ -514,7 +526,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       artworkUrl: specs?.artworkUrl,
       fileSize: specs?.fileSize,
       mimeType: specs?.mimeType,
+      previewThumbnailUrl: specs?.previewThumbnailUrl,
       preflightData: specs?.preflightData,
+      multipleImagesPerSheet: specs?.multipleImagesPerSheet ?? false,
+      imagesPerSheet: specs?.imagesPerSheet ?? 4,
       batchFiles: specs?.batchFiles || specs?.preflightData?.batch_files || [],
       selectedPrinterId: defaultPrinter.id,
       selectedInkSet: 'Konica C6085 OEM Set',
@@ -560,6 +575,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   ]);
   const [activeItemIndex, setActiveItemIndex] = useState(0);
   const activeItem = items[activeItemIndex] || items[0];
+  const [selectedFile, setSelectedFile] = useState<{ itemId: string; role: ArtworkPart['role'] } | null>(null);
+  const selectedPart = activeItem.artworkParts?.find(part => selectedFile?.itemId === activeItem.id && part.role === selectedFile.role) || activeItem.artworkParts?.[0];
+
+  const editorItem = selectedPart ? artworkEditorItem(activeItem, selectedPart) : activeItem;
 
   // Auto-sync when prefilledOrderSpecs or prefilledSpecs arrives dynamically
   useEffect(() => {
@@ -611,6 +630,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         unitName: isBatch ? 'ຊຸດ' : (isBook ? 'ຊຸດ' : 'ແຜ່ນ'),
         isDoubleSided: isDuplex,
         includeCover: incomingSpecs.includeCover ?? isBook,
+        artworkParts: incomingSpecs.artworkParts?.map(part => ({ ...part, paperId: part.paperId || (part.role === 'cover' ? activeItem.coverPaperId : activeItem.paperId), paperName: part.paperName || papers.find(p => p.id === (part.paperId || (part.role === 'cover' ? activeItem.coverPaperId : activeItem.paperId)))?.name, doubleSided: part.doubleSided ?? (part.role === 'cover' ? activeItem.coverPrintMode === 'CMYK_2_SIDES' : activeItem.isDoubleSided), printerId: part.printerId || activeItem.selectedPrinterId })) || activeItem.artworkParts,
         coverArtworkUrl: incomingSpecs.coverArtworkUrl || activeItem.coverArtworkUrl,
         coverFileName: incomingSpecs.coverFileName || activeItem.coverFileName,
         isBatchPhoto: isBatch,
@@ -632,8 +652,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         impositionSummary: incomingSpecs.impositionSummary || incomingSpecs.imposition_summary || activeItem.impositionSummary,
         fileName: incomingSpecs.fileName || activeItem.fileName,
         fileSize: incomingSpecs.fileSize ?? activeItem.fileSize,
+        previewThumbnailUrl: incomingSpecs.previewThumbnailUrl || activeItem.previewThumbnailUrl,
         artworkUrl: incomingSpecs.fileUrl || incomingSpecs.artworkUrl || activeItem.artworkUrl,
         preflightData: incomingSpecs.preflightData || activeItem.preflightData,
+        multipleImagesPerSheet: incomingSpecs.multipleImagesPerSheet ?? activeItem.multipleImagesPerSheet,
+        imagesPerSheet: incomingSpecs.imagesPerSheet ?? activeItem.imagesPerSheet,
         batchFiles: incomingSpecs.batchFiles || incomingSpecs.preflightData?.batch_files || activeItem.batchFiles || [],
         printerAllocations: [{
           printer_id: selectedPrinter.id,
@@ -665,10 +688,16 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   const [isPreflightModalOpen, setIsPreflightModalOpen] = useState(false);
   const [previewColorItem, setPreviewColorItem] = useState<QuotationItem | null>(null);
+  const openArtworkInspection = (item: QuotationItem, role?: ArtworkPart['role']) => {
+    const part = item.artworkParts?.find(part => part.role === (role || (selectedFile?.itemId === item.id ? selectedFile.role : undefined))) || item.artworkParts?.[0];
+    const index = items.findIndex(candidate => candidate.id === item.id); if (index >= 0) setActiveItemIndex(index);
+    if (part) setSelectedFile({ itemId: item.id, role: part.role });
+    setPreviewColorItem(part ? artworkEditorItem(item, part) : item);
+  };
   const [activeProductionTab, setActiveProductionTab] = useState<'specs' | 'print' | 'postpress'>('specs');
 
   const handleSyncColorsToActivePrinter = (colors: { c: number; m: number; y: number; k: number }) => {
-    const isMono = activeItem.colorPrintMode === 'MONO_K';
+    const isMono = editorItem.colorPrintMode === 'MONO_K';
     const channels = isMono ? [
       { channel_name: 'K', density_pct: colors.k, is_spot_color: false }
     ] : [
@@ -679,13 +708,13 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     ];
     const avg = Math.round((colors.c + colors.m + colors.y + colors.k) / (isMono ? 1 : 4));
 
-    updateActiveItem({
+    updateEditorItem({
       cCoverage: colors.c,
       mCoverage: colors.m,
       yCoverage: colors.y,
       kCoverage: colors.k,
       avgCoverage: avg,
-      printerAllocations: (activeItem.printerAllocations || []).map(a => ({
+      printerAllocations: (editorItem.printerAllocations || []).map(a => ({
         ...a,
         average_density_pct: avg,
         color_channels: channels,
@@ -700,9 +729,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   const handleSelectPaperFromModal = (paperId: string) => {
     if (paperModalTarget === 'cover') {
-      updateActiveItem({ coverPaperId: paperId });
+      updateEditorItem({ coverPaperId: paperId });
     } else {
-      updateActiveItem({ paperId });
+      updateEditorItem({ paperId, selectedPaperName: papers.find(paper => paper.id === paperId)?.name });
     }
   };
 
@@ -715,29 +744,29 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const inkBaseRate = Number(printer.colorInkCost || printer.linkedInkCostPerPage || prnCost.linkedInkRatePerPage || 0);
 
     // Preserve exact existing channels, density, and duplex from active allocation or item
-    const firstAlloc = activeItem.printerAllocations?.[0];
-    const isMono = firstAlloc ? firstAlloc.color_mode === 'MONO_K' : activeItem.colorPrintMode === 'MONO_K';
-    const isDuplex = firstAlloc ? firstAlloc.is_double_sided : activeItem.isDoubleSided;
+    const firstAlloc = editorItem.printerAllocations?.[0];
+    const isMono = firstAlloc ? firstAlloc.color_mode === 'MONO_K' : editorItem.colorPrintMode === 'MONO_K';
+    const isDuplex = firstAlloc ? firstAlloc.is_double_sided : editorItem.isDoubleSided;
 
     const existingChannels = firstAlloc?.color_channels;
     const channels = existingChannels && existingChannels.length > 0
       ? existingChannels.map(c => ({ ...c }))
       : (isMono ? [
-          { channel_name: 'K', density_pct: activeItem.kCoverage || 5, is_spot_color: false }
+          { channel_name: 'K', density_pct: editorItem.kCoverage || 5, is_spot_color: false }
         ] : [
-          { channel_name: 'C', density_pct: activeItem.cCoverage || 5, is_spot_color: false },
-          { channel_name: 'M', density_pct: activeItem.mCoverage || 5, is_spot_color: false },
-          { channel_name: 'Y', density_pct: activeItem.yCoverage || 5, is_spot_color: false },
-          { channel_name: 'K', density_pct: activeItem.kCoverage || 5, is_spot_color: false },
+          { channel_name: 'C', density_pct: editorItem.cCoverage || 5, is_spot_color: false },
+          { channel_name: 'M', density_pct: editorItem.mCoverage || 5, is_spot_color: false },
+          { channel_name: 'Y', density_pct: editorItem.yCoverage || 5, is_spot_color: false },
+          { channel_name: 'K', density_pct: editorItem.kCoverage || 5, is_spot_color: false },
         ]);
 
-    const avgDensity = firstAlloc?.average_density_pct || activeItem.avgCoverage || 5;
-    const totalJobSheets = (Number(activeItem.printVolume) || 1) * Math.ceil(Math.max(1, Number(activeItem.pagesPerBook || 1)) / (isDuplex ? 2 : 1));
+    const avgDensity = firstAlloc?.average_density_pct || editorItem.avgCoverage || 5;
+    const totalJobSheets = (Number(editorItem.printVolume) || 1) * Math.ceil(Math.max(1, Number(editorItem.pagesPerBook || 1)) / (isDuplex ? 2 : 1));
 
-    if (mode === 'add' && (activeItem.printerAllocations || []).length > 0) {
+    if (mode === 'add' && (editorItem.printerAllocations || []).length > 0) {
       // Split load mode: Add new printer and distribute sheets
       const totalPages = totalJobSheets;
-      const currentAllocations = activeItem.printerAllocations || [];
+      const currentAllocations = editorItem.printerAllocations || [];
       const newCount = currentAllocations.length + 1;
       const pagesPerEngine = Math.floor(totalPages / newCount);
       const remainder = totalPages % newCount;
@@ -764,7 +793,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         is_double_sided: isDuplex
       };
 
-      updateActiveItem({
+      updateEditorItem({
         printerAllocations: [...updatedExisting, newAlloc]
       });
       if (showToast) showToast(`ເພີ່ມ "${printer.name}" ເພື່ອແບ່ງການຜະລິດຮຽບຮ້ອຍ!`, 'success');
@@ -783,7 +812,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         is_double_sided: isDuplex
       };
 
-      updateActiveItem({
+      updateEditorItem({
         selectedPrinterId: printer.id,
         printerAllocations: [newAlloc]
       });
@@ -795,10 +824,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   const [isPostPressModalOpen, setIsPostPressModalOpen] = useState(false);
 
   const handleTogglePostPressFromModal = (machId: string) => {
-    const current = activeItem.selectedPostPressIds || [];
+    const current = editorItem.selectedPostPressIds || [];
     const exists = current.includes(machId);
     const next = exists ? current.filter(id => id !== machId) : [...current, machId];
-    updateActiveItem({ selectedPostPressIds: next });
+    updateEditorItem({ selectedPostPressIds: next });
   };
 
   // Material & Consumable Inventory Search Modal State
@@ -838,6 +867,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       return updated;
     }));
   };
+
+  const updateEditorItem = (patch: Partial<QuotationItem>) => updateActiveItem(selectedPart ? patchArtworkEditor(activeItem, selectedPart, patch) : patch);
 
   const handleAddItem = () => {
     const newItem = createNewItem(`ລາຍການທີ ${items.length + 1}`);
@@ -976,7 +1007,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       };
     }
 
-    updateActiveItem({
+    updateEditorItem({
       selectedTemplateId: tpl.id,
       activeModules: { ...tpl.activeModules },
       finishingMaterials: tpl.defaultMaterials ? [...tpl.defaultMaterials] : [],
@@ -1212,6 +1243,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   const [quotationProfitMargin, setQuotationProfitMargin] = useState<number>(40);
   const [quotationDiscountPercent, setQuotationDiscountPercent] = useState<number>(0);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [isSavingQuotation, setIsSavingQuotation] = useState(false);
+  const savingQuotation = useRef(false);
+  const pendingSaveId = useRef<string | null>(null);
   const [isTemplateOption, setIsTemplateOption] = useState(false);
   const [templateCategory, setTemplateCategory] = useState('sticker');
   const [selectedCustomerId, setSelectedCustomerId] = useState(customers[0]?.name || '');
@@ -1237,6 +1271,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   const [selectedPackagingPreset, setSelectedPackagingPreset] = useState<string>('none');
   const [isPackagingEnabled, setIsPackagingEnabled] = useState<boolean>(false);
   const [isQuotationListOpen, setIsQuotationListOpen] = useState(false);
+  const [convertingQuoteId, setConvertingQuoteId] = useState<string | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isCopiedLink, setIsCopiedLink] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -1277,7 +1312,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     }
   };
 
-  const calculateItemFinancials = (item: QuotationItem) => {
+  const calculateSingleItemFinancials = (item: QuotationItem, imposed?: { sheets: number; copies: number; capacity: number }) => {
     const { w: jobW, h: jobH } = getPresetDimensions(item.jobSizePreset, item.jobWidth, item.jobHeight);
     
     const paperItem = inventory.find(p => 
@@ -1287,27 +1322,16 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       (p.sku && p.sku.toLowerCase() === item.paperId?.toLowerCase()) ||
       p.name === item.paperId
     );
-    let parentW = 210;
-    let parentH = 297;
-    if (item.parentSheetSize === '31x43' || paperItem?.name?.includes('31x43') || paperItem?.specs?.standardSize === '31x43' || paperItem?.category === 'parent_sheet') {
-      parentW = 787;
-      parentH = 1092;
-    } else if (paperItem?.name?.includes('A3') || paperItem?.specs?.standardSize === 'A3') { parentW = 297; parentH = 420; }
-    else if (paperItem?.name?.includes('A4') || paperItem?.specs?.standardSize === 'A4') { parentW = 210; parentH = 297; }
-    else if (paperItem?.name?.includes('A5') || paperItem?.specs?.standardSize === 'A5') { parentW = 148; parentH = 210; }
-    else if (paperItem?.specs?.width && paperItem?.specs?.height) {
-      parentW = Number(paperItem.specs.width);
-      parentH = Number(paperItem.specs.height);
-    }
-    
+    const {sheetWidth:parentW,sheetHeight:parentH} = parentSheetDimensions(paperItem,item.parentSheetSize);
+
     const curW = Number(jobW) + (Number(bleedMargin) * 2);
     const curH = Number(jobH) + (Number(bleedMargin) * 2);
     const portraitCuts = Math.floor(parentW / curW) * Math.floor(parentH / curH);
     const landscapeCuts = Math.floor(parentW / curH) * Math.floor(parentH / curW);
     const autoCutsPerSheet = Math.max(1, portraitCuts, landscapeCuts);
-    const cutsPerSheet = (item.cutsPerSheetOverride !== undefined && item.cutsPerSheetOverride > 0)
+    const cutsPerSheet = imposed?.capacity ?? ((item.cutsPerSheetOverride !== undefined && item.cutsPerSheetOverride > 0)
       ? Number(item.cutsPerSheetOverride)
-      : autoCutsPerSheet;
+      : autoCutsPerSheet);
 
     // 1. Check if this is a Photo Print / Batch Multi-Photo item:
     const isBatchPhoto = Boolean(
@@ -1332,10 +1356,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
     // 2. Inner Paper Sheets Calculation:
     // For Batch Photo: totalPhotos = photoCountPerSet * orderQty; parent sheets = ceil(totalPhotos / cutsPerSheet)
-    const totalInnerSheets = innerSheetsPerBook * orderQty;
-    const innerParentSheetsNeeded = isBatchPhoto
+    const totalInnerSheets = imposed?.copies ?? innerSheetsPerBook * orderQty;
+    const innerParentSheetsNeeded = imposed?.sheets ?? (isBatchPhoto
       ? Math.ceil(totalInnerSheets / Math.max(1, cutsPerSheet))
-      : Math.ceil(totalInnerSheets / Math.max(1, cutsPerSheet));
+      : Math.ceil(totalInnerSheets / Math.max(1, cutsPerSheet)));
 
     const isSpoilageActive = item.useSpoilage !== false;
     const tier = spoilageTiers.find(t => totalInnerSheets >= t.min && totalInnerSheets <= t.max);
@@ -1721,17 +1745,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const packagingDeliveryCost = hasPackagingModule ? (finalItemPkgCost + Number(item.deliveryCost || 0)) : 0;
 
     // Commercial cost (for Step 3 Selling Price calculation)
-    const commercialBaseCost = netCost + laborCost + packagingDeliveryCost;
-    const marginDec = Math.min(0.99, Math.max(0, Number(quotationProfitMargin ?? item.profitMargin ?? 40) / 100));
-    const baseSellingPrice = Math.round(commercialBaseCost / (1.0 - marginDec));
-    const discountAmt = Math.round(baseSellingPrice * (Number(quotationDiscountPercent ?? item.discountPercent ?? 0) / 100));
-    const finalSellingPrice = baseSellingPrice - discountAmt;
-    const unitPrice = Math.round(finalSellingPrice / Math.max(1, item.printVolume));
-    const unitCost = Math.round(netCost / Math.max(1, item.printVolume));
-    const profit = finalSellingPrice - commercialBaseCost;
+    const totals = commercialTotals(netCost, laborCost, packagingDeliveryCost, item.printVolume, quotationProfitMargin ?? item.profitMargin ?? 40, quotationDiscountPercent ?? item.discountPercent ?? 0);
+    const { baseSellingPrice, discountAmt, sellingPrice: finalSellingPrice, unitPrice, unitCost, profit } = totals;
 
     return {
-      cutsPerSheet,
+      cutsPerSheet: imposed?.capacity ?? cutsPerSheet,
       parentSheetsNeeded,
       totalParentSheets,
       wastedSheets,
@@ -1782,8 +1800,40 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     };
   };
 
+  const calculateItemFinancials = (item: QuotationItem) => {
+    const isPhoto = Boolean(item.isBatchPhoto || item.name?.includes('Photo Prints') || item.batchFiles?.length || (item.preflightData as any)?.is_batch_photo);
+    const capacity = Math.max(1, Math.floor(Number(item.imagesPerSheet) || 4));
+    const copies = (Number(item.photoCount) || item.batchFiles?.length || Number(item.pagesPerBook || 1)) * Number(item.printVolume || 1);
+    // One division: finished photos -> standard parent/printer sheets. OFF is the exact legacy path.
+    const imposed = isPhoto && item.multipleImagesPerSheet && !item.artworkParts?.length ? { copies, capacity, sheets: Math.ceil(copies / capacity) } : undefined;
+    const shared = calculateSingleItemFinancials(item, imposed);
+    if (!item.artworkParts?.length) return { ...shared, partCosts: undefined, sharedCosts: undefined };
+    const partCosts = item.artworkParts.map(part => {
+      const cost = calculateSingleItemFinancials(itemForArtworkPart(item,part));
+      return { role: part.role, sourceUrl: part.source.url, pages: part.pageCount, paperCost: cost.paperCost, inkCost: cost.inkCost, machineOverhead: cost.machineOverhead, parentSheets: cost.totalParentSheets, productionSheets: cost.totalProductionSheets, cutsPerSheet: cost.cutsPerSheet, paperUnitCost: cost.paperUnitCost, wastedSheets: cost.wastedSheets, parentSheetsNeeded: cost.parentSheetsNeeded, totalSheets: cost.totalInnerSheets, sheetsPerCopy: cost.innerSheetsPerBook, machDepr: cost.machDepr, machMaint: cost.machMaint, cyanMl: cost.cyanMl, magentaMl: cost.magentaMl, yellowMl: cost.yellowMl, blackMl: cost.blackMl };
+    });
+    const sum = (key: 'paperCost' | 'inkCost' | 'machineOverhead' | 'parentSheets' | 'productionSheets' | 'wastedSheets' | 'parentSheetsNeeded' | 'machDepr' | 'machMaint' | 'cyanMl' | 'magentaMl' | 'yellowMl' | 'blackMl') => partCosts.reduce((total, part) => total + part[key], 0);
+    const paperBeforeRebate = sum('paperCost');
+    const offcutRebate = item.useOffcutRebate ? Math.min(paperBeforeRebate, Number(item.offcutRebateAmount || 0)) : 0;
+    const paperCost = Math.max(0, paperBeforeRebate - offcutRebate);
+    const inkCost = sum('inkCost'); const machineOverhead = sum('machineOverhead');
+    // Binding/finishing use the existing job workflow once, never once per source.
+    const netCost = paperCost + inkCost + machineOverhead + shared.postPressCost + shared.finishingMaterialsCost;
+    const laborCost = item.activeModules?.laborAndSetup
+      ? (item.laborMode === 'manual' ? Math.max(0, Number(item.laborCostManual || 0)) : Math.round(netCost * Math.max(0, Number(item.laborPercent || 0)) / 100)) : 0;
+    const totals = commercialTotals(netCost, laborCost, shared.packagingDeliveryCost, item.printVolume, quotationProfitMargin ?? item.profitMargin ?? 40, quotationDiscountPercent ?? item.discountPercent ?? 0);
+    const cover = partCosts.find(part => part.role === 'cover'); const inner = partCosts.find(part => part.role === 'inner');
+    return { ...shared, ...totals, paperCost, inkCost, machineOverhead, netCost, directMatMach: netCost, laborCost, offcutRebate,
+      coverPaperCost: cover?.paperCost || 0, innerPaperCost: inner?.paperCost || 0, coverInkCost: cover?.inkCost || 0,
+      machDepr: sum('machDepr'), machMaint: sum('machMaint'), cyanMl: sum('cyanMl'), magentaMl: sum('magentaMl'), yellowMl: sum('yellowMl'), blackMl: sum('blackMl'), wastedSheets: sum('wastedSheets'), parentSheetsNeeded: sum('parentSheetsNeeded'), totalInnerSheets: inner?.totalSheets || 0, innerSheetsPerBook: inner?.sheetsPerCopy || 0,
+      totalParentSheets: sum('parentSheets'), totalProductionSheets: sum('productionSheets'), totalJobProductionSheets: sum('productionSheets'),
+      totalInnerParentSheets: inner?.parentSheets || 0, totalCoverParentSheets: cover?.parentSheets || 0, innerPagesPerBook: item.artworkParts?.find(part => part.role === 'inner')?.pageCount || 0,
+      partCosts, sharedCosts: { postPressCost: shared.postPressCost, finishingMaterialsCost: shared.finishingMaterialsCost, laborCost, packagingDeliveryCost: shared.packagingDeliveryCost, offcutRebate } };
+  };
+
   const calculatedItems = items.map(item => calculateItemFinancials(item));
   const activeCalc = calculateItemFinancials(activeItem);
+  const editorCalc = selectedPart ? calculateSingleItemFinancials(itemForArtworkPart(activeItem, selectedPart)) : activeCalc;
 
   const grandPaperCost = calculatedItems.reduce((sum, c) => sum + c.paperCost, 0);
   const grandInkCost = calculatedItems.reduce((sum, c) => sum + c.inkCost, 0);
@@ -1820,6 +1870,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   // Convert Quotation to Order (Lifecycle: Created without immediate stock deduction - stock will be deducted at IN_PRODUCTION)
   const handleConfirmOrder = () => {
+    if (!selectedCustomerId.trim()) {
+      showToast(currentLang === 'lo' ? 'ກະລຸນາເລືອກ ຫຼື ລະບຸຊື່ລູກຄ້າ' : 'Select or enter a customer name before creating the order', 'error');
+      return;
+    }
     const msg = currentLang === 'lo'
       ? `ຢືນຢັນການເປີດອໍເດີ (${items.length} ລາຍການ)? ຍອດລວມ: ${formatCurrency(finalGrandTotal)} (ສະຕ໋ອກຈະຖືກຕັດອັດຕະໂນມັດເມື່ອເລີ່ມສັ່ງພິມຈິງ IN_PRODUCTION)`
       : `Confirm order creation (${items.length} items)? Total: ${formatCurrency(finalGrandTotal)} (Stock will be auto-deducted at IN_PRODUCTION stage)`;
@@ -1846,11 +1900,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         phone: customerPhone || customers.find(c => c.name === selectedCustomerId)?.phone || '020 55889900',
         items: orderItems,
         totalPriceCharged: finalGrandTotal,
-        depositAmountPaid: Math.round(finalGrandTotal * 0.5),
-        remainingUnpaidBalance: Math.round(finalGrandTotal * 0.5),
+        depositAmountPaid: 0,
+        remainingUnpaidBalance: finalGrandTotal,
         paymentMethod: 'BCEL One',
-        paymentStatus: 'Deposit Paid',
-        status: 'Received',
+        paymentStatus: 'Unpaid',
+        status: 'WAITING_DEPOSIT',
         shippingFee: Number(shippingFee || 0),
         shippingMethod: shippingMethod,
         artworkLink: firstArtwork || firstFileName || '',
@@ -1874,6 +1928,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         const primaryItem = items[0];
         const primaryCalc = calculatedItems[0];
         onConvertToOrder({
+          artworkParts: primaryItem?.artworkParts,
           paperId: primaryItem?.paperId,
           paperName: primaryItem?.name,
           quantity: primaryItem?.printVolume,
@@ -1886,6 +1941,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
           artwork_file_size: firstFileSize,
           artworkLink: firstArtwork,
           items: items.map((it, idx) => ({
+            ...mapQuotationItemToOrderItem(it, idx, calculatedItems[idx], inventory.find(p => p.id === it.paperId), equipment),
             name: it.name,
             paperId: it.paperId,
             quantity: it.printVolume,
@@ -1911,11 +1967,26 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     setIsSaveModalOpen(true);
   };
 
+  const savedCommercialSnapshot = () => ({
+    version: 1, currency: 'LAK', total_cost_lak: grandNetCost,
+    final_total_lak: finalGrandTotal, discounted_subtotal_lak: grandSubtotal,
+    tax_amount_lak: taxAmount, shipping_fee_lak: Number(shippingFee || 0),
+    setup_fee_lak: quotationSetupFee, packaging_cost_lak: grandPackagingCost,
+    base_selling_price_lak: grandBaseSellingPrice, discount_amount_lak: grandDiscountAmount,
+    discount_percent: Number(quotationDiscountPercent || 0), target_margin_percent: quotationProfitMargin,
+    zero_cost_reason: '', metadata: { tax_enabled: taxEnabled, tax_rate: Number(taxRate), tax_mode: taxMode, tax_override_amount: Number(taxOverrideAmount), shipping_method: shippingMethod },
+  });
+
   // Confirm Save current quotation to history with versioning & template tag
-  const handleConfirmSaveQuotation = () => {
+  const handleConfirmSaveQuotation = async () => {
+    if (savingQuotation.current) return;
+    savingQuotation.current = true; setIsSavingQuotation(true);
+    try {
     const quoteItems = items.map((item, idx) => {
       const calc = calculatedItems[idx];
       return {
+        ...item,
+        ...mapQuotationItemToOrderItem(item, idx, calc, inventory.find(p => p.id === item.paperId), equipment),
         id: item.id,
         name: item.name,
         quantity: item.printVolume,
@@ -1931,8 +2002,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       title: quotationTitle.trim() || 'ໃບສະເໜີລາຄາງານພິມ',
       isPricingTemplate: isTemplateOption,
       templateCategory: isTemplateOption ? templateCategory : undefined,
-      customerName: selectedCustomerId || 'General Customer',
-      phone: resolvedPhone,
+      customerName: selectedCustomerId.trim(),
+      phone: resolvedPhone, customerPhone: resolvedPhone, customerAddress,
+      id: pendingSaveId.current ?? (pendingSaveId.current = `quot-${crypto.randomUUID()}`),
+      totalCost: grandNetCost, setupFee: quotationSetupFee, packagingCost: grandPackagingCost,
+      commercial_snapshot: savedCommercialSnapshot(),
       rawItems: JSON.parse(JSON.stringify(items)),
       items: quoteItems,
       subtotal: grandSubtotal,
@@ -1956,7 +2030,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       version: 1
     };
 
-    addQuotation(quoteData);
+    if (!await addQuotation(quoteData)) return;
+    pendingSaveId.current = null;
     setIsSaveModalOpen(false);
 
     if (isTemplateOption) {
@@ -1975,74 +2050,45 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       );
     } else {
       showToast(
-        currentLang === 'lo' ? 'ບັນທຶກໃບສະເໜີລາຄາສຳເລັດ!' : 'Quotation saved successfully!',
+        'ບັນທຶກໃບສະເໜີລາຄາສຳເລັດ!',
         'success'
       );
     }
+    } finally { savingQuotation.current = false; setIsSavingQuotation(false); }
   };
 
-  // Manager Approval Actions
-  const handleApproveDiscount = async (quote: any) => {
-    setIsProcessingApproval(true);
-    try {
-      await fetch(`/api/v1/quotations/${quote.id || quote.quotationNumber}/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-User-Role': 'ROLE_MANAGER' },
-        body: JSON.stringify({ reason: approvalReason, manager_id: 'MGR-ACTIVE' })
-      }).catch(() => null);
-
-      quote.status = 'Approved';
-      quote.approvedBy = 'Sales Manager';
-      quote.approvalNote = approvalReason;
-
-      showToast(
-        currentLang === 'lo' ? 'ອະນຸມັດສ່ວນຫຼຸດສຳເລັດແລ້ວ!' : 'Discount approved by Sales Manager!',
-        'success'
-      );
-      setApprovalModalQuote(null);
-      setApprovalReason('');
-    } finally {
-      setIsProcessingApproval(false);
-    }
-  };
-
-  const handleRejectDiscount = async (quote: any) => {
+  // Financial decisions remain separate from lifecycle conversion.
+  const handleQuotationDecision = async (quoteId: string, action: 'approve' | 'reject') => {
+    if (isProcessingApproval) return;
     if (!approvalReason.trim()) {
-      showToast(
-        currentLang === 'lo' ? 'ກະລຸນາປ້ອນເຫດຜົນການປະຕິເສດ' : 'Please provide a rejection reason',
-        'error'
-      );
-      return;
+      showToast('ກະລຸນາປ້ອນເຫດຜົນກ່ອນ', 'error'); return;
     }
     setIsProcessingApproval(true);
     try {
-      await fetch(`/api/v1/quotations/${quote.id || quote.quotationNumber}/reject`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-User-Role': 'ROLE_MANAGER' },
-        body: JSON.stringify({ reason: approvalReason, manager_id: 'MGR-ACTIVE' })
-      }).catch(() => null);
-
-      quote.status = 'Rejected';
-      quote.rejectionReason = approvalReason;
-
-      showToast(
-        currentLang === 'lo' ? 'ປະຕິເສດສ່ວນຫຼຸດແລ້ວ' : 'Discount rejected',
-        'info'
-      );
-      setApprovalModalQuote(null);
-      setApprovalReason('');
-    } finally {
-      setIsProcessingApproval(false);
-    }
+      const response = await apiFetch<Response>(`/api/v1/quotations/${encodeURIComponent(quoteId)}/${action}`, { method: 'POST', body: JSON.stringify({ reason: approvalReason }) });
+      if (!response.ok) throw new Error(`Quotation decision failed (HTTP ${response.status})`);
+      const decision = await response.json();
+      if (decision.status !== 'success' || decision.target_type !== 'quotation' || decision.quotation_id !== quoteId || decision.quotation_status !== (action === 'approve' ? 'ACCEPTED' : 'REJECTED') || decision.committed !== true) throw new Error('Quotation decision not committed to matching target');
+      await refreshServerState();
+      showToast(action === 'approve' ? 'ອະນຸມັດໃບສະເໜີລາຄາສຳເລັດ' : 'ປະຕິເສດໃບສະເໜີລາຄາແລ້ວ', 'success');
+      setApprovalModalQuote(null); setApprovalReason('');
+    } catch (error) {
+      console.error('Quotation decision not confirmed:', error);
+      showToast('ຍັງບໍ່ຢືນຢັນຜົນການອະນຸມັດ; ກະລຸນາລອງອີກຄັ້ງ ຫຼື ໃຫ້ຜູ້ຈັດການກວດສອບ', 'error');
+    } finally { setIsProcessingApproval(false); }
   };
+  const handleApproveDiscount = (quote: { id: string }) => handleQuotationDecision(quote.id, 'approve');
+  const handleRejectDiscount = (quote: { id: string }) => handleQuotationDecision(quote.id, 'reject');
 
   // Revise the active quotation (adds a new version row)
-  const handleReviseQuotation = (quotationId: string) => {
-    reviseQuotation(quotationId, finalGrandTotal, `Revision applied: ${currency} ${formatCurrency(finalGrandTotal)}`);
-    showToast(
-      currentLang === 'lo' ? 'ສ້າງເວີຊັນໃໝ່ສຳເລັດ!' : 'New quotation version created!',
-      'success'
-    );
+  const handleReviseQuotation = async (quotationId: string) => {
+    if (savingQuotation.current) return;
+    savingQuotation.current = true; setIsSavingQuotation(true);
+    try {
+      const quoteItems = items.map((item, idx) => ({ ...item, ...mapQuotationItemToOrderItem(item, idx, calculatedItems[idx], inventory.find(p => p.id === item.paperId), equipment), quantity: item.printVolume, unitPrice: calculatedItems[idx].unitPrice, subtotal: calculatedItems[idx].sellingPrice }));
+      const saved = await reviseQuotation(quotationId, { rawItems: structuredClone(items), items: quoteItems, totalCost: grandNetCost, grandTotal: finalGrandTotal, setupFee: quotationSetupFee, packagingCost: grandPackagingCost, shippingFee: Number(shippingFee || 0), profitMargin: quotationProfitMargin, discountPercent: Number(quotationDiscountPercent || 0), commercial_snapshot: savedCommercialSnapshot(), status: grandProfitMargin < 25 ? 'REQUIRES_MANAGER_APPROVAL' : 'Pending' }, 'ປັບປຸງໃບສະເໜີລາຄາ');
+      if (saved) showToast('ບັນທຶກການປັບປຸງໃບສະເໜີລາຄາສຳເລັດ', 'success');
+    } finally { savingQuotation.current = false; setIsSavingQuotation(false); }
   };
 
   // 1-Click Convert accepted quotation to production order + job ticket
@@ -2052,35 +2098,19 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       : `Convert quotation ${quotation.quotationNumber || quotation.quotation_no || quotation.id} to a production order with Job Ticket?`;
 
     askConfirmation(msg, async () => {
-      let createdOrderId = quotation.id;
+      setConvertingQuoteId(quotation.id);
       try {
-        const res = await fetch(`/api/v1/quotations/${quotation.id || quotation.quotationNumber || quotation.quotation_no}/convert`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          createdOrderId = data.orderId || data.order_id || createdOrderId;
-        }
-      } catch (err) {
-        console.warn('Backend conversion fallback to local store:', err);
-      }
-
-      const localOrderId = convertQuotationToOrder(quotation.id);
-      const finalOrderId = createdOrderId || localOrderId;
-
-      if (finalOrderId && onConvertToOrder) {
-        onConvertToOrder({ orderId: finalOrderId, sourceQuotationId: quotation.id });
-      }
-      showToast(
-        currentLang === 'lo' ? 'ປ່ຽນເປັນອໍເດີສຳເລັດ! ສ້າງ Job Ticket ແລ້ວ.' : 'Converted to order! Job Ticket generated.',
-        'success'
-      );
+        const finalOrderId = await convertQuotationToOrder(quotation.id);
+        if (finalOrderId && onConvertToOrder) onConvertToOrder({ orderId: finalOrderId, sourceQuotationId: quotation.id });
+      } finally { setConvertingQuoteId(null); }
     });
   };
 
   // Quick Save as Draft with Customer & Specs Snapshot
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
+    if (savingQuotation.current) return;
+    savingQuotation.current = true; setIsSavingQuotation(true);
+    try {
     const quoteItems = items.map((item, idx) => {
       const calc = calculatedItems[idx];
       const paperObj = inventory.find(p => p.id === item.paperId);
@@ -2093,6 +2123,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         .join(', ');
 
       return {
+        ...item,
+        ...mapQuotationItemToOrderItem(item, idx, calc, inventory.find(p => p.id === item.paperId), equipment),
         id: item.id,
         name: item.name,
         quantity: item.printVolume,
@@ -2106,8 +2138,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
     const draftData = {
       title: quotationTitle.trim() || 'ສະບັບຮ່າງໃບສະເໜີລາຄາ',
-      customerName: selectedCustomerId || 'General Customer',
-      phone: resolvedPhone,
+      customerName: selectedCustomerId.trim(),
+      phone: resolvedPhone, customerPhone: resolvedPhone, customerAddress,
+      id: pendingSaveId.current ?? (pendingSaveId.current = `quot-${crypto.randomUUID()}`),
+      totalCost: grandNetCost, setupFee: quotationSetupFee, packagingCost: grandPackagingCost,
+      commercial_snapshot: savedCommercialSnapshot(),
       rawItems: JSON.parse(JSON.stringify(items)),
       items: quoteItems,
       subtotal: grandSubtotal,
@@ -2134,13 +2169,15 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       fileName: items.find(it => it.fileName)?.fileName || '',
     };
 
-    addQuotation(draftData);
+    if (!await addQuotation(draftData)) return;
+    pendingSaveId.current = null;
     showToast(
       currentLang === 'lo'
         ? `ບັນທຶກສະບັບຮ່າງ "${draftData.title}" ສຳເລັດ! ເຂົ້າສູ່ປະຫວັດໃບສະເໜີແລ້ວ.`
         : `Draft "${draftData.title}" saved successfully!`,
       'success'
     );
+    } finally { savingQuotation.current = false; setIsSavingQuotation(false); }
   };
 
   // Delete a quotation with confirmation
@@ -2163,6 +2200,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const defPaper = inventory[0]?.id || '';
     const defPrn = equipment[0]?.id || '';
     return {
+      ...raw,
       id: raw?.id || `item-${Date.now()}-${idx}`,
       name: raw?.name || `ລາຍການ ${idx + 1}`,
       paperId: raw?.paperId || defPaper,
@@ -2409,6 +2447,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
           <button
             type="button"
             onClick={handleSaveDraft}
+            disabled={isSavingQuotation}
+            aria-busy={isSavingQuotation}
             className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer active:scale-95"
             title="Save draft"
           >
@@ -2635,7 +2675,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                             placeholder="ລະບຸຊື່ລາຍການ..."
                             className="font-bold text-slate-800 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-500 focus:outline-none px-1 py-0.5 transition w-full text-xs"
                           />
-                          {item.fileName && (
+                          {item.artworkParts?.length ? <div className="text-xs space-y-1">{item.artworkParts.map(part => <div key={part.role}>{part.role}: {part.source.name} • {(part.source.size / 1048576).toFixed(2)} MB</div>)}</div> : item.fileName && (
                             <span className="inline-flex items-center gap-1 text-[10px] text-sky-600 font-medium mt-0.5 truncate max-w-[180px]">
                               <FileText className="w-2.5 h-2.5 shrink-0" />
                               <span className="truncate">{item.fileName}</span>
@@ -2643,20 +2683,20 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                           )}
                         </td>
                         <td className="py-2.5 px-3">
-                          <div className="space-y-1 text-[11px]">
+                          {item.artworkParts?.length ? <div className="text-xs space-y-1">{item.artworkParts.map(part => <button type="button" key={part.role} data-inspect-artwork-role={part.role} onClick={() => openArtworkInspection(item, part.role)} className="block text-left"><strong>{part.role}: {part.pageCount} pages</strong> • {part.widthMM}×{part.heightMM} mm • {part.colorMode}<br />C{part.coverage.c} M{part.coverage.m} Y{part.coverage.y} K{part.coverage.k}</button>)}</div> : <>                          <div className="space-y-1 text-[11px]">
                             <div className="flex flex-wrap items-center gap-1">
                               <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-bold font-sans">
                                 {item.jobSizePreset || 'A4'}
                               </span>
                               <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium font-sans">
-                                {item.pagesPerBook ? `${item.pagesPerBook} ໜ້າ` : '1 ໜ້າ'}
+                                {item.artworkParts?.length ? item.artworkParts.map(p => `${p.role}: ${p.pageCount}`).join(' • ') : (item.pagesPerBook ? `${item.pagesPerBook} ໜ້າ` : '1 ໜ້າ')}
                               </span>
                               <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-bold">
                                 {item.colorPrintMode === 'MONO_K' ? 'Mono' : 'CMYK'}
                               </span>
                               <button
                                 type="button"
-                                onClick={() => setPreviewColorItem(item)}
+                                onClick={() => openArtworkInspection(item)}
                                 className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200/60 cursor-pointer transition text-[10px]"
                                 title="ກວດສອບຄ່າສີ & Preview ໄຟລ໌"
                               >
@@ -2681,7 +2721,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                                 <span> • {printerItem.name}</span>
                               )}
                             </div>
-                          </div>
+                          </div></>}
+
                         </td>
                         <td className="py-2.5 px-3 text-right font-bold text-slate-700 font-sans">
                           {item.printVolume || 1} {item.unitName || 'ຊຸດ'}
@@ -2698,7 +2739,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                           <div className="flex items-center justify-center gap-1">
                             <button
                               type="button"
-                              onClick={() => setPreviewColorItem(item)}
+                              onClick={() => openArtworkInspection(item)}
                               className="p-1 hover:bg-indigo-100 text-indigo-500 hover:text-indigo-700 rounded-lg transition cursor-pointer"
                               title="ກວດສອບຄ່າສີ & Preview ໄຟລ໌"
                             >
@@ -2896,19 +2937,19 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                         </div>
                       </div>
 
-                      {/* Visual Artwork Thumbnail & Quick Preview Trigger */}
+                      {item.artworkParts?.length ? <div data-testid="quotation-sidebar-artwork-parts" className="space-y-2 pl-3 border-l-2 border-slate-200">{item.artworkParts.map(part => <div key={part.role}><button type="button" data-select-artwork-role={part.role} aria-label={`ແກ້ໄຂ ${part.role === 'cover' ? 'ປົກ' : 'ເນື້ອໃນ'}: ${part.source.name}`} aria-pressed={isActive && selectedPart?.role === part.role} className={`w-full text-left p-3 rounded-xl border text-xs transition focus-visible:ring-2 focus-visible:ring-sky-500 ${isActive && selectedPart?.role === part.role ? 'bg-sky-50 border-sky-300 text-sky-900' : 'bg-slate-50 border-slate-200 hover:bg-white'}`} onClick={e => { e.stopPropagation(); setActiveItemIndex(idx); setSelectedFile({ itemId: item.id, role: part.role }); }}><span className="font-bold flex items-center gap-2"><FileText className="w-4 h-4 text-sky-600" />{part.role === 'cover' ? 'ປົກ' : 'ເນື້ອໃນ'}</span><div className="break-all my-1" title={part.source.name}>{part.source.name}</div><div className="text-slate-500">{part.pageCount} ໜ້າ • {formatArtworkSize(part.source.size)}</div><div className="text-slate-500 mt-1">{part.paperName || part.paperSize} • {part.widthMM}×{part.heightMM} mm • {part.colorMode}</div></button><div className="pt-2"><ArtworkFileActions role={part.role} url={part.source.url} name={part.source.name} onPreview={() => { setActiveItemIndex(idx); setSelectedFile({ itemId: item.id, role: part.role }); setPreviewColorItem(artworkEditorItem(item, part)); }} /></div></div>)}</div> : <>                      {/* Visual Artwork Thumbnail & Quick Preview Trigger */}
                       <div 
                         onClick={(e) => {
                           e.stopPropagation();
-                          setPreviewColorItem(item);
+                          openArtworkInspection(item);
                         }}
                         className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-100/70 hover:bg-indigo-50/60 border border-slate-200/80 hover:border-indigo-300 transition group cursor-pointer"
                       >
                         <div className="w-11 h-11 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 shadow-2xs relative">
-                          {primaryArtworkUrl ? (
+                          {(item.previewThumbnailUrl || item.preflightData?.preview_thumbnail_url) ? (
                             <img 
-                              src={primaryArtworkUrl} 
-                              alt="Artwork thumbnail" 
+                              src={item.previewThumbnailUrl || item.preflightData?.preview_thumbnail_url}
+                              alt="ຕົວຢ່າງໄຟລ໌"
                               className="w-full h-full object-cover group-hover:scale-110 transition duration-200"
                             />
                           ) : (
@@ -2923,12 +2964,12 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-black text-slate-800 group-hover:text-indigo-950 truncate flex items-center gap-1">
+                            <span className="text-[10px] font-black text-slate-800 group-hover:text-indigo-950 break-all flex items-center gap-1">
                               <Eye className="w-3 h-3 text-indigo-600" />
                               <span>{isBatchPhoto ? `ໄຟລ໌ຮູບ ${batchCount} ໃບ` : (item.fileName || 'ກົດເບິ່ງໄຟລ໌')}</span>
                             </span>
                             <span className="text-[9px] font-bold text-indigo-700 bg-white px-1.5 py-0.5 rounded border border-indigo-200 shadow-2xs">
-                              Preview
+                              ເບິ່ງຕົວຢ່າງ
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-900 mt-0.5">
@@ -2938,13 +2979,16 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                         </div>
                       </div>
 
-                      {/* Structured Specifications Breakdown */}
+                      {isBatchPhoto ? <ArtworkFileActions url="" name={item.name} files={getArtworkFiles(item.batchFiles || [])} onPreview={() => openArtworkInspection(item)} /> : <><p className="text-xs text-slate-500">{item.pagesPerBook || 1} ໜ້າ • {formatArtworkSize(item.fileSize)}</p><ArtworkFileActions url={item.artworkUrl || ''} name={item.fileName || ''} onPreview={() => openArtworkInspection(item)} /></>}
+                      </>}
+
+                      {item.artworkParts?.length ? <div className="text-xs text-slate-500 px-1">{item.printVolume || 1} {item.unitName || 'ຊຸດ'}{[...postPressNames, ...matNames].length > 0 && <div className="mt-1 truncate">{[...postPressNames, ...matNames].join(', ')}</div>}</div> : <>                      {/* Structured Specifications Breakdown */}
                       <div className="space-y-1.5 text-[11px] bg-slate-50/70 p-2.5 rounded-xl border border-slate-200/60">
                         {/* Row 1: Volume & Dimensions */}
                         <div className="flex items-center gap-1.5 text-slate-700 font-bold">
                           <Layers className="w-3 h-3 text-indigo-500 shrink-0" />
                           <span className="truncate">
-                            {item.printVolume || 1} {isBatchPhoto ? 'ຊຸດ' : (item.unitName || 'ຊຸດ')} • {isBatchPhoto ? `${item.pagesPerBook || batchCount} ຮູບ/ຊຸດ` : `${item.pagesPerBook || 1} ໜ້າ`} • <strong className="text-slate-900">{item.jobSizePreset || '4x6"'}</strong>
+                            {item.printVolume || 1} {isBatchPhoto ? 'ຊຸດ' : (item.unitName || 'ຊຸດ')} • {isBatchPhoto ? `${item.pagesPerBook || batchCount} ຮູບ/ຊຸດ` : (item.artworkParts?.length ? item.artworkParts.map(p => `${p.role}: ${p.pageCount}`).join(' • ') : `${item.pagesPerBook || 1} ໜ້າ`)} • <strong className="text-slate-900">{item.jobSizePreset || '4x6"'}</strong>
                           </span>
                         </div>
 
@@ -2988,11 +3032,12 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                         )}
                       </div>
 
+                      </>}
                       {/* Clean Direct Raw Costing Summary Panel */}
                       <div className="bg-slate-100/80 border border-slate-200/80 rounded-xl p-2.5 text-[11px] space-y-1.5">
                         <div className="flex items-center justify-between text-slate-800 font-bold">
-                          <span>ຕົ້ນທຶນວັດຖຸດິບ/{isBatchPhoto ? 'ຮູບ' : 'ໜ້າ'}:</span>
-                          <span className="font-mono font-black text-indigo-700">{formatCurrency(costPerSingleUnit)}</span>
+                          <span>{item.artworkParts?.length ? 'ຕົ້ນທຶນງານ (Job cost)' : `ຕົ້ນທຶນວັດຖຸດິບ/${isBatchPhoto ? 'ຮູບ' : 'ໜ້າ'}`}:</span>
+                          <span className="font-mono font-black text-indigo-700">{formatCurrency(item.artworkParts?.length ? calc.netCost || 0 : costPerSingleUnit)}</span>
                         </div>
                         <div className="flex items-center justify-between text-slate-500 text-[10px] font-medium pt-1 border-t border-slate-200/60">
                           <span>ຄ່າເຈ້ຍ: {formatCurrency(calc.paperCost || 0)}</span>
@@ -3041,7 +3086,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                     <span>•</span>
                     <span>{activeItem.jobSizePreset || 'A4'}</span>
                     <span>•</span>
-                    <span>{activeItem.pagesPerBook || 1} ໜ້າ</span>
+                    <span>{activeItem.artworkParts?.length ? activeItem.artworkParts.map(p => `${p.role}: ${p.pageCount}`).join(' • ') : `${activeItem.pagesPerBook || 1} ໜ້າ`}</span>
                   </p>
                 </div>
 
@@ -3049,13 +3094,13 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setPreviewColorItem(activeItem)}
+                    onClick={() => setPreviewColorItem(editorItem)}
                     className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
                     title="ກວດສອບຄ່າສີ & Preview ໄຟລ໌"
                   >
                     <Palette className="w-3.5 h-3.5 text-indigo-600" />
                     <span className="truncate max-w-[140px]">
-                      {activeItem.fileName ? activeItem.fileName : (currentLang === 'lo' ? 'ກວດຄ່າສີ & ໄຟລ໌' : 'Color & File')}
+                      {editorItem.fileName ? editorItem.fileName : (currentLang === 'lo' ? 'ກວດຄ່າສີ & ໄຟລ໌' : 'Color & File')}
                     </span>
                   </button>
 
@@ -3083,74 +3128,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 </div>
               </div>
 
-              {/* 1-Click Fast Presets Pills Bar (Dynamic & User-definable) */}
-              <div className="p-2.5 bg-gradient-to-r from-sky-50/80 via-indigo-50/60 to-purple-50/80 border border-sky-200/80 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-2xs">
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <div className="w-6 h-6 rounded-lg bg-sky-600 text-white flex items-center justify-center shadow-xs">
-                    <Sparkles className="w-3.5 h-3.5" />
-                  </div>
-                  <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider">
-                    {currentLang === 'lo' ? 'ຕັ້ງຄ່າດ່ວນ 1-Click:' : 'Fast Presets:'}
-                  </span>
-                </div>
+              {selectedPart && <div className="space-y-3" data-testid="selected-artwork-editor" key={`${activeItem.id}:${selectedPart.role}:${selectedPart.source.url}`}>
 
-                <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto">
-                  {customFastPresets.map((tpl) => {
-                    const isSelected = activeItem.selectedTemplateId === tpl.id;
-                    const isCustom = tpl.id.startsWith('CUST_TPL_');
-                    return (
-                      <div key={tpl.id} className="relative group">
-                        <button
-                          type="button"
-                          onClick={() => handleApplyTemplate(tpl)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                            isSelected
-                              ? 'bg-sky-600 text-white shadow-xs scale-[1.02]'
-                              : 'bg-white hover:bg-sky-50 text-slate-700 border border-slate-200/80 hover:border-sky-300'
-                          }`}
-                        >
-                          {(tpl.iconName === 'Book' || tpl.id === 'TPL_PERFECT_BIND_BOOK') && <BookOpen className="w-3.5 h-3.5" />}
-                          {(tpl.iconName === 'Bookmark' || tpl.id === 'TPL_HARDCOVER_BOOK') && <Bookmark className="w-3.5 h-3.5" />}
-                          {(tpl.iconName === 'ImageIcon' || tpl.id === 'TPL_PHOTO_PRINT') && <ImageIcon className="w-3.5 h-3.5" />}
-                          {(tpl.iconName === 'Layers' || tpl.id === 'TPL_BOOKLET_STAPLE') && <Layers className="w-3.5 h-3.5" />}
-                          {(tpl.iconName === 'Calendar' || tpl.id === 'TPL_DESK_CALENDAR') && <Calendar className="w-3.5 h-3.5" />}
-                          {(tpl.iconName === 'Sparkles' || (!['Book', 'Bookmark', 'ImageIcon', 'Layers', 'Calendar'].includes(tpl.iconName || ''))) && <Sparkles className="w-3.5 h-3.5" />}
-                          <span className="truncate max-w-[150px]">
-                            {currentLang === 'lo' ? tpl.nameLao.split('(')[0].trim() : tpl.nameEn}
-                          </span>
-                          {isSelected && <CheckCircle2 className="w-3 h-3 text-white ml-0.5" />}
-                        </button>
-
-                        {/* Delete Custom Preset button on hover */}
-                        {isCustom && (
-                          <button
-                            type="button"
-                            onClick={(e) => handleDeleteCustomPreset(tpl.id, e)}
-                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 hover:bg-rose-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-xs cursor-pointer"
-                            title="ລຶບແມ່ແບບນີ້"
-                          >
-                            <X className="w-2.5 h-2.5" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {/* Add New Custom Preset Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNewPresetName(activeItem.name || 'ແມ່ແບບດ່ວນໃໝ່');
-                      setIsSavePresetModalOpen(true);
-                    }}
-                    className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition flex items-center gap-1 cursor-pointer shadow-2xs"
-                    title="ບັນທຶກສເປກປະຈຸບັນເປັນແມ່ແບບດ່ວນ"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>+ ບັນທຶກແມ່ແບບດ່ວນ</span>
-                  </button>
-                </div>
-              </div>
+                <ArtworkPartsPanel costs={activeCalc.partCosts} printers={printers} papers={papers} parts={[selectedPart]} />
+              </div>}
 
               {/* 3-Stage Production Step Tabs */}
               <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100/80 rounded-2xl border border-slate-200 text-xs font-black">
@@ -3198,9 +3179,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
               <div className="space-y-4 animate-fade-in">
                 {/* Job Overview & Production Quantity */}
                 <JobQuantityAndPagesSection
-                  activeItem={activeItem}
-                  updateActiveItem={updateActiveItem}
-                  activeCalc={activeCalc}
+                  activeItem={editorItem}
+                  sourcePagesLocked={!!selectedPart}
+                  updateActiveItem={updateEditorItem}
+                  activeCalc={editorCalc}
                   isOpen={true}
                   onToggle={() => {}}
                   currentLang={currentLang}
@@ -3273,9 +3255,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
             {/* TAB CONTENT 2: Paper & Print */}
             {activeProductionTab === 'print' && (
               <QuotationPrintEngineTab
-                activeItem={activeItem}
-                updateActiveItem={updateActiveItem}
-                activeCalc={activeCalc}
+                activeItem={editorItem}
+                sourceLocked={!!selectedPart}
+                updateActiveItem={updateEditorItem}
+                activeCalc={editorCalc}
                 papers={papers}
                 offcuts={offcuts}
                 inventory={inventory}
@@ -3286,7 +3269,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                   setIsPaperModalOpen(true);
                 }}
                 onOpenPrinterModal={() => setIsPrinterModalOpen(true)}
-                onOpenColorPreview={(item) => setPreviewColorItem(item)}
+                onOpenColorPreview={(item) => openArtworkInspection(item)}
                 formatCurrency={formatCurrency}
                 getFIFOCostPerSheet={getFIFOCostPerSheet}
                 currentLang={currentLang}
@@ -4305,13 +4288,16 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         isOpen={!!previewColorItem}
         onClose={() => setPreviewColorItem(null)}
         item={previewColorItem}
-        items={items}
+        sourceLocked={!!activeItem.artworkParts?.length}
+        items={items.map(item => item.artworkParts?.[0] ? artworkEditorItem(item, item.artworkParts[0]) : item)}
         onItemSelect={(idx) => {
           setActiveItemIndex(idx);
-          setPreviewColorItem(items[idx]);
+          setSelectedFile(null);
+          setPreviewColorItem(items[idx].artworkParts?.[0] ? artworkEditorItem(items[idx], items[idx].artworkParts[0]) : items[idx]);
         }}
         onSyncColorsToPrinter={handleSyncColorsToActivePrinter}
         onUpdateArtwork={(data) => {
+          if (selectedPart) return;
           const updates: any = {
             artworkUrl: data.artworkUrl,
             fileName: data.fileName,
@@ -4449,6 +4435,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         onConvertToOrder={handleConvertToOrder}
         onOpenApproval={setApprovalModalQuote}
         onSaveDraft={handleSaveDraft}
+        isSaving={isSavingQuotation}
+        convertingQuoteId={convertingQuoteId}
         currentLang={currentLang}
         formatCurrency={formatCurrency}
       />
@@ -4485,6 +4473,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         isOpen={isSaveModalOpen}
         onClose={() => setIsSaveModalOpen(false)}
         onConfirm={handleConfirmSaveQuotation}
+        isSaving={isSavingQuotation}
         quotationTitle={quotationTitle}
         onTitleChange={setQuotationTitle}
         selectedCustomerId={selectedCustomerId}
@@ -4544,7 +4533,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         isOpen={isPaperModalOpen}
         onClose={() => setIsPaperModalOpen(false)}
         onSelect={handleSelectPaperFromModal}
-        selectedPaperId={paperModalTarget === 'cover' ? activeItem.coverPaperId : activeItem.paperId}
+        selectedPaperId={paperModalTarget === 'cover' ? editorItem.coverPaperId : editorItem.paperId}
         papers={papers}
         title={paperModalTarget === 'cover' ? 'ເລືອກເຈ້ຍໜ້າປົກຈາກຄັງ (Select Book Cover Paper)' : 'ເລືອກເຈ້ຍເນື້ອໃນຈາກຄັງ (Select Inner Pages Paper)'}
         targetType={paperModalTarget === 'cover' ? 'cover' : 'inner'}
@@ -4557,7 +4546,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         isOpen={isPrinterModalOpen}
         onClose={() => setIsPrinterModalOpen(false)}
         onSelect={handleSelectPrinterFromModal}
-        selectedPrinterId={activeItem.selectedPrinterId}
+        selectedPrinterId={editorItem.selectedPrinterId}
         printers={printers}
         formatCurrency={formatCurrency}
         getPrinterMachineRate={getPrinterMachineRate}

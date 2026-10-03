@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { usePaymentSlipReview } from '../../../hooks/usePaymentSlipReview';
+import { useApp } from '../../../store/AppContext';
 import OrderReceptionHeader from './reception/OrderReceptionHeader';
 import PaymentSlipCard from './reception/PaymentSlipCard';
 import ArtworkPrepressCard from './reception/ArtworkPrepressCard';
@@ -38,6 +40,9 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
 }) => {
   const [isWorkflowModalOpen, setIsWorkflowModalOpen] = useState(false);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+
+  const { refreshData } = useApp();
+  const paymentReview = usePaymentSlipReview(String(order?.id || ''));
 
   if (!order) return null;
 
@@ -140,57 +145,28 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
             isPaymentConfirmed={isPaymentConfirmed}
             currentLang={currentLang}
             formatLAK={formatLAK}
-            onConfirmFullPayment={() => {
-              handleStatusChange(order.id, 'PREPRESS_CHECK');
-              if (onUpdatePayment) {
-                onUpdatePayment(order.id, 'Paid', totalAmountLAK, 0);
-              }
-              if (order) {
-                order.paymentStatus = 'Paid';
-                order.depositAmountPaid = totalAmountLAK;
-                order.remainingUnpaidBalance = 0;
-              }
-              showToast(
-                currentLang === 'lo' 
-                  ? 'ຢືນຢັນຮັບຊຳລະເຕັມ 100% ສຳເລັດແລ້ວ! ສົ່ງຕໍ່ຝ່າຍ Pre-Press' 
-                  : 'Full 100% payment verified! Handed over to Pre-Press', 
-                'success'
-              );
+            reviewPending={paymentReview.pending}
+            reviewError={paymentReview.error}
+            onConfirmFullPayment={async () => {
+              const result = await paymentReview.review('APPROVED');
+              if (!result) return;
+              onUpdatePayment?.(order.id, 'Paid', totalAmountLAK, 0);
+              void refreshData();
+              showToast(currentLang === 'lo' ? 'ບັນທຶກຜົນກວດສອບການຊຳລະແລ້ວ' : 'Payment review saved; ready for Pre-Press', 'success');
             }}
-            onConfirmDepositPayment={(depositAmt) => {
-              handleStatusChange(order.id, 'PREPRESS_CHECK');
-              if (onUpdatePayment) {
-                onUpdatePayment(order.id, 'Deposit', depositAmt, totalAmountLAK - depositAmt);
-              }
-              if (order) {
-                order.paymentStatus = 'Deposit';
-                order.depositAmountPaid = depositAmt;
-                order.remainingUnpaidBalance = totalAmountLAK - depositAmt;
-              }
-              showToast(
-                currentLang === 'lo' 
-                  ? `ຢືນຢັນຮັບມັດຈຳ ${formatLAK(depositAmt)} ສຳເລັດ! ສົ່ງຕໍ່ຝ່າຍ Pre-Press` 
-                  : `Deposit of ${formatLAK(depositAmt)} verified! Handed over to Pre-Press`, 
-                'success'
-              );
+            onConfirmDepositPayment={() => {
+              showToast(currentLang === 'lo' ? 'ຍັງບໍ່ຮອງຮັບການຢືນຢັນມັດຈຳຜ່ານການກວດສະລິບ' : 'Partial deposit review is unavailable; use the finance workflow', 'warning');
             }}
             onRevertPayment={() => {
-              handleStatusChange(order.id, 'PENDING');
-              if (onUpdatePayment) {
-                onUpdatePayment(order.id, 'Unpaid', 0, totalAmountLAK);
-              }
-              if (order) {
-                order.paymentStatus = 'Unpaid';
-                order.depositAmountPaid = 0;
-                order.remainingUnpaidBalance = totalAmountLAK;
-              }
-              showToast(currentLang === 'lo' ? 'ຍົກເລີກການຢືນຢັນສະລິບແລ້ວ' : 'Reverted payment confirmation', 'info');
+              showToast(currentLang === 'lo' ? 'ຕ້ອງດຳເນີນການຍ້ອນການຊຳລະຜ່ານຝ່າຍການເງິນ' : 'Payment reversal requires the finance workflow', 'warning');
             }}
-            onRejectSlip={() => {
+            onRejectSlip={async () => {
               const reason = prompt(currentLang === 'lo' ? 'ລະບຸເຫດຜົນທີ່ສະລິບບໍ່ຖືກຕ້ອງ:' : 'Reason for slip rejection:');
-              if (reason) {
-                showToast(currentLang === 'lo' ? 'ແຈ້ງເຕືອນລູກຄ້າໃຫ້ສົ່ງສະລິບໃໝ່ແລ້ວ' : 'Customer notified to re-upload slip', 'warning');
-              }
+              if (!reason) return;
+              const result = await paymentReview.review('REJECTED', reason);
+              if (!result) return;
+              void refreshData();
+              showToast(currentLang === 'lo' ? 'ບັນທຶກຜົນປະຕິເສດສະລິບແລ້ວ' : 'Slip rejection saved', 'warning');
             }}
             onUploadSlip={(fileUrl) => {
               if (order) {
@@ -200,8 +176,8 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
               }
               showToast(
                 currentLang === 'lo' 
-                  ? (fileUrl ? 'ອັບໂຫລດສະລິບໂອນເງິນສຳເລັດ!' : 'ລົບຮູບສະລິບອອກແລ້ວ') 
-                  : (fileUrl ? 'Slip uploaded successfully!' : 'Slip removed'), 
+                  ? (fileUrl ? 'ເລືອກສະລິບແລ້ວ; ຕ້ອງບັນທຶກອໍເດີກ່ອນກວດສອບ' : 'ລົບຮູບສະລິບອອກແລ້ວ')
+                  : (fileUrl ? 'Slip selected; save the order before review' : 'Slip removed'),
                 'success'
               );
             }}

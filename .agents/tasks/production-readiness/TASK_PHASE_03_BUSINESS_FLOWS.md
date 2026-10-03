@@ -230,3 +230,8 @@ fixturesimage/PDFknownpages/size/coverage valid+corrupt; failedanalysisต้อ
 - Passed / required corrections / not verified:
 - Release next task: no
 
+
+
+## Architecture integration — user approved 2026-10-02
+
+P3.1/P3.2 additions: keep transaction/idempotency/state transitions in existing domain business services, request handlers delegate instead of duplicating logic. Atomic stock/money flows and duplicate requests tested with guarded fixtures. P3.3 additions: inventory actual pricing/report helpers and callers before consolidation; preserve current outputs for existing inputs, independently price intact cover/inner source specifications and combine totals without shared-charge duplication. Do not assume frontend/backend similarly named formulas are equivalent; document units/rounding and intended authority before changes. Business ambiguity requires user decision.

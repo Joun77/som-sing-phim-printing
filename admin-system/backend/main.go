@@ -43,7 +43,7 @@ func main() {
 
 	// Initialize PostgreSQL connection pool
 	if _, err := db.InitDB(); err != nil {
-		log.Printf("Starting with fallback mode (DB connection error: %v)", err)
+		log.Fatal("Backend startup stopped: database initialization did not complete")
 	}
 
 	// Initialize Notification Dispatcher

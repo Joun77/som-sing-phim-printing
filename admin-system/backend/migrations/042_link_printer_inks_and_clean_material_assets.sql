@@ -59,11 +59,14 @@ ON CONFLICT (ink_code) DO UPDATE SET
 INSERT INTO printer_color_link (
     asset_id, ink_code, slot_position, iso_page_yield_a4,
     oem_standard_volume_ml, oem_standard_iso_yield_a4, base_consumption_rate_ml, created_at
-) VALUES
+)
+SELECT seed.* FROM (VALUES
     ('PRN-9614', 'EPSON-008-BK', 'Slot 1 (K - Black)', 7500, 127.00, 7500, 0.016933, NOW()),
     ('PRN-9614', 'EPSON-008-C',  'Slot 2 (C - Cyan)',  6000, 70.00,  6000, 0.011667, NOW()),
     ('PRN-9614', 'EPSON-008-M',  'Slot 3 (M - Magenta)', 6000, 70.00, 6000, 0.011667, NOW()),
     ('PRN-9614', 'EPSON-008-Y',  'Slot 4 (Y - Yellow)', 6000, 70.00,  6000, 0.011667, NOW())
+) AS seed(asset_id, ink_code, slot_position, iso_page_yield_a4, oem_standard_volume_ml, oem_standard_iso_yield_a4, base_consumption_rate_ml, created_at)
+JOIN printers p ON p.asset_id = seed.asset_id
 ON CONFLICT (asset_id, slot_position) DO UPDATE SET
     ink_code = EXCLUDED.ink_code,
     iso_page_yield_a4 = EXCLUDED.iso_page_yield_a4,
@@ -75,11 +78,14 @@ ON CONFLICT (asset_id, slot_position) DO UPDATE SET
 INSERT INTO printer_color_link (
     asset_id, ink_code, slot_position, iso_page_yield_a4,
     oem_standard_volume_ml, oem_standard_iso_yield_a4, base_consumption_rate_ml, created_at
-) VALUES
+)
+SELECT seed.* FROM (VALUES
     ('PRN-6317', 'LC462XL-BK', 'Slot 1 (K - Black)', 3000, 65.00, 3000, 0.021667, NOW()),
     ('PRN-6317', 'LC462XL-C',  'Slot 2 (C - Cyan)',  1500, 19.00, 1500, 0.012667, NOW()),
     ('PRN-6317', 'LC462XL-M',  'Slot 3 (M - Magenta)', 1500, 19.00, 1500, 0.012667, NOW()),
     ('PRN-6317', 'LC462XL-Y',  'Slot 4 (Y - Yellow)', 1500, 19.00, 1500, 0.012667, NOW())
+) AS seed(asset_id, ink_code, slot_position, iso_page_yield_a4, oem_standard_volume_ml, oem_standard_iso_yield_a4, base_consumption_rate_ml, created_at)
+JOIN printers p ON p.asset_id = seed.asset_id
 ON CONFLICT (asset_id, slot_position) DO UPDATE SET
     ink_code = EXCLUDED.ink_code,
     iso_page_yield_a4 = EXCLUDED.iso_page_yield_a4,
@@ -90,17 +96,19 @@ ON CONFLICT (asset_id, slot_position) DO UPDATE SET
 -- 5. Link materials.assigned_printer_id to respective printers
 UPDATE materials
 SET assigned_printer_id = 'PRN-9614'
-WHERE id IN ('INB-7677', 'INK-8713', 'INK-0365', 'INK-6588')
+WHERE EXISTS (SELECT 1 FROM printers WHERE asset_id = 'PRN-9614')
+  AND (id IN ('INB-7677', 'INK-8713', 'INK-0365', 'INK-6588')
    OR sku IN ('EPSON-008-BK', 'EPSON-008-C', 'EPSON-008-M', 'EPSON-008-Y')
    OR name ILIKE '%Epson-008%'
-   OR name ILIKE '%Epson 008%';
+   OR name ILIKE '%Epson 008%');
 
 UPDATE materials
 SET assigned_printer_id = 'PRN-6317'
-WHERE id IN ('INK-8306', 'INK-0093', 'INK-1160', 'INK-3389')
+WHERE EXISTS (SELECT 1 FROM printers WHERE asset_id = 'PRN-6317')
+  AND (id IN ('INK-8306', 'INK-0093', 'INK-1160', 'INK-3389')
    OR sku IN ('LC462XL-BK', 'LC462XL-C', 'LC462XL-M', 'LC462XL-Y', 'LC-462XL-BK', 'LC-462XL-C', 'LC-462XL-M', 'LC-462XL-Y')
    OR name ILIKE '%LC-462%'
-   OR name ILIKE '%LC462%';
+   OR name ILIKE '%LC462%');
 
 -- 6. Ensure machine_wear_parts has unique constraint on (asset_id, part_name_en) for idempotent seeding
 CREATE UNIQUE INDEX IF NOT EXISTS uq_machine_wear_parts_asset_part_en
@@ -109,7 +117,8 @@ ON machine_wear_parts (asset_id, part_name_en);
 INSERT INTO machine_wear_parts (
     id, asset_id, part_name_lo, part_name_en, part_category,
     cost_price_lak, expected_lifespan_units, unit_type, current_counter, is_active, created_at, updated_at
-) VALUES
+)
+SELECT seed.* FROM (VALUES
     (gen_random_uuid(), 'PRN-9614', 'ລູກຢາງດຶງເຈ້ຍ', 'Pickup Roller', 'roller', 600000, 50000, 'pages', 0, true, NOW(), NOW()),
     (gen_random_uuid(), 'PRN-9614', 'ກ່ອງຊັບໝຶກເສຍ', 'Maintenance Box', 'box', 700000, 50000, 'pages', 0, true, NOW(), NOW()),
     (gen_random_uuid(), 'PRN-9614', 'ສາຍພານຫົວພິມ', 'Carriage Belt', 'belt', 600000, 50000, 'pages', 0, true, NOW(), NOW()),
@@ -117,6 +126,8 @@ INSERT INTO machine_wear_parts (
     (gen_random_uuid(), 'PRN-6317', 'ລູກຢາງດຶງເຈ້ຍ', 'Pickup Roller', 'roller', 450000, 40000, 'pages', 0, true, NOW(), NOW()),
     (gen_random_uuid(), 'PRN-6317', 'ຊຸດແຜ່ນຊັບໝຶກເສຍ', 'Waste Ink Absorber', 'box', 550000, 40000, 'pages', 0, true, NOW(), NOW()),
     (gen_random_uuid(), 'PRN-6317', 'ຫົວພິມ Brother Piezo', 'Brother Piezo Printhead', 'printhead', 2800000, 80000, 'pages', 0, true, NOW(), NOW())
+) AS seed(id, asset_id, part_name_lo, part_name_en, part_category, cost_price_lak, expected_lifespan_units, unit_type, current_counter, is_active, created_at, updated_at)
+JOIN printers p ON p.asset_id = seed.asset_id
 ON CONFLICT (asset_id, part_name_en) DO UPDATE SET
     part_name_lo = EXCLUDED.part_name_lo,
     part_category = EXCLUDED.part_category,

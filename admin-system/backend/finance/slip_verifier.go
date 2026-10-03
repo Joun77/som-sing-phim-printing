@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/shopspring/decimal"
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -32,10 +35,11 @@ type SlipOKResponse struct {
 
 // SlipOKDataBody holds verified transaction details
 type SlipOKDataBody struct {
-	TransRef  string  `json:"transRef"`
-	TransDate string  `json:"transDate"`
-	TransTime string  `json:"transTime"`
-	Amount    float64 `json:"amount"`
+	TransRef  string          `json:"transRef"`
+	TransDate string          `json:"transDate"`
+	TransTime string          `json:"transTime"`
+	Amount    decimal.Decimal `json:"amount"`
+	Currency  string          `json:"currency"`
 	Sender    struct {
 		Bank struct {
 			Name string `json:"name"`
@@ -84,107 +88,105 @@ type VerifySlipResponse struct {
 	VerifiedAt string  `json:"verified_at,omitempty"`
 }
 
-// CallSlipOKAPI communicates with SlipOK API endpoint
-func CallSlipOKAPI(qrPayload, slipImageBase64 string) (*SlipOKResponse, error) {
-	apiKey := os.Getenv("SLIPOK_API_KEY")
-	branchID := os.Getenv("SLIPOK_BRANCH_ID")
+// SlipExpectation must come from trusted order/payment configuration, never client overrides.
+type SlipExpectation struct {
+	Amount          decimal.Decimal
+	ReceiverAccount string
+	Currency        string
+}
+
+var slipProviderClient = &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+
+// CallSlipOKAPI verifies provider evidence only. It never approves or records money.
+// Automatic checkout remains manual-review-only, including valid provider evidence.
+func CallSlipOKAPI(qrPayload, slipImageBase64 string, expected ...SlipExpectation) (*SlipOKResponse, error) {
+	apiKey := strings.TrimSpace(os.Getenv("SLIPOK_API_KEY"))
+	branchID := strings.TrimSpace(os.Getenv("SLIPOK_BRANCH_ID"))
+	if apiKey == "" || branchID == "" {
+		return nil, errors.New("automatic slip verification is not configured")
+	}
+	if len(expected) != 1 || !expected[0].Amount.IsPositive() || strings.TrimSpace(expected[0].ReceiverAccount) == "" || strings.TrimSpace(expected[0].Currency) == "" {
+		return nil, errors.New("trusted amount, receiver and currency are required")
+	}
 	apiURL := os.Getenv("SLIPOK_API_URL")
-
 	if apiURL == "" {
-		if branchID != "" {
-			apiURL = fmt.Sprintf("https://api.slipok.com/api/line/apikey/%s", branchID)
-		} else if apiKey != "" {
-			apiURL = fmt.Sprintf("https://api.slipok.com/api/line/apikey/%s", apiKey)
-		} else {
-			apiURL = "https://api.slipok.com/api/line/apikey/"
-		}
+		apiURL = "https://api.slipok.com/api/line/apikey/" + url.PathEscape(branchID)
 	}
-
-	if strings.TrimSpace(apiKey) == "" || strings.TrimSpace(branchID) == "" {
-		return nil, fmt.Errorf("automatic slip verification is not configured")
+	parsed, err := url.Parse(apiURL)
+	if err != nil || parsed.Host == "" || parsed.User != nil {
+		return nil, errors.New("invalid slip provider URL")
 	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-
+	testLoopback := os.Getenv("ENVIRONMENT") == "test" && parsed.Scheme == "http" && (parsed.Hostname() == "127.0.0.1" || parsed.Hostname() == "localhost")
+	if parsed.Scheme != "https" && !testLoopback {
+		return nil, errors.New("slip provider requires HTTPS")
+	}
+	var body io.Reader
+	contentType := "application/json"
 	if qrPayload != "" {
-		// Verify via QR Text Data
-		reqBody, _ := json.Marshal(SlipOKRequest{
-			Data: qrPayload,
-			Log:  true,
-		})
-
-		httpReq, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(reqBody))
+		payload, err := json.Marshal(SlipOKRequest{Data: qrPayload, Log: true})
 		if err != nil {
-			return nil, fmt.Errorf("failed to create http request: %w", err)
+			return nil, err
 		}
-		httpReq.Header.Set("Content-Type", "application/json")
-		if apiKey != "" {
-			httpReq.Header.Set("x-authorization", apiKey)
+		body = bytes.NewReader(payload)
+	} else if slipImageBase64 != "" {
+		if len(slipImageBase64) > 12*1024*1024 {
+			return nil, errors.New("slip image too large")
 		}
-
-		resp, err := client.Do(httpReq)
-		if err != nil {
-			return nil, fmt.Errorf("slipok request failed: %w", err)
+		image := slipImageBase64
+		if idx := strings.Index(image, ","); idx != -1 {
+			image = image[idx+1:]
 		}
-		defer resp.Body.Close()
-
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		var slipRes SlipOKResponse
-		if err := json.Unmarshal(bodyBytes, &slipRes); err != nil {
-			return nil, fmt.Errorf("failed to parse slipok response: %w", err)
+		decoded, err := base64.StdEncoding.DecodeString(image)
+		if err != nil || len(decoded) == 0 {
+			return nil, errors.New("invalid slip image")
 		}
-
-		return &slipRes, nil
-	}
-
-	if slipImageBase64 != "" {
-		// Handle base64 image or multipart
-		imgData := slipImageBase64
-		if idx := strings.Index(imgData, ","); idx != -1 {
-			imgData = imgData[idx+1:]
-		}
-		decoded, err := base64.StdEncoding.DecodeString(imgData)
-		if err != nil {
-			return nil, fmt.Errorf("invalid base64 image: %w", err)
-		}
-
-		var body bytes.Buffer
-		writer := multipart.NewWriter(&body)
+		var buffer bytes.Buffer
+		writer := multipart.NewWriter(&buffer)
 		part, err := writer.CreateFormFile("files", "slip.jpg")
 		if err != nil {
-			return nil, fmt.Errorf("failed to create form file: %w", err)
+			return nil, err
 		}
-		if _, err := part.Write(decoded); err != nil {
-			return nil, fmt.Errorf("failed to write file to form: %w", err)
+		if _, err = part.Write(decoded); err != nil {
+			return nil, err
 		}
-		_ = writer.WriteField("log", "true")
-		_ = writer.Close()
-
-		httpReq, err := http.NewRequest("POST", apiURL, &body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create multipart request: %w", err)
+		if err = writer.WriteField("log", "true"); err != nil {
+			return nil, err
 		}
-		httpReq.Header.Set("Content-Type", writer.FormDataContentType())
-		if apiKey != "" {
-			httpReq.Header.Set("x-authorization", apiKey)
+		if err = writer.Close(); err != nil {
+			return nil, err
 		}
-
-		resp, err := client.Do(httpReq)
-		if err != nil {
-			return nil, fmt.Errorf("slipok multipart request failed: %w", err)
-		}
-		defer resp.Body.Close()
-
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		var slipRes SlipOKResponse
-		if err := json.Unmarshal(bodyBytes, &slipRes); err != nil {
-			return nil, fmt.Errorf("failed to parse slipok multipart response: %w", err)
-		}
-
-		return &slipRes, nil
+		body = &buffer
+		contentType = writer.FormDataContentType()
+	} else {
+		return nil, errors.New("neither qr_payload nor slip_image provided")
 	}
-
-	return nil, fmt.Errorf("neither qr_payload nor slip_image provided")
+	request, err := http.NewRequest(http.MethodPost, apiURL, body)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Content-Type", contentType)
+	request.Header.Set("x-authorization", apiKey)
+	response, err := slipProviderClient.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("slip provider unavailable: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, errors.New("slip provider rejected request")
+	}
+	raw, err := io.ReadAll(io.LimitReader(response.Body, 1024*1024+1))
+	if err != nil || len(raw) > 1024*1024 {
+		return nil, errors.New("invalid slip provider response")
+	}
+	var result SlipOKResponse
+	if err = json.Unmarshal(raw, &result); err != nil {
+		return nil, errors.New("invalid slip provider response")
+	}
+	e := expected[0]
+	if !result.Success || strings.TrimSpace(result.Data.TransRef) == "" || !result.Data.Amount.IsPositive() || !result.Data.Amount.Equal(e.Amount) || result.Data.Receiver.Account.BankNumber != e.ReceiverAccount || result.Data.Currency != e.Currency {
+		return nil, errors.New("slip evidence does not match trusted payment details")
+	}
+	return &result, nil
 }
 
 // HandleVerifySlip retains the legacy endpoint without approving money automatically.

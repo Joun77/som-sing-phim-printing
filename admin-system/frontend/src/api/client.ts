@@ -625,8 +625,12 @@ export async function fetchAuthenticatedBlob(url: string, explicitToken?: string
           detectedType = 'image/png';
         } else if (bytes.length >= 3 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
           detectedType = 'image/gif';
-        } else if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) {
+        } else if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') {
           detectedType = 'image/webp';
+        } else if (bytes.length >= 2 && bytes[0] === 0x42 && bytes[1] === 0x4D) {
+          detectedType = 'image/bmp';
+        } else if (detectedType.startsWith('image/')) {
+          detectedType = 'application/octet-stream';
         }
       }
     } catch (sniffErr: any) {
@@ -664,11 +668,12 @@ export async function fetchAuthenticatedBlobUrl(url: string, explicitToken?: str
 export async function downloadAuthenticatedFile(
   url: string,
   defaultFilename?: string,
-  explicitToken?: string
+  explicitToken?: string,
+  originalFilename?: string
 ): Promise<{ filename: string; size: number }> {
   const result = await fetchAuthenticatedBlob(url, explicitToken);
   
-  let finalFilename = result.filename || defaultFilename || 'artwork';
+  let finalFilename = originalFilename || result.filename || defaultFilename || 'artwork';
   // If defaultFilename had an extension (e.g. .pdf) and finalFilename lacks it, retain extension
   if (defaultFilename && /\.[a-zA-Z0-9]{3,4}$/.test(defaultFilename) && !/\.[a-zA-Z0-9]{3,4}$/.test(finalFilename)) {
     const ext = defaultFilename.match(/\.[a-zA-Z0-9]{3,4}$/)?.[0] || '';

@@ -4,6 +4,7 @@ import { FormModalTemplate, FormSection } from '@components/common/FormModalTemp
 
 export interface QuotationSaveModalProps {
   isOpen: boolean;
+  isSaving?: boolean;
   onClose: () => void;
   onConfirm: () => void;
   quotationTitle: string;
@@ -21,6 +22,7 @@ export interface QuotationSaveModalProps {
 
 export const QuotationSaveModal: React.FC<QuotationSaveModalProps> = ({
   isOpen,
+  isSaving = false,
   onClose,
   onConfirm,
   quotationTitle,
@@ -55,6 +57,8 @@ export const QuotationSaveModal: React.FC<QuotationSaveModalProps> = ({
           <button
             type="button"
             onClick={onConfirm}
+            disabled={isSaving}
+            aria-busy={isSaving}
             className="px-6 py-2.5 bg-accent-sky hover:bg-sky-600 text-white rounded-2xl text-xs font-black transition cursor-pointer shadow-md shadow-sky-500/20 active:scale-95 flex items-center gap-2"
           >
             <Save className="w-4 h-4" />

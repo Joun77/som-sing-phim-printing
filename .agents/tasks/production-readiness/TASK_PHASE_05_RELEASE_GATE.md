@@ -236,3 +236,8 @@ path ด้านล่างสัมพันธ์กับ repository root `
 
 เพิ่มแถวระดับปุ่มย่อยเมื่อพบจาก UI/source; ระบุ expected/actual, signed role, fixture, request ID และ evidence โดยไม่ใส่ secret/PII
 
+
+
+## Architecture integration — user approved 2026-10-02
+
+P5.1 additions: integrated old/new contract regressions and scoped vs browser/DB evidence clearly separated. P5.2 additions: inspect both migration locations and consumers, compare bytes, establish canonical source only with Docker/runner verification; never silently remove copies. Review persistent DB/upload mounts and secret separation from images, release build/config, isolated staging restore of DB plus original files, rollback and sanitized monitoring. Load tests use owner-agreed simultaneous-user/file-size targets; no invented capacity/RTO guarantees. P5.3 additions: evidence packet includes architecture/contract compatibility, migration authority, tested backup/restore and observed capacity; no release certification while checks NOT VERIFIED. Actual deploy remains separately authorized.

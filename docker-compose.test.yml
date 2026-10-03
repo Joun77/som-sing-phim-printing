@@ -1,0 +1,21 @@
+name: somsing-phase1-test
+services:
+  fixture-db:
+    image: postgres:15-alpine
+    restart: "no"
+    environment:
+      POSTGRES_USER: fixture
+      POSTGRES_PASSWORD: fixture-only-not-a-shop-secret
+      POSTGRES_DB: somsing_fixture_db
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - phase1-test-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fixture -d somsing_fixture_db"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+volumes:
+  phase1-test-pgdata:
+    name: somsing_phase1_test_pgdata

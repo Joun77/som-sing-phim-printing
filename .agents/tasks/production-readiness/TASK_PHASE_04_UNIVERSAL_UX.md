@@ -147,3 +147,8 @@ path ด้านล่างสัมพันธ์กับ repository root `
 - Passed / required corrections / not verified:
 - Release next task: no
 
+
+
+## Architecture integration — user approved 2026-10-02
+
+P4.1/P4.2 additions: reuse common modal/viewer/form/feedback components across actual callers, keeping feature-specific pricing/domain behavior in features. P1.2 file viewer work is prerequisite scoped delivery, not Phase4 completion. Verify loading/error/retry, keyboard/focus/accessibility and all17 module feedback. No duplicated toolbar or blanket success on failed persistence.

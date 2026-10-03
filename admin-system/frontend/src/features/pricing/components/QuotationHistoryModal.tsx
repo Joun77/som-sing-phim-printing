@@ -25,6 +25,8 @@ interface QuotationHistoryModalProps {
   onConvertToOrder: (quote: Quotation) => void;
   onOpenApproval: (quote: Quotation) => void;
   onSaveDraft: () => void;
+  isSaving?: boolean;
+  convertingQuoteId?: string | null;
   currentLang: string;
   formatCurrency: (val: number) => string;
 }
@@ -39,6 +41,8 @@ export const QuotationHistoryModal: React.FC<QuotationHistoryModalProps> = ({
   onConvertToOrder,
   onOpenApproval,
   onSaveDraft,
+  isSaving = false,
+  convertingQuoteId,
   currentLang,
   formatCurrency,
 }) => {
@@ -107,6 +111,8 @@ export const QuotationHistoryModal: React.FC<QuotationHistoryModalProps> = ({
           <button
             type="button"
             onClick={onSaveDraft}
+            disabled={isSaving}
+            aria-busy={isSaving}
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
           >
             <Save className="w-3.5 h-3.5" />
@@ -141,11 +147,11 @@ export const QuotationHistoryModal: React.FC<QuotationHistoryModalProps> = ({
                       className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${
                         quote.status === 'Draft'
                           ? 'bg-slate-100 text-slate-700 border-slate-300'
-                          : quote.status === 'Accepted' || quote.status === 'Approved'
+                          : quote.status === 'Accepted' || quote.status === 'ACCEPTED' || quote.status === 'Approved'
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                           : quote.status === 'REQUIRES_MANAGER_APPROVAL'
                           ? 'bg-amber-50 text-amber-700 border-amber-200'
-                          : quote.status === 'Rejected'
+                          : quote.status === 'Rejected' || quote.status === 'REJECTED'
                           ? 'bg-rose-50 text-rose-700 border-rose-200'
                           : quote.status === 'Expired'
                           ? 'bg-slate-100 text-slate-500 border-slate-200'
@@ -156,7 +162,7 @@ export const QuotationHistoryModal: React.FC<QuotationHistoryModalProps> = ({
                         ? 'ສະບັບຮ່າງ (Draft)'
                         : quote.status === 'REQUIRES_MANAGER_APPROVAL'
                         ? 'ລໍຖ້າອະນຸມັດ'
-                        : quote.status}
+                        : quote.status === 'CONVERTED' ? 'ປ່ຽນເປັນອໍເດີແລ້ວ' : quote.status === 'ACCEPTED' ? 'ອະນຸມັດແລ້ວ' : quote.status === 'REJECTED' ? 'ປະຕິເສດແລ້ວ' : quote.status}
                     </span>
 
                     <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
@@ -275,6 +281,7 @@ export const QuotationHistoryModal: React.FC<QuotationHistoryModalProps> = ({
                     <button
                       type="button"
                       onClick={() => onRevise(quote.id)}
+                      disabled={isSaving}
                       className="px-3 py-1.5 text-xs font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-xl hover:bg-indigo-100 transition cursor-pointer"
                     >
                       {currentLang === 'lo'
@@ -298,21 +305,24 @@ export const QuotationHistoryModal: React.FC<QuotationHistoryModalProps> = ({
                     )}
 
                     {(quote.status === 'Pending' ||
-                      quote.status === 'Approved' ||
+                      quote.status === 'Approved' || quote.status === 'ACCEPTED' || quote.status === 'REQUIRES_MANAGER_APPROVAL' ||
                       quote.status === 'Draft') && (
                       <button
                         type="button"
                         onClick={() => onConvertToOrder(quote)}
+                        disabled={convertingQuoteId === quote.id}
+                        aria-busy={convertingQuoteId === quote.id}
                         className="px-3.5 py-1.5 text-xs font-black bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition cursor-pointer shadow-2xs flex items-center gap-1"
                       >
                         <span>
-                          {currentLang === 'lo'
-                            ? 'ປ່ຽນເປັນອໍເດີ →'
-                            : 'Convert to Order →'}
+                          {convertingQuoteId === quote.id ? 'ກຳລັງແປງໃບສະເໜີ...' : currentLang === 'lo'
+                            ? (quote.pendingConversionOrderId ? 'ກວດສອບການແປງອີກຄັ້ງ →' : 'ປ່ຽນເປັນອໍເດີ →')
+                            : (quote.pendingConversionOrderId ? 'ກວດສອບການແປງອີກຄັ້ງ →' : 'Convert to Order →')}
                         </span>
                       </button>
                     )}
 
+                    {quote.pendingConversionOrderId && <p role="status" className="text-xs text-amber-700">{currentLang === 'lo' ? 'ອໍເດີມີແລ້ວ; ລໍຖ້າອະນຸມັດ / ກວດສອບ' : 'ອໍເດີມີແລ້ວ; ລໍຖ້າກວດສອບ'}: {quote.pendingConversionOrderId}</p>}
                     {quote.convertedOrderId && (
                       <span className="px-2 py-1 text-[11px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-1">
                         <CheckCircle2 className="w-3.5 h-3.5" />

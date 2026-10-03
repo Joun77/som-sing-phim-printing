@@ -30,9 +30,35 @@ export interface PreflightDiagnostics {
   dpi: 'PASS' | 'WARN' | 'ERROR';
 }
 
+export interface ArtworkPartCost {
+  role: 'cover' | 'inner';
+  paperCost: number;
+  inkCost: number;
+  machineOverhead: number;
+}
+
+export interface ArtworkPart {
+  role: 'cover' | 'inner';
+  source: { url: string; fileId?: string; name: string; size: number; mimeType: string };
+  pageCount: number;
+  paperId?: string;
+  paperName?: string;
+  paperSize?: string;
+  widthMM: number;
+  heightMM: number;
+  colorMode: string;
+  coverage: { c: number; m: number; y: number; k: number };
+  doubleSided?: boolean;
+  printerId?: string;
+  cutsPerSheet?: number;
+  thumbnailUrl?: string;
+  printSettings?: Partial<import('../pricing/components/QuotationManager').QuotationItem>;
+}
+
 export interface PreflightResult {
   file_name: string;
   file_size?: number;
+  file_id?: string;
   preview_thumbnail_url?: string;
   file_url?: string;
   file_type?: 'PDF' | 'IMAGE' | string;
@@ -190,6 +216,7 @@ export interface OrderItem {
     preview_thumbnail_url?: string;
     page_count?: number;
   };
+  artworkParts?: ArtworkPart[];
   specifications?: any;
   specs?: any;
 }

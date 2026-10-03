@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"somsing.local/backend/auth"
 )
 
 func setupTestRouter() *gin.Engine {
@@ -133,10 +134,8 @@ func TestMasterDetailOrderAndTrackerFlow(t *testing.T) {
 }
 
 func TestMarginGuardAndApprovalWorkflow(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	r := gin.Default()
-	r.POST("/api/v1/orders", HandleCreateOrder)
-	r.POST("/api/v1/quotations/:id/approve", HandleApproveQuotation)
+	r := ownershipFixtureRouter(t)
+	r.POST("/api/v1/quotations/:id/approve", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), HandleApproveQuotation)
 	r.POST("/api/v1/quotations/:id/reject", HandleRejectQuotation)
 
 	// Create order with very low margin (< 25%)
@@ -157,6 +156,7 @@ func TestMarginGuardAndApprovalWorkflow(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/v1/orders", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+makeUploadTestToken(auth.RoleSales, false, false))
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusCreated {
@@ -173,21 +173,24 @@ func TestMarginGuardAndApprovalWorkflow(t *testing.T) {
 	// 2. Reject with non-manager role should be forbidden
 	wForbidden := httptest.NewRecorder()
 	reqForbidden, _ := http.NewRequest("POST", "/api/v1/quotations/"+order.ID+"/approve", nil)
-	reqForbidden.Header.Set("X-User-Role", "OPERATOR")
+	reqForbidden.Header.Set("Authorization", "Bearer "+makeUploadTestToken(auth.RoleSales, false, false))
 	r.ServeHTTP(wForbidden, reqForbidden)
 
 	if wForbidden.Code != http.StatusForbidden {
 		t.Errorf("Expected 403 Forbidden for OPERATOR role, got %d", wForbidden.Code)
 	}
 
-	// 3. Approve with ROLE_MANAGER
+	// 3. Manager auth passes, but unavailable persistence must not acknowledge approval.
 	wApprove := httptest.NewRecorder()
 	reqApprove, _ := http.NewRequest("POST", "/api/v1/quotations/"+order.ID+"/approve", bytes.NewBuffer([]byte(`{"manager_id":"MGR-001"}`)))
-	reqApprove.Header.Set("X-User-Role", "ROLE_MANAGER")
+	reqApprove.Header.Set("Authorization", "Bearer "+makeUploadTestToken(auth.RoleManager, false, false))
 	r.ServeHTTP(wApprove, reqApprove)
 
-	if wApprove.Code != http.StatusOK {
-		t.Errorf("Expected 200 OK for manager approval, got %d: %s", wApprove.Code, wApprove.Body.String())
+	if wApprove.Code != http.StatusServiceUnavailable {
+		t.Errorf("Expected 503 without approval persistence, got %d: %s", wApprove.Code, wApprove.Body.String())
+	}
+	if ordersStore[order.ID].Status != StatusRequiresManagerApproval {
+		t.Fatal("Uncommitted approval changed order cache")
 	}
 }
 
@@ -725,7 +728,7 @@ func TestQuotationSaveAndConvertToOrderFlow(t *testing.T) {
 	storeMutex.RLock()
 	fetchedOrder, exists := ordersStore[convertResp.OrderID]
 	storeMutex.RUnlock()
-	
+
 	if !exists {
 		t.Fatalf("Failed to fetch converted order from ordersStore")
 	}

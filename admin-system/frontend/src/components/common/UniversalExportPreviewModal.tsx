@@ -38,6 +38,8 @@ export interface UniversalModalShellProps {
   subtitle?: string;
   toolbarLeft?: React.ReactNode;
   toolbarRight?: React.ReactNode;
+  showFooter?: boolean;
+  closeLabel?: string;
   footerLeft?: React.ReactNode;
   footerRight?: React.ReactNode;
   children: React.ReactNode;
@@ -54,20 +56,62 @@ export const UniversalModalShell: React.FC<UniversalModalShellProps> = ({
   subtitle = 'ສະແດງຕົວຢ່າງ ແລະ ສົ່ງອອກເອກະສານຄວາມລະອຽດສູງ (High-DPI Export)',
   toolbarLeft,
   toolbarRight,
+  showFooter = true,
+  closeLabel = 'Close (Esc)',
   footerLeft,
   footerRight,
   children,
   contentContainerClassName = 'flex-1 overflow-auto bg-slate-100/90 p-4 sm:p-8 flex justify-center items-start custom-scrollbar',
   zIndex = 'z-[200]'
 }) => {
-  React.useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const titleId = React.useId();
+
+  React.useLayoutEffect(() => {
+    if (!isOpen || !dialogRef.current) return;
+    const dialog = dialogRef.current;
+    const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const isTopModal = () => Array.from(document.querySelectorAll('[data-universal-modal]')).at(-1) === dialog;
+    const focusables = () => Array.from(dialog.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, [tabindex]'))
+      .filter(element => {
+        if (element.tabIndex < 0 || element.matches(':disabled') || element.closest('[hidden], [inert]') || getComputedStyle(element).visibility === 'hidden') return false;
+        for (let parent: HTMLElement | null = element; parent && parent !== dialog; parent = parent.parentElement) {
+          if (getComputedStyle(parent).display === 'none') return false;
+        }
+        return true;
+      });
+    const focusClose = () => closeRef.current?.focus();
+    const handleFocus = (event: FocusEvent) => {
+      if (isTopModal() && !dialog.contains(event.target as Node)) focusClose();
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isTopModal()) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        onCloseRef.current();
+      } else if (event.key === 'Tab') {
+        const elements = focusables();
+        const first = elements[0] || dialog;
+        const last = elements.at(-1) || dialog;
+        if (!dialog.contains(document.activeElement) || (event.shiftKey ? document.activeElement === first : document.activeElement === last)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+        }
+      }
+    };
+    focusClose();
+    document.addEventListener('focusin', handleFocus);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      document.removeEventListener('focusin', handleFocus);
+      window.removeEventListener('keydown', handleKeyDown, true);
+      if (invoker?.isConnected) invoker.focus();
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -75,7 +119,7 @@ export const UniversalModalShell: React.FC<UniversalModalShellProps> = ({
 
   const modalContent = (
     <div className={`fixed inset-0 ${zIndex} flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in`}>
-      <div 
+      <div ref={dialogRef} data-universal-modal role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}
         className="bg-white border border-slate-200 rounded-3xl w-full max-w-[1700px] h-[96vh] flex flex-col shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
@@ -87,7 +131,7 @@ export const UniversalModalShell: React.FC<UniversalModalShellProps> = ({
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-lg font-black text-slate-900 tracking-wide truncate">{title}</h3>
+                <h3 id={titleId} className="text-lg font-black text-slate-900 tracking-wide truncate">{title}</h3>
                 {(documentNumber || badgeLabel) && (
                   <span className="px-2.5 py-0.5 text-xs font-mono font-bold rounded-lg bg-sky-50 text-sky-700 border border-sky-200 shrink-0">
                     {documentNumber || badgeLabel}
@@ -99,10 +143,10 @@ export const UniversalModalShell: React.FC<UniversalModalShellProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button
+            <button ref={closeRef}
               onClick={onClose}
               className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
-              title="Close (Esc)"
+              title={closeLabel} aria-label={closeLabel}
             >
               <X className="w-5 h-5" />
             </button>
@@ -125,7 +169,7 @@ export const UniversalModalShell: React.FC<UniversalModalShellProps> = ({
         </div>
 
         {/* Footer info */}
-        <div className="px-6 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 shrink-0">
+        {showFooter && <div className="px-6 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 shrink-0">
           {footerLeft || (
             <div className="flex items-center gap-2">
               <Sparkles className="w-3.5 h-3.5 text-sky-500" />
@@ -137,7 +181,7 @@ export const UniversalModalShell: React.FC<UniversalModalShellProps> = ({
               <span>ຮອງຮັບການສົ່ງຕໍ່ WhatsApp / Messenger / WeChat</span>
             </div>
           )}
-        </div>
+        </div>}
 
       </div>
     </div>

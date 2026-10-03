@@ -4,6 +4,7 @@ import type { QuotationItem } from './QuotationManager';
 import { JobSizeSelectorCard } from './JobSizeSelectorCard';
 
 interface JobQuantityAndPagesSectionProps {
+  sourcePagesLocked?: boolean;
   activeItem: QuotationItem;
   updateActiveItem: (patch: Partial<QuotationItem>) => void;
   activeCalc: any;
@@ -14,6 +15,7 @@ interface JobQuantityAndPagesSectionProps {
 
 export const JobQuantityAndPagesSection: React.FC<JobQuantityAndPagesSectionProps> = ({
   activeItem,
+  sourcePagesLocked = false,
   updateActiveItem,
   activeCalc,
   isOpen,
@@ -83,6 +85,7 @@ export const JobQuantityAndPagesSection: React.FC<JobQuantityAndPagesSectionProp
                   type="number"
                   min="1"
                   value={activeItem.printVolume}
+                  aria-label="Job quantity"
                   onChange={(e) => updateActiveItem({ printVolume: Math.max(1, Number(e.target.value)) })}
                   className="w-full min-h-[46px] pl-4 pr-16 py-2 border-2 border-emerald-400 rounded-xl focus:outline-none text-xl font-black font-sans bg-white text-emerald-950 text-center shadow-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
@@ -141,6 +144,8 @@ export const JobQuantityAndPagesSection: React.FC<JobQuantityAndPagesSectionProp
                       type="number"
                       min="1"
                       value={activeItem.pagesPerBook || 1}
+                      readOnly={sourcePagesLocked}
+                      aria-label="Source pages"
                       onChange={(e) => updateActiveItem({ 
                         pagesPerBook: Math.max(1, Number(e.target.value)),
                         photoCount: isBatchPhoto ? Math.max(1, Number(e.target.value)) : undefined

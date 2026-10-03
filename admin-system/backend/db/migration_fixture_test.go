@@ -25,14 +25,23 @@ func TestParseAndValidateDSN(t *testing.T) {
 		dsn     string
 		wantErr bool
 	}{
-		{"Valid fixture URL", "postgres://user:pass@localhost:5432/somsing_fixture_db?sslmode=disable", false},
-		{"Valid fixture URL 127.0.0.1", "postgresql://user:pass@127.0.0.1/somsing_fixture_db", false},
+		{"Valid fixture URL", "postgres://user:pass@localhost:55432/somsing_fixture_db?sslmode=disable", false},
+		{"Valid fixture URL 127.0.0.1", "postgresql://user:pass@127.0.0.1:55432/somsing_fixture_db", false},
 		{"Keyword DSN rejection", "host=localhost dbname=somsing_fixture_db", true},
-		{"Production DB name rejection", "postgres://localhost/somsing_db", true},
-		{"Unknown DB name rejection", "postgres://localhost/other_db", true},
-		{"Query host override rejection", "postgres://localhost/somsing_fixture_db?host=remote.example", true},
-		{"Query dbname override rejection", "postgres://localhost/somsing_fixture_db?dbname=somsing_db", true},
+		{"Production DB name rejection", "postgres://localhost:55432/somsing_db", true},
+		{"Unknown DB name rejection", "postgres://localhost:55432/other_db", true},
+		{"Query host override rejection", "postgres://localhost:55432/somsing_fixture_db?host=remote.example", true},
+		{"Query dbname override rejection", "postgres://localhost:55432/somsing_fixture_db?dbname=somsing_db", true},
 		{"Remote host rejection", "postgres://remote.example/somsing_fixture_db", true},
+		{"Shop port rejected", "postgres://localhost:5432/somsing_fixture_db", true},
+		{"Default port rejected", "postgres://localhost/somsing_fixture_db", true},
+		{"Provider query rejected", "postgres://localhost:55432/somsing_fixture_db?service=shop", true},
+		{"Options override rejected", "postgres://localhost:55432/somsing_fixture_db?options=-csearch_path%3Dpublic", true},
+		{"Malformed query rejected", "postgres://localhost:55432/somsing_fixture_db?sslmode=%GG", true},
+		{"Duplicate query rejected", "postgres://localhost:55432/somsing_fixture_db?sslmode=disable&sslmode=require", true},
+		{"Encoded database rejected", "postgres://localhost:55432/%73omsing_fixture_db", true},
+		{"Fragment rejected", "postgres://localhost:55432/somsing_fixture_db#shop", true},
+		{"Valid bounded timeout", "postgres://localhost:55432/somsing_fixture_db?sslmode=disable&connect_timeout=5", false},
 	}
 
 	for _, tt := range tests {
@@ -65,7 +74,7 @@ func TestMigration043_IsolatedFixture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open fixture DB: %v", err)
 	}
-	
+
 	// A3: cleanup runs before connection/pool close
 	t.Cleanup(func() {
 		if err := testDB.Close(); err != nil {
@@ -139,7 +148,7 @@ func TestMigration043_IsolatedFixture(t *testing.T) {
 			t.Fatalf("Failed to read actual 043 migration file: %v", err)
 		}
 	}
-	
+
 	upSection := extractUpSection(string(migrationContent))
 	if upSection == "" {
 		t.Fatalf("Failed to extract Up section from 043 migration")
@@ -179,19 +188,19 @@ func TestMigration043_IsolatedFixture(t *testing.T) {
 	} else if !strings.Contains(err.Error(), "unique constraint") {
 		t.Fatalf("Expected unique constraint violation, got: %v", err)
 	}
-	
+
 	// Add persistence/reconnect read fixture using a new dedicated sql.Conn
 	reconnectConn, err := testDB.Conn(ctx)
 	if err != nil {
 		t.Fatalf("Failed to open read reconnect DB conn: %v", err)
 	}
 	defer reconnectConn.Close()
-	
+
 	_, err = reconnectConn.ExecContext(ctx, fmt.Sprintf("SET search_path TO %s;", schemaName))
 	if err != nil {
 		t.Fatalf("Failed to set search_path on read connection: %v", err)
 	}
-	
+
 	var readToken string
 	err = reconnectConn.QueryRowContext(ctx, `SELECT public_tracking_token FROM orders WHERE id = 'ord-4'`).Scan(&readToken)
 	if err != nil {

@@ -1,7 +1,10 @@
 package finance
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -203,6 +206,11 @@ func HandleVerifyPaymentSlip(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid payment review"})
 		return
 	}
+	reviewer := c.GetString("user_id")
+	if reviewer == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "Authenticated reviewer required"})
+		return
+	}
 	if db.DB == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "Payment storage unavailable"})
 		return
@@ -240,18 +248,45 @@ func HandleVerifyPaymentSlip(c *gin.Context) {
 			return
 		}
 		newStatus = "PAID_PREPRESS"
-		result, err = tx.ExecContext(c.Request.Context(), `UPDATE orders SET status = 'PAID_PREPRESS', deposit_amount = $2, deposit_lak = $2, remaining_lak = 0, updated_at = NOW() WHERE id = $1`, id, amount.String())
+		result, err = tx.ExecContext(c.Request.Context(), `UPDATE orders SET status = 'PAID_PREPRESS', overall_status = 'PAID_PREPRESS', deposit_amount = $2, deposit_lak = $2, remaining_lak = 0, updated_at = NOW() WHERE id = $1`, id, amount.String())
 		if err == nil {
 			err = CreatePaymentReceivedJournal(tx, id, amount, "Manual QR slip review")
 		}
 	} else {
-		result, err = tx.ExecContext(c.Request.Context(), `UPDATE orders SET status = 'PAYMENT_REJECTED', proof_rejection_reason = $2, updated_at = NOW() WHERE id = $1`, id, req.RejectionReason)
+		result, err = tx.ExecContext(c.Request.Context(), `UPDATE orders SET status = 'PAYMENT_REJECTED', overall_status = 'PAYMENT_REJECTED', proof_rejection_reason = $2, updated_at = NOW() WHERE id = $1`, id, req.RejectionReason)
 	}
 	if err == nil {
 		var affected int64
 		affected, err = result.RowsAffected()
 		if err == nil && affected != 1 {
 			err = fmt.Errorf("unexpected payment update count")
+		}
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
+		return
+	}
+	auditID := make([]byte, 16)
+	if _, err := rand.Read(auditID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
+		return
+	}
+	oldValues, err := json.Marshal(map[string]string{"status": status})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
+		return
+	}
+	newValues, err := json.Marshal(map[string]string{"status": newStatus, "overall_status": newStatus, "decision": req.Status, "rejection_reason": req.RejectionReason})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
+		return
+	}
+	audit, err := tx.ExecContext(c.Request.Context(), `INSERT INTO audit_logs(id,user_id,user_name,action,resource_type,resource_id,old_values,new_values,ip_address,created_at) VALUES($1,$2,$3,'MANUAL_SLIP_REVIEW','ORDER',$4,$5,$6,$7,NOW())`, hex.EncodeToString(auditID), reviewer, c.GetString("username"), id, string(oldValues), string(newValues), c.ClientIP())
+	if err == nil {
+		var count int64
+		count, err = audit.RowsAffected()
+		if err == nil && count != 1 {
+			err = fmt.Errorf("unexpected review audit count")
 		}
 	}
 	if err != nil {
@@ -277,10 +312,11 @@ type PendingSlipOrderDTO struct {
 
 // HandleGetPendingSlips returns list of orders waiting for slip verification
 func HandleGetPendingSlips(c *gin.Context) {
-	slips := make([]PendingSlipOrderDTO, 0)
-
-	if db.DB != nil {
-		rows, err := db.DB.Query(`
+	if db.DB == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "Payment storage unavailable"})
+		return
+	}
+	rows, err := db.DB.QueryContext(c.Request.Context(), `
 			SELECT 
 				o.id, 
 				COALESCE(o.order_no, o.order_number, o.id) as order_number, 
@@ -295,20 +331,27 @@ func HandleGetPendingSlips(c *gin.Context) {
 			  AND o.status IN ('PENDING_PAYMENT', 'Pending Payment', 'Verification Required', 'PENDING_SLIP_CHECK', 'WAITING_DEPOSIT')
 			ORDER BY o.created_at DESC
 		`)
-		if err == nil {
-			defer rows.Close()
-			for rows.Next() {
-				var item PendingSlipOrderDTO
-				var createdAt time.Time
-				if err := rows.Scan(&item.ID, &item.OrderNumber, &item.CustomerName, &item.TotalAmount, &item.PaymentSlipURL, &createdAt); err == nil {
-					item.Currency = "LAK"
-					item.CreatedAt = createdAt.Format("2006-01-02 15:04")
-					slips = append(slips, item)
-				}
-			}
-		}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Unable to load pending slips"})
+		return
 	}
-
+	defer rows.Close()
+	slips := make([]PendingSlipOrderDTO, 0)
+	for rows.Next() {
+		var item PendingSlipOrderDTO
+		var createdAt time.Time
+		if err := rows.Scan(&item.ID, &item.OrderNumber, &item.CustomerName, &item.TotalAmount, &item.PaymentSlipURL, &createdAt); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Unable to load pending slips"})
+			return
+		}
+		item.Currency = "LAK"
+		item.CreatedAt = createdAt.Format("2006-01-02 15:04")
+		slips = append(slips, item)
+	}
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Unable to load pending slips"})
+		return
+	}
 	c.JSON(http.StatusOK, slips)
 }
 

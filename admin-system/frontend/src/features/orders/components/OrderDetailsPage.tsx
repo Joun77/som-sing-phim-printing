@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ArtworkThumbnail from '../../../components/common/ArtworkThumbnail';
+import { usePaymentSlipReview } from '../../../hooks/usePaymentSlipReview';
 import { 
   ArrowLeft,
   CheckCircle2, 
@@ -97,6 +99,7 @@ export default function OrderDetailsPage({
   equipment?: any[];
   onEditOrder?: (order: any) => void;
 }) {
+  const paymentReview = usePaymentSlipReview(String(order?.id || ''));
   const openedMedia = useRef<string[]>([]);
   const mountedRef = useRef(true);
   const orderGenerationRef = useRef(0);
@@ -131,7 +134,8 @@ export default function OrderDetailsPage({
     updateOrderTracking: contextUpdateOrderTracking, 
     updateOrderDetails: contextUpdateOrderDetails,
     inventory: contextInventory = [],
-    equipment: contextEquipment = []
+    equipment: contextEquipment = [],
+    refreshData,
   } = useApp();
 
   const [isShippingLabelOpen, setIsShippingLabelOpen] = useState(false);
@@ -1639,11 +1643,7 @@ export default function OrderDetailsPage({
                   >
                     {order.paymentSlipUrl || order.payment_slip_url || order.slipUrl || order.slipImage ? (
                       <>
-                        <img 
-                          src={order.paymentSlipUrl || order.payment_slip_url || order.slipUrl || order.slipImage} 
-                          alt="Payment Slip" 
-                          className="max-h-[220px] max-w-full object-contain rounded-lg shadow-md"
-                        />
+                        <ArtworkThumbnail url={order.paymentSlipUrl || order.payment_slip_url || order.slipUrl || order.slipImage} name="payment-slip" alt="Payment Slip" language={currentLang} fit="contain" />
                         <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2 text-xs font-black text-amber-400">
                           <Sparkles className="w-4 h-4" />
                           <span>{currentLang === 'lo' ? 'ຄລິກເພື່ອຂະຫຍາຍຮູບ' : 'Click to zoom'}</span>
@@ -1664,6 +1664,7 @@ export default function OrderDetailsPage({
                     )}
                   </div>
 
+                  {paymentReview.error && <p role="alert" className="text-sm text-red-600">{paymentReview.error}</p>}
                   {/* Amount Breakdown */}
                   <div className="mt-3 p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1 text-xs">
                     <div className="flex justify-between">
@@ -1688,8 +1689,7 @@ export default function OrderDetailsPage({
                       <button
                         type="button"
                         onClick={() => {
-                          if (handleStatusChange) handleStatusChange(order.id, 'PENDING');
-                          showToast(currentLang === 'lo' ? 'ຍົກເລີກການຢືນຢັນສະລິບແລ້ວ' : 'Reverted payment confirmation', 'info');
+                          showToast(currentLang === 'lo' ? 'ຕ້ອງດຳເນີນການຍ້ອນການຊຳລະຜ່ານຝ່າຍການເງິນ' : 'Payment reversal requires the finance workflow', 'warning');
                         }}
                         className="py-3 px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-400 border border-slate-700 text-xs font-bold transition active:scale-95 cursor-pointer flex items-center gap-1.5 shrink-0"
                         title="Revert / Cancel payment status"
@@ -1701,14 +1701,12 @@ export default function OrderDetailsPage({
                     <div className="flex flex-col sm:flex-row gap-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          if (handleStatusChange) handleStatusChange(order.id, 'PREPRESS_CHECK');
-                          showToast(
-                            currentLang === 'lo' 
-                              ? 'ຢືນຢັນຮັບອໍເດີ & ຊຳຣະເງິນຖືກຕ້ອງແລ້ວ! ສົ່ງຕໍ່ຝ່າຍ Pre-Press' 
-                              : 'Order accepted & payment verified! Handed over to Pre-Press', 
-                            'success'
-                          );
+                        disabled={paymentReview.pending}
+                        onClick={async () => {
+                          const result = await paymentReview.review('APPROVED');
+                          if (!result) return;
+                          void refreshData();
+                          showToast(currentLang === 'lo' ? 'ບັນທຶກຜົນກວດສອບການຊຳລະແລ້ວ' : 'Payment review saved; ready for Pre-Press', 'success');
                         }}
                         className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-black shadow-lg shadow-emerald-500/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2 border-none"
                       >
@@ -1718,11 +1716,14 @@ export default function OrderDetailsPage({
 
                       <button
                         type="button"
-                        onClick={() => {
+                        disabled={paymentReview.pending}
+                        onClick={async () => {
                           const reason = prompt(currentLang === 'lo' ? 'ລະບຸເຫດຜົນທີ່ສະລິບບໍ່ຖືກຕ້ອງ:' : 'Reason for slip rejection:');
-                          if (reason) {
-                            showToast(currentLang === 'lo' ? 'ແຈ້ງເຕືອນລູກຄ້າໃຫ້ສົ່ງສະລິບໃໝ່ແລ້ວ' : 'Customer notified to re-upload slip', 'warning');
-                          }
+                          if (!reason) return;
+                          const result = await paymentReview.review('REJECTED', reason);
+                          if (!result) return;
+                          void refreshData();
+                          showToast(currentLang === 'lo' ? 'ບັນທຶກຜົນປະຕິເສດສະລິບແລ້ວ' : 'Slip rejection saved', 'warning');
                         }}
                         className="py-3 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-red-400 border border-slate-800 text-xs font-bold transition active:scale-95 cursor-pointer"
                         title="Reject Slip"

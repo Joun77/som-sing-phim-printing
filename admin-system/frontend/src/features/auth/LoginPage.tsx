@@ -47,12 +47,12 @@ export const LoginPage: React.FC = () => {
         });
       }
 
-      // Check if response is HTML (e.g. Render cold start, gateway error, or 404/504 page)
+      // Gateway/HTML responses do not establish a provider or cold-start cause.
       const contentType = response.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
         const text = await response.text().catch(() => '');
         if (text.includes('<!doctype') || text.includes('<html') || response.status === 502 || response.status === 504 || response.status === 503) {
-          throw new Error('ເຊີບເວີ Backend (Render) ກຳລັງເລີ່ມຕົ້ນ ຫຼື ພວມຕື່ນຕົວ (Cold-start) ກະລຸນາລໍຖ້າ 30-50 ວິນາທີ ແລ້ວກົດເຂົ້າສູ່ລະບົບໃໝ່ອີກຄັ້ງ');
+          throw new Error(`ບໍ່ສາມາດເຂົ້າສູ່ລະບົບໄດ້: ການຕອບສະໜອງຈາກ Backend ບໍ່ຖືກຕ້ອງ (HTTP ${response.status}). ກະລຸນາກວດສອບວ່າ Backend ກຳລັງເຮັດວຽກ.`);
         }
         throw new Error(`ການຕອບສະໜອງຈາກເຊີບເວີບໍ່ຖືກຕ້ອງ (HTTP ${response.status})`);
       }

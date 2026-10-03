@@ -80,6 +80,7 @@ export const JobSizeSelectorCard: React.FC<JobSizeSelectorCardProps> = ({
               min="1"
               step="1"
               value={Math.round(currentW)}
+              aria-label="Width mm"
               onChange={(e) => {
                 const val = Math.max(1, Number(e.target.value));
                 onChange(val, currentH, 'Custom');
@@ -96,6 +97,7 @@ export const JobSizeSelectorCard: React.FC<JobSizeSelectorCardProps> = ({
               min="1"
               step="1"
               value={Math.round(currentH)}
+              aria-label="Height mm"
               onChange={(e) => {
                 const val = Math.max(1, Number(e.target.value));
                 onChange(currentW, val, 'Custom');

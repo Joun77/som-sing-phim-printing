@@ -11,6 +11,7 @@ const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const backend = resolve(frontend, '../backend');
 const tools = process.env.P12_TEST_TOOLS;
 if (!tools) throw new Error('Set P12_TEST_TOOLS to an isolated node_modules containing vitest@3 and jsdom@26');
+const evidenceOnly = process.env.P12_EVIDENCE_ONLY === '1';
 const temp = await mkdtemp(join(tmpdir(), 'somsing-p12-'));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const dataPaths = ['couriers_data.json', 'payment_methods_data.json'].map(name => join(backend, name));
@@ -25,7 +26,7 @@ const before = await hashes();
 const home = join(temp, 'home'); await mkdir(home);
 const fixtureEnv = { PATH: process.env.PATH, HOME: home, TMPDIR: temp, ENVIRONMENT: 'test', GOCACHE: process.env.GOCACHE || join(process.env.HOME, 'Library/Caches/go-build'), GOPATH: process.env.GOPATH || join(process.env.HOME, 'go') };
 function run(command, args, cwd, env = fixtureEnv) {
-  const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
+  const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', stdio: 'inherit', maxBuffer: 20 * 1024 * 1024 });
   process.stdout.write(result.stdout || ''); process.stderr.write(result.stderr || '');
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} exited ${result.status}`);
@@ -35,7 +36,7 @@ try {
   // Compilation never executes settings.init. All execution starts in fresh temp cwd/HOME.
   const binary = join(temp, 'fixture-server');
   run('go', ['build', '-o', binary, './cmd/fixture-server'], backend);
-  for (const [pkg, selector] of [
+  if (!evidenceOnly) for (const [pkg, selector] of [
     ['cmd/fixture-server', '.'],
     ['orders', 'Test(UploadValidation_U1|ProtectedFileServing_U2|SingleSplitBatchUploadPreviewDownload_U3|SymlinkAndContainedResolution|OrderUploadValidationAndDraftPreservation)'],
   ]) {
@@ -56,9 +57,10 @@ try {
     await new Promise(resolve => setTimeout(resolve, 50));
   }
   if (!ready) throw new Error('Disposable Go fixture never became ready');
-  run(process.execPath, [join(tools, 'vitest/vitest.mjs'), 'run', '--config', join(frontend, 'tests/p12.config.mjs'), '--reporter=verbose'], frontend,
-    { ...fixtureEnv, P12_TEST_TOOLS: tools, P12_TEMP_DIR: temp, P12_FIXTURE_ORIGIN: origin });
+  run(process.execPath, [join(tools, 'vitest/vitest.mjs'), 'run', '--config', join(frontend, 'tests/p12.config.mjs'), '--reporter=verbose', ...(process.env.P12_TEST_NAME_PATTERN ? ['--testNamePattern', process.env.P12_TEST_NAME_PATTERN] : [])], frontend,
+    { ...fixtureEnv, P12_TEST_TOOLS: tools, P12_TEMP_DIR: temp, P12_FIXTURE_ORIGIN: origin, P12_EVIDENCE_ONLY: evidenceOnly ? '1' : '0', P12_EVIDENCE_SCOPE: process.env.P12_EVIDENCE_SCOPE || '', P12_BATCH_DTO_PATH: process.env.P12_BATCH_DTO_PATH || '', P12_CONVERSION_DTO_PATH: process.env.P12_CONVERSION_DTO_PATH || '', P12_SAVED_QUOTE_DTO_PATH: process.env.P12_SAVED_QUOTE_DTO_PATH || '' });
 
+  if (!evidenceOnly || process.env.P12_VALIDATE_BUILD === '1') {
   const require = createRequire(join(frontend, 'package.json'));
   const { build } = await import(require.resolve('vite'));
   const { default: react } = await import(require.resolve('@vitejs/plugin-react'));
@@ -76,6 +78,7 @@ try {
   const bundles = await Promise.all(assets.filter(name => name.endsWith('.js')).map(name => readFile(join(temp, 'dist/assets', name), 'utf8')));
   if (!bundles.some(text => text.includes(workers[0]))) throw new Error('Application does not reference the bundled worker');
   console.log('Production application references the emitted local worker asset');
+  }
 } finally {
   if (server && server.exitCode === null) {
     const stopped = new Promise(resolve => server.once('exit', resolve)); server.kill('SIGTERM'); await stopped;

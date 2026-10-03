@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { impositionGrid } from './impositionLayout';
 
 export interface ImposedItem {
   id?: string;
@@ -99,12 +100,10 @@ export async function generateAndDownloadImposedPdf(
   // Margin for crop marks
   const marginX = 10;
   const marginY = 15;
-  const usableW = sheetW - marginX * 2;
-  const usableH = sheetH - marginY * 2;
-
-  // Calculate cols and rows
-  const cols = Math.max(1, Math.floor((usableW + gutter) / (itemW + gutter)));
-  const rows = Math.max(1, Math.floor((usableH + gutter) / (itemH + gutter)));
+  const grid = impositionGrid({ sheetWidth: sheetW, sheetHeight: sheetH, itemWidth: itemW, itemHeight: itemH, marginX, marginY, gap: gutter });
+  // Preserve the legacy exporter fallback; the new preview rejects no-fit layouts.
+  const cols = Math.max(1, grid.cols);
+  const rows = Math.max(1, grid.rows);
   const itemsPerPage = cols * rows;
 
   const totalPages = Math.ceil(items.length / itemsPerPage);

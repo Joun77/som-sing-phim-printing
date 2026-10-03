@@ -11,10 +11,6 @@ import {
   Images,
   X,
   Plus,
-  Maximize2,
-  ZoomIn,
-  ZoomOut,
-  Download,
   BookOpen,
   ChevronLeft,
   ChevronRight,
@@ -25,10 +21,15 @@ import {
   FileCheck,
   Calculator,
 } from 'lucide-react';
+import { uploadOriginal } from '../../../api/artworkUpload';
+import ArtworkThumbnail from '../../../components/common/ArtworkThumbnail';
+import UniversalViewer from '../../../components/common/UniversalViewer';
+import ArtworkPartsPanel from '../../orders/components/ArtworkPartsPanel';
 import { QuotationItem } from './QuotationManager';
 import { FormModalTemplate } from '@components/common/FormModalTemplate';
 
 interface Props {
+  sourceLocked?: boolean;
   isOpen: boolean;
   onClose: () => void;
   item: QuotationItem | null;
@@ -41,6 +42,7 @@ interface Props {
 
 export const ArtworkColorPreviewModal: React.FC<Props> = ({
   isOpen,
+  sourceLocked = false,
   onClose,
   item,
   items = [],
@@ -51,6 +53,10 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverFileInputRef = useRef<HTMLInputElement>(null);
+  const uploadGeneration = useRef(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  useEffect(() => { uploadGeneration.current++; setUploading(false); setUploadError(''); return () => { uploadGeneration.current++; }; }, [isOpen, item?.id]);
 
   const [covC, setCovC] = useState<number>(15);
   const [covM, setCovM] = useState<number>(15);
@@ -60,9 +66,6 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
   const [batchFiles, setBatchFiles] = useState<any[]>([]);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number>(0);
   const [activeDocType, setActiveDocType] = useState<'inner' | 'cover'>('inner');
-  const [isLightboxOpen, setIsLightboxOpen] = useState<boolean>(false);
-  const [lightboxZoom, setLightboxZoom] = useState<number>(1);
-  const [mainZoom, setMainZoom] = useState<number>(1);
 
   // Initialize and attach coverage to batch files if missing
   useEffect(() => {
@@ -89,6 +92,8 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
         const k = f.covK !== undefined ? f.covK : Math.max(2, Math.min(95, Math.round(baseK + (((seed * 4) % 13) - 6))));
         return {
           ...f,
+          name: f.file_name || f.name,
+          url: f.originalUrl || f.file_url || f.url,
           covC: c,
           covM: m,
           covY: y,
@@ -99,7 +104,6 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
       setBatchFiles(normalizedBatch);
       setSelectedPhotoIndex(0);
       setActiveDocType('inner');
-      setMainZoom(1);
     }
   }, [item]);
 
@@ -117,6 +121,8 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
   }, [selectedPhotoIndex, activeDocType]);
 
   if (!isOpen || !item) return null;
+
+  if (item.artworkParts?.length) return <FormModalTemplate isOpen={isOpen} onClose={onClose} title={item.name}><ArtworkPartsPanel parts={item.artworkParts} /></FormModalTemplate>;
 
   const pf = item.preflightData;
   const tac = pf?.tac_max_percent ?? (covC + covM + covY + covK);
@@ -148,60 +154,51 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
     currentPreviewName = item.coverFileName || 'ໄຟລ໌ໜ້າປົກ (Cover File)';
   } else {
     const activeBatchItem = batchFiles[selectedPhotoIndex];
-    currentPreviewUrl = activeBatchItem?.url || activeBatchItem?.file_url || item.artworkUrl || pf?.file_url;
-    currentPreviewName = activeBatchItem?.name || item.fileName || pf?.file_name || item.name;
+    currentPreviewUrl = activeBatchItem?.originalUrl || activeBatchItem?.file_url || activeBatchItem?.url || item.artworkUrl || pf?.file_url;
+    currentPreviewName = activeBatchItem?.file_name || activeBatchItem?.name || item.fileName || pf?.file_name || item.name;
   }
 
-  const isImage = item.mimeType?.startsWith('image/') ||
-    currentPreviewName?.match(/\.(png|jpe?g|webp|gif|svg)$/i) ||
-    currentPreviewUrl?.startsWith('blob:') ||
-    currentPreviewUrl?.startsWith('data:image') ||
-    (currentPreviewUrl && !currentPreviewUrl.toLowerCase().endsWith('.pdf'));
-
-  const isPdf = item.mimeType === 'application/pdf' ||
-    currentPreviewName?.toLowerCase().endsWith('.pdf') ||
-    (currentPreviewUrl && currentPreviewUrl.toLowerCase().endsWith('.pdf'));
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (sourceLocked || uploading) return;
     const rawFiles = e.target.files;
     if (!rawFiles || rawFiles.length === 0) return;
 
-    const files = Array.from(rawFiles).slice(0, 100);
-    const newItems = files.map((file, idx) => ({
-      name: file.name,
-      url: URL.createObjectURL(file),
-      size: file.size,
-      mimeType: file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
-      covC: Math.max(5, Math.min(60, 12 + (idx % 7))),
-      covM: Math.max(5, Math.min(60, 11 + (idx % 5))),
-      covY: Math.max(5, Math.min(60, 8 + (idx % 4))),
-      covK: Math.max(5, Math.min(80, 28 + (idx % 9))),
-    }));
+    const files = Array.from(rawFiles).slice(0, 100); e.target.value = '';
+    const generation = ++uploadGeneration.current; setUploading(true); setUploadError('');
+    try {
+    const newItems = [];
+    for (const file of files) {
+      const url = await uploadOriginal(file); if (generation !== uploadGeneration.current) return;
+      newItems.push({ name: file.name, file_name: file.name, url, file_url: url, originalUrl: url, size: file.size, file_size: file.size, mimeType: file.type, covC, covM, covY, covK });
+    }
 
     const combined = [...batchFiles, ...newItems].slice(0, 100);
     setBatchFiles(combined);
     setSelectedPhotoIndex(0);
 
     const primaryFile = combined[0];
-    const totalSize = combined.reduce((sum, f) => sum + (f.size || 0), 0);
-    const primaryName = combined.length > 1 ? `ຊຸດໄຟລ໌ (${combined.length} ໄຟລ໌)` : (primaryFile?.name || '');
 
     if (onUpdateArtwork && primaryFile) {
       onUpdateArtwork({
-        artworkUrl: primaryFile.url,
-        fileName: primaryName,
+        artworkUrl: primaryFile.originalUrl || primaryFile.file_url || primaryFile.url,
+        fileName: primaryFile.file_name || primaryFile.name,
         mimeType: primaryFile.mimeType,
-        fileSize: totalSize,
+        fileSize: primaryFile.file_size || primaryFile.size,
         batchFiles: combined,
       });
     }
+    } catch { if (generation === uploadGeneration.current) setUploadError('ອັບໂຫຼດຕົ້ນສະບັບບໍ່ສຳເລັດ ກະລຸນາລອງໃໝ່'); }
+    finally { if (generation === uploadGeneration.current) setUploading(false); }
   };
 
-  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (sourceLocked || uploading) return;
     const rawFile = e.target.files?.[0];
     if (!rawFile) return;
 
-    const coverUrl = URL.createObjectURL(rawFile);
+    e.target.value = ''; const generation = ++uploadGeneration.current; setUploading(true); setUploadError('');
+    try {
+    const coverUrl = await uploadOriginal(rawFile); if (generation !== uploadGeneration.current) return;
     if (onUpdateArtwork) {
       onUpdateArtwork({
         artworkUrl: item.artworkUrl || '',
@@ -214,24 +211,25 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
       });
     }
     setActiveDocType('cover');
+    } catch { if (generation === uploadGeneration.current) setUploadError('ອັບໂຫຼດຕົ້ນສະບັບບໍ່ສຳເລັດ ກະລຸນາລອງໃໝ່'); }
+    finally { if (generation === uploadGeneration.current) setUploading(false); }
   };
 
   const handleRemoveFile = (idx: number) => {
+    if (sourceLocked || uploading) return;
     const updated = batchFiles.filter((_, i) => i !== idx);
     setBatchFiles(updated);
     if (selectedPhotoIndex >= updated.length) {
       setSelectedPhotoIndex(Math.max(0, updated.length - 1));
     }
     const primaryFile = updated[0];
-    const totalSize = updated.reduce((sum, f) => sum + (f.size || 0), 0);
-    const primaryName = updated.length > 1 ? `ຊຸດໄຟລ໌ (${updated.length} ໄຟລ໌)` : (primaryFile?.name || '');
 
     if (onUpdateArtwork) {
       onUpdateArtwork({
-        artworkUrl: primaryFile ? primaryFile.url : '',
-        fileName: primaryName,
+        artworkUrl: primaryFile ? primaryFile.originalUrl || primaryFile.file_url || primaryFile.url : '',
+        fileName: primaryFile?.file_name || primaryFile?.name || '',
         mimeType: primaryFile?.mimeType || 'image/jpeg',
-        fileSize: totalSize,
+        fileSize: primaryFile?.file_size || primaryFile?.size || 0,
         batchFiles: updated,
       });
     }
@@ -272,7 +270,7 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
       isOpen={isOpen}
       onClose={onClose}
       icon={<Palette className="w-5 h-5 text-indigo-400" />}
-      title={currentLang === 'lo' ? 'Universal Artwork & Color Preflight Viewer' : 'Universal Artwork & Color Inspection'}
+      title={currentLang === 'lo' ? 'ກວດສອບໄຟລ໌ ແລະ ຄ່າສີ' : 'Universal Artwork & Color Inspection'}
       subtitle={currentPreviewName}
       badgeText={batchFiles.length > 1 ? `Batch (${batchFiles.length} ຮູບ)` : (isViewingCover ? 'ໜ້າປົກ (Cover)' : 'ເນື້ອໃນ (Inner)')}
       maxWidthClass="max-w-[96vw] xl:max-w-[94vw]"
@@ -297,6 +295,7 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
             <input
               ref={fileInputRef}
               type="file"
+              disabled={sourceLocked || uploading}
               multiple
               accept="image/*,application/pdf"
               className="hidden"
@@ -305,6 +304,7 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
             <input
               ref={coverFileInputRef}
               type="file"
+              disabled={sourceLocked || uploading}
               accept="image/*,application/pdf"
               className="hidden"
               onChange={handleCoverUpload}
@@ -312,6 +312,7 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
 
             <button
               type="button"
+              disabled={sourceLocked || uploading}
               onClick={() => fileInputRef.current?.click()}
               className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
             >
@@ -326,7 +327,8 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
             {item.includeCover && (
               <button
                 type="button"
-                onClick={() => coverFileInputRef.current?.click()}
+                disabled={sourceLocked || uploading}
+              onClick={() => coverFileInputRef.current?.click()}
                 className="px-3.5 py-2 bg-amber-50 border border-amber-200 hover:bg-amber-100 text-amber-900 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <BookOpen className="w-3.5 h-3.5 text-amber-600" />
@@ -357,6 +359,8 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
       }
     >
       <div className="flex flex-col space-y-4">
+        {uploadError && <p role="alert" className="text-rose-600">{uploadError}</p>}
+        {uploading && <p role="status" className="text-slate-500">ກຳລັງອັບໂຫຼດຕົ້ນສະບັບ…</p>}
 
         {/* TOP TOOLBAR: 1. Item Switcher (Item #1, #2...) & 2. Sub-Doc Switcher (Cover vs Inner) */}
         <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-2xl border border-slate-200">
@@ -459,106 +463,9 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
                 )}
               </div>
 
-              {currentPreviewUrl && (
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {/* Zoom Controls */}
-                  <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setMainZoom(prev => Math.max(0.5, prev - 0.25))}
-                      className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
-                      title="Zoom Out"
-                    >
-                      <ZoomOut className="w-3.5 h-3.5" />
-                    </button>
-                    <span className="font-mono font-bold px-1.5 text-[10px] text-slate-700 min-w-[40px] text-center">
-                      {Math.round(mainZoom * 100)}%
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setMainZoom(prev => Math.min(3, prev + 0.25))}
-                      className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
-                      title="Zoom In"
-                    >
-                      <ZoomIn className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLightboxZoom(1);
-                      setIsLightboxOpen(true);
-                    }}
-                    className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-lg border border-indigo-200 flex items-center gap-1 transition cursor-pointer"
-                    title="Pop-up Fullscreen"
-                  >
-                    <Maximize2 className="w-3 h-3 text-indigo-600" />
-                    <span className="hidden sm:inline">ຂະໜາດເຕັມ</span>
-                  </button>
-
-                  <a
-                    href={currentPreviewUrl}
-                    download={currentPreviewName}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 px-2 py-1 rounded-lg border border-slate-200 flex items-center gap-1 transition"
-                  >
-                    <Download className="w-3 h-3 text-slate-500" />
-                  </a>
-                </div>
-              )}
             </div>
-
-            {/* Canvas Viewport */}
-            <div className="flex-1 w-full min-h-[380px] max-h-[520px] bg-slate-950/5 flex items-center justify-center p-4 overflow-auto relative">
-              {currentPreviewUrl ? (
-                isImage ? (
-                  <div className="flex items-center justify-center w-full h-full">
-                    <img
-                      src={currentPreviewUrl}
-                      alt={currentPreviewName}
-                      style={{ transform: `scale(${mainZoom})`, transformOrigin: 'center center' }}
-                      className="max-w-full max-h-[480px] object-contain rounded-lg shadow-sm transition-transform duration-150"
-                    />
-                  </div>
-                ) : isPdf ? (
-                  <iframe
-                    src={`${currentPreviewUrl}#toolbar=0&navpanes=0&scrollbar=1`}
-                    title={currentPreviewName}
-                    className="w-full h-[480px] border-0 rounded-lg bg-white shadow-xs"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center text-slate-600 gap-2 p-6">
-                    <FileText className="w-16 h-16 text-indigo-500" />
-                    <span className="text-xs font-bold truncate max-w-[240px]">{currentPreviewName}</span>
-                    <a
-                      href={currentPreviewUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition"
-                    >
-                      ເປີດໄຟລ໌ໃນແຖບໃໝ່
-                    </a>
-                  </div>
-                )
-              ) : (
-                <div className="flex flex-col items-center justify-center text-slate-400 p-8 space-y-3">
-                  <ImageIcon className="w-14 h-14 stroke-[1.5] text-slate-300" />
-                  <p className="text-xs font-semibold text-center text-slate-500">
-                    {isViewingCover
-                      ? 'ຍັງບໍ່ມີໄຟລ໌ໜ້າປົກແນບມາ (No Cover Attached)'
-                      : 'ຍັງບໍ່ມີໄຟລ໌ອາດເວິກແນບມາ (No Artwork Attached)'}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => isViewingCover ? coverFileInputRef.current?.click() : fileInputRef.current?.click()}
-                    className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold border border-indigo-200 transition cursor-pointer"
-                  >
-                    {isViewingCover ? 'ອັບໂຫຼດໄຟລ໌ໜ້າປົກ' : 'ອັບໂຫຼດໄຟລ໌ອາດເວິກ (1-100 ໄຟລ໌)'}
-                  </button>
-                </div>
-              )}
+            <div className="w-full h-[520px] min-h-0 overflow-hidden" data-testid="quotation-original-preview">
+              <UniversalViewer embedded language={currentLang} src={currentPreviewUrl} fileName={currentPreviewName} fileSize={isViewingCover ? undefined : batchFiles[selectedPhotoIndex]?.file_size || batchFiles[selectedPhotoIndex]?.size || item.fileSize} onClose={onClose} />
             </div>
 
             {/* Quick Next/Prev controls when in batch */}
@@ -609,7 +516,8 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
+                  disabled={sourceLocked || uploading}
+              onClick={() => fileInputRef.current?.click()}
                   className="p-1 hover:bg-slate-200 text-indigo-600 rounded-md transition cursor-pointer"
                   title="ເພີ່ມຮູບ"
                 >
@@ -620,7 +528,7 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
               {/* Scrollable List with Number Badges 1, 2, 3... */}
               <div className="flex-1 overflow-y-auto max-h-[480px] p-2 space-y-1.5 divide-y divide-slate-100 scrollbar-thin">
                 {batchFiles.map((bf, idx) => {
-                  const bUrl = bf.url || bf.file_url;
+                  const bUrl = bf.originalUrl || bf.file_url || bf.url;
                   const isSelected = selectedPhotoIndex === idx && !isViewingCover;
                   const bC = bf.covC !== undefined ? bf.covC : covC;
                   const bM = bf.covM !== undefined ? bf.covM : covM;
@@ -650,7 +558,7 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
                       {/* Thumbnail Preview */}
                       <div className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
                         {(bf.mimeType?.startsWith('image/') || bf.name?.match(/\.(png|jpe?g|webp|gif)$/i) || bUrl?.startsWith('blob:') || (bUrl && !bUrl.toLowerCase().endsWith('.pdf'))) ? (
-                          <img src={bUrl} alt={bf.name} className="w-full h-full object-cover" />
+                          <ArtworkThumbnail url={bUrl} name={bf.name} language={currentLang} />
                         ) : (
                           <FileText className="w-5 h-5 text-indigo-500" />
                         )}
@@ -877,135 +785,6 @@ export const ArtworkColorPreviewModal: React.FC<Props> = ({
 
       </div>
 
-      {/* Pop-up Universal File Viewer Lightbox (When clicking "ຂະໜາດເຕັມ") */}
-      {isLightboxOpen && currentPreviewUrl && (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-700 w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-scale-up">
-            {/* Pop-up Header */}
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-full bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0">
-                  <Eye className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <h4 className="text-base font-black truncate text-white">
-                    {currentPreviewName}
-                  </h4>
-                  <p className="text-[11px] font-bold text-slate-400">
-                    {item.jobSizePreset || '4x6"'} • {batchFiles.length > 1 ? `ຮູບທີ ${selectedPhotoIndex + 1}/${batchFiles.length}` : `${item.pagesPerBook || 1} ໜ້າ`} • {item.colorPrintMode === 'MONO_K' ? 'Mono' : 'CMYK'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Controls */}
-              <div className="flex items-center gap-2">
-                <div className="flex items-center bg-slate-800 p-1 rounded-xl border border-slate-700 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setLightboxZoom(prev => Math.max(0.5, prev - 0.25))}
-                    className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white transition cursor-pointer"
-                    title="Zoom Out"
-                  >
-                    <ZoomOut className="w-4 h-4" />
-                  </button>
-                  <span className="font-mono font-bold px-2 text-slate-300 min-w-[50px] text-center">
-                    {Math.round(lightboxZoom * 100)}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setLightboxZoom(prev => Math.min(3, prev + 0.25))}
-                    className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white transition cursor-pointer"
-                    title="Zoom In"
-                  >
-                    <ZoomIn className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <a
-                  href={currentPreviewUrl}
-                  download={currentPreviewName}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-200 hover:text-white transition cursor-pointer"
-                  title="Download / Open Original"
-                >
-                  <Download className="w-4 h-4" />
-                </a>
-
-                <button
-                  type="button"
-                  onClick={() => setIsLightboxOpen(false)}
-                  className="p-2 bg-rose-600/80 hover:bg-rose-600 rounded-xl text-white transition cursor-pointer ml-1"
-                  title="Close"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Pop-up Viewer Canvas */}
-            <div className="flex-1 bg-slate-950/95 overflow-auto p-4 flex items-center justify-center relative">
-              {isImage ? (
-                <div className="transition-transform duration-150 flex items-center justify-center max-w-full max-h-full">
-                  <img
-                    src={currentPreviewUrl}
-                    alt={currentPreviewName}
-                    style={{ transform: `scale(${lightboxZoom})`, transformOrigin: 'center center' }}
-                    className="max-w-[85vw] max-h-[76vh] object-contain rounded-lg shadow-2xl transition-transform"
-                  />
-                </div>
-              ) : isPdf ? (
-                <iframe
-                  src={`${currentPreviewUrl}#toolbar=1&navpanes=1&scrollbar=1`}
-                  title={currentPreviewName}
-                  className="w-full h-full border-0 rounded-2xl bg-white shadow-2xl"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center text-slate-400 gap-3 p-8">
-                  <FileText className="w-20 h-20 text-indigo-400" />
-                  <p className="text-sm font-bold text-white">{currentPreviewName}</p>
-                  <a
-                    href={currentPreviewUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-md transition"
-                  >
-                    ເປີດໄຟລ໌ໃນແຖບໃໝ່
-                  </a>
-                </div>
-              )}
-            </div>
-
-            {/* Pop-up Thumbnail Strip (For batch photos) */}
-            {batchFiles.length > 1 && (
-              <div className="bg-slate-900 border-t border-slate-800 p-2.5 flex items-center gap-2 overflow-x-auto shrink-0 scrollbar-thin">
-                <span className="text-[10px] font-bold text-slate-400 shrink-0 px-2">
-                  ໄຟລ໌ທັງໝົດ ({batchFiles.length}):
-                </span>
-                {batchFiles.map((bf, bidx) => {
-                  const bUrl = bf.url || bf.file_url;
-                  const isCur = selectedPhotoIndex === bidx;
-                  return (
-                    <button
-                      key={bidx}
-                      type="button"
-                      onClick={() => setSelectedPhotoIndex(bidx)}
-                      className={`w-12 h-12 rounded-lg border-2 overflow-hidden shrink-0 transition cursor-pointer relative ${
-                        isCur ? 'border-indigo-400 ring-2 ring-indigo-400/30 shadow-md' : 'border-slate-700 opacity-60 hover:opacity-100'
-                      }`}
-                    >
-                      <img src={bUrl} alt={bf.name} className="w-full h-full object-cover" />
-                      <span className="absolute bottom-0 right-0 bg-slate-900/80 text-[8px] font-mono text-white px-0.5">
-                        {bidx + 1}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </FormModalTemplate>
   );
 };

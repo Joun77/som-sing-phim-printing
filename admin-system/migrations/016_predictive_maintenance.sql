@@ -1,8 +1,20 @@
 -- Migration 016: Predictive Maintenance (PPM) & Meter Tracking
-ALTER TABLE equipment 
-ADD COLUMN IF NOT EXISTS maintenance_interval_impressions INT DEFAULT 50000,
-ADD COLUMN IF NOT EXISTS last_serviced_meter INT DEFAULT 0,
-ADD COLUMN IF NOT EXISTS current_meter INT DEFAULT 0;
+-- Extend each existing master without creating or copying equipment assets.
+DO $$
+DECLARE
+    master_name text;
+    found_master boolean := false;
+BEGIN
+    FOREACH master_name IN ARRAY ARRAY['equipment', 'printers'] LOOP
+        IF to_regclass(master_name) IS NOT NULL THEN
+            found_master := true;
+            EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS maintenance_interval_impressions INT DEFAULT 50000, ADD COLUMN IF NOT EXISTS last_serviced_meter INT DEFAULT 0, ADD COLUMN IF NOT EXISTS current_meter INT DEFAULT 0', master_name);
+        END IF;
+    END LOOP;
+    IF NOT found_master THEN
+        RAISE EXCEPTION 'Migration 016 requires an existing equipment or printers master';
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS equipment_specs (
     id SERIAL PRIMARY KEY,

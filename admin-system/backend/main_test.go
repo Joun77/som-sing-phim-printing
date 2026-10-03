@@ -7,6 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -477,4 +480,96 @@ func TestActualRegisterRoutes_IsolatedUploadAndPreflight(t *testing.T) {
 	})
 }
 
-
+// Static source evidence only: do not start business main or initialize its side effects.
+func TestStartupDBFailureGuard(t *testing.T) {
+	source := os.Getenv("P1_STARTUP_SOURCE")
+	if source == "" {
+		t.Fatal("explicit frozen startup source required")
+	}
+	parsed, err := parser.ParseFile(token.NewFileSet(), source, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body *ast.BlockStmt
+	for _, decl := range parsed.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == "main" {
+			body = fn.Body
+		}
+	}
+	if body == nil {
+		t.Fatal("actual main function missing")
+	}
+	guard := -1
+	effects := map[string]bool{"notifications.InitGlobalDispatcher": false, "settings.SeedLocationsToDB": false, "inventory.StartPPMDailyCron": false, "router.Run": false}
+	for index, stmt := range body.List {
+		if candidate, ok := stmt.(*ast.IfStmt); ok {
+			if assign, ok := candidate.Init.(*ast.AssignStmt); ok && len(assign.Rhs) == 1 {
+				if call, ok := assign.Rhs[0].(*ast.CallExpr); ok {
+					if selectCall, ok := call.Fun.(*ast.SelectorExpr); ok && selectCall.Sel.Name == "InitDB" {
+						owner, ok := selectCall.X.(*ast.Ident)
+						if !ok || owner.Name != "db" {
+							t.Fatal("unexpected initialization owner")
+						}
+						condition, ok := candidate.Cond.(*ast.BinaryExpr)
+						if !ok || condition.Op != token.NEQ {
+							t.Fatal("database failure guard missing")
+						}
+						left, lok := condition.X.(*ast.Ident)
+						right, rok := condition.Y.(*ast.Ident)
+						if !lok || !rok || left.Name != "err" || right.Name != "nil" || candidate.Else != nil || len(candidate.Body.List) != 1 {
+							t.Fatal("database failure can fall through")
+						}
+						expression, ok := candidate.Body.List[0].(*ast.ExprStmt)
+						if !ok {
+							t.Fatal("failure branch must exit")
+						}
+						fatal, ok := expression.X.(*ast.CallExpr)
+						if !ok {
+							t.Fatal("failure branch must exit")
+						}
+						selected, ok := fatal.Fun.(*ast.SelectorExpr)
+						if !ok || selected.Sel.Name != "Fatal" {
+							t.Fatal("failure branch does not terminate")
+						}
+						logger, ok := selected.X.(*ast.Ident)
+						if !ok || logger.Name != "log" {
+							t.Fatal("unexpected termination call")
+						}
+						guard = index
+					}
+				}
+			}
+		}
+		ast.Inspect(stmt, func(node ast.Node) bool {
+			call, ok := node.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			selected, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			owner, ok := selected.X.(*ast.Ident)
+			if !ok {
+				return true
+			}
+			name := owner.Name + "." + selected.Sel.Name
+			if _, required := effects[name]; required {
+				if guard < 0 || index <= guard {
+					t.Fatalf("%s precedes database readiness", name)
+				}
+				effects[name] = true
+			}
+			return true
+		})
+	}
+	if guard < 0 {
+		t.Fatal("actual initialization failure guard missing")
+	}
+	for name, found := range effects {
+		if !found {
+			t.Fatalf("expected startup call missing: %s", name)
+		}
+	}
+	t.Log("actual main AST exits on database failure before dispatcher/location seed/cron/listener; business main not run")
+}

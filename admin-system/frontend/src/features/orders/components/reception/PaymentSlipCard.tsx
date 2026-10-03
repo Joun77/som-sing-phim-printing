@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   CreditCard, 
   Sparkles, 
@@ -11,7 +11,11 @@ import {
   Trash2
 } from 'lucide-react';
 
+import ArtworkThumbnail from '../../../../components/common/ArtworkThumbnail';
+
 interface PaymentSlipCardProps {
+  reviewPending?: boolean;
+  reviewError?: string;
   orderIdDisplay: string;
   paymentSlipUrl?: string | null;
   totalAmountLAK: number;
@@ -32,6 +36,8 @@ interface PaymentSlipCardProps {
 }
 
 export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
+  reviewPending = false,
+  reviewError = '',
   orderIdDisplay,
   paymentSlipUrl,
   totalAmountLAK,
@@ -51,6 +57,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
   setLightbox,
 }) => {
   const [localSlip, setLocalSlip] = useState<string | null>(paymentSlipUrl || null);
+  useEffect(() => { setLocalSlip(paymentSlipUrl || null); }, [orderIdDisplay, paymentSlipUrl]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isDeposit = paymentStatus === 'Deposit' || (depositAmountPaid && depositAmountPaid > 0 && depositAmountPaid < totalAmountLAK);
@@ -121,6 +128,8 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
   return (
     <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-7 shadow-sm space-y-5 flex flex-col justify-between">
       <div>
+        {reviewError && <p role="alert" className="text-sm text-red-600">{reviewError}</p>}
+        {reviewPending && <p role="status">{currentLang === 'lo' ? 'ກຳລັງບັນທຶກຜົນກວດສອບ...' : 'Saving payment review...'}</p>}
         {/* Card Title */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
           <div className="flex items-center gap-2.5">
@@ -169,11 +178,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
             className="w-full min-h-[200px] max-h-[240px] rounded-2xl bg-slate-50 border-2 border-slate-200 flex flex-col items-center justify-center p-3 overflow-hidden cursor-pointer hover:border-sky-400 hover:bg-sky-50/20 transition relative group shadow-inner"
             title={currentLang === 'lo' ? 'ຄລິກເພື່ອເບິ່ງຮູບສະລິບເຕັມຈໍ' : 'Click to view full slip image'}
           >
-            <img 
-              src={activeSlip} 
-              alt="Bank Transfer Slip" 
-              className="max-h-[190px] max-w-full object-contain rounded-xl shadow-md border border-slate-200"
-            />
+            <ArtworkThumbnail url={activeSlip} name="payment-slip" alt="Bank Transfer Slip" fit="contain" language={currentLang} />
             <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition rounded-2xl flex items-center justify-center gap-2 text-xs font-black text-white">
               <Eye className="w-4 h-4 text-sky-400" />
               <span>{currentLang === 'lo' ? 'ຄລິກເພື່ອຂະຫຍາຍຮູບສະລິບ' : 'Click to Zoom'}</span>
@@ -265,6 +270,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
               </div>
               <button
                 type="button"
+                disabled={reviewPending}
                 onClick={onRevertPayment}
                 className="py-3 px-3.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-amber-700 border border-slate-200 text-xs font-black transition active:scale-95 cursor-pointer flex items-center gap-1.5 shrink-0"
                 title="Revert payment status"
@@ -361,6 +367,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
               {/* Option 1: Full Payment (100%) */}
               <button
                 type="button"
+                disabled={reviewPending}
                 onClick={onConfirmFullPayment}
                 className="py-3 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border-none"
               >
@@ -371,6 +378,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
               {/* Option 2: Dynamic Deposit Payment */}
               <button
                 type="button"
+                disabled={reviewPending}
                 onClick={() => onConfirmDepositPayment(customDepositAmount)}
                 className="py-3 px-3 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-black shadow-md shadow-sky-500/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border-none"
               >
@@ -381,11 +389,12 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
 
             <button
               type="button"
-              onClick={onRejectSlip}
+              disabled={reviewPending}
+                onClick={onRejectSlip}
               className="w-full py-2 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-600 border border-slate-200 text-[11px] font-bold transition active:scale-95 cursor-pointer flex items-center justify-center gap-1"
             >
               <X className="w-3.5 h-3.5" />
-              <span>{currentLang === 'lo' ? 'ປະຕິເສດສະລິບ / ແຈ້ງລູກຄ້າ' : 'Reject Slip / Notify Customer'}</span>
+              <span>{currentLang === 'lo' ? 'ປະຕິເສດສະລິບ' : 'Reject Slip'}</span>
             </button>
           </div>
         )}

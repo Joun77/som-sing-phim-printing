@@ -1,3 +1,4 @@
+import UniversalViewer from './common/UniversalViewer';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   UploadCloud,
@@ -32,6 +33,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { uploadOriginal } from '../api/artworkUpload';
 import { apiFetch, resolveBackendUrl, isTrustedOrigin } from "../api/client";
 import { useApp } from '../store/AppContext';
 import type { PreflightResult, BatchPreflightResult } from '../features/orders/types';
@@ -69,6 +71,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   const currentLang = i18n.language || 'lo';
 
   const [file, setFile] = useState<File | null>(null);
+  const [originalPreviewOpen, setOriginalPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number; pct: number }>({ current: 0, total: 0, pct: 0 });
@@ -104,18 +107,6 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
     }
   }, []);
 
-  const uploadOriginal = async (file: File) => {
-    const body = new FormData();
-    body.append('file', file);
-    const response = await apiFetch<Response>('/api/v1/upload/artwork', { method: 'POST', body });
-    if (!response.ok) throw new Error(`Upload failed with status ${response.status}`);
-    const metadata: { fileUrl?: string; file_url?: string; url?: string } = await response.json();
-    const url = metadata.fileUrl || metadata.file_url || metadata.url;
-    if (!url || !isTrustedOrigin(resolveBackendUrl(url)) || !new URL(resolveBackendUrl(url)).pathname.startsWith('/uploads/artworks/')) {
-      throw new Error('Upload succeeded but no valid original artwork URL returned from server');
-    }
-    return url;
-  };
 
   // 1.1 Inventory Paper Substrate Picker & Defaults
   const { inventory, formatCurrency } = useApp();
@@ -233,6 +224,9 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   const [borderMode, setBorderMode] = useState<'BORDERED' | 'BORDERLESS'>('BORDERED');
   const [isBatchAnalyzing, setIsBatchAnalyzing] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; pct: number }>({ current: 0, total: 0, pct: 0 });
+  const batchGeneration = useRef(0);
+  useEffect(() => () => { batchGeneration.current++; }, []);
+  useEffect(() => () => { batchPreviews.forEach(preview => URL.revokeObjectURL(preview.url)); }, [batchPreviews]);
   const [batchResult, setBatchResult] = useState<BatchPreflightResult | null>(null);
   const [batchErrorMessage, setBatchErrorMessage] = useState<string | null>(null);
   const [selectedPreviewPhoto, setSelectedPreviewPhoto] = useState<string | null>(null);
@@ -247,6 +241,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   };
 
   const resetBatch = () => {
+    batchGeneration.current++; setIsBatchAnalyzing(false);
     setBatchFiles([]);
     setBatchPreviews([]);
     setBatchResult(null);
@@ -281,11 +276,30 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
     runBatchPreflightAnalysis(selected, batchPhotoSize, borderMode);
   };
 
+  const persistBatchOriginals = async (results: PreflightResult[], files: File[], generation: number) => {
+    if (results.length !== files.length) throw new Error('ຂໍ້ມູນຮູບບໍ່ຄົບ ກະລຸນາລອງໃໝ່');
+    const persisted: PreflightResult[] = [];
+    for (let index = 0; index < files.length; index++) {
+      if (generation !== batchGeneration.current) return null;
+      const result = results[index]; const file = files[index];
+      let durable = false;
+      try { const url = new URL(resolveBackendUrl(result.file_url || '')); durable = isTrustedOrigin(url) && url.pathname.startsWith('/uploads/artworks/') && result.file_name === file.name; } catch {}
+      const url = durable ? result.file_url! : await uploadOriginal(file);
+      if (generation !== batchGeneration.current) return null;
+      const thumbnail = result.preview_thumbnail_url;
+      persisted.push({ ...result, file_url: url, file_name: file.name, file_size: file.size, preview_thumbnail_url: thumbnail?.startsWith('data:') ? thumbnail : undefined, ...{ url, name: file.name, size: file.size, originalUrl: url, mime_type: file.type, mimeType: file.type } });
+    }
+    return persisted;
+  };
+
   const runBatchPreflightAnalysis = async (
     filesToAnalyze: File[],
     photoSize: string,
     border: 'BORDERED' | 'BORDERLESS'
   ) => {
+    const generation = ++batchGeneration.current;
+    let serverAnalysisComplete = false;
+    setBatchResult(null);
     setIsBatchAnalyzing(true);
     setBatchErrorMessage(null);
     setBatchProgress({ current: 0, total: filesToAnalyze.length, pct: 0 });
@@ -298,7 +312,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       formData.append('photo_size', photoSize);
       formData.append('border_mode', border);
 
-      const res = await fetch('/api/v1/preflight/batch-analyze', {
+      const res = await apiFetch<Response>('/api/v1/preflight/batch-analyze', {
         method: 'POST',
         body: formData,
       });
@@ -309,8 +323,12 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       }
 
       const data: BatchPreflightResult = await res.json();
-      setBatchResult(data);
+      serverAnalysisComplete = true;
+      const files = await persistBatchOriginals(data.files, filesToAnalyze, generation);
+      if (generation === batchGeneration.current && files) setBatchResult({ ...data, files });
     } catch (err: any) {
+      if (generation !== batchGeneration.current) return;
+      if (serverAnalysisComplete) { setBatchErrorMessage('ອັບໂຫຼດຕົ້ນສະບັບບໍ່ສຳເລັດ ກະລຸນາເລືອກໄຟລ໌ແລະລອງໃໝ່'); return; }
       console.warn('Batch endpoint fallback to client-side analyzer:', err);
       try {
         const preset = PHOTO_PRESETS[photoSize] || PHOTO_PRESETS['4x6'];
@@ -318,6 +336,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
         let sumC = 0, sumM = 0, sumY = 0, sumK = 0, lowDpi = 0;
 
         for (let i = 0; i < filesToAnalyze.length; i++) {
+          if (generation !== batchGeneration.current) return;
           setBatchProgress({
             current: i + 1,
             total: filesToAnalyze.length,
@@ -366,12 +385,13 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
           files: clientResults,
         };
 
-        setBatchResult(fallbackResult);
-      } catch (fallbackErr: any) {
-        setBatchErrorMessage(fallbackErr.message || 'Error analyzing batch photos');
+        const files = await persistBatchOriginals(clientResults, filesToAnalyze, generation);
+        if (generation === batchGeneration.current && files) setBatchResult({ ...fallbackResult, files });
+      } catch {
+        if (generation === batchGeneration.current) setBatchErrorMessage('ວິເຄາະ ຫຼື ອັບໂຫຼດຕົ້ນສະບັບບໍ່ສຳເລັດ ກະລຸນາເລືອກໄຟລ໌ແລະລອງໃໝ່');
       }
     } finally {
-      setIsBatchAnalyzing(false);
+      if (generation === batchGeneration.current) setIsBatchAnalyzing(false);
     }
   };
 
@@ -533,7 +553,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   };
 
   const handleSendBatchToQuotationAction = () => {
-    if (!batchResult) return;
+    if (!batchResult || isBatchAnalyzing || batchErrorMessage) return;
     const preset = PHOTO_PRESETS[batchPhotoSize] || PHOTO_PRESETS['4x6'];
 
     const effectiveItemW = batchCustomW || preset.w;
@@ -1538,6 +1558,22 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
             </div>
           </div>
 
+                <input
+                  id="preflight-batch-input"
+                  type="file"
+                  multiple
+                  accept=".png,.jpg,.jpeg,.webp,.tiff,.tif,.pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files) {
+                      handleBatchFilesSelected(e.target.files);
+                      e.target.value = '';
+                    }
+                  }}
+                />
+          {batchErrorMessage && <div role="alert" className="p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-sm">
+            <p>{batchErrorMessage}</p><button type="button" className="mt-2 underline font-bold" onClick={() => document.getElementById('preflight-batch-input')?.click()}>ລອງໃໝ່ / ເລືອກໄຟລ໌</button>
+          </div>}
           {/* If no files uploaded yet: Compact Modern Dropzone */}
           {batchFiles.length === 0 ? (
             <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border border-slate-700/80 rounded-3xl p-6 sm:p-8 shadow-md text-white">
@@ -1558,18 +1594,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                     : 'border-slate-700 hover:border-accent-sky hover:bg-slate-800/60'
                 }`}
               >
-                <input
-                  id="preflight-batch-input"
-                  type="file"
-                  multiple
-                  accept=".png,.jpg,.jpeg,.webp,.tiff,.tif,.pdf"
-                  className="hidden"
-                  onChange={(e) => {
-                    if (e.target.files) {
-                      handleBatchFilesSelected(e.target.files);
-                    }
-                  }}
-                />
+
 
                 <div className="flex flex-col items-center justify-center space-y-3.5 max-w-lg mx-auto">
                   <div className="w-14 h-14 rounded-2xl bg-accent-sky/15 border border-accent-sky/30 text-accent-sky flex items-center justify-center shadow-xs">
@@ -1594,12 +1619,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                 </div>
               </div>
 
-              {batchErrorMessage && (
-                <div className="mt-4 p-4 bg-rose-950/70 border border-rose-600 text-rose-200 rounded-2xl text-xs font-bold flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-                  <span>{batchErrorMessage}</span>
-                </div>
-              )}
+
             </div>
           ) : (
             /* Batch Results View */
@@ -2228,11 +2248,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                       className="max-h-[600px] object-contain rounded-lg shadow-2xl transition-transform"
                     />
                   ) : (
-                    <iframe
-                      src={previewUrl}
-                      title="PDF Preview"
-                      className="w-full h-[600px] rounded-lg border-0 bg-white shadow-2xl"
-                    />
+                    <button type="button" onClick={() => setOriginalPreviewOpen(true)} className="px-4 py-2 border rounded text-white">ສະແດງ PDF ຕົ້ນສະບັບ (Open original PDF)</button>
                   )
                 )}
               </div>
@@ -2696,6 +2712,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       )
     )}
 
+      {originalPreviewOpen && file && <UniversalViewer src={result?.file_url || previewUrl} fileName={file.name} fileSize={file.size} onClose={() => setOriginalPreviewOpen(false)} />}
       {/* Lightbox Modal for Full View of Selected Photo */}
       {selectedPreviewPhoto && (
         <div

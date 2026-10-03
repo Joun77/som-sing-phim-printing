@@ -1,10 +1,15 @@
-import React, { useState } from 'react';
+import ArtworkThumbnail from '@components/common/ArtworkThumbnail';
+import { getMediaViewerCopy } from '@components/common/mediaViewerCopy';
+import ArtworkPartsPanel from '../ArtworkPartsPanel';
+import { getArtworkFiles, formatArtworkSize, getArtworkParts, getArtworkPartCosts } from '../../utils/artworkParts';
+import React, { useCallback, useState } from 'react';
 import { 
   User, 
   FileText, 
   Printer, 
   ExternalLink, 
-  Download, 
+  Download,
+  LoaderCircle,
   Plus, 
   Layers, 
   BookOpen, 
@@ -88,6 +93,8 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
   productionWorkflow,
   setLightbox,
 }) => {
+  const [unavailable, setUnavailable] = useState<string[]>([]);
+  const markUnavailable = useCallback((url: string) => setUnavailable(previous => previous.includes(url) ? previous : [...previous, url]), []);
   const { customerCategories = [], showToast } = useApp();
   const categoryObj = customerCategories.find((c: any) => c.id === customerTier);
   const categoryLabel = categoryObj ? categoryObj.name : customerTier;
@@ -120,7 +127,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
       }
     } catch (err: any) {
       console.error('ZIP download error:', err);
-      showToast(err.message || 'ZIP download failed', 'error');
+      showToast('ດາວໂຫຼດ ZIP ບໍ່ສຳເລັດ ກະລຸນາລອງອີກຄັ້ງ', 'error');
     } finally {
       setIsZipping(false);
     }
@@ -245,18 +252,22 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                 const itArtworkUrl = it.artwork?.file_url || it.artworkUrl || it.artwork_url || it.fileUrl || it.file_url || it.cover_file_url || it.inner_file_url || driveLink;
                 const itArtworkFileName = it.artwork?.file_name || it.artworkFileName || it.artwork_file_name || it.fileName || it.file_name || (itArtworkUrl ? itArtworkUrl.split('/').pop()?.split('?')[0] : '');
                 const itArtworkSize = it.artwork?.file_size_bytes || it.artworkFileSize || it.artwork_file_size || it.fileSize || 0;
-                const itFormattedSize = itArtworkSize > 0 ? `${(itArtworkSize / (1024 * 1024)).toFixed(2)} MB` : '';
+                const itFormattedSize = formatArtworkSize(itArtworkSize);
 
                 // Extract all batch photos / artwork files
-                const rawBatch: any[] = it.batch_files || it.batchFiles || it.gallery_urls || it.galleryUrls || it.fileUrls || it.artworkUrls || [];
-                const batchFiles: string[] = Array.isArray(rawBatch) && rawBatch.length > 0
-                  ? rawBatch.map((f: any) => (typeof f === 'string' ? f : (f?.file_url || f?.url || ''))).filter(Boolean)
-                  : (itArtworkUrl ? [itArtworkUrl] : []);
+                const rawBatch: any[] = it.batch_files || it.batchFiles || it.specs?.batch_files || it.specifications?.batch_files || it.gallery_urls || it.galleryUrls || it.fileUrls || it.artworkUrls || [];
+                const originalFiles = getArtworkFiles(rawBatch);
+                const batchFiles = originalFiles.length ? originalFiles.map(file => file.url) : (itArtworkUrl ? [itArtworkUrl] : []);
 
                 const hasBatch = batchFiles.length > 1;
 
+                if (getArtworkParts(it).length) return <div key={it.id || idx} className="pt-2 space-y-2">
+                  <strong>{idx + 1}. {it.name || it.item_name || it.job_name}</strong>
+                  <ArtworkPartsPanel costs={getArtworkPartCosts(it)} parts={getArtworkParts(it)} />
+                </div>;
                 return (
                   <div key={it.id || idx} className="pt-2 text-slate-800 space-y-2">
+                    {getArtworkParts(it).length > 0 && <ArtworkPartsPanel costs={getArtworkPartCosts(it)} parts={getArtworkParts(it)} />}
                     <div className="flex justify-between items-start">
                       <div className="min-w-0 flex-1">
                         <strong className="block text-xs font-black text-slate-900 truncate">
@@ -292,14 +303,14 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                                 {hasBatch ? (
                                   <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-mono font-black text-[9px] uppercase shrink-0 flex items-center gap-1">
                                     <Images className="w-2.5 h-2.5" />
-                                    {batchFiles.length} PHOTOS
+                                    {batchFiles.length} ຮູບ
                                   </span>
                                 ) : (
                                   <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono font-bold text-[9px] uppercase shrink-0">
-                                    {itArtworkFileName.toLowerCase().endsWith('.pdf') ? 'PDF' : 'ARTWORK'}
+                                    {itArtworkFileName.toLowerCase().endsWith('.pdf') ? 'PDF' : 'ໄຟລ໌ງານພິມ'}
                                   </span>
                                 )}
-                                <span className="font-mono font-bold text-slate-700 truncate" title={itArtworkFileName}>
+                                <span className="font-mono font-bold text-slate-700 break-all" title={itArtworkFileName}>
                                   {hasBatch ? `ຊຸດໄຟລ໌ຮູບພາບ (${batchFiles.length} ຮູບ)` : (itArtworkFileName || 'Job Artwork')}
                                 </span>
                                 {itFormattedSize && (
@@ -307,39 +318,41 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                                 )}
                               </div>
 
-                              <div className="flex items-center gap-1.5 shrink-0">
+                              <div className="flex flex-wrap items-center gap-1.5">
                                 <button
                                   type="button"
                                   onClick={async (e) => {
                                     e.stopPropagation();
                                     if (hasBatch) {
                                       const itemPhotos = batchFiles.map((url, i) => ({
-                                        name: `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
+                                        name: originalFiles[i]?.name || `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
                                         url
                                       }));
                                       handleDownloadBatchZip(itemPhotos, it.name || 'photos');
                                     } else if (itArtworkUrl) {
                                       try {
                                         setIsDownloadingArtwork(it.id || itArtworkFileName || 'artwork');
-                                        await downloadAuthenticatedFile(itArtworkUrl, itArtworkFileName || 'artwork.pdf');
+                                        await downloadAuthenticatedFile(itArtworkUrl, itArtworkFileName || 'artwork.pdf', undefined, itArtworkFileName || undefined);
                                         showToast(currentLang === 'lo' ? 'ດາວໂຫຼດໄຟລ໌ສຳເລັດ' : 'Artwork downloaded', 'success');
                                       } catch (err: any) {
                                         console.error('Download artwork error:', err);
-                                        showToast(err.message || 'Download failed', 'error');
+                                        showToast('ດາວໂຫຼດຕົ້ນສະບັບບໍ່ສຳເລັດ ກະລຸນາລອງອີກຄັ້ງ', 'error');
                                       } finally {
                                         setIsDownloadingArtwork(null);
                                       }
                                     }
                                   }}
-                                  className="px-2 py-1 rounded-lg bg-white hover:bg-slate-200 text-slate-700 border border-slate-200 text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
-                                  title={hasBatch ? `Download all ${batchFiles.length} photos as ZIP` : "Download Job Artwork"}
+                                  className="px-2 py-1 rounded-lg bg-white hover:bg-slate-200 text-slate-700 border border-slate-200 text-[10px] font-bold flex items-center gap-1 transition cursor-pointer focus-visible:ring-2 focus-visible:ring-sky-500"
+                                  disabled={isZipping || isDownloadingArtwork !== null}
+                                  aria-busy={isZipping || isDownloadingArtwork === (it.id || itArtworkFileName || 'artwork')}
+                                  title={hasBatch ? 'ດາວໂຫຼດ ZIP' : 'ດາວໂຫຼດຕົ້ນສະບັບ'}
                                 >
                                   {isZipping || isDownloadingArtwork === (it.id || itArtworkFileName || 'artwork') ? (
-                                    <Loader2 className="w-3 h-3 text-slate-600 animate-spin" />
+                                    <LoaderCircle aria-hidden="true" className="w-3 h-3 text-slate-600 animate-spin" />
                                   ) : (
                                     <Download className="w-3 h-3 text-slate-600" />
                                   )}
-                                  <span>{hasBatch ? 'ໂຫຼດ ZIP' : 'ໂຫຼດ'}</span>
+                                  <span>{isZipping || isDownloadingArtwork === (it.id || itArtworkFileName || 'artwork') ? 'ກຳລັງດາວໂຫຼດ…' : hasBatch ? 'ດາວໂຫຼດ ZIP' : 'ດາວໂຫຼດຕົ້ນສະບັບ'}</span>
                                 </button>
                                 <button
                                   type="button"
@@ -347,7 +360,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                                     e.stopPropagation();
                                     if (hasBatch && setLightbox) {
                                       const itemPhotos = batchFiles.map((url, i) => ({
-                                        name: `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
+                                        name: originalFiles[i]?.name || `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
                                         url,
                                         originalUrl: url,
                                         contentType: 'image/jpeg',
@@ -359,12 +372,12 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                                         photos: itemPhotos,
                                         initialPhotoIndex: 0,
                                         onDownloadOriginal: async (item) => {
-                                          await downloadAuthenticatedFile(item?.originalUrl || item?.url || batchFiles[0], item?.name || 'photo.jpg');
+                                          await downloadAuthenticatedFile(item?.originalUrl || item?.url || batchFiles[0], item?.name || 'photo.jpg', undefined, item?.name);
                                         }
                                       });
                                     } else if (hasBatch) {
                                       const itemPhotos = batchFiles.map((url, i) => ({
-                                        name: `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
+                                        name: originalFiles[i]?.name || `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
                                         url
                                       }));
                                       setGalleryModalItem({ name: it.name || 'Photo Prints', photos: itemPhotos });
@@ -374,33 +387,34 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                                         src: targetUrl,
                                         title: `${it.name || 'Artwork'} - #${orderIdDisplay}`,
                                         documentNumber: `#${orderIdDisplay}`,
-                                        fileName: `${it.name || 'artwork'}.pdf`,
+                                        fileName: itArtworkFileName,
                                         onDownloadOriginal: async (item) => {
-                                          await downloadAuthenticatedFile(item?.originalUrl || item?.url || targetUrl, item?.name || `${it.name || 'artwork'}.pdf`);
+                                          await downloadAuthenticatedFile(item?.originalUrl || item?.url || targetUrl, item?.name || itArtworkFileName, undefined, item?.name || itArtworkFileName);
                                         }
                                       });
                                     }
                                   }}
                                   className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold flex items-center gap-1 transition cursor-pointer shadow-xs"
-                                  title="Open Job Artwork Gallery"
+                                  title="ເບິ່ງຕົວຢ່າງ"
                                 >
-                                  <ExternalLink className="w-3 h-3" />
-                                  <span>{hasBatch ? 'ເບິ່ງຄັງຮູບ' : 'ເບິ່ງ'}</span>
+                                  <Eye aria-hidden="true" className="w-3 h-3" />
+                                  <span>ເບິ່ງຕົວຢ່າງ</span>
                                 </button>
                               </div>
                             </div>
 
+                            {batchFiles.some(url => url.startsWith('blob:') && unavailable.includes(url)) && <p role="alert" className="text-rose-700">{getMediaViewerCopy(currentLang).temporaryError}</p>}
                             {/* Batch Photos Thumbnail Strip (up to 6 thumbnails) */}
                             {hasBatch && (
                               <div className="flex items-center gap-1.5 pt-1 overflow-x-auto pb-1">
                                 {batchFiles.slice(0, 6).map((imgUrl: string, bIdx: number) => (
-                                  <div
+                                  <button type="button"
                                     key={bIdx}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (setLightbox) {
                                         const itemPhotos = batchFiles.map((url, i) => ({
-                                          name: `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
+                                          name: originalFiles[i]?.name || `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
                                           url,
                                           originalUrl: url,
                                           contentType: 'image/jpeg',
@@ -413,28 +427,21 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                                           initialPhotoIndex: bIdx,
                                           fileName: `${it.name || 'photo'}_${String(bIdx + 1).padStart(2, '0')}.jpg`,
                                           onDownloadOriginal: async (item) => {
-                                            await downloadAuthenticatedFile(item?.originalUrl || item?.url || imgUrl, item?.name || 'photo.jpg');
+                                            await downloadAuthenticatedFile(item?.originalUrl || item?.url || imgUrl, item?.name || 'photo.jpg', undefined, item?.name);
                                           }
                                         });
                                       } else {
                                         window.open(imgUrl, '_blank');
                                       }
                                     }}
-                                    className="w-11 h-11 rounded-lg border border-slate-200 bg-white overflow-hidden shrink-0 cursor-pointer hover:border-sky-500 hover:scale-105 transition-all relative group shadow-2xs"
-                                    title={`Click to view photo #${bIdx + 1}`}
+                                    className="w-11 h-11 rounded-lg border border-slate-200 bg-white overflow-hidden shrink-0 cursor-pointer hover:border-sky-500 hover:scale-105 transition-all relative group shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                                    title={`ເບິ່ງຕົວຢ່າງຮູບ ${bIdx + 1}`} aria-label={`ເບິ່ງຕົວຢ່າງຮູບ ${bIdx + 1}`}
                                   >
-                                    <img
-                                      src={imgUrl}
-                                      alt={`Thumb ${bIdx + 1}`}
-                                      className="w-full h-full object-cover"
-                                      onError={(e) => {
-                                        (e.target as HTMLElement).style.display = 'none';
-                                      }}
-                                    />
+                                    <ArtworkThumbnail url={imgUrl} name={originalFiles[bIdx]?.name || 'photo.jpg'} alt={`ຮູບ ${bIdx + 1}`} onUnavailable={markUnavailable} />
                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-[9px] font-bold text-white">
                                       #{bIdx + 1}
                                     </div>
-                                  </div>
+                                  </button>
                                 ))}
                                 {batchFiles.length > 6 && (
                                   <button
@@ -442,12 +449,12 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       const itemPhotos = batchFiles.map((url, i) => ({
-                                        name: `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
+                                        name: originalFiles[i]?.name || `${it.name || 'Photo'}_${String(i + 1).padStart(2, '0')}.jpg`,
                                         url
                                       }));
                                       setGalleryModalItem({ name: it.name || 'Photo Prints', photos: itemPhotos });
                                     }}
-                                    className="w-11 h-11 rounded-lg border border-dashed border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 flex items-center justify-center font-black text-[10px] shrink-0 transition cursor-pointer"
+                                    className="w-11 h-11 rounded-lg border border-dashed border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 flex items-center justify-center font-black text-[10px] shrink-0 transition cursor-pointer focus-visible:ring-2 focus-visible:ring-sky-500"
                                     title="View all photos in gallery"
                                   >
                                     +{batchFiles.length - 6}
@@ -497,7 +504,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                 <button
                   type="button"
                   onClick={onConfigureWorkflow}
-                  className="py-3 px-3.5 rounded-2xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-black transition active:scale-95 cursor-pointer flex items-center gap-1.5 shrink-0"
+                  className="py-3 px-3.5 rounded-2xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-black transition active:scale-95 cursor-pointer flex flex-wrap items-center gap-1.5"
                   title="Configure Production Process"
                 >
                   <Layers className="w-3.5 h-3.5 text-sky-600" />
@@ -507,7 +514,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
               <button
                 type="button"
                 onClick={onRevertArtwork}
-                className="py-3 px-3.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-200 text-xs font-black transition active:scale-95 cursor-pointer flex items-center gap-1.5 shrink-0"
+                className="py-3 px-3.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-200 text-xs font-black transition active:scale-95 cursor-pointer flex flex-wrap items-center gap-1.5"
                 title="Revert / Edit artwork"
               >
                 <span>{currentLang === 'lo' ? 'ແກ້ໄຂ' : 'Revert'}</span>
@@ -535,7 +542,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
           title={currentLang === 'lo' ? `ຄັງຮູບພາບງານພິມ (${galleryModalItem.photos.length} ຮູບ)` : `Artwork Gallery (${galleryModalItem.photos.length} Photos)`}
           subtitle={`ອໍເດີ #${orderIdDisplay} • ລາຍການ: ${galleryModalItem.name} • ລູກຄ້າ: ${customerName}`}
           maxWidthClass="max-w-4xl"
-          badgeText={`${galleryModalItem.photos.length} PHOTOS`}
+          badgeText={`${galleryModalItem.photos.length} ຮູບ`}
           footerActions={
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
               <span className="text-xs text-slate-500 font-semibold text-center sm:text-left">
@@ -550,7 +557,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                   className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-black text-xs cursor-pointer transition flex items-center gap-1.5 shadow-sm"
                 >
                   {isZipping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                  <span>{currentLang === 'lo' ? 'ດາວໂຫຼດຮູບທັງໝົດ (ZIP)' : 'Download All as ZIP'}</span>
+                  <span>ດາວໂຫຼດ ZIP</span>
                 </button>
                 <button
                   type="button"
@@ -566,7 +573,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
           <div className="space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3 max-h-[60vh] overflow-y-auto p-1">
               {galleryModalItem.photos.map((photo, pIdx) => (
-                <div
+                <button type="button" aria-label={`ເບິ່ງຕົວຢ່າງຮູບ ${pIdx + 1}`}
                   key={pIdx}
                   onClick={() => {
                     if (setLightbox) {
@@ -582,7 +589,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                         })),
                         initialPhotoIndex: pIdx,
                         onDownloadOriginal: async (item) => {
-                          await downloadAuthenticatedFile(item?.originalUrl || item?.url || photo.url, item?.name || 'photo.jpg');
+                          await downloadAuthenticatedFile(item?.originalUrl || item?.url || photo.url, item?.name || 'photo.jpg', undefined, item?.name);
                         }
                       });
                     }
@@ -590,14 +597,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                   className="group relative bg-white rounded-2xl overflow-hidden border border-slate-200 hover:border-sky-500 cursor-pointer shadow-2xs transition hover:shadow-md"
                 >
                   <div className="aspect-square w-full overflow-hidden bg-slate-100">
-                    <img 
-                      src={photo.url} 
-                      alt={photo.name} 
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-200" 
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
-                    />
+                    <ArtworkThumbnail url={photo.url} name={photo.name} onUnavailable={markUnavailable} />
                   </div>
                   <div className="p-2 bg-white">
                     <span className="text-[10.5px] font-bold text-slate-700 block truncate" title={photo.name}>
@@ -607,7 +607,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                   <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
                     <ZoomIn className="w-5 h-5 text-sky-300" />
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>

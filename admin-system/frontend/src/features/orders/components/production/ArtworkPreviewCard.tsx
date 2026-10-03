@@ -1,4 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { getMediaViewerCopy } from '@components/common/mediaViewerCopy';
+import ArtworkFileActions from '../ArtworkFileActions';
+import ArtworkPartsPanel from '../ArtworkPartsPanel';
+import { formatArtworkSize, getArtworkParts, getArtworkPartCosts } from '../../utils/artworkParts';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   FileText,
   Download,
@@ -100,7 +104,7 @@ export async function executeArtworkZipDownload(
       callbacks.setDownloadFeedback(null);
     }
   } catch (err: any) {
-    const errorMsg = err?.message || (state.currentLang === 'lo' ? 'ເກີດຂໍ້ຜິດພາດໃນການສ້າງໄຟລ໌ ZIP' : 'Failed to generate ZIP file');
+    const errorMsg = state.currentLang === 'lo' ? 'ເກີດຂໍ້ຜິດພາດໃນການສ້າງໄຟລ໌ ZIP ກະລຸນາລອງອີກຄັ້ງ' : err instanceof Error ? err.message : 'Failed to generate ZIP file';
     const initialFailedAssets = state.rawPhotos.filter((p) => state.blobMap[p.canonicalUrl] === '');
     const initialFailedNames = initialFailedAssets.map((p) => p.name);
     const allFailedNames = initialFailedNames.length > 0 ? initialFailedNames : state.rawPhotos.map((p) => p.name);
@@ -128,6 +132,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
 }) => {
   const [selectedPhotoIdx, setSelectedPhotoIdx] = useState(0);
   const [isGalleryModalOpen, setIsGalleryModalOpen] = useState(false);
+  const galleryTriggerRef = useRef<HTMLButtonElement>(null);
   const [isZipping, setIsZipping] = useState(false);
 
   // Extract batch files from order items or specs
@@ -175,10 +180,12 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
     if (hasCover && hasInner && hasCover !== hasInner) {
       return [
         {
+          size: firstItem.cover_file_size || firstItem.coverFileSize,
           name: firstItem.cover_file_name || firstItem.coverFileName || `cover_${orderIdDisplay}.pdf`,
           canonicalUrl: hasCover,
         },
         {
+          size: firstItem.inner_file_size || firstItem.artwork_file_size || firstItem.artworkFileSize,
           name: firstItem.inner_file_name || firstItem.innerFileName || firstItem.artwork_file_name || `inner_${orderIdDisplay}.pdf`,
           canonicalUrl: hasInner,
         }
@@ -186,11 +193,12 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
     }
 
     // If single artwork or thumbnail exists
-    const singleUrl = artworkThumbnailUrl || driveLink || hasInner || order?.artwork_url;
+    const singleUrl = hasInner || firstItem.artwork?.file_url || order?.artwork_url || driveLink || artworkThumbnailUrl;
     if (singleUrl) {
       return [{
-        name: firstItem.artwork_file_name || firstItem.artworkFileName || order?.artwork_file_name || `artwork_${orderIdDisplay}.jpg`,
+        name: firstItem.artwork_file_name || firstItem.artworkFileName || firstItem.artwork?.file_name || order?.artwork_file_name || singleUrl.split('/').pop()?.split('?')[0] || 'ໄຟລ໌ງານພິມ',
         canonicalUrl: singleUrl,
+        size: firstItem.artwork_file_size || firstItem.artworkFileSize || firstItem.artwork?.file_size_bytes,
       }];
     }
 
@@ -218,6 +226,11 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
       const nextMap: Record<string, string> = {};
       for (const item of rawPhotos) {
         if (!item.canonicalUrl) continue;
+        // File cards reuse PDF metadata; only the preview viewer fetches its original.
+        if (/\.pdf(?:$|[?#])/i.test(item.name) || /\.pdf(?:$|[?#])/i.test(item.canonicalUrl)) {
+          nextMap[item.canonicalUrl] = item.canonicalUrl;
+          continue;
+        }
         if (item.canonicalUrl.startsWith('blob:') || item.canonicalUrl.startsWith('data:')) {
           nextMap[item.canonicalUrl] = item.canonicalUrl;
           continue;
@@ -255,7 +268,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
         } catch {}
       });
     };
-  }, [JSON.stringify(rawPhotos.map((p) => p.canonicalUrl))]);
+  }, [JSON.stringify(rawPhotos.map((p) => [p.canonicalUrl, p.name, p.size]))]);
 
   const photos: { name: string; url: string; size?: number }[] = rawPhotos.map((p) => ({
     name: p.name,
@@ -266,10 +279,19 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
   // Count media that attempted to load but failed (empty string in blobMap = load attempted & failed)
   const failedCount = Object.values(blobMap).filter((v) => v === '').length;
 
-  const handleDownloadZip = () => executeArtworkZipDownload(
-    { rawPhotos, blobMap, photos, orderIdDisplay, currentLang },
-    { setIsZipping, setDownloadFeedback }
-  );
+  const zipGeneration = useRef(0);
+  const zipSourceKey = JSON.stringify([orderIdDisplay, rawPhotos]);
+  useEffect(() => {
+    zipGeneration.current++; setIsZipping(false); setDownloadFeedback(null);
+    return () => { zipGeneration.current++; };
+  }, [zipSourceKey]);
+  const handleDownloadZip = () => {
+    const active = zipGeneration.current;
+    return executeArtworkZipDownload(
+      { rawPhotos, blobMap, photos, orderIdDisplay, currentLang: 'lo' },
+      { setIsZipping: value => { if (active === zipGeneration.current) setIsZipping(value); }, setDownloadFeedback: value => { if (active === zipGeneration.current) setDownloadFeedback(value); } }
+    );
+  };
 
   const activePhoto = photos[selectedPhotoIdx] || photos[0];
   const customerName = order?.customer_name || order?.customerName || order?.customer?.name || '-';
@@ -293,7 +315,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
         onDownloadOriginal: async (item: any) => {
           const target = item?.originalUrl || item?.url || photoItem.url;
           const fileName = item?.name || photoItem.name || `photo_${index + 1}.jpg`;
-          await downloadAuthenticatedFile(target, fileName);
+          await downloadAuthenticatedFile(target, fileName, undefined, fileName);
         }
       });
     } else if (photoItem?.url) {
@@ -303,6 +325,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
 
   return (
     <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm space-y-4 flex flex-col justify-between">
+      {getArtworkParts(firstItem).length > 0 && <ArtworkPartsPanel costs={getArtworkPartCosts(firstItem)} parts={getArtworkParts(firstItem)} />}
       <div className="space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -311,7 +334,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
               <ImageIcon className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] font-black uppercase text-purple-600 tracking-wider block">Artwork Asset & Client</span>
+              <span className="text-[10px] font-black uppercase text-purple-600 tracking-wider block">ໄຟລ໌ງານພິມ ແລະ ລູກຄ້າ</span>
               <h3 className="text-sm font-black text-slate-900">
                 {currentLang === 'lo' ? 'ໄຟລ໌ງານພິມ & ຂໍ້ມູນລູກຄ້າ' : 'Customer Artwork & Profile'}
               </h3>
@@ -320,7 +343,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
           {photos.length > 0 && failedCount === 0 ? (
             <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-              <span>Approved (CMYK)</span>
+              <span>ພ້ອມແລ້ວ (CMYK)</span>
             </span>
           ) : photos.length > 0 && failedCount > 0 ? (
             <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
@@ -387,19 +410,19 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
               <div
                 onClick={() => handleOpenPhotoInUniversalLightbox(activePhoto, selectedPhotoIdx)}
                 className="group relative w-full h-48 sm:h-52 bg-slate-50 rounded-2xl border border-slate-200 p-2 flex items-center justify-center cursor-pointer hover:border-sky-400 hover:shadow-md transition-all overflow-hidden"
-                title={currentLang === 'lo' ? 'ຄລິກເພື່ອເບິ່ງຮູບເຕັມຈໍ (Universal Preview)' : 'Click for Universal Fullscreen Preview'}
+                title="ເບິ່ງຕົວຢ່າງ"
               >
-                <img
-                  src={activePhoto.url}
+                {/\.pdf(?:$|[?#])/i.test(activePhoto.name) ? <FileText aria-hidden="true" className="w-16 h-16 text-sky-500" /> : <img
+                  src={activePhoto.url} onError={() => { const source = rawPhotos[selectedPhotoIdx] || rawPhotos[0]; if (source?.canonicalUrl.startsWith('blob:')) setBlobMap(previous => ({ ...previous, [source.canonicalUrl]: '' })); }}
                   alt={activePhoto.name}
                   className="max-h-full max-w-full object-contain rounded-xl transition duration-200 group-hover:scale-[1.02]"
-                />
+                />}
 
                 {/* Subtle Hover Action Overlay */}
                 <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition rounded-2xl flex items-center justify-center gap-2 text-white text-xs font-bold backdrop-blur-[1px]">
                   <div className="p-2 bg-white/20 rounded-xl backdrop-blur-md flex items-center gap-1.5 shadow-md">
                     <ZoomIn className="w-4 h-4 text-sky-300" />
-                    <span>{currentLang === 'lo' ? 'ຄລິກເພື່ອຂະຫຍາຍເບິ່ງເຕັມຈໍ' : 'Universal Preview'}</span>
+                    <span>{currentLang === 'lo' ? 'ຄລິກເພື່ອຂະຫຍາຍເບິ່ງເຕັມຈໍ' : 'ເບິ່ງຕົວຢ່າງ'}</span>
                   </div>
                 </div>
 
@@ -417,6 +440,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
                   <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold px-0.5">
                     <span>ເລືອກຮູບທີ່ຈະກວດສອບ ({photos.length} ຮູບ):</span>
                     <button
+                      ref={galleryTriggerRef}
                       type="button"
                       onClick={() => setIsGalleryModalOpen(true)}
                       className="text-sky-600 hover:text-sky-700 font-black cursor-pointer hover:underline"
@@ -440,7 +464,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
                           }`}
                           title={p.name}
                         >
-                          <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
+                          {/\.pdf$/i.test(p.name) ? <FileText aria-hidden="true" className="w-8 h-8 m-auto text-sky-500" /> : <img src={p.url} alt={p.name} className="w-full h-full object-cover" />}
                           <span className="absolute bottom-0 inset-x-0 bg-slate-900/70 text-white text-[8px] font-mono text-center font-bold">
                             #{idx + 1}
                           </span>
@@ -467,6 +491,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
         </div>
       </div>
 
+      {rawPhotos.some(photo => photo.canonicalUrl.startsWith('blob:') && blobMap[photo.canonicalUrl] === '') && <p role="alert" className="text-rose-700">{getMediaViewerCopy(currentLang).temporaryError}</p>}
       {/* Visible ZIP Download Feedback Banner (Partial or Total Failure) */}
       {downloadFeedback && (
         <div
@@ -506,26 +531,20 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
         </div>
       )}
 
+      {activePhoto && <div className="min-w-0"><p className="break-all font-semibold text-sm" title={activePhoto.name}>{activePhoto.name}</p><p className="text-xs text-slate-500">{formatArtworkSize(activePhoto.size)}</p></div>}
       {/* Action Buttons: Clean Universal Actions */}
-      <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100">
+      <div className="flex flex-wrap gap-2 pt-3 border-t border-slate-100">
         {photos.length > 1 ? (
           <button
             type="button"
             onClick={() => setIsGalleryModalOpen(true)}
-            className="py-2.5 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 text-xs font-black transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border border-purple-200"
+            className="py-2.5 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 text-xs font-black transition active:scale-95 cursor-pointer focus-visible:ring-2 focus-visible:ring-sky-500 flex items-center justify-center gap-1.5 border border-purple-200"
           >
             <Images className="w-3.5 h-3.5 text-purple-600" />
-            <span>{currentLang === 'lo' ? `ຄັງຮູບທັງໝົດ (${photos.length})` : `All Photos (${photos.length})`}</span>
+            <span>{`ເບິ່ງຕົວຢ່າງ (${photos.length})`}</span>
           </button>
         ) : photos.length === 1 ? (
-          <button
-            type="button"
-            onClick={() => handleOpenPhotoInUniversalLightbox(activePhoto, 0)}
-            className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-black transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border border-slate-200"
-          >
-            <Eye className="w-3.5 h-3.5 text-slate-600" />
-            <span>{currentLang === 'lo' ? 'ເປີດເບິ່ງໄຟລ໌' : 'View Artwork'}</span>
-          </button>
+          <ArtworkFileActions url={rawPhotos[0]?.canonicalUrl || activePhoto.url} name={activePhoto.name} onPreview={() => handleOpenPhotoInUniversalLightbox(activePhoto, 0)} />
         ) : (
           <button
             type="button"
@@ -542,10 +561,10 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
           </button>
         )}
 
-        <button
+        {photos.length !== 1 || failedCount > 0 ? <button
           type="button"
           data-testid="artwork-download-btn"
-          disabled={(photos.length === 0 && failedCount === 0) && !onDownloadArtwork}
+          disabled={isZipping || ((photos.length === 0 && failedCount === 0) && !onDownloadArtwork)} aria-busy={isZipping}
           onClick={async () => {
             if (onDownloadArtwork) {
               onDownloadArtwork();
@@ -570,12 +589,12 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
           {isZipping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
           <span>
             {photos.length > 1 || (photos.length === 1 && failedCount > 0) || (photos.length === 0 && failedCount > 0)
-              ? (currentLang === 'lo' ? 'ດາວໂຫຼດ ZIP' : 'Download ZIP')
+              ? 'ດາວໂຫຼດ ZIP'
               : photos.length === 1
-              ? (currentLang === 'lo' ? 'ດາວໂຫຼດໄຟລ໌' : 'Download File')
-              : (currentLang === 'lo' ? 'ບໍ່ມີໄຟລ໌' : 'No File')}
+              ? 'ດາວໂຫຼດຕົ້ນສະບັບ'
+              : 'ບໍ່ມີໄຟລ໌'}
           </span>
-        </button>
+        </button> : null}
       </div>
 
       {/* Universal Photo Batch Gallery Modal (FormModalTemplate) */}
@@ -601,7 +620,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
                   className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-black text-xs cursor-pointer transition flex items-center gap-1.5 shadow-sm"
                 >
                   {isZipping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                  <span>{currentLang === 'lo' ? 'ດາວໂຫຼດຮູບທັງໝົດ (ZIP)' : 'Download All as ZIP'}</span>
+                  <span>ດາວໂຫຼດ ZIP</span>
                 </button>
                 <button
                   type="button"
@@ -654,31 +673,33 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
             )}
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
               {photos.map((photo, pIdx) => (
-                <div
+                <button type="button" aria-label={`ເບິ່ງຕົວຢ່າງຮູບ ${pIdx + 1}`}
                   key={pIdx}
                   onClick={() => {
                     setSelectedPhotoIdx(pIdx);
                     setIsGalleryModalOpen(false);
+                    // The gallery thumbnail unmounts; the viewer must capture a live return target.
+                    galleryTriggerRef.current?.focus();
                     handleOpenPhotoInUniversalLightbox(photo, pIdx);
                   }}
                   className="group relative bg-white rounded-2xl overflow-hidden border border-slate-200 hover:border-sky-500 cursor-pointer shadow-2xs transition hover:shadow-md"
                 >
                   <div className="aspect-square w-full overflow-hidden bg-slate-100">
-                    <img
+                    {/\.pdf$/i.test(photo.name) ? <FileText aria-hidden="true" className="h-12 w-12 m-auto text-sky-500" /> : <img
                       src={photo.url}
                       alt={photo.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition duration-200"
-                    />
+                    />}
                   </div>
                   <div className="p-2 bg-white">
-                    <span className="text-[10.5px] font-bold text-slate-700 block truncate" title={photo.name}>
+                    <span className="text-[10.5px] font-bold text-slate-700 block break-all" title={photo.name}>
                       {pIdx + 1}. {photo.name}
                     </span>
                   </div>
                   <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
                     <ZoomIn className="w-5 h-5 text-sky-300" />
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>

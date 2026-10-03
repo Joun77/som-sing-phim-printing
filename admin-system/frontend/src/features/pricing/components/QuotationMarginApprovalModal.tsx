@@ -28,6 +28,9 @@ export const QuotationMarginApprovalModal: React.FC<QuotationMarginApprovalModal
   onClose
 }) => {
   if (!quote) return null;
+  const savedTotal = quote.total_selling_price ?? quote.grandTotal ?? quote.finalGrandTotal;
+  const displayedTotal = typeof savedTotal === 'number' && Number.isFinite(savedTotal)
+    ? formatCurrency(savedTotal) : 'ບໍ່ມີຂໍ້ມູນຍອດລວມ';
 
   return (
     <FormModalTemplate
@@ -65,7 +68,7 @@ export const QuotationMarginApprovalModal: React.FC<QuotationMarginApprovalModal
           <div>
             <p className="font-bold">ໃບສະເໜີລາຄາ {quote.quotationNumber || quote.id}</p>
             <p className="text-[11px] text-amber-800 mt-0.5">
-              ລູກຄ້າ: {quote.customerName || 'N/A'} • ຍອດລວມ: {formatCurrency(quote.finalGrandTotal || 0)}
+              ລູກຄ້າ: {quote.customerName || 'N/A'} • ຍອດລວມ: {displayedTotal}
             </p>
           </div>
         </div>

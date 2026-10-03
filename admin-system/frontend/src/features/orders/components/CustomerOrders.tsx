@@ -637,7 +637,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
   }
 
   if (selectedOrder) {
-    const currentOrder = orders.find(o => o.id === selectedOrder.id || (o as any).orderNo === (selectedOrder as any).orderNo) || selectedOrder;
+    const currentOrder = orders.find(o => selectedOrder.id ? o.id === selectedOrder.id : !!selectedOrder.orderNo && (o as any).orderNo === selectedOrder.orderNo) || selectedOrder;
 
     return (
       <>
@@ -1270,7 +1270,7 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             if (updateOrderDetails) {
               updateOrderDetails(updated.id, updated);
             }
-            if (selectedOrder && (selectedOrder.id === updated.id || selectedOrder.orderNo === updated.orderNo)) {
+            if (selectedOrder && (selectedOrder.id ? selectedOrder.id === updated.id : !!selectedOrder.orderNo && selectedOrder.orderNo === updated.orderNo)) {
               setSelectedOrder(updated);
             }
             setEditModalOrder(null);

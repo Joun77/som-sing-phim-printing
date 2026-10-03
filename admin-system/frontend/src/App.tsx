@@ -126,57 +126,7 @@ function AppContent() {
                     )}
                     {activeTab === 'preflight' && (
                       <ProtectedRoute allowedRoles={['manager', 'production', 'sales', 'customer_service']}>
-                        <PreflightPage
-                          onSendToQuotation={(res) => {
-                            if (setPrefilledOrderSpecs) {
-                              const isBatch = (res as any).is_batch_photo || res.file_name?.includes('Photo Prints') || !!(res as any).batch_files;
-                              const isMono = !isBatch && (res.color_pages_count || 0) === 0 && (res.mono_pages_count || 0) > 0;
-                              const covC = res.color_pages_avg_c !== undefined ? res.color_pages_avg_c : (res.avg_cov_c ?? 0);
-                              const covM = res.color_pages_avg_m !== undefined ? res.color_pages_avg_m : (res.avg_cov_m ?? 0);
-                              const covY = res.color_pages_avg_y !== undefined ? res.color_pages_avg_y : (res.avg_cov_y ?? 0);
-                              const covK = (res.color_pages_count || 0) > 0
-                                ? (res.color_pages_avg_k !== undefined ? res.color_pages_avg_k : (res.avg_cov_k ?? 0))
-                                : (res.mono_pages_avg_k !== undefined ? res.mono_pages_avg_k : (res.avg_cov_k ?? 0));
-                              const targetSize = res.target_paper_size || (isBatch ? '5x7 cm' : (res.suggested_paper || 'A4'));
-                              setPrefilledOrderSpecs({
-                                jobName: res.file_name.replace(/\.[^/.]+$/, ''),
-                                pageCount: isBatch ? 1 : res.total_pages,
-                                orderQuantity: isBatch ? 1 : 1,
-                                photoCount: isBatch ? res.total_pages : undefined,
-                                colorPages: isBatch ? res.total_pages : (res.color_pages_count || 0),
-                                monoPages: isBatch ? 0 : (res.mono_pages_count || 0),
-                                jobWidth: res.target_width_mm || (isBatch ? 50 : 210),
-                                jobHeight: res.target_height_mm || (isBatch ? 70 : 297),
-                                suggestedPaper: res.suggested_paper || (isBatch ? 'Photo Glossy 230gsm' : targetSize),
-                                selected_paper_id: res.selected_paper_id,
-                                paperId: res.selected_paper_id,
-                                jobSizePreset: targetSize,
-                                avgCovC: covC,
-                                avgCovM: covM,
-                                avgCovY: covY,
-                                avgCovK: covK,
-                                cCoverage: covC,
-                                mCoverage: covM,
-                                yCoverage: covY,
-                                kCoverage: covK,
-                                colorMode: isMono ? 'MONO_K' : (res.color_mode || 'CMYK'),
-                                fileUrl: res.file_url,
-                                fileName: res.file_name,
-                                preflightData: res,
-                                is_batch_photo: isBatch,
-                                batch_files: (res as any).batch_files,
-                                batchFiles: (res as any).batch_files,
-                                cuts_per_sheet_override: res.cuts_per_sheet_override,
-                                cutsPerSheetOverride: res.cuts_per_sheet_override,
-                                imposition_summary: res.imposition_summary,
-                                impositionSummary: res.imposition_summary,
-                                includeCover: false,
-                              });
-                            }
-                            setActiveTab('quotation');
-                            showToast('ສົ່ງຄ່າສີ, ຂະໜາດຕັດ ແລະ ຈຳນວນຮູບໄປຍັງໃບສະເໜີລາຄາຮຽບຮ້ອຍ!', 'success');
-                          }}
-                        />
+                        <PreflightPage />
                       </ProtectedRoute>
                     )}
                     {activeTab === 'quotation' && (

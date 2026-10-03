@@ -23,6 +23,14 @@ func GetDB() *sql.DB {
 // InitDB initializes PostgreSQL connection pool and runs migrations if available.
 func InitDB() (*sql.DB, error) {
 	connStr := os.Getenv("DATABASE_URL")
+	if os.Getenv("ENVIRONMENT") == "test" {
+		var guardErr error
+		connStr, guardErr = ParseAndValidateDSN(os.Getenv("TEST_FIXTURE_DSN"))
+		if guardErr != nil {
+			DB = nil
+			return nil, fmt.Errorf("isolated test DB configuration required: %w", guardErr)
+		}
+	}
 	if connStr == "" {
 		host := getEnv("DB_HOST", "127.0.0.1")
 		port := getEnv("DB_PORT", "5432")
@@ -47,20 +55,26 @@ func InitDB() (*sql.DB, error) {
 	db.SetConnMaxLifetime(5 * time.Minute)
 
 	if err := db.Ping(); err != nil {
-		log.Printf("[DB WARNING] Could not ping PostgreSQL at %s: %v (Using in-memory fallback)", connStr, err)
+		log.Printf("[DB WARNING] PostgreSQL connection failed: %v", err)
 		DB = nil
+		if closeErr := db.Close(); closeErr != nil {
+			log.Printf("[DB WARNING] Failed to close unavailable database pool: %v", closeErr)
+		}
 		return nil, err
 	}
 
 	log.Println("[DB SUCCESS] Successfully connected to PostgreSQL database!")
-	DB = db
-
-	// Auto-run migrations if connected
+	// Publish the pool only after the schema is ready.
 	if err := RunMigrations(db); err != nil {
+		DB = nil
 		log.Printf("[DB MIGRATION INCOMPLETE] Database has unapplied migrations: %v", err)
-	} else {
-		log.Println("[DB MIGRATION SUCCESS] All migrations verified and applied.")
+		if closeErr := db.Close(); closeErr != nil {
+			log.Printf("[DB WARNING] Failed to close incomplete migration pool: %v", closeErr)
+		}
+		return nil, fmt.Errorf("database migrations incomplete: %w", err)
 	}
+	log.Println("[DB MIGRATION SUCCESS] All migrations verified and applied.")
+	DB = db
 
 	return db, nil
 }
@@ -122,6 +136,8 @@ var MigrationFiles = []string{
 	"041_reconcile_printer_epson_inkjet_spec.sql",
 	"042_link_printer_inks_and_clean_material_assets.sql",
 	"043_add_public_tracking_token_to_orders.sql",
+	"000010_create_finance_tables.up.sql",
+	"000011_seed_chart_of_accounts.up.sql",
 }
 
 // verifyLegacyBaseline checks if a legacy migration's intended schema changes
@@ -152,14 +168,34 @@ func verifyLegacyBaseline(db *sql.DB, version string) (bool, string) {
 		}
 
 	case "016_predictive_maintenance.sql":
-		var hasSpecs, hasTickets bool
+		// Resolve against the active search_path; names in unrelated schemas do not prove a baseline.
+		var complete bool
 		err := db.QueryRow(`
-			SELECT
-				EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = 'equipment_specs'),
-				EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = 'maintenance_tickets')
-		`).Scan(&hasSpecs, &hasTickets)
-		if err == nil && hasSpecs && hasTickets {
-			return true, "tables equipment_specs and maintenance_tickets already exist with required schema"
+			WITH masters AS (
+				SELECT to_regclass(name) AS relation FROM (VALUES ('equipment'), ('printers')) AS master(name)
+			), required AS (
+				SELECT relation, column_name FROM masters
+				CROSS JOIN (VALUES ('maintenance_interval_impressions'), ('last_serviced_meter'), ('current_meter')) AS meter(column_name)
+				WHERE relation IS NOT NULL
+				UNION ALL
+				SELECT to_regclass('equipment_specs'), column_name FROM (VALUES
+					('id'), ('equipment_id'), ('maintenance_interval_impressions'), ('last_serviced_meter'),
+					('current_meter'), ('created_at'), ('updated_at')) AS specs(column_name)
+				UNION ALL
+				SELECT to_regclass('maintenance_tickets'), column_name FROM (VALUES
+					('id'), ('equipment_id'), ('trigger_reason'), ('status'), ('scheduled_date'),
+					('resolved_at'), ('created_at')) AS ticket(column_name)
+			)
+			SELECT EXISTS (SELECT 1 FROM masters WHERE relation IS NOT NULL)
+				AND NOT EXISTS (
+					SELECT 1 FROM required WHERE relation IS NULL OR NOT EXISTS (
+						SELECT 1 FROM pg_attribute WHERE attrelid = relation AND attname = column_name
+						AND attnum > 0 AND NOT attisdropped
+					)
+				)
+		`).Scan(&complete)
+		if err == nil && complete {
+			return true, "existing masters have meter columns and maintenance tables have required columns"
 		}
 	}
 
@@ -317,36 +353,40 @@ func RunInTransaction(fn func(tx *sql.Tx) error) error {
 // rejects unauthorized hosts, requires explicitly named fixture database, prevents malicious
 // driver overrides in query parameters, and returns a safe, canonical URL string.
 func ParseAndValidateDSN(rawDSN string) (string, error) {
-	if !strings.HasPrefix(rawDSN, "postgres://") && !strings.HasPrefix(rawDSN, "postgresql://") {
-		return "", fmt.Errorf("fixture DSN must be a standard postgres:// URL, key-value format is unsupported for safety")
-	}
-
 	u, err := url.Parse(rawDSN)
+	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Opaque != "" || u.Fragment != "" {
+		return "", fmt.Errorf("fixture DSN must be a standard PostgreSQL URL")
+	}
+	if u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" {
+		return "", fmt.Errorf("fixture DSN requires loopback host")
+	}
+	if u.Port() != "55432" {
+		return "", fmt.Errorf("fixture DSN requires dedicated port 55432; shop port 5432 is forbidden")
+	}
+	if u.Path != "/somsing_fixture_db" || u.RawPath != "" {
+		return "", fmt.Errorf("fixture DSN requires dedicated database somsing_fixture_db")
+	}
+	q, err := url.ParseQuery(u.RawQuery)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse fixture DSN URL: %v", err)
+		return "", fmt.Errorf("invalid fixture DSN query")
 	}
-
-	host := u.Hostname()
-	if host != "localhost" && host != "127.0.0.1" {
-		return "", fmt.Errorf("fixture DSN host must be localhost or 127.0.0.1, got %s", host)
-	}
-
-	dbname := strings.TrimPrefix(u.Path, "/")
-	if dbname != "somsing_fixture_db" {
-		return "", fmt.Errorf("fixture DSN must use the explicit dedicated test database 'somsing_fixture_db', got '%s'", dbname)
-	}
-
-	// Prevent DSN query parameter overrides that lib/pq might prioritize over the URL components
-	q := u.Query()
-	for k := range q {
-		lowerK := strings.ToLower(k)
-		if lowerK == "host" || lowerK == "dbname" || lowerK == "port" || lowerK == "user" || lowerK == "password" {
-			return "", fmt.Errorf("fixture DSN URL contains unsafe overriding query parameter '%s'", k)
+	for key, values := range q {
+		if len(values) != 1 {
+			return "", fmt.Errorf("duplicate fixture DSN option")
+		}
+		switch key {
+		case "sslmode":
+			if values[0] != "disable" {
+				return "", fmt.Errorf("fixture sslmode must be disable")
+			}
+		case "connect_timeout":
+			if values[0] != "5" {
+				return "", fmt.Errorf("fixture connect_timeout must be 5")
+			}
+		default:
+			return "", fmt.Errorf("fixture DSN option is not allowed")
 		}
 	}
-
-	// Always return the re-encoded canonical URL string so no raw string injection passes to sql.Open
+	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
-
-

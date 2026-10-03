@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"somsing.local/backend/auth"
 	"somsing.local/backend/db"
 	"somsing.local/backend/inventory"
 	"somsing.local/backend/notifications"
@@ -27,9 +29,10 @@ import (
 
 // In-memory mock database store for orders fallback
 var (
-	ordersStore = make(map[string]Order)
-	storeMutex  sync.RWMutex
-	orderSeq    int
+	ordersStore        = make(map[string]Order)
+	storeMutex         sync.RWMutex
+	orderSeq           int
+	orderCreationMutex sync.Mutex
 )
 
 func init() {
@@ -89,6 +92,11 @@ func HandleCreateOrder(c *gin.Context) {
 		return
 	}
 
+	// ponytail: serialize creates within this process; use per-number locks if throughput requires it.
+	// DB uniqueness checks protect creation across processes.
+	orderCreationMutex.Lock()
+	defer orderCreationMutex.Unlock()
+
 	if req.OrderNo == "" {
 		if req.OrderID != "" {
 			req.OrderNo = req.OrderID
@@ -133,10 +141,27 @@ func HandleCreateOrder(c *gin.Context) {
 		storeMutex.RUnlock()
 	}
 
-	storeMutex.Lock()
-	orderSeq++
-	orderID := fmt.Sprintf("order-%03d", orderSeq)
-	storeMutex.Unlock()
+	if req.OrderNo != "" {
+		storeMutex.RLock()
+		duplicate := false
+		for _, existing := range ordersStore {
+			if existing.ID == req.OrderNo || existing.OrderNo == req.OrderNo || existing.OrderNumber == req.OrderNo {
+				duplicate = true
+				break
+			}
+		}
+		storeMutex.RUnlock()
+		if duplicate {
+			c.JSON(http.StatusConflict, gin.H{"error": "Order already exists; use the explicit update endpoint"})
+			return
+		}
+	}
+
+	orderID, generatedOrderNo, err := generateOrderIdentity()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate order identity"})
+		return
+	}
 
 	var itemsList []OrderItem
 	var totalPrice, totalCost float64
@@ -219,9 +244,14 @@ func HandleCreateOrder(c *gin.Context) {
 			return
 		}
 
-		specs := itemReq.Specs
-		if specs == nil {
-			specs = make(map[string]interface{})
+		// Both request snapshots are supported; persist the merged metadata in Specs.
+		// Explicit specs fields retain precedence over specifications.
+		specs := make(map[string]interface{})
+		for key, value := range itemReq.Specifications {
+			specs[key] = value
+		}
+		for key, value := range itemReq.Specs {
+			specs[key] = value
 		}
 		if itemReq.PaperSetup != nil {
 			specs["paper_setup"] = itemReq.PaperSetup
@@ -292,6 +322,9 @@ func HandleCreateOrder(c *gin.Context) {
 		}
 
 		itemArtworkURL := itemReq.ArtworkURL
+		if itemArtworkURL == "" && itemReq.Artwork != nil {
+			itemArtworkURL = itemReq.Artwork.FileURL
+		}
 		if itemArtworkURL == "" {
 			itemArtworkURL = itemReq.InnerFileURL
 		}
@@ -299,6 +332,15 @@ func HandleCreateOrder(c *gin.Context) {
 			itemArtworkURL = itemReq.CoverFileURL
 		}
 		itemArtworkFileName := itemReq.ArtworkFileName
+		itemArtworkFileSize := itemReq.ArtworkFileSize
+		if itemReq.Artwork != nil && itemReq.Artwork.FileURL == itemArtworkURL {
+			if itemArtworkFileName == "" {
+				itemArtworkFileName = itemReq.Artwork.FileName
+			}
+			if itemArtworkFileSize <= 0 {
+				itemArtworkFileSize = itemReq.Artwork.FileSizeBytes
+			}
+		}
 		if itemArtworkFileName == "" && itemArtworkURL != "" {
 			itemArtworkFileName = filepath.Base(itemArtworkURL)
 		}
@@ -306,7 +348,7 @@ func HandleCreateOrder(c *gin.Context) {
 		if itemArtworkURL != "" {
 			specs["artwork_url"] = itemArtworkURL
 			specs["artwork_file_name"] = itemArtworkFileName
-			specs["artwork_file_size"] = itemReq.ArtworkFileSize
+			specs["artwork_file_size"] = itemArtworkFileSize
 			specs["mime_type"] = itemReq.MimeType
 		}
 
@@ -317,7 +359,7 @@ func HandleCreateOrder(c *gin.Context) {
 			itemArtwork = &ItemArtwork{
 				FileURL:       itemArtworkURL,
 				FileName:      itemArtworkFileName,
-				FileSizeBytes: itemReq.ArtworkFileSize,
+				FileSizeBytes: itemArtworkFileSize,
 				PageCount:     pageCount,
 			}
 		}
@@ -339,11 +381,11 @@ func HandleCreateOrder(c *gin.Context) {
 			InnerPaperID:      itemReq.InnerPaperID,
 			CoverFileURL:      itemReq.CoverFileURL,
 			InnerFileURL:      itemReq.InnerFileURL,
-			ArtworkURL:         itemArtworkURL,
-			ArtworkFileName:    itemArtworkFileName,
-			ArtworkFileSize:    itemReq.ArtworkFileSize,
-			Artwork:            itemArtwork,
-			Specifications:     itemSpecs,
+			ArtworkURL:        itemArtworkURL,
+			ArtworkFileName:   itemArtworkFileName,
+			ArtworkFileSize:   itemArtworkFileSize,
+			Artwork:           itemArtwork,
+			Specifications:    itemSpecs,
 			BindingType:       BindingType(itemReq.BindingType),
 			SpineWidthMM:      spineWidth,
 			CurrentStep:       StepPending,
@@ -373,7 +415,7 @@ func HandleCreateOrder(c *gin.Context) {
 		} else if req.OrderNumber != "" {
 			orderNo = req.OrderNumber
 		} else {
-			orderNo = fmt.Sprintf("ORD-%s-%03d", time.Now().Format("200601"), orderSeq)
+			orderNo = generatedOrderNo
 		}
 	}
 
@@ -480,6 +522,17 @@ func HandleCreateOrder(c *gin.Context) {
 	if db.DB != nil {
 		err := saveOrderToDB(newOrder)
 		if err != nil {
+			if errors.Is(err, errOrderAlreadyExists) {
+				if req.IdempotencyKey != "" {
+					if existing, retryErr := getOrderByIdempotencyKeyFromDB(req.IdempotencyKey); retryErr == nil && existing.ID != "" {
+						c.JSON(http.StatusOK, existing)
+						return
+					}
+				}
+				c.JSON(http.StatusConflict, gin.H{"error": "Order already exists; use the explicit update endpoint"})
+				return
+			}
+
 			log.Printf("[DB ERROR] Failed to save order to DB: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to persist order to database", "details": err.Error()})
 			return
@@ -764,7 +817,6 @@ func dischargeFIFOStockForOrder(o Order, allowNegativeStock bool) error {
 		return EnsureOrderInProductionTx(tx, o.ID, allowNegativeStock)
 	})
 }
-
 
 // --- DB HELPERS FOR ORDERS ---
 
@@ -1145,14 +1197,14 @@ func GetOrdersByCustomer(customerID, phone string) ([]Order, error) {
 	return list, nil
 }
 
-func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) string {
+func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) (string, error) {
 	var custID string
 
 	// 1. Check by customer_id if provided
 	if o.CustomerID != "" {
 		err := tx.QueryRow("SELECT id FROM customers WHERE id = $1", o.CustomerID).Scan(&custID)
 		if err == nil && custID != "" {
-			_, _ = tx.Exec(`
+			result, err := tx.Exec(`
 				UPDATE customers
 				SET total_spent_lak = total_spent_lak + $1,
 				    total_orders_count = total_orders_count + 1,
@@ -1163,7 +1215,20 @@ func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) string {
 				    updated_at = NOW()
 				WHERE id = $2
 			`, o.TotalAmountLAK, custID, o.CustomerAddress, o.Province, o.District, o.Village)
-			return custID
+			if err != nil {
+				return "", err
+			}
+			n, err := result.RowsAffected()
+			if err != nil {
+				return "", err
+			}
+			if n != 1 {
+				return "", fmt.Errorf("customer update matched %d rows", n)
+			}
+			return custID, nil
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return "", err
 		}
 	}
 
@@ -1171,7 +1236,7 @@ func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) string {
 	if custID == "" && o.CustomerPhone != "" {
 		err := tx.QueryRow("SELECT id FROM customers WHERE phone = $1", o.CustomerPhone).Scan(&custID)
 		if err == nil && custID != "" {
-			_, _ = tx.Exec(`
+			result, err := tx.Exec(`
 				UPDATE customers
 				SET total_spent_lak = total_spent_lak + $1,
 				    total_orders_count = total_orders_count + 1,
@@ -1182,7 +1247,20 @@ func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) string {
 				    updated_at = NOW()
 				WHERE id = $2
 			`, o.TotalAmountLAK, custID, o.CustomerAddress, o.Province, o.District, o.Village)
-			return custID
+			if err != nil {
+				return "", err
+			}
+			n, err := result.RowsAffected()
+			if err != nil {
+				return "", err
+			}
+			if n != 1 {
+				return "", fmt.Errorf("customer update matched %d rows", n)
+			}
+			return custID, nil
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return "", err
 		}
 	}
 
@@ -1190,7 +1268,7 @@ func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) string {
 	if custID == "" && o.CustomerEmail != "" {
 		err := tx.QueryRow("SELECT id FROM customers WHERE email = $1", o.CustomerEmail).Scan(&custID)
 		if err == nil && custID != "" {
-			_, _ = tx.Exec(`
+			result, err := tx.Exec(`
 				UPDATE customers
 				SET total_spent_lak = total_spent_lak + $1,
 				    total_orders_count = total_orders_count + 1,
@@ -1201,12 +1279,29 @@ func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) string {
 				    updated_at = NOW()
 				WHERE id = $2
 			`, o.TotalAmountLAK, custID, o.CustomerAddress, o.Province, o.District, o.Village)
-			return custID
+			if err != nil {
+				return "", err
+			}
+			n, err := result.RowsAffected()
+			if err != nil {
+				return "", err
+			}
+			if n != 1 {
+				return "", fmt.Errorf("customer update matched %d rows", n)
+			}
+			return custID, nil
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return "", err
 		}
 	}
 
 	// 4. Auto-create customer profile if not found
-	custID = fmt.Sprintf("cust-%d", time.Now().UnixNano()/1e6)
+	customerToken, err := generateTrackingToken()
+	if err != nil {
+		return "", err
+	}
+	custID = "cust-" + customerToken
 	custName := o.CustomerName
 	if custName == "" {
 		custName = "Customer " + o.CustomerPhone
@@ -1220,22 +1315,34 @@ func autoLinkOrCreateCustomer(tx *sql.Tx, o Order) string {
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 2000000.00, 'Net 30', $9, 1, NOW(), NOW())
 		ON CONFLICT (id) DO NOTHING
 	`
-	_, err := tx.Exec(insertCustQuery, custID, custName, o.CustomerPhone, o.CustomerEmail, o.CustomerAddress, o.Province, o.District, o.Village, o.TotalAmountLAK)
+	result, err := tx.Exec(insertCustQuery, custID, custName, o.CustomerPhone, o.CustomerEmail, o.CustomerAddress, o.Province, o.District, o.Village, o.TotalAmountLAK)
 	if err != nil {
-		log.Printf("[DB WARN] Failed to auto-create customer: %v", err)
+		return "", err
 	}
-
-	return custID
+	n, err := result.RowsAffected()
+	if err != nil {
+		return "", err
+	}
+	if n != 1 {
+		return "", fmt.Errorf("customer insert matched %d rows", n)
+	}
+	return custID, nil
 }
 
 func saveOrderToDB(o Order) error {
-	return db.RunInTransaction(func(tx *sql.Tx) error {
-		// Phase C: Customer Auto-Creation & Identity Linking
-		if linkedCustID := autoLinkOrCreateCustomer(tx, o); linkedCustID != "" {
-			o.CustomerID = linkedCustID
-		}
+	return db.RunInTransaction(func(tx *sql.Tx) error { return saveOrderInTransaction(tx, &o) })
+}
 
-		orderQuery := `
+// saveOrderInTransaction shares the existing SQL under the caller's atomic operation.
+func saveOrderInTransaction(tx *sql.Tx, o *Order) error {
+	// Phase C: Customer Auto-Creation & Identity Linking
+	linkedCustID, err := autoLinkOrCreateCustomer(tx, *o)
+	if err != nil {
+		return err
+	}
+	o.CustomerID = linkedCustID
+
+	orderQuery := `
 			INSERT INTO orders (id, order_no, order_number, customer_id, customer_name, customer_phone,
 			                    customer_email, customer_address,
 			                    status, overall_status, deposit_amount, deposit_lak, remaining_lak,
@@ -1245,91 +1352,62 @@ func saveOrderToDB(o Order) error {
 			                    tracking_code, internal_tracking_code, public_tracking_token, courier_name, branch_code,
 			                    idempotency_key, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, NOW(), NOW())
-			ON CONFLICT (id) DO UPDATE SET
-				customer_id = EXCLUDED.customer_id,
-				customer_name = EXCLUDED.customer_name,
-				customer_phone = EXCLUDED.customer_phone,
-				customer_email = EXCLUDED.customer_email,
-				customer_address = EXCLUDED.customer_address,
-				status = EXCLUDED.status,
-				overall_status = EXCLUDED.overall_status,
-				deposit_amount = EXCLUDED.deposit_amount,
-				deposit_lak = EXCLUDED.deposit_lak,
-				remaining_lak = EXCLUDED.remaining_lak,
-				total_price = EXCLUDED.total_price,
-				total_amount_lak = EXCLUDED.total_amount_lak,
-				total_cost = EXCLUDED.total_cost,
-				delivery_date = EXCLUDED.delivery_date,
-				google_drive_link = EXCLUDED.google_drive_link,
-				stock_deducted_at = EXCLUDED.stock_deducted_at,
-				proof_url = EXCLUDED.proof_url,
-				digital_proof_url = EXCLUDED.digital_proof_url,
-				proof_version = EXCLUDED.proof_version,
-				proof_status = EXCLUDED.proof_status,
-				proof_feedback = EXCLUDED.proof_feedback,
-				prepress_notes = EXCLUDED.prepress_notes,
-				proof_approved_at = EXCLUDED.proof_approved_at,
-				proof_rejected_at = EXCLUDED.proof_rejected_at,
-				proof_signature_ip = EXCLUDED.proof_signature_ip,
-				proof_rejection_reason = EXCLUDED.proof_rejection_reason,
-				tracking_code = EXCLUDED.tracking_code,
-				internal_tracking_code = EXCLUDED.internal_tracking_code,
-				public_tracking_token = EXCLUDED.public_tracking_token,
-				courier_name = EXCLUDED.courier_name,
-				branch_code = EXCLUDED.branch_code,
-				idempotency_key = EXCLUDED.idempotency_key,
-				updated_at = NOW()
+			ON CONFLICT DO NOTHING
 		`
-		proofVer := o.ProofVersion
-		if proofVer <= 0 {
-			proofVer = 1
-		}
-		proofSt := o.ProofStatus
-		if proofSt == "" {
-			proofSt = "NOT_SUBMITTED"
-		}
-		_, err := tx.Exec(orderQuery,
-			o.ID, o.OrderNo, o.OrderNumber, o.CustomerID, o.CustomerName, o.CustomerPhone,
-			o.CustomerEmail, o.CustomerAddress,
-			string(o.Status), string(o.OverallStatus), o.DepositAmount, o.DepositLAK, o.RemainingLAK,
-			o.TotalPrice, o.TotalAmountLAK, o.TotalCost, o.DeliveryDate, o.GoogleDriveLink,
-			o.StockDeductedAt, o.ProofURL, o.DigitalProofURL, proofVer, proofSt, o.ProofFeedback, o.PrepressNotes,
-			o.ProofApprovedAt, o.ProofRejectedAt, o.ProofSignatureIP, o.ProofRejectionReason,
-			o.TrackingCode, o.InternalTrackingCode, o.PublicTrackingToken, o.CourierName, o.CourierBranch,
-			o.IdempotencyKey,
-		)
+	proofVer := o.ProofVersion
+	if proofVer <= 0 {
+		proofVer = 1
+	}
+	proofSt := o.ProofStatus
+	if proofSt == "" {
+		proofSt = "NOT_SUBMITTED"
+	}
+	result, err := tx.Exec(orderQuery,
+		o.ID, o.OrderNo, o.OrderNumber, o.CustomerID, o.CustomerName, o.CustomerPhone,
+		o.CustomerEmail, o.CustomerAddress,
+		string(o.Status), string(o.OverallStatus), o.DepositAmount, o.DepositLAK, o.RemainingLAK,
+		o.TotalPrice, o.TotalAmountLAK, o.TotalCost, o.DeliveryDate, o.GoogleDriveLink,
+		o.StockDeductedAt, o.ProofURL, o.DigitalProofURL, proofVer, proofSt, o.ProofFeedback, o.PrepressNotes,
+		o.ProofApprovedAt, o.ProofRejectedAt, o.ProofSignatureIP, o.ProofRejectionReason,
+		o.TrackingCode, o.InternalTrackingCode, o.PublicTrackingToken, o.CourierName, o.CourierBranch,
+		o.IdempotencyKey,
+	)
+	if err != nil {
+		return err
+	}
+	if err := requireCreatedOrderRow(result); err != nil {
+		return err
+	}
+
+	for _, item := range o.Items {
+		specsBytes, err := json.Marshal(item.Specs)
 		if err != nil {
 			return err
 		}
-
-		for _, item := range o.Items {
-			specsBytes, _ := json.Marshal(item.Specs)
-			itemQuery := `
+		itemQuery := `
 				INSERT INTO order_items (id, order_id, job_name, item_name, quantity, page_count, paper_size,
 				                         cover_paper_id, inner_paper_id, cover_file_url, inner_file_url,
 				                         binding_type, spine_width_mm, current_step, avg_cov_c, avg_cov_m, avg_cov_y, avg_cov_k,
 				                         unit_cost_lak, unit_price_lak, total_price_lak,
 				                         unit_price_snapshot, cost_price_snapshot, specs, created_at, updated_at)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24::jsonb, NOW(), NOW())
-				ON CONFLICT (id) DO UPDATE SET
-					current_step = EXCLUDED.current_step,
-					cover_file_url = EXCLUDED.cover_file_url,
-					inner_file_url = EXCLUDED.inner_file_url,
-					updated_at = NOW()
+				ON CONFLICT DO NOTHING
 			`
-			_, err = tx.Exec(itemQuery,
-				item.ID, o.ID, item.JobName, item.ItemName, item.Quantity, item.PageCount, item.PaperSize,
-				item.CoverPaperID, item.InnerPaperID, item.CoverFileURL, item.InnerFileURL,
-				string(item.BindingType), item.SpineWidthMM, string(item.CurrentStep), item.AvgCovC, item.AvgCovM, item.AvgCovY, item.AvgCovK,
-				item.UnitCostLAK, item.UnitPriceLAK, item.TotalPriceLAK,
-				item.UnitPriceSnapshot, item.CostPriceSnapshot, string(specsBytes),
-			)
-			if err != nil {
-				return err
-			}
+		result, err = tx.Exec(itemQuery,
+			item.ID, o.ID, item.JobName, item.ItemName, item.Quantity, item.PageCount, item.PaperSize,
+			item.CoverPaperID, item.InnerPaperID, item.CoverFileURL, item.InnerFileURL,
+			string(item.BindingType), item.SpineWidthMM, string(item.CurrentStep), item.AvgCovC, item.AvgCovM, item.AvgCovY, item.AvgCovK,
+			item.UnitCostLAK, item.UnitPriceLAK, item.TotalPriceLAK,
+			item.UnitPriceSnapshot, item.CostPriceSnapshot, string(specsBytes),
+		)
+		if err != nil {
+			return err
 		}
-		return nil
-	})
+		if err := requireCreatedOrderRow(result); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func updateOrderDepositAndStatusInDB(orderID string, deposit float64, status string) error {
@@ -1896,15 +1974,15 @@ func lookupOrderTracking(token string) (*OrderTrackingDTO, error) {
 			&dto.CreatedAt, &dto.UpdatedAt,
 			&dto.ItemCount,
 		)
-		
+
 		if err != nil {
 			return nil, err
 		}
-		
+
 		if len(dto.CustomerName) > 3 {
 			dto.CustomerName = dto.CustomerName[:3] + "***"
 		}
-		
+
 		return &dto, nil
 	}
 
@@ -1937,7 +2015,7 @@ func HandleTrackOrderQuery(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"found": false, "error": "Database error"})
 		return
 	}
-	
+
 	c.JSON(http.StatusOK, dto)
 }
 
@@ -1945,13 +2023,13 @@ func HandleTrackOrderQuery(c *gin.Context) {
 // It deliberately omits customer PII (phone, email, address), financial data
 // (deposit, total, cost breakdown), internal notes, artwork file URLs, and internal codes.
 type OrderTrackingDTO struct {
-	ID           string      `json:"id"`
-	OrderNo      string      `json:"order_no"`
-	OrderNumber  string      `json:"order_number,omitempty"`
-	Status       OrderStatus `json:"status"`
+	ID            string      `json:"id"`
+	OrderNo       string      `json:"order_no"`
+	OrderNumber   string      `json:"order_number,omitempty"`
+	Status        OrderStatus `json:"status"`
 	OverallStatus OrderStatus `json:"overall_status,omitempty"`
-	CreatedAt    time.Time   `json:"created_at"`
-	UpdatedAt    time.Time   `json:"updated_at,omitempty"`
+	CreatedAt     time.Time   `json:"created_at"`
+	UpdatedAt     time.Time   `json:"updated_at,omitempty"`
 	// Delivery date only (not the full delivery address)
 	DeliveryDate string `json:"delivery_date,omitempty"`
 	// Customer first name only — strips phone/email/address
@@ -1984,7 +2062,7 @@ func toTrackingDTO(o *Order) OrderTrackingDTO {
 // Returns OrderTrackingDTO (not the full Order) to avoid leaking PII and financial data.
 func HandleGetOrderByOrderNo(c *gin.Context) {
 	token := c.Param("order_no")
-	
+
 	if token == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing tracking token"})
 		return
@@ -2049,114 +2127,117 @@ func checkManagerRole(c *gin.Context) bool {
 }
 
 // HandleApproveQuotation approves a quotation that required manager approval
-func HandleApproveQuotation(c *gin.Context) {
-	id := c.Param("id")
+func HandleApproveQuotation(c *gin.Context) { handleQuotationDecision(c, false) }
+func HandleRejectQuotation(c *gin.Context)  { handleQuotationDecision(c, true) }
 
-	if !checkManagerRole(c) {
-		c.JSON(http.StatusForbidden, gin.H{
-			"status":  "error",
-			"message": "Unauthorized: requires ROLE_MANAGER or ROLE_ADMIN",
-		})
+func handleQuotationDecision(c *gin.Context, reject bool) {
+	id := c.Param("id")
+	role, authenticated := c.Get("user_role")
+	if !authenticated || !auth.CheckRole(fmt.Sprint(role), []string{auth.RoleAdmin, auth.RoleManager}) {
+		c.JSON(http.StatusForbidden, gin.H{"status": "error", "message": "Unauthorized: requires manager approval"})
+		return
+	}
+	if db.DB == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "Approval storage unavailable"})
 		return
 	}
 
-	var req QuotationDecisionRequest
-	_ = c.ShouldBindJSON(&req)
-
-	storeMutex.Lock()
-	order, exists := ordersStore[id]
-	if exists {
-		order.Status = StatusWaitingDeposit
-		order.OverallStatus = StatusWaitingDeposit
-		order.UpdatedAt = time.Now()
-		ordersStore[id] = order
+	var request QuotationDecisionRequest
+	if err := c.ShouldBindJSON(&request); err != nil && !errors.Is(err, io.EOF) {
+		c.JSON(400, gin.H{"status": "error", "code": "invalid_request", "message": "Invalid manager decision request"})
+		return
 	}
-	storeMutex.Unlock()
-
-	if db.DB != nil {
-		_ = db.RunInTransaction(func(tx *sql.Tx) error {
-			updateQuery := `
-				UPDATE orders
-				SET status = 'WAITING_DEPOSIT',
-				    updated_at = NOW()
-				WHERE id = $1 OR order_no = $1 OR order_number = $1
-			`
-			_, _ = tx.Exec(updateQuery, id)
-
-			updateQuoteQuery := `
-				UPDATE quotations
-				SET status = 'ACCEPTED',
-				    updated_at = NOW()
-				WHERE id = $1 OR quotation_no = $1
-			`
-			_, err := tx.Exec(updateQuoteQuery, id)
+	orderStatus, quoteStatus := StatusWaitingDeposit, "ACCEPTED"
+	if reject {
+		orderStatus, quoteStatus = StatusRejected, "REJECTED"
+	}
+	// Legacy callers can supply an order identifier; saved-quote callers supply a quotation identifier.
+	// Exactly one target must match. Neither an absent target nor an ambiguous identifier is approval.
+	missing := errors.New("approval target not found")
+	ambiguous := errors.New("ambiguous approval target")
+	var orderRows, quoteRows int64
+	err := db.RunInTransaction(func(tx *sql.Tx) error {
+		orderQuery := fmt.Sprintf(`UPDATE orders SET status='%s', overall_status='%s', updated_at=NOW() WHERE id=$1 OR order_no=$1 OR order_number=$1`, orderStatus, orderStatus)
+		args := []any{id}
+		if reject {
+			orderQuery = `UPDATE orders SET status='REJECTED', overall_status='REJECTED', notes=COALESCE(notes,'')||' [Rejected: '||$2||']',updated_at=NOW() WHERE id=$1 OR order_no=$1 OR order_number=$1`
+			args = append(args, request.Reason)
+		}
+		result, err := tx.Exec(orderQuery, args...)
+		if err != nil {
 			return err
-		})
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"status":     "success",
-		"message":    "Quotation discount approved by manager",
-		"id":         id,
-		"new_status": string(StatusWaitingDeposit),
+		}
+		orderRows, err = result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		quoteQuery := fmt.Sprintf(`UPDATE quotations SET status='%s',updated_at=NOW() WHERE id=$1 OR quotation_no=$1`, quoteStatus)
+		if reject {
+			quoteQuery = `UPDATE quotations SET status='REJECTED', notes=COALESCE(notes,'')||' [Rejected: '||$2||']',updated_at=NOW() WHERE id=$1 OR quotation_no=$1`
+		}
+		result, err = tx.Exec(quoteQuery, args...)
+		if err != nil {
+			return err
+		}
+		quoteRows, err = result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if orderRows+quoteRows == 0 {
+			return missing
+		}
+		if orderRows+quoteRows != 1 {
+			return ambiguous
+		}
+		return nil
 	})
-}
-
-// HandleRejectQuotation rejects a quotation with custom discount
-func HandleRejectQuotation(c *gin.Context) {
-	id := c.Param("id")
-
-	if !checkManagerRole(c) {
-		c.JSON(http.StatusForbidden, gin.H{
-			"status":  "error",
-			"message": "Unauthorized: requires ROLE_MANAGER or ROLE_ADMIN",
-		})
+	if err != nil {
+		code := http.StatusInternalServerError
+		message := "Approval could not be committed"
+		if errors.Is(err, missing) {
+			code, message = http.StatusNotFound, "Approval target not found"
+		}
+		if errors.Is(err, ambiguous) {
+			code, message = http.StatusConflict, "Ambiguous approval target"
+		}
+		log.Printf("[QUOTATION APPROVAL ERROR] %v", err)
+		c.JSON(code, gin.H{"status": "error", "message": message})
 		return
 	}
 
-	var req QuotationDecisionRequest
-	_ = c.ShouldBindJSON(&req)
-
-	storeMutex.Lock()
-	order, exists := ordersStore[id]
-	if exists {
-		order.Status = StatusRejected
-		order.OverallStatus = StatusRejected
-		order.UpdatedAt = time.Now()
-		ordersStore[id] = order
+	targetType, newStatus := "quotation", quoteStatus
+	if orderRows == 1 {
+		targetType, newStatus = "order", string(orderStatus)
+		storeMutex.Lock()
+		for key, order := range ordersStore {
+			if order.ID == id || order.OrderNo == id || order.OrderNumber == id {
+				order.Status, order.OverallStatus, order.UpdatedAt = orderStatus, orderStatus, time.Now()
+				ordersStore[key] = order
+			}
+		}
+		storeMutex.Unlock()
+	} else {
+		quoteMutex.Lock()
+		for key, quote := range quotationsStore {
+			if quote.ID == id || quote.QuotationNo == id {
+				quote.Status, quote.UpdatedAt = quoteStatus, time.Now()
+				quotationsStore[key] = quote
+			}
+		}
+		quoteMutex.Unlock()
 	}
-	storeMutex.Unlock()
-
-	if db.DB != nil {
-		_ = db.RunInTransaction(func(tx *sql.Tx) error {
-			updateQuery := `
-				UPDATE orders
-				SET status = 'REJECTED',
-				    notes = COALESCE(notes, '') || ' [Rejected: ' || $2 || ']',
-				    updated_at = NOW()
-				WHERE id = $1 OR order_no = $1 OR order_number = $1
-			`
-			_, _ = tx.Exec(updateQuery, id, req.Reason)
-
-			updateQuoteQuery := `
-				UPDATE quotations
-				SET status = 'REJECTED',
-				    notes = COALESCE(notes, '') || ' [Rejected: ' || $2 || ']',
-				    updated_at = NOW()
-				WHERE id = $1 OR quotation_no = $1
-			`
-			_, err := tx.Exec(updateQuoteQuery, id, req.Reason)
-			return err
-		})
+	response := gin.H{
+		"status": "success", "message": "Manager decision committed",
+		"id": id, "target_type": targetType, "new_status": newStatus, "committed": true,
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"status":     "success",
-		"message":    "Quotation discount rejected by manager",
-		"id":         id,
-		"new_status": string(StatusRejected),
-		"reason":     req.Reason,
-	})
+	if quoteRows == 1 {
+		response["quotation_id"] = id
+		response["quotation_status"] = quoteStatus
+	}
+	if reject {
+		response["reason"] = request.Reason
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 // HandleUploadDigitalProof uploads or sets the proof preview URL for an order
@@ -2890,7 +2971,7 @@ func HandleIssueTrackingToken(c *gin.Context) {
 			WHERE id = $2
 			RETURNING public_tracking_token
 		`, publicToken, orderID).Scan(&existingToken)
-		
+
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 			return
@@ -2898,7 +2979,7 @@ func HandleIssueTrackingToken(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to issue tracking token in DB", "details": err.Error()})
 			return
 		}
-		
+
 		if !existingToken.Valid || existingToken.String == "" {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database failed to return a valid tracking token"})
 			return
@@ -2933,4 +3014,33 @@ func HandleIssueTrackingToken(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"public_tracking_token": publicToken, "message": "Tracking link issued successfully"})
+}
+
+var errOrderAlreadyExists = errors.New("order or item already exists")
+
+// Only create/quotation conversion call this writer; explicit PUT/PATCH updates
+// retain their own handlers. A uniqueness conflict must never reassign artwork.
+func requireCreatedOrderRow(result sql.Result) error {
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return errOrderAlreadyExists
+	}
+	return nil
+}
+
+// Preserve recognizable prefixes/counters while making identity unique across
+// process restarts. Item IDs inherit this order identity.
+func generateOrderIdentity() (id, number string, err error) {
+	nonce, err := generateTrackingToken()
+	if err != nil {
+		return "", "", err
+	}
+	storeMutex.Lock()
+	orderSeq++
+	sequence := orderSeq
+	storeMutex.Unlock()
+	return "order-" + nonce, fmt.Sprintf("ORD-%s-%03d-%s", time.Now().Format("200601"), sequence, nonce[:12]), nil
 }

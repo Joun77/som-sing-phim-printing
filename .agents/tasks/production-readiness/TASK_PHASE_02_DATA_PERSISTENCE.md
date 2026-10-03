@@ -217,3 +217,8 @@ productionemptyinitและclearstale/mockcacheเมื่อauthoritativeempt
 - Passed / required corrections / not verified:
 - Release next task: no
 
+
+
+## Architecture integration — user approved 2026-10-02
+
+P2.1/P2.2 additions: use existing API client/error path rather than duplicate fetch wrappers; align actual Go DTOs with frontend types. Success only after authoritative server confirmation; failures retain editable data and do not imply persisted success. Test real callers across save/reload/second session and backward-compatible multi-file metadata. P2.3 additions: isolate demo fixtures from business records and eliminate competing client copies of authoritative stock/state. No wholesale AppContext rewrite without demonstrated need.

@@ -278,6 +278,30 @@ func TestWearPartsDatabaseLifecycleAndWrongAsset(t *testing.T) {
 	}
 	defer dbConn.Close()
 
+	// The production bootstrap deliberately does not invent printer assets.
+	// Own a synthetic parent here; the focused fixture has only the asset_id column.
+	var fullPrinterSchema bool
+	if err := dbConn.QueryRow("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='printers' AND column_name='serial_number')").Scan(&fullPrinterSchema); err != nil {
+		t.Fatal(err)
+	}
+	seed := "INSERT INTO printers(asset_id) VALUES('PRN-9614') ON CONFLICT(asset_id) DO NOTHING RETURNING asset_id"
+	if fullPrinterSchema {
+		seed = `INSERT INTO printers(asset_id,serial_number,brand,model,category,color_scheme_type,total_color_slots,expected_life_a4_pages,purchase_date,price_cost,vendor_supplier,warranty_expiry_year,location_dept)
+		VALUES('PRN-9614','phase1-wear-fixture','Fixture','Fixture','Inkjet','CMYK',4,1000000,CURRENT_DATE,100,'Fixture',2027,'Fixture')
+		ON CONFLICT(asset_id) DO NOTHING RETURNING asset_id`
+	}
+	var ownedParent string
+	if err := dbConn.QueryRow(seed).Scan(&ownedParent); err != nil && err != sql.ErrNoRows {
+		t.Fatal(err)
+	}
+	if ownedParent != "" {
+		defer func() {
+			if _, err := dbConn.Exec("DELETE FROM printers WHERE asset_id=$1", ownedParent); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+
 	// Temporarily set db.DB for handler testing
 	oldDB := db.DB
 	db.DB = dbConn

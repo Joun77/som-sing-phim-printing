@@ -38,6 +38,8 @@ export interface Quotation {
   paymentTerms?: string;
   createdAt: string;
   convertedOrderId: string | null;
+  pendingConversionOrderId?: string;
+  pendingConversionStatus?: 'AWAITING_MANAGER_APPROVAL' | 'RECONCILIATION_REQUIRED';
   notes?: string;
   artworkLink?: string;
 }

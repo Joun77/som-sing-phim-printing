@@ -476,6 +476,7 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
                             max="100"
                             step="1"
                             value={ch.density_pct || 0}
+                            aria-label={`${ch.channel_name} density`}
                             onChange={(e) => handleChannelDensityChange(item.printer_id, ch.channel_name, parseFloat(e.target.value))}
                             className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                           />

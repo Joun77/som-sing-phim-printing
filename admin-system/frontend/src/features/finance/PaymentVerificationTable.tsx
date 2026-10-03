@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CheckCircle2, XCircle, Eye, DollarSign, ShieldAlert, RefreshCw } from 'lucide-react';
 import { useApp } from '../../store/AppContext';
+import { apiFetch } from '../../api/client';
+import { reviewPaymentSlip } from '../../api/paymentReview';
+import ArtworkThumbnail from '../../components/common/ArtworkThumbnail';
 
 interface PendingSlipOrder {
   id: string;
@@ -13,7 +16,7 @@ interface PendingSlipOrder {
 }
 
 export const PaymentVerificationTable: React.FC = () => {
-  const { orders, refreshData } = useApp();
+  const { refreshData } = useApp();
   const [selectedSlip, setSelectedSlip] = useState<PendingSlipOrder | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -22,85 +25,62 @@ export const PaymentVerificationTable: React.FC = () => {
   const [reviewing, setReviewing] = useState(false);
   const [error, setError] = useState('');
 
+  const reviewLock = useRef(false);
+  const loadGeneration = useRef(0);
+
   const fetchPendingSlips = async () => {
+    if (reviewLock.current) return;
+    const generation = ++loadGeneration.current;
+    setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/finance/pending-slips');
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setSlips(data);
-          setLoading(false);
-          return;
-        }
-      }
+      const res = await apiFetch<Response>('/api/v1/finance/pending-slips');
+      if (!res.ok) throw new Error(`ບໍ່ສາມາດໂຫຼດລາຍການສະລິບໄດ້ (HTTP ${res.status})`);
+      const data: unknown = await res.json();
+      if (!Array.isArray(data) || !data.every(item => item && typeof item.id === 'string' && typeof item.orderNumber === 'string' && typeof item.customerName === 'string' && typeof item.totalAmount === 'number' && Number.isFinite(item.totalAmount) && typeof item.currency === 'string' && typeof item.paymentSlipUrl === 'string' && typeof item.createdAt === 'string')) throw new Error('Invalid payment review list');
+      if (generation === loadGeneration.current) setSlips(data);
     } catch (err) {
-      console.warn('Failed to fetch pending slips API, checking store orders:', err);
+      if (generation === loadGeneration.current) setError(err instanceof Error ? err.message : 'Payment list unavailable');
+    } finally {
+      if (generation === loadGeneration.current) setLoading(false);
     }
-
-    // Fallback: derive from AppContext orders if API not available
-    const orderSlips: PendingSlipOrder[] = [];
-    orders.forEach((o: any) => {
-      const slipUrl = o.paymentSlipUrl || o.payment_slip_url || o.proof_url || o.proofUrl;
-      const isPending = ['PENDING_PAYMENT', 'Pending Payment', 'WAITING_DEPOSIT', 'PENDING_SLIP_CHECK'].includes(o.status || o.overall_status);
-      if (slipUrl && isPending) {
-        orderSlips.push({
-          id: o.id,
-          orderNumber: o.orderNumber || o.order_number || o.orderNo || o.id,
-          customerName: o.customerName || o.customer_name || 'Customer',
-          totalAmount: o.totalPriceCharged || o.total_amount_lak || o.totalAmount || 0,
-          currency: 'LAK',
-          paymentSlipUrl: slipUrl,
-          createdAt: o.createdAt || o.created_at || new Date().toISOString(),
-        });
-      }
-    });
-
-    setSlips(orderSlips);
-    setLoading(false);
   };
 
   useEffect(() => {
-    fetchPendingSlips();
-  }, [orders]);
+    void fetchPendingSlips();
+    return () => { loadGeneration.current++; };
+  }, []);
 
   const handleApprove = async (orderId: string) => {
-    if (reviewing) return;
+    if (reviewLock.current) return;
+    reviewLock.current = true;
+    loadGeneration.current++;
+    setLoading(false);
     setReviewing(true);
     setError('');
     try {
-      const response = await fetch('/api/v1/finance/verify-slip', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_id: orderId, status: 'APPROVED' }),
-      });
-      if (!response.ok) throw new Error('ບໍ່ສາມາດບັນທຶກຜົນກວດສອບໄດ້');
+      await reviewPaymentSlip(orderId, 'APPROVED');
       setSlips((prev) => prev.filter((s) => s.id !== orderId));
       setSelectedSlip(null);
       if (refreshData) refreshData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Payment review failed');
     } finally {
+      reviewLock.current = false;
       setReviewing(false);
     }
   };
 
   const handleReject = async () => {
     if (!selectedSlip) return;
-    if (reviewing) return;
+    if (reviewLock.current) return;
+    reviewLock.current = true;
+    loadGeneration.current++;
+    setLoading(false);
     setReviewing(true);
     setError('');
     try {
-      const response = await fetch('/api/v1/finance/verify-slip', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          order_id: selectedSlip.id,
-          status: 'REJECTED',
-          rejection_reason: rejectReason || 'ສລິບບໍ່ຖືກຕ້ອງ ຫຼື ຍອດເງິນບໍ່ຄົບ',
-        }),
-      });
-      if (!response.ok) throw new Error('ບໍ່ສາມາດບັນທຶກຜົນກວດສອບໄດ້');
+      await reviewPaymentSlip(selectedSlip.id, 'REJECTED', rejectReason || 'ສລິບບໍ່ຖືກຕ້ອງ ຫຼື ຍອດເງິນບໍ່ຄົບ');
       setSlips((prev) => prev.filter((s) => s.id !== selectedSlip.id));
       setShowRejectModal(false);
       setSelectedSlip(null);
@@ -109,6 +89,7 @@ export const PaymentVerificationTable: React.FC = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Payment review failed');
     } finally {
+      reviewLock.current = false;
       setReviewing(false);
     }
   };
@@ -122,13 +103,13 @@ export const PaymentVerificationTable: React.FC = () => {
             ລາຍການສລິບໂອນເງິນລໍຖ້າກວດສອບ (Payment Slip Audits)
           </h3>
           <p className="text-sm font-semibold text-slate-500 mt-1">
-            ກວດສອບສລິບການໂອນ ແລະ ກົດອະນຸມັດຍອດເພື່ອປ່ຽນສະຖານະເປັນ Paid & ເຂົ້າສູ່ການຜະລິດ
+            ກວດສອບສລິບການໂອນ ແລະ ກົດອະນຸມັດຍອດເພື່ອປ່ຽນສະຖານະເປັນ Paid & ສົ່ງຕໍ່ Pre-Press
           </p>
         </div>
         <div className="flex items-center gap-2.5">
           <button
             onClick={fetchPendingSlips}
-            disabled={loading}
+            disabled={loading || reviewing}
             className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition cursor-pointer"
             title="ໂຫຼດຂໍ້ມູນໃໝ່"
           >
@@ -140,12 +121,12 @@ export const PaymentVerificationTable: React.FC = () => {
         </div>
       </div>
 
-      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-      {slips.length === 0 ? (
+      {error && !selectedSlip && <p role="alert" className="text-sm text-red-600">{error}</p>}
+      {loading ? <p role="status">ກຳລັງໂຫຼດລາຍການສະລິບ...</p> : slips.length === 0 && error ? null : slips.length === 0 ? (
         <div className="text-center py-12 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 space-y-2">
           <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
           <p className="text-base font-bold text-slate-700">ບໍ່ມີສລິບຄ້າງອະນຸມັດໃນຂະນະນີ້</p>
-          <p className="text-xs text-slate-400 font-medium">ທຸກອໍເດີໄດ້ຮັບການກວດສອບສລິບ ແລະ ປັບສະຖານະຮຽບຮ້ອຍແລ້ວ</p>
+          <p className="text-xs text-slate-400 font-medium">ບໍ່ພົບລາຍການລໍຖ້າກວດສອບຈາກລະບົບ</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200">
@@ -189,6 +170,7 @@ export const PaymentVerificationTable: React.FC = () => {
                         ອະນຸມັດຍອດ (Approve)
                       </button>
                       <button
+                        disabled={reviewing}
                         onClick={() => {
                           setSelectedSlip(item);
                           setShowRejectModal(true);
@@ -224,6 +206,7 @@ export const PaymentVerificationTable: React.FC = () => {
               </button>
             </div>
 
+            {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
             <div className="space-y-4">
               <div className="bg-slate-50 p-4 rounded-2xl flex justify-between items-center text-sm font-bold">
                 <span className="text-slate-500">ຍອດທີ່ຕ້ອງໂອນຕົວຈິງ:</span>
@@ -233,11 +216,7 @@ export const PaymentVerificationTable: React.FC = () => {
               </div>
 
               <div className="border-2 border-slate-100 rounded-2xl overflow-hidden max-h-96 flex items-center justify-center bg-slate-900">
-                <img
-                  src={selectedSlip.paymentSlipUrl}
-                  alt="Payment Slip Preview"
-                  className="max-h-96 w-auto object-contain"
-                />
+                <ArtworkThumbnail url={selectedSlip.paymentSlipUrl} name="payment-slip" alt="Payment Slip Preview" fit="contain" />
               </div>
             </div>
 
@@ -269,6 +248,7 @@ export const PaymentVerificationTable: React.FC = () => {
               <h4 className="text-xl font-black text-slate-900">ລະບຸເຫດຜົນໃນການປະຕິເສດສລິບ</h4>
             </div>
 
+            {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
             <textarea
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}

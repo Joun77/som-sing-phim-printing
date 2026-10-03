@@ -4,6 +4,7 @@ import type { QuotationItem } from './QuotationManager';
 import type { InventoryItem } from '../../../types';
 
 interface PaperAndCoverSectionProps {
+  sourceLocked?: boolean;
   activeItem: QuotationItem;
   updateActiveItem: (patch: Partial<QuotationItem>) => void;
   activeCalc: any;
@@ -20,6 +21,7 @@ interface PaperAndCoverSectionProps {
 
 export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
   activeItem,
+  sourceLocked = false,
   updateActiveItem,
   activeCalc,
   papers,
@@ -38,6 +40,8 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
     (activeItem.batchFiles && activeItem.batchFiles.length > 0) ||
     (activeItem.preflightData as any)?.is_batch_photo
   );
+  const multiPhoto = isBatchPhoto && !!activeItem.multipleImagesPerSheet;
+  const setYield = (value?: number) => updateActiveItem(multiPhoto ? { imagesPerSheet: Math.max(1, Math.floor(value || 4)) } : { cutsPerSheetOverride: value });
   const isCoverActive = !isBatchPhoto && Boolean(activeItem.includeCover);
 
   return (
@@ -109,6 +113,8 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
                   type="button"
                   role="switch"
                   aria-checked={isCoverActive}
+                  disabled={sourceLocked}
+                  title={sourceLocked ? 'Cover and inner are already separate originals' : undefined}
                   onClick={() => updateActiveItem({ includeCover: !isCoverActive })}
                   className={`w-12 h-6.5 rounded-full transition-colors relative p-0.5 focus:outline-none cursor-pointer shadow-inner ${
                     isCoverActive ? 'bg-amber-500' : 'bg-slate-300'
@@ -481,16 +487,17 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
                 <span>ສະຫຼຸບການໃຊ້ເຈ້ຍ & ການຕັດ ({activeItem.name})</span>
               </span>
 
+              {isBatchPhoto && <label className="flex items-center gap-2 text-xs font-bold text-sky-900"><input type="checkbox" role="switch" aria-label="พิมพ์หลายรูปต่อแผ่น" checked={!!activeItem.multipleImagesPerSheet} onChange={e=>updateActiveItem({multipleImagesPerSheet:e.target.checked})} className="accent-sky-600"/>พิมพ์หลายรูปต่อแผ่น</label>}
               {/* Manual Override for Cuts Per Sheet */}
               <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-xl border border-sky-300 shadow-2xs">
-                <span className="text-[11px] text-slate-600 font-medium">1 ແຜ່ນແມ່ ຕັດໄດ້:</span>
+                <span className="text-[11px] text-slate-600 font-medium">{multiPhoto ? 'รูปต่อแผ่น' : '1 ແຜ່ນແມ່ ຕັດໄດ້:'}</span>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => {
                       const current = activeCalc.cutsPerSheet || 1;
                       const next = Math.max(1, current - 1);
-                      updateActiveItem({ cutsPerSheetOverride: next });
+                      setYield(next);
                     }}
                     className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs cursor-pointer"
                   >
@@ -500,10 +507,12 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
                     type="number"
                     min="1"
                     max="100"
-                    value={activeItem.cutsPerSheetOverride !== undefined ? activeItem.cutsPerSheetOverride : activeCalc.cutsPerSheet}
+                    aria-label={multiPhoto ? "รูปต่อแผ่น" : "Cuts per sheet"}
+                    step="1"
+                    value={multiPhoto ? activeItem.imagesPerSheet || 4 : activeItem.cutsPerSheetOverride !== undefined ? activeItem.cutsPerSheetOverride : activeCalc.cutsPerSheet}
                     onChange={(e) => {
                       const v = Number(e.target.value);
-                      updateActiveItem({ cutsPerSheetOverride: v > 0 ? v : undefined });
+                      setYield(v > 0 ? v : undefined);
                     }}
                     className="w-10 text-center font-mono font-black text-xs text-sky-900 border border-sky-200 rounded py-0.5 focus:outline-none focus:border-sky-500 bg-sky-50/50"
                   />
@@ -511,7 +520,7 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
                     type="button"
                     onClick={() => {
                       const current = activeCalc.cutsPerSheet || 1;
-                      updateActiveItem({ cutsPerSheetOverride: current + 1 });
+                      setYield(current + 1);
                     }}
                     className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs cursor-pointer"
                   >
@@ -519,7 +528,7 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
                   </button>
                 </div>
                 <span className="text-[11px] text-sky-900 font-bold">ແຜ່ນງານ</span>
-                {activeItem.cutsPerSheetOverride !== undefined && (
+                {!multiPhoto && activeItem.cutsPerSheetOverride !== undefined && (
                   <button
                     type="button"
                     onClick={() => updateActiveItem({ cutsPerSheetOverride: undefined })}

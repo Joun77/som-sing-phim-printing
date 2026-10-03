@@ -1,5 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import { confirmedSavedQuotation, normalizeSavedQuotation, confirmedSavedConversion } from '../features/orders/utils/confirmedConversion';
+import { apiFetch } from '../api/client';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { AppContextValue, EarningRecord } from '../types';
+import { getArtworkParts, resolveArtworkOriginal } from '../features/orders/utils/artworkParts';
 import { getAuthHeaders } from '@utils/authHeaders';
 import { isAssetItem, resolveCanonicalEquipmentCategory, resolvePrinterSubtype } from '@utils/assetClassification';
 
@@ -1045,6 +1048,7 @@ export const AppProvider = ({ children }) => {
     if (!serverItem) return {};
     const items = Array.isArray(serverItem.items) && serverItem.items.length > 0
       ? serverItem.items.map((it: any, idx: number) => ({
+          ...it, // Preserve canonical original metadata returned by the API. Existing aliases remain normalized below.
           id: it.id || `item-${idx + 1}`,
           orderId: it.order_id || serverItem.id || serverItem.order_no || serverItem.orderNo,
           jobName: it.job_name || it.item_name || it.name || 'ງານສິ່ງພິມ (Custom Print)',
@@ -1061,7 +1065,7 @@ export const AppProvider = ({ children }) => {
           currentStep: it.current_step || 'READY_FOR_PICKUP',
           unitPrice: Number(it.unit_price_lak) || Number(it.unit_price) || 0,
           totalPrice: Number(it.total_price_lak) || Number(it.total_price) || 0,
-          specs: it.specs || {},
+          specs: it.specs || it.specifications || {},
         }))
       : [];
 
@@ -1507,7 +1511,7 @@ export const AppProvider = ({ children }) => {
               const id = item.id || item.quotation_no;
               if (id) {
                 const existingLocal = mapById.get(id) || {};
-                mapById.set(id, { ...existingLocal, ...item });
+                mapById.set(id, { ...existingLocal, ...normalizeSavedQuotation(item) });
               }
             });
             const merged = Array.from(mapById.values());
@@ -3310,6 +3314,12 @@ export const AppProvider = ({ children }) => {
 
   // State actions
   const addOrder = (orderData, autoDeduct = true) => {
+    if (!(orderData.customer_name || orderData.customerName || '').trim()) {
+      showToast('ກະລຸນາເລືອກ ຫຼື ລະບຸຊື່ລູກຄ້າກ່ອນສ້າງອໍເດີ', 'error');
+      return;
+    }
+    // A saved order owns its JSON snapshot; later editor changes cannot mutate it.
+    orderData = structuredClone(orderData);
     const formatDateTime = () => {
       const now = new Date('2026-08-04T09:30:00');
       const pad = (n) => n.toString().padStart(2, '0');
@@ -3345,7 +3355,7 @@ export const AppProvider = ({ children }) => {
     const resolvedArtworkFileSize = orderData.artworkFileSize || orderData.artwork_file_size || (orderData.items && orderData.items[0]?.artworkFileSize) || 0;
 
     const newOrder = {
-      id: `ord-${Date.now().toString().slice(-4)}`,
+      id: `ord-${crypto.randomUUID()}`,
       date: new Date().toISOString().split('T')[0],
       createdTime: formatDateTime(),
       productionStartTime: null,
@@ -3428,11 +3438,21 @@ export const AppProvider = ({ children }) => {
       return updated;
     });
 
-    // Sync to Go Backend DB
-    fetch('/api/orders', {
+    // Canonical root fields match the actual Go CreateOrderRequest decoder.
+    // Keep local aliases and immutable item snapshots; quoting never verifies payment.
+    const createPayload = {
+      ...newOrder,
+      order_no: newOrder.order_no || newOrder.orderNo || newOrder.id,
+      customer_name: (newOrder.customer_name || newOrder.customerName).trim(),
+      customer_id: newOrder.customer_id || newOrder.customerId || '',
+      customer_phone: newOrder.customer_phone || newOrder.phone || '',
+      customer_address: newOrder.customer_address || newOrder.address || '',
+      customer_email: newOrder.customer_email || newOrder.email || '',
+      total_amount_lak: newOrder.total_amount_lak ?? newOrder.totalPriceCharged ?? newOrder.totalAmount ?? 0,
+    };
+    apiFetch<Response>('/api/orders', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newOrder)
+      body: JSON.stringify(createPayload)
     }).catch(err => console.log('Order DB sync background notice:', err));
   };
 
@@ -3687,6 +3707,7 @@ export const AppProvider = ({ children }) => {
   };
 
   const updateOrderDetails = (orderId: string, updatedOrder: any) => {
+    updatedOrder = structuredClone(updatedOrder);
     setOrders(prev => {
       const updated = prev.map(ord => (ord.id === orderId || ord.orderNo === orderId || ord.orderNumber === orderId) ? { ...ord, ...updatedOrder } : ord);
       safeSetItem('ss_print_orders_v6', updated);
@@ -4280,124 +4301,65 @@ export const AppProvider = ({ children }) => {
   };
 
   // ---- Quotation actions (versioning, expiry, convert) ----
-  const addQuotation = (quotationData) => {
-    const now = new Date().toISOString().split('T')[0];
-    const newQuote = {
-      id: `quot-${Date.now().toString().slice(-6)}`,
-      quotationNumber: quotationData.quotationNumber || `Q-${now.replace(/-/g, '').slice(2)}-${Date.now().toString().slice(-2)}`,
-      status: quotationData.status || 'Pending',
-      version: 1,
-      versions: [{ version: 1, date: now, total: Number(quotationData.grandTotal) || 0, note: 'Initial estimate' }],
-      createdAt: now,
-      convertedOrderId: null,
-      ...quotationData
-    };
-    setQuotations(prev => {
-      const updated = [newQuote, ...prev];
-      safeSetItem('ss_print_quotations_v6', updated);
-      return updated;
-    });
-
-    // PostgreSQL Backend Sync
-    fetch('/api/v1/quotations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: newQuote.id,
-        quotation_no: newQuote.quotationNumber,
-        title: newQuote.title || newQuote.quotationTitle || 'ໃບສະເໜີລາຄາງານພິມ',
-        customer_name: newQuote.customerName || 'General Customer',
-        customer_phone: newQuote.customerPhone || '',
-        customer_address: newQuote.customerAddress || '',
-        status: newQuote.status || 'Draft',
-        total_cost: Number(newQuote.totalCost || newQuote.grandNetCost || 0),
-        total_selling_price: Number(newQuote.grandTotal || newQuote.finalGrandTotal || 0),
-        overall_profit_percent: Number(newQuote.profitMargin || newQuote.quotationProfitMargin || 40),
-        discount_percent: Number(newQuote.discountPercent || newQuote.quotationDiscountPercent || 0),
-        setup_fee: Number(newQuote.setupFee || newQuote.quotationSetupFee || 0),
-        packaging_cost: Number(newQuote.packagingCost || newQuote.quotationPackagingCost || 0),
-        shipping_fee: Number(newQuote.shippingFee || 0),
-        expiry_date: newQuote.expiryDate || newQuote.quotationExpiry || '',
-        notes: newQuote.notes || newQuote.quotationNote || '',
-        items: newQuote.items || []
-      })
-    }).catch(err => console.log('Quotation DB sync notice:', err));
-
-    return newQuote;
+  const savingQuotations = useRef(new Set<string>());
+  const persistQuotation = async (quote: Record<string, unknown>, method: 'POST' | 'PUT') => {
+    const id = String(quote.id);
+    if (savingQuotations.current.has(id)) return null;
+    savingQuotations.current.add(id);
+    try {
+      // Reserved review/linkage metadata is authored only by the server.
+      const items = structuredClone(quote.items) as Record<string, unknown>[];
+      for (const item of items) {
+        for (const field of ['specs', 'specifications']) {
+          if (item[field] && typeof item[field] === 'object') delete (item[field] as Record<string, unknown>)._somsing_quote_snapshot;
+        }
+      }
+      const payload = {
+        id, quotation_no: quote.quotationNumber ?? quote.quotation_no,
+        title: quote.title, customer_name: quote.customerName ?? quote.customer_name,
+        customer_phone: quote.customerPhone ?? quote.phone ?? quote.customer_phone ?? '',
+        customer_address: quote.customerAddress ?? quote.customer_address ?? '',
+        status: quote.status ?? 'Draft', total_cost: quote.totalCost ?? quote.total_cost,
+        total_selling_price: quote.grandTotal ?? quote.total_selling_price,
+        overall_profit_percent: quote.profitMargin ?? quote.overall_profit_percent,
+        discount_percent: quote.discountPercent ?? quote.discount_percent,
+        setup_fee: quote.setupFee ?? quote.setup_fee,
+        packaging_cost: quote.packagingCost ?? quote.packaging_cost,
+        shipping_fee: quote.shippingFee ?? quote.shipping_fee,
+        expiry_date: quote.expiresAt ?? quote.expiry_date ?? '', notes: quote.notes ?? '',
+        commercial_snapshot: quote.commercial_snapshot,
+        ...(quote.snapshot_completion_reason ? { snapshot_completion_reason: quote.snapshot_completion_reason } : {}),
+        items,
+      };
+      const response = await apiFetch<Response>(method === 'POST' ? '/api/v1/quotations' : `/api/v1/quotations/${encodeURIComponent(id)}`, { method, body: JSON.stringify(payload) });
+      if (!response.ok) throw new Error(`Quotation save failed (HTTP ${response.status})`);
+      const saved = confirmedSavedQuotation(await response.json(), id);
+      const confirmed = { ...quote, ...saved };
+      setQuotations(prev => [confirmed, ...prev.filter(q => q.id !== id)]);
+      return confirmed;
+    } catch (error) {
+      console.error('Quotation save not confirmed:', error);
+      showToast('ບັນທຶກບໍ່ສຳເລັດ; ຂໍ້ມູນຍັງຢູ່ໃນໜ້າແກ້ໄຂ ແລະ ສາມາດລອງອີກຄັ້ງ', 'error');
+      return null;
+    } finally { savingQuotations.current.delete(id); }
   };
 
-  const reviseQuotation = (quotationId, newTotal, note) => {
-    setQuotations(prev => {
-      const updated = prev.map(q => {
-        if (q.id !== quotationId) return q;
-        const nextVersion = (q.version || 0) + 1;
-        const newVersionEntry = {
-          version: nextVersion,
-          date: new Date().toISOString().split('T')[0],
-          total: Number(newTotal),
-          note: note || `Revision v${nextVersion}`
-        };
-        return {
-          ...q,
-          version: nextVersion,
-          grandTotal: Number(newTotal),
-          versions: [newVersionEntry, ...(q.versions || [])],
-          status: 'Pending'
-        };
-      });
-      safeSetItem('ss_print_quotations_v6', updated);
-      return updated;
-    });
+  const addQuotation = async (quotationData: Record<string, unknown>) => {
+    const now = new Date().toISOString();
+    return persistQuotation({ ...quotationData, id: quotationData.id ?? `quot-${crypto.randomUUID()}`, quotationNumber: quotationData.quotationNumber ?? `Q-${now.slice(0, 10).replace(/-/g, '')}-${Date.now()}`, createdAt: now, convertedOrderId: null }, 'POST');
   };
 
-  const updateQuotation = (quotationId: string, updatedFields: Record<string, any>) => {
-    let updatedQuote: any = null;
-    setQuotations(prev => {
-      const updated = prev.map(q => {
-        if (q.id === quotationId || q.quotationNumber === quotationId) {
-          updatedQuote = { ...q, ...updatedFields, updatedAt: new Date().toISOString().split('T')[0] };
-          return updatedQuote;
-        }
-        return q;
-      });
-      safeSetItem('ss_print_quotations_v6', updated);
-      return updated;
-    });
+  const updateQuotation = async (quotationId: string, updatedFields: Record<string, unknown>) => {
+    const previous = quotations.find(q => q.id === quotationId || q.quotationNumber === quotationId);
+    if (!previous) return null;
+    return persistQuotation({ ...previous, ...updatedFields, id: previous.id }, 'PUT');
+  };
 
-    if (updatedQuote) {
-      fetch(`/api/v1/quotations/${quotationId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: updatedQuote.id,
-          quotation_no: updatedQuote.quotationNumber || updatedQuote.quotation_no,
-          title: updatedQuote.title || updatedQuote.quotationTitle || 'ໃບສະເໜີລາຄາງານພິມ',
-          customer_name: updatedQuote.customerName || updatedQuote.customer_name || 'General Customer',
-          customer_phone: updatedQuote.customerPhone || updatedQuote.customer_phone || '',
-          customer_address: updatedQuote.customerAddress || updatedQuote.customer_address || '',
-          status: updatedQuote.status || 'Draft',
-          total_cost: Number(updatedQuote.totalCost || updatedQuote.grandNetCost || 0),
-          total_selling_price: Number(updatedQuote.grandTotal || updatedQuote.finalGrandTotal || updatedQuote.total_selling_price || 0),
-          overall_profit_percent: Number(updatedQuote.profitMargin || updatedQuote.quotationProfitMargin || updatedQuote.overall_profit_percent || 40),
-          discount_percent: Number(updatedQuote.discountPercent || updatedQuote.quotationDiscountPercent || 0),
-          setup_fee: Number(updatedQuote.setupFee || updatedQuote.quotationSetupFee || 0),
-          packaging_cost: Number(updatedQuote.packagingCost || updatedQuote.quotationPackagingCost || 0),
-          shipping_fee: Number(updatedQuote.shippingFee || 0),
-          expiry_date: updatedQuote.expiryDate || updatedQuote.quotationExpiry || updatedQuote.expiresAt || '',
-          notes: updatedQuote.notes || updatedQuote.quotationNote || '',
-          items: updatedQuote.items || []
-        })
-      }).then(res => {
-        if (res.ok) {
-          showToast('ບັນທຶກໃບສະເໜີລາຄາສຳເລັດແລ້ວ', 'success');
-        } else {
-          showToast('ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກໃບສະເໜີລາຄາ', 'error');
-        }
-      }).catch(err => {
-        console.error('Quotation update sync error:', err);
-        showToast('ເກີດຂໍ້ຜິດພາດໃນການເຊື່ອມຕໍ່ຖານຂໍ້ມູນ', 'error');
-      });
-    }
+  const reviseQuotation = async (quotationId: string, fields: Record<string, unknown>, note: string) => {
+    const previous = quotations.find(q => q.id === quotationId || q.quotationNumber === quotationId);
+    if (!previous) return null;
+    const version = (previous.version ?? 0) + 1;
+    return updateQuotation(previous.id, { ...fields, version, versions: [{ version, date: new Date().toISOString(), total: fields.grandTotal, note }, ...(previous.versions ?? [])] });
   };
 
   const deleteQuotation = (quotationId: string) => {
@@ -4411,231 +4373,49 @@ export const AppProvider = ({ children }) => {
   };
 
   // Convert an accepted quotation into a production order + job ticket
+  const convertingQuotations = useRef(new Set<string>());
   const convertQuotationToOrder = async (quotationId: string) => {
     const quotation = quotations.find(q => q.id === quotationId || q.quotationNumber === quotationId);
-    if (!quotation) return null;
-
-    const qArtworkUrl = quotation.artworkUrl || quotation.artwork_url || quotation.artworkLink || (quotation.items && quotation.items.find((it: any) => it.artworkUrl || it.fileUrl)?.artworkUrl) || '';
-    const qArtworkFileName = quotation.artworkFileName || quotation.artwork_file_name || quotation.fileName || (quotation.items && quotation.items.find((it: any) => it.fileName)?.fileName) || (qArtworkUrl ? qArtworkUrl.split('/').pop()?.split('?')[0] : '');
-    const qArtworkFileSize = quotation.artworkFileSize || quotation.artwork_file_size || (quotation.items && quotation.items.find((it: any) => it.fileSize)?.fileSize) || 0;
-
-    const defaultPaper = inventory.find(i => i.category === 'Paper') || inventory[0];
-    const defaultPrinter = equipment.find(e => e.type === 'Printer') || equipment[0];
-
-    const orderItems = (quotation.items || []).map((item: any, idx: number) => {
-      const invPaper = inventory.find(i => i.id === item.paperId || (i.category === 'Paper' && (i.id === item.id || i.name === item.paperType)));
-      const paperName = invPaper?.name || item.paperName || item.paperType || item.paper_name || defaultPaper?.name || '';
-      const paperBrand = invPaper?.specs?.brand || invPaper?.brand || item.paperBrand || item.paper_brand || (defaultPaper as any)?.brand || '';
-      const paperWeight = invPaper?.specs?.grammage || invPaper?.weight_gsm || item.weight_gsm || item.paperWeight || (defaultPaper as any)?.weight_gsm || '';
-      const paperSku = invPaper?.sku || item.paperSku || item.paper_sku || defaultPaper?.sku || '';
-
-      const batchFiles = Array.isArray(item.batchFiles) ? item.batchFiles : (Array.isArray(item.batch_files) ? item.batch_files : []);
-      const galleryUrls = Array.isArray(item.galleryUrls) ? item.galleryUrls : (Array.isArray(item.gallery_urls) ? item.gallery_urls : []);
-
-      const itArtworkUrl = item.artworkUrl || item.artwork_url || item.fileUrl || item.file_url || (batchFiles[0]?.url || batchFiles[0]?.file_url) || qArtworkUrl;
-      const itArtworkFileName = item.fileName || item.file_name || (batchFiles[0]?.name || batchFiles[0]?.file_name) || (itArtworkUrl ? itArtworkUrl.split('/').pop()?.split('?')[0] : '');
-      const itArtworkFileSize = item.fileSize || item.file_size || (batchFiles[0]?.size || 0);
-
-      // Preserve distinct cover/inner file URLs from split-cover quotation items
-      const itCoverFileUrl = item.cover_file_url || item.coverArtworkUrl || itArtworkUrl;
-      const itInnerFileUrl = item.inner_file_url || item.artworkUrl || item.artwork_url || itArtworkUrl;
-
-      const cutsPerSheet = Number(item.cutsPerSheet || item.cuts_per_sheet || 1);
-      const totalUnits = Number(item.quantity || 1) * (batchFiles.length > 0 ? batchFiles.length : Number(item.pageCount || item.pages || 1));
-      const parentSheets = Math.ceil(totalUnits / cutsPerSheet);
-
-      return {
-        id: `item-${quotation.id}-${idx + 1}`,
-        job_name: item.name || item.jobName || 'Custom Print Job',
-        item_name: item.name || item.itemName || 'Custom Print Job',
-        quantity: Number(item.quantity) || 1,
-        page_count: Number(item.pageCount || item.pages || (batchFiles.length > 0 ? batchFiles.length : 1)),
-        paper_size: item.paperSize || item.size || 'A4',
-        paper_brand: paperBrand,
-        paper_weight: paperWeight,
-        paper_sku: paperSku,
-        paper_name: paperName,
-        total_parent_sheets: parentSheets,
-        total_cut_pieces: totalUnits,
-        cuts_per_sheet: cutsPerSheet,
-        unit_price_lak: Number(item.unitPrice || item.unitPriceSnapshot || item.unitCost || 0),
-        total_price_lak: Number(item.totalPrice || (Number(item.quantity || 1) * Number(item.unitPrice || 0))),
-        unit_cost_lak: Number(item.unitCost || item.costPriceSnapshot || 0),
-        cover_file_url: itCoverFileUrl,
-        inner_file_url: itInnerFileUrl,
-        artwork_url: itArtworkUrl,
-        artworkUrl: itArtworkUrl,
-        artwork_file_name: itArtworkFileName,
-        artworkFileName: itArtworkFileName,
-        artwork_file_size: itArtworkFileSize,
-        artworkFileSize: itArtworkFileSize,
-        batch_files: batchFiles,
-        gallery_urls: galleryUrls,
-        artwork: {
-          file_url: itArtworkUrl,
-          file_name: itArtworkFileName,
-          file_size_bytes: itArtworkFileSize,
-          preview_thumbnail_url: itArtworkUrl,
-          page_count: Number(item.pageCount || item.pages || (batchFiles.length > 0 ? batchFiles.length : 1))
-        },
-        specifications: {
-          ...(item.specifications || item.specs || item),
-          paper_id: item.paperId || invPaper?.id || defaultPaper?.id || '',
-          paper_name: paperName,
-          paper_brand: paperBrand,
-          paper_weight: paperWeight,
-          paper_sku: paperSku,
-          color_mode: item.colorPrintMode || item.colorMode || 'CMYK',
-          printer_id: item.printerId || quotation.printerId || defaultPrinter?.id || '',
-          printer_name: item.printerName || quotation.printerName || defaultPrinter?.name || '',
-          binding: item.bindingMethod || item.binding,
-          coating: item.coating || item.lamination,
-          pages: Number(item.pageCount || item.pages || (batchFiles.length > 0 ? batchFiles.length : 1)),
-          batch_files: batchFiles,
-          gallery_urls: galleryUrls,
-          cuts_per_sheet: cutsPerSheet,
-          parent_sheets: parentSheets,
-        },
-        specs: {
-          ...(item.specs || item),
-          paper_name: paperName,
-          paper_brand: paperBrand,
-          paper_weight: paperWeight,
-          paper_sku: paperSku,
-          artworkUrl: itArtworkUrl,
-          artworkFileName: itArtworkFileName,
-          artworkFileSize: itArtworkFileSize,
-          batch_files: batchFiles,
-          gallery_urls: galleryUrls,
-        }
-      };
-    });
-
-    const totalPrice = Number(quotation.grandTotal || quotation.total_selling_price || quotation.finalGrandTotal) || 0;
-    const depositAmt = Math.round(totalPrice * 0.5);
-    const orderNo = `ORD-${new Date().toISOString().replace(/\D/g, '').slice(2, 8)}-${Date.now().toString().slice(-3)}`;
-
-    const allocatedPrinterId = quotation.printerId || defaultPrinter?.id || '';
-    const allocatedPrinterName = quotation.printerName || defaultPrinter?.name || '';
-
-    const orderPayload = {
-      order_no: orderNo,
-      order_number: orderNo,
-      customer_name: quotation.customerName || quotation.customer_name || 'General Customer',
-      customer_phone: quotation.customerPhone || quotation.customer_phone || quotation.phone || '',
-      customer_address: quotation.customerAddress || quotation.customer_address || '',
-      deposit_lak: depositAmt,
-      deposit_amount: depositAmt,
-      total_amount_lak: totalPrice,
-      total_price: totalPrice,
-      delivery_date: quotation.expiryDate || quotation.expiresAt || new Date().toISOString().split('T')[0],
-      artwork_url: qArtworkUrl,
-      artworkUrl: qArtworkUrl,
-      artwork_file_name: qArtworkFileName,
-      artworkFileName: qArtworkFileName,
-      artwork_file_size: qArtworkFileSize,
-      artworkFileSize: qArtworkFileSize,
-      artwork_link: qArtworkUrl || quotation.artworkLink || '',
-      google_drive_link: qArtworkUrl || quotation.artworkLink || '',
-      status: 'WAITING_DEPOSIT',
-      overall_status: 'WAITING_DEPOSIT',
-      isPacked: false,
-      packing_status: 'PENDING',
-      isDispatched: false,
-      dispatch_status: 'PENDING',
-      isCustomerReceived: false,
-      allocated_printer_id: allocatedPrinterId,
-      allocated_printer_name: allocatedPrinterName,
-      realized_paper_cost: Number(quotation.paperCost || quotation.realized_paper_cost || Math.round(totalPrice * 0.35)),
-      realized_ink_cost: Number(quotation.inkCost || quotation.realized_ink_cost || Math.round(totalPrice * 0.15)),
-      realized_labor_cost: Number(quotation.laborCost || quotation.realized_labor_cost || Math.round(totalPrice * 0.10)),
-      realized_finishing_cost: Number(quotation.finishingCost || quotation.realized_finishing_cost || 0),
-      realized_spoilage_cost: Number(quotation.spoilageCost || quotation.realized_spoilage_cost || Math.round(totalPrice * 0.03)),
-      realized_total_cost: Number(quotation.totalCost || quotation.realized_total_cost || Math.round(totalPrice * 0.63)),
-      notes: `ແປງມາຈາກໃບສະເໜີລາຄາ #${quotation.quotationNumber || quotation.quotation_no || quotation.id}. ${quotation.notes || ''}`,
-      source_quotation_id: quotation.id,
-      items: orderItems
-    };
-
-    try {
-      // 1. Create order in backend
-      const orderRes = await fetch('/api/v1/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderPayload)
-      });
-
-      let createdOrder: any = null;
-      if (orderRes.ok) {
-        const orderData = await orderRes.json();
-        createdOrder = orderData.data || orderData;
-      }
-
-      const createdId = createdOrder?.id || `ord-${Date.now().toString().slice(-4)}`;
-
-      // 2. Approve/Convert quotation in backend
-      await fetch(`/api/v1/quotations/${quotationId}/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: `Converted to Order ${orderNo}` })
-      }).catch(() => {});
-
-      // 3. Update local state
-      const localOrderObj = {
-        ...orderPayload,
-        id: createdId,
-        items: orderItems.map((it: any) => ({
-          id: it.id,
-          name: it.item_name,
-          quantity: it.quantity,
-          unitCost: it.unit_price_lak,
-          artworkUrl: it.artwork_url,
-          artworkFileName: it.artwork_file_name,
-          artworkFileSize: it.artwork_file_size,
-          inner_file_url: it.inner_file_url || it.artwork_url,
-          cover_file_url: it.cover_file_url || it.artwork_url,
-          specs: it.specs,
-          batch_files: it.specs?.batch_files || (quotation as any).batch_files || (quotation as any).gallery_urls || [],
-          gallery_urls: it.specs?.gallery_urls || (quotation as any).gallery_urls || [],
-          binding_type: it.binding_type,
-          bindingType: it.binding_type,
-          printerName: allocatedPrinterName,
-          printer_name: allocatedPrinterName,
-          assigned_press_name: allocatedPrinterName
-        })),
-        totalPriceCharged: totalPrice,
-        depositAmountPaid: depositAmt,
-        remainingUnpaidBalance: totalPrice - depositAmt,
-        paymentMethod: 'BCEL One',
-        paymentStatus: 'Deposit Paid',
-        status: 'Received',
-        promisedDeliveryDate: orderPayload.delivery_date,
-        artworkLink: qArtworkUrl || orderPayload.artwork_link,
-        artworkUrl: qArtworkUrl,
-        artwork_url: qArtworkUrl,
-        artworkFileName: qArtworkFileName,
-        artwork_file_name: qArtworkFileName,
-        artworkFileSize: qArtworkFileSize,
-        artwork_file_size: qArtworkFileSize,
-        sourceQuotationId: quotation.id,
-        printer_name: allocatedPrinterName,
-        printerName: allocatedPrinterName,
-        allocated_printer_name: allocatedPrinterName,
-        batch_files: (quotation as any).batch_files || (quotation as any).gallery_urls || [],
-        gallery_urls: (quotation as any).gallery_urls || [],
-        productionWorkflow: (quotation as any).productionWorkflow || (quotation as any).workflow || null
-      };
-
-      setOrders(prev => [localOrderObj, ...prev]);
-      setQuotations(prev => prev.map(q => (q.id === quotationId || q.quotationNumber === quotationId) ? { ...q, status: 'Accepted', convertedOrderId: createdId } : q));
-
-      showToast('ແປງໃບສະເໜີລາຄາເປັນອໍເດີຜະລິດຮຽບຮ້ອຍແລ້ວ', 'success');
-      return createdId;
-    } catch (err) {
-      console.error('Failed to convert quotation to order:', err);
-      showToast('ເກີດຂໍ້ຜິດພາດໃນການແປງໃບສະເໜີລາຄາ', 'error');
+    if (!quotation || convertingQuotations.current.has(quotation.id)) return null;
+    if (typeof quotation.updated_at !== 'string' || typeof quotation.total_selling_price !== 'number') {
+      showToast('ຕ້ອງບັນທຶກ ຫຼື ໂຫຼດໃບສະເໜີລາຄາຈາກເຊີບເວີກ່ອນ', 'error');
       return null;
     }
+    convertingQuotations.current.add(quotation.id);
+    try {
+      const response = await apiFetch<Response>(`/api/v1/quotations/${encodeURIComponent(quotation.id)}/convert`, {
+        method: 'POST', headers: { 'Idempotency-Key': `quotation-conversion:${quotation.id}` },
+        body: JSON.stringify({ expected_updated_at: quotation.updated_at, expected_total_selling_price: quotation.total_selling_price }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        if (typeof result.existing_order_id === 'string') setQuotations(prev => prev.map(q => q.id === quotation.id ? { ...q, pendingConversionOrderId: result.existing_order_id, pendingConversionStatus: 'RECONCILIATION_REQUIRED' } : q));
+        showToast(result.code === 'quotation_snapshot_incomplete' ? 'ຂໍ້ມູນຕົ້ນທຶນບໍ່ຄົບ; ຕ້ອງໃຫ້ຜູ້ຈັດການກວດສອບກ່ອນ' : result.code === 'quotation_changed' ? 'ໃບສະເໜີລາຄາປ່ຽນແລ້ວ; ກະລຸນາໂຫຼດຂໍ້ມູນໃໝ່' : result.existing_order_id ? 'ອໍເດີມີແລ້ວ; ຕ້ອງກວດສອບກ່ອນ ແລະ ຈະບໍ່ສ້າງຊ້ຳ' : 'ແປງໃບສະເໜີບໍ່ສຳເລັດ; ສາມາດລອງອີກຄັ້ງ', 'error');
+        return null;
+      }
+      const { envelope, order } = confirmedSavedConversion(result, quotation.id);
+      const normalized = normalizeBackendOrder(order);
+      const localOrder = { ...order, ...normalized,
+        total_amount_lak: order.total_amount_lak, totalPriceCharged: order.total_amount_lak, totalAmount: order.total_amount_lak,
+        deposit_lak: order.deposit_lak, deposit_amount: order.deposit_lak, paidAmount: order.deposit_lak, depositAmountPaid: order.deposit_lak,
+        remaining_lak: order.remaining_lak, remainingUnpaidBalance: order.remaining_lak, remainingAmount: order.remaining_lak,
+        paymentStatus: typeof order.payment_status === 'string' ? order.payment_status : order.total_amount_lak > 0 && order.deposit_lak >= order.total_amount_lak ? 'Paid' : order.deposit_lak > 0 ? 'Partial' : 'Unpaid',
+        status: order.status, overall_status: order.overall_status,
+        items: normalized.items.map((item, index) => {
+          const source = resolveArtworkOriginal(order.items[index]);
+          return { ...item, unitPrice: order.items[index].unit_price_lak, totalPrice: order.items[index].total_price_lak, artworkUrl: source.url, artworkFileName: source.name, artworkFileSize: source.size, artworkParts: structuredClone(getArtworkParts(order.items[index])) };
+        }),
+        sourceQuotationId: quotation.id, quotationApprovalPending: envelope.approval_required,
+      };
+      setOrders(prev => [localOrder, ...prev.filter(existing => existing.id !== order.id)]);
+      setQuotations(prev => prev.map(q => q.id === quotation.id ? { ...q, status: 'CONVERTED', convertedOrderId: order.id, pendingConversionOrderId: undefined, pendingConversionStatus: undefined, conversion: { quotation_id: quotation.id, order_id: order.id, idempotency_key: envelope.idempotency_key, source_updated_at: envelope.source_quotation_updated_at, approval_required: envelope.approval_required } } : q));
+      showToast(envelope.approval_required ? 'ສ້າງອໍເດີແລ້ວ; ຍັງລໍຖ້າຜູ້ຈັດການອະນຸມັດ' : 'ແປງໃບສະເໜີເປັນອໍເດີສຳເລັດ', envelope.approval_required ? 'warning' : 'success');
+      return order.id;
+    } catch (error) {
+      console.error('Quotation conversion not confirmed:', error);
+      showToast('ຍັງບໍ່ຢືນຢັນຜົນການແປງ; ລອງອີກຄັ້ງເພື່ອກວດສອບອໍເດີເດີມ', 'error');
+      return null;
+    } finally { convertingQuotations.current.delete(quotation.id); }
   };
 
   // ---- Employee actions (CRUD + shift/machine assignment + incentives) ----
