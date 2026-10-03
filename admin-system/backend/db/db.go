@@ -138,6 +138,8 @@ var MigrationFiles = []string{
 	"043_add_public_tracking_token_to_orders.sql",
 	"000010_create_finance_tables.up.sql",
 	"000011_seed_chart_of_accounts.up.sql",
+	"044_quotation_artwork_references.sql",
+	"045_quotation_id_uniqueness.sql",
 }
 
 // verifyLegacyBaseline checks if a legacy migration's intended schema changes

@@ -25,9 +25,10 @@ try:
   time.sleep(1)
  else:raise SystemExit('Fixture DB readiness failed')
 
- if '--packaged-migrations' in sys.argv:
+ if '--packaged-migrations' in sys.argv or '--actual-image-startup' in sys.argv:
   import hashlib,tempfile,shutil,re,secrets
-  assert sys.argv[1:]==['--packaged-migrations'],'Packaged mode cannot mix with other modes'
+  actual_startup='--actual-image-startup' in sys.argv
+  assert sys.argv[1:]==['--actual-image-startup' if actual_startup else '--packaged-migrations'],'Packaged mode cannot mix with other modes'
   protected_before={name:hashlib.sha256((repo/'admin-system/backend'/name).read_bytes()).hexdigest() for name in ['couriers_data.json','payment_methods_data.json']}
   model_env={**env,'POSTGRES_USER':'fixture','POSTGRES_PASSWORD':'fixture-only-not-a-shop-secret','POSTGRES_DB':'somsing_fixture_db','DB_PORT':'55432','JWT_SECRET':'fixture-packaging-only-signed-key-32chars'}
   for filename,service in [('docker-compose.yml','db'),('docker-compose.dev.yml','postgres')]:
@@ -46,7 +47,7 @@ try:
    shutil.copytree(backend/'assets',clean/'assets')
    for name in ['couriers_data.json','payment_methods_data.json']:(clean/name).write_text('[]\n')
    assert not list(clean.rglob('.env*')),'Environment file entered disposable context'
-   registered=re.findall(r'"([^"\n]+\.sql)"',(backend/'db/db.go').read_text().split('var MigrationFiles = []string{',1)[1].split('\n}',1)[0]);assert len(registered)==44
+   registered=re.findall(r'"([^"\n]+\.sql)"',(backend/'db/db.go').read_text().split('var MigrationFiles = []string{',1)[1].split('\n}',1)[0]);assert len(registered)==46
    hashes={name:hashlib.sha256((canonical/name).read_bytes()).hexdigest() for name in registered}
    tag='codex-test-somsing-packaging:'+secrets.token_hex(8);container_id=None;image_id=None
    assert run(['docker','image','inspect',tag],False).returncode!=0,'Test image tag already exists'
@@ -60,9 +61,201 @@ try:
     for name,sha in hashes.items():assert hashlib.sha256((extracted/'migrations'/name).read_bytes()).hexdigest()==sha,'Packaged canonical SQL mismatch '+name
     provenance={'image_id':image_id,'tag':tag,'registered_hashes':hashes};(workspace/'image-provenance.json').write_text(json.dumps(provenance))
     print('PACKAGING_IMAGE_JSON '+json.dumps(provenance),flush=True)
-    print('PACKAGING_CHECK PASS extracted44 registered canonical hashes; stopped container removed; business CMD not run',flush=True)
-    command=[sys.executable,str(backend/'tests/run-phase1.py'),'--fixture-dsn','postgres://fixture:fixture-only-not-a-shop-secret@127.0.0.1:55432/somsing_fixture_db?sslmode=disable&connect_timeout=5','--packaged-migrations-dir',str(extracted/'migrations')]
-    subprocess.run(command,cwd=repo,env=env,check=True)
+    print('PACKAGING_CHECK PASS extracted46 registered canonical hashes; stopped extraction container removed',flush=True)
+    if actual_startup:
+     import re
+     network='somsing-startup-'+secrets.token_hex(8);case_ids=[];runtime_results=[]
+     db_id=run(base+['ps','-q','fixture-db']).stdout.strip();assert db_id
+     assert run(['docker','network','inspect',network],False).returncode!=0
+     network_created=False;db_connected=False
+     default_dsn='postgres://fixture:fixture-only-not-a-shop-secret@fixture-db:5432/somsing_fixture_db?sslmode=disable&connect_timeout=2'
+     schema='phase1_runtime_'+secrets.token_hex(8)
+     def sql(query):return run(base+['exec','-T','fixture-db','psql','-v','ON_ERROR_STOP=1','-U','fixture','-d','somsing_fixture_db','-Atc',query]).stdout.strip()
+     def http(container,path,body=None,token=None,method=None):
+      if method=='PUT':
+       import io,http.client,types
+       payload=json.dumps(body).encode()
+       wire=('PUT '+path+' HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nConnection: close\r\nContent-Type: application/json\r\nAuthorization: Bearer '+token+'\r\nContent-Length: '+str(len(payload))+'\r\n\r\n').encode()+payload
+       result=subprocess.run(['docker','exec','-i',container,'nc','-w','2','127.0.0.1','8080'],cwd=repo,env=env,input=wire,capture_output=True)
+       response=http.client.HTTPResponse(types.SimpleNamespace(makefile=lambda *args:io.BytesIO(result.stdout)));response.begin()
+       return response.status,json.loads(response.read())
+      # Probe the actual HTTP listener without opening an egress path or host port.
+      command=['docker','exec',container,'wget','-S','-O','-','-T','1','--header=Content-Type: application/json']
+      if token:command+=['--header=Authorization: Bearer '+token]
+      if body is not None:command+=['--post-data='+json.dumps(body)]
+      response=run(command+['http://127.0.0.1:8080'+path],False)
+      statuses=re.findall(r'HTTP/1\.[01] (\d{3})',response.stderr)
+      if not statuses:raise OSError('Actual container HTTP listener unavailable')
+      status=int(statuses[-1]);payload=json.loads(response.stdout) if response.stdout.strip() else None
+      return status,payload
+     def launch(label,dsn=default_dsn,key='Fixture-runtime-only-strong-signed-key-32chars',missing=False):
+      storage=workspace/('storage-'+label);storage.mkdir()
+      command=['docker','run','-d','--network',network,'--label','somsing.phase1.startup-owned='+workspace.name,'--mount','type=bind,source='+str(storage)+',target=/app/uploads','-e','ENVIRONMENT=production','-e','JWT_SECRET='+key,'-e','DATABASE_URL='+dsn,'-e','PORT=8080','-e','UPLOAD_STORAGE_DIR=/app/uploads']
+      if missing:
+       empty=workspace/'empty-runtime-migrations';empty.mkdir();command+=['--mount','type=bind,source='+str(empty)+',target=/app/migrations,readonly']
+      cid=run(command+[tag]).stdout.strip();case_ids.append(cid)
+      info=json.loads(run(['docker','inspect',cid]).stdout)[0]
+      assert set(info['NetworkSettings']['Networks'])=={network},'Unexpected network/egress path'
+      passed_env=dict(x.split('=',1) for x in info['Config']['Env'])
+      assert passed_env['ENVIRONMENT']=='production'
+      assert all(not value for name,value in passed_env.items() if any(word in name for word in ['TOKEN','SLIPOK','LINE_CHANNEL','SMTP','WHATSAPP','TELEGRAM'])),'Provider credentials entered runtime'
+      assert not info['HostConfig']['PortBindings'],'Runtime unexpectedly publishes host ports'
+      origin=cid
+      return cid,origin
+     try:
+      run(['docker','network','create','--internal','--label','somsing.phase1.startup-owned='+workspace.name,network]);network_created=True
+      assert json.loads(run(['docker','network','inspect',network]).stdout)[0]['Internal'] is True
+      run(['docker','network','connect','--alias','fixture-db',network,db_id]);db_connected=True
+      cid,origin=launch('success');deadline=time.monotonic()+30;health=None
+      while time.monotonic()<deadline:
+       if run(['docker','inspect',cid,'--format','{{.State.Running}}']).stdout.strip()!='true':break
+       try:
+        status,health=http(origin,'/health')
+        if status==200 and health.get('database')=='connected':break
+       except (OSError,ValueError):pass
+       time.sleep(.1)
+      success_logs=run(['docker','logs',cid]);print('STARTUP_LOG_JSON '+json.dumps({'case':'success','text':success_logs.stdout+success_logs.stderr}),flush=True)
+      assert health and status==200 and health['database']=='connected','Actual image failed to become healthy with owned DB'
+      assert sql('SELECT count(*) FROM schema_migrations')=='46'
+      sql("CREATE EXTENSION IF NOT EXISTS pgcrypto; INSERT INTO admin_users(id,username,password_hash,fullname,role,is_active) VALUES('fixture-runtime-admin','fixture_runtime_admin',crypt('Fixture-runtime-only!',gen_salt('bf')),'Owned Runtime Admin','admin',true)")
+      status,login=http(origin,'/api/v1/auth/login',{'username':'fixture_runtime_admin','password':'Fixture-runtime-only!'});assert status==200 and login['role']=='admin';token=login['token']
+      assert http(origin,'/api/v1/quotations')[0]==401
+      authenticated_status=http(origin,'/api/v1/admin/users',token=token)[0];assert authenticated_status==200
+      quotation_status,quotation_body=http(origin,'/api/v1/quotations',token=token)
+      assert quotation_status==200,'Actual canonical quotation read failed'
+      migration044=(extracted/'migrations/044_quotation_artwork_references.sql').read_text()
+      legacy_schema='phase1_reference_'+secrets.token_hex(8)
+      # Execute extracted real SQL against an owned representative pre-044 table.
+      sql('BEGIN; CREATE SCHEMA '+legacy_schema+'; SET LOCAL search_path TO '+legacy_schema+"; CREATE TABLE quotations(quotation_id text PRIMARY KEY,customer_name text NOT NULL,total_cost numeric); INSERT INTO quotations VALUES('legacy-owned','Owned Legacy',12.34); "+migration044+' COMMIT;')
+      legacy_before=sql('SELECT row_to_json(q)::text FROM '+legacy_schema+'.quotations q')
+      assert json.loads(legacy_before)=={'quotation_id':'legacy-owned','customer_name':'Owned Legacy','total_cost':12.34,'artwork_url':None,'digital_proof_url':None}
+      sql("UPDATE "+legacy_schema+".quotations SET artwork_url='/owned/original.pdf',digital_proof_url='/owned/proof.pdf'")
+      legacy_references=sql('SELECT row_to_json(q)::text FROM '+legacy_schema+'.quotations q')
+      sql('BEGIN; SET LOCAL search_path TO '+legacy_schema+'; '+migration044+migration044+' COMMIT;')
+      assert sql('SELECT row_to_json(q)::text FROM '+legacy_schema+'.quotations q')==legacy_references
+      sql('DROP SCHEMA '+legacy_schema+' CASCADE')
+      runtime_results.append({'case':'migration044_legacy','missing_columns_added':True,'existing_row_preserved':True,'existing_references_repeat_preserved':True,'sql_source':'extracted_actual_image'})
+      migration045=(extracted/'migrations/045_quotation_id_uniqueness.sql').read_text()
+      for label,index_ddl in [('full_unique',None),('nonunique','CREATE INDEX idx_quotations_id_unique ON quotations(id)'),('wrong_column','CREATE UNIQUE INDEX idx_quotations_id_unique ON quotations(quotation_id)'),('partial','CREATE UNIQUE INDEX idx_quotations_id_unique ON quotations(id) WHERE id IS NOT NULL'),('expression','CREATE UNIQUE INDEX idx_quotations_id_unique ON quotations(lower(id))'),('nulls_not_distinct','CREATE UNIQUE INDEX idx_quotations_id_unique ON quotations(id) NULLS NOT DISTINCT')]:
+       owned_schema='phase1_index_'+secrets.token_hex(8)
+       sql('CREATE SCHEMA '+owned_schema+'; SET search_path TO '+owned_schema+"; CREATE TABLE quotations(quotation_id text PRIMARY KEY,id text,artwork_url text,digital_proof_url text); INSERT INTO quotations VALUES('owned-legacy','owned-id','/owned/original.pdf','/owned/proof.pdf'); "+(index_ddl+';' if index_ddl else ''))
+       snapshot=sql('SELECT row_to_json(q)::text FROM '+owned_schema+'.quotations q')
+       query='BEGIN; SET LOCAL search_path TO '+owned_schema+'; '+migration045+' COMMIT;'
+       checked=run(base+['exec','-T','fixture-db','psql','-v','ON_ERROR_STOP=1','-U','fixture','-d','somsing_fixture_db','-Atc',query],False)
+       if index_ddl:
+        assert checked.returncode!=0 and 'conflicting named index definition' in checked.stderr,label
+       else:
+        assert checked.returncode==0,checked.stderr
+        sql(query)
+       assert sql('SELECT row_to_json(q)::text FROM '+owned_schema+'.quotations q')==snapshot
+       sql('DROP SCHEMA '+owned_schema+' CASCADE')
+       runtime_results.append({'case':'index_definition_'+label,'accepted':not bool(index_ddl),'rows_references_preserved':True})
+      sql("INSERT INTO quotations(id,quotation_no,customer_name,total_cost,total_selling_price,items_json,artwork_url,digital_proof_url) VALUES('fixture-runtime-legacy','QT-OWNED-LEGACY','Owned Legacy',12.34,56.78,'[]','/owned/original.pdf','/owned/proof.pdf')")
+      quotation_status,quotation_body=http(origin,'/api/v1/quotations',token=token)
+      legacy_read=next(q for q in quotation_body if q['id']=='fixture-runtime-legacy')
+      assert quotation_status==200 and legacy_read['artwork_url']=='/owned/original.pdf' and legacy_read['digital_proof_url']=='/owned/proof.pdf'
+      mutation_query="SELECT json_build_object('quotations',(SELECT count(*) FROM quotations),'customers',(SELECT count(*) FROM customers),'audits',(SELECT count(*) FROM audit_logs))::text"
+      before_write=sql(mutation_query)
+      write_status,write_body=http(origin,'/api/v1/quotations',body={'id':'fixture-runtime-write','customer_name':'Owned Runtime Write','customer_phone':'owned-runtime-phone','artwork_url':'/owned/new-original.pdf','digital_proof_url':'/owned/new-proof.pdf','items':[]},token=token)
+      after_write=sql(mutation_query)
+      if write_status!=200:assert before_write==after_write,'Failed quotation write mutated owned data'
+      else:
+       assert write_body['committed'] is True
+       assert sql("SELECT artwork_url||'|'||digital_proof_url FROM quotations WHERE id='fixture-runtime-write'")=='/owned/new-original.pdf|/owned/new-proof.pdf'
+      update_status=None
+      if write_status==200:
+       update_status,update_body=http(origin,'/api/v1/quotations/fixture-runtime-write',body={'id':'fixture-runtime-write','customer_name':'Owned Runtime Write','customer_phone':'owned-runtime-phone','title':'Owned updated title','artwork_url':'/owned/new-original.pdf','digital_proof_url':'/owned/new-proof.pdf','items':[]},token=token,method='PUT')
+       if update_status==200:
+        assert update_body['committed'] is True
+        assert sql("SELECT count(*) FROM quotations WHERE id='fixture-runtime-write'")=='1'
+        assert sql("SELECT count(*) FROM audit_logs WHERE resource_id='fixture-runtime-write'")=='2'
+        assert sql("SELECT count(*) FROM customers WHERE phone='owned-runtime-phone'")=='1'
+        assert sql("SELECT total_orders_count FROM customers WHERE phone='owned-runtime-phone'")=='2'
+        assert sql("SELECT title||'|'||artwork_url||'|'||digital_proof_url FROM quotations WHERE id='fixture-runtime-write'")=='Owned updated title|/owned/new-original.pdf|/owned/new-proof.pdf'
+       runtime_results.append({'case':'quotation_update','http_status':update_status,'response':update_body,'single_row':update_status==200,'audit_records':2 if update_status==200 else None,'matched_customer_rows':1 if update_status==200 else None,'customer_order_counter_observed':2 if update_status==200 else None})
+      runtime_results.append({'case':'quotation_write','http_status':write_status,'response':write_body,'failed_write_rollback':before_write==after_write if write_status!=200 else None,'before_counts':json.loads(before_write),'after_counts':json.loads(after_write)})
+      assert http(origin,'/api/v1/auth/login',{'username':'fixture_runtime_admin','password':'wrong-fixture-only'})[0]==401
+      runtime_results.append({'case':'success','container':cid,'health':health,'tracked_migrations':46,'bcrypt_login':200,'anonymous_read':401,'authenticated_admin_read':authenticated_status,'quotation_read':quotation_status,'quotation_response':quotation_body,'wrong_password':401,'production_environment':True})
+      logs=run(['docker','logs',cid]);print('STARTUP_LOG_JSON '+json.dumps({'case':'success_after_requests','text':logs.stdout+logs.stderr}),flush=True)
+      sql("INSERT INTO quotations(customer_name,artwork_url,digital_proof_url,items_json) VALUES('Owned NULL A','/owned/null-a.pdf','/owned/null-a-proof.pdf','[]'),('Owned NULL B','/owned/null-b.pdf','/owned/null-b-proof.pdf','[]')")
+      run(['docker','stop','-t','2',cid]);run(['docker','rm',cid]);case_ids.remove(cid)
+      ledger_before=sql('SELECT json_agg(row_to_json(m) ORDER BY version)::text FROM schema_migrations m')
+      row_before=sql("SELECT json_agg(row_to_json(q) ORDER BY quotation_id)::text FROM quotations q")
+      cid,origin=launch('repeat');deadline=time.monotonic()+30;repeat_health=None
+      while time.monotonic()<deadline:
+       if run(['docker','inspect',cid,'--format','{{.State.Running}}']).stdout.strip()!='true':break
+       try:
+        repeat_status,repeat_health=http(origin,'/health')
+        if repeat_status==200 and repeat_health.get('database')=='connected':break
+       except (OSError,ValueError):pass
+       time.sleep(.1)
+      assert repeat_health and repeat_status==200 and repeat_health['database']=='connected'
+      readback_status,readback=http(origin,'/api/v1/quotations',token=token);assert readback_status==200
+      if write_status==200 and update_status==200:
+       saved=next(q for q in readback if q['id']=='fixture-runtime-write')
+       assert saved['title']=='Owned updated title' and saved['artwork_url']=='/owned/new-original.pdf' and saved['digital_proof_url']=='/owned/new-proof.pdf' and saved['committed'] is True
+      assert sql('SELECT json_agg(row_to_json(m) ORDER BY version)::text FROM schema_migrations m')==ledger_before
+      assert sql("SELECT json_agg(row_to_json(q) ORDER BY quotation_id)::text FROM quotations q")==row_before
+      assert sql('SELECT count(*) FROM quotations WHERE id IS NULL')=='2'
+      logs=run(['docker','logs',cid]);raw=logs.stdout+logs.stderr;print('STARTUP_LOG_JSON '+json.dumps({'case':'repeat','text':raw}),flush=True)
+      assert '(applied: 0, baselined: 0)' in raw
+      runtime_results.append({'case':'repeat','container':cid,'health':repeat_health,'migration_ledger_timestamps_unchanged':True,'legacy_row_references_unchanged':True,'multiple_null_ids_preserved':2,'created_updated_rows_preserved':True,'quotation_read':200,'applied':0,'baselined':0})
+      run(['docker','stop','-t','2',cid]);run(['docker','rm',cid]);case_ids.remove(cid)
+      # Actual migration runner must refuse duplicate IDs, leaving no045 success.
+      for label,value in [('duplicate_nonnull','owned-duplicate'),('duplicate_empty','')]:
+       sql("DROP INDEX IF EXISTS idx_quotations_id_unique; DELETE FROM schema_migrations WHERE version='045_quotation_id_uniqueness.sql'; INSERT INTO quotations(id,customer_name,artwork_url,digital_proof_url,items_json) VALUES('"+value+"','Owned duplicate A','/owned/a.pdf','/owned/a-proof.pdf','[]'),('"+value+"','Owned duplicate B','/owned/b.pdf','/owned/b-proof.pdf','[]')")
+       duplicate_rows=sql('SELECT json_agg(row_to_json(q) ORDER BY quotation_id)::text FROM quotations q')
+       duplicate_ledger=sql('SELECT json_agg(row_to_json(m) ORDER BY version)::text FROM schema_migrations m')
+       cid,origin=launch(label);deadline=time.monotonic()+15;served=False
+       while time.monotonic()<deadline:
+        try:http(origin,'/health');served=True
+        except (OSError,ValueError):pass
+        state=json.loads(run(['docker','inspect',cid]).stdout)[0]['State']
+        if not state['Running']:break
+        time.sleep(.1)
+       logs=run(['docker','logs',cid]);raw=logs.stdout+logs.stderr;print('STARTUP_LOG_JSON '+json.dumps({'case':label,'text':raw}),flush=True)
+       assert not state['Running'] and state['ExitCode']!=0 and not served
+       assert 'duplicate non-NULL ids require explicit review' in raw
+       assert 'Starting Go server' not in raw and '[PPM CRON]' not in raw
+       assert sql('SELECT json_agg(row_to_json(q) ORDER BY quotation_id)::text FROM quotations q')==duplicate_rows
+       assert sql('SELECT json_agg(row_to_json(m) ORDER BY version)::text FROM schema_migrations m')==duplicate_ledger
+       assert sql("SELECT count(*) FROM schema_migrations WHERE version='045_quotation_id_uniqueness.sql'")=='0'
+       assert sql("SELECT to_regclass('idx_quotations_id_unique') IS NULL")=='t'
+       runtime_results.append({'case':label,'exit_code':state['ExitCode'],'health_served':served,'rows_references_unchanged':True,'ledger_unchanged':True,'migration045_recorded':False,'unique_index_created':False})
+       run(['docker','rm',cid]);case_ids.remove(cid)
+       sql("DELETE FROM quotations WHERE customer_name IN ('Owned duplicate A','Owned duplicate B')")
+      sql('CREATE SCHEMA '+schema)
+      for label,dsn,key,missing in [('unavailable_db',default_dsn.replace(':5432/',':65432/'),'Fixture-runtime-only-strong-signed-key-32chars',False),('migration_failure',default_dsn,'Fixture-runtime-only-strong-signed-key-32chars',True),('unsafe_jwt',default_dsn,'weak-fixture',False)]:
+       if missing:sql('ALTER DATABASE somsing_fixture_db SET search_path TO '+schema)
+       cid,origin=launch(label,dsn,key,missing);deadline=time.monotonic()+15;served=False
+       while time.monotonic()<deadline:
+        try:
+         http(origin,'/health');served=True
+        except (OSError,ValueError):pass
+        state=json.loads(run(['docker','inspect',cid]).stdout)[0]['State']
+        if not state['Running']:break
+        time.sleep(.1)
+       logs=run(['docker','logs',cid]);raw=logs.stdout+logs.stderr;print('STARTUP_LOG_JSON '+json.dumps({'case':label,'text':raw}),flush=True)
+       assert not state['Running'] and state['ExitCode']!=0 and not served,label+' did not fail closed'
+       assert 'Starting Go server' not in raw and '[PPM CRON]' not in raw,label+' reached post-initialization effects'
+       if label=='migration_failure':assert '[DB MIGRATION INCOMPLETE]' in raw
+       if label=='unsafe_jwt':assert '[SECURITY]' in raw and '[DB SUCCESS]' not in raw
+       runtime_results.append({'case':label,'container':cid,'exit_code':state['ExitCode'],'health_served':served,'server_start_marker':False,'cron_start_marker':False})
+       run(['docker','rm',cid]);case_ids.remove(cid)
+       if missing:sql('ALTER DATABASE somsing_fixture_db RESET search_path')
+      print('STARTUP_RESULTS_JSON '+json.dumps({'image_id':image_id,'network':network,'internal_only':True,'provider_credentials':False,'cases':runtime_results}),flush=True)
+     finally:
+      for cid in case_ids:
+       run(['docker','stop','-t','1',cid],False);run(['docker','rm',cid])
+      sql('ALTER DATABASE somsing_fixture_db RESET search_path; DROP SCHEMA IF EXISTS '+schema+' CASCADE')
+      if db_connected:run(['docker','network','disconnect',network,db_id])
+      if network_created:
+       run(['docker','network','rm',network]);assert run(['docker','network','inspect',network],False).returncode!=0
+     print('STARTUP_CHECK PASS owned runtime containers/network/storage cleaned; actual production CMD cases complete',flush=True)
+     assert quotation_status==200 and write_status==200 and update_status==200,'Actual quotation contract failed; see captured status/logs; further production correction requires approval'
+    else:
+     command=[sys.executable,str(backend/'tests/run-phase1.py'),'--fixture-dsn','postgres://fixture:fixture-only-not-a-shop-secret@127.0.0.1:55432/somsing_fixture_db?sslmode=disable&connect_timeout=5','--packaged-migrations-dir',str(extracted/'migrations')]
+     subprocess.run(command,cwd=repo,env=env,check=True)
    finally:
     if container_id:run(['docker','rm',container_id])
     if run(['docker','image','inspect',tag],False).returncode==0:run(['docker','image','rm',tag])

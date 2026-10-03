@@ -33,7 +33,7 @@ Antigravity พัฒนา; Codex ตรวจรับ ไม่ต้อง s
 
 | เฟส | งานย่อยตามลำดับ | Outcome | Status |
 |---|---|---|---|
-| [Phase 1](TASK_PHASE_01_SECURITY.md) | P1.1 → P1.2 → P1.3 | Production ปฏิเสธผู้ไม่มีสิทธิ์และการตรวจเงินที่ยืนยันไม่ได้ พร้อมฐานข้อมูลทดสอบแยก | implementing |
+| [Phase 1](TASK_PHASE_01_SECURITY.md) | P1.1 → P1.2 → P1.3 | Production ปฏิเสธผู้ไม่มีสิทธิ์และการตรวจเงินที่ยืนยันไม่ได้ พร้อมฐานข้อมูลทดสอบแยก | verified |
 | [Phase 2](TASK_PHASE_02_DATA_PERSISTENCE.md) | P2.1 → P2.2 → P2.3 | UI แสดงข้อมูล authoritative และ success เฉพาะเมื่อเซิร์ฟเวอร์บันทึกแล้ว | planned |
 | [Phase 3](TASK_PHASE_03_BUSINESS_FLOWS.md) | P3.1 → P3.2 → P3.3 | สอง business flows ทำงานแบบ atomic/idempotent และรายงานตรงรายการต้นทาง | planned |
 | [Phase 4](TASK_PHASE_04_UNIVERSAL_UX.md) | P4.1 → P4.2 | Daily Plan ใช้ฟอร์มร่วม วัน/ขั้นงาน/ข้อความตรงความจริงทุกหน้า | planned |
@@ -334,3 +334,5 @@ Architecture: feature-local frontend behavior, common reusable UI; existing back
 Latest frontend delivery Oct2 23:00: original full selected-child spec editor restored; shared/separate photo layout uses actual geometry and existing price units; 57/57 scoped tests, 98/98 client/exporter, typecheck/tempbuild PASS. Mixed photo-setting conversion explicitly held for grouped production/stock contract support. Status ready_for_review; native browser/actual DB/print fidelity/latency NOT VERIFIED. See latest Phase01/P1.2 handoff delivery; five phases/14 tasks unchanged, no P1.3 release.
 
 Latest frontend correction Oct2 23:31 supersedes photo canvas/group UI: 1-CLICK strip removed; simple multi-image switch reuses original numeric yield path with exact OFF price parity. Actual Orders B/C reception+production fail-before traced to undefined orderNo alias matching; ID-first guarded lookup fixes presentation and exact originals survive navigation/reload. 54/54 scoped cases,98/98client-exporter,typecheck/tempbuild PASS. Ready_for_review; P1.2 NOT VERIFIED; native browser/actual DB/history recovery/print fidelity NOT VERIFIED. See latest Phase01/handoff evidence; five phases14tasks unchanged.
+
+Final acceptance 2026-10-04: Phase1 VERIFIED by root after independentQA and manager completeness. See Phase1 final acceptance section. Phase2 remains planned; no automatic next-phase/deployment authorization.

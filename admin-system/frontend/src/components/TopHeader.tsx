@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '@store/AppContext';
 import { useAuthStore } from '@store/useAuthStore';
 import { useTranslation } from 'react-i18next';
@@ -45,6 +45,18 @@ export default function TopHeader({ onToggleMobileSidebar, collapsed, onToggleCo
   } = useApp();
 
   const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+  const profileTriggerRef = useRef<HTMLButtonElement>(null);
+  const logoutRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!profileOpen) return;
+    logoutRef.current?.focus();
+    const outside = (event: PointerEvent) => {
+      if (!profileRef.current?.contains(event.target as Node)) setProfileOpen(false);
+    };
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, [profileOpen]);
   const [isAlertDismissed, setIsAlertDismissed] = useState(false);
   const [isAlertExpanded, setIsAlertExpanded] = useState(false);
   const { i18n } = useTranslation();
@@ -245,8 +257,10 @@ export default function TopHeader({ onToggleMobileSidebar, collapsed, onToggleCo
           </button>
 
           {/* Profile Dropdown */}
-          <div className="relative">
-            <button
+          <div ref={profileRef} className="relative" onKeyDown={event => {
+            if (event.key === 'Escape') { event.preventDefault(); setProfileOpen(false); profileTriggerRef.current?.focus(); }
+          }} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setProfileOpen(false); }}>
+            <button ref={profileTriggerRef} type="button" aria-expanded={profileOpen} aria-controls="authenticated-profile" aria-label="ໂປຣໄຟລ໌ຜູ້ໃຊ້"
               onClick={() => setProfileOpen(!profileOpen)}
               className={`flex items-center gap-2 p-1.5 pr-2.5 rounded-2xl transition cursor-pointer border ${
                 isDarkNav
@@ -258,59 +272,21 @@ export default function TopHeader({ onToggleMobileSidebar, collapsed, onToggleCo
                 {user?.username ? user.username.substring(0, 2).toUpperCase() : 'SP'}
               </div>
               <div className="text-left hidden xl:block">
-                <div className={`text-xs font-bold leading-tight truncate max-w-[180px] ${isDarkNav ? 'text-slate-200' : 'text-slate-800'}`}>{user?.fullName || 'Owner'}</div>
+                <div className={`text-xs font-bold leading-tight truncate max-w-[180px] ${isDarkNav ? 'text-slate-200' : 'text-slate-800'}`}>{user?.fullName || user?.username || 'ຜູ້ໃຊ້'}</div>
               </div>
             </button>
 
           {profileOpen && (
-            <div className="absolute right-0 mt-2 w-72 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-4 space-y-3 z-[100] animate-fade-in text-white">
+            <div id="authenticated-profile" className="absolute right-0 mt-2 w-72 max-w-[calc(100vw-1rem)] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-4 space-y-3 z-[100] animate-fade-in text-white">
               <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white font-black text-xs flex items-center justify-center shadow-md">
                   {user?.username ? user.username.substring(0, 2).toUpperCase() : 'SP'}
                 </div>
                 <div>
-                  <div className="text-xs font-black text-white">{user?.fullName || 'ຮ້ານ ສົມສິ່ງພິມ'}</div>
+                  <div className="text-xs font-black text-white">{user?.fullName || user?.username || 'ຜູ້ໃຊ້'}</div>
                   <span className="inline-block mt-0.5 px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold rounded-md border border-emerald-500/30">
-                    {user?.role === 'owner' || user?.role === 'admin'
-                      ? 'ເຈົ້າຂອງຮ້ານ (Owner)'
-                      : user?.role === 'sales'
-                      ? 'ພະນັກງານຂາຍ (Sales)'
-                      : user?.role === 'production'
-                      ? 'ຊ່າງພິມ (Operator)'
-                      : user?.role === 'accountant'
-                      ? 'ພະນັກງານບັນຊີ (Accountant)'
-                      : user?.role?.toUpperCase() || 'SUPER ADMIN'}
+                    {user?.role || 'ບໍ່ລະບຸບົດບາດ'}
                   </span>
-                </div>
-              </div>
-
-              {/* Role Switcher for Verification & Simulation */}
-              <div className="space-y-1.5 pt-1">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                  {currentLang === 'en' ? 'Switch Role (Simulation)' : 'ສະຫຼັບບົດບາດ (Role Switcher)'}
-                </span>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {[
-                    { id: 'owner', label: 'Owner' },
-                    { id: 'sales', label: 'Sales' },
-                    { id: 'production', label: 'Operator' },
-                    { id: 'accountant', label: 'Accountant' }
-                  ].map((r) => (
-                    <button
-                      key={r.id}
-                      type="button"
-                      onClick={() => {
-                        useAuthStore.getState().setUserRole(r.id);
-                      }}
-                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold transition text-center cursor-pointer ${
-                        user?.role === r.id
-                          ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/50'
-                          : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-transparent'
-                      }`}
-                    >
-                      {r.label}
-                    </button>
-                  ))}
                 </div>
               </div>
 
@@ -325,7 +301,7 @@ export default function TopHeader({ onToggleMobileSidebar, collapsed, onToggleCo
                 <span>{currentLang === 'en' ? 'Settings & Profile' : 'ຕັ້ງຄ່າລະບົບ & ໂປຣໄຟລ໌'}</span>
               </button>
 
-              <button
+              <button ref={logoutRef} type="button"
                 onClick={() => {
                   if (window.confirm(currentLang === 'en' ? 'Are you sure you want to sign out?' : 'ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການອອກຈາກລະບົບ?')) {
                     setProfileOpen(false);

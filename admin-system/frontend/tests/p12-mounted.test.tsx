@@ -1,3 +1,7 @@
+import TopHeader from '../src/components/TopHeader';
+import Sidebar from '../src/components/Sidebar';
+import { ProtectedRoute } from '../src/components/ProtectedRoute';
+import '../src/i18n';
 import { writeFileSync } from 'node:fs';
 import { Blob as NodeBlob } from 'node:buffer';
 import { createCanvas, DOMMatrix, Path2D, ImageData } from '@napi-rs/canvas';
@@ -1612,4 +1616,80 @@ test('N1 production gallery keyboard journey restores live gallery control after
     expect(document.querySelector('[role="dialog"]')).toBeNull(); expect(document.activeElement).toBe(gallery); expect(gallery.isConnected).toBe(true);
     expect(document.querySelector('button[title="gallery-second.png"]')?.className).toContain('border-sky-500');
   }
+});
+
+
+test('FILE normal quotation history buttons confirm canonical Pending conversion, retain HTTP500 retry and original linkage', async () => {
+  const unregister = authorize(token); const dispatcher = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const quote = { ...conversionFixture(), status: 'Pending' }; let committed = false; let fail = true; const requests: any[] = []; const onConverted = vi.fn();
+  let app: ReturnType<typeof useApp>;
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input), origin).pathname;
+    if (path === '/api/v1/quotations' && !init?.method) return new Response(JSON.stringify([{ ...quote, status: committed ? 'CONVERTED' : 'Pending', convertedOrderId: committed ? 'canonical-order' : undefined }]));
+    if (path === `/api/v1/quotations/${quote.id}/convert` && init?.method === 'POST') {
+      expect(new Headers(init.headers).get('Authorization')).toBe(`Bearer ${token}`);
+      expect(new Headers(init.headers).get('Idempotency-Key')).toBe(`quotation-conversion:${quote.id}`);
+      requests.push(JSON.parse(String(init.body)));
+      if (fail) return new Response('{}', { status: 500 });
+      committed = true; return new Response(JSON.stringify(conversionReply(quote)), { status: 201 });
+    }
+    return dispatcher(input, init);
+  });
+  function Journey() {
+    app = useApp();
+    return <><QuotationManager onConvertToOrder={onConverted} />
+      {app.confirmDialog && <section role="dialog" aria-label="Fixture confirmation"><p>{app.confirmDialog.message}</p><button onClick={app.confirmDialog.onCancel}>ຍົກເລີກ</button><button onClick={app.confirmDialog.onConfirm}>ຢືນຢັນ</button></section>}
+    </>;
+  }
+  const convert = () => buttonText('ປ່ຽນເປັນອໍເດີ →');
+  const confirm = () => document.querySelector('[aria-label="Fixture confirmation"] button:last-child')!;
+  try {
+    await render(<AppProvider><Journey /></AppProvider>); await until(() => app!.quotations[0]?.total_selling_price === 2600);
+    await click(byTitle('ປະຫວັດໃບສະເໜີ')); expect(convert()).toBeTruthy();
+    const previous = structuredClone(app!.orders);
+    await click(convert()); expect(requests).toHaveLength(0); await click(confirm()); await until(() => requests.length === 1 && app!.toast?.type === 'error');
+    expect(app!.orders).toEqual(previous); expect(app!.quotations[0].status).toBe('Pending'); expect(onConverted).not.toHaveBeenCalled(); expect(convert()).toBeTruthy();
+    fail = false; await click(convert()); await click(confirm()); await until(() => onConverted.mock.calls.length === 1);
+    expect(requests).toHaveLength(2); expect(requests[0]).toEqual({ expected_updated_at: quote.updated_at, expected_total_selling_price: 2600 }); expect(requests[1]).toEqual(requests[0]);
+    expect(onConverted).toHaveBeenCalledWith({ orderId: 'canonical-order', sourceQuotationId: quote.id });
+    const order = app!.orders.find(order => order.id === 'canonical-order')!;
+    expect(app!.orders.filter(order => order.id === 'canonical-order')).toHaveLength(1); expect(order.totalPriceCharged).toBe(2600); expect(order.total_cost).toBe(1500); expect(order.depositAmountPaid).toBe(0); expect(order.remainingUnpaidBalance).toBe(2600);
+    expect(order.items[0].artworkUrl).toBe(quote.items[0].artwork_url); expect(order.items[0].artworkFileName).toBe('fixture-original.pdf'); expect(order.items[0].artworkFileSize).toBe(123);
+    expect(app!.quotations[0].status).toBe('CONVERTED'); expect(document.body.textContent).toContain('canonical-order'); expect(Array.from(document.querySelectorAll('button')).some(button => button.textContent?.trim() === 'ປ່ຽນເປັນອໍເດີ →')).toBe(false);
+  } finally { unregister(); }
+});
+
+
+test('P2-PROFILE actual header/sidebar retain persisted identity, expose one logout, close by keyboard and clear credentials', async () => {
+  const previous = useAuthStore.getState(); const user = { username: 'fixture_admin', fullName: 'Disposable authenticated admin', role: 'admin' };
+  useAuthStore.getState().login(token, user, true, 'disposable-refresh');
+  const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  function Journey() {
+    const [open, setOpen] = React.useState(false);
+    return <AppProvider><ProtectedRoute><TopHeader collapsed={false} onToggleCollapse={() => {}} onToggleMobileSidebar={() => setOpen(!open)} /><Sidebar sidebarOpen={open} setSidebarOpen={setOpen} collapsed={false} setCollapsed={() => {}} /><p>Private fixture content</p></ProtectedRoute></AppProvider>;
+  }
+  try {
+    await render(<Journey />);
+    const trigger = () => document.querySelector('button[aria-label="ໂປຣໄຟລ໌ຜູ້ໃຊ້"]') as HTMLButtonElement;
+    expect(trigger()).toBeTruthy(); expect(trigger().className).not.toMatch(/hidden/);
+    trigger().focus(); trigger().focus(); await click(trigger());
+    let dropdown = document.getElementById('authenticated-profile')!;
+    expect(dropdown.textContent).toContain(user.fullName); expect(dropdown.textContent).toContain('admin'); expect(dropdown.textContent).not.toContain('Owner');
+    expect(dropdown.querySelectorAll('button')).toHaveLength(2); expect(document.activeElement).toBe(dropdown.querySelector('button:last-child'));
+    expect(document.querySelectorAll('button[title="ອອກຈາກລະບົບ"]')).toHaveLength(0); expect(document.body.textContent).not.toContain('Role Switcher'); expect(document.body.textContent).not.toContain('Switch Role'); expect(useAuthStore.getState()).not.toHaveProperty('setUserRole');
+    expect(Array.from(document.querySelectorAll('aside button')).some(button => button.textContent?.includes('ຕັ້ງຄ່າລະບົບ'))).toBe(true);
+    await act(async () => document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(document.getElementById('authenticated-profile')).toBeNull(); expect(document.activeElement).toBe(trigger());
+    trigger().focus(); await click(trigger()); await act(async () => document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))); expect(document.getElementById('authenticated-profile')).toBeNull();
+    await act(async () => useAuthStore.persist.rehydrate()); expect(useAuthStore.getState().user).toEqual(user); expect(useAuthStore.getState().token).toBe(token);
+    trigger().focus(); await click(trigger()); dropdown = document.getElementById('authenticated-profile')!;
+    await click(dropdown.querySelector('button:last-child')!); expect(useAuthStore.getState().isAuthenticated).toBe(true);
+    await click(dropdown.querySelector('button')!); expect(document.getElementById('authenticated-profile')).toBeNull(); expect(document.querySelector('header')?.textContent).toContain('ຕັ້ງຄ່າລະບົບ');
+    trigger().focus(); await click(trigger()); dropdown = document.getElementById('authenticated-profile')!;
+    confirmation.mockReturnValue(true); await click(dropdown.querySelector('button:last-child')!);
+    expect(useAuthStore.getState().user).toBeNull(); expect(useAuthStore.getState().token).toBeNull(); expect(useAuthStore.getState().refreshToken).toBeNull(); expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    for (const key of ['token', 'refresh_token', 'auth-storage']) expect(localStorage.getItem(key)).toBeNull(); expect(sessionStorage.getItem('auth-storage')).toBeNull();
+    expect(document.body.textContent).not.toContain('Private fixture content'); expect(trigger()).toBeNull(); expect(document.querySelector('input[type="password"]')).toBeTruthy();
+    const denied = await realFetch(`${origin}/uploads/artworks/sample_document.pdf`); expect([401,403]).toContain(denied.status);
+  } finally { useAuthStore.setState(previous); }
 });

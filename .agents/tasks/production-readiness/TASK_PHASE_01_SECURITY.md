@@ -1,6 +1,6 @@
 # Phase 1 — Authentication, private files และ safe test environment
 
-Status: planned | Developer: Antigravity | Independent reviewer: Codex
+Status: verified | Developer: project frontend/backend team | Independent reviewer: Codex
 
 **Outcome:** Production ปฏิเสธผู้ไม่มีสิทธิ์และการตรวจเงินที่ยืนยันไม่ได้ พร้อมฐานข้อมูลทดสอบแยก
 
@@ -11,8 +11,8 @@ Status: planned | Developer: Antigravity | Independent reviewer: Codex
 | งาน | โมเดลหลัก | โมเดลสำรอง | Primary skill | Status |
 |---|---|---|---|---|
 | P1.1 ปิด authentication/authorization bypass | Claude Opus 4.6 (Thinking) | Gemini 3.1 Pro High | somsing-security-specialist | verified |
-| P1.2 Private artwork และ upload validation | Claude Opus 4.6 (Thinking) | Gemini 3.1 Pro High | somsing-security-specialist | changes_requested |
-| P1.3 Slip fail closed และ isolated integration harness | Gemini 3.1 Pro High | Claude Opus 4.6 (Thinking) | backend-developer | planned |
+| P1.2 Private artwork และ upload validation | Claude Opus 4.6 (Thinking) | Gemini 3.1 Pro High | somsing-security-specialist | verified |
+| P1.3 Slip fail closed และ isolated integration harness | Gemini 3.1 Pro High | Claude Opus 4.6 (Thinking) | backend-developer | verified |
 
 ## P1.1 — ปิด authentication/authorization bypass
 
@@ -991,3 +991,11 @@ Existing shared viewer/export shell focus containment/initialfocus/invoker resto
 
 ### N1 production-gallery caller residual — 2026-10-03
 Existing ArtworkPreviewCard persistent gallery trigger becomes live return-focus target before gallery thumbnail unmount/viewer open; shared shell/N2 unchanged.8 scoped caller checks PASS,112 explicitlyfiltered;tsc/diffcheck PASS. Frozen2-path manifestd5575a23c9796415fb6cb4a2a9d00486ad3a80ae1e7cab393cf91bb7c2232808 and report /Users/joun/Documents/ChatGPT/Som-sing-phim/frontend-phase1/gallery-focus-delivery.md. Direct QA native recheck pending; ready_for_review not Phase1verified. No formulas/originals/module/schema/API changes; no unrelated solved fullsuite rerun.
+
+### FILE final-acceptance normal-history readiness — 2026-10-03
+Actual connected normal QuotationManager/history/confirmation already available; QA identifies native evidence gap, no observed UIdefect. No production/shared-runtime changes needed. Added existing mounted visiblehistorybutton confirmation500/retry/canonicalamount/originalmetadata case;2focusedPASS/119filtered, existingnativeentrybuild/tsc/diffcheckPASS. Frozen11input manifest2e6c2ed85014e15db51ae9c7c2996356086cc9d0bb3f65ab0dfc4bdd5fe58cf0 and report /Users/joun/Documents/ChatGPT/Som-sing-phim/frontend-phase1/history-ui-readiness-delivery.md deliveredDIRECTQA; native ordinaryhistory proofpending, retained assisted3page chain preserved. No shop/formula/API/schema/Phase2/deploy; ready_for_review only.
+
+## Final root acceptance — 2026-10-04 Asia/Vientiane
+Original Phase1 P1.1/P1.2/P1.3 and human-approved START gate: VERIFIED within documented evidence scopes. Root reviewed qa-phase1/final-original-phase1-review.md and final-original-acceptance-map.md, independently recomputed98 joinedBE/FEsource hashes with zero drift, and received one read-only delivery-manager completeness recommendation with no required blocker. Latest independent canonical production-image16cases cover46registeredSQL/fresh/repeat/signedcreate-update-read/processrestart/legacyNULL/reference preservation/duplicate and conflictingindex rejection/startupdenials. Actual normal quotation-history visibleconversion/confirmation/lostcommittedresponse/samebuttonretry produces exactlyoneorder, canonicalmoney and original3pageviewer/restartlinkage. OriginalAUTH/FILE/PAY proofs including strengthenedoversize and all3isolatedliveDBtests retained at their exact scopes. Approved044/045 supersede historical quotation read/write blockers.
+Evidence root: /Users/joun/Documents/ChatGPT/Som-sing-phim/qa-phase1/. Reports above plus final-045-independent-results.json, final-history-native-result.json and cleanup/integrity records. Root inspected reports/results; QA performed independent runtime tests, not rerun by root.
+NoPhase2/deploy/commit/push/live-shop upgrade authorized. IABdownloadbytes,truezero modal, live-shop/fullshopbrowser upgrade,backup,performance,liveGateway remain explicit later/separate limits, not certified. Existing historical checkboxes/reviews remain historical; this final decision supersedes pending states for required original criteria only.

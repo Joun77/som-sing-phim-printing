@@ -14,7 +14,6 @@ import {
   User, 
   Users, 
   Coins, 
-  LogOut, 
   Globe, 
   ExternalLink, 
   Calculator,
@@ -391,24 +390,16 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, setCol
             </div>
             {!collapsed && (
               <div className="min-w-0">
-                <div className="text-xs font-black text-white truncate">{user?.fullName || 'ສົມສິ່ງພິມ (Owner)'}</div>
+                <div className="text-xs font-black text-white truncate">{user?.fullName || user?.username || 'ຜູ້ໃຊ້'}</div>
                 <div className="text-[10px] font-bold text-emerald-400 flex items-center gap-1 truncate">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                  {user?.role ? user.role.toUpperCase() : 'SUPER ADMIN'}
+                  {user?.role || 'ບໍ່ລະບຸບົດບາດ'}
                 </div>
               </div>
             )}
           </div>
 
-          {!collapsed && (
-            <button
-              onClick={() => useAuthStore.getState().logout()}
-              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
-              title={currentLang === 'en' ? 'Log Out' : 'ອອກຈາກລະບົບ'}
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          )}
+
         </div>
       </div>
     </aside>

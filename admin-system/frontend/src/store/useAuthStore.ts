@@ -17,7 +17,6 @@ interface AuthState {
   isRefreshing: boolean;
   login: (token: string, user: UserProfile, rememberMe: boolean, refreshToken?: string) => void;
   silentRefreshToken: () => Promise<string | null>;
-  setUserRole: (role: string) => void;
   logout: () => void;
 }
 
@@ -110,29 +109,6 @@ export const useAuthStore = create<AuthState>()(
           // Network error — do not logout (user might be offline), but return null so caller skips retry
           set({ isRefreshing: false });
           return null;
-        }
-      },
-
-      setUserRole: (newRole: string) => {
-        const current = get().user;
-        if (current) {
-          const roleLabels: Record<string, string> = {
-            owner: 'ສົມສິ່ງພິມ (Owner)',
-            admin: 'ສົມສິ່ງພິມ (Super Admin)',
-            manager: 'ຜູ້ຈັດການທົ່ວໄປ (General Manager)',
-            prepress: 'ກຽມໄຟລ໌ພິມ (Prepress Specialist)',
-            sales: 'ພະນັກງານຂາຍ (Sales)',
-            production: 'ຊ່າງພິມ (Operator)',
-            finance: 'ພະນັກງານບັນຊີ (Finance)',
-            accountant: 'ພະນັກງານບັນຊີ (Accountant)'
-          };
-          set({
-            user: {
-              ...current,
-              role: newRole,
-              fullName: roleLabels[newRole] || current.fullName
-            }
-          });
         }
       },
 
