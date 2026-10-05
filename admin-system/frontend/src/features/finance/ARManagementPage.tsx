@@ -1,3 +1,5 @@
+import { apiFetch } from '../../api/client';
+import { useApp } from '../../store/AppContext';
 import React, { useState, useEffect } from 'react';
 import { 
   Users, 
@@ -21,6 +23,9 @@ interface ARAgingItem {
 }
 
 export const ARManagementPage: React.FC = () => {
+  const { orders, settleOrderBalance, showToast } = useApp();
+  const [selectedOrderId, setSelectedOrderId] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [arList, setArList] = useState<ARAgingItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -28,19 +33,19 @@ export const ARManagementPage: React.FC = () => {
   // Payment Modal State
   const [selectedCustomer, setSelectedCustomer] = useState<ARAgingItem | null>(null);
   const [payAmount, setPayAmount] = useState<number | string>('');
-  const [paymentMethod, setPaymentMethod] = useState('BCEL Transfer');
+  const eligibleOrders = orders.filter(order => selectedCustomer && String(order.customer_id ?? order.customerId ?? '') === selectedCustomer.customer_id && Number(order.remaining_lak ?? order.remainingUnpaidBalance) > 0);
   const [recording, setRecording] = useState(false);
 
   const loadAR = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/finance/ar');
-      if (res.ok) {
-        const json = await res.json();
-        setArList(json.data || []);
-      }
+      const res = await apiFetch('/api/v1/finance/ar');
+      const json = await res.json();
+      if (!res.ok || json?.status !== 'success' || !Array.isArray(json.data)) throw new Error('ບໍ່ສາມາດໂຫຼດລູກໜີ້ໄດ້');
+      setArList(json.data);
+      setError(null);
     } catch (err) {
-      console.error('Failed to load AR aging:', err);
+      setError('ບໍ່ສາມາດໂຫຼດລູກໜີ້ໄດ້. ກະລຸນາລອງໃໝ່');
     } finally {
       setLoading(false);
     }
@@ -65,18 +70,15 @@ export const ARManagementPage: React.FC = () => {
 
     setRecording(true);
     try {
-      const res = await fetch(`/api/v1/finance/ar/${selectedCustomer.customer_id}/payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: numAmt, payment_method: paymentMethod })
-      });
-      if (res.ok) {
-        setSelectedCustomer(null);
-        setPayAmount('');
-        loadAR();
-      }
+      if (!eligibleOrders.some(order => order.id === selectedOrderId)) throw new Error('ກະລຸນາເລືອກອໍເດີທີ່ຈະຊຳລະ');
+      await settleOrderBalance(selectedOrderId, String(payAmount), 'MANUAL_QR');
+      showToast('ບັນທຶກຄຳຂໍຊຳລະແລ້ວ. ລໍຖ້າກວດສະລິບ', 'success');
+      setSelectedCustomer(null);
+      setSelectedOrderId('');
+      setPayAmount('');
+      await loadAR();
     } catch (err) {
-      console.error('Payment record failed:', err);
+      setError(err instanceof Error ? err.message : 'ບໍ່ສາມາດບັນທຶກຄຳຂໍໄດ້');
     } finally {
       setRecording(false);
     }
@@ -84,6 +86,7 @@ export const ARManagementPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {error && <p role="alert" className="text-rose-700">{error}</p>}
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">
@@ -166,7 +169,9 @@ export const ARManagementPage: React.FC = () => {
                       <button
                         onClick={() => {
                           setSelectedCustomer(item);
-                          setPayAmount(item.total_due);
+                          setSelectedOrderId('');
+                          setPayAmount('');
+                          setError(null);
                         }}
                         className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-xl border border-emerald-200 transition cursor-pointer text-xs"
                       >
@@ -203,6 +208,17 @@ export const ARManagementPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleRecordPayment} className="space-y-3 text-xs font-bold">
+              <label className="block">ອໍເດີທີ່ຈະຊຳລະ
+                <select required value={selectedOrderId} disabled={recording} onChange={event => {
+                  setSelectedOrderId(event.target.value);
+                  const order = eligibleOrders.find(item => item.id === event.target.value);
+                  setPayAmount(order ? String(order.remaining_lak ?? order.remainingUnpaidBalance) : '');
+                }} className="w-full px-3 py-2 border rounded-xl">
+                  <option value="">ກະລຸນາເລືອກອໍເດີ</option>
+                  {eligibleOrders.map(order => <option key={order.id} value={order.id}>{order.order_no || order.id}</option>)}
+                </select>
+              </label>
+              {error && <p role="alert" className="text-rose-700">{error}</p>}
               <div className="space-y-1">
                 <label className="text-slate-500 uppercase">ຈຳນວນເງິນທີ່ຮັບ (Amount)</label>
                 <input
@@ -217,15 +233,7 @@ export const ARManagementPage: React.FC = () => {
 
               <div className="space-y-1">
                 <label className="text-slate-500 uppercase">ຊ່ອງທາງຮັບເງິນ</label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border rounded-xl bg-white"
-                >
-                  <option value="BCEL Transfer">BCEL One (LAK)</option>
-                  <option value="KBank Transfer">KBank (THB)</option>
-                  <option value="Cash">ເງິນສົດ (Cash)</option>
-                </select>
+                <p>ຮັບຊຳລະຜ່ານ QR ຕາມບັນຊີທີ່ຕັ້ງຄ່າໄວ້</p>
               </div>
 
               <button
@@ -233,7 +241,7 @@ export const ARManagementPage: React.FC = () => {
                 disabled={recording}
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-extrabold shadow-md shadow-emerald-500/20 transition cursor-pointer"
               >
-                {recording ? 'ກຳລັງບັນທຶກ...' : 'ຢືນຢັນການຮັບເງິນ (Confirm Payment)'}
+                {recording ? 'ກຳລັງບັນທຶກ...' : 'ສ້າງຄຳຂໍຊຳລະ'}
               </button>
             </form>
           </div>

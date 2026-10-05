@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -471,17 +471,24 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
   };
 
   // Confirm and Release to Production
-  const handleConfirm = () => {
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const handleConfirm = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true; setSaving(true);
     const workflow: ProductionWorkflow = {
       templateId: selectedTemplateId,
       templateName: currentTemplateName,
       templateNameLao: currentTemplateNameLao,
       steps: steps,
       createdAt: new Date().toISOString(),
-      startedAt: new Date().toISOString(),
     };
-    onConfirmWorkflow(workflow);
-    onClose();
+    try {
+      await onConfirmWorkflow(workflow);
+      onClose();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກສາຍງານໄດ້');
+    } finally { savingRef.current = false; setSaving(false); }
   };
 
   const getCategoryBadge = (category: WorkflowStepCategory) => {
@@ -537,7 +544,8 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
 
           <button
             type="button"
-            onClick={onClose}
+            disabled={saving}
+              onClick={onClose}
             className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
             aria-label="Close"
           >
@@ -1083,13 +1091,14 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
             </span>
             <span className="mx-2">•</span>
             <span className="text-amber-700 font-bold">
-              {currentLang === 'lo' ? 'ຕັດສະຕັອກເຈ້ຍ-ໝຶກອັດຕະໂນມັດ' : 'Stock deducted automatically'}
+              {currentLang === 'lo' ? 'ບັນທຶກສາຍງານກ່ອນເລີ່ມຜະລິດ' : 'Save workflow before starting production'}
             </span>
           </div>
 
           <div className="flex items-center gap-2.5 w-full sm:w-auto">
             <button
               type="button"
+              disabled={saving}
               onClick={onClose}
               className="flex-1 sm:flex-none px-5 py-2.5 rounded-2xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
             >
@@ -1097,11 +1106,12 @@ export const ConfigureWorkflowModal: React.FC<ConfigureWorkflowModalProps> = ({
             </button>
             <button
               type="button"
+              disabled={saving}
               onClick={handleConfirm}
               className="flex-1 sm:flex-none px-6 py-2.5 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-black shadow-md shadow-sky-500/25 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2 border-none"
             >
               <Printer className="w-4 h-4" />
-              <span>{currentLang === 'lo' ? 'ຢືນຢັນເລີ່ມຜະລິດ & ສົ່ງເຂົ້າແທ່ນພິມ' : 'Confirm & Release to Production'}</span>
+              <span>{currentLang === 'lo' ? 'ບັນທຶກສາຍງານຜະລິດ' : 'Save Production Workflow'}</span>
             </button>
           </div>
         </div>

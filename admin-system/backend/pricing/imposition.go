@@ -281,6 +281,7 @@ func generatePlacedItems(cols, rows int, slotW, slotH, gutterMM decimal.Decimal,
 
 // BatchImpositionRequest defines input parameters for multi-item / photo imposition
 type BatchImpositionRequest struct {
+	ImpositionMode  string  `json:"imposition_mode,omitempty"`
 	ItemWidthMM     float64 `json:"item_width_mm"`
 	ItemHeightMM    float64 `json:"item_height_mm"`
 	ParentSheet     string  `json:"parent_sheet"` // "A4", "A3", "A3+", or "CUSTOM"
@@ -400,4 +401,3 @@ func CalculateBatchImposition(req BatchImpositionRequest) BatchImpositionRespons
 		SummaryTextEn:        summaryEn,
 	}
 }
-

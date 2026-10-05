@@ -83,7 +83,7 @@ export function mapOrderToFormSpecs(order: any, inventory: any[] = [], equipment
       const totalPrice = Number(it.totalPrice ?? it.total_price ?? it.total_price_lak ?? (unitPrice * qty));
       const margin = Number(it.targetMarginPercent ?? it.profitMargin ?? it.target_margin_percent ?? 35);
 
-      const itArtworkUrl = it.artwork?.file_url || it.artworkUrl || it.artwork_url || it.fileUrl || it.file_url || it.cover_file_url || it.inner_file_url || order.artworkUrl || order.artwork_url || order.artworkLink || '';
+      const itArtworkUrl = it.artwork?.file_url || it.artworkUrl || it.artwork_url || it.fileUrl || it.file_url || it.cover_file_url || it.inner_file_url || '';
       const itArtworkFileName = it.artwork?.file_name || it.artworkFileName || it.artwork_file_name || it.fileName || it.file_name || (itArtworkUrl ? itArtworkUrl.split('/').pop()?.split('?')[0] : '');
       const itArtworkFileSize = it.artwork?.file_size_bytes || it.artworkFileSize || it.artwork_file_size || it.fileSize || it.file_size || 0;
       const itPageCount = Number(it.pagesPerBook || it.pages || it.page_count || specs.pages || 1);

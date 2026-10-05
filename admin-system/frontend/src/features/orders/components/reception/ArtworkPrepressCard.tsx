@@ -2,7 +2,7 @@ import ArtworkThumbnail from '@components/common/ArtworkThumbnail';
 import { getMediaViewerCopy } from '@components/common/mediaViewerCopy';
 import ArtworkPartsPanel from '../ArtworkPartsPanel';
 import { getArtworkFiles, formatArtworkSize, getArtworkParts, getArtworkPartCosts } from '../../utils/artworkParts';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { 
   User, 
   FileText, 
@@ -47,6 +47,8 @@ interface ArtworkPrepressCardProps {
   artworkFileName?: string;
   artworkFileSize?: number;
   proofUrl?: string;
+  proofStatus?: string;
+  proofVersion?: number;
   proofApprovedAt?: string;
   proofRejectedAt?: string;
   proofRejectionReason?: string;
@@ -59,6 +61,7 @@ interface ArtworkPrepressCardProps {
   onOpenDriveLink: () => void;
   onAttachArtwork?: (link: string) => void;
   onUploadProof?: (proofUrl: string) => void;
+  onUploadProofFile?: (file: File) => Promise<void>;
   onConfigureWorkflow?: () => void;
   productionWorkflow?: any;
   setLightbox?: (lb: any) => void;
@@ -76,7 +79,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
   driveLink,
   artworkFileName,
   artworkFileSize,
-  proofUrl,
+  proofUrl, proofStatus, proofVersion,
   proofApprovedAt,
   proofRejectedAt,
   proofRejectionReason,
@@ -88,7 +91,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
   onRevertArtwork,
   onOpenDriveLink,
   onAttachArtwork,
-  onUploadProof,
+  onUploadProof, onUploadProofFile,
   onConfigureWorkflow,
   productionWorkflow,
   setLightbox,
@@ -102,6 +105,20 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
   const [isAttaching, setIsAttaching] = useState(false);
   const [newLink, setNewLink] = useState('');
   const [isAttachingProof, setIsAttachingProof] = useState(false);
+  const proofGeneration = useRef(0);
+  const proofWriting = useRef(false);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPending, setProofPending] = useState(false);
+  const [proofError, setProofError] = useState('');
+  useEffect(() => { proofGeneration.current++; proofWriting.current = false; setProofFile(null); setProofError(''); setProofPending(false); return () => { proofGeneration.current++; }; }, [orderIdDisplay]);
+  const saveProofFile = async (file: File) => {
+    if (proofWriting.current || !onUploadProofFile) return;
+    const generation = proofGeneration.current; proofWriting.current = true;
+    setProofPending(true); setProofError('');
+    try { await onUploadProofFile(file); if (generation === proofGeneration.current) setProofFile(null); }
+    catch (failure) { if (generation === proofGeneration.current) setProofError(failure instanceof Error ? failure.message : 'ບັນທຶກ Proof ບໍ່ສຳເລັດ'); }
+    finally { if (generation === proofGeneration.current) { proofWriting.current = false; setProofPending(false); } }
+  };
   const [newProofLink, setNewProofLink] = useState('');
 
   const [galleryModalItem, setGalleryModalItem] = useState<{ name: string; photos: { name: string; url: string }[] } | null>(null);
@@ -133,12 +150,16 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
     }
   };
 
-  const handleSaveProofLink = (e: React.FormEvent) => {
+  const handleSaveProofLink = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newProofLink.trim() && onUploadProof) {
-      onUploadProof(newProofLink.trim());
-      setIsAttachingProof(false);
-      setNewProofLink('');
+      try {
+        await onUploadProof(newProofLink.trim());
+        setIsAttachingProof(false);
+        setNewProofLink('');
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກ Proof ໄດ້');
+      }
     }
   };
 
@@ -240,6 +261,10 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
             </span>
           </div>
 
+          {proofUrl && <section aria-label="Digital Proof" className="p-3 rounded-xl border border-blue-200 bg-blue-50 space-y-2">
+            <p>Digital Proof • {({ PENDING_CUSTOMER: 'ລໍຖ້າລູກຄ້າຢືນຢັນ', APPROVED: 'ຢືນຢັນແລ້ວ', REJECTED: 'ປະຕິເສດ' } as Record<string, string>)[proofStatus || ''] || proofStatus || 'ບັນທຶກແລ້ວ'} • ເວີຊັນ {proofVersion ?? '—'}</p>
+            <button type="button" disabled={!setLightbox} onClick={() => setLightbox?.({ src: proofUrl, title: 'Digital Proof', fileName: proofUrl.split('/').pop(), documentNumber: `#${orderIdDisplay}` })}>ເບິ່ງ Proof ທີ່ບັນທຶກແລ້ວ</button>
+          </section>}
           {Array.isArray(items) && items.length > 0 ? (
             <div className="space-y-2.5 divide-y divide-slate-200/60">
               {items.map((it: any, idx: number) => {
@@ -249,7 +274,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                 const colorPages = it.colorPages || (it.colorPrintMode === 'MONO_K' ? 0 : totalPages);
                 const bwPages = it.bwPages || (it.colorPrintMode === 'MONO_K' ? totalPages : 0);
 
-                const itArtworkUrl = it.artwork?.file_url || it.artworkUrl || it.artwork_url || it.fileUrl || it.file_url || it.cover_file_url || it.inner_file_url || driveLink;
+                const itArtworkUrl = it.artwork?.file_url || it.artworkUrl || it.artwork_url || it.fileUrl || it.file_url || it.cover_file_url || it.inner_file_url || '';
                 const itArtworkFileName = it.artwork?.file_name || it.artworkFileName || it.artwork_file_name || it.fileName || it.file_name || (itArtworkUrl ? itArtworkUrl.split('/').pop()?.split('?')[0] : '');
                 const itArtworkSize = it.artwork?.file_size_bytes || it.artworkFileSize || it.artwork_file_size || it.fileSize || 0;
                 const itFormattedSize = formatArtworkSize(itArtworkSize);
@@ -295,6 +320,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                           )}
                         </div>
 
+                              {!itArtworkUrl && !batchFiles.length && <p role="status">ລາຍການນີ້ຍັງບໍ່ມີໄຟລ໌ຕົ້ນສະບັບ</p>}
                         {/* Per-Job Artwork File Info & Quick Actions */}
                         {batchFiles.length > 0 && (
                           <div className="mt-2 p-2.5 rounded-xl bg-slate-100/90 border border-slate-200 space-y-2 text-[11px]">
@@ -343,7 +369,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                                     }
                                   }}
                                   className="px-2 py-1 rounded-lg bg-white hover:bg-slate-200 text-slate-700 border border-slate-200 text-[10px] font-bold flex items-center gap-1 transition cursor-pointer focus-visible:ring-2 focus-visible:ring-sky-500"
-                                  disabled={isZipping || isDownloadingArtwork !== null}
+                                  disabled={(!itArtworkUrl && !batchFiles.length) || isZipping || isDownloadingArtwork !== null}
                                   aria-busy={isZipping || isDownloadingArtwork === (it.id || itArtworkFileName || 'artwork')}
                                   title={hasBatch ? 'ດາວໂຫຼດ ZIP' : 'ດາວໂຫຼດຕົ້ນສະບັບ'}
                                 >
@@ -356,6 +382,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
                                 </button>
                                 <button
                                   type="button"
+                                  disabled={!itArtworkUrl && !batchFiles.length}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     if (hasBatch && setLightbox) {
@@ -483,6 +510,12 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
       </div>
 
       {/* Action Button for Artwork & Press Order (Step 2 Toggle State) */}
+      {onUploadProofFile && <section className="p-3 rounded-xl border space-y-2" aria-label="Digital Proof">
+        <label className="text-xs font-bold">ອັບໂຫຼດ Digital Proof<input type="file" accept=".pdf,.png,.jpg,.jpeg" aria-label="ອັບໂຫຼດ Digital Proof" disabled={proofPending} onChange={event => { const file = event.target.files?.[0]; if (file) { setProofFile(file); void saveProofFile(file); } }} /></label>
+        {proofFile && <p className="text-xs">{proofFile.name}</p>}
+        {proofError && <p role="alert" className="text-xs text-rose-700">{proofError}</p>}
+        {proofFile && proofError && <button type="button" disabled={proofPending} onClick={() => void saveProofFile(proofFile)}>ລອງບັນທຶກ Proof ໃໝ່</button>}
+      </section>}
       <div className="pt-2">
         {isArtworkApproved ? (
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">

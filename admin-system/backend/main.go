@@ -17,6 +17,7 @@ import (
 	"somsing.local/backend/inbound"
 	"somsing.local/backend/internal/handler"
 	"somsing.local/backend/inventory"
+	"somsing.local/backend/materialguide"
 	"somsing.local/backend/middleware"
 	"somsing.local/backend/notifications"
 	"somsing.local/backend/orders"
@@ -182,6 +183,8 @@ func RegisterRoutes(engine *gin.Engine, opts ...RouteOption) {
 
 	// General API Rate Limiting (180 req/min per IP)
 	router.Use(middleware.RateLimitMiddleware(180, time.Minute))
+	materialguide.RegisterRoutes(engine)
+	finance.RegisterPaymentRoutes(engine)
 
 	// Protected file serving for uploaded order files, artworks & preflight uploads (P1.2)
 	// Serves private artwork/order files only to authorized staff, with public access
@@ -271,7 +274,7 @@ func RegisterRoutes(engine *gin.Engine, opts ...RouteOption) {
 	financeAuth := auth.RequireRoles(auth.RoleAdmin, auth.RoleFinance, "accountant")
 	router.GET("/api/v1/finance/summary", financeAuth, finance.HandleGetFinanceSummary)
 	router.GET("/api/finance/summary", financeAuth, finance.HandleGetFinanceSummary)
-	router.POST("/api/v1/finance/verify-slip", financeAuth, finance.HandleVerifyPaymentSlip)
+	router.POST("/api/v1/finance/verify-slip", auth.RequireRoles("admin", "manager", "finance", "accountant", "owner"), finance.HandleVerifyPaymentSlip)
 	router.GET("/api/v1/finance/pending-slips", financeAuth, finance.HandleGetPendingSlips)
 	router.GET("/api/finance/pending-slips", financeAuth, finance.HandleGetPendingSlips)
 	// checkout/verify-slip is a finance operation and requires authentication
@@ -285,7 +288,7 @@ func RegisterRoutes(engine *gin.Engine, opts ...RouteOption) {
 	router.GET("/api/v1/finance/expenses", financeAuth, finance.HandleGetExpenses)
 	router.GET("/api/v1/finance/job-profitability", financeAuth, finance.HandleGetJobProfitability)
 	router.GET("/api/v1/finance/ar", financeAuth, finance.HandleGetAR)
-	router.POST("/api/v1/finance/ar/:id/payment", financeAuth, finance.HandleRecordARPayment)
+	router.POST("/api/v1/finance/ar/:id/payment", auth.RequireRoles("admin", "manager", "sales", "finance", "accountant", "owner"), finance.HandleRecordARPayment)
 	router.GET("/api/v1/finance/ap", financeAuth, finance.HandleGetAP)
 	router.POST("/api/v1/finance/ap/:id/payment", financeAuth, finance.HandleRecordAPPayment)
 	router.GET("/api/v1/finance/chart-of-accounts", financeAuth, finance.HandleGetChartOfAccounts)
@@ -337,10 +340,10 @@ func RegisterRoutes(engine *gin.Engine, opts ...RouteOption) {
 	router.GET("/api/v1/orders/:id", ordersAuth, orders.HandleGetOrderById)
 	router.POST("/api/orders", ordersWriteAuth, orders.HandleCreateOrder)
 	router.POST("/api/v1/orders", ordersWriteAuth, orders.HandleCreateOrder)
-	router.PUT("/api/orders/:id", ordersWriteAuth, orders.HandleUpdateOrder)
-	router.PUT("/api/v1/orders/:id", ordersWriteAuth, orders.HandleUpdateOrder)
-	router.PATCH("/api/orders/:id", ordersWriteAuth, orders.HandleUpdateOrder)
-	router.PATCH("/api/v1/orders/:id", ordersWriteAuth, orders.HandleUpdateOrder)
+	router.PUT("/api/orders/:id", auth.RequireRoles("admin", "manager", "sales", "finance", "accountant", "owner", "prepress", "production"), orders.HandleUpdateOrder)
+	router.PUT("/api/v1/orders/:id", auth.RequireRoles("admin", "manager", "sales", "finance", "accountant", "owner", "prepress", "production"), orders.HandleUpdateOrder)
+	router.PATCH("/api/orders/:id", auth.RequireRoles("admin", "manager", "sales", "finance", "accountant", "owner", "prepress", "production"), orders.HandleUpdateOrder)
+	router.PATCH("/api/v1/orders/:id", auth.RequireRoles("admin", "manager", "sales", "finance", "accountant", "owner", "prepress", "production"), orders.HandleUpdateOrder)
 	router.DELETE("/api/orders/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleDeleteOrder)
 	router.DELETE("/api/v1/orders/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleDeleteOrder)
 	router.GET("/api/v1/quotations", quotationAuth, orders.HandleGetQuotations)
@@ -357,15 +360,15 @@ func RegisterRoutes(engine *gin.Engine, opts ...RouteOption) {
 	router.POST("/api/quotations/:id/reject", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleRejectQuotation)
 	router.POST("/api/v1/quotations/:id/convert", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales), orders.HandleConvertQuotationToOrder)
 	router.POST("/api/quotations/:id/convert", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleSales), orders.HandleConvertQuotationToOrder)
-	router.POST("/api/v1/orders/upload", artworkAuth, orders.HandleUploadOrderFile)
-	router.POST("/api/orders/upload", artworkAuth, orders.HandleUploadOrderFile)
+	router.POST("/api/v1/orders/upload", auth.RequireRoles("admin", "manager", "sales", "prepress", "production", "finance", "accountant", "owner"), orders.HandleUploadOrderFile)
+	router.POST("/api/orders/upload", auth.RequireRoles("admin", "manager", "sales", "prepress", "production", "finance", "accountant", "owner"), orders.HandleUploadOrderFile)
 	router.PATCH("/api/v1/orders/items/:id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
 	router.PUT("/api/v1/orders/items/:id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
 	router.POST("/api/v1/orders/items/:id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
 	router.PATCH("/api/v1/orders/:id/items/:item_id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
 	router.PUT("/api/v1/orders/:id/items/:item_id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
 	router.POST("/api/v1/orders/:id/items/:item_id/step", ordersAuth, orders.HandleUpdateOrderItemStep)
-	
+
 	// Legacy order tracking issue link
 	router.POST("/api/orders/:id/issue-tracking-token", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleOwner, "super_admin"), orders.HandleIssueTrackingToken)
 	router.POST("/api/v1/orders/:id/issue-tracking-token", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleOwner, "super_admin"), orders.HandleIssueTrackingToken)
@@ -388,7 +391,7 @@ func RegisterRoutes(engine *gin.Engine, opts ...RouteOption) {
 	router.GET("/api/v1/orders/track/:order_no", orders.HandleGetOrderByOrderNo)
 	router.GET("/api/orders/track/:order_no", orders.HandleGetOrderByOrderNo)
 	// Order operational actions — require admin/manager/sales/production write access
-	router.PUT("/api/orders/:id/deposit", ordersWriteAuth, orders.HandleRecordDeposit)
+	router.PUT("/api/orders/:id/deposit", auth.RequireRoles("admin", "manager", "sales", "finance", "accountant", "owner"), orders.HandleRecordDeposit)
 	router.PUT("/api/orders/:id/status", ordersWriteAuth, orders.HandleUpdateOrderStatus)
 	router.PATCH("/api/v1/orders/:id/status", ordersWriteAuth, orders.HandleUpdateOrderStatus)
 	router.POST("/api/orders/:id/reverse-stock", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleReverseOrderStock)
@@ -492,7 +495,6 @@ func RegisterRoutes(engine *gin.Engine, opts ...RouteOption) {
 	router.POST("/api/v1/customers/categories", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), customers.HandleCreateCustomerCategory)
 	router.PUT("/api/v1/customers/categories/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), customers.HandleUpdateCustomerCategory)
 	router.DELETE("/api/v1/customers/categories/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), customers.HandleDeleteCustomerCategory)
-
 
 	// Spoilage audit log routes
 	router.GET("/api/spoilage", prodAuth, spoilage.HandleGetSpoilageLogs)
@@ -610,9 +612,9 @@ func RegisterRoutes(engine *gin.Engine, opts ...RouteOption) {
 	router.POST("/api/v1/admin/couriers/upload-logo", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleUploadLogo)
 	router.POST("/api/v1/couriers/upload-logo", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleUploadLogo)
 
-	router.GET("/api/v1/public/payment-methods", settings.HandleGetPaymentMethods)
-	router.GET("/api/v1/payment-methods", settings.HandleGetPaymentMethods)
-	router.GET("/api/payment-methods", settings.HandleGetPaymentMethods)
+	router.GET("/api/v1/public/payment-methods", auth.RequireAuth(), settings.HandleGetPaymentMethods)
+	router.GET("/api/v1/payment-methods", auth.RequireAuth(), settings.HandleGetPaymentMethods)
+	router.GET("/api/payment-methods", auth.RequireAuth(), settings.HandleGetPaymentMethods)
 	router.POST("/api/v1/admin/payment-methods", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleCreatePaymentMethod)
 	router.POST("/api/v1/payment-methods", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleCreatePaymentMethod)
 	router.POST("/api/v1/admin/payment-methods/sync", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), settings.HandleSyncPaymentMethods)
@@ -666,6 +668,5 @@ func RegisterRoutes(engine *gin.Engine, opts ...RouteOption) {
 	router.GET("/api/production/templates", workflowReadAuth, orders.HandleGetWorkflowTemplates)
 	router.POST("/api/production/templates", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager, auth.RoleProduction), orders.HandleSaveWorkflowTemplate)
 	router.DELETE("/api/production/templates/:id", auth.RequireRoles(auth.RoleAdmin, auth.RoleManager), orders.HandleDeleteWorkflowTemplate)
-
 
 }

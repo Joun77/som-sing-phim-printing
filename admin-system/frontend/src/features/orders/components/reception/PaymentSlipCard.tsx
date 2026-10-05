@@ -1,11 +1,12 @@
+import { percentageTarget } from '../../../../api/paymentReview';
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  CreditCard, 
-  Sparkles, 
-  CheckCircle2, 
-  X, 
-  DollarSign, 
-  Upload, 
+import {
+  CreditCard,
+  Sparkles,
+  CheckCircle2,
+  X,
+  DollarSign,
+  Upload,
   Image as ImageIcon,
   Eye,
   Trash2
@@ -14,6 +15,13 @@ import {
 import ArtworkThumbnail from '../../../../components/common/ArtworkThumbnail';
 
 interface PaymentSlipCardProps {
+  depositMode?: 'OFF' | 'ON' | null;
+  depositTargetPercent?: string;
+  depositTargetAmount?: string;
+  receiptRequestMode?: boolean;
+  depositModePending?: boolean;
+  depositModeDisabledReason?: string;
+  onDepositModeChange?: (mode: 'OFF' | 'ON') => void;
   reviewPending?: boolean;
   reviewError?: string;
   orderIdDisplay: string;
@@ -31,11 +39,17 @@ interface PaymentSlipCardProps {
   onConfirmDepositPayment: (amount: number) => void;
   onRevertPayment: () => void;
   onRejectSlip: () => void;
-  onUploadSlip?: (fileUrl: string) => void;
+  onUploadSlip?: (file: File) => Promise<string>;
+  onDiscardSlipDraft?: () => void;
   setLightbox?: (v: { src: string; title: string } | null) => void;
 }
 
 export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
+  depositMode = 'OFF',
+  depositTargetPercent, depositTargetAmount, receiptRequestMode = false,
+  depositModePending = false,
+  depositModeDisabledReason = '',
+  onDepositModeChange,
   reviewPending = false,
   reviewError = '',
   orderIdDisplay,
@@ -53,48 +67,64 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
   onConfirmDepositPayment,
   onRevertPayment,
   onRejectSlip,
-  onUploadSlip,
+  onUploadSlip, onDiscardSlipDraft,
   setLightbox,
 }) => {
   const [localSlip, setLocalSlip] = useState<string | null>(paymentSlipUrl || null);
   useEffect(() => { setLocalSlip(paymentSlipUrl || null); }, [orderIdDisplay, paymentSlipUrl]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [draftFile, setDraftFile] = useState<File | null>(null);
+  const [uploadPending, setUploadPending] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const uploadGeneration = useRef(0);
+  useEffect(() => { uploadGeneration.current++; setDraftFile(null); setUploadError(''); setUploadPending(false); }, [orderIdDisplay]);
+  const saveDraftSlip = async (file: File) => {
+    if (!onUploadSlip || uploadPending) return;
+    const generation = uploadGeneration.current;
+    setUploadPending(true); setUploadError('');
+    try {
+      await onUploadSlip(file);
+      if (generation === uploadGeneration.current) { setLocalSlip(null); setDraftFile(null); }
+    } catch (error) {
+      if (generation === uploadGeneration.current) setUploadError(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກສະລິບໄດ້');
+    } finally { if (generation === uploadGeneration.current) setUploadPending(false); }
+  };
 
   const isDeposit = paymentStatus === 'Deposit' || (depositAmountPaid && depositAmountPaid > 0 && depositAmountPaid < totalAmountLAK);
   const isPaidFull = paymentStatus === 'Paid' || paymentStatus === 'PAID' || paymentStatus === 'Fully Paid';
-  const effectiveDepositPaid = depositAmountPaid || Math.round(totalAmountLAK / 2);
-  const effectiveRemaining = remainingUnpaidBalance !== undefined ? remainingUnpaidBalance : (isDeposit ? totalAmountLAK - effectiveDepositPaid : 0);
+  const effectiveDepositPaid = depositAmountPaid ?? 0;
+  const effectiveRemaining = remainingUnpaidBalance ?? Math.max(0, totalAmountLAK - effectiveDepositPaid);
 
   const activeSlip = localSlip || paymentSlipUrl;
 
   // Dynamic Custom Deposit State
   const [customDepositPercent, setCustomDepositPercent] = useState<number>(
-    depositAmountPaid && totalAmountLAK > 0 
-      ? Math.round((depositAmountPaid / totalAmountLAK) * 100) 
+    depositAmountPaid && totalAmountLAK > 0
+      ? Math.round((depositAmountPaid / totalAmountLAK) * 100)
       : 50
   );
   const [customDepositAmount, setCustomDepositAmount] = useState<number>(
     depositAmountPaid || Math.round(totalAmountLAK * 0.5)
   );
-  const [isRoundDeposit, setIsRoundDeposit] = useState<boolean>(true);
+  useEffect(() => {
+    const pct = Number(depositTargetPercent ?? (depositMode === 'ON' ? '50' : '100'));
+    setCustomDepositPercent(pct);
+    setCustomDepositAmount(Number(depositTargetAmount ?? percentageTarget(effectiveRemaining, pct)));
+  }, [orderIdDisplay, depositMode, depositTargetPercent, depositTargetAmount, effectiveRemaining]);
 
   // Sync when percent changes
   const handlePercentChange = (pct: number) => {
     setCustomDepositPercent(pct);
-    let raw = (totalAmountLAK * pct) / 100;
-    if (isRoundDeposit) {
-      raw = Math.round(raw / 1000) * 1000;
-    } else {
-      raw = Math.round(raw);
-    }
+    let raw = 0;
+    try { raw = Number(percentageTarget(effectiveRemaining, pct)); } catch { raw = 0; }
     setCustomDepositAmount(raw);
   };
 
   // Sync when direct amount changes
   const handleAmountChange = (amt: number) => {
     setCustomDepositAmount(amt);
-    if (totalAmountLAK > 0) {
-      const pct = Math.round((amt / totalAmountLAK) * 100);
+    if (effectiveRemaining > 0) {
+      const pct = Math.round((amt / effectiveRemaining) * 10000) / 100;
       setCustomDepositPercent(pct);
     }
   };
@@ -103,12 +133,11 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         const result = event.target?.result as string;
         setLocalSlip(result);
-        if (onUploadSlip) {
-          onUploadSlip(result);
-        }
+        setDraftFile(file);
+        await saveDraftSlip(file);
       };
       reader.readAsDataURL(file);
     }
@@ -116,10 +145,8 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
 
   const handleRemoveLocalSlip = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setLocalSlip(null);
-    if (onUploadSlip) {
-      onUploadSlip('');
-    }
+    if (uploadPending) return;
+    setLocalSlip(null); setDraftFile(null); setUploadError(''); onDiscardSlipDraft?.();
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -128,6 +155,18 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
   return (
     <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-7 shadow-sm space-y-5 flex flex-col justify-between">
       <div>
+        <div className="flex flex-wrap items-center gap-2 mb-4 text-xs font-bold text-slate-700">
+          <button type="button" role="switch" aria-label="ໂໝດມັດຈຳ" aria-checked={depositMode === 'ON'} aria-busy={depositModePending}
+            disabled={reviewPending || depositModePending || !!depositModeDisabledReason || !onDepositModeChange}
+            onClick={() => onDepositModeChange?.(depositMode === 'ON' ? 'OFF' : 'ON')}
+            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:opacity-50 ${depositMode === 'ON' ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+            <span aria-hidden="true" className={`pointer-events-none h-5 w-5 rounded-full bg-white shadow-md transition-transform ${depositMode === 'ON' ? 'translate-x-5' : 'translate-x-0'}`} />
+          </button>
+          <span>ໂໝດມັດຈຳ: {depositMode === null ? 'ບໍ່ລະບຸ' : depositMode === 'ON' ? 'ເປີດ' : 'ປິດ'}</span>
+          {depositModePending ? <span role="status">ກຳລັງບັນທຶກໂໝດມັດຈຳ</span> : (depositModeDisabledReason || !onDepositModeChange) && <span>{depositModeDisabledReason || 'ບໍ່ສາມາດປ່ຽນໂໝດມັດຈຳໄດ້'}</span>}
+        </div>
+        {uploadError && <div role="alert">{uploadError}{draftFile && <button type="button" disabled={uploadPending} onClick={() => saveDraftSlip(draftFile)}>ລອງບັນທຶກສະລິບໃໝ່</button>}</div>}
+        {uploadPending && <p role="status">ກຳລັງບັນທຶກສະລິບ</p>}
         {reviewError && <p role="alert" className="text-sm text-red-600">{reviewError}</p>}
         {reviewPending && <p role="status">{currentLang === 'lo' ? 'ກຳລັງບັນທຶກຜົນກວດສອບ...' : 'Saving payment review...'}</p>}
         {/* Card Title */}
@@ -150,26 +189,27 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
               ? 'bg-amber-50 text-amber-800 border-amber-300 font-bold'
               : 'bg-slate-100 text-slate-700 border-slate-200'
           }`}>
-            {isPaidFull 
-              ? (currentLang === 'lo' ? 'ຊຳລະເຕັມ 100%' : 'Paid 100%') 
-              : isDeposit 
-              ? (currentLang === 'lo' ? 'ມັດຈຳແລ້ວ' : 'Deposit Paid') 
+            {isPaidFull
+              ? (currentLang === 'lo' ? 'ຊຳລະເຕັມ 100%' : 'Paid 100%')
+              : isDeposit
+              ? (currentLang === 'lo' ? 'ມັດຈຳແລ້ວ' : 'Deposit Paid')
               : (currentLang === 'lo' ? 'ລໍຖ້າກວດສອບ' : 'Pending Check')}
           </span>
         </div>
 
         {/* Hidden File Input for Upload */}
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          onChange={handleFileChange} 
-          accept="image/*,.pdf" 
-          className="hidden" 
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          disabled={uploadPending || reviewPending}
+          accept="image/*,.pdf"
+          className="hidden"
         />
 
         {/* Slip Preview or Upload Box */}
         {activeSlip ? (
-          <div 
+          <div
             onClick={() => {
               if (activeSlip && setLightbox) {
                 setLightbox({ src: activeSlip, title: `Bank Transfer Slip - Order #${orderIdDisplay}` });
@@ -193,7 +233,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
             </button>
           </div>
         ) : (
-          <div 
+          <div
             onClick={() => fileInputRef.current?.click()}
             className="w-full min-h-[200px] max-h-[240px] rounded-2xl bg-slate-50 border-2 border-dashed border-slate-300 hover:border-sky-500 hover:bg-sky-50/30 flex flex-col items-center justify-center p-4 text-center cursor-pointer transition group shadow-inner"
           >
@@ -257,14 +297,14 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <div className={`flex-1 py-3 px-4 rounded-2xl border text-xs font-black flex items-center justify-center gap-2 shadow-xs ${
-                isPaidFull 
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                isPaidFull
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                   : 'bg-amber-50 border-amber-200 text-amber-800'
               }`}>
                 <CheckCircle2 className={`w-4 h-4 ${isPaidFull ? 'text-emerald-600' : 'text-amber-600'}`} />
                 <span>
-                  {isPaidFull 
-                    ? (currentLang === 'lo' ? 'ຊຳລະເຕັມ 100% ສຳເລັດແລ້ວ' : 'Fully Paid 100%') 
+                  {isPaidFull
+                    ? (currentLang === 'lo' ? 'ຊຳລະເຕັມ 100% ສຳເລັດແລ້ວ' : 'Fully Paid 100%')
                     : (currentLang === 'lo' ? `ຮັບມັດຈຳ ${formatLAK(effectiveDepositPaid)} (${Math.round((effectiveDepositPaid / (totalAmountLAK || 1)) * 100)}%) ແລ້ວ` : `Deposit ${formatLAK(effectiveDepositPaid)} Verified`)}
                 </span>
               </div>
@@ -281,7 +321,8 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
           </div>
         ) : (
           <div className="space-y-3">
-            {/* Dynamic Custom Deposit Box */}
+            {/* Proposed amount is distinct from confirmed receipts. */}
+            {(depositMode === 'ON' || !receiptRequestMode) && <>
             <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
@@ -337,7 +378,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
                   <input
                     type="number"
                     min={0}
-                    step={1000}
+                    step={0.01}
                     value={customDepositAmount || ''}
                     onChange={(e) => handleAmountChange(Number(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold focus:border-sky-500 outline-hidden"
@@ -345,23 +386,8 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
                 </div>
               </div>
 
-              {/* Rounding Checkbox */}
-              <label className="flex items-center gap-2 cursor-pointer select-none text-[11px] font-bold text-slate-600 pt-1">
-                <input
-                  type="checkbox"
-                  checked={isRoundDeposit}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setIsRoundDeposit(checked);
-                    let raw = (totalAmountLAK * customDepositPercent) / 100;
-                    if (checked) raw = Math.round(raw / 1000) * 1000;
-                    setCustomDepositAmount(raw);
-                  }}
-                  className="w-3.5 h-3.5 rounded text-sky-600 border-slate-300 focus:ring-sky-500"
-                />
-                <span>ປັດເປັນຕົວເລກຖ້ວນ (ຫຼັກພັນກີບ)</span>
-              </label>
-            </div>
+
+            </div></>}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {/* Option 1: Full Payment (100%) */}
@@ -372,19 +398,19 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
                 className="py-3 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border-none"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>{currentLang === 'lo' ? 'ຢືນຢັນຊຳລະ 100%' : 'Confirm Full 100%'}</span>
+                <span>{receiptRequestMode ? 'ສ້າງຄຳຂໍຊຳລະຍອດຄ້າງ' : currentLang === 'lo' ? 'ຢືນຢັນຊຳລະ 100%' : 'Confirm Full 100%'}</span>
               </button>
 
               {/* Option 2: Dynamic Deposit Payment */}
-              <button
+              {(depositMode === 'ON' || !receiptRequestMode) && <button
                 type="button"
                 disabled={reviewPending}
                 onClick={() => onConfirmDepositPayment(customDepositAmount)}
                 className="py-3 px-3 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-black shadow-md shadow-sky-500/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border-none"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>ຢືນຢັນມັດຈຳ ({formatLAK(customDepositAmount)})</span>
-              </button>
+                <span>{receiptRequestMode ? 'ສ້າງຄຳຂໍມັດຈຳ' : 'ຢືນຢັນມັດຈຳ'} ({formatLAK(customDepositAmount)})</span>
+              </button>}
             </div>
 
             <button

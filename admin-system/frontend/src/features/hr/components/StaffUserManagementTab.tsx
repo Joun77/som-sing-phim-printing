@@ -84,15 +84,21 @@ export const StaffUserManagementTab: React.FC = () => {
   const [isActive, setIsActive] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const committedAccountMutation = async (path: string, options: RequestInit) => {
+    const response = await apiFetch(path, options);
+    const body = await response.json();
+    if (!response.ok || body?.status !== 'success' || body?.committed !== true) throw new Error(body?.message || 'ບໍ່ສາມາດຢືນຢັນການບັນທຶກໄດ້');
+    return body;
+  };
   const fetchUsers = async () => {
     setLoading(true);
     try {
       const res = await apiFetch<any>('/api/v1/admin/users');
-      if (res && res.data) {
-        setUsers(res.data);
-      }
+      const body = await res.json();
+      if (!res.ok || body?.status !== 'success' || !Array.isArray(body.data)) throw new Error('ບໍ່ສາມາດໂຫຼດບັນຊີໄດ້');
+      setUsers(body.data);
     } catch (err: any) {
-      console.warn('Failed to fetch admin users:', err);
+      showToast(err.message || 'ບໍ່ສາມາດໂຫຼດບັນຊີໄດ້', 'error');
     } finally {
       setLoading(false);
     }
@@ -166,14 +172,14 @@ export const StaffUserManagementTab: React.FC = () => {
       }
 
       if (editingUser) {
-        await apiFetch(`/api/v1/admin/users/${editingUser.id}`, {
+        await committedAccountMutation(`/api/v1/admin/users/${editingUser.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
         showToast('ອັບເດດບັນຊີຜູ້ໃຊ້ສຳເລັດ!', 'success');
       } else {
-        await apiFetch('/api/v1/admin/users', {
+        await committedAccountMutation('/api/v1/admin/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -200,7 +206,7 @@ export const StaffUserManagementTab: React.FC = () => {
       `ທ່ານຕ້ອງການລຶບບັນຊີ "${u.username}" (${u.fullName}) ແທ້ບໍ່? ການກະທຳນີ້ບໍ່ສາມາດຍົກເລີກໄດ້`,
       async () => {
         try {
-          await apiFetch(`/api/v1/admin/users/${u.id}`, { method: 'DELETE' });
+          await committedAccountMutation(`/api/v1/admin/users/${u.id}`, { method: 'DELETE' });
           showToast('ລຶບບັນຊີສຳເລັດ', 'success');
           fetchUsers();
         } catch (err: any) {
@@ -213,7 +219,7 @@ export const StaffUserManagementTab: React.FC = () => {
   const handleToggleActive = async (u: AdminUserItem) => {
     if (u.username === 'admin') return;
     try {
-      await apiFetch(`/api/v1/admin/users/${u.id}`, {
+      await committedAccountMutation(`/api/v1/admin/users/${u.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...u, isActive: !u.isActive })

@@ -25,6 +25,7 @@ export const FaqManagement: React.FC = () => {
   const [answerLo, setAnswerLo] = useState('');
   const [answerEn, setAnswerEn] = useState('');
   const [sortOrder, setSortOrder] = useState(10);
+  const [actionError, setActionError] = useState('');
   const [formError, setFormError] = useState('');
 
   const resetForm = () => {
@@ -91,25 +92,19 @@ export const FaqManagement: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     if (window.confirm('ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບ FAQ ນີ້?')) {
-      await deleteMutation.mutateAsync(id);
+      try { await deleteMutation.mutateAsync(id); setActionError(''); }
+      catch (error) { setActionError(error instanceof Error ? error.message : 'ບໍ່ສາມາດລຶບໄດ້'); }
     }
   };
 
   const handleMove = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= faqs.length) return;
+    const moved = faqs[index], neighbor = faqs[targetIndex];
+    if (!moved || !neighbor || reorderMutation.isPending) return;
+    const payload = [{ id: moved.id, sortOrder: neighbor.sortOrder }, { id: neighbor.id, sortOrder: moved.sortOrder }];
 
-    const newItems = [...faqs];
-    const temp = newItems[index];
-    newItems[index] = newItems[targetIndex];
-    newItems[targetIndex] = temp;
-
-    const payload = newItems.map((item, idx) => ({
-      id: item.id,
-      sortOrder: (idx + 1) * 10,
-    }));
-
-    await reorderMutation.mutateAsync(payload);
+    try { await reorderMutation.mutateAsync(payload); setActionError(''); }
+    catch (error) { setActionError(error instanceof Error ? error.message : 'ບໍ່ສາມາດຈັດລຳດັບໄດ້'); }
   };
 
   if (isLoading) {
@@ -130,6 +125,7 @@ export const FaqManagement: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {actionError && <p role="alert" className="text-rose-700">{actionError}</p>}
       {/* Header Bar */}
       <div className="flex items-center justify-between">
         <div>

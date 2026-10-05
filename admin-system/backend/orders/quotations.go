@@ -2,7 +2,10 @@ package orders
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +13,8 @@ import (
 	"log"
 	"math"
 	"path/filepath"
+	"somsing.local/backend/finance"
+	"somsing.local/backend/pricing"
 	"strings"
 	"sync"
 	"time"
@@ -21,34 +26,37 @@ import (
 )
 
 type QuotationRecord struct {
-	ID                       string           `json:"id"`
-	QuotationNo              string           `json:"quotation_no"`
-	Title                    string           `json:"title"`
-	CustomerID               string           `json:"customer_id,omitempty"`
-	CustomerName             string           `json:"customer_name"`
-	CustomerPhone            string           `json:"customer_phone"`
-	CustomerAddress          string           `json:"customer_address"`
-	Status                   string           `json:"status"`
-	TotalCost                float64          `json:"total_cost"`
-	TotalSellingPrice        float64          `json:"total_selling_price"`
-	OverallProfitPercent     float64          `json:"overall_profit_percent"`
-	DiscountPercent          float64          `json:"discount_percent"`
-	SetupFee                 float64          `json:"setup_fee"`
-	PackagingCost            float64          `json:"packaging_cost"`
-	ShippingFee              float64          `json:"shipping_fee"`
-	ExpiryDate               string           `json:"expiry_date"`
-	Notes                    string           `json:"notes"`
-	ArtworkURL               string           `json:"artwork_url,omitempty"`
-	DigitalProofURL          string           `json:"digital_proof_url,omitempty"`
-	Items                    []map[string]any `json:"items"`
-	CreatedAt                time.Time        `json:"created_at"`
-	UpdatedAt                time.Time        `json:"updated_at"`
-	CommercialSnapshot       map[string]any   `json:"commercial_snapshot,omitempty"`
-	CostReview               map[string]any   `json:"cost_review,omitempty"`
-	Conversion               map[string]any   `json:"conversion,omitempty"`
-	SnapshotCompletionReason string           `json:"snapshot_completion_reason,omitempty"`
-	Committed                bool             `json:"committed"`
-	legacyCostMissing        bool
+	PriceCorrectionTargetOrderID string           `json:"price_correction_target_order_id,omitempty"`
+	ExpectedOrderUpdatedAt       string           `json:"expected_order_updated_at,omitempty"`
+	PriceCorrectionSource        map[string]any   `json:"price_correction_source,omitempty"`
+	ID                           string           `json:"id"`
+	QuotationNo                  string           `json:"quotation_no"`
+	Title                        string           `json:"title"`
+	CustomerID                   string           `json:"customer_id,omitempty"`
+	CustomerName                 string           `json:"customer_name"`
+	CustomerPhone                string           `json:"customer_phone"`
+	CustomerAddress              string           `json:"customer_address"`
+	Status                       string           `json:"status"`
+	TotalCost                    float64          `json:"total_cost"`
+	TotalSellingPrice            float64          `json:"total_selling_price"`
+	OverallProfitPercent         float64          `json:"overall_profit_percent"`
+	DiscountPercent              float64          `json:"discount_percent"`
+	SetupFee                     float64          `json:"setup_fee"`
+	PackagingCost                float64          `json:"packaging_cost"`
+	ShippingFee                  float64          `json:"shipping_fee"`
+	ExpiryDate                   string           `json:"expiry_date"`
+	Notes                        string           `json:"notes"`
+	ArtworkURL                   string           `json:"artwork_url,omitempty"`
+	DigitalProofURL              string           `json:"digital_proof_url,omitempty"`
+	Items                        []map[string]any `json:"items"`
+	CreatedAt                    time.Time        `json:"created_at"`
+	UpdatedAt                    time.Time        `json:"updated_at"`
+	CommercialSnapshot           map[string]any   `json:"commercial_snapshot,omitempty"`
+	CostReview                   map[string]any   `json:"cost_review,omitempty"`
+	Conversion                   map[string]any   `json:"conversion,omitempty"`
+	SnapshotCompletionReason     string           `json:"snapshot_completion_reason,omitempty"`
+	Committed                    bool             `json:"committed"`
+	legacyCostMissing            bool
 }
 
 var (
@@ -74,11 +82,17 @@ type quotationFailure struct {
 	existingID string
 }
 
-func (e *quotationFailure) Error() string { return e.code }
+func (e *quotationFailure) Error() string                 { return e.code }
+func (e *quotationFailure) PaymentFailure() (int, string) { return e.status, e.code }
 func quoteFailure(status int, code string, fields ...string) error {
 	return &quotationFailure{status: status, code: code, fields: fields}
 }
 func sendQuotationFailure(c *gin.Context, err error) {
+	var op *finance.OperationError
+	if errors.As(err, &op) {
+		finance.WriteOperationError(c, err)
+		return
+	}
 	var failure *quotationFailure
 	if !errors.As(err, &failure) {
 		log.Printf("[QUOTATION OPERATION ERROR] %v", err)
@@ -145,6 +159,9 @@ func quoteCloneItems(items []map[string]any) ([]map[string]any, error) {
 }
 func quotationReserved(q QuotationRecord) map[string]any {
 	result := map[string]any{}
+	if q.PriceCorrectionSource != nil {
+		result["price_correction_source"] = q.PriceCorrectionSource
+	}
 	if q.CommercialSnapshot != nil {
 		result["commercial_snapshot"] = q.CommercialSnapshot
 	}
@@ -201,6 +218,11 @@ func hydrateQuotationSnapshot(q *QuotationRecord) error {
 		q.CommercialSnapshot = quoteObject(reference["commercial_snapshot"])
 		q.CostReview = quoteObject(reference["cost_review"])
 		q.Conversion = quoteObject(reference["conversion"])
+		q.PriceCorrectionSource = quoteObject(reference["price_correction_source"])
+		if q.PriceCorrectionSource != nil {
+			q.CustomerID = quotationString(q.PriceCorrectionSource, "customer_id")
+			q.PriceCorrectionTargetOrderID = quotationString(q.PriceCorrectionSource, "target_order_id")
+		}
 	}
 	return nil
 }
@@ -383,7 +405,11 @@ func auditQuotation(tx *sql.Tx, c *gin.Context, action, id string, old, new any)
 	if err != nil {
 		return err
 	}
-	result, err := tx.Exec(`INSERT INTO audit_logs(id,user_id,user_name,action,resource_type,resource_id,old_values,new_values,ip_address,created_at) VALUES($1,$2,$3,$4,'QUOTATION',$5,$6,$7,$8,NOW())`, token, actor, c.GetString("username"), action, id, string(before), string(after), c.ClientIP())
+	resourceType := "QUOTATION"
+	if strings.HasPrefix(action, "ORDER_") {
+		resourceType = "ORDER"
+	}
+	result, err := tx.Exec(`INSERT INTO audit_logs(id,user_id,user_name,action,resource_type,resource_id,old_values,new_values,ip_address,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())`, token, actor, c.GetString("username"), action, resourceType, id, string(before), string(after), c.ClientIP())
 	if err != nil {
 		return err
 	}
@@ -443,7 +469,29 @@ func HandleSaveQuotation(c *gin.Context) {
 	q.CostReview = nil
 	q.Conversion = nil
 	q.Committed = false
+	q.PriceCorrectionSource = nil
 	err := db.RunInTransaction(func(tx *sql.Tx) error {
+		// Bound paths lock the parent before the source and recheck the binding under lock.
+		hint, hintErr := loadQuotation(tx, q.ID, false)
+		if hintErr != nil && !errors.Is(hintErr, sql.ErrNoRows) {
+			return hintErr
+		}
+		target := q.PriceCorrectionTargetOrderID
+		if hint.PriceCorrectionSource != nil {
+			storedTarget := quotationString(hint.PriceCorrectionSource, "target_order_id")
+			if target != "" && target != storedTarget {
+				return quoteFailure(409, "PRICE_SOURCE_ALREADY_USED")
+			}
+			target = storedTarget
+		}
+		if target != "" {
+			if q.ExpectedOrderUpdatedAt == "" {
+				return quoteFailure(422, "PRICE_SOURCE_REQUIRED")
+			}
+			if err := lockPriceSourceOrder(tx, target, q.ExpectedOrderUpdatedAt); err != nil {
+				return err
+			}
+		}
 		old, err := loadQuotation(tx, q.ID, true)
 		exists := err == nil
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -481,6 +529,18 @@ func HandleSaveQuotation(c *gin.Context) {
 				return quoteFailure(400, "invalid_request", "status")
 			}
 		}
+		if old.PriceCorrectionSource != nil && quotationString(old.PriceCorrectionSource, "target_order_id") != target {
+			return quoteFailure(409, "PRICE_SOURCE_ALREADY_USED")
+		}
+		if target != "" {
+			if old.Conversion != nil || q.Conversion != nil {
+				return quoteFailure(409, "PRICE_SOURCE_ALREADY_USED")
+			}
+			q.PriceCorrectionTargetOrderID = target
+			if err := bindPriceSource(tx, &q, target); err != nil {
+				return err
+			}
+		}
 		q.UpdatedAt = time.Now().UTC().Truncate(time.Microsecond)
 		complete := validateQuotationSnapshot(q) == nil
 		if q.CommercialSnapshot != nil && !complete {
@@ -508,11 +568,18 @@ func HandleSaveQuotation(c *gin.Context) {
 			}
 			q.CostReview = map[string]any{"source": source, "user_id": c.GetString("user_id"), "reviewed_at": q.UpdatedAt.Format(time.RFC3339Nano), "reason": reason}
 		}
+		if q.Conversion == nil {
+			if err := validateQuotationImposition(tx, &q); err != nil {
+				return err
+			}
+		}
 		if err := normalizeQuotationItems(&q); err != nil {
 			return err
 		}
-		if _, err := autoLinkOrCreateCustomer(tx, Order{CustomerID: q.CustomerID, CustomerName: q.CustomerName, CustomerPhone: q.CustomerPhone, CustomerAddress: q.CustomerAddress}); err != nil {
-			return err
+		if target == "" {
+			if _, err := autoLinkOrCreateCustomer(tx, Order{CustomerID: q.CustomerID, CustomerName: q.CustomerName, CustomerPhone: q.CustomerPhone, CustomerAddress: q.CustomerAddress}); err != nil {
+				return err
+			}
 		}
 		items, err := json.Marshal(q.Items)
 		if err != nil {
@@ -690,6 +757,9 @@ func HandleConvertQuotationToOrder(c *gin.Context) {
 		if err != nil {
 			return err
 		}
+		if q.PriceCorrectionSource != nil {
+			return quoteFailure(409, "PRICE_SOURCE_ALREADY_USED")
+		}
 		key := "quotation-conversion:" + q.ID
 		if supplied := c.GetHeader("Idempotency-Key"); supplied != "" && supplied != key {
 			return quoteFailure(400, "invalid_request", "Idempotency-Key")
@@ -725,6 +795,9 @@ func HandleConvertQuotationToOrder(c *gin.Context) {
 			}
 		}
 		if err := validateQuotationSnapshot(q); err != nil {
+			return err
+		}
+		if err := validateQuotationImposition(tx, &q); err != nil {
 			return err
 		}
 		sourceRevision = q.UpdatedAt.UTC().Format(time.RFC3339Nano)
@@ -933,18 +1006,18 @@ func quotationArtworkSnapshot(item map[string]any) (coverURL, innerURL string, a
 		}
 	} else {
 		// Legacy single artwork represents one original, never a fabricated cover.
-		coverURL = quotationString(item, "cover_file_url", "coverArtworkUrl")
-		innerURL = quotationString(item, "inner_file_url", "artworkUrl", "artwork_url", "fileUrl", "file_url")
+		coverURL = quotationString(specs, "cover_file_url", "coverArtworkUrl")
+		innerURL = quotationString(specs, "inner_file_url", "artworkUrl", "artwork_url", "fileUrl", "file_url")
 		url := innerURL
 		if url == "" {
 			url = coverURL
 		}
 		if url != "" {
-			name := quotationString(item, "fileName", "file_name", "artworkFileName", "artwork_file_name")
+			name := quotationString(specs, "fileName", "file_name", "artworkFileName", "artwork_file_name")
 			if name == "" {
 				name = filepath.Base(url)
 			}
-			artwork = &ItemArtwork{FileURL: url, FileName: name, FileSizeBytes: int64(quotationPositiveInt(item, "fileSize", "file_size", "artworkFileSize", "artwork_file_size")), PageCount: quotationPositiveInt(specs, "page_count", "pagesPerBook", "pageCount", "pages")}
+			artwork = &ItemArtwork{FileURL: url, FileName: name, FileSizeBytes: int64(quotationPositiveInt(specs, "fileSize", "file_size", "artworkFileSize", "artwork_file_size")), PageCount: quotationPositiveInt(specs, "page_count", "pagesPerBook", "pageCount", "pages")}
 			if artwork.PageCount == 0 {
 				artwork.PageCount = 1
 			}
@@ -974,4 +1047,437 @@ func quotationPositiveInt(values map[string]any, keys ...string) int {
 		}
 	}
 	return 0
+}
+
+// Validate and materialize explicit modes only; legacy absence is never backfilled.
+func validateQuotationImposition(tx *sql.Tx, q *QuotationRecord) error {
+	for _, item := range q.Items {
+		_, _, _, specs := quotationArtworkSnapshot(item)
+		mode, err := explicitImpositionMode(item, specs)
+		if err != nil {
+			return err
+		}
+		parts, _ := specs["artwork_parts"].([]any)
+		var primary *pricing.StockDimensionSnapshot
+		for _, raw := range parts {
+			part, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			settings := quoteObject(part["printSettings"])
+			if settings == nil {
+				settings = map[string]any{}
+			}
+			partMode, e := explicitImpositionMode(part, settings)
+			if e != nil {
+				return e
+			}
+			if partMode == "" {
+				partMode = mode
+			}
+			if partMode == "" {
+				continue
+			}
+			part["printSettings"] = settings
+			settings["imposition_mode"] = partMode
+			if partMode == "OFF" {
+				merged := map[string]any{}
+				for k, v := range settings {
+					merged[k] = v
+				}
+				for k, v := range part {
+					merged[k] = v
+				}
+				if err = rejectImpositionCutting(merged); err != nil {
+					return err
+				}
+				snapshot, e := validatePrecutSpec(tx, merged)
+				if e != nil {
+					return e
+				}
+				settings["stock_dimension_snapshot"] = snapshot
+				if primary == nil || part["role"] == "inner" {
+					primary = snapshot
+				}
+			}
+		}
+		if mode == "" {
+			continue
+		}
+		item["imposition_mode"] = mode
+		specs["imposition_mode"] = mode
+		if mode == "OFF" {
+			if err = rejectImpositionCutting(specs); err != nil {
+				return err
+			}
+			key := quotationString(specs, "paper_sku", "paperId", "paper_id")
+			width := impositionNumber(specs, "job_width", "jobWidth", "unfolded_width_mm", "widthMM", "width_mm")
+			height := impositionNumber(specs, "job_height", "jobHeight", "unfolded_height_mm", "heightMM", "height_mm")
+			if key != "" && width > 0 && height > 0 {
+				primary, err = validatePrecutSpec(tx, specs)
+				if err != nil {
+					return err
+				}
+			} else if primary == nil {
+				return &finance.OperationError{Status: 422, Code: "PRECUT_STOCK_DIMENSIONS_INCOMPATIBLE"}
+			}
+			if existing := specs["stock_dimension_snapshot"]; existing != nil {
+				if err = compareStockSnapshot(existing, primary); err != nil {
+					return err
+				}
+			}
+			specs["stock_dimension_snapshot"] = primary
+		}
+		item["specs"] = specs
+	}
+	return nil
+}
+func explicitImpositionMode(objects ...map[string]any) (string, error) {
+	mode := ""
+	for _, object := range objects {
+		value, has := object["imposition_mode"]
+		if !has {
+			continue
+		}
+		s, ok := value.(string)
+		if !ok || (s != "OFF" && s != "ON") {
+			return "", &finance.OperationError{Status: 422, Code: "INVALID_IMPOSITION_MODE"}
+		}
+		if mode != "" && s != mode {
+			return "", &finance.OperationError{Status: 422, Code: "IMPOSITION_MODE_CONFLICT"}
+		}
+		mode = s
+	}
+	return mode, nil
+}
+func impositionNumber(specs map[string]any, keys ...string) float64 {
+	for _, key := range keys {
+		if value, ok := specs[key].(float64); ok {
+			return value
+		}
+	}
+	return 0
+}
+func rejectImpositionCutting(specs map[string]any) error {
+	for _, key := range []string{"paper_cutting_ticket", "paper_cutting_tickets", "cuttingTickets"} {
+		if value, has := specs[key]; has && value != nil {
+			if array, ok := value.([]any); !ok || len(array) > 0 {
+				return &finance.OperationError{Status: 422, Code: "OFF_CUTTING_OPTIONS_FORBIDDEN"}
+			}
+		}
+	}
+	for _, key := range []string{"requires_guillotine_cut", "requiresGuillotineCut", "use_31x43_parent_sheet"} {
+		if specs[key] == true {
+			return &finance.OperationError{Status: 422, Code: "OFF_CUTTING_OPTIONS_FORBIDDEN"}
+		}
+	}
+	for _, key := range []string{"cuts_per_sheet", "cutsPerSheet", "cutsPerSheetOverride", "images_per_sheet"} {
+		if value, ok := specs[key].(float64); ok && value > 1 {
+			return &finance.OperationError{Status: 422, Code: "OFF_CUTTING_OPTIONS_FORBIDDEN"}
+		}
+	}
+	return nil
+}
+func compareStockSnapshot(value any, expected *pricing.StockDimensionSnapshot) error {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	var actual pricing.StockDimensionSnapshot
+	if json.Unmarshal(raw, &actual) != nil {
+		return &finance.OperationError{Status: 422, Code: "STOCK_DIMENSION_SNAPSHOT_INVALID"}
+	}
+	if actual.Version != expected.Version {
+		return &finance.OperationError{Status: 409, Code: "STOCK_DIMENSION_SNAPSHOT_STALE"}
+	}
+	if actual != *expected {
+		return &finance.OperationError{Status: 422, Code: "STOCK_DIMENSION_SNAPSHOT_INVALID"}
+	}
+	return nil
+}
+func validatePrecutSpec(tx *sql.Tx, specs map[string]any) (*pricing.StockDimensionSnapshot, error) {
+	key := quotationString(specs, "paper_sku", "paperId", "paper_id")
+	if key == "" {
+		key = quotationString(quoteObject(specs["paper"]), "id")
+	}
+	width := impositionNumber(specs, "job_width", "jobWidth", "unfolded_width_mm", "widthMM", "width_mm")
+	height := impositionNumber(specs, "job_height", "jobHeight", "unfolded_height_mm", "heightMM", "height_mm")
+	snapshot, _, err := pricing.ResolvePrecutStock(context.Background(), tx, key, width, height)
+	if err != nil {
+		return nil, err
+	}
+	if value := specs["stock_dimension_snapshot"]; value != nil {
+		if err = compareStockSnapshot(value, snapshot); err != nil {
+			return nil, err
+		}
+	}
+	return snapshot, nil
+}
+
+// A replacement quote changes commercial amounts only. Work comparison retains
+// every unrecognized spec, so an unfamiliar work field cannot silently disappear.
+func priceSourceWork(value any) any { return priceSourceWorkAt(value, true) }
+func priceSourceWorkAt(value any, root bool) any {
+	switch v := value.(type) {
+	case map[string]any:
+		result := map[string]any{}
+		for key, item := range v {
+			if key == quoteSnapshotKey {
+				continue
+			}
+			if root {
+				switch key {
+				case "id", "specs", "specifications", "cover_file_url", "inner_file_url", "quantity", "unit_price_lak", "unitPrice", "unit_price_snapshot", "total_price_lak", "subtotal", "totalPrice", "unit_cost_lak", "costPriceSnapshot", "unitCost", "cost_price_snapshot", "total_cost", "total_selling_price", "commercial_snapshot", "commercial_cost_snapshot":
+					continue
+				}
+			}
+			result[key] = priceSourceWorkAt(item, false)
+		}
+		return result
+	case []any:
+		result := make([]any, len(v))
+		for i, item := range v {
+			result[i] = priceSourceWorkAt(item, false)
+		}
+		return result
+	default:
+		return value
+	}
+}
+func lockPriceSourceOrder(tx *sql.Tx, id, expected string) error {
+	var version time.Time
+	if err := tx.QueryRow(`SELECT updated_at FROM orders WHERE id=$1 FOR UPDATE`, id).Scan(&version); err != nil {
+		return err
+	}
+	if expected != "" && version.UTC().Format(time.RFC3339Nano) != expected {
+		return quoteFailure(409, "PRICE_SOURCE_STALE")
+	}
+	return nil
+}
+func priceSourceOrderWork(tx *sql.Tx, id string) (string, map[string]map[string]any, error) {
+	rows, err := tx.Query(`SELECT id,quantity,COALESCE(specs,'{}'::jsonb),COALESCE(page_count,1),COALESCE(paper_size,''),COALESCE(cover_file_url,''),COALESCE(inner_file_url,''),COALESCE(binding_type,'NONE'),COALESCE(cover_paper_id,''),COALESCE(inner_paper_id,''),COALESCE(spine_width_mm,0),COALESCE(avg_cov_c,0),COALESCE(avg_cov_m,0),COALESCE(avg_cov_y,0),COALESCE(avg_cov_k,0) FROM order_items WHERE order_id=$1 ORDER BY id FOR UPDATE`, id)
+	if err != nil {
+		return "", nil, err
+	}
+	defer rows.Close()
+	items := map[string]map[string]any{}
+	ordered := []map[string]any{}
+	for rows.Next() {
+		var itemID, paper, cover, inner, binding, coverPaper, innerPaper string
+		var qty, pages int
+		var raw []byte
+		var spine, c, m, y, k float64
+		if err = rows.Scan(&itemID, &qty, &raw, &pages, &paper, &cover, &inner, &binding, &coverPaper, &innerPaper, &spine, &c, &m, &y, &k); err != nil {
+			return "", nil, err
+		}
+		specs := map[string]any{}
+		if err = json.Unmarshal(raw, &specs); err != nil {
+			return "", nil, err
+		}
+		item := map[string]any{"id": itemID, "quantity": qty, "page_count": pages, "paper_size": paper, "cover_file_url": cover, "inner_file_url": inner, "binding_type": binding, "cover_paper_id": coverPaper, "inner_paper_id": innerPaper, "spine_width_mm": spine, "avg_cov_c": c, "avg_cov_m": m, "avg_cov_y": y, "avg_cov_k": k, "work_specs": priceSourceWork(specs)}
+		items[itemID] = item
+		ordered = append(ordered, item)
+	}
+	if err = rows.Err(); err != nil {
+		return "", nil, err
+	}
+	if len(items) == 0 {
+		return "", nil, quoteFailure(409, "PRICE_SOURCE_ITEMS_MISMATCH")
+	}
+	raw, err := json.Marshal(ordered)
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:]), items, err
+}
+func bindPriceSource(tx *sql.Tx, q *QuotationRecord, target string) error {
+	var customer string
+	if err := tx.QueryRow(`SELECT COALESCE(customer_id,'') FROM orders WHERE id=$1`, target).Scan(&customer); err != nil {
+		return err
+	}
+	if customer == "" || (q.CustomerID != "" && q.CustomerID != customer) {
+		return quoteFailure(409, "PRICE_SOURCE_CUSTOMER_MISMATCH")
+	}
+	if err := tx.QueryRow(`SELECT COALESCE(name,''),COALESCE(phone,''),COALESCE(address,'') FROM customers WHERE id=$1 FOR UPDATE`, customer).Scan(&q.CustomerName, &q.CustomerPhone, &q.CustomerAddress); err != nil {
+		return err
+	}
+	fingerprint, canonical, err := priceSourceOrderWork(tx, target)
+	if err != nil {
+		return err
+	}
+	if len(canonical) != len(q.Items) {
+		return quoteFailure(409, "PRICE_SOURCE_ITEMS_MISMATCH")
+	}
+	seen := map[string]bool{}
+	for _, item := range q.Items {
+		id := quotationString(item, "id")
+		stored, ok := canonical[id]
+		if !ok || seen[id] {
+			return quoteFailure(409, "PRICE_SOURCE_ITEMS_MISMATCH")
+		}
+		seen[id] = true
+		qty, ok := quoteNumber(item["quantity"])
+		if !ok || qty != float64(stored["quantity"].(int)) {
+			return quoteFailure(409, "PRICE_SOURCE_ITEMS_MISMATCH")
+		}
+		cover, inner, _, specs := quotationArtworkSnapshot(item)
+		if !quoteObjectsEqual(priceSourceWork(specs), stored["work_specs"]) || cover != stored["cover_file_url"] || inner != stored["inner_file_url"] {
+			return quoteFailure(409, "PRICE_SOURCE_ITEMS_MISMATCH")
+		}
+	}
+	q.CustomerID = customer
+	q.PriceCorrectionSource = map[string]any{"target_order_id": target, "customer_id": customer, "order_work_fingerprint": fingerprint}
+	return nil
+}
+func priceSourceCommercialFingerprint(q QuotationRecord) (string, error) {
+	raw, err := quoteSnapshotFingerprint(q)
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:]), err
+}
+func validateBoundPriceSource(tx *sql.Tx, q QuotationRecord, target string) error {
+	if q.Conversion != nil || quotationString(q.PriceCorrectionSource, "target_order_id") != target {
+		return quoteFailure(409, "PRICE_SOURCE_ALREADY_USED")
+	}
+	var customer string
+	if err := tx.QueryRow(`SELECT COALESCE(customer_id,'') FROM orders WHERE id=$1`, target).Scan(&customer); err != nil {
+		return err
+	}
+	if customer == "" || quotationString(q.PriceCorrectionSource, "customer_id") != customer {
+		return quoteFailure(409, "PRICE_SOURCE_CUSTOMER_MISMATCH")
+	}
+	if q.CommercialSnapshot == nil {
+		return quoteFailure(409, "PRICE_SOURCE_NOT_APPROVED")
+	}
+	if err := validateQuotationSnapshot(q); err != nil {
+		return quoteFailure(409, "PRICE_SOURCE_NOT_APPROVED")
+	}
+	fingerprint, _, err := priceSourceOrderWork(tx, target)
+	if err != nil {
+		return err
+	}
+	if fingerprint != quotationString(q.PriceCorrectionSource, "order_work_fingerprint") {
+		return quoteFailure(409, "PRICE_SOURCE_ITEMS_MISMATCH")
+	}
+	return nil
+}
+func approvePriceSource(c *gin.Context, expected string) {
+	role := c.GetString("user_role")
+	if role != "admin" && role != "manager" && role != "owner" {
+		sendQuotationFailure(c, quoteFailure(403, "forbidden"))
+		return
+	}
+	var q QuotationRecord
+	var approval gin.H
+	err := db.RunInTransaction(func(tx *sql.Tx) error {
+		hint, err := loadQuotation(tx, c.Param("id"), false)
+		if err != nil {
+			return err
+		}
+		target := quotationString(hint.PriceCorrectionSource, "target_order_id")
+		if hint.ID != c.Param("id") || target == "" || expected == "" {
+			return quoteFailure(422, "PRICE_SOURCE_REQUIRED")
+		}
+		if err = lockPriceSourceOrder(tx, target, ""); err != nil {
+			return err
+		}
+		q, err = loadQuotation(tx, hint.ID, true)
+		if err != nil {
+			return err
+		}
+		if q.UpdatedAt.UTC().Format(time.RFC3339Nano) != expected {
+			return quoteFailure(409, "PRICE_SOURCE_STALE")
+		}
+		if err = validateBoundPriceSource(tx, q, target); err != nil {
+			return err
+		}
+		q.Status = "ACCEPTED"
+		if err = tx.QueryRow(`UPDATE quotations SET status='ACCEPTED',updated_at=clock_timestamp() WHERE id=$1 RETURNING updated_at`, q.ID).Scan(&q.UpdatedAt); err != nil {
+			return err
+		}
+		fingerprint, err := priceSourceCommercialFingerprint(q)
+		if err != nil {
+			return err
+		}
+		approvalID, err := finance.NewOperationID()
+		if err != nil {
+			return err
+		}
+		approval = gin.H{"approval_audit_id": approvalID, "source_quotation_id": q.ID, "source_quotation_updated_at": q.UpdatedAt.UTC().Format(time.RFC3339Nano), "commercial_fingerprint": fingerprint, "total_lak": decimal.NewFromFloat(q.TotalSellingPrice).StringFixed(2), "target_order_id": target, "customer_id": q.CustomerID, "actor_id": c.GetString("user_id"), "actor_role": role}
+		raw, err := json.Marshal(approval)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(`INSERT INTO audit_logs(id,user_id,user_name,action,resource_type,resource_id,new_values,ip_address) VALUES($1,$2,$3,'QUOTATION_PRICE_SOURCE_APPROVED','QUOTATION',$4,$5,$6)`, approvalID, c.GetString("user_id"), c.GetString("username"), q.ID, string(raw), c.ClientIP())
+		return err
+	})
+	if err != nil {
+		sendQuotationFailure(c, err)
+		return
+	}
+	q.Committed = true
+	cacheQuotation(q)
+	c.JSON(200, gin.H{"status": "success", "committed": true, "data": q, "price_source_approval": approval, "updated_at": q.UpdatedAt.UTC().Format(time.RFC3339Nano)})
+}
+func validateTotalPriceSource(c *gin.Context, tx *sql.Tx, body map[string]any, total decimal.Decimal) (gin.H, error) {
+	id, ok := body["source_quotation_id"].(string)
+	version, vok := body["source_quotation_updated_at"].(string)
+	if !ok || !vok || id == "" || version == "" {
+		return nil, &finance.OperationError{Status: 422, Code: "PRICE_SOURCE_REQUIRED"}
+	}
+	q, err := loadQuotation(tx, id, true)
+	if err != nil {
+		return nil, err
+	}
+	if q.ID != id {
+		return nil, quoteFailure(422, "PRICE_SOURCE_REQUIRED")
+	}
+	if q.UpdatedAt.UTC().Format(time.RFC3339Nano) != version {
+		return nil, quoteFailure(409, "PRICE_SOURCE_STALE")
+	}
+	if q.Status != "ACCEPTED" {
+		return nil, quoteFailure(409, "PRICE_SOURCE_NOT_APPROVED")
+	}
+	if err = validateBoundPriceSource(tx, q, c.Param("id")); err != nil {
+		return nil, err
+	}
+	var dbTotal string
+	if err = tx.QueryRow(`SELECT total_selling_price::text FROM quotations WHERE id=$1`, id).Scan(&dbTotal); err != nil {
+		return nil, err
+	}
+	stored, err := decimal.NewFromString(dbTotal)
+	if err != nil {
+		return nil, err
+	}
+	snapshotAmount, valid := quoteNumber(q.CommercialSnapshot["final_total_lak"])
+	if !valid || !stored.Equal(total) || !decimal.NewFromFloat(snapshotAmount).Equal(total) || !stored.Equal(stored.Truncate(2)) {
+		return nil, quoteFailure(422, "PRICE_SOURCE_TOTAL_MISMATCH")
+	}
+	fingerprint, err := priceSourceCommercialFingerprint(q)
+	if err != nil {
+		return nil, err
+	}
+	var raw []byte
+	var auditID, actor string
+	err = tx.QueryRow(`SELECT id,user_id,new_values FROM audit_logs WHERE action='QUOTATION_PRICE_SOURCE_APPROVED' AND resource_id=$1 AND new_values->>'source_quotation_updated_at'=$2 ORDER BY created_at DESC LIMIT 1`, id, version).Scan(&auditID, &actor, &raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, quoteFailure(409, "PRICE_SOURCE_NOT_APPROVED")
+	}
+	if err != nil {
+		return nil, err
+	}
+	var approval map[string]any
+	if err = json.Unmarshal(raw, &approval); err != nil {
+		return nil, err
+	}
+	role := quotationString(approval, "actor_role")
+	if (role != "admin" && role != "manager" && role != "owner") || actor == "" || quotationString(approval, "commercial_fingerprint") != fingerprint || quotationString(approval, "target_order_id") != c.Param("id") || quotationString(approval, "customer_id") != q.CustomerID {
+		return nil, quoteFailure(409, "PRICE_SOURCE_NOT_APPROVED")
+	}
+	var reused bool
+	err = tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM audit_logs WHERE action='ORDER_TOTAL_CORRECTION' AND new_values->'price_review'->>'source_quotation_id'=$1 AND resource_id<>$2)`, id, c.Param("id")).Scan(&reused)
+	if err != nil {
+		return nil, err
+	}
+	if reused {
+		return nil, quoteFailure(409, "PRICE_SOURCE_ALREADY_USED")
+	}
+	return gin.H{"source": "approved_quotation", "source_quotation_id": id, "source_quotation_updated_at": version, "approval_audit_id": auditID, "commercial_fingerprint": fingerprint, "target_order_id": c.Param("id"), "customer_id": q.CustomerID}, nil
 }

@@ -1,3 +1,4 @@
+import { apiFetch } from '../../../api/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ProductMaterial,
@@ -10,10 +11,22 @@ import {
 
 const API = '/api/v1';
 
+// Validate the server contract before callers invalidate caches or close drafts.
+async function guideFetch(url: string, options?: RequestInit) {
+  const res = await apiFetch(url, options);
+  let body: any;
+  try { body = await res.clone().json(); } catch { throw new Error('ບໍ່ສາມາດຢືນຢັນຂໍ້ມູນຈາກລະບົບໄດ້'); }
+  if (!res.ok || body.status !== 'success') throw new Error(body.message || 'ບໍ່ສາມາດບັນທຶກຂໍ້ມູນໄດ້');
+  if (!options?.method || options.method === 'GET') {
+    if (!Array.isArray(body.data)) throw new Error('ຮູບແບບລາຍການຂໍ້ມູນບໍ່ຖືກຕ້ອງ');
+  } else if (body.committed !== true) throw new Error('ລະບົບຍັງບໍ່ຢືນຢັນການບັນທຶກ');
+  return res;
+}
+
 // ---- Materials ----
 
 async function fetchMaterialsAdmin(): Promise<ProductMaterial[]> {
-  const res = await fetch(`${API}/materials`);
+  const res = await guideFetch(`${API}/material-guide`);
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || 'Failed to fetch materials');
   return json.data ?? [];
@@ -27,7 +40,7 @@ export function useCreateMaterial() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: CreateMaterialInput) => {
-      const res = await fetch(`${API}/admin/materials`, {
+      const res = await guideFetch(`${API}/admin/material-guide`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
@@ -44,7 +57,7 @@ export function useUpdateMaterial() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, input }: { id: string; input: ProductMaterial }) => {
-      const res = await fetch(`${API}/admin/materials/${id}`, {
+      const res = await guideFetch(`${API}/admin/material-guide/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
@@ -61,7 +74,7 @@ export function useDeleteMaterial() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`${API}/admin/materials/${id}`, { method: 'DELETE' });
+      const res = await guideFetch(`${API}/admin/material-guide/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-materials'] }),
@@ -72,7 +85,7 @@ export function useReorderMaterials() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (items: { id: string; sortOrder: number }[]) => {
-      const res = await fetch(`${API}/admin/materials/reorder`, {
+      const res = await guideFetch(`${API}/admin/material-guide/reorder`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(items),
@@ -86,7 +99,7 @@ export function useReorderMaterials() {
 // ---- FAQs ----
 
 async function fetchFAQsAdmin(): Promise<ProductFAQ[]> {
-  const res = await fetch(`${API}/faqs`);
+  const res = await guideFetch(`${API}/faqs`);
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || 'Failed to fetch FAQs');
   return json.data ?? [];
@@ -100,7 +113,7 @@ export function useCreateFAQ() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: CreateFAQInput) => {
-      const res = await fetch(`${API}/admin/faqs`, {
+      const res = await guideFetch(`${API}/admin/faqs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
@@ -117,7 +130,7 @@ export function useUpdateFAQ() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, input }: { id: string; input: ProductFAQ }) => {
-      const res = await fetch(`${API}/admin/faqs/${id}`, {
+      const res = await guideFetch(`${API}/admin/faqs/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
@@ -134,7 +147,7 @@ export function useDeleteFAQ() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`${API}/admin/faqs/${id}`, { method: 'DELETE' });
+      const res = await guideFetch(`${API}/admin/faqs/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-faqs'] }),
@@ -145,7 +158,7 @@ export function useReorderFAQs() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (items: { id: string; sortOrder: number }[]) => {
-      const res = await fetch(`${API}/admin/faqs/reorder`, {
+      const res = await guideFetch(`${API}/admin/faqs/reorder`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(items),
@@ -159,7 +172,7 @@ export function useReorderFAQs() {
 // ---- Categories ----
 
 async function fetchMaterialCategoriesAdmin(): Promise<MaterialCategory[]> {
-  const res = await fetch(`${API}/admin/material-categories`);
+  const res = await guideFetch(`${API}/admin/material-categories`);
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || 'Failed to fetch categories');
   return json.data ?? [];
@@ -176,7 +189,7 @@ export function useCreateMaterialCategory() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: CreateMaterialCategoryInput) => {
-      const res = await fetch(`${API}/admin/material-categories`, {
+      const res = await guideFetch(`${API}/admin/material-categories`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
@@ -196,7 +209,7 @@ export function useUpdateMaterialCategory() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, input }: { id: string; input: MaterialCategory }) => {
-      const res = await fetch(`${API}/admin/material-categories/${id}`, {
+      const res = await guideFetch(`${API}/admin/material-categories/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
@@ -216,7 +229,7 @@ export function useDeleteMaterialCategory() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`${API}/admin/material-categories/${id}`, { method: 'DELETE' });
+      const res = await guideFetch(`${API}/admin/material-categories/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
     },
     onSuccess: () => {
@@ -230,7 +243,7 @@ export function useReorderMaterialCategories() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (items: { id: string; sortOrder: number }[]) => {
-      const res = await fetch(`${API}/admin/material-categories/reorder`, {
+      const res = await guideFetch(`${API}/admin/material-categories/reorder`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(items),

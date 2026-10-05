@@ -28,6 +28,7 @@ type PageCoverage struct {
 
 // PreflightResult holds the summary of file analysis (PDF or Image)
 type PreflightResult struct {
+	ImpositionMode    string         `json:"imposition_mode,omitempty"`
 	FileName          string         `json:"file_name"`
 	FileURL           string         `json:"file_url,omitempty"`
 	FileType          string         `json:"file_type"` // "PDF" or "IMAGE"

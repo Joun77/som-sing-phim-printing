@@ -35,6 +35,7 @@ export const MaterialManagement: React.FC = () => {
   const updateMutation = useUpdateMaterial();
   const reorderMutation = useReorderMaterials();
 
+  const [actionError, setActionError] = useState('');
   const [activeTab, setActiveTab] = useState<'materials' | 'faqs'>('materials');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,7 +69,8 @@ export const MaterialManagement: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     if (window.confirm('ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການປິດໃຊ້ງານ/ລຶບວັດສະດຸນີ້?')) {
-      await deleteMutation.mutateAsync(id);
+      setActionError('');
+      await deleteMutation.mutateAsync(id).catch(error => setActionError(error.message || 'ບໍ່ສາມາດປິດໃຊ້ງານໄດ້'));
     }
   };
 
@@ -84,23 +86,20 @@ export const MaterialManagement: React.FC = () => {
 
   const handleMove = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= materials.length) return;
+    const moved = filteredMaterials[index], neighbor = filteredMaterials[targetIndex];
+    if (!moved || !neighbor || reorderMutation.isPending) return;
+    const payload = [
+      { id: moved.id, sortOrder: neighbor.sortOrder },
+      { id: neighbor.id, sortOrder: moved.sortOrder },
+    ];
 
-    const newItems = [...materials];
-    const temp = newItems[index];
-    newItems[index] = newItems[targetIndex];
-    newItems[targetIndex] = temp;
-
-    const payload = newItems.map((item, idx) => ({
-      id: item.id,
-      sortOrder: (idx + 1) * 10,
-    }));
-
-    await reorderMutation.mutateAsync(payload);
+    setActionError('');
+    await reorderMutation.mutateAsync(payload).catch(error => setActionError(error.message || 'ບໍ່ສາມາດຍ້າຍລາຍການໄດ້'));
   };
 
   return (
     <div className="space-y-6">
+      {actionError && <p role="alert" className="text-rose-700">{actionError}</p>}
       {/* Top Banner & Title */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -292,7 +291,7 @@ export const MaterialManagement: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => handleMove(index, 'down')}
-                              disabled={index === materials.length - 1}
+                              disabled={index === filteredMaterials.length - 1}
                               className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-30 rounded hover:bg-slate-200"
                               title="ຍ້າຍລົງ"
                             >

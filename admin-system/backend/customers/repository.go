@@ -1,15 +1,16 @@
 package customers
 
 import (
-	"log"
+	"database/sql"
+	"strings"
 	"sync"
 
 	"somsing.local/backend/db"
 )
 
 var (
-	customerStore = make(map[string]Customer)
-	storeMutex    sync.RWMutex
+	customerStore     = make(map[string]Customer)
+	storeMutex        sync.RWMutex
 	ensureColumnsOnce sync.Once
 )
 
@@ -31,7 +32,6 @@ func ensureCustomerColumns() {
 }
 
 func getCustomersFromDB() ([]Customer, error) {
-	ensureCustomerColumns()
 	query := `
 		SELECT id, name, COALESCE(phone, ''), COALESCE(email, ''), COALESCE(address, ''),
 		       COALESCE(credit_limit, 1000000.00), COALESCE(payment_terms, 'Net 30'),
@@ -42,7 +42,7 @@ func getCustomersFromDB() ([]Customer, error) {
 		       COALESCE(source, 'CUSTOMER_SERVICE'), COALESCE(auth_provider, 'PHONE'),
 		       COALESCE(password_hash, ''), last_login_at,
 		       COALESCE(notes, ''), COALESCE(total_spent_lak, 0), COALESCE(total_orders_count, 0),
-		       created_at, updated_at
+		       created_at, updated_at,deposit_eligible
 		FROM customers
 		ORDER BY created_at DESC
 	`
@@ -65,11 +65,10 @@ func getCustomersFromDB() ([]Customer, error) {
 			&cust.Source, &cust.AuthProvider,
 			&cust.PasswordHash, &cust.LastLoginAt,
 			&cust.Notes, &cust.TotalSpentLAK, &cust.TotalOrdersCount,
-			&cust.CreatedAt, &cust.UpdatedAt,
+			&cust.CreatedAt, &cust.UpdatedAt, &cust.DepositEligible,
 		)
 		if err != nil {
-			log.Printf("[DB ERROR] Scan customer failed: %v", err)
-			continue
+			return nil, err
 		}
 		list = append(list, cust)
 	}
@@ -81,8 +80,8 @@ func getCustomersFromDB() ([]Customer, error) {
 	return list, nil
 }
 
-func getCustomerByIDFromDB(id string) (Customer, error) {
-	ensureCustomerColumns()
+func getCustomerByIDFromDB(id string) (Customer, error) { return getCustomerByIDInTransaction(nil, id) }
+func getCustomerByIDInTransaction(tx *sql.Tx, id string) (Customer, error) {
 	var cust Customer
 	query := `
 		SELECT id, name, COALESCE(phone, ''), COALESCE(email, ''), COALESCE(address, ''),
@@ -94,11 +93,17 @@ func getCustomerByIDFromDB(id string) (Customer, error) {
 		       COALESCE(source, 'CUSTOMER_SERVICE'), COALESCE(auth_provider, 'PHONE'),
 		       COALESCE(password_hash, ''), last_login_at,
 		       COALESCE(notes, ''), COALESCE(total_spent_lak, 0), COALESCE(total_orders_count, 0),
-		       created_at, updated_at
+		       created_at, updated_at,deposit_eligible
 		FROM customers
 		WHERE id = $1
 	`
-	err := db.DB.QueryRow(query, id).Scan(
+	var row *sql.Row
+	if tx == nil {
+		row = db.DB.QueryRow(query, id)
+	} else {
+		row = tx.QueryRow(query, id)
+	}
+	err := row.Scan(
 		&cust.ID, &cust.Name, &cust.Phone, &cust.Email, &cust.Address,
 		&cust.CreditLimit, &cust.PaymentTerms,
 		&cust.Instagram, &cust.LineID, &cust.Facebook,
@@ -108,13 +113,15 @@ func getCustomerByIDFromDB(id string) (Customer, error) {
 		&cust.Source, &cust.AuthProvider,
 		&cust.PasswordHash, &cust.LastLoginAt,
 		&cust.Notes, &cust.TotalSpentLAK, &cust.TotalOrdersCount,
-		&cust.CreatedAt, &cust.UpdatedAt,
+		&cust.CreatedAt, &cust.UpdatedAt, &cust.DepositEligible,
 	)
 	return cust, err
 }
 
 func saveCustomerToDB(cust Customer) error {
-	ensureCustomerColumns()
+	return db.RunInTransaction(func(tx *sql.Tx) error { return saveCustomerInTransaction(tx, cust, false) })
+}
+func saveCustomerInTransaction(tx *sql.Tx, cust Customer, create bool) error {
 	if cust.Tier == "" {
 		cust.Tier = "STANDARD"
 	}
@@ -162,11 +169,12 @@ func saveCustomerToDB(cust Customer) error {
 			password_hash = CASE WHEN EXCLUDED.password_hash != '' THEN EXCLUDED.password_hash ELSE customers.password_hash END,
 			last_login_at = COALESCE(EXCLUDED.last_login_at, customers.last_login_at),
 			notes = EXCLUDED.notes,
-			total_spent_lak = EXCLUDED.total_spent_lak,
-			total_orders_count = EXCLUDED.total_orders_count,
 			updated_at = NOW()
 	`
-	_, err := db.DB.Exec(
+	if create {
+		query = strings.Split(query, "ON CONFLICT (id)")[0]
+	}
+	_, err := tx.Exec(
 		query,
 		cust.ID, cust.Name, cust.Phone, cust.Email, cust.Address,
 		cust.CreditLimit, cust.PaymentTerms,
@@ -175,7 +183,7 @@ func saveCustomerToDB(cust Customer) error {
 		cust.Village, cust.BranchCode, cust.TaxID,
 		cust.Tier, cust.PreferredCourier,
 		cust.Source, cust.AuthProvider, cust.PasswordHash, cust.LastLoginAt,
-		cust.Notes, cust.TotalSpentLAK, cust.TotalOrdersCount,
+		cust.Notes, 0, 0,
 	)
 	return err
 }

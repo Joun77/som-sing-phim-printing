@@ -1,3 +1,4 @@
+import { useAuthStore } from '../../../store/useAuthStore';
 import React, { useState, useEffect } from 'react';
 import { 
   User, 
@@ -38,6 +39,8 @@ export function CustomerFormModal({
 
   // Form States
   const [name, setName] = useState('');
+  const canEditDepositEligibility = ['admin', 'manager', 'owner'].includes(useAuthStore(state => state.user?.role || ''));
+  const [depositEligible, setDepositEligible] = useState(false);
   const [tier, setTier] = useState('RETAIL');
   const [phone, setPhone] = useState('');
   
@@ -61,6 +64,7 @@ export function CustomerFormModal({
   useEffect(() => {
     if (isOpen) {
       if (customer) {
+        setDepositEligible(customer.depositEligible === true);
         setName(customer.name || '');
         setTier(customer.tier || 'RETAIL');
         setPhone(customer.phone || '');
@@ -74,6 +78,7 @@ export function CustomerFormModal({
         setNotes(customer.notes || '');
       } else {
         // Reset for Add
+        setDepositEligible(false);
         setName('');
         const defaultCat = customerCategories.find((c: any) => c.isDefault) || customerCategories[0];
         setTier(defaultCat ? defaultCat.id : 'RETAIL');
@@ -116,6 +121,7 @@ export function CustomerFormModal({
 
       const payload = {
         name: name.trim(),
+        ...(canEditDepositEligibility ? { depositEligible } : {}),
         tier,
         phone: phone.trim(),
         province,
@@ -178,6 +184,13 @@ export function CustomerFormModal({
 
         {/* Universal Form Body */}
         <form id="customer-universal-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 text-xs font-bold text-slate-700">
+          <div className="flex items-center justify-between gap-3 p-3 border rounded-xl">
+            <span id="customer-deposit-eligibility">ອະນຸຍາດໃຫ້ຊຳລະມັດຈຳ</span>
+            <button type="button" role="switch" aria-labelledby="customer-deposit-eligibility" aria-checked={depositEligible} disabled={!canEditDepositEligibility || isSubmitting} onClick={() => setDepositEligible(value => !value)} className={`rounded-full px-4 py-2 focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-50 ${depositEligible ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'}`}>
+              {depositEligible ? 'ເປີດ' : 'ປິດ'}
+            </button>
+          </div>
+
           
           {/* Row 1: Name & Tier */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

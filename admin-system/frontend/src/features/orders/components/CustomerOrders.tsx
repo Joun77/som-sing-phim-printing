@@ -170,36 +170,11 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
     { id: 'Cancelled', labelLo: 'ຍົກເລີກ', labelEn: 'Cancelled' },
   ];
 
-  const handleStatusChange = useCallback((orderId, targetOrCurrentStatus) => {
-    let nextStatus = targetOrCurrentStatus;
-    let paymentUpdate = null;
-
-    if (targetOrCurrentStatus === 'Received') nextStatus = 'Printing';
-    else if (targetOrCurrentStatus === 'Printing') nextStatus = 'Cutting';
-    else if (targetOrCurrentStatus === 'Cutting') nextStatus = 'Ready';
-    else if (targetOrCurrentStatus === 'Ready') nextStatus = 'Delivered';
-    else if (targetOrCurrentStatus === 'PREPRESS_CHECK') {
-      nextStatus = 'PREPRESS_CHECK';
-      paymentUpdate = 'Paid';
-    } else if (targetOrCurrentStatus === 'PENDING') {
-      nextStatus = 'Pending';
-      paymentUpdate = 'Unpaid';
-    } else if (targetOrCurrentStatus === 'IN_PRODUCTION') {
-      nextStatus = 'Printing';
-    }
-
-    updateOrderStatus(orderId, nextStatus);
-    
-    if (selectedOrder && selectedOrder.id === orderId) {
-      setSelectedOrder(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          status: nextStatus,
-          paymentStatus: paymentUpdate || prev.paymentStatus
-        };
-      });
-    }
+  const handleStatusChange = useCallback(async (orderId, targetOrCurrentStatus) => {
+    const nextStatus = ({ Received: 'Printing', Printing: 'Cutting', Cutting: 'Ready', Ready: 'Delivered', PENDING: 'Pending', IN_PRODUCTION: 'Printing' } as Record<string, string>)[targetOrCurrentStatus] || targetOrCurrentStatus;
+    const saved = await updateOrderStatus(orderId, nextStatus);
+    if (saved && selectedOrder?.id === orderId) setSelectedOrder(saved);
+    return saved;
   }, [selectedOrder, updateOrderStatus]);
 
   const handlePreflightToggle = useCallback((field, value) => {
@@ -271,47 +246,19 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
     }
   }, []);
 
-  const handleSettleSubmit = (e) => {
+  const handleSettleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedOrder || settleAmount <= 0) {
-      showToast(currentLang === 'lo' ? 'ກະລຸນາປ້ອນຈຳນວນເງິນຊຳຣະ!' : 'Enter settlement amount!', 'warning');
-      return;
-    }
-
-    fetch(`/api/orders/${selectedOrder.id}/deposit`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deposit_amount: Number(settleAmount) })
-    })
-    .then(res => {
-      if (!res.ok) throw new Error('Deposit failed');
-      return res.json();
-    })
-    .then(updatedOrder => {
-      settleOrderBalance(selectedOrder.id, Number(settleAmount), settleMethod, settleSlip);
-      showToast(currentLang === 'lo' ? 'ຊຳຣະລ້ຽງໜີ້ສຳເລັດ!' : 'Balance settled successfully!', 'success');
-      const updated = orders.find(o => o.id === selectedOrder.id);
-      if (updated) {
-        setSelectedOrder({
-          ...updated,
-          status: updatedOrder.status === 'PREPRESS_CHECK' ? 'Prepress' : updated.status,
-          depositAmountPaid: updatedOrder.deposit_amount
-        });
-      }
-    })
-    .catch(err => {
-      console.error(err);
-      settleOrderBalance(selectedOrder.id, Number(settleAmount), settleMethod, settleSlip);
-      showToast(currentLang === 'lo' ? 'ຊຳຣະລ້ຽງໜີ້ສຳເລັດ!' : 'Balance settled successfully!', 'success');
-      const updated = orders.find(o => o.id === selectedOrder.id);
-      if (updated) setSelectedOrder(updated);
-    })
-    .finally(() => {
+    if (!selectedOrder || settleAmount <= 0) return;
+    try {
+      await settleOrderBalance(selectedOrder.id, Number(settleAmount), settleMethod, settleSlip);
+      showToast('ບັນທຶກຄຳຂໍຊຳລະແລ້ວ. ລໍຖ້າກວດສະລິບ', 'success');
       setIsSettleOpen(false);
       setSettleAmount(0);
       setSettleSlip('');
       setSettleStep(1);
-    });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກຄຳຂໍໄດ້', 'error');
+    }
   };
 
   const applySettlePreset = (pct) => {
@@ -655,13 +602,9 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             inventory={inventory}
             equipment={equipment}
             formatCurrency={formatLAK}
-            onSave={(updated) => {
-              if (updateOrderDetails) {
-                updateOrderDetails(updated.id, updated);
-              }
-              setSelectedOrder(updated);
-              setEditModalOrder(null);
-              showToast(currentLang === 'lo' ? 'ອັບເດດລາຍລະອຽດອໍເດີສຳເລັດ!' : 'Order details updated successfully!', 'success');
+            onSave={async (updated) => {
+              const saved = await updateOrderDetails(updated.id, updated);
+              setSelectedOrder(saved);
             }}
           />
         )}
@@ -674,11 +617,10 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             currentLang={currentLang}
             handleStatusChange={handleStatusChange}
             onUpdatePayment={updateOrderPaymentStatus}
-            onUpdateOrder={(updated) => {
-              if (updateOrderDetails) {
-                updateOrderDetails(updated.id, updated);
-              }
-              setSelectedOrder(updated);
+            onUpdateOrder={async (updated) => {
+              const saved = await updateOrderDetails(updated.id, updated);
+              setSelectedOrder(saved);
+              return saved;
             }}
             showToast={showToast}
             setLightbox={setLightbox}
@@ -703,11 +645,10 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             getPaymentStatusIcon={getPaymentStatusIcon}
             setLightbox={setLightbox}
             onEditOrder={(ord) => setEditModalOrder(ord)}
-            onUpdateOrder={(updated) => {
-              if (updateOrderDetails) {
-                updateOrderDetails(updated.id, updated);
-              }
-              setSelectedOrder(updated);
+            onUpdateOrder={async (updated) => {
+              const saved = await updateOrderDetails(updated.id, updated);
+              setSelectedOrder(saved);
+              return saved;
             }}
           />
         )}
@@ -724,11 +665,10 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             setLightbox={setLightbox}
             onEditOrder={(ord) => setEditModalOrder(ord)}
             askConfirmation={askConfirmation}
-            onUpdateOrder={(updated) => {
-              if (updateOrderDetails) {
-                updateOrderDetails(updated.id, updated);
-              }
-              setSelectedOrder(updated);
+            onUpdateOrder={async (updated) => {
+              const saved = await updateOrderDetails(updated.id, updated);
+              setSelectedOrder(saved);
+              return saved;
             }}
           />
         )}
@@ -744,11 +684,10 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
             handleStatusChange={handleStatusChange}
             askConfirmation={askConfirmation}
             showToast={showToast}
-            onUpdateOrder={(updated) => {
-              if (updateOrderDetails) {
-                updateOrderDetails(updated.id, updated);
-              }
-              setSelectedOrder(updated);
+            onUpdateOrder={async (updated) => {
+              const saved = await updateOrderDetails(updated.id, updated);
+              setSelectedOrder(saved);
+              return saved;
             }}
           />
         )}
@@ -1266,15 +1205,9 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
           inventory={inventory}
           equipment={equipment}
           formatCurrency={formatLAK}
-          onSave={(updated) => {
-            if (updateOrderDetails) {
-              updateOrderDetails(updated.id, updated);
-            }
-            if (selectedOrder && (selectedOrder.id ? selectedOrder.id === updated.id : !!selectedOrder.orderNo && selectedOrder.orderNo === updated.orderNo)) {
-              setSelectedOrder(updated);
-            }
-            setEditModalOrder(null);
-            showToast(currentLang === 'lo' ? 'ອັບເດດລາຍລະອຽດອໍເດີສຳເລັດ!' : 'Order details updated successfully!', 'success');
+          onSave={async (updated) => {
+            const saved = await updateOrderDetails(updated.id, updated);
+            if (selectedOrder?.id === saved.id) setSelectedOrder(saved);
           }}
         />
       )}
@@ -1309,31 +1242,16 @@ export default function CustomerOrders({ initialSubTab = 'orders' }) {
           onClose={() => setTrackingModalOrder(null)}
           order={trackingModalOrder}
           couriers={couriers}
-          onSaveTracking={(orderId, courierName, trackingNum, fee, branchCode) => {
+          onSaveTracking={async (orderId, courierName, trackingNum, fee, branchCode) => {
             if (updateOrderTracking) {
-              updateOrderTracking(orderId, courierName, trackingNum, fee, branchCode);
+              await updateOrderTracking(orderId, courierName, trackingNum, fee, branchCode);
             }
           }}
         />
       )}
 
       {/* Submit Quotation Modal */}
-      {quoteModalOrder && (
-        <SubmitQuotationModal
-          order={quoteModalOrder}
-          isOpen={!!quoteModalOrder}
-          onClose={() => setQuoteModalOrder(null)}
-          onSubmitQuotation={(orderId, amount, notes) => {
-            const target = orders.find(o => o.id === orderId);
-            if (target) {
-              target.totalPriceCharged = amount;
-              target.remainingUnpaidBalance = amount - (target.depositAmountPaid || 0);
-              showToast(`ສົ່ງໃບສະເໜີລາຄາຈຳນວນ ${formatLAK(amount)} ຮຽບຮ້ອຍແລ້ວ!`, 'success');
-            }
-          }}
-          formatCurrency={formatLAK}
-        />
-      )}
+      {quoteModalOrder && <EditOrderModal isOpen order={quoteModalOrder} onClose={() => setQuoteModalOrder(null)} inventory={inventory} equipment={equipment} formatCurrency={formatLAK} onSave={async updated => { await updateOrderDetails(updated.id, updated); }} />}
 
       {/* Lightbox Modal */}
       {lightbox && (

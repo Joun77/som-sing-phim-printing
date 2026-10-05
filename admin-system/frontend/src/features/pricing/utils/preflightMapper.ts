@@ -37,10 +37,12 @@ export const mapPreflightToSpecs = (pfResult: PreflightResult, itemsLength: numb
 
   const isBatch = Boolean((pfResult as any)?.is_batch_photo);
   const batchImp = (pfResult as any)?.batch_imposition;
+  const preCut = (pfResult.imposition_mode ?? 'OFF') === 'OFF';
 
   return {
+    imposition_mode: pfResult.imposition_mode ?? 'OFF',
     jobName: cleanName,
-    artworkParts: isSplit && coverRes && innerRes ? [{ ...sourcePart('cover', coverRes, pfResult.cover_paper_id), cutsPerSheet: pfResult.cover_cuts_per_sheet_override }, { ...sourcePart('inner', innerRes, pfResult.selected_paper_id), cutsPerSheet: pfResult.cuts_per_sheet_override }] : undefined,
+    artworkParts: isSplit && coverRes && innerRes ? [{ ...sourcePart('cover', coverRes, pfResult.cover_paper_id), cutsPerSheet: preCut ? undefined : pfResult.cover_cuts_per_sheet_override }, { ...sourcePart('inner', innerRes, pfResult.selected_paper_id), cutsPerSheet: preCut ? undefined : pfResult.cuts_per_sheet_override }] : undefined,
     fileName: innerRes?.file_name || pfResult.file_name,
     fileSize: innerRes?.file_size || pfResult.file_size,
     previewThumbnailUrl: innerRes?.preview_thumbnail_url || pfResult.preview_thumbnail_url,
@@ -63,9 +65,9 @@ export const mapPreflightToSpecs = (pfResult: PreflightResult, itemsLength: numb
     suggestedPaper: pfResult.target_paper_size || 'A4',
     paperId: pfResult.selected_paper_id,
     coverPaperId: pfResult.cover_paper_id,
-    cutsPerSheetOverride: pfResult.cuts_per_sheet_override !== undefined ? pfResult.cuts_per_sheet_override : (batchImp?.cuts_per_sheet ? Number(batchImp.cuts_per_sheet) : undefined),
-    coverCutsPerSheetOverride: pfResult.cover_cuts_per_sheet_override,
-    impositionSummary: pfResult.imposition_summary || batchImp?.summary_lao,
+    cutsPerSheetOverride: preCut ? undefined : pfResult.cuts_per_sheet_override !== undefined ? pfResult.cuts_per_sheet_override : (batchImp?.cuts_per_sheet ? Number(batchImp.cuts_per_sheet) : undefined),
+    coverCutsPerSheetOverride: preCut ? undefined : pfResult.cover_cuts_per_sheet_override,
+    impositionSummary: preCut ? undefined : pfResult.imposition_summary || batchImp?.summary_lao,
     colorPrintMode: detectedColorMode,
     cCoverage: covC,
     mCoverage: covM,
@@ -79,16 +81,25 @@ export const mapPreflightToSpecs = (pfResult: PreflightResult, itemsLength: numb
 
 export const mapQuotationItemToOrderItem = (item: any, idx: number, calc?: any, paperItem?: any, equipment: any[] = []) => {
   const parts: ArtworkPart[] | undefined = item.artworkParts ? structuredClone(item.artworkParts) : undefined;
+  if (item.imposition_mode === 'OFF') parts?.forEach(part => {
+    delete part.cutsPerSheet;
+    if (part.printSettings) {
+      delete part.printSettings.cutsPerSheetOverride; delete part.printSettings.parentSheetSize;
+      part.printSettings.multipleImagesPerSheet = false;
+    }
+  });
   const batchFiles = item.batchFiles || item.preflightData?.batch_files;
   const batchSnapshot = batchFiles?.length ? structuredClone(batchFiles) : undefined;
   const innerPart = parts?.find(part => part.role === 'inner');
   const coverPart = parts?.find(part => part.role === 'cover');
   const innerCost = calc?.partCosts?.find((part: { role: string }) => part.role === 'inner');
-  const cuttingTickets = parts?.map(part => {
+  const cuttingTickets = item.imposition_mode === 'OFF' ? undefined : parts?.map(part => {
     const cost = calc?.partCosts?.find((priced: { role: string }) => priced.role === part.role);
     return { role: part.role, paper_id: part.paperId, total_parent_sheets: cost?.parentSheets, cuts_per_parent: cost?.cutsPerSheet, wasted_sheets: cost?.wastedSheets, paper_unit_cost: cost?.paperUnitCost };
   });
   return {
+    imposition_mode: item.imposition_mode,
+    stock_dimension_snapshot: item.stock_dimension_snapshot,
     artworkParts: parts,
     id: item.id || `job-item-${idx + 1}`,
     name: item.name || item.jobName || `Job #${idx + 1}`,
@@ -127,8 +138,11 @@ export const mapQuotationItemToOrderItem = (item: any, idx: number, calc?: any, 
     avg_cov_y: item.yCoverage || 0,
     avg_cov_k: item.kCoverage || 0,
     specifications: {
+      imposition_mode: item.imposition_mode,
+      stock_dimension_snapshot: item.stock_dimension_snapshot,
+      job_width: Number(item.jobWidth), job_height: Number(item.jobHeight),
       batch_files: structuredClone(batchSnapshot),
-      multi_image_print: { enabled: !!item.multipleImagesPerSheet, images_per_sheet: item.imagesPerSheet || 4 },
+      multi_image_print: { enabled: item.imposition_mode !== 'OFF' && !!item.multipleImagesPerSheet, images_per_sheet: item.imagesPerSheet || 4 },
       artwork_parts: parts,
       paper_cutting_tickets: cuttingTickets,
       price_components: calc?.partCosts ? { parts: calc.partCosts, shared: calc.sharedCosts } : undefined,
@@ -136,14 +150,14 @@ export const mapQuotationItemToOrderItem = (item: any, idx: number, calc?: any, 
       pages: innerPart?.pageCount || item.pagesPerBook || item.pageCount || 1,
       paper_id: item.paperId,
       paper_name: paperItem?.name || 'Standard Paper',
-      paper_cutting_ticket: paperItem ? {
+      paper_cutting_ticket: paperItem && item.imposition_mode !== 'OFF' ? {
         parent_paper_id: item.paperId,
         parent_paper_name: paperItem.name,
         total_parent_sheets: (innerCost?.parentSheets ?? calc?.totalParentSheets) || 1,
         cuts_per_parent: (innerCost?.cutsPerSheet ?? calc?.cutsPerSheet) || 1,
         wasted_sheets: (innerCost?.wastedSheets ?? calc?.wastedSheets) || 0,
         paper_unit_cost: (innerCost?.paperUnitCost ?? calc?.paperUnitCost) || 0
-      } : null,
+      } : undefined,
       materials: {
         paper: paperItem ? {
           id: item.paperId,
@@ -151,7 +165,7 @@ export const mapQuotationItemToOrderItem = (item: any, idx: number, calc?: any, 
           total_parent_sheets: (innerCost?.parentSheets ?? calc?.totalParentSheets) || 1,
           unit_cost: (innerCost?.paperUnitCost ?? calc?.paperUnitCost) || 0
         } : null,
-        machinery: (item.selectedPostPressIds || []).map((machId: any) => {
+        machinery: (item.selectedPostPressIds || []).filter((machId: any) => item.imposition_mode !== 'OFF' || !equipment.some((e: any) => e.id === machId && (e.postPressSubtype || e.specs?.postPressSubtype) === 'guillotine')).map((machId: any) => {
           const mach = equipment.find((e: any) => e.id === machId);
           const rate = Number((mach as any)?.costPerPage) || Number((mach as any)?.calculatedCostPerPage) || 300;
           return {
@@ -170,9 +184,12 @@ export const mapQuotationItemToOrderItem = (item: any, idx: number, calc?: any, 
       file_size: item.fileSize
     },
     specs: {
+      imposition_mode: item.imposition_mode,
+      stock_dimension_snapshot: item.stock_dimension_snapshot,
+      job_width: Number(item.jobWidth), job_height: Number(item.jobHeight),
       commercial_cost_snapshot: calc ? { net_cost_lak: calc.netCost, labor_cost_lak: calc.laborCost, packaging_delivery_cost_lak: calc.packagingDeliveryCost, commercial_cost_lak: calc.netCost + calc.laborCost + calc.packagingDeliveryCost } : undefined,
       batch_files: structuredClone(batchSnapshot),
-      multi_image_print: { enabled: !!item.multipleImagesPerSheet, images_per_sheet: item.imagesPerSheet || 4 },
+      multi_image_print: { enabled: item.imposition_mode !== 'OFF' && !!item.multipleImagesPerSheet, images_per_sheet: item.imagesPerSheet || 4 },
       artwork_parts: parts,
       paper_cutting_tickets: cuttingTickets,
       price_components: calc?.partCosts ? { parts: calc.partCosts, shared: calc.sharedCosts } : undefined,
@@ -185,14 +202,14 @@ export const mapQuotationItemToOrderItem = (item: any, idx: number, calc?: any, 
       fileName: item.fileName,
       artworkUrl: item.artworkUrl,
       fileSize: item.fileSize,
-      paper_cutting_ticket: paperItem ? {
+      paper_cutting_ticket: paperItem && item.imposition_mode !== 'OFF' ? {
         parent_paper_id: item.paperId,
         parent_paper_name: paperItem.name,
         total_parent_sheets: (innerCost?.parentSheets ?? calc?.totalParentSheets) || 1,
         cuts_per_parent: (innerCost?.cutsPerSheet ?? calc?.cutsPerSheet) || 1,
         wasted_sheets: (innerCost?.wastedSheets ?? calc?.wastedSheets) || 0,
         paper_unit_cost: (innerCost?.paperUnitCost ?? calc?.paperUnitCost) || 0
-      } : null,
+      } : undefined,
       materials: {
         paper: paperItem ? {
           id: item.paperId,
@@ -200,7 +217,7 @@ export const mapQuotationItemToOrderItem = (item: any, idx: number, calc?: any, 
           total_parent_sheets: (innerCost?.parentSheets ?? calc?.totalParentSheets) || 1,
           unit_cost: (innerCost?.paperUnitCost ?? calc?.paperUnitCost) || 0
         } : null,
-        machinery: (item.selectedPostPressIds || []).map((machId: any) => {
+        machinery: (item.selectedPostPressIds || []).filter((machId: any) => item.imposition_mode !== 'OFF' || !equipment.some((e: any) => e.id === machId && (e.postPressSubtype || e.specs?.postPressSubtype) === 'guillotine')).map((machId: any) => {
           const mach = equipment.find((e: any) => e.id === machId);
           const rate = Number((mach as any)?.costPerPage) || Number((mach as any)?.calculatedCostPerPage) || 300;
           return {

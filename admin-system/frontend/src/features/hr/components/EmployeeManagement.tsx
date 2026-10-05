@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Users, UserPlus, Pencil, Trash2, Phone, MapPin, Star,
   Clock, Calendar, CheckCircle2, XCircle, AlertCircle,
@@ -18,6 +18,7 @@ const INITIAL_EMPLOYEES: any[] = [];
 const ROLES = [
   { id: 'ceo',                labelLo: 'ປະທານເຈົ້າໜ້າທີ່ບໍລິຫານ (CEO / Owner)', labelEn: 'Chief Executive Officer (CEO)', color: 'bg-amber-100 text-amber-900 border-amber-300' },
   { id: 'manager',            labelLo: 'ຜູ້ຈັດການ (Manager)',                  labelEn: 'Manager',               color: 'bg-rose-100 text-rose-800 border-rose-200' },
+  { id: 'technician', labelLo: 'ຊ່າງເຕັກນິກ (Technician)', labelEn: 'Technician', color: 'bg-purple-100 text-purple-800 border-purple-200' },
   { id: 'press_operator',    labelLo: 'ຊ່າງພິມ (Press Operator)',            labelEn: 'Press Operator',        color: 'bg-purple-100 text-purple-800 border-purple-200' },
   { id: 'cutting_finishing',  labelLo: 'ຊ່າງຕັດ & ສຳເລັດຮູບ (Cutting)',      labelEn: 'Cutting & Finishing',   color: 'bg-blue-100 text-blue-800 border-blue-200' },
   { id: 'design_prepress',    labelLo: 'ນັກອອກແບບ / Pre-press',              labelEn: 'Designer / Pre-press',  color: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
@@ -31,7 +32,14 @@ const SHIFTS = [
   { id: 'full',      labelLo: 'ເຕັມວັນ (08:00–19:00)', labelEn: 'Full Day (08:00–19:00)' },
 ];
 
-const getRoleInfo = (roleId: string) => ROLES.find(r => r.id === roleId) || ROLES[0];
+const getRoleInfo = (roleId: string) => {
+  const normalized = typeof roleId === 'string' ? roleId.trim().toLowerCase() : '';
+  return ROLES.find(role => role.id === (normalized === 'owner' ? 'ceo' : normalized)) || {
+    id: normalized, labelLo: normalized ? `ບົດບາດບໍ່ຮູ້ຈັກ: ${roleId}` : 'ບໍ່ລະບຸບົດບາດ',
+    labelEn: normalized ? `Unknown role: ${roleId}` : 'Unspecified role',
+    color: 'bg-slate-100 text-slate-700 border-slate-200',
+  };
+};
 const getShiftInfo = (shiftId: string) => SHIFTS.find(s => s.id === shiftId) || SHIFTS[0];
 
 // ========== EMPTY FORM ==========
@@ -104,44 +112,33 @@ export default function EmployeeManagement() {
   const [employees, setEmployees] = useState(contextEmployees && contextEmployees.length > 0 ? contextEmployees : INITIAL_EMPLOYEES);
   const [mainTab, setMainTab] = useState<'employees' | 'staff_users'>('employees');
 
-  useEffect(() => {
-    if (contextEmployees && contextEmployees.length > 0) {
-      setEmployees(contextEmployees);
-    }
-  }, [contextEmployees]);
-
-  useEffect(() => {
-    fetch('/api/employees')
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success' && Array.isArray(data.data) && data.data.length > 0) {
-          const mapped = data.data.map((item: any) => ({
-            id: item.id,
-            name: item.nameLo || item.name,
-            nameEn: item.nameEn || item.name,
-            role: item.role,
-            department: item.department || 'Digital Printing',
-            phone: item.phone,
-            address: item.address,
-            salary: item.salaryLAK || item.salary || 0,
-            salaryType: 'monthly',
-            startDate: item.createdAt ? item.createdAt.split('T')[0] : '2024-01-01',
-            status: (item.status || 'active').toLowerCase(),
-            attendance: { present: 20, absent: 0, late: 0 },
-            skills: item.skills || [],
-            shift: 'morning',
-            avatar: item.nameEn ? item.nameEn.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) : 'EM',
-            rating: 5.0,
-            pieceRatePerImpression: item.pieceRatePerImpression || 5,
-            salesCommissionRate: item.salesCommissionRate || 0,
-            impressionsProduced: item.impressionsProduced || 0
-          }));
-          setEmployees(mapped);
-          if (setContextEmployees) setContextEmployees(mapped);
-        }
-      })
-      .catch(err => console.log('Using initial employees fallback', err));
-  }, []);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const savePending = useRef(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const requestKeys = useRef(new Map<string, string>());
+  const mapEmployee = (item: any, loginAccount?: any) => ({
+    ...item, name: item.nameLo, nameEn: item.nameEn, salary: item.salaryLAK,
+    status: String(item.status).toLowerCase(),
+    startDate: item.createdAt?.split('T')[0] || '',
+    avatar: (item.nameEn || item.nameLo || '').slice(0, 2),
+    hasLoginAccount: Boolean(loginAccount), loginAccount,
+  });
+  useEffect(() => { setEmployees(contextEmployees || []); }, [contextEmployees]);
+  const loadEmployees = async () => {
+    try {
+      const response = await apiFetch('/api/employees');
+      const body = await response.json();
+      if (!response.ok || body?.status !== 'success' || !Array.isArray(body.data)) throw new Error('ບໍ່ສາມາດໂຫຼດພະນັກງານໄດ້');
+      const accountsResponse = await apiFetch('/api/v1/admin/users');
+      const accountsBody = await accountsResponse.json();
+      if (!accountsResponse.ok || accountsBody?.status !== 'success' || !Array.isArray(accountsBody.data)) throw new Error('ບໍ່ສາມາດໂຫຼດບັນຊີພະນັກງານໄດ້');
+      const mapped = body.data.map((item: any) => mapEmployee(item, accountsBody.data.find((account: any) => account.employeeId === item.id)));
+      setEmployees(mapped);
+      setContextEmployees?.(mapped);
+      setLoadError(null);
+    } catch (error) { setLoadError(error instanceof Error ? error.message : 'ບໍ່ສາມາດໂຫຼດພະນັກງານໄດ້'); }
+  };
+  useEffect(() => { void loadEmployees(); }, []);
 
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState('all');
@@ -189,7 +186,7 @@ export default function EmployeeManagement() {
 
     earningRecords.forEach(rec => {
       if (earnerMap[rec.employeeId]) {
-        earnerMap[rec.employeeId].totalEarned += Number(rec.earnedAmount || (rec as any).earnedAmountLAK || 0);
+        earnerMap[rec.employeeId].totalEarned += Number((rec as any).earnedAmountLAK ?? rec.earnedAmount ?? 0);
         earnerMap[rec.employeeId].impressions += Number(rec.impressions || 0);
         earnerMap[rec.employeeId].jobsCount += 1;
       }
@@ -237,128 +234,64 @@ export default function EmployeeManagement() {
         showToast(T('ກະລຸນາປ້ອນຊື່ຜູ້ໃຊ້ເຂົ້າລະບົບ (Username is required)', 'Username is required for system login'), 'warning');
         return;
       }
-      if (!isEditing && !form.password) {
+      if (!form.loginAccount?.id && !form.password) {
         showToast(T('ກະລຸນາປ້ອນລະຫັດຜ່ານສຳລັບບັນຊີເຂົ້າລະບົບ (Password is required)', 'Password is required for new system account'), 'warning');
         return;
       }
     }
 
-    const skillArr = form.skills ? form.skills.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
-    const avatarInit = form.nameEn ? form.nameEn.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) : form.name.slice(0, 2);
-    const empId = isEditing ? form.id : `EMP-${String(Date.now()).slice(-3).padStart(3, '0')}`;
-
+    if (savePending.current) return;
     const payload = {
-      id: empId,
-      nameLo: form.name,
-      nameEn: form.nameEn || form.name,
-      role: form.role,
-      department: form.role === 'ceo' ? 'Executive Management' : 'Digital Printing',
-      phone: form.phone,
-      address: form.address,
-      salaryLAK: Number(form.salary) || 0,
-      status: form.status ? form.status.toUpperCase() : 'ACTIVE',
-      skills: skillArr,
-      pieceRatePerImpression: Number(form.pieceRatePerImpression) || 0,
-      salesCommissionRate: Number(form.salesCommissionRate) || 0,
-      hasLoginAccount: Boolean(form.hasLoginAccount),
-      username: form.hasLoginAccount ? form.username.trim() : undefined,
-      systemRole: form.hasLoginAccount ? (form.role === 'ceo' ? 'ceo' : (form.systemRole || 'production')) : undefined,
-      customRoleTitle: form.hasLoginAccount ? form.customRoleTitle : undefined,
-      permissions: form.hasLoginAccount ? (form.role === 'ceo' ? ['ALL'] : (form.permissions || [])) : undefined,
+      nameLo: form.name, nameEn: form.nameEn || form.name, role: form.role,
+      department: form.department || 'Digital Printing', phone: form.phone, address: form.address,
+      salaryLAK: Number(form.salary), status: String(form.status || 'active').toUpperCase(),
+      skills: String(form.skills || '').split(',').map(value => value.trim()).filter(Boolean),
+      pieceRatePerImpression: Number(form.pieceRatePerImpression), salesCommissionRate: Number(form.salesCommissionRate),
+      ...(form.hasLoginAccount ? { login_account: {
+        ...(form.loginAccount?.id ? { id: form.loginAccount.id } : {}),
+        username: form.username.trim(), fullName: form.nameEn || form.name,
+        role: form.systemRole, permissions: form.permissions || [], isActive: form.status !== 'inactive',
+        ...(form.password ? { password: form.password } : {}),
+      } } : {}),
     };
-
-    fetch(isEditing ? `/api/employees/${form.id}` : '/api/employees', {
-      method: isEditing ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).catch(err => console.log('API save error', err));
-
-    // Sync to admin user account if login account enabled
-    if (form.hasLoginAccount && form.username?.trim()) {
-      try {
-        const userPayload: any = {
-          username: form.username.trim(),
-          fullName: form.nameEn || form.name,
-          phone: form.phone,
-          role: form.role === 'ceo' ? 'ceo' : (form.systemRole || 'production'),
-          employeeId: empId,
-          isActive: form.status !== 'inactive'
-        };
-        if (form.password) {
-          userPayload.password = form.password;
-        }
-
-        await apiFetch('/api/v1/admin/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(userPayload)
-        }).catch(async () => {
-          return apiFetch(`/api/v1/admin/users/by-username/${encodeURIComponent(form.username.trim())}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(userPayload)
-          }).catch(e => console.warn('Admin user sync skipped:', e));
-        });
-      } catch (err) {
-        console.warn('Sync admin user error:', err);
-      }
-    }
-
-    if (isEditing) {
-      const updatedList = employees.map(e => e.id === form.id ? { 
-        ...form, 
-        skills: skillArr, 
-        avatar: avatarInit,
-        pieceRatePerImpression: Number(form.pieceRatePerImpression) || 0,
-        salesCommissionRate: Number(form.salesCommissionRate) || 0
-      } : e);
-      setEmployees(updatedList);
-      if (setContextEmployees) setContextEmployees(updatedList);
-      showToast(T('ອັບເດດຂໍ້ມູນພະນັກງານສຳເລັດ!', 'Employee updated successfully!'), 'success');
-    } else {
-      const newEmp = {
-        ...form,
-        id: payload.id,
-        skills: skillArr,
-        avatar: avatarInit,
-        salary: Number(form.salary) || 0,
-        pieceRatePerImpression: Number(form.pieceRatePerImpression) || 0,
-        salesCommissionRate: Number(form.salesCommissionRate) || 0,
-        impressionsProduced: 0,
-        attendance: { present: 0, absent: 0, late: 0 },
-        rating: 5.0
-      };
-      const updatedList = [newEmp, ...employees];
-      setEmployees(updatedList);
-      if (setContextEmployees) setContextEmployees(updatedList);
-      showToast(T('ເພີ່ມພະນັກງານໃໝ່ສຳເລັດ!', 'New employee added successfully!'), 'success');
-    }
-    closeModal();
+    const fingerprint = JSON.stringify([isEditing ? form.id : 'new', payload]);
+    if (!requestKeys.current.has(fingerprint)) requestKeys.current.set(fingerprint, crypto.randomUUID());
+    savePending.current = true; setIsSaving(true);
+    try {
+      const response = await apiFetch(isEditing ? `/api/employees/${encodeURIComponent(form.id)}` : '/api/employees', {
+        method: isEditing ? 'PUT' : 'POST', headers: { 'Idempotency-Key': requestKeys.current.get(fingerprint)! }, body: JSON.stringify(payload),
+      });
+      const body = await response.json();
+      if (!response.ok || body?.status !== 'success' || body?.committed !== true || !body.employee?.id ||
+          (isEditing && body.employee.id !== form.id) || (form.hasLoginAccount && !body.login_account?.id)) throw new Error(body?.message || 'ບໍ່ສາມາດຢືນຢັນການບັນທຶກໄດ້');
+      const saved = mapEmployee(body.employee, body.login_account);
+      const next = [saved, ...employees.filter(item => item.id !== saved.id)];
+      setEmployees(next); setContextEmployees?.(next);
+      showToast('ບັນທຶກພະນັກງານສຳເລັດ', 'success');
+      closeModal();
+    } catch (error) { showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກໄດ້', 'error'); }
+    finally { savePending.current = false; setIsSaving(false); }
   };
 
   const handleDelete = (emp: any) => {
-    askConfirmation(
-      T(`ທ່ານຕ້ອງການລຶບພະນັກງານ "${emp.name}" ແທ້ ຫຼື ບໍ່?`, `Delete employee "${emp.nameEn}"?`),
-      () => {
-        fetch(`/api/employees/${emp.id}`, { method: 'DELETE' })
-          .catch(err => console.log('API delete error', err));
-        setEmployees(prev => prev.filter(e => e.id !== emp.id));
+    askConfirmation(`ທ່ານຕ້ອງການລຶບພະນັກງານ "${emp.name}" ແທ້ບໍ່?`, async () => {
+      try {
+        const fingerprint = `delete:${emp.id}`;
+        if (!requestKeys.current.has(fingerprint)) requestKeys.current.set(fingerprint, crypto.randomUUID());
+        const response = await apiFetch(`/api/employees/${encodeURIComponent(emp.id)}`, { method: 'DELETE', headers: { 'Idempotency-Key': requestKeys.current.get(fingerprint)! } });
+        const body = await response.json();
+        if (!response.ok || body?.status !== 'success' || body?.committed !== true) throw new Error(body?.message || 'ບໍ່ສາມາດລຶບພະນັກງານໄດ້');
+        const next = employees.filter(item => item.id !== emp.id);
+        setEmployees(next); setContextEmployees?.(next);
         if (selectedEmp?.id === emp.id) setSelectedEmp(null);
-        showToast(T('ລຶບຂໍ້ມູນພະນັກງານສຳເລັດ!', 'Employee deleted!'), 'success');
-      }
-    );
+        showToast('ລຶບພະນັກງານສຳເລັດ', 'success');
+      } catch (error) { showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດລຶບໄດ້', 'error'); }
+    });
   };
 
   const toggleStatus = (emp: any) => {
-    const next = emp.status === 'active' ? 'inactive' : 'active';
-    setEmployees(prev => prev.map(e => e.id === emp.id ? { ...e, status: next } : e));
-    if (selectedEmp?.id === emp.id) setSelectedEmp(prev => ({ ...prev, status: next }));
-    showToast(
-      next === 'active'
-        ? T(`ເປີດໃຊ້ງານ ${emp.name} ແລ້ວ`, `${emp.nameEn} is now active`)
-        : T(`ປິດການໃຊ້ງານ ${emp.name} ແລ້ວ`, `${emp.nameEn} is now inactive`),
-      'success'
-    );
+    openEdit(emp);
+    setForm(previous => ({ ...previous, status: emp.status === 'active' ? 'inactive' : 'active' }));
   };
 
   if (selectedEmp) {
@@ -371,6 +304,7 @@ export default function EmployeeManagement() {
 
     return (
       <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8 space-y-6 animate-fade-in font-sans">
+        {loadError && <p role="alert">{loadError} <button onClick={loadEmployees}>ລອງໃໝ່</button></p>}
         {/* Header */}
         <div className="flex items-center gap-4">
           <button
@@ -582,7 +516,7 @@ export default function EmployeeManagement() {
                                 {rec.impressions?.toLocaleString()}
                               </td>
                               <td className="py-2.5 px-3 text-right font-mono font-black text-emerald-600">
-                                +{formatLAK(rec.earnedAmount)}
+                                +{formatLAK((rec as any).earnedAmountLAK ?? rec.earnedAmount)}
                               </td>
                             </tr>
                           ))
@@ -603,7 +537,7 @@ export default function EmployeeManagement() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 {(() => {
                   const empEarnings = earningRecords.filter(r => r.employeeId === emp.id);
-                  const pieceRateTotal = empEarnings.reduce((sum, r) => sum + Number(r.earnedAmount || 0), 0);
+                  const pieceRateTotal = empEarnings.reduce((sum, r) => sum + Number((r as any).earnedAmountLAK ?? r.earnedAmount ?? 0), 0);
                   const baseSalary = Number(emp.salary || 0);
                   const overtime = Math.round(baseSalary * 0.1);
                   const allowance = 100000;
@@ -648,8 +582,9 @@ export default function EmployeeManagement() {
             isEditing={isEditing}
             form={form}
             setForm={setForm}
+            isSaving={isSaving}
             onSave={handleSave}
-            onClose={closeModal}
+            onClose={() => { if (!savePending.current) closeModal(); }}
             T={T}
             roles={ROLES}
             shifts={SHIFTS}
@@ -661,6 +596,7 @@ export default function EmployeeManagement() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8 space-y-6 font-sans">
+      {loadError && <p role="alert">{loadError} <button onClick={loadEmployees}>ລອງໃໝ່</button></p>}
       {/* Hero Header */}
       <div className="bg-slate-900 text-white rounded-3xl p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-md relative overflow-hidden">
         <div className="absolute right-0 top-0 w-64 h-64 rounded-full bg-white/5 -translate-y-24 translate-x-20 pointer-events-none" />
@@ -725,7 +661,7 @@ export default function EmployeeManagement() {
         <StatCard icon={UserCheck} label={T('ພະນັກງານທີ່ໃຊ້ງານ', 'Active Staff')} value={stats.active} sub={`${employees.length} ${T('ທັງໝົດ', 'total')}`} color="bg-emerald-50 text-emerald-600" />
         <StatCard icon={Banknote} label={T('ເງິນເດືອນລວມ / ເດືອນ', 'Monthly Payroll')} value={`${(stats.totalPayroll / 1000000).toFixed(1)}M`} sub="ກີບ LAK" color="bg-blue-50 text-blue-600" />
         <StatCard icon={TrendingUp} label={T('ມາວຽກໂດຍສະເລ່ຍ', 'Avg Attendance')} value={`${stats.totalPresent}`} sub={T(`ຂາດ ${stats.totalAbsent} ວັນ`, `${stats.totalAbsent} absences`)} color="bg-purple-50 text-purple-600" />
-        <StatCard icon={Coins} label={T('ລວມຄ່າແຮງພິເສດ (Incentives)', 'Total Piece-Rate')} value={formatLAK(earningRecords.reduce((s, r) => s + Number(r.earnedAmount || 0), 0))} sub={`${earningRecords.length} ${T('ລາຍການຜະລິດ', 'recorded tasks')}`} color="bg-amber-50 text-amber-600" />
+        <StatCard icon={Coins} label={T('ລວມຄ່າແຮງພິເສດ (Incentives)', 'Total Piece-Rate')} value={formatLAK(earningRecords.reduce((s, r) => s + Number((r as any).earnedAmountLAK ?? r.earnedAmount ?? 0), 0))} sub={`${earningRecords.length} ${T('ລາຍການຜະລິດ', 'recorded tasks')}`} color="bg-amber-50 text-amber-600" />
       </div>
 
       {/* Top Earners Piece-Rate Leaderboard */}
@@ -938,8 +874,9 @@ export default function EmployeeManagement() {
           isEditing={isEditing}
           form={form}
           setForm={setForm}
-          onSave={handleSave}
-          onClose={closeModal}
+          isSaving={isSaving}
+            onSave={handleSave}
+          onClose={() => { if (!savePending.current) closeModal(); }}
           T={T}
           roles={ROLES}
           shifts={SHIFTS}

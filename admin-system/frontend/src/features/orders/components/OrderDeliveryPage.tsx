@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { usePaymentSlipReview } from '../../../hooks/usePaymentSlipReview';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, 
   CheckCircle2, 
@@ -37,13 +38,13 @@ interface OrderDeliveryPageProps {
   onSelectStep: (step: 1 | 2 | 3 | 4) => void;
   formatLAK: (n: number) => string;
   currentLang: string;
-  handleStatusChange: (orderId: any, status: string) => void;
+  handleStatusChange: (orderId: any, status: string) => Promise<any>;
   onUpdatePayment?: (orderId: any, paymentStatus: string, depositAmount?: number, remainingBalance?: number) => void;
   showToast: (msg: string, type?: string) => void;
   setLightbox?: (v: { src: string; title: string } | null) => void;
   onEditOrder?: (order: any) => void;
   askConfirmation?: (msg: string, onConfirm: () => void) => void;
-  onUpdateOrder?: (order: any) => void;
+  onUpdateOrder?: (order: any) => Promise<any>;
 }
 
 export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
@@ -63,16 +64,16 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
   if (!order) return null;
 
   const orderIdDisplay = order.orderNo || order.order_no || order.orderNumber || order.id || 'ORDER';
-  const customerName = order.customerName || order.customer_name || 'Somphavath DOUANGSVA';
-  const customerPhone = order.phone || order.customer_phone || '02058866339';
-  const deliveryAddress = order.address || order.delivery_address || 'Saysettha, Vientiane';
-  const totalAmountLAK = Number(order.totalPriceCharged || order.totalAmount || order.total_amount_lak || 86250);
+  const customerName = order.customerName || order.customer_name || '—';
+  const customerPhone = order.phone || order.customer_phone || '—';
+  const deliveryAddress = order.address || order.delivery_address || '—';
+  const totalAmountLAK = Number(order.totalPriceCharged ?? order.totalAmount ?? order.total_amount_lak ?? 0);
 
   const village = order.village || '';
   const district = order.district || '';
   const province = order.province || '';
 
-  const { couriers = [], customerCategories = [], customers = [], updateOrderTracking, addDelivery } = useApp();
+  const { couriers = [], customerCategories = [], customers = [], updateOrderTracking, addDelivery, settleOrderBalance } = useApp();
 
   const customerTier = order.customerTier || order.customer_tier || order.tier || 
     customers.find(c => (order.customerId && c.id === order.customerId) || c.name === customerName)?.tier || 'RETAIL';
@@ -83,12 +84,12 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [isEditingDelivery, setIsEditingDelivery] = useState(false);
 
-  const [courier, setCourier] = useState(order.deliveryMethod || 'Anousith Express');
+  const [courier, setCourier] = useState(order.deliveryMethod || '');
   const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber || '');
-  const [shippingFee, setShippingFee] = useState<number>(order.shippingFee || 15000);
+  const [shippingFee, setShippingFee] = useState<number>(order.shippingFee ?? 0);
   const [enableProofImage, setEnableProofImage] = useState<boolean>(Boolean(order.courierProofUrl));
   const [courierProofImage, setCourierProofImage] = useState<string | null>(
-    order.courierProofUrl || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&q=80&w=600'
+    order.courierProofUrl || null
   );
 
   // Strict Sequential Delivery Lifecycle States (Packaging -> Dispatch -> Customer Received)
@@ -100,222 +101,82 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
   );
   // Never default isDelivered to true prematurely unless customer actually received the items
   const [isDelivered, setIsDelivered] = useState<boolean>(
+
     Boolean(order.isCustomerReceived === true)
   );
 
-  // Payment Settlement State
-  const initialRemaining = order.remainingUnpaidBalance !== undefined 
-    ? order.remainingUnpaidBalance 
-    : (order.paymentStatus === 'Deposit' ? Math.round(totalAmountLAK / 2) : 0);
-  
-  const [remainingBalance, setRemainingBalance] = useState(initialRemaining);
-  const [finalSettled, setFinalSettled] = useState(
-    order.paymentStatus === 'Paid' || order.paymentStatus === 'PAID' || initialRemaining === 0
-  );
-  const [settleMethod, setSettleMethod] = useState('BCEL One');
+  useEffect(() => {
+    setIsPacked(Boolean(order.isPacked)); setIsDispatched(Boolean(order.isDispatched));
+    setIsDelivered(Boolean(order.isCustomerReceived));
+  }, [order.id, order.updated_at, order.isPacked, order.isDispatched, order.isCustomerReceived]);
 
-  const isPaymentConfirmed = true;
+  // Payment Settlement State
+  const paymentReview = usePaymentSlipReview(String(order.id));
+  const remainingBalance = Number(paymentReview.summary?.remaining_lak ?? order.remaining_lak ?? order.remainingUnpaidBalance ?? totalAmountLAK);
+  const finalSettled = paymentReview.summary?.payment_status === 'PAID';
+  const [settling, setSettling] = useState(false);
+  const settleMethod = 'MANUAL_QR';
+
+  const isPaymentConfirmed = Number(paymentReview.summary?.received_net_lak || 0) > 0;
   const isArtworkApproved = true;
   const isProductionFinished = true;
 
-  // 1. Action: Confirm Packaging
-  const handleTogglePack = () => {
+  // Delivery fields are published only after the existing order callback acknowledges them.
+  const handleTogglePack = async () => {
     const next = !isPacked;
-    setIsPacked(next);
-    if (!next) {
-      setIsDispatched(false);
-      setIsDelivered(false);
-    }
-    if (order) {
-      order.isPacked = next;
-      if (!next) {
-        order.isDispatched = false;
-        order.isCustomerReceived = false;
-      }
-    }
-    if (onUpdateOrder) {
-      onUpdateOrder({
-        ...order,
-        isPacked: next,
-        ...(next ? {} : { isDispatched: false, isCustomerReceived: false })
-      });
-    }
-    showToast(next ? 'ແພັກກິ້ງສິນຄ້າຮຽບຮ້ອຍແລ້ວ! ປົດລັອກຂັ້ນຕອນມອບໃຫ້ຂົນສົ່ງ' : 'Reverted packaging status', 'info');
+    try {
+      if (!onUpdateOrder) throw new Error('ບໍ່ມີຊ່ອງທາງບັນທຶກ');
+      await onUpdateOrder({ id: order.id, expected_updated_at: order.updated_at, isPacked: next,  });
+      setIsPacked(next);
+      if (!next) { setIsDispatched(false); setIsDelivered(false); }
+      showToast('ບັນທຶກສະຖານະແພັກແລ້ວ', 'success');
+    } catch (error) { showToast(error instanceof Error ? error.message : 'ບັນທຶກບໍ່ສຳເລັດ', 'error'); }
   };
 
-  // 2. Action: Handed to Courier & Save Proof
-  const handleConfirmDispatched = () => {
-    if (!isPacked) {
-      showToast(currentLang === 'lo' ? 'ກະລຸນາກວດສອບແລະຢືນຢັນການແພັກສິນຄ້າກ່ອນ' : 'Please complete packaging first', 'warning');
-      return;
+  const handleConfirmDispatched = async () => {
+    if (!isPacked || (!trackingNumber && courier !== 'ຮັບເອງທີ່ຮ້ານ')) {
+      showToast('ກະລຸນາຢືນຢັນການແພັກ ແລະ ເລກຕິດຕາມກ່ອນ', 'warning'); return;
     }
-    if (!trackingNumber && courier !== 'ຮັບເອງທີ່ຮ້ານ') {
-      showToast(currentLang === 'lo' ? 'ກະລຸນາໃສ່ເລກຕິດຕາມພັດສະດຸ (Tracking No.)' : 'Please enter tracking number', 'warning');
-      return;
-    }
-    setIsDispatched(true);
-    handleStatusChange(order.id, 'Dispatched');
-
-    if (updateOrderTracking) {
-      updateOrderTracking(order.id, courier, trackingNumber, shippingFee);
-    }
-    if (addDelivery) {
-      addDelivery({
-        orderId: order.id,
-        orderNumber: orderIdDisplay,
-        customerName: customerName,
-        courierId: courier,
-        courierName: courier,
-        trackingCode: trackingNumber,
-        shippingFeeLAK: shippingFee,
-        status: 'IN_TRANSIT',
-        dispatchedAt: new Date().toISOString(),
-        podImageUrl: courierProofImage || ''
-      });
-    }
-
-    if (order) {
-      order.status = 'Dispatched';
-      order.isDispatched = true;
-      order.isPacked = true;
-      order.deliveryMethod = courier;
-      order.trackingNumber = trackingNumber;
-      order.shippingFee = shippingFee;
-      order.courierProofUrl = courierProofImage;
-    }
-    if (onUpdateOrder) {
-      onUpdateOrder({
-        ...order,
-        status: 'Dispatched',
-        isDispatched: true,
-        isPacked: true,
-        deliveryMethod: courier,
-        trackingNumber: trackingNumber,
-        shippingFee: shippingFee,
-        courierProofUrl: courierProofImage
-      });
-    }
-    showToast(
-      currentLang === 'lo' 
-        ? 'ບັນທຶກຫຼັກຖານ & ມອບໃຫ້ຂົນສົ່ງແລ້ວ! (ສະຖານະ: ກຳລັງຈັດສົ່ງ)' 
-        : 'Dispatched to courier with proof recorded!', 
-      'success'
-    );
+    try {
+      if (!onUpdateOrder) throw new Error('ບໍ່ມີຊ່ອງທາງບັນທຶກ');
+      await onUpdateOrder({ id: order.id, expected_updated_at: order.updated_at, isDispatched: true, isPacked: true, deliveryMethod: courier, trackingNumber, shippingFee, courierProofUrl: enableProofImage ? courierProofImage : null });
+      setIsDispatched(true);
+      showToast('ບັນທຶກການຈັດສົ່ງແລ້ວ', 'success');
+    } catch (error) { showToast(error instanceof Error ? error.message : 'ບັນທຶກບໍ່ສຳເລັດ', 'error'); }
   };
 
-  const handleSettleRemaining = () => {
-    setFinalSettled(true);
-    setRemainingBalance(0);
-    if (onUpdatePayment) {
-      onUpdatePayment(order.id, 'Paid', totalAmountLAK, 0);
-    }
-    if (order) {
-      order.paymentStatus = 'Paid';
-      order.remainingUnpaidBalance = 0;
-    }
-    showToast(
-      currentLang === 'lo' 
-        ? 'ຢືນຢັນຮັບຊຳລະຍອດທີ່ເຫຼືອຄົບ 100% ແລ້ວ!' 
-        : 'Final balance settled successfully!', 
-      'success'
-    );
+  const handleSettleRemaining = async () => {
+    if (settling) return;
+    setSettling(true);
+    try {
+      if (!paymentReview.summary) throw new Error('ກະລຸນາລໍຖ້າຂໍ້ມູນຊຳລະ');
+      await settleOrderBalance(order.id, paymentReview.summary.remaining_lak, 'MANUAL_QR');
+      showToast('ບັນທຶກຄຳຂໍຊຳລະແລ້ວ. ລໍຖ້າກວດສະລິບ', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກຄຳຂໍໄດ້', 'error');
+    } finally { setSettling(false); }
   };
 
-  // 3. Action: Customer Received -> Step 4
-  const handleConfirmCustomerReceived = () => {
-    if (!isDispatched) {
-      showToast(currentLang === 'lo' ? 'ກະລຸນາກົດມອບໃຫ້ຂົນສົ່ງກ່ອນ' : 'Order must be dispatched first', 'warning');
-      return;
+  const handleConfirmCustomerReceived = async () => {
+    if (!isDispatched || !finalSettled) {
+      showToast('ກະລຸນາຢືນຢັນຈັດສົ່ງ ແລະ ກວດຍອດຊຳລະກ່ອນ', 'warning'); return;
     }
-    if (!finalSettled && remainingBalance > 0) {
-      showToast(
-        currentLang === 'lo' 
-          ? 'ກະລຸນາປິດຍອດເງິນທີ່ຄ້າງຊຳລະກ່ອນຢືນຢັນສຳເລັດ' 
-          : 'Please settle remaining balance before completing', 
-        'warning'
-      );
-      return;
-    }
-
-    setIsDelivered(true);
-    handleStatusChange(order.id, 'Delivered');
-    if (order) {
-      order.status = 'Delivered';
-      order.isCustomerReceived = true;
-      order.deliveryMethod = courier;
-      order.trackingNumber = trackingNumber;
-    }
-    if (onUpdateOrder) {
-      onUpdateOrder({ ...order, status: 'Delivered', isCustomerReceived: true, deliveryMethod: courier, trackingNumber });
-    }
-    showToast(
-      currentLang === 'lo' 
-        ? 'ລູກຄ້າໄດ້ຮັບສິນຄ້າແລ້ວ! ນຳທາງສູ່ໜ້າສະຫຼຸບອໍເດີ (Step 4)' 
-        : 'Customer received confirmed! Advancing to Step 4 Summary', 
-      'success'
-    );
-    setTimeout(() => {
-      onSelectStep(4);
-    }, 600);
+    try {
+      if (!onUpdateOrder) throw new Error('ບໍ່ມີຊ່ອງທາງບັນທຶກ');
+      await onUpdateOrder({ id: order.id, expected_updated_at: order.updated_at, isCustomerReceived: true, deliveryMethod: courier, trackingNumber });
+      setIsDelivered(true); onSelectStep(4);
+    } catch (error) { showToast(error instanceof Error ? error.message : 'ບັນທຶກບໍ່ສຳເລັດ', 'error'); }
   };
 
-  // 4. Action: Save Delivery Updates (In-Place Edit)
-  const handleSaveDeliveryUpdates = () => {
-    if (updateOrderTracking) {
-      updateOrderTracking(order.id, courier, trackingNumber, shippingFee);
-    }
-    if (order) {
-      order.deliveryMethod = courier;
-      order.trackingNumber = trackingNumber;
-      order.shippingFee = shippingFee;
-      if (enableProofImage) {
-        order.courierProofUrl = courierProofImage;
-      }
-    }
-    if (onUpdateOrder) {
-      onUpdateOrder({ 
-        ...order, 
-        deliveryMethod: courier, 
-        trackingNumber, 
-        shippingFee, 
-        courierProofUrl: enableProofImage ? courierProofImage : null 
-      });
-    }
-    setIsEditingDelivery(false);
-    showToast(currentLang === 'lo' ? 'ບັນທຶກການແກ້ໄຂຂໍ້ມູນຈັດສົ່ງສຳເລັດ!' : 'Delivery info updated!', 'success');
+  const handleSaveDeliveryUpdates = async () => {
+    try {
+      if (!onUpdateOrder) throw new Error('ບໍ່ມີຊ່ອງທາງບັນທຶກ');
+      await onUpdateOrder({ id: order.id, expected_updated_at: order.updated_at, deliveryMethod: courier, trackingNumber, shippingFee, courierProofUrl: enableProofImage ? courierProofImage : null });
+      setIsEditingDelivery(false);
+      showToast('ບັນທຶກຂໍ້ມູນຈັດສົ່ງແລ້ວ', 'success');
+    } catch (error) { showToast(error instanceof Error ? error.message : 'ບັນທຶກບໍ່ສຳເລັດ', 'error'); }
   };
 
-  // 5. Action: Revert to Dispatched / In-Transit Status
-  const handleRevertToDispatched = () => {
-    const doRevert = () => {
-      setIsDelivered(false);
-      handleStatusChange(order.id, 'Dispatched');
-      if (order) {
-        order.status = 'Dispatched';
-        order.isCustomerReceived = false;
-      }
-      if (onUpdateOrder) {
-        onUpdateOrder({ ...order, status: 'Dispatched', isCustomerReceived: false });
-      }
-      showToast(
-        currentLang === 'lo' 
-          ? 'ຍ້ອນສະຖານະກັບມາຂັ້ນຕອນການຈັດສົ່ງ (In-Transit) ສຳເລັດ!' 
-          : 'Reverted status to In-Transit delivery!', 
-        'info'
-      );
-    };
-
-    if (askConfirmation) {
-      askConfirmation(
-        currentLang === 'lo'
-          ? 'ທ່ານຕ້ອງການຍ້ອນສະຖານະອໍເດີນີ້ກັບໄປຂັ້ນຕອນການຈັດສົ່ງແທ້ ຫຼື ບໍ່? (ລະບົບຈະປົດລັອກໃຫ້ແກ້ໄຂການຈັດສົ່ງໄດ້)'
-          : 'Revert this order back to In-Transit delivery stage?',
-        doRevert
-      );
-    } else {
-      doRevert();
-    }
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 lg:p-8 space-y-6 animate-fade-in font-sans">
@@ -516,12 +377,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {(couriers && couriers.length > 0 ? couriers : [
-                    { id: 'anousith', name: 'Anousith Express', shortName: 'Anousith', fee: 15000 },
-                    { id: 'hal', name: 'HAL Logistics', shortName: 'HAL', fee: 20000 },
-                    { id: 'mixay', name: 'Mixay Express', shortName: 'Mixay', fee: 15000 },
-                    { id: 'self', name: 'ຮັບເອງທີ່ຮ້ານ', shortName: 'Self Pickup', fee: 0 },
-                  ]).map((c: any) => {
+                  {[...couriers, ...(!couriers.some(c => c.name === 'ຮັບເອງທີ່ຮ້ານ') ? [{ id: 'self-pickup', name: 'ຮັບເອງທີ່ຮ້ານ', shortName: 'ຮັບເອງ', fee: 0 }] : [])].map((c: any) => {
                     const cName = c.shortName || c.name;
                     const isSelected = courier === c.name || courier === cName || courier === c.id;
                     return (
@@ -530,9 +386,6 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
                         type="button"
                         onClick={() => {
                           setCourier(c.name || cName);
-                          if (c.fee !== undefined && !shippingFee) {
-                            setShippingFee(c.fee);
-                          }
                         }}
                         className={`p-2 rounded-2xl border font-bold text-xs transition active:scale-95 cursor-pointer flex flex-col items-center justify-center gap-1.5 text-center relative overflow-hidden ${
                           isSelected
@@ -756,11 +609,11 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
-                  {['BCEL One QR', 'ເງິນສົດ (Cash)'].map((m) => (
+                  {['MANUAL_QR'].map((m) => (
                     <button
                       key={m}
                       type="button"
-                      onClick={() => setSettleMethod(m)}
+                      disabled
                       className={`p-2 rounded-xl border text-xs font-bold transition ${
                         settleMethod === m ? 'bg-amber-500 text-slate-950 border-amber-500 font-black' : 'bg-white text-slate-700 border-slate-200'
                       }`}
@@ -773,13 +626,14 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
                 <button
                   type="button"
                   onClick={handleSettleRemaining}
+                  disabled={settling || !paymentReview.summary}
                   className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2 border-none"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>{currentLang === 'lo' ? `ຢືນຢັນຮັບຊຳລະຍອດທີ່ເຫຼືອ (${formatLAK(remainingBalance)})` : 'Settle Full Balance'}</span>
+                  <span>{currentLang === 'lo' ? `ສົ່ງຄຳຂໍຊຳລະຍອດທີ່ເຫຼືອ (${formatLAK(remainingBalance)})` : 'Request Remaining Payment'}</span>
                 </button>
               </div>
-            ) : (
+            ) : finalSettled ? (
               <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-xs text-emerald-950 space-y-1">
                 <span className="font-black flex items-center gap-1.5 text-emerald-900">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -791,7 +645,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
                     : 'Payment 100% cleared. Once customer receives the items, click confirm to advance.'}
                 </p>
               </div>
-            )}
+            ) : <div role="status">{paymentReview.historyError || 'ກຳລັງໂຫຼດຂໍ້ມູນຊຳລະ'}</div>}
           </div>
 
           {/* Action 3: Customer Received Confirmation (Gateway to Step 4) & Revert Action */}
@@ -803,15 +657,7 @@ export const OrderDeliveryPage: React.FC<OrderDeliveryPageProps> = ({
                     <CheckCircle2 className="w-5 h-5 text-emerald-700" />
                     <span>{currentLang === 'lo' ? 'ລູກຄ້າໄດ້ຮັບສິນຄ້າແລ້ວ (ອໍເດີສຳເລັດ)' : 'Delivered & Completed'}</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleRevertToDispatched}
-                    className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-black transition border border-amber-300 flex items-center gap-1.5 cursor-pointer shadow-xs"
-                    title="ຍ້ອນສະຖານະກັບສູ່ຂັ້ນຕອນການຈັດສົ່ງ"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
-                    <span>{currentLang === 'lo' ? 'ຍ້ອນສະຖານະ (Revert)' : 'Revert'}</span>
-                  </button>
+
                 </div>
               </div>
             ) : !isDispatched ? (

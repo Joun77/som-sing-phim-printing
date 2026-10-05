@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../../api/client';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Truck, 
   Clock, 
@@ -23,6 +24,8 @@ interface AccountsPayableItem {
 }
 
 export const APManagementPage: React.FC = () => {
+  const [error, setError] = useState<string | null>(null);
+  const paymentKeys = useRef(new Map<string, string>());
   const [apList, setApList] = useState<AccountsPayableItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [settlingId, setSettlingId] = useState<string | null>(null);
@@ -30,13 +33,12 @@ export const APManagementPage: React.FC = () => {
   const loadAP = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/finance/ap');
-      if (res.ok) {
-        const json = await res.json();
-        setApList(json.data || []);
-      }
+      const res = await apiFetch('/api/v1/finance/ap');
+      const body = await res.json();
+      if (!res.ok || body?.status !== 'success' || !Array.isArray(body.data)) throw new Error('ບໍ່ສາມາດໂຫຼດເຈົ້າໜີ້ໄດ້');
+      setApList(body.data); setError(null);
     } catch (err) {
-      console.error('Failed to load AP records:', err);
+      setError('ບໍ່ສາມາດໂຫຼດເຈົ້າໜີ້ໄດ້. ກະລຸນາລອງໃໝ່');
     } finally {
       setLoading(false);
     }
@@ -54,14 +56,13 @@ export const APManagementPage: React.FC = () => {
     if (!window.confirm('ຢືນຢັນການຕັດຈ່າຍໜີ້ສິນໃຫ້ຊັບພລາຍເອີ?')) return;
     setSettlingId(id);
     try {
-      const res = await fetch(`/api/v1/finance/ap/${id}/payment`, {
-        method: 'POST'
-      });
-      if (res.ok) {
-        loadAP();
-      }
+      if (!paymentKeys.current.has(id)) paymentKeys.current.set(id, crypto.randomUUID());
+      const res = await apiFetch(`/api/v1/finance/ap/${encodeURIComponent(id)}/payment`, { method: 'POST', headers: { 'Idempotency-Key': paymentKeys.current.get(id)! } });
+      const body = await res.json();
+      if (!res.ok || body?.status !== 'success' || body?.committed !== true || body.data?.id !== id || body.data.status !== 'PAID') throw new Error(body?.message || 'ບໍ່ສາມາດຢືນຢັນການຈ່າຍໄດ້');
+      await loadAP();
     } catch (err) {
-      console.error('Failed to settle AP:', err);
+      setError(err instanceof Error ? err.message : 'ບໍ່ສາມາດບັນທຶກການຈ່າຍໄດ້');
     } finally {
       setSettlingId(null);
     }
@@ -69,6 +70,7 @@ export const APManagementPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {error && <p role="alert">{error}</p>}
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">

@@ -17,10 +17,9 @@ import { QuotationShareModal } from './QuotationShareModal';
 import { PricingTemplatesModal } from './PricingTemplatesModal';
 import { QuotationHistoryModal } from './QuotationHistoryModal';
 import { PreflightItemCreationModal } from '../../../components/PreflightItemCreationModal';
-import { parentSheetDimensions } from '@utils/impositionLayout';
+import { parentSheetDimensions, preCutStockDimensions, preCutStockMatches } from '@utils/impositionLayout';
 import ArtworkFileActions from '@features/orders/components/ArtworkFileActions';
 import { getArtworkFiles, formatArtworkSize } from '@features/orders/utils/artworkParts';
-import ArtworkPartsPanel from '@features/orders/components/ArtworkPartsPanel';
 import type { ArtworkPart, PreflightResult } from '@features/orders/types';
 import { itemForArtworkPart, commercialTotals, artworkEditorItem, patchArtworkEditor } from '../utils/artworkPartPricing';
 import { mapPreflightToSpecs, mapQuotationItemToOrderItem } from '../utils/preflightMapper';
@@ -134,6 +133,8 @@ const DEFAULT_MONO_CHANNELS = [
 ];
 
 export interface QuotationItem {
+  imposition_mode?: 'OFF' | 'ON';
+  stock_dimension_snapshot?: import('../../orders/types').StockDimensionSnapshot;
   id: string;
   name: string;
   paperId: string;
@@ -528,6 +529,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       mimeType: specs?.mimeType,
       previewThumbnailUrl: specs?.previewThumbnailUrl,
       preflightData: specs?.preflightData,
+      imposition_mode: specs?.imposition_mode ?? 'OFF',
       multipleImagesPerSheet: specs?.multipleImagesPerSheet ?? false,
       imagesPerSheet: specs?.imagesPerSheet ?? 4,
       batchFiles: specs?.batchFiles || specs?.preflightData?.batch_files || [],
@@ -569,6 +571,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   };
 
   const incomingSpecs = prefilledSpecs || prefilledOrderSpecs;
+  const [priceCorrectionTarget, setPriceCorrectionTarget] = useState<any>(null);
 
   const [items, setItems] = useState<QuotationItem[]>(() => [
     createNewItem(incomingSpecs?.jobName || 'ລາຍການທີ 1', incomingSpecs)
@@ -582,6 +585,14 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   // Auto-sync when prefilledOrderSpecs or prefilledSpecs arrives dynamically
   useEffect(() => {
+    if (incomingSpecs?.replacementQuoteItems && incomingSpecs.price_correction_target_order_id) {
+      setItems(structuredClone(incomingSpecs.replacementQuoteItems));
+      setPriceCorrectionTarget({ price_correction_target_order_id: incomingSpecs.price_correction_target_order_id, expected_order_updated_at: incomingSpecs.expected_order_updated_at });
+      setSelectedCustomerId(incomingSpecs.customerName || ''); setCustomerPhone(incomingSpecs.customerPhone || ''); setCustomerAddress(incomingSpecs.customerAddress || '');
+      setPrefilledOrderSpecs(null);
+      return;
+    }
+    if (incomingSpecs) setPriceCorrectionTarget(null);
     if (incomingSpecs && (incomingSpecs.avgCovC !== undefined || incomingSpecs.cCoverage !== undefined || incomingSpecs.jobName || incomingSpecs.pageCount || incomingSpecs.jobWidth || incomingSpecs.suggestedPaper)) {
       const isBatch = Boolean(incomingSpecs.is_batch_photo || incomingSpecs.isBatchPhoto || incomingSpecs.jobName?.includes('Photo Prints') || (incomingSpecs.batchFiles && incomingSpecs.batchFiles.length > 0) || (incomingSpecs.preflightData as any)?.is_batch_photo);
       const isMono = !isBatch && ((incomingSpecs.colorPages === 0 && (incomingSpecs.monoPages || 0) > 0) || incomingSpecs.colorMode === 'MONO_K');
@@ -655,6 +666,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         previewThumbnailUrl: incomingSpecs.previewThumbnailUrl || activeItem.previewThumbnailUrl,
         artworkUrl: incomingSpecs.fileUrl || incomingSpecs.artworkUrl || activeItem.artworkUrl,
         preflightData: incomingSpecs.preflightData || activeItem.preflightData,
+        imposition_mode: incomingSpecs.imposition_mode ?? activeItem.imposition_mode,
         multipleImagesPerSheet: incomingSpecs.multipleImagesPerSheet ?? activeItem.multipleImagesPerSheet,
         imagesPerSheet: incomingSpecs.imagesPerSheet ?? activeItem.imagesPerSheet,
         batchFiles: incomingSpecs.batchFiles || incomingSpecs.preflightData?.batch_files || activeItem.batchFiles || [],
@@ -1298,18 +1310,14 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       setSelectedCustomerCategory(foundCust.category || foundCust.tier);
     }
 
-    if (data.isNew && (data.saveToCrm || autoSaveCustomerToCRM) && data.name.trim() && addCustomer) {
-      addCustomer({
-        id: `cust-${Date.now()}`,
-        name: data.name.trim(),
-        phone: data.phone || '020 55889900',
-        address: data.address || 'Vientiane',
-        category: selectedCustomerCategory,
-        tier: selectedCustomerCategory,
-        creditLimit: 5000000,
-        unpaidBalance: 0
-      });
-    }
+
+  };
+
+  const ensureQuotationCustomer = async () => {
+    if (priceCorrectionTarget) return null;
+    const existing = customers.find(customer => customer.name.trim().toLowerCase() === selectedCustomerId.trim().toLowerCase());
+    if (existing || !autoSaveCustomerToCRM) return existing;
+    return addCustomer({ name: selectedCustomerId.trim(), phone: customerPhone, address: customerAddress, tier: selectedCustomerCategory, creditLimit: 0 });
   };
 
   const calculateSingleItemFinancials = (item: QuotationItem, imposed?: { sheets: number; copies: number; capacity: number }) => {
@@ -1322,14 +1330,15 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       (p.sku && p.sku.toLowerCase() === item.paperId?.toLowerCase()) ||
       p.name === item.paperId
     );
-    const {sheetWidth:parentW,sheetHeight:parentH} = parentSheetDimensions(paperItem,item.parentSheetSize);
+    const preCut = item.imposition_mode === 'OFF';
+    const {sheetWidth:parentW,sheetHeight:parentH} = preCut ? (preCutStockDimensions(paperItem) || { sheetWidth: Number(jobW), sheetHeight: Number(jobH) }) : parentSheetDimensions(paperItem, item.parentSheetSize);
 
     const curW = Number(jobW) + (Number(bleedMargin) * 2);
     const curH = Number(jobH) + (Number(bleedMargin) * 2);
     const portraitCuts = Math.floor(parentW / curW) * Math.floor(parentH / curH);
     const landscapeCuts = Math.floor(parentW / curH) * Math.floor(parentH / curW);
     const autoCutsPerSheet = Math.max(1, portraitCuts, landscapeCuts);
-    const cutsPerSheet = imposed?.capacity ?? ((item.cutsPerSheetOverride !== undefined && item.cutsPerSheetOverride > 0)
+    const cutsPerSheet = preCut ? 1 : imposed?.capacity ?? ((item.cutsPerSheetOverride !== undefined && item.cutsPerSheetOverride > 0)
       ? Number(item.cutsPerSheetOverride)
       : autoCutsPerSheet);
 
@@ -1392,7 +1401,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     if (hasCover) {
       const coverPaperItem = inventory.find(p => p.id === item.coverPaperId) || paperItem;
       const totalCoverSheets = 1 * orderQty; // 1 Spread sheet per book
-      const coverCutsPerSheet = (item.coverCutsPerSheetOverride !== undefined && item.coverCutsPerSheetOverride > 0)
+      const coverCutsPerSheet = preCut ? 1 : (item.coverCutsPerSheetOverride !== undefined && item.coverCutsPerSheetOverride > 0)
         ? Number(item.coverCutsPerSheetOverride)
         : 1;
       coverParentSheetsNeeded = Math.ceil(totalCoverSheets / coverCutsPerSheet);
@@ -1675,7 +1684,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
     const rawPostPressCost = (item.selectedPostPressIds || []).reduce((sum, machId) => {
       const mach = equipment.find(e => e.id === machId);
-      if (!mach) return sum;
+      if (!mach || (preCut && String(mach.postPressSubtype || mach.specs?.postPressSubtype || '').toLowerCase() === 'guillotine')) return sum;
       const accCost = getEquipmentAccurateCost(mach);
       const rate = accCost.totalMachineCost > 0
         ? accCost.totalMachineCost
@@ -1805,7 +1814,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const capacity = Math.max(1, Math.floor(Number(item.imagesPerSheet) || 4));
     const copies = (Number(item.photoCount) || item.batchFiles?.length || Number(item.pagesPerBook || 1)) * Number(item.printVolume || 1);
     // One division: finished photos -> standard parent/printer sheets. OFF is the exact legacy path.
-    const imposed = isPhoto && item.multipleImagesPerSheet && !item.artworkParts?.length ? { copies, capacity, sheets: Math.ceil(copies / capacity) } : undefined;
+    const imposed = item.imposition_mode !== 'OFF' && isPhoto && item.multipleImagesPerSheet && !item.artworkParts?.length ? { copies, capacity, sheets: Math.ceil(copies / capacity) } : undefined;
     const shared = calculateSingleItemFinancials(item, imposed);
     if (!item.artworkParts?.length) return { ...shared, partCosts: undefined, sharedCosts: undefined };
     const partCosts = item.artworkParts.map(part => {
@@ -1831,6 +1840,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       partCosts, sharedCosts: { postPressCost: shared.postPressCost, finishingMaterialsCost: shared.finishingMaterialsCost, laborCost, packagingDeliveryCost: shared.packagingDeliveryCost, offcutRebate } };
   };
 
+  const impositionError = items.some(item => item.imposition_mode === 'OFF' && (item.artworkParts?.length
+    ? item.artworkParts.some(part => !preCutStockMatches(inventory.find(paper => paper.id === part.paperId), part.widthMM, part.heightMM))
+    : !preCutStockMatches(inventory.find(paper => paper.id === item.paperId), Number(item.jobWidth), Number(item.jobHeight))
+      || (item.includeCover && !preCutStockMatches(inventory.find(paper => paper.id === item.coverPaperId), Number(item.jobWidth) * 2, Number(item.jobHeight)))))
+    ? 'ຂະໜາດວຽກບໍ່ກົງກັບເຈ້ຍທີ່ຕັດໄວ້. ກະລຸນາເລືອກເຈ້ຍທີ່ເໝາະສົມ.' : '';
   const calculatedItems = items.map(item => calculateItemFinancials(item));
   const activeCalc = calculateItemFinancials(activeItem);
   const editorCalc = selectedPart ? calculateSingleItemFinancials(itemForArtworkPart(activeItem, selectedPart)) : activeCalc;
@@ -1870,6 +1884,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   // Convert Quotation to Order (Lifecycle: Created without immediate stock deduction - stock will be deducted at IN_PRODUCTION)
   const handleConfirmOrder = () => {
+    if (priceCorrectionTarget) { showToast('ກະລຸນາບັນທຶກໃບສະເໜີປັບລາຄາ ແລະ ຂໍອະນຸມັດກ່ອນ', 'warning'); return; }
+    if (impositionError) { showToast(impositionError, 'error'); return; }
     if (!selectedCustomerId.trim()) {
       showToast(currentLang === 'lo' ? 'ກະລຸນາເລືອກ ຫຼື ລະບຸຊື່ລູກຄ້າ' : 'Select or enter a customer name before creating the order', 'error');
       return;
@@ -1878,7 +1894,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       ? `ຢືນຢັນການເປີດອໍເດີ (${items.length} ລາຍການ)? ຍອດລວມ: ${formatCurrency(finalGrandTotal)} (ສະຕ໋ອກຈະຖືກຕັດອັດຕະໂນມັດເມື່ອເລີ່ມສັ່ງພິມຈິງ IN_PRODUCTION)`
       : `Confirm order creation (${items.length} items)? Total: ${formatCurrency(finalGrandTotal)} (Stock will be auto-deducted at IN_PRODUCTION stage)`;
 
-    askConfirmation(msg, () => {
+    askConfirmation(msg, async () => {
+      try {
+      const savedCustomer = await ensureQuotationCustomer();
       const orderItems: any[] = [];
 
       items.forEach((item, idx) => {
@@ -1895,7 +1913,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       const firstFileSize = items.find(i => i.fileSize)?.fileSize;
 
       // Pass autoDeduct = false to enforce stock deduction only at IN_PRODUCTION stage
-      addOrder({
+      await addOrder({
+        customerId: savedCustomer?.id,
         customerName: selectedCustomerId,
         phone: customerPhone || customers.find(c => c.name === selectedCustomerId)?.phone || '020 55889900',
         items: orderItems,
@@ -1959,11 +1978,13 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       if (setActiveTab) {
         setActiveTab('orders');
       }
+      } catch (error) { showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດສ້າງອໍເດີໄດ້', 'error'); }
     });
   };
 
   // Open Save Modal
   const handleSaveQuotation = () => {
+    if (impositionError) { showToast(impositionError, 'error'); return; }
     setIsSaveModalOpen(true);
   };
 
@@ -1979,9 +2000,11 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   // Confirm Save current quotation to history with versioning & template tag
   const handleConfirmSaveQuotation = async () => {
+    if (impositionError) { showToast(impositionError, 'error'); return; }
     if (savingQuotation.current) return;
     savingQuotation.current = true; setIsSavingQuotation(true);
     try {
+    await ensureQuotationCustomer();
     const quoteItems = items.map((item, idx) => {
       const calc = calculatedItems[idx];
       return {
@@ -2007,6 +2030,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       id: pendingSaveId.current ?? (pendingSaveId.current = `quot-${crypto.randomUUID()}`),
       totalCost: grandNetCost, setupFee: quotationSetupFee, packagingCost: grandPackagingCost,
       commercial_snapshot: savedCommercialSnapshot(),
+      ...(priceCorrectionTarget || {}),
       rawItems: JSON.parse(JSON.stringify(items)),
       items: quoteItems,
       subtotal: grandSubtotal,
@@ -2026,7 +2050,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       expiresAt: quotationExpiry,
       paymentTerms,
       notes: quotationNote,
-      status: grandProfitMargin < 25.0 ? 'REQUIRES_MANAGER_APPROVAL' : 'Pending',
+      status: priceCorrectionTarget || grandProfitMargin < 25.0 ? 'REQUIRES_MANAGER_APPROVAL' : 'Pending',
       version: 1
     };
 
@@ -2054,7 +2078,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         'success'
       );
     }
-    } finally { savingQuotation.current = false; setIsSavingQuotation(false); }
+    } catch (error) { showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກໄດ້', 'error'); } finally { savingQuotation.current = false; setIsSavingQuotation(false); }
   };
 
   // Financial decisions remain separate from lifecycle conversion.
@@ -2065,10 +2089,16 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     }
     setIsProcessingApproval(true);
     try {
-      const response = await apiFetch<Response>(`/api/v1/quotations/${encodeURIComponent(quoteId)}/${action}`, { method: 'POST', body: JSON.stringify({ reason: approvalReason }) });
+      const sourceQuote: any = quotations.find(q => q.id === quoteId);
+      const boundTarget = sourceQuote?.price_correction_source?.target_order_id || sourceQuote?.price_correction_target_order_id || sourceQuote?.items?.find((item: any) => item.specs?._somsing_quote_snapshot?.price_correction_source)?.specs._somsing_quote_snapshot.price_correction_source.target_order_id;
+      if (boundTarget && !sourceQuote.updated_at) throw new Error('ກະລຸນາໂຫຼດເວີຊັນໃບສະເໜີກ່ອນ');
+      const response = await apiFetch<Response>(`/api/v1/quotations/${encodeURIComponent(quoteId)}/${action}`, { method: 'POST', body: JSON.stringify({ reason: approvalReason, ...(quotations.find(q => q.id === quoteId)?.updated_at ? { expected_updated_at: quotations.find(q => q.id === quoteId)!.updated_at } : {}) }) });
       if (!response.ok) throw new Error(`Quotation decision failed (HTTP ${response.status})`);
       const decision = await response.json();
-      if (decision.status !== 'success' || decision.target_type !== 'quotation' || decision.quotation_id !== quoteId || decision.quotation_status !== (action === 'approve' ? 'ACCEPTED' : 'REJECTED') || decision.committed !== true) throw new Error('Quotation decision not committed to matching target');
+      const approval = decision.price_source_approval;
+      const boundApproval = action === 'approve' && decision.data?.id === quoteId && decision.data.status === 'ACCEPTED' && decision.updated_at === decision.data.updated_at && approval?.source_quotation_id === quoteId && approval.source_quotation_updated_at === decision.updated_at && approval.approval_audit_id && approval.commercial_fingerprint && approval.target_order_id === boundTarget && approval.customer_id && approval.actor_id && ['admin','manager','owner'].includes(approval.actor_role) && typeof approval.total_lak === 'string' && /^\d+\.\d{2}$/.test(approval.total_lak) && Number(approval.total_lak) === decision.data.total_selling_price;
+      const legacyDecision = decision.target_type === 'quotation' && decision.quotation_id === quoteId && decision.quotation_status === (action === 'approve' ? 'ACCEPTED' : 'REJECTED');
+      if (decision.status !== 'success' || decision.committed !== true || (boundTarget && action === 'approve' ? !boundApproval : !legacyDecision)) throw new Error('Quotation decision not committed to matching target');
       await refreshServerState();
       showToast(action === 'approve' ? 'ອະນຸມັດໃບສະເໜີລາຄາສຳເລັດ' : 'ປະຕິເສດໃບສະເໜີລາຄາແລ້ວ', 'success');
       setApprovalModalQuote(null); setApprovalReason('');
@@ -2082,6 +2112,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   // Revise the active quotation (adds a new version row)
   const handleReviseQuotation = async (quotationId: string) => {
+    if (impositionError) { showToast(impositionError, 'error'); return; }
     if (savingQuotation.current) return;
     savingQuotation.current = true; setIsSavingQuotation(true);
     try {
@@ -2108,6 +2139,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   // Quick Save as Draft with Customer & Specs Snapshot
   const handleSaveDraft = async () => {
+    if (impositionError) { showToast(impositionError, 'error'); return; }
     if (savingQuotation.current) return;
     savingQuotation.current = true; setIsSavingQuotation(true);
     try {
@@ -2143,6 +2175,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       id: pendingSaveId.current ?? (pendingSaveId.current = `quot-${crypto.randomUUID()}`),
       totalCost: grandNetCost, setupFee: quotationSetupFee, packagingCost: grandPackagingCost,
       commercial_snapshot: savedCommercialSnapshot(),
+      ...(priceCorrectionTarget || {}),
       rawItems: JSON.parse(JSON.stringify(items)),
       items: quoteItems,
       subtotal: grandSubtotal,
@@ -2186,12 +2219,13 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       ? `ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບໃບສະເໜີ "${quote.quotationNumber}" (${quote.customerName})?`
       : `Are you sure you want to delete quotation "${quote.quotationNumber}" (${quote.customerName})?`;
 
-    askConfirmation(msg, () => {
-      deleteQuotation(quote.id);
-      showToast(
-        currentLang === 'lo' ? 'ລົບໃບສະເໜີລາຄາຮຽບຮ້ອຍແລ້ວ' : 'Quotation deleted successfully',
-        'success'
-      );
+    askConfirmation(msg, async () => {
+      try {
+        await deleteQuotation(quote.id);
+        showToast('ລົບໃບສະເໜີລາຄາຮຽບຮ້ອຍແລ້ວ', 'success');
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດລົບໄດ້', 'error');
+      }
     });
   };
 
@@ -2201,6 +2235,9 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const defPrn = equipment[0]?.id || '';
     return {
       ...raw,
+      imposition_mode: raw?.imposition_mode ?? raw?.specs?.imposition_mode ?? raw?.specifications?.imposition_mode,
+      stock_dimension_snapshot: raw?.stock_dimension_snapshot ?? raw?.specs?.stock_dimension_snapshot,
+      artworkParts: raw?.artworkParts ?? raw?.specs?.artwork_parts,
       id: raw?.id || `item-${Date.now()}-${idx}`,
       name: raw?.name || `ລາຍການ ${idx + 1}`,
       paperId: raw?.paperId || defPaper,
@@ -2257,6 +2294,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   // Load a saved quotation's financial settings back into the calculator (Lossless & Robust)
   const handleLoadQuotation = (quotation: any) => {
+    setPriceCorrectionTarget(null);
     if (!quotation) return;
     if (quotation.title) setQuotationTitle(quotation.title);
     if (quotation.customerName) setSelectedCustomerId(quotation.customerName);
@@ -2281,7 +2319,10 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         : [];
 
     if (rawList.length > 0) {
-      const sanitized = rawList.map((it: any, i: number) => sanitizeQuotationItem(it, i));
+      const sanitized = rawList.map((it: any, i: number) => {
+        const canonical = quotation.items?.[i];
+        return sanitizeQuotationItem({ ...it, specs: canonical?.specs ?? it.specs, stock_dimension_snapshot: canonical?.specs?.stock_dimension_snapshot ?? canonical?.stock_dimension_snapshot ?? it.stock_dimension_snapshot, imposition_mode: canonical?.imposition_mode ?? canonical?.specs?.imposition_mode ?? it.imposition_mode, artworkParts: canonical?.specs?.artwork_parts ?? it.artworkParts }, i);
+      });
       setItems(sanitized);
       setActiveItemIndex(0);
     }
@@ -2306,6 +2347,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   return (
     <div className="space-y-3 animate-fade-in text-slate-800 print:bg-white print:p-0 print:text-black">
+      {impositionError && <p role="alert" className="p-3 text-rose-700 bg-rose-50 rounded-xl">{impositionError}</p>}
       
       {/* ========================================================================= */}
       {/* UNIFIED HEADER & PIPELINE STEPPER BAR                                     */}
@@ -2937,7 +2979,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                         </div>
                       </div>
 
-                      {item.artworkParts?.length ? <div data-testid="quotation-sidebar-artwork-parts" className="space-y-2 pl-3 border-l-2 border-slate-200">{item.artworkParts.map(part => <div key={part.role}><button type="button" data-select-artwork-role={part.role} aria-label={`ແກ້ໄຂ ${part.role === 'cover' ? 'ປົກ' : 'ເນື້ອໃນ'}: ${part.source.name}`} aria-pressed={isActive && selectedPart?.role === part.role} className={`w-full text-left p-3 rounded-xl border text-xs transition focus-visible:ring-2 focus-visible:ring-sky-500 ${isActive && selectedPart?.role === part.role ? 'bg-sky-50 border-sky-300 text-sky-900' : 'bg-slate-50 border-slate-200 hover:bg-white'}`} onClick={e => { e.stopPropagation(); setActiveItemIndex(idx); setSelectedFile({ itemId: item.id, role: part.role }); }}><span className="font-bold flex items-center gap-2"><FileText className="w-4 h-4 text-sky-600" />{part.role === 'cover' ? 'ປົກ' : 'ເນື້ອໃນ'}</span><div className="break-all my-1" title={part.source.name}>{part.source.name}</div><div className="text-slate-500">{part.pageCount} ໜ້າ • {formatArtworkSize(part.source.size)}</div><div className="text-slate-500 mt-1">{part.paperName || part.paperSize} • {part.widthMM}×{part.heightMM} mm • {part.colorMode}</div></button><div className="pt-2"><ArtworkFileActions role={part.role} url={part.source.url} name={part.source.name} onPreview={() => { setActiveItemIndex(idx); setSelectedFile({ itemId: item.id, role: part.role }); setPreviewColorItem(artworkEditorItem(item, part)); }} /></div></div>)}</div> : <>                      {/* Visual Artwork Thumbnail & Quick Preview Trigger */}
+                      {item.artworkParts?.length ? <div data-testid="quotation-sidebar-artwork-parts" className="space-y-2 pl-3 border-l-2 border-slate-200">{item.artworkParts.map(part => <div key={part.role}><button type="button" data-select-artwork-role={part.role} aria-label={`ແກ້ໄຂ ${part.role === 'cover' ? 'ປົກ' : 'ເນື້ອໃນ'}: ${part.source.name}`} aria-pressed={isActive && selectedPart?.role === part.role} className={`w-full text-left p-3 rounded-xl border text-xs transition focus-visible:ring-2 focus-visible:ring-sky-500 ${isActive && selectedPart?.role === part.role ? 'bg-sky-50 border-sky-300 text-sky-900' : 'bg-slate-50 border-slate-200 hover:bg-white'}`} onClick={e => { e.stopPropagation(); setActiveItemIndex(idx); setSelectedFile({ itemId: item.id, role: part.role }); }}><span className="font-bold flex items-center gap-2"><FileText className="w-4 h-4 text-sky-600" />{part.role === 'cover' ? 'ປົກ' : 'ເນື້ອໃນ'}</span><div className="break-all my-1" title={part.source.name}>{part.source.name}</div><div className="text-slate-500">{part.pageCount} ໜ້າ • {formatArtworkSize(part.source.size)}</div><div className="text-slate-500 mt-1">{part.paperName || part.paperSize} • {part.widthMM}×{part.heightMM} mm • {part.colorMode} • {part.doubleSided ? 'ສອງດ້ານ' : 'ດ້ານດຽວ'}</div><div className="text-slate-500 mt-1">C{part.coverage.c} M{part.coverage.m} Y{part.coverage.y} K{part.coverage.k}</div>{(calc.partCosts || []).filter((cost: any) => cost.role === part.role).map((cost: any) => <div key={cost.role} data-testid={`${part.role}-print-cost`} className="mt-1 text-slate-700 font-semibold">ຕົ້ນທຶນພິມ: {formatCurrency(cost.paperCost + cost.inkCost + cost.machineOverhead)}</div>)}</button><div className="pt-2"><ArtworkFileActions role={part.role} url={part.source.url} name={part.source.name} onPreview={() => { setActiveItemIndex(idx); setSelectedFile({ itemId: item.id, role: part.role }); setPreviewColorItem(artworkEditorItem(item, part)); }} /></div></div>)}</div> : <>                      {/* Visual Artwork Thumbnail & Quick Preview Trigger */}
                       <div 
                         onClick={(e) => {
                           e.stopPropagation();
@@ -3128,10 +3170,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
                 </div>
               </div>
 
-              {selectedPart && <div className="space-y-3" data-testid="selected-artwork-editor" key={`${activeItem.id}:${selectedPart.role}:${selectedPart.source.url}`}>
-
-                <ArtworkPartsPanel costs={activeCalc.partCosts} printers={printers} papers={papers} parts={[selectedPart]} />
-              </div>}
+              {selectedPart && <p data-testid="selected-artwork-editor" className="text-xs text-sky-700 flex items-center gap-2 min-w-0"><FileText className="w-4 h-4 shrink-0" /><span className="font-bold shrink-0">{selectedPart.role === 'cover' ? 'ປົກ' : 'ເນື້ອໃນ'}</span><span className="truncate" title={selectedPart.source.name}>{selectedPart.source.name}</span></p>}
 
               {/* 3-Stage Production Step Tabs */}
               <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100/80 rounded-2xl border border-slate-200 text-xs font-black">

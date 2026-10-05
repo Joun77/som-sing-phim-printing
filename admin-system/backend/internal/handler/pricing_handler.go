@@ -40,6 +40,10 @@ func (h *PricingHandler) HandleCalculatePrice(c *gin.Context) {
 		return
 	}
 
+	if req.ImpositionMode != "" {
+		c.JSON(422, gin.H{"status": "error", "code": "IMPOSITION_MODE_UNSUPPORTED", "message": "ກະລຸນາໃຊ້ການຄຳນວນຂະໜາດເຈ້ຍທີ່ຮອງຮັບ"})
+		return
+	}
 	breakdown, err := h.svc.CalculatePrice(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{

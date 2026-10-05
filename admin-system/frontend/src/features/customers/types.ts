@@ -1,4 +1,5 @@
 export interface Customer {
+  depositEligible?: boolean;
   id: string;
   name: string;
   phone: string;

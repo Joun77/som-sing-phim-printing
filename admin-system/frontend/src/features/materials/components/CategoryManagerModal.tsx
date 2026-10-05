@@ -40,7 +40,7 @@ export const CATEGORY_ICONS = [
 ];
 
 export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({ isOpen, onClose }) => {
-  const { data: categories = [], isLoading, refetch } = useMaterialCategories();
+  const { data: categories = [], isLoading, isError, refetch } = useMaterialCategories();
   const createMutation = useCreateMaterialCategory();
   const updateMutation = useUpdateMaterialCategory();
   const deleteMutation = useDeleteMaterialCategory();
@@ -57,6 +57,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({ isOp
   const [descriptionLo, setDescriptionLo] = useState('');
   const [descriptionEn, setDescriptionEn] = useState('');
   const [sortOrder, setSortOrder] = useState(10);
+  const [actionError, setActionError] = useState('');
   const [formError, setFormError] = useState('');
 
   const resetForm = () => {
@@ -131,25 +132,19 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({ isOp
 
   const handleDelete = async (id: string, name: string) => {
     if (window.confirm(`ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບໝວດໝູ່ "${name}"?`)) {
-      await deleteMutation.mutateAsync(id);
+      try { await deleteMutation.mutateAsync(id); setActionError(''); }
+      catch (error) { setActionError(error instanceof Error ? error.message : 'ບໍ່ສາມາດລຶບໄດ້'); }
     }
   };
 
   const handleMove = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= categories.length) return;
+    const moved = categories[index], neighbor = categories[targetIndex];
+    if (!moved || !neighbor || reorderMutation.isPending) return;
+    const payload = [{ id: moved.id, sortOrder: neighbor.sortOrder }, { id: neighbor.id, sortOrder: moved.sortOrder }];
 
-    const newItems = [...categories];
-    const temp = newItems[index];
-    newItems[index] = newItems[targetIndex];
-    newItems[targetIndex] = temp;
-
-    const payload = newItems.map((item, idx) => ({
-      id: item.id,
-      sortOrder: (idx + 1) * 10,
-    }));
-
-    await reorderMutation.mutateAsync(payload);
+    try { await reorderMutation.mutateAsync(payload); setActionError(''); }
+    catch (error) { setActionError(error instanceof Error ? error.message : 'ບໍ່ສາມາດຈັດລຳດັບໄດ້'); }
   };
 
   if (!isOpen) return null;
@@ -157,6 +152,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({ isOp
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        {actionError && <p role="alert" className="p-4 text-rose-700">{actionError}</p>}
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div className="flex items-center gap-3">
@@ -321,6 +317,8 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({ isOp
           <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
             {isLoading ? (
               <div className="p-8 text-center text-xs text-slate-400">ກຳລັງໂຫຼດໝວດໝູ່...</div>
+            ) : isError ? (
+              <div role="alert" className="p-8 text-center text-rose-700">ບໍ່ສາມາດໂຫຼດໝວດໝູ່ໄດ້ <button type="button" onClick={() => refetch()}>ລອງໃໝ່</button></div>
             ) : categories.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-400">ຍັງບໍ່ມີໝວດໝູ່ໃນລະບົບ</div>
             ) : (

@@ -176,6 +176,10 @@ export async function apiFetch<T = any>(
   options: RequestOptions = {}
 ): Promise<T> {
   const { params, skipAuth = false, headers = {}, ...rest } = options;
+  const sessionGeneration = useAuthStore.getState().sessionGeneration;
+  const assertCurrentSession = () => {
+    if (!skipAuth && useAuthStore.getState().sessionGeneration !== sessionGeneration) throw new DOMException('Authentication session changed', 'AbortError');
+  };
 
   let url = endpoint;
   if (BACKEND_HOST && url.startsWith('/api')) {
@@ -223,11 +227,13 @@ export async function apiFetch<T = any>(
     throw networkErr;
   }
 
+  assertCurrentSession();
   // Handle 401 Unauthorized - Attempt Silent Refresh then Retry once
   if (response.status === 401 && !skipAuth) {
     console.warn(`[API 401 Unauthorized] on ${url}. Attempting silent token refresh...`);
     const newToken = await useAuthStore.getState().silentRefreshToken();
 
+    assertCurrentSession();
     if (newToken) {
       requestHeaders['Authorization'] = `Bearer ${newToken}`;
       try {
@@ -245,6 +251,7 @@ export async function apiFetch<T = any>(
     }
   }
 
+  assertCurrentSession();
   return response as unknown as T;
 }
 
@@ -290,6 +297,8 @@ export function setupGlobalFetchInterceptor(): void {
       return originalFetch(targetInput, init);
     }
 
+    const generation = useAuthStore.getState().sessionGeneration;
+    const assertSession = () => { if (useAuthStore.getState().sessionGeneration !== generation) throw new DOMException('Session changed', 'AbortError'); };
     const headers = new Headers(init?.headers || (typeof input === 'object' && 'headers' in input ? input.headers : undefined));
 
     // CRITICAL SECURITY ENFORCEMENT:
@@ -313,17 +322,30 @@ export function setupGlobalFetchInterceptor(): void {
     };
 
     let response = await originalFetch(targetInput, newInit);
+    assertSession();
 
     // If 401 Unauthorized, try silent refresh and retry once (trusted backend only)
     if (isTrusted && response.status === 401 && !originalUrlStr.includes('/auth/login') && !originalUrlStr.includes('/auth/refresh')) {
       const newToken = await useAuthStore.getState().silentRefreshToken();
+      assertSession();
       if (newToken) {
         headers.set('Authorization', `Bearer ${newToken}`);
         response = await originalFetch(targetInput, { ...newInit, headers });
       }
     }
 
-    return response;
+    assertSession();
+    // Cloned response bodies must keep the same account boundary as the original.
+    const guardBody = (result: Response): Response => {
+      for (const method of ['json', 'text', 'blob', 'arrayBuffer', 'formData'] as const) {
+        const read = result[method].bind(result);
+        Object.defineProperty(result, method, { value: async () => { assertSession(); const body = await read(); assertSession(); return body; } });
+      }
+      const clone = result.clone.bind(result);
+      Object.defineProperty(result, 'clone', { value: () => { assertSession(); return guardBody(clone()); } });
+      return result;
+    };
+    return guardBody(response);
   };
 }
 
@@ -466,6 +488,8 @@ export interface AuthenticatedBlobResult {
  * and creates an ephemeral Blob URL.
  */
 export async function fetchAuthenticatedBlob(url: string, explicitToken?: string): Promise<AuthenticatedBlobResult> {
+  const generation = useAuthStore.getState().sessionGeneration;
+  const assertSession = () => { if (useAuthStore.getState().sessionGeneration !== generation) throw new DOMException('Session changed', 'AbortError'); };
   const trimmed = (url || '').trim();
   if (!trimmed) {
     throw new Error('Invalid media URL');
@@ -474,6 +498,7 @@ export async function fetchAuthenticatedBlob(url: string, explicitToken?: string
   // Support blob: and data: URLs directly while validating contents against HTML spoofing
   if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
     const res = await fetch(trimmed);
+    assertSession();
     if (!res.ok) {
       throw new Error(`Failed to fetch blob media (HTTP ${res.status})`);
     }
@@ -516,6 +541,7 @@ export async function fetchAuthenticatedBlob(url: string, explicitToken?: string
       }
     }
 
+    assertSession();
     return {
       blob,
       blobUrl: trimmed,
@@ -551,6 +577,7 @@ export async function fetchAuthenticatedBlob(url: string, explicitToken?: string
   }
 
   const res = await fetch(parsed.toString(), { headers, redirect: 'error', referrerPolicy: 'no-referrer' });
+  assertSession();
   if (!res.ok) {
     let errDetail = `${res.status} ${res.statusText}`;
     try {
@@ -640,6 +667,7 @@ export async function fetchAuthenticatedBlob(url: string, explicitToken?: string
     }
   }
 
+  assertSession();
   const blobUrl = URL.createObjectURL(blob);
   return {
     blob,

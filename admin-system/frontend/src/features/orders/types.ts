@@ -1,3 +1,8 @@
+export interface StockDimensionSnapshot {
+  material_id: string; sku: string; width_mm: number; height_mm: number; unit: 'mm';
+  orientation: 'DIRECT' | 'ROTATED'; source: 'materials.technical_specs'; source_path: string; version: string;
+}
+
 export interface OrderLotUsed {
   lotId: string;
   qty: number;
@@ -56,6 +61,7 @@ export interface ArtworkPart {
 }
 
 export interface PreflightResult {
+  imposition_mode?: 'OFF' | 'ON';
   file_name: string;
   file_size?: number;
   file_id?: string;

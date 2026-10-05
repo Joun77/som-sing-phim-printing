@@ -124,7 +124,7 @@ export interface AppContextValue {
   assignEmployeeToMachine: (...args: any[]) => any;
   recordImpressions: (...args: any[]) => any;
   earningRecords: EarningRecord[];
-  addEarningRecord: (record: Omit<EarningRecord, 'id' | 'recordedAt'>) => void;
+  addEarningRecord: (record: Omit<EarningRecord, 'id' | 'recordedAt'>) => Promise<void>;
 
   machineStatus: Record<string, MachineStatusEntry>;
   setMachineStatus: (...args: any[]) => any;
@@ -204,8 +204,8 @@ export interface AppContextValue {
   addOrderVersion: (...args: any[]) => any;
   addOrder: (...args: any[]) => any;
   updateOrderStatus: (...args: any[]) => any;
-  updateOrderDetails?: (orderId: string, updatedOrder: any) => void;
-  startOrderProduction?: (orderId: string) => boolean;
+  updateOrderDetails?: (orderId: string, updatedOrder: any) => Promise<any>;
+  startOrderProduction?: (orderId: string) => Promise<boolean>;
   updateOrderTracking?: (orderId: string, courierName: string, trackingNumber: string, shippingFee?: number, branchCode?: string) => void;
   settleOrderBalance: (...args: any[]) => any;
   deleteOrder: (...args: any[]) => any;

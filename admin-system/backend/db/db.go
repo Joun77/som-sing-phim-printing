@@ -140,6 +140,8 @@ var MigrationFiles = []string{
 	"000011_seed_chart_of_accounts.up.sql",
 	"044_quotation_artwork_references.sql",
 	"045_quotation_id_uniqueness.sql",
+	"046_phase2_guide_schema.sql",
+	"047_phase2_payment_persistence.sql",
 }
 
 // verifyLegacyBaseline checks if a legacy migration's intended schema changes

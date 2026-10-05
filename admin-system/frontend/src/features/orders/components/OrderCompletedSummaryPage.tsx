@@ -41,7 +41,7 @@ interface OrderCompletedSummaryPageProps {
   currentLang: string;
   setLightbox?: (v: { src: string; title: string } | null) => void;
   onEditOrder?: (order: any) => void;
-  handleStatusChange?: (orderId: any, status: string) => void;
+  handleStatusChange?: (orderId: any, status: string) => Promise<any>;
   askConfirmation?: (msg: string, onConfirm: () => void) => void;
   onUpdateOrder?: (order: any) => void;
   showToast?: (msg: string, type?: string) => void;
@@ -169,38 +169,12 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
             {handleStatusChange && (
               <button
                 type="button"
-                onClick={() => {
-                  const doRevert = () => {
-                    handleStatusChange(order.id, 'Dispatched');
-                    if (order) {
-                      order.status = 'Dispatched';
-                      order.isCustomerReceived = false;
-                    }
-                    if (onUpdateOrder) {
-                      onUpdateOrder({ ...order, status: 'Dispatched', isCustomerReceived: false });
-                    }
-                    if (showToast) {
-                      showToast(currentLang === 'lo' ? 'ຍ້ອນສະຖານະກັບມາຂັ້ນຕອນການຈັດສົ່ງ (In-Transit) ແລ້ວ' : 'Reverted to In-Transit delivery', 'info');
-                    }
-                    onSelectStep(3);
-                  };
-
-                  if (askConfirmation) {
-                    askConfirmation(
-                      currentLang === 'lo'
-                        ? 'ທ່ານຕ້ອງການຍ້ອນສະຖານະອໍເດີນີ້ກັບໄປຂັ້ນຕອນການຈັດສົ່ງ (Step 3) ແທ້ ຫຼື ບໍ່?'
-                        : 'Revert this order back to delivery handover stage (Step 3)?',
-                      doRevert
-                    );
-                  } else {
-                    doRevert();
-                  }
-                }}
+                onClick={() => onSelectStep(3)}
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 font-black rounded-xl text-xs transition border border-amber-300 active:scale-95 cursor-pointer shadow-xs"
-                title={currentLang === 'lo' ? 'ຍ້ອນສະຖານະກັບສູ່ຂັ້ນຕອນການຈັດສົ່ງ' : 'Revert to Delivery'}
+                title={currentLang === 'lo' ? 'ເບິ່ງການຈັດສົ່ງ' : 'View Delivery'}
               >
                 <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
-                <span>{currentLang === 'lo' ? 'ຍ້ອນສະຖານະ (Step 3)' : 'Revert to Step 3'}</span>
+                <span>{currentLang === 'lo' ? 'ເບິ່ງການຈັດສົ່ງ' : 'View Delivery'}</span>
               </button>
             )}
 

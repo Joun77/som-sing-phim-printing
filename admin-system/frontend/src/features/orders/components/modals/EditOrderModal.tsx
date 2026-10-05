@@ -1,4 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useAuthStore } from '../../../../store/useAuthStore';
+import { correctOrderTotal, getPaymentHistory, paymentDecimal } from '../../../../api/paymentReview';
+import { apiFetch } from '../../../../api/client';
+import { getArtworkParts } from '../../utils/artworkParts';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   User, 
   Phone, 
@@ -73,7 +77,18 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
   equipment = [],
   formatCurrency = (v) => `${Number(v || 0).toLocaleString()} ₭`
 }) => {
-  const { offcuts = [], couriers = [], customerCategories = [], customers = [], updateCustomer } = useApp();
+  const { offcuts = [], couriers = [], customerCategories = [], customers = [], updateCustomer, showToast, quotations, setPrefilledOrderSpecs, setActiveTab, refreshData } = useApp();
+  const role = useAuthStore(state => state.user?.role);
+  const canReplaceOriginal = ['admin','manager','sales','prepress','owner'].includes(role || '');
+  const canApplyPrice = ['admin','manager','finance','accountant','owner'].includes(role || '');
+  const [isSaving, setIsSaving] = useState(false);
+  const savePending = useRef(false);
+  const originalPending = useRef(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [sourceQuoteId, setSourceQuoteId] = useState('');
+  const [priceReason, setPriceReason] = useState('');
+  const totalRequestKeys = useRef(new Map<string, string>());
+
   const [activeStep, setActiveStep] = useState<number>(1);
   const [activeJobIndex, setActiveJobIndex] = useState<number>(0);
 
@@ -100,6 +115,11 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
 
   // STEP 2: Items & Specs State
   const [items, setItems] = useState<any[]>([]);
+  const initialItems = useRef<any[]>([]);
+  const initialBasic = useRef<string>('');
+  const [replacementItems, setReplacementItems] = useState<Record<string, any>>({});
+  const [uploadingOriginal, setUploadingOriginal] = useState(false);
+
 
   // STEP 3: Financial & Status State
   const [status, setStatus] = useState<string>('Received');
@@ -116,7 +136,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
     if (!order) return false;
     const currentStatus = order.status || order.overall_status || '';
     return (
-      order.stockDeducted === true ||
+      order.stockDeducted === true || !!order.stock_deducted_at ||
       ['IN_PRODUCTION', 'Printing', 'Cutting', 'READY_FOR_PICKUP', 'Ready', 'DELIVERED', 'Delivered', 'COMPLETED'].includes(currentStatus)
     );
   }, [order]);
@@ -151,6 +171,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
       setDeliveryDate(order.promisedDeliveryDate || order.delivery_date || order.dueDate || '');
       setArtworkLink(order.artworkLink || order.google_drive_link || order.driveLink || '');
       setOrderNotes(order.notes || order.orderNotes || '');
+      initialBasic.current = JSON.stringify([order.customerName || order.customer_name || order.customer || '', order.phone || order.customer_phone || order.customerPhone || '', order.promisedDeliveryDate || order.delivery_date || order.dueDate || '', delMethod, order.courier || order.courierName || matchedCust?.preferredCourier || (couriers[0]?.name || 'Anousith Express'), order.courierBranch || order.courierBranchCode || order.branchCode || '', order.trackingNumber || order.trackingNo || '', Number(order.shippingFee || order.deliveryFee || 0)]);
 
       setStatus(order.status || order.overall_status || 'Received');
       setPaymentStatus(order.paymentStatus || order.payment_status || 'Unpaid');
@@ -166,11 +187,58 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
       setDepositAmount(deposit);
 
       const normalizedItems = mapOrderToFormSpecs(order, inventory, equipment);
-      setItems(normalizedItems);
+      setItems(normalizedItems); initialItems.current = structuredClone(normalizedItems); setReplacementItems({});
       setActiveJobIndex(0);
       setActiveStep(1);
     }
   }, [order, isOpen]);
+
+  const quoteTarget = (quote: any) => quote.price_correction_source?.target_order_id || quote.price_correction_target_order_id || quote.items?.find((item: any) => item.specs?._somsing_quote_snapshot?.price_correction_source)?.specs._somsing_quote_snapshot.price_correction_source.target_order_id;
+  const approvedSources = (quotations || []).filter((quote: any) => quote.status === 'ACCEPTED' && !quote.convertedOrderId && !quote.converted_order_id && quoteTarget(quote) === order?.id);
+  const preparePriceSource = () => {
+    if (!order.updated_at) { setSaveError('ກະລຸນາໂຫຼດອໍເດີຈາກເຊີບເວີກ່ອນ'); return; }
+    setPrefilledOrderSpecs({ replacementQuoteItems: mapOrderToFormSpecs(order, inventory, equipment).map((row: any) => { const original = order.items.find((item: any) => item.id === row.id); const parts = getArtworkParts(original); return { ...row, printVolume: row.quantity, artworkUrl: row.fileUrl, jobSizePreset: row.paperSize, imposition_mode: original?.specs?.imposition_mode, stock_dimension_snapshot: original?.specs?.stock_dimension_snapshot, ...(parts.length ? { artworkParts: parts, includeCover: true } : {}) }; }), price_correction_target_order_id: order.id, expected_order_updated_at: order.updated_at, customerName: order.customerName || order.customer_name, customerPhone: order.customerPhone || order.customer_phone, customerAddress: order.customerAddress || order.address });
+    setActiveTab('quotation'); onClose();
+  };
+  const applyApprovedPrice = async () => {
+    if (!canApplyPrice) { setSaveError('ທ່ານບໍ່ມີສິດປັບລາຄາ'); return; }
+    const source: any = approvedSources.find((quote: any) => quote.id === sourceQuoteId);
+    if (!source?.updated_at || !priceReason.trim()) { setSaveError('ກະລຸນາເລືອກໃບສະເໜີທີ່ອະນຸມັດ ແລະ ເຫດຜົນ'); return; }
+    if (savePending.current || originalPending.current) return;
+    savePending.current = true; setIsSaving(true); setSaveError(null);
+    try {
+      const { summary } = await getPaymentHistory(order.id);
+      const amount = paymentDecimal(source.total_selling_price);
+      const intent = JSON.stringify([order.id, source.id, source.updated_at, amount, priceReason.trim(), summary.payment_revision]);
+      if (!totalRequestKeys.current.has(intent)) totalRequestKeys.current.set(intent, crypto.randomUUID());
+      await correctOrderTotal(order.id, source.id, source.updated_at, amount, priceReason.trim(), summary.payment_revision, totalRequestKeys.current.get(intent)!);
+      await refreshData(); showToast('ປັບລາຄາຕາມໃບສະເໜີທີ່ອະນຸມັດແລ້ວ', 'success'); onClose();
+    } catch (error) { setSaveError(error instanceof Error ? error.message : 'ບໍ່ສາມາດປັບລາຄາໄດ້'); }
+    finally { savePending.current = false; setIsSaving(false); }
+  };
+
+  const handleOriginalReplacement = async (file: File, item: any, role: 'single' | 'cover' | 'inner') => {
+    if (originalPending.current || savePending.current) return;
+    if (!canReplaceOriginal || isInProduction || !order.updated_at) { setSaveError('ກະລຸນາໂຫຼດເວີຊັນອໍເດີ; ວຽກທີ່ເລີ່ມແລ້ວຕ້ອງກວດຄືນ'); return; }
+    originalPending.current = true; setUploadingOriginal(true); setSaveError(null);
+    try {
+      const form = new FormData(); form.set('file', file); form.set('order_no', String(order.id));
+      form.set('item_id', String(item.id)); form.set('file_type', role); form.set('artwork_role', role);
+      const response = await apiFetch('/api/v1/orders/upload', { method: 'POST', body: form });
+      const asset = await response.json();
+      if (!response.ok || asset.order_no !== order.id || asset.item_id !== item.id || !asset.asset_id ||
+          typeof asset.file_url !== 'string' || !asset.file_url.startsWith('/api/v1/orders/files/')) throw new Error(asset.message || asset.error || 'ບໍ່ສາມາດຢືນຢັນໄຟລ໌ໄດ້');
+      const original = order.items.find((row: any) => row.id === item.id);
+      const previous = replacementItems[item.id] || { id: item.id };
+      const parts = previous.artwork_parts || getArtworkParts(original);
+      const patch = role === 'single' ? { artwork_url: asset.file_url, artwork_file_name: asset.file_name, artwork_file_size: file.size } : {
+        artwork_parts: parts.map((part: any) => part.role === role ? { ...part, source: { url: asset.file_url, fileId: asset.asset_id, name: asset.file_name, size: file.size, mimeType: file.type } } : part),
+        [role === 'cover' ? 'cover_file_url' : 'inner_file_url']: asset.file_url,
+      };
+      setReplacementItems(rows => ({ ...rows, [item.id]: { ...previous, ...patch } }));
+    } catch (error) { setSaveError(error instanceof Error ? error.message : 'ອັບໂຫຼດບໍ່ສຳເລັດ'); }
+    finally { originalPending.current = false; setUploadingOriginal(false); }
+  };
 
   // Handle updates from ItemSpecConfigurator for the active job
   const handleActiveJobConfigChange = (updatedJob: any) => {
@@ -372,7 +440,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
     setTotalPrice(grand);
   }, [combinedCostSummary.totalSellingPrice, shippingFee, discountAmount]);
 
-  const remainingBalance = Math.max(0, totalPrice - depositAmount);
+  const remainingBalance = Number(order?.remaining_lak ?? order?.remainingUnpaidBalance ?? 0);
 
   const availableDistricts = useMemo(() => getDistrictsForProvince(province), [province]);
   const buildFullAddress = (v = village, d = district, p = province) => {
@@ -384,7 +452,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
     return parts.join(', ');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim()) {
       alert('ກະລຸນາໃສ່ຊື່ລູກຄ້າ');
@@ -393,90 +461,28 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
 
     const finalFullAddress = buildFullAddress() || customerAddress.trim();
 
-    const updatedOrder = {
-      ...order,
-      customerName: customerName.trim(),
-      customer_name: customerName.trim(),
-      customerPhone: customerPhone.trim(),
-      phone: customerPhone.trim(),
-      customerAddress: finalFullAddress,
-      address: finalFullAddress,
-      province,
-      district,
-      village,
-      customerTier,
-      customer_tier: customerTier,
-      deliveryMethod,
-      courier: deliveryMethod === 'Courier' ? courierName : 'Pickup',
-      courierName: deliveryMethod === 'Courier' ? courierName : 'Pickup',
-      courierBranch: deliveryMethod === 'Courier' ? courierBranch : '',
-      trackingNumber: deliveryMethod === 'Courier' ? trackingNumber : '',
-      trackingNo: deliveryMethod === 'Courier' ? trackingNumber : '',
-      promisedDeliveryDate: deliveryDate,
-      delivery_date: deliveryDate,
-      artworkLink: artworkLink.trim(),
-      google_drive_link: artworkLink.trim(),
-      notes: orderNotes.trim(),
-      orderNotes: orderNotes.trim(),
-      status,
-      overall_status: status,
-      paymentStatus,
-      payment_status: paymentStatus,
-      discountAmount: Number(discountAmount) || 0,
-      discount: Number(discountAmount) || 0,
-      shippingFee: Number(shippingFee) || 0,
-      deliveryFee: Number(shippingFee) || 0,
-      subtotalAmount: combinedCostSummary.totalSellingPrice,
-      totalPriceCharged: totalPrice,
-      totalAmount: totalPrice,
-      total_amount_lak: totalPrice,
-      total_price: totalPrice,
-      depositAmountPaid: Number(depositAmount) || 0,
-      deposit_amount: Number(depositAmount) || 0,
-      remainingUnpaidBalance: remainingBalance,
-      items: items.map(it => {
-        const costing = calculateItemCosting(it, inventory, equipment);
-        const itemArtworkUrl = it.artwork?.file_url || it.fileUrl || it.artworkUrl || '';
-        const itemArtworkFileName = it.artwork?.file_name || it.fileName || it.artworkFileName || (itemArtworkUrl ? itemArtworkUrl.split('/').pop()?.split('?')[0] : '');
-        const itemArtworkFileSize = it.artwork?.file_size_bytes || it.fileSize || it.artworkFileSize || 0;
-        const itemPageCount = Number(it.pagesPerBook || it.page_count || 1);
-
-        return {
-          ...it,
-          unitPrice: it.unitPrice || costing.unitPrice,
-          totalPrice: it.totalPrice || costing.finalPrice,
-          unit_price_lak: it.unitPrice || costing.unitPrice,
-          total_price_lak: it.totalPrice || costing.finalPrice,
-          directCost: costing.directCost,
-          paperCost: costing.totalPaperCost,
-          inkCost: costing.totalInkCost,
-          finishingCost: costing.totalFinishingCost,
-          artworkUrl: itemArtworkUrl,
-          artwork_url: itemArtworkUrl,
-          artworkFileName: itemArtworkFileName,
-          artwork_file_name: itemArtworkFileName,
-          artworkFileSize: itemArtworkFileSize,
-          artwork_file_size: itemArtworkFileSize,
-          artwork: {
-            file_url: itemArtworkUrl,
-            file_name: itemArtworkFileName,
-            file_size_bytes: itemArtworkFileSize,
-            preview_thumbnail_url: itemArtworkUrl,
-            page_count: itemPageCount
-          },
-          specifications: {
-            ...(it.specifications || it.specs || {}),
-            paper_id: it.paperId,
-            color_mode: it.colorPrintMode || it.colorMode,
-            printer_id: it.printerId,
-            binding: it.bindingMethod,
-            coating: it.coating,
-            pages: itemPageCount
-          }
-        };
-      })
+    // Source replacement is held separately. Every spec change requires repricing.
+    const work = (rows: any[]) => rows.map(({ unitPrice, totalPrice, costingDetails, ...specs }) => specs);
+    if (JSON.stringify(work(items)) !== JSON.stringify(work(initialItems.current))) {
+      setSaveError('REPRICE_REQUIRED: ປ່ຽນສະເປກວຽກຕ້ອງຄິດລາຄາ ແລະ ອະນຸມັດໃໝ່'); return;
+    }
+    if (orderNotes !== (order.notes || order.orderNotes || '')) { setSaveError('ບັນທຶກໝາຍເຫດຍັງບໍ່ຮອງຮັບ; ກະລຸນາຄືນຄ່າເດີມ'); return; }
+    const replacements = Object.values(replacementItems);
+    if (replacements.length && initialBasic.current !== JSON.stringify([customerName, customerPhone, deliveryDate, deliveryMethod, courierName, courierBranch, trackingNumber, Number(shippingFee)])) { setSaveError('ກະລຸນາບັນທຶກຂໍ້ມູນລູກຄ້າ/ຈັດສົ່ງ ແລະ ປ່ຽນໄຟລ໌ແຍກກັນ'); return; }
+    if (replacements.length && (!order.updated_at || isInProduction)) { setSaveError('ITEM_EDIT_REQUIRES_REVIEW: ກະລຸນາກວດເວີຊັນ ແລະ ສະຖານະວຽກ'); return; }
+    const updatedOrder = replacements.length ? {
+      id: order.id, expected_updated_at: order.updated_at, reason: 'Replace original artwork', items: replacements,
+    } : {
+      id: order.id, customer_name: customerName.trim(), customer_phone: customerPhone.trim(),
+      delivery_date: deliveryDate, google_drive_link: artworkLink, courier_name: deliveryMethod === 'Courier' ? courierName : 'Pickup',
+      branch_code: courierBranch, tracking_number: trackingNumber, shipping_fee: Number(shippingFee),
     };
-
+    if (savePending.current || originalPending.current) return;
+    savePending.current = true; setIsSaving(true); setSaveError(null);
+    try {
+      await onSave(updatedOrder);
+      // Customer profile is a separate committed operation; report its failure explicitly.
+      try {
     // Option A: Auto-sync updated customer tier, address, phone & courier to CRM profile
     if (updateCustomer) {
       const matchedCust = customers.find(c => 
@@ -484,7 +490,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
         c.name === customerName.trim()
       );
       if (matchedCust) {
-        updateCustomer(matchedCust.id, {
+        await updateCustomer(matchedCust.id, {
           tier: customerTier,
           province,
           district,
@@ -495,9 +501,14 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
         });
       }
     }
+      } catch (error) {
+        showToast('ບັນທຶກອໍເດີແລ້ວ ແຕ່ບໍ່ສາມາດອັບເດດຂໍ້ມູນ CRM ໄດ້', 'error');
+      }
+      onClose();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກອໍເດີໄດ້');
+    } finally { savePending.current = false; setIsSaving(false); }
 
-    onSave(updatedOrder);
-    onClose();
   };
 
   if (!isOpen || !order) return null;
@@ -507,7 +518,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
   return (
     <FormModalTemplate
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={() => { if (!isSaving) onClose(); }}
       icon={<FileText className="w-6 h-6" />}
       title="ແກ້ໄຂຂໍ້ມູນອໍເດີ & ສະເປກລາຄາ (Edit Order & Pricing Specs)"
       subtitle={`Order #${orderIdDisplay} • ${customerName || 'Customer'}`}
@@ -532,6 +543,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
             <button
               type="button"
               onClick={onClose}
+              disabled={isSaving || uploadingOriginal}
               className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition cursor-pointer"
             >
               ປິດ (Close)
@@ -550,6 +562,8 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
               <button
                 type="button"
                 onClick={handleSubmit}
+                disabled={isSaving || uploadingOriginal}
+                aria-busy={isSaving}
                 className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-500/20 active:scale-95 transition flex items-center gap-2 cursor-pointer border-none"
               >
                 <Save className="w-4 h-4" />
@@ -561,6 +575,14 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
       }
     >
       <div className="space-y-6">
+        {saveError && <div role="alert" className="p-3 text-sm text-rose-700 bg-rose-50">{saveError}</div>}
+        <section className="rounded-xl border p-3 space-y-2" aria-label="ປັບລາຄາຈາກໃບສະເໜີທີ່ອະນຸມັດ">
+          <p className="text-xs">ປັບຍອດເງິນຕ້ອງໃຊ້ໃບສະເໜີທີ່ຜູ້ຈັດການອະນຸມັດ ແລະ ຜູກກັບອໍເດີນີ້.</p>
+          <button type="button" disabled={isSaving} onClick={preparePriceSource}>ຈັດທຳໃບສະເໜີປັບລາຄາ</button>
+          <select aria-label="ໃບສະເໜີປັບລາຄາ" value={sourceQuoteId} onChange={e => setSourceQuoteId(e.target.value)} disabled={isSaving}><option value="">ເລືອກໃບສະເໜີທີ່ອະນຸມັດ</option>{approvedSources.map((quote: any) => <option key={quote.id} value={quote.id}>{quote.quotationNumber || quote.id}</option>)}</select>
+          <input aria-label="ເຫດຜົນປັບລາຄາ" value={priceReason} onChange={e => setPriceReason(e.target.value)} disabled={isSaving} />
+          <button type="button" onClick={applyApprovedPrice} disabled={isSaving || !canApplyPrice || !sourceQuoteId || !priceReason.trim()}>ປັບລາຄາຕາມໃບສະເໜີ</button>
+        </section>
         
         {/* 3-Step Navigation Bar */}
         <div className="grid grid-cols-3 gap-2 bg-slate-100 p-1.5 rounded-2xl">
@@ -1260,6 +1282,11 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
                       )}
                     </div>
 
+                    {!isInProduction && canReplaceOriginal && <div className="p-3 bg-sky-50 rounded-xl space-y-2">
+                      <p className="text-xs">ເປັນການປ່ຽນໄຟລ໌ຕົ້ນສະບັບເທົ່ານັ້ນ. ຖ້າຈຳນວນໜ້າ ຫຼື ຄ່າສີປ່ຽນ ຕ້ອງກວດລາຄາໃໝ່.</p>
+                      {(getArtworkParts(order.items?.find((row: any) => row.id === items[activeJobIndex].id) || {}).length ? getArtworkParts(order.items.find((row: any) => row.id === items[activeJobIndex].id)).map(part => part.role) : ['single']).map(role => <label key={role} className="block text-xs">{role === 'cover' ? 'ປ່ຽນໄຟລ໌ປົກ' : role === 'inner' ? 'ປ່ຽນໄຟລ໌ເນື້ອໃນ' : 'ປ່ຽນໄຟລ໌ຕົ້ນສະບັບ'}<input type="file" accept=".pdf,.png,.jpg,.jpeg" disabled={uploadingOriginal || isSaving} onChange={e => { const file = e.target.files?.[0]; if (file) void handleOriginalReplacement(file, items[activeJobIndex], role as any); }} /></label>)}
+                      {Object.keys(replacementItems).length > 0 && <p role="status">ເລືອກໄຟລ໌ໃໝ່ແລ້ວ; ກົດບັນທຶກເພື່ອຢືນຢັນ</p>}
+                    </div>}
                     <ItemSpecConfigurator
                       item={items[activeJobIndex]}
                       itemIndex={activeJobIndex}
@@ -1317,6 +1344,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
                       type="number"
                       min="0"
                       value={discountAmount}
+                    disabled
                       onChange={(e) => setDiscountAmount(Number(e.target.value) || 0)}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-red-600"
                     />
@@ -1338,14 +1366,14 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
                   <div>
                     <span className="text-xs font-bold text-slate-400 block uppercase tracking-wider">ມູນຄ່າສັ່ງຜະລິດສຸດທິ (Grand Total)</span>
                     <strong className="text-2xl font-black font-mono text-amber-400 block mt-1">
-                      {formatCurrency(totalPrice)}
+                      {formatCurrency(Number(order.total_amount_lak ?? order.totalPriceCharged ?? 0))}
                     </strong>
                   </div>
 
                   <div className="border-t border-slate-800 pt-3 space-y-2 text-xs">
                     <div className="flex justify-between text-slate-300">
                       <span>ຍອດຮັບຊຳລະແລ້ວ (ມັດຈຳ):</span>
-                      <span className="font-mono text-emerald-400 font-bold">{formatCurrency(depositAmount)}</span>
+                      <span className="font-mono text-emerald-400 font-bold">{formatCurrency(Number(order.received_net_lak ?? order.depositAmountPaid ?? order.deposit_lak ?? 0))}</span>
                     </div>
                     <div className="flex justify-between text-slate-100 font-black border-t border-slate-800 pt-1.5">
                       <span>ຍອດຄ້າງຊຳລະປັດຈຸບັນ:</span>
@@ -1358,7 +1386,8 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
               </div>
 
               {/* Deposit Quick Buttons & Dynamic % with 1,000 LAK Rounding */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-3">
+              <fieldset disabled className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-3">
+                <p>ປ່ຽນໂໝດມັດຈຳ ແລະ ກວດສະລິບໃນໜ້າຮັບອໍເດີ</p>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label className="block text-xs font-bold text-slate-700">
                     ຕັ້ງຄ່າຍອດມັດຈຳ (Financial Deposit Configuration)
@@ -1455,7 +1484,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
                     </button>
                   </div>
                 </div>
-              </div>
+              </fieldset>
             </div>
 
             {/* Workflow & Payment Status Selectors */}
@@ -1470,6 +1499,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">ສະຖານະການຜະລິດ (Order Status)</label>
                   <select
                     value={status}
+                    disabled
                     onChange={(e) => setStatus(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:border-blue-500 transition"
                   >
@@ -1488,6 +1518,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">ສະຖານະການຊຳລະເງິນ (Payment Status)</label>
                   <select
                     value={paymentStatus}
+                    disabled
                     onChange={(e) => setPaymentStatus(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:border-blue-500 transition"
                   >

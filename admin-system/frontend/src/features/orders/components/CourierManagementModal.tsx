@@ -109,6 +109,7 @@ export const CourierManagementModal: React.FC<CourierManagementModalProps> = ({
       return;
     }
 
+    try {
     if (isEditing) {
       await updateCourier(isEditing, {
         name: name.trim(),
@@ -141,16 +142,19 @@ export const CourierManagementModal: React.FC<CourierManagementModalProps> = ({
     }
 
     resetForm();
+    } catch (error) { showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກໄດ້', 'error'); }
   };
 
   const handleDelete = async (id: string, courierName: string) => {
     if (confirm(currentLang === 'lo' ? `ຕ້ອງການລຶບຂົນສົ່ງ "${courierName}" ແທ້ບໍ່?` : `Delete courier "${courierName}"?`)) {
+      try {
       await deleteCourier(id);
       showToast(
         currentLang === 'lo' ? 'ລຶບຂົນສົ່ງຮຽບຮ້ອຍ' : 'Courier deleted',
         'info'
       );
       if (isEditing === id) resetForm();
+      } catch (error) { showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດລຶບໄດ້', 'error'); }
     }
   };
 

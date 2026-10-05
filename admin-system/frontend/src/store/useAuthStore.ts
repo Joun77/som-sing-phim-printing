@@ -9,6 +9,7 @@ export interface UserProfile {
 }
 
 interface AuthState {
+  sessionGeneration: number;
   token: string | null;
   refreshToken: string | null;
   user: UserProfile | null;
@@ -23,6 +24,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
+      sessionGeneration: 0,
       token: null,
       refreshToken: null,
       user: null,
@@ -32,6 +34,8 @@ export const useAuthStore = create<AuthState>()(
 
       login: (token: string, user: UserProfile, rememberMe: boolean, refreshToken?: string) => {
         set({
+          sessionGeneration: (get().sessionGeneration || 0) + 1,
+          isRefreshing: false,
           token,
           refreshToken: refreshToken || null,
           user,
@@ -64,6 +68,7 @@ export const useAuthStore = create<AuthState>()(
             body: JSON.stringify({ refresh_token: activeRefreshToken })
           });
 
+          if (get().sessionGeneration !== state.sessionGeneration) return null;
           if (!res.ok) {
             // Fallback legacy route
             const resLegacy = await fetch('/api/auth/refresh', {
@@ -72,6 +77,7 @@ export const useAuthStore = create<AuthState>()(
               body: JSON.stringify({ refresh_token: activeRefreshToken })
             });
 
+            if (get().sessionGeneration !== state.sessionGeneration) return null;
             if (!resLegacy.ok) {
               // Both endpoints failed — the refresh token is invalid/expired; force logout.
               set({ isRefreshing: false });
@@ -80,6 +86,7 @@ export const useAuthStore = create<AuthState>()(
             }
 
             const data = await resLegacy.json();
+            if (get().sessionGeneration !== state.sessionGeneration) return null;
             const newToken = data.token;
             const newRefreshToken = data.refresh_token || state.refreshToken;
             if (!newToken) {
@@ -94,6 +101,7 @@ export const useAuthStore = create<AuthState>()(
           }
 
           const data = await res.json();
+          if (get().sessionGeneration !== state.sessionGeneration) return null;
           const newToken = data.token;
           const newRefreshToken = data.refresh_token || state.refreshToken;
           if (!newToken) {
@@ -106,6 +114,7 @@ export const useAuthStore = create<AuthState>()(
           if (newRefreshToken) localStorage.setItem('refresh_token', newRefreshToken);
           return newToken;
         } catch {
+          if (get().sessionGeneration !== state.sessionGeneration) return null;
           // Network error — do not logout (user might be offline), but return null so caller skips retry
           set({ isRefreshing: false });
           return null;
@@ -119,6 +128,8 @@ export const useAuthStore = create<AuthState>()(
           // ignore network error
         }
         set({
+          sessionGeneration: (get().sessionGeneration || 0) + 1,
+          isRefreshing: false,
           token: null,
           refreshToken: null,
           user: null,

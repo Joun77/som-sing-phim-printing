@@ -67,15 +67,16 @@ export const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({
 
   if (!isOpen || effectiveOrders.length === 0) return null;
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    try {
     // 1. Update tracking number on order if changed
     if (updateOrderTracking) {
-      effectiveOrders.forEach((ord, idx) => {
+      for (const ord of effectiveOrders) {
         const trk = isBulk 
-          ? (ord.trackingNumber || `LA-${(Date.now() + idx).toString().slice(-8)}`)
+          ? (ord.trackingNumber || '')
           : trackingNumber;
-        updateOrderTracking(ord.id, selectedCourier, trk, ord.shippingFee, branchCode);
-      });
+        await updateOrderTracking(ord.id, selectedCourier, trk, ord.shippingFee, branchCode);
+      }
     }
 
     // 2. Optionally deduct packaging boxes
@@ -84,7 +85,7 @@ export const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({
       const available = boxItem ? Number(boxItem.stockQty || 0) : 0;
       const qtyToDeduct = effectiveOrders.length;
       if (available >= qtyToDeduct) {
-        dischargeInventoryStock(selectedBoxSku, qtyToDeduct, 'PACKAGING_USE', `ຕັດກ່ອງພັດສະດຸ ສຳລັບ ${qtyToDeduct} ອໍເດີ`);
+        await dischargeInventoryStock(selectedBoxSku, qtyToDeduct, 'PACKAGING_USE', `ຕັດກ່ອງພັດສະດຸ ສຳລັບ ${qtyToDeduct} ອໍເດີ`);
         showToast(`ຕັດສະຕັອກກ່ອງພັດສະດຸ ${qtyToDeduct} ອັນສຳເລັດ!`, 'success');
       } else {
         showToast('ກ່ອງພັດສະດຸທີ່ເລືອກໃນສາງມີບໍ່ພຽງພໍ', 'warning');
@@ -95,6 +96,7 @@ export const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({
     setTimeout(() => {
       window.print();
     }, 150);
+    } catch (failure) { showToast(failure instanceof Error ? failure.message : 'ບັນທຶກບໍ່ສຳເລັດ; ບໍ່ໄດ້ພິມໃບຈັດສົ່ງ', 'error'); }
   };
 
   return (
@@ -276,7 +278,7 @@ export const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({
                 <ShippingLabelTemplate
                   order={ord}
                   courierName={selectedCourier}
-                  trackingNumber={isBulk ? (ord.trackingNumber || `LA-${(Date.now() + idx).toString().slice(-8)}`) : trackingNumber}
+                  trackingNumber={isBulk ? (ord.trackingNumber || '') : trackingNumber}
                   format={labelFormat}
                 />
               </div>

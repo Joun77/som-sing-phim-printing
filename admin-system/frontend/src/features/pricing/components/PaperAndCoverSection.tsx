@@ -60,7 +60,7 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
           </span>
           <span className="text-[11px] font-bold px-2 py-0.5 bg-sky-50 text-sky-700 rounded-lg border border-sky-200 font-sans flex items-center gap-1">
             <Scissors className="w-3 h-3" />
-            {activeCalc.cutsPerSheet} ຕັດ/ແຜ່ນ • {formatCurrency(activeCalc.paperCost)}
+            {activeItem.imposition_mode === 'OFF' ? 'ເຈ້ຍຕັດໄວ້' : `${activeCalc.cutsPerSheet} ຕັດ/ແຜ່ນ`} • {formatCurrency(activeCalc.paperCost)}
           </span>
         </div>
         <div className="flex items-center gap-2 text-slate-400">
@@ -72,6 +72,15 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
       {isOpen && (
         <div className="p-4 sm:p-5 border-t border-slate-100 space-y-4 animate-fade-in">
           
+          <div className="flex items-center gap-2 text-xs font-bold text-sky-900">
+            <button type="button" role="switch" aria-label="ຈັດວາງເຈ້ຍ ແລະ ຕັດ" aria-checked={activeItem.imposition_mode !== 'OFF'} disabled={sourceLocked}
+              onClick={() => updateActiveItem({ imposition_mode: activeItem.imposition_mode !== 'OFF' ? 'OFF' : 'ON' })}
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:opacity-50 ${activeItem.imposition_mode !== 'OFF' ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+              <span aria-hidden="true" className={`pointer-events-none h-5 w-5 rounded-full bg-white shadow-md transition-transform ${activeItem.imposition_mode !== 'OFF' ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+            <span>ຈັດວາງເຈ້ຍ ແລະ ຕັດ: {activeItem.imposition_mode !== 'OFF' ? 'ເປີດ' : 'ປິດ'}</span>
+            {sourceLocked && <span>ລັອກສະເປກໄຟລ໌</span>}
+          </div>
           {/* SECTION 1: BOOK COVER CONFIGURATION (Hides cleanly when isBatchPhoto) */}
           {isBatchPhoto ? (
             <div className="p-3 bg-sky-50/60 border border-sky-200/80 rounded-2xl flex items-center justify-between gap-3 text-xs">
@@ -319,7 +328,7 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
             </select>
 
             {/* Parent Sheet Imposition Preset Selector */}
-            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+            {activeItem.imposition_mode !== 'OFF' && <div data-testid="imposition-layout-panel" className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
               <div className="flex items-center gap-2">
                 <Layers className="w-4 h-4 text-sky-600 shrink-0" />
                 <div>
@@ -361,6 +370,7 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
               </div>
             </div>
 
+            }
             {/* Warehouse Offcuts Selector & Scrap Paper Rebate */}
             <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-2.5 shadow-2xs">
               <div className="flex items-center justify-between">
@@ -480,17 +490,24 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
           </div>
 
           {/* SECTION 3: CUTTING & YIELD CALCULATION BOX (ສະຫຼຸບການຕັດ & ຕົ້ນທຶນ) */}
-          <div className="p-4 bg-sky-50/90 border border-sky-200 rounded-2xl text-xs space-y-2.5 shadow-2xs">
+          {activeItem.imposition_mode !== 'OFF' && <div data-testid="imposition-cutting-panel" className="p-4 bg-sky-50/90 border border-sky-200 rounded-2xl text-xs space-y-2.5 shadow-2xs">
             <div className="flex flex-wrap justify-between items-center gap-2 text-sky-950 font-black">
               <span className="flex items-center gap-1.5">
                 <Scissors className="w-4 h-4 text-sky-600" />
                 <span>ສະຫຼຸບການໃຊ້ເຈ້ຍ & ການຕັດ ({activeItem.name})</span>
               </span>
 
-              {isBatchPhoto && <label className="flex items-center gap-2 text-xs font-bold text-sky-900"><input type="checkbox" role="switch" aria-label="พิมพ์หลายรูปต่อแผ่น" checked={!!activeItem.multipleImagesPerSheet} onChange={e=>updateActiveItem({multipleImagesPerSheet:e.target.checked})} className="accent-sky-600"/>พิมพ์หลายรูปต่อแผ่น</label>}
+              {isBatchPhoto && <div className="flex items-center gap-2 text-xs font-bold text-sky-900">
+                <button type="button" role="switch" aria-label="ພິມຫຼາຍຮູບຕໍ່ແຜ່ນ" aria-checked={!!activeItem.multipleImagesPerSheet} disabled={sourceLocked}
+                  onClick={() => updateActiveItem({multipleImagesPerSheet: !activeItem.multipleImagesPerSheet})}
+                  className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:opacity-50 ${activeItem.multipleImagesPerSheet ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                  <span aria-hidden="true" className={`pointer-events-none h-5 w-5 rounded-full bg-white shadow-md transition-transform ${activeItem.multipleImagesPerSheet ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+                <span>ພິມຫຼາຍຮູບຕໍ່ແຜ່ນ: {activeItem.multipleImagesPerSheet ? 'ເປີດ' : 'ປິດ'}</span>
+              </div>}
               {/* Manual Override for Cuts Per Sheet */}
               <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-xl border border-sky-300 shadow-2xs">
-                <span className="text-[11px] text-slate-600 font-medium">{multiPhoto ? 'รูปต่อแผ่น' : '1 ແຜ່ນແມ່ ຕັດໄດ້:'}</span>
+                <span className="text-[11px] text-slate-600 font-medium">{multiPhoto ? 'ຮູບຕໍ່ແຜ່ນ' : '1 ແຜ່ນແມ່ ຕັດໄດ້:'}</span>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
@@ -507,7 +524,7 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
                     type="number"
                     min="1"
                     max="100"
-                    aria-label={multiPhoto ? "รูปต่อแผ่น" : "Cuts per sheet"}
+                    aria-label={multiPhoto ? "ຮູບຕໍ່ແຜ່ນ" : "Cuts per sheet"}
                     step="1"
                     value={multiPhoto ? activeItem.imagesPerSheet || 4 : activeItem.cutsPerSheetOverride !== undefined ? activeItem.cutsPerSheetOverride : activeCalc.cutsPerSheet}
                     onChange={(e) => {
@@ -738,7 +755,7 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
               </span>
               <span className="text-base font-sans text-sky-950 font-black">{formatCurrency(activeCalc.paperCost)}</span>
             </div>
-          </div>
+          </div>}
         </div>
       )}
     </div>

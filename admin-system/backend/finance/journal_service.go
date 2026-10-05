@@ -83,7 +83,7 @@ func insertJournalEntry(tx *sql.Tx, date time.Time, description, refType, refID 
 		_, err = tx.Exec(`
 			INSERT INTO journal_lines (entry_id, account_id, debit, credit, currency, notes)
 			VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6)
-		`, entryID, acctID, l.Debit.InexactFloat64(), l.Credit.InexactFloat64(), currency, l.Notes)
+		`, entryID, acctID, l.Debit.StringFixed(2), l.Credit.StringFixed(2), currency, l.Notes)
 		if err != nil {
 			return fmt.Errorf("failed to insert journal line for account %s: %w", l.AccountCode, err)
 		}
@@ -195,7 +195,7 @@ func CreateInboundAPJournal(tx *sql.Tx, inboundID string, amount decimal.Decimal
 	_, err := tx.Exec(`
 		INSERT INTO accounts_payable (supplier_name, inbound_transaction_id, amount, status, due_date, created_at)
 		VALUES ($1, $2, $3, 'PENDING', $4, NOW())
-	`, supplierName, inboundID, amount.InexactFloat64(), dueDate)
+	`, supplierName, inboundID, amount.StringFixed(2), dueDate)
 	if err != nil {
 		return fmt.Errorf("failed to create AP record: %w", err)
 	}

@@ -2,6 +2,8 @@ package orders
 
 import (
 	"encoding/json"
+	"somsing.local/backend/finance"
+	"somsing.local/backend/pricing"
 	"strings"
 	"time"
 )
@@ -109,54 +111,62 @@ type OrderPrintItem struct {
 }
 
 type Order struct {
-	ID                   string      `json:"id"`
-	OrderNo              string      `json:"order_no"`
-	OrderNumber          string      `json:"order_number"` // Backward compatibility
-	CustomerID           string      `json:"customer_id"`
-	CustomerName         string      `json:"customer_name"`
-	CustomerPhone        string      `json:"customer_phone"`
-	CustomerEmail        string      `json:"customer_email,omitempty"`
-	CustomerAddress      string      `json:"customer_address,omitempty"`
-	Province             string      `json:"province,omitempty"`
-	District             string      `json:"district,omitempty"`
-	Village              string      `json:"village,omitempty"`
-	TotalAmountLAK       float64     `json:"total_amount_lak"`
-	DepositLAK           float64     `json:"deposit_lak"`
-	RemainingLAK         float64     `json:"remaining_lak"`
-	OverallStatus        OrderStatus `json:"overall_status"`
-	Status               OrderStatus `json:"status"` // Backward compatibility
-	DeliveryDate         string      `json:"delivery_date"`
-	DepositAmount        float64     `json:"deposit_amount"`
-	TotalPrice           float64     `json:"total_price"`
-	TotalCost            float64     `json:"total_cost"`
-	GoogleDriveLink      string      `json:"google_drive_link"`
-	ArtworkURL           string      `json:"artwork_url,omitempty"`
-	ArtworkFileName      string      `json:"artwork_file_name,omitempty"`
-	ArtworkFileSize      int64       `json:"artwork_file_size,omitempty"`
-	MimeType             string      `json:"mime_type,omitempty"`
-	StockDeductedAt      *time.Time  `json:"stock_deducted_at,omitempty"`
-	ProofURL             string      `json:"proof_url,omitempty"`
-	DigitalProofURL      string      `json:"digital_proof_url,omitempty"`
-	ProofVersion         int         `json:"proof_version,omitempty"`
-	ProofStatus          string      `json:"proof_status,omitempty"` // NOT_SUBMITTED, PENDING_CUSTOMER, APPROVED, REJECTED
-	ProofFeedback        string      `json:"proof_feedback,omitempty"`
-	ProofActionAt        *time.Time  `json:"proof_action_at,omitempty"`
-	PrepressNotes        string      `json:"prepress_notes,omitempty"`
-	ProofApprovedAt      *time.Time  `json:"proof_approved_at,omitempty"`
-	ProofRejectedAt      *time.Time  `json:"proof_rejected_at,omitempty"`
-	ProofSignatureIP     string      `json:"proof_signature_ip,omitempty"`
-	ProofRejectionReason string      `json:"proof_rejection_reason,omitempty"`
-	Items                []OrderItem `json:"items"`
-	InternalTrackingCode string      `json:"internal_tracking_code,omitempty"`
-	PublicTrackingToken  string      `json:"public_tracking_token,omitempty"`
-	TrackingCode         string      `json:"tracking_code,omitempty"`
-	CourierName          string      `json:"courier_name,omitempty"`
-	CourierBranch        string      `json:"courier_branch,omitempty"`
-	ShippingFee          float64     `json:"shipping_fee,omitempty"`
-	PODImageUrl          string      `json:"pod_image_url,omitempty"`
-	IdempotencyKey       string      `json:"idempotency_key,omitempty"`
-	CreatedAt            time.Time   `json:"created_at"`
-	UpdatedAt            time.Time   `json:"updated_at"`
+	ProductionWorkflow   map[string]any          `json:"productionWorkflow,omitempty"`
+	IsPacked             bool                    `json:"isPacked"`
+	IsDispatched         bool                    `json:"isDispatched"`
+	IsCustomerReceived   bool                    `json:"isCustomerReceived"`
+	CourierProofURL      *string                 `json:"courierProofUrl"`
+	ShippingFeeAlias     float64                 `json:"shippingFee"`
+	ProofURLAlias        string                  `json:"proofUrl,omitempty"`
+	PaymentSummary       *finance.PaymentSummary `json:"-"`
+	ID                   string                  `json:"id"`
+	OrderNo              string                  `json:"order_no"`
+	OrderNumber          string                  `json:"order_number"` // Backward compatibility
+	CustomerID           string                  `json:"customer_id"`
+	CustomerName         string                  `json:"customer_name"`
+	CustomerPhone        string                  `json:"customer_phone"`
+	CustomerEmail        string                  `json:"customer_email,omitempty"`
+	CustomerAddress      string                  `json:"customer_address,omitempty"`
+	Province             string                  `json:"province,omitempty"`
+	District             string                  `json:"district,omitempty"`
+	Village              string                  `json:"village,omitempty"`
+	TotalAmountLAK       float64                 `json:"total_amount_lak"`
+	DepositLAK           float64                 `json:"deposit_lak"`
+	RemainingLAK         float64                 `json:"remaining_lak"`
+	OverallStatus        OrderStatus             `json:"overall_status"`
+	Status               OrderStatus             `json:"status"` // Backward compatibility
+	DeliveryDate         string                  `json:"delivery_date"`
+	DepositAmount        float64                 `json:"deposit_amount"`
+	TotalPrice           float64                 `json:"total_price"`
+	TotalCost            float64                 `json:"total_cost"`
+	GoogleDriveLink      string                  `json:"google_drive_link"`
+	ArtworkURL           string                  `json:"artwork_url,omitempty"`
+	ArtworkFileName      string                  `json:"artwork_file_name,omitempty"`
+	ArtworkFileSize      int64                   `json:"artwork_file_size,omitempty"`
+	MimeType             string                  `json:"mime_type,omitempty"`
+	StockDeductedAt      *time.Time              `json:"stock_deducted_at,omitempty"`
+	ProofURL             string                  `json:"proof_url,omitempty"`
+	DigitalProofURL      string                  `json:"digital_proof_url,omitempty"`
+	ProofVersion         int                     `json:"proof_version,omitempty"`
+	ProofStatus          string                  `json:"proof_status,omitempty"` // NOT_SUBMITTED, PENDING_CUSTOMER, APPROVED, REJECTED
+	ProofFeedback        string                  `json:"proof_feedback,omitempty"`
+	ProofActionAt        *time.Time              `json:"proof_action_at,omitempty"`
+	PrepressNotes        string                  `json:"prepress_notes,omitempty"`
+	ProofApprovedAt      *time.Time              `json:"proof_approved_at,omitempty"`
+	ProofRejectedAt      *time.Time              `json:"proof_rejected_at,omitempty"`
+	ProofSignatureIP     string                  `json:"proof_signature_ip,omitempty"`
+	ProofRejectionReason string                  `json:"proof_rejection_reason,omitempty"`
+	Items                []OrderItem             `json:"items"`
+	InternalTrackingCode string                  `json:"internal_tracking_code,omitempty"`
+	PublicTrackingToken  string                  `json:"public_tracking_token,omitempty"`
+	TrackingCode         string                  `json:"tracking_code,omitempty"`
+	CourierName          string                  `json:"courier_name,omitempty"`
+	CourierBranch        string                  `json:"courier_branch,omitempty"`
+	ShippingFee          float64                 `json:"shipping_fee,omitempty"`
+	PODImageUrl          string                  `json:"pod_image_url,omitempty"`
+	IdempotencyKey       string                  `json:"idempotency_key,omitempty"`
+	CreatedAt            time.Time               `json:"created_at"`
+	UpdatedAt            time.Time               `json:"updated_at"`
 }
 
 // Request payloads
@@ -229,6 +239,13 @@ type CreateOrderRequest struct {
 }
 
 type CreateItemRequest struct {
+	ImpositionMode         string                          `json:"imposition_mode,omitempty"`
+	StockDimensionSnapshot *pricing.StockDimensionSnapshot `json:"stock_dimension_snapshot,omitempty"`
+	JobWidth               float64                         `json:"job_width,omitempty"`
+	JobHeight              float64                         `json:"job_height,omitempty"`
+	CutsPerSheet           int                             `json:"cuts_per_sheet,omitempty"`
+	RequiresGuillotineCut  bool                            `json:"requires_guillotine_cut,omitempty"`
+
 	ProductID          string                 `json:"product_id,omitempty"`
 	ProductName        string                 `json:"product_name,omitempty"`
 	JobName            string                 `json:"job_name"`
@@ -405,4 +422,31 @@ func (r *CreateOrderRequest) UnmarshalJSON(data []byte) error {
 	}
 	r.CustomerName = strings.TrimSpace(r.CustomerName)
 	return nil
+}
+
+func (o Order) MarshalJSON() ([]byte, error) {
+	if o.Items == nil {
+		o.Items = []OrderItem{}
+	}
+	type orderAlias Order
+	raw, err := json.Marshal(orderAlias(o))
+	if err != nil || o.PaymentSummary == nil {
+		return raw, err
+	}
+	var result map[string]any
+	if err = json.Unmarshal(raw, &result); err != nil {
+		return nil, err
+	}
+	summary, err := json.Marshal(o.PaymentSummary)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]any
+	if err = json.Unmarshal(summary, &fields); err != nil {
+		return nil, err
+	}
+	for key, value := range fields {
+		result[key] = value
+	}
+	return json.Marshal(result)
 }

@@ -13,6 +13,10 @@ export interface QuotationVersion {
 }
 
 export interface Quotation {
+  updated_at?: string;
+  price_correction_source?: { target_order_id: string; customer_id: string; order_work_fingerprint: string };
+  price_correction_target_order_id?: string;
+  expected_order_updated_at?: string;
   id: string;
   quotationNumber: string;
   title?: string;

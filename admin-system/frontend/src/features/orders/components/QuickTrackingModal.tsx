@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Truck, Check, X, PackageCheck, Hash, Building2, DollarSign } from 'lucide-react';
 import type { Courier } from '../../../types';
 import { FormModalTemplate, FormSection } from '../../../components/common/FormModalTemplate';
@@ -25,10 +25,13 @@ export const QuickTrackingModal: React.FC<QuickTrackingModalProps> = ({
   couriers = [],
   onSaveTracking,
 }) => {
+  const pending = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const [selectedCourier, setSelectedCourier] = useState<string>('Anousith Express');
   const [branchCode, setBranchCode] = useState<string>('');
   const [trackingNumber, setTrackingNumber] = useState<string>('');
-  const [shippingFee, setShippingFee] = useState<number>(15000);
+  const [shippingFee, setShippingFee] = useState<number>(0);
 
   const availableCouriers = couriers && couriers.length > 0 ? couriers : DEFAULT_COURIERS;
 
@@ -38,7 +41,7 @@ export const QuickTrackingModal: React.FC<QuickTrackingModalProps> = ({
       setSelectedCourier(activeCourierName);
       setBranchCode(order.branchCode || order.courierBranch || (availableCouriers.find(c => c.name === activeCourierName) as any)?.defaultBranch || '');
       setTrackingNumber(order.trackingNumber || '');
-      setShippingFee(order.shippingFee || 15000);
+      setShippingFee(order.shippingFee ?? 0);
     }
   }, [order, availableCouriers]);
 
@@ -46,16 +49,21 @@ export const QuickTrackingModal: React.FC<QuickTrackingModalProps> = ({
 
   const orderIdentifier = order.orderNo || order.order_no || order.orderNumber || order.id || 'ORDER';
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSaveTracking(order.id, selectedCourier, trackingNumber.trim(), shippingFee, branchCode.trim());
-    onClose();
+    if (pending.current) return;
+    pending.current = true; setSaving(true); setError('');
+    try {
+      await onSaveTracking(order.id, selectedCourier, trackingNumber.trim(), shippingFee, branchCode.trim());
+      onClose();
+    } catch (failure) { setError(failure instanceof Error ? failure.message : 'ບັນທຶກບໍ່ສຳເລັດ'); }
+    finally { pending.current = false; setSaving(false); }
   };
 
   return (
     <FormModalTemplate
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={() => { if (!pending.current) onClose(); }}
       icon={<Truck className="w-6 h-6" />}
       title="ບັນທຶກເລກພັດສະດຸ & ຂົນສົ່ງ (Courier Tracking)"
       subtitle={`Order #${orderIdentifier} • ${order.customerName || order.customer_name || 'Customer'}`}
@@ -72,6 +80,7 @@ export const QuickTrackingModal: React.FC<QuickTrackingModalProps> = ({
           </button>
           <button
             type="button"
+            disabled={saving}
             onClick={handleSubmit}
             className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-black shadow-md shadow-sky-600/20 active:scale-95 transition flex items-center gap-2 cursor-pointer"
           >
@@ -82,6 +91,7 @@ export const QuickTrackingModal: React.FC<QuickTrackingModalProps> = ({
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {error && <p role="alert" className="text-rose-700">{error}</p>}
         {/* Select Courier */}
         <div className="space-y-2">
           <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">

@@ -46,12 +46,13 @@ export const PrintJobItemsCard: React.FC<PrintJobItemsCardProps> = ({
     setPendingPrinterChange({ itemIdx, printer });
   };
 
-  const handleConfirmPrinterSwitch = () => {
+  const handleConfirmPrinterSwitch = async () => {
     if (!pendingPrinterChange) return;
     const { itemIdx, printer } = pendingPrinterChange;
     
+    try {
     if (onUpdateOrderItemMachine) {
-      onUpdateOrderItemMachine(itemIdx, printer.id, printer.name);
+      await onUpdateOrderItemMachine(itemIdx, printer.id, printer.name);
     } else if (orderSpecs && orderSpecs.id) {
       const updatedItems = [...displayItems];
       if (updatedItems[itemIdx]) {
@@ -63,7 +64,7 @@ export const PrintJobItemsCard: React.FC<PrintJobItemsCardProps> = ({
           printer_id: printer.id,
         };
         if (updateOrderDetails) {
-          updateOrderDetails(orderSpecs.id, {
+          await updateOrderDetails(orderSpecs.id, {
             ...orderSpecs,
             items: updatedItems,
             allocated_printer_id: printer.id,
@@ -82,6 +83,7 @@ export const PrintJobItemsCard: React.FC<PrintJobItemsCardProps> = ({
 
     setPendingPrinterChange(null);
     setActiveItemIndexForPrinter(null);
+    } catch (error) { showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກເຄື່ອງພິມໄດ້', 'error'); }
   };
 
   return (

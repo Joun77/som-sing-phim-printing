@@ -20,6 +20,7 @@ type CustomerAddress struct {
 
 // Customer represents a customer profile in the Som Sing Phim Printing system.
 type Customer struct {
+	DepositEligible  bool              `json:"depositEligible"`
 	ID               string            `json:"id"`
 	Name             string            `json:"name"`
 	Phone            string            `json:"phone"`
@@ -38,14 +39,14 @@ type Customer struct {
 	Village          string            `json:"village"`
 	BranchCode       string            `json:"branchCode"`
 	TaxID            string            `json:"taxId"`
-	Tier             string            `json:"tier"`             // Loyalty VIP Tier: STANDARD, SILVER, GOLD, PLATINUM
+	Tier             string            `json:"tier"` // Loyalty VIP Tier: STANDARD, SILVER, GOLD, PLATINUM
 	DiscountPercent  float64           `json:"discountPercent,omitempty"`
 	Perks            []string          `json:"perks,omitempty"`
-	PreferredCourier string            `json:"preferredCourier"` // Courier ID or name
-	Source           string            `json:"source"`           // CUSTOMER_SERVICE vs ADMIN_MANUAL
-	AuthProvider     string            `json:"authProvider"`     // PHONE, GOOGLE, MANUAL
+	PreferredCourier string            `json:"preferredCourier"`   // Courier ID or name
+	Source           string            `json:"source"`             // CUSTOMER_SERVICE vs ADMIN_MANUAL
+	AuthProvider     string            `json:"authProvider"`       // PHONE, GOOGLE, MANUAL
 	Password         string            `json:"password,omitempty"` // plain password when creating/resetting (never exposed in output)
-	PasswordHash     string            `json:"-"`                // internal bcrypt hash
+	PasswordHash     string            `json:"-"`                  // internal bcrypt hash
 	LastLoginAt      *time.Time        `json:"lastLoginAt,omitempty"`
 	Notes            string            `json:"notes"`
 	TotalSpentLAK    float64           `json:"totalSpentLAK"`

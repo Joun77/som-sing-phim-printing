@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  ArrowLeft, 
-  User, 
-  Printer, 
-  ChevronRight, 
-  Plus, 
+import {
+  ArrowLeft,
+  User,
+  Printer,
+  ChevronRight,
+  Plus,
   Trash2,
   CheckCircle2,
   DollarSign,
@@ -111,12 +111,12 @@ export default function CreateOrderPage({
   const getOffcutRecommendation = (it: any) => {
     const w = Number(it.jobWidth || 210);
     const h = Number(it.jobHeight || 297);
-    const isSmall = (w <= 150 && h <= 210) || (w <= 210 && h <= 150) || 
+    const isSmall = (w <= 150 && h <= 210) || (w <= 210 && h <= 150) ||
       (it.name && (it.name.toLowerCase().includes('card') || it.name.toLowerCase().includes('tag') || it.name.toLowerCase().includes('sticker') || it.name.includes('ນາມບັດ') || it.name.includes('ສຕິກເກີ')));
-    
+
     if (!isSmall) return null;
 
-    const matched = offcuts.find((o: any) => 
+    const matched = offcuts.find((o: any) =>
       Number(o.quantity || o.qty || 0) >= Number(it.quantity || 1) &&
       ((Number(o.width_mm || o.width || 120) >= w && Number(o.length_mm || o.length || 250) >= h) ||
        (Number(o.width_mm || o.width || 120) >= h && Number(o.length_mm || o.length || 250) >= w))
@@ -440,7 +440,7 @@ export default function CreateOrderPage({
     }
   };
 
-  const handleSubmitFinal = (e) => {
+  const handleSubmitFinal = async (e) => {
     e.preventDefault();
 
     if (items.length === 0) {
@@ -448,6 +448,7 @@ export default function CreateOrderPage({
       return;
     }
 
+    let finalCustomerId = '';
     let finalCustomerName = '';
     let finalPhone = '';
     let finalAddress = '';
@@ -462,7 +463,7 @@ export default function CreateOrderPage({
       finalAddress = newCustAddress;
 
       if (autoSaveToCrm) {
-        addCustomer({
+        try { const savedCustomer = await addCustomer({
           name: newCustName,
           phone: newCustPhone,
           address: newCustAddress,
@@ -471,24 +472,25 @@ export default function CreateOrderPage({
           province,
           tier: customerTier,
           creditLimit: 1000000
-        });
+        }); finalCustomerId = savedCustomer.id; } catch (error) { showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກລູກຄ້າໄດ້', 'error'); return; }
       }
     } else {
       const cust = customers.find(c => c.id === selectedCustomerId || c.name === selectedCustomerId);
+      finalCustomerId = cust?.id || '';
       finalCustomerName = cust ? cust.name : selectedCustomerId;
       finalPhone = cust ? cust.phone : phone;
       finalAddress = cust ? cust.address : address;
 
       // Option A: Auto-sync updated tier and address to CRM customer profile if toggle is ON
       if (autoSaveToCrm && cust && updateCustomer) {
-        updateCustomer(cust.id, { 
+        try { await updateCustomer(cust.id, {
           tier: customerTier,
           village: village || cust.village,
           district: district || cust.district,
           province: province || cust.province,
           address: address || cust.address,
           phone: phone || cust.phone
-        });
+        }); } catch (error) { showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກລູກຄ້າໄດ້', 'error'); return; }
       }
     }
 
@@ -497,6 +499,7 @@ export default function CreateOrderPage({
     const firstItemFileSize = (items.find(it => (it as any).fileSize) as any)?.fileSize || 0;
 
     const payload = {
+      customer_id: finalCustomerId,
       customer_name: finalCustomerName,
       customer_phone: finalPhone,
       customer_address: finalAddress,
@@ -635,144 +638,13 @@ export default function CreateOrderPage({
       })
     };
 
-    fetch('/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    .then(res => {
-      if (!res.ok) throw new Error('Order creation failed');
-      return res.json();
-    })
-    .then(orderData => {
-      if (paymentStatus === 'Deposit Paid' && depositAmountPaid > 0) {
-        return fetch(`/api/orders/${orderData.id}/deposit`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deposit_amount: Number(depositAmountPaid) })
-        })
-        .then(res => res.json())
-        .then(updatedOrder => {
-          addOrder({
-            id: updatedOrder.id,
-            orderNumber: updatedOrder.order_number,
-            customerName: updatedOrder.customer_name,
-            phone: updatedOrder.customer_phone,
-            items: (updatedOrder.items || []).map((it: any) => ({
-              id: it.id,
-              name: it.job_name || it.name,
-              quantity: it.quantity,
-              unitCost: it.unit_price_snapshot || it.unit_price_lak,
-              specs: 'Synced',
-              artworkUrl: it.artwork_url || it.inner_file_url || it.cover_file_url || firstItemArtwork,
-              artworkFileName: it.artwork_file_name || firstItemFileName,
-              artworkFileSize: it.artwork_file_size || firstItemFileSize,
-              inner_file_url: it.inner_file_url || firstItemArtwork,
-              cover_file_url: it.cover_file_url || firstItemArtwork
-            })),
-            totalPriceCharged: updatedOrder.total_price,
-            depositAmountPaid: updatedOrder.deposit_amount,
-            remainingUnpaidBalance: Math.max(0, updatedOrder.total_price - updatedOrder.deposit_amount),
-            paymentStatus: 'Deposit Paid',
-            status: 'Received',
-            promisedDeliveryDate: promisedDeliveryDate,
-            deliveryMethod: deliveryMethod,
-            artworkLink: updatedOrder.artwork_url || updatedOrder.google_drive_link || firstItemArtwork,
-            artworkUrl: updatedOrder.artwork_url || updatedOrder.google_drive_link || firstItemArtwork,
-            artworkFileName: updatedOrder.artwork_file_name || firstItemFileName,
-            artworkFileSize: updatedOrder.artwork_file_size || firstItemFileSize
-          });
-        });
-      } else {
-        addOrder({
-          id: orderData.id,
-          orderNumber: orderData.order_number,
-          customerName: orderData.customer_name,
-          phone: orderData.customer_phone,
-          items: (orderData.items || []).map((it: any) => ({
-            id: it.id,
-            name: it.job_name || it.name,
-            quantity: it.quantity,
-            unitCost: it.unit_price_snapshot || it.unit_price_lak,
-            specs: 'Synced',
-            artworkUrl: it.artwork_url || it.inner_file_url || it.cover_file_url || firstItemArtwork,
-            artworkFileName: it.artwork_file_name || firstItemFileName,
-            artworkFileSize: it.artwork_file_size || firstItemFileSize,
-            inner_file_url: it.inner_file_url || firstItemArtwork,
-            cover_file_url: it.cover_file_url || firstItemArtwork
-          })),
-          totalPriceCharged: orderData.total_price,
-          depositAmountPaid: orderData.deposit_amount,
-          remainingUnpaidBalance: orderData.total_price,
-          paymentStatus: paymentStatus === 'Fully Paid' ? 'Fully Paid' : 'Pending',
-          status: 'Received',
-          promisedDeliveryDate: promisedDeliveryDate,
-          deliveryMethod: deliveryMethod,
-          artworkLink: orderData.artwork_url || orderData.google_drive_link || firstItemArtwork,
-          artworkUrl: orderData.artwork_url || orderData.google_drive_link || firstItemArtwork,
-          artworkFileName: orderData.artwork_file_name || firstItemFileName,
-          artworkFileSize: orderData.artwork_file_size || firstItemFileSize
-        });
-      }
-    })
-    .then(() => {
-      showToast('ເພີ່ມອໍເດີໃໝ່ ແລະ ຕັດສະຕ໋ອກ FIFO ສຳເລັດ!', 'success');
+    try {
+      await addOrder(payload, false);
+      showToast('ສ້າງອໍເດີສຳເລັດ. ສາມາດສ້າງຄຳຂໍຊຳລະໃນອໍເດີ', 'success');
       onBack();
-    })
-    .catch(err => {
-      console.error(err);
-      showToast('Sync failure. Defaulting order creation to local state storage.', 'warning');
-      const fallbackItems = items.map(it => ({
-        id: it.paperId || 'paper-a4-80',
-        name: it.name,
-        quantity: it.quantity,
-        unitCost: 15000,
-        specs: `${it.jobWidth}x${it.jobHeight}mm`,
-        artworkUrl: (it as any).artworkUrl || firstItemArtwork,
-        artworkFileName: it.fileName || firstItemFileName,
-        artworkFileSize: (it as any).fileSize || firstItemFileSize,
-        inner_file_url: (it as any).artworkUrl || firstItemArtwork,
-        cover_file_url: (it as any).coverArtworkUrl || (it as any).cover_file_url || (it as any).artworkUrl || firstItemArtwork
-      }));
-      const selectedCourierObj = couriers?.find(c => c.id === selectedCourierId);
-      const deliveryMethodLabel = deliveryMethod === 'Pickup' 
-        ? 'Pickup (ຮັບເອງທີ່ຮ້ານ)' 
-        : (deliveryMethod === 'Courier' 
-            ? `${selectedCourierObj?.name || 'Courier'}${courierBranchCode ? ` [ສາຂາ: ${courierBranchCode}]` : ''}` 
-            : 'Direct (ຈັດສົ່ງດ່ວນ)');
-
-      const totalWithDelivery = grandTotalBill + (deliveryMethod === 'Courier' ? Number(deliveryFee || 0) : 0);
-
-      addOrder({
-        customerName: finalCustomerName,
-        phone: finalPhone,
-        address: finalAddress,
-        village: village,
-        district: district,
-        province: province,
-        items: fallbackItems,
-        totalPriceCharged: totalWithDelivery,
-        depositAmountPaid: Number(depositAmountPaid),
-        remainingUnpaidBalance: Math.max(0, totalWithDelivery - Number(depositAmountPaid)),
-        paymentMethod: 'BCEL One',
-        bankName: 'BCEL',
-        paymentStatus: paymentStatus,
-        artworkLink: firstItemArtwork,
-        artworkUrl: firstItemArtwork,
-        artworkFileName: firstItemFileName,
-        artworkFileSize: firstItemFileSize,
-        promisedDeliveryDate: promisedDeliveryDate || new Date().toISOString().split('T')[0],
-        deliveryMethod: deliveryMethodLabel,
-        delivery_type: deliveryMethod,
-        courier_id: deliveryMethod === 'Courier' ? selectedCourierId : undefined,
-        courier_name: deliveryMethod === 'Courier' ? (selectedCourierObj?.name || selectedCourierId) : undefined,
-        courier_branch_code: deliveryMethod === 'Courier' ? courierBranchCode : undefined,
-        tracking_number: deliveryMethod === 'Courier' ? courierTrackingNo : undefined,
-        delivery_fee: deliveryMethod === 'Courier' ? Number(deliveryFee || 0) : 0,
-        status: 'Received'
-      });
-      onBack();
-    });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດສ້າງອໍເດີໄດ້', 'error');
+    }
   };
 
   if (editingItemIndex !== null && items[editingItemIndex]) {
@@ -825,11 +697,11 @@ export default function CreateOrderPage({
           { step: 2, label: '2. ລາຍການສິນຄ້າ & ສເປກ (Items & Specs)' },
           { step: 3, label: '3. ສະຫຼຸບຍອດ & ເປີດອໍເດີ (Summary & Confirm)' }
         ].map(s => (
-          <div 
+          <div
             key={s.step}
             className={`text-center py-3 px-3 rounded-xl font-black text-xs transition-all ${
-              currentStep === s.step 
-                ? 'bg-accent-sky text-white shadow-md shadow-accent-sky/20' 
+              currentStep === s.step
+                ? 'bg-accent-sky text-white shadow-md shadow-accent-sky/20'
                 : currentStep > s.step
                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                 : 'bg-slate-50 text-slate-400 border border-slate-100'
@@ -853,8 +725,8 @@ export default function CreateOrderPage({
                 </h4>
               </div>
               <span className={`text-xs font-bold px-3 py-1 rounded-xl border ${
-                customerType === 'existing' 
-                  ? 'bg-sky-50 text-accent-sky border-sky-100' 
+                customerType === 'existing'
+                  ? 'bg-sky-50 text-accent-sky border-sky-100'
                   : 'bg-emerald-50 text-emerald-700 border-emerald-100'
               }`}>
                 {customerType === 'existing' ? 'ລູກຄ້າເກົ່າໃນລະບົບ' : 'ລົງທະບຽນລູກຄ້າໃໝ່'}
@@ -1261,11 +1133,11 @@ export default function CreateOrderPage({
                 const costing = calculateItemCosting(it, inventory, equipment);
 
                 return (
-                  <div 
+                  <div
                     key={it.id}
                     className={`p-4 rounded-2xl border transition-all ${
-                      it.isConfigured 
-                        ? 'bg-emerald-50/30 border-emerald-200/80 shadow-sm' 
+                      it.isConfigured
+                        ? 'bg-emerald-50/30 border-emerald-200/80 shadow-sm'
                         : 'bg-amber-50/30 border-amber-200/80 shadow-sm'
                     }`}
                   >

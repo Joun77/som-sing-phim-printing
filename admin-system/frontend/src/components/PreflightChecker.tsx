@@ -1,3 +1,4 @@
+import { preCutStockMatches } from '../utils/impositionLayout';
 import UniversalViewer from './common/UniversalViewer';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -75,6 +76,13 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number; pct: number }>({ current: 0, total: 0, pct: 0 });
+  const [impositionMode, setImpositionMode] = useState<'OFF' | 'ON'>('OFF');
+  const [impositionError, setImpositionError] = useState('');
+  const compatibleStock = (paper: InventoryItem | null, width: number, height: number) => {
+    if (impositionMode === 'ON' || preCutStockMatches(paper, width, height)) { setImpositionError(''); return true; }
+    setImpositionError('ຂະໜາດວຽກບໍ່ກົງກັບເຈ້ຍທີ່ຕັດໄວ້. ກະລຸນາເລືອກເຈ້ຍທີ່ເໝາະສົມ.');
+    return false;
+  };
   const [result, setResult] = useState<PreflightResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -491,6 +499,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
 
   const handleSendSplitToQuotationAction = () => {
     if (!coverResult?.file_url || !innerResult?.file_url || isCoverScanning || isInnerScanning || splitErrors.cover || splitErrors.inner) return;
+    if (!compatibleStock(coverPaper || selectedPaper, coverResult.target_width_mm || 210, coverResult.target_height_mm || 297) || !compatibleStock(innerPaper || selectedPaper, innerResult.target_width_mm || 210, innerResult.target_height_mm || 297)) return;
     const coverP = coverResult?.total_pages || 4;
     const innerP = innerResult?.total_pages || 1;
     const totalP = coverP + innerP;
@@ -507,6 +516,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
     const splitSummary = `ປົກ: ${coverDims.name} (ຕັດໄດ້ ${effectiveCoverCuts} ປົກ/ແຜ່ນ) | ເນື້ອໃນ: ${innerDims.name} (ຕັດໄດ້ ${effectiveInnerCuts} ໜ້າ/ແຜ່ນ)`;
 
     const exportPayload: PreflightResult = {
+      imposition_mode: impositionMode,
       file_name: innerResult?.file_name ? `ປຶ້ມແຍກປົກ (${innerResult.file_name})` : 'ປຶ້ມແຍກປົກ & ເນື້ອໃນ',
       file_size: innerResult.file_size,
       preview_thumbnail_url: innerResult.preview_thumbnail_url,
@@ -534,10 +544,10 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       target_height_mm: innerResult?.target_height_mm || 297,
       suggested_paper: 'A4',
       selected_paper_id: innerPaper?.id || selectedPaper?.id,
-      cuts_per_sheet_override: effectiveInnerCuts,
+      cuts_per_sheet_override: impositionMode === 'OFF' ? undefined : effectiveInnerCuts,
       cover_paper_id: coverPaper?.id || selectedPaper?.id,
-      cover_cuts_per_sheet_override: effectiveCoverCuts,
-      imposition_summary: splitSummary,
+      cover_cuts_per_sheet_override: impositionMode === 'OFF' ? undefined : effectiveCoverCuts,
+      imposition_summary: impositionMode === 'OFF' ? undefined : splitSummary,
       dpi_estimate: Math.min(coverResult?.dpi_estimate || 300, innerResult?.dpi_estimate || 300),
       bleed_mm: 3,
       has_sufficient_bleed: true,
@@ -558,9 +568,10 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
 
     const effectiveItemW = batchCustomW || preset.w;
     const effectiveItemH = batchCustomH || preset.h;
+    if (!compatibleStock(selectedPaper, effectiveItemW, effectiveItemH)) return;
     const parentDims = getParentSheetDims();
     const autoCuts = calculateBestFitImposition(parentDims.w, parentDims.h, effectiveItemW, effectiveItemH);
-    const effectiveCuts = batchCutsOverride !== undefined ? batchCutsOverride : (autoCuts || batchResult.suggested_imposition.cuts_per_sheet);
+    const effectiveCuts = impositionMode === 'OFF' ? 1 : batchCutsOverride !== undefined ? batchCutsOverride : (autoCuts || batchResult.suggested_imposition.cuts_per_sheet);
     const reqSheets = Math.ceil(batchResult.total_files / Math.max(1, effectiveCuts));
     const spoilSheets = Math.max(1, Math.ceil(reqSheets * 0.05));
     const totalSheets = reqSheets + spoilSheets;
@@ -586,6 +597,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
     };
 
     const exportPayload: PreflightResult = {
+      imposition_mode: impositionMode,
       file_name: `ພິມຮູບພາບ Photo Prints (ຊຸດ ${batchResult.total_files} ໃບ)`,
       total_pages: batchResult.total_files,
       color_pages_count: batchResult.total_files,
@@ -608,8 +620,8 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       target_height_mm: Math.round(effectiveItemH),
       suggested_paper: selectedPaper?.name || 'Photo Glossy 230gsm',
       selected_paper_id: selectedPaper?.id,
-      cuts_per_sheet_override: effectiveCuts,
-      imposition_summary: summaryLao,
+      cuts_per_sheet_override: impositionMode === 'OFF' ? undefined : effectiveCuts,
+      imposition_summary: impositionMode === 'OFF' ? undefined : summaryLao,
       dpi_estimate: 300,
       bleed_mm: borderMode === 'BORDERLESS' ? 2 : 0,
       has_sufficient_bleed: true,
@@ -617,7 +629,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       ...({
         is_batch_photo: true,
         border_mode: borderMode,
-        batch_imposition: updatedImposition,
+        batch_imposition: impositionMode === 'OFF' ? undefined : updatedImposition,
         batch_files: batchResult.files,
       } as any),
     };
@@ -719,7 +731,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       if (generations.current.single !== generation) return;
       const uploadedUrl = await uploadOriginal(selectedFile);
       if (generations.current.single !== generation) return;
-      analysisResult = { ...analysisResult, preview_thumbnail_url: analysisResult.file_url, file_url: uploadedUrl, file_size: selectedFile.size };
+      analysisResult = { ...analysisResult, imposition_mode: 'OFF', preview_thumbnail_url: analysisResult.file_url, file_url: uploadedUrl, file_size: selectedFile.size };
 
       setResult(analysisResult);
       handleSavePreflightReport(analysisResult, generation);
@@ -897,6 +909,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
 
   const handleSendToQuotationAction = () => {
     if (!result?.file_url || isAnalyzing || errorMessage) return;
+    if (!compatibleStock(selectedPaper, customWidthMM, customHeightMM)) return;
 
     const parentDims = getParentSheetDims();
     const autoCuts = calculateBestFitImposition(parentDims.w, parentDims.h, customWidthMM, customHeightMM);
@@ -905,6 +918,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
 
     const exportPayload: PreflightResult = {
       ...result,
+      imposition_mode: impositionMode,
       color_mode: customerPrintMode === 'MONO_ALL' ? 'MONO_K' : 'CMYK',
       color_pages_count: colorPages,
       mono_pages_count: monoPages,
@@ -917,8 +931,8 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       target_width_mm: customWidthMM,
       target_height_mm: customHeightMM,
       selected_paper_id: selectedPaper?.id,
-      cuts_per_sheet_override: effectiveCuts,
-      imposition_summary: impSummary,
+      cuts_per_sheet_override: impositionMode === 'OFF' ? undefined : effectiveCuts,
+      imposition_summary: impositionMode === 'OFF' ? undefined : impSummary,
     };
 
     if (onSendToQuotation) {
@@ -951,6 +965,17 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs font-bold">
+            <button type="button" role="switch" aria-label="ຈັດວາງເຈ້ຍ ແລະ ຕັດ" aria-checked={impositionMode === 'ON'}
+              disabled={isAnalyzing || isCoverScanning || isInnerScanning || isBatchAnalyzing}
+              onClick={() => { setImpositionMode(impositionMode === 'ON' ? 'OFF' : 'ON'); setImpositionError(''); }}
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:opacity-50 ${impositionMode === 'ON' ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+              <span aria-hidden="true" className={`pointer-events-none h-5 w-5 rounded-full bg-white shadow-md transition-transform ${impositionMode === 'ON' ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+            <span>ຈັດວາງເຈ້ຍ ແລະ ຕັດ: {impositionMode === 'ON' ? 'ເປີດ' : 'ປິດ'}</span>
+            {(isAnalyzing || isCoverScanning || isInnerScanning || isBatchAnalyzing) && <span role="status">ກຳລັງກວດສອບໄຟລ໌</span>}
+          </div>
+          {impositionError && <p role="alert" className="text-xs text-rose-700">{impositionError}</p>}
           {/* Mode Switcher */}
           <div className="flex items-center bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
             <button
@@ -1201,6 +1226,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                 </div>
                 {(() => {
                   const cDims = getItemSheetDims(coverPaper || selectedPaper);
+                  if (impositionMode === 'OFF') return <div className="font-bold text-slate-700">{(coverPaper || selectedPaper)?.name || 'ເລືອກເຈ້ຍຈາກສາງ'}</div>;
                   const autoCuts = calculateBestFitImposition(cDims.w, cDims.h, (innerResult?.target_width_mm || 210) * 2, innerResult?.target_height_mm || 297);
                   const effectiveCuts = coverCutsOverride !== undefined ? coverCutsOverride : Math.max(1, autoCuts);
                   return (
@@ -1398,6 +1424,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                 </div>
                 {(() => {
                   const iDims = getItemSheetDims(innerPaper || selectedPaper);
+                  if (impositionMode === 'OFF') return <div className="font-bold text-slate-700">{(innerPaper || selectedPaper)?.name || 'ເລືອກເຈ້ຍຈາກສາງ'}</div>;
                   const autoCuts = calculateBestFitImposition(iDims.w, iDims.h, innerResult?.target_width_mm || 210, innerResult?.target_height_mm || 297);
                   const effectiveCuts = innerCutsOverride !== undefined ? innerCutsOverride : autoCuts;
                   return (
@@ -1728,6 +1755,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
 
                   {/* Imposition & Production Guillotine Cutting Strategy */}
                   {(() => {
+                    if (impositionMode === 'OFF') return null;
                     const parentDims = getParentSheetDims();
                     const autoCuts = calculateBestFitImposition(parentDims.w, parentDims.h, batchCustomW, batchCustomH);
                     const effectiveCuts = batchCutsOverride !== undefined ? batchCutsOverride : (autoCuts || batchResult.suggested_imposition.cuts_per_sheet);
@@ -2023,6 +2051,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                 </div>
                 {selectedPaper ? (() => {
                   const pDims = getParentSheetDims();
+                  if (impositionMode === 'OFF') return <div className="font-bold text-slate-700">{(selectedPaper)?.name || 'ເລືອກເຈ້ຍຈາກສາງ'}</div>;
                   const autoCuts = calculateBestFitImposition(pDims.w, pDims.h, paperWidthMM, paperHeightMM);
                   const effectiveCuts = singleCutsOverride !== undefined ? singleCutsOverride : autoCuts;
                   return (
@@ -2303,6 +2332,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                     </div>
                     {selectedPaper ? (() => {
                       const pDims = getParentSheetDims();
+                  if (impositionMode === 'OFF') return <div className="font-bold text-slate-700">{(selectedPaper)?.name || 'ເລືອກເຈ້ຍຈາກສາງ'}</div>;
                       const autoCuts = calculateBestFitImposition(pDims.w, pDims.h, paperWidthMM, paperHeightMM);
                       const effectiveCuts = singleCutsOverride !== undefined ? singleCutsOverride : autoCuts;
                       return (

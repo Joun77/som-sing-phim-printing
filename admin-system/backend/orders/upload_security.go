@@ -1,15 +1,23 @@
 package orders
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -350,13 +358,25 @@ func SaveSafeUploadedFile(file *multipart.FileHeader, dst string) error {
 	}
 	defer src.Close()
 
-	out, err := os.OpenFile(cleanDst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	out, err := os.OpenFile(cleanDst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to create destination file: %w", err)
 	}
 	defer out.Close()
 
-	_, err = io.Copy(out, src)
+	written, err := io.Copy(out, io.LimitReader(src, MaxArtworkFileSize+1))
+	if err == nil && (written != file.Size || written > MaxArtworkFileSize) {
+		err = fmt.Errorf("upload length mismatch")
+	}
+	if err == nil {
+		err = out.Sync()
+	}
+	if closeErr := out.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		os.Remove(cleanDst)
+	}
 	return err
 }
 
@@ -480,3 +500,132 @@ func HandleServeProtectedFile(c *gin.Context) {
 	http.ServeFile(c.Writer, c.Request, canonicalTarget)
 }
 
+// analyzeOwnedArtwork has no simulation or guessed page fallback. Both sides
+// must be real contained originals with verified pagination and equal ink work.
+func analyzeOwnedArtwork(ctx context.Context, url string) (map[string]any, error) {
+	var relative string
+	if strings.HasPrefix(url, "/api/v1/orders/files/") {
+		relative = strings.TrimPrefix(url, "/api/v1/orders/files/")
+	} else if strings.HasPrefix(url, "/uploads/") {
+		relative = strings.TrimPrefix(url, "/uploads/")
+	} else {
+		return nil, fmt.Errorf("private artwork URL required")
+	}
+	if strings.Contains(relative, "..") || strings.ContainsAny(relative, "\\\x00") {
+		return nil, fmt.Errorf("invalid artwork path")
+	}
+	root, err := filepath.Abs(GetUploadStorageDir())
+	if err != nil {
+		return nil, err
+	}
+	path, _, err := ResolveContainedPath(root, filepath.Join(root, filepath.FromSlash(relative)), false)
+	if err != nil {
+		return nil, err
+	}
+	stat, err := os.Stat(path)
+	if err != nil || !stat.Mode().IsRegular() || stat.Size() > MaxArtworkFileSize {
+		return nil, fmt.Errorf("unavailable artwork")
+	}
+	mime := DetectSafeMimeType(path)
+	if mime == "application/pdf" {
+		timeout, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(timeout, "gs", "-dSAFER", "-dBATCH", "-dNOPAUSE", "-q", "-o", "-", "-sDEVICE=inkcov", path)
+		output, err := cmd.StdoutPipe()
+		if err != nil {
+			return nil, err
+		}
+		cmd.Stderr = io.Discard
+		if err = cmd.Start(); err != nil {
+			return nil, err
+		}
+		raw, err := io.ReadAll(io.LimitReader(output, 2*1024*1024+1))
+		if err != nil || len(raw) > 2*1024*1024 {
+			cmd.Process.Kill()
+			cmd.Wait()
+			return nil, fmt.Errorf("artwork analysis limit")
+		}
+		if err = cmd.Wait(); err != nil {
+			return nil, err
+		}
+		scanner := bufio.NewScanner(bytes.NewReader(raw))
+		coverage := [][4]float64{}
+		for scanner.Scan() {
+			line := strings.Fields(scanner.Text())
+			if len(line) != 6 || line[4] != "CMYK" || line[5] != "OK" {
+				continue
+			}
+			values := [4]float64{}
+			for i := 0; i < 4; i++ {
+				number, e := strconv.ParseFloat(line[i], 64)
+				if e != nil || math.IsNaN(number) || math.IsInf(number, 0) || number < 0 || number > 1 {
+					return nil, fmt.Errorf("invalid coverage")
+				}
+				values[i] = math.Round(number*10000) / 100
+			}
+			coverage = append(coverage, values)
+			if len(coverage) > 1000 {
+				return nil, fmt.Errorf("page limit")
+			}
+		}
+		if scanner.Err() != nil || len(coverage) == 0 {
+			return nil, fmt.Errorf("unverified pagination")
+		}
+		return map[string]any{"pages": len(coverage), "coverage": coverage}, nil
+	}
+	if mime != "image/png" && mime != "image/jpeg" {
+		return nil, fmt.Errorf("unsupported bounded artwork analysis")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	config, _, err := image.DecodeConfig(file)
+	if err != nil || config.Width <= 0 || config.Height <= 0 || int64(config.Width)*int64(config.Height) > 16*1024*1024 {
+		return nil, fmt.Errorf("image analysis limit")
+	}
+	if _, err = file.Seek(0, 0); err != nil {
+		return nil, err
+	}
+	img, _, err := image.Decode(file)
+	if err != nil {
+		return nil, err
+	}
+	bounds := img.Bounds()
+	coverage := [4]float64{}
+	samples := float64(bounds.Dx() * bounds.Dy())
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		if err = ctx.Err(); err != nil {
+			return nil, err
+		}
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			if a == 0 {
+				continue
+			}
+			rf, gf, bf := float64(r)/65535, float64(g)/65535, float64(b)/65535
+			k := 0.0
+			rawK := 1 - math.Max(rf, math.Max(gf, bf))
+			if rawK > 0.25 {
+				k = (rawK - 0.25) / 0.75
+			}
+			denominator := 1 - k
+			values := [4]float64{0, 0, 0, k}
+			if denominator > 0.001 {
+				values[0] = math.Max(0, math.Min(1, (1-rf-k)/denominator))
+				values[1] = math.Max(0, math.Min(1, (1-gf-k)/denominator))
+				values[2] = math.Max(0, math.Min(1, (1-bf-k)/denominator))
+			} else {
+				values[3] = 1
+			}
+			for i := 0; i < 4; i++ {
+				coverage[i] += values[i] * 100
+			}
+		}
+	}
+	for i := 0; i < 4; i++ {
+		coverage[i] = math.Round(coverage[i]/samples*100) / 100
+	}
+	return map[string]any{"pages": 1, "coverage": [][4]float64{coverage}, "width": bounds.Dx(), "height": bounds.Dy()}, nil
+}

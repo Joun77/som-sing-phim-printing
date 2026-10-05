@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { AppProvider, useApp } from '@store/AppContext';
 import Sidebar from '@components/Sidebar';
 import TopHeader from '@components/TopHeader';
+import { useAuthStore } from '@store/useAuthStore';
 import { ProtectedRoute } from '@components/ProtectedRoute';
 import CurrencyRatesModal from '@components/common/CurrencyRatesModal';
 import { useTranslation } from 'react-i18next';
@@ -261,7 +262,9 @@ function AppContent() {
 }
 
 export default function App() {
-  const [queryClient] = React.useState(
+  const sessionGeneration = useAuthStore(state => state.sessionGeneration);
+  const identity = useAuthStore(state => state.user?.username || 'anonymous');
+  const queryClient = React.useMemo(
     () =>
       new QueryClient({
         defaultOptions: {
@@ -270,12 +273,13 @@ export default function App() {
             retry: 1,
           },
         },
-      })
+      }), [sessionGeneration, identity]
   );
+  React.useEffect(() => () => { void queryClient.cancelQueries(); queryClient.clear(); }, [queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppProvider>
+      <AppProvider key={`${identity}:${sessionGeneration}`}>
         <AppContent />
       </AppProvider>
     </QueryClientProvider>

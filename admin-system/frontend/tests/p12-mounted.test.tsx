@@ -1,3 +1,17 @@
+import { mapOrderToFormSpecs } from '../src/utils/orderDataMapper';
+import { ProductionProcessFlowCard } from '../src/features/orders/components/production/ProductionProcessFlowCard';
+import { OrderDeliveryPage } from '../src/features/orders/components/OrderDeliveryPage';
+import EditOrderModal from '../src/features/orders/components/modals/EditOrderModal';
+import { JobProfitabilityAudit } from '../src/features/finance/JobProfitabilityAudit';
+import { FinanceDashboard } from '../src/features/finance/FinanceDashboard';
+import EmployeeManagement from '../src/features/hr/components/EmployeeManagement';
+import { OrderReceptionPage } from '../src/features/orders/components/OrderReceptionPage';
+import { percentageTarget, confirmedPaymentSummary } from '../src/api/paymentReview';
+import PaymentSlipCard from '../src/features/orders/components/reception/PaymentSlipCard';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MaterialManagement } from '../src/features/materials/components/MaterialManagement';
+import { PaperAndCoverSection } from '../src/features/pricing/components/PaperAndCoverSection';
+import { preCutStockMatches } from '../src/utils/impositionLayout';
 import TopHeader from '../src/components/TopHeader';
 import Sidebar from '../src/components/Sidebar';
 import { ProtectedRoute } from '../src/components/ProtectedRoute';
@@ -22,7 +36,7 @@ import { CustomerInvoiceModal } from '../src/features/orders/components/modals/C
 import Lightbox from '../src/features/orders/components/Lightbox';
 import { useLightboxAssetController, extractPdfPageCount } from '../src/features/orders/utils/lightboxAssetController';
 import { configurePdfWorker, getPdfWorkerSrc } from '../src/lib/pdfWorker';
-import { downloadAuthenticatedFile, resolveBackendUrl } from '../src/api/client';
+import { apiFetch, setupGlobalFetchInterceptor, fetchAuthenticatedBlob, downloadAuthenticatedFile, resolveBackendUrl } from '../src/api/client';
 import { useAuthStore } from '../src/store/useAuthStore';
 import { PreflightChecker } from '../src/components/PreflightChecker';
 import { AppProvider, useApp } from '../src/store/AppContext';
@@ -49,9 +63,13 @@ vi.mock('jspdf', async importOriginal => {
   return { ...actual, default: constructor, jsPDF: constructor };
 });
 function authorize(fixtureToken: string) {
-  const previous = useAuthStore.getState().token;
-  useAuthStore.setState({ token: fixtureToken });
-  return () => useAuthStore.setState({ token: previous });
+  const previous = useAuthStore.getState();
+  const user = previous.user || { id: 'disposable-p12-staff', username: 'disposable-p12-staff', fullName: 'Disposable fixture staff', role: 'admin', permissions: [] };
+  useAuthStore.setState({ token: fixtureToken, user, isAuthenticated: true });
+  // The fixture customer is owned by this synthetic account, matching the new cache boundary.
+  const customer = localStorage.getItem('ss_print_customers_v6');
+  if (customer) localStorage.setItem(`ssp_private:${encodeURIComponent(user.username)}:ss_print_customers_v6`, customer);
+  return () => useAuthStore.setState({ token: previous.token, user: previous.user, isAuthenticated: previous.isAuthenticated });
 }
 
 const jpeg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==';
@@ -338,6 +356,8 @@ test('split original PDFs → reused quotation mappers → real AppContext.addOr
   try {
     await render(<AppProvider><Journey /></AppProvider>);
     await click(buttonText('ແຍກປົກ & ເນື້ອໃນ'));
+    // This accepted legacy journey intentionally uses the existing imposed workflow.
+    await click(document.querySelector('[role="switch"]')!);
     await selectFile('cover', cover.file); await selectFile('inner', inner.file);
     await until(() => !splitSend().disabled);
     await click(splitSend());
@@ -345,6 +365,7 @@ test('split original PDFs → reused quotation mappers → real AppContext.addOr
     expect(payload.cover_file_url).toMatch(/^\/uploads\/artworks\//);
     expect(payload.file_url).not.toBe(payload.cover_file_url);
     // The same exported mapping functions are called by QuotationManager.
+    expect(payload.imposition_mode).toBe('ON');
     const specs = mapPreflightToSpecs(payload, 0);
     expect(specs.fileName).toBe(inner.file.name); expect(specs.fileSize).toBe(inner.bytes.length);
     const orderItem = mapQuotationItemToOrderItem(specs, 0);
@@ -477,6 +498,9 @@ test('single replacement ignores stale upload error/finally and old analysis pro
     uploadOverride = null;
     await act(async () => pendingB.resolve(analysis(b.file)));
     await until(() => !!buttonText('Send to Quotation'));
+    await until(() => document.body.textContent?.includes('3 ໜ້າ') === true);
+    await click(document.querySelector('[role="switch"]')!);
+    await until(() => !buttonText('Send to Quotation')!.disabled);
     await click(buttonText('Send to Quotation'));
     expect(send).toHaveBeenCalledOnce(); expect(send.mock.calls[0][0].file_name).toBe(b.file.name);
   } finally { unregister(); }
@@ -723,6 +747,8 @@ test('actual PreflightPage navigation sends split originals into mounted quotati
   try {
     await render(<AppProvider><Navigation /></AppProvider>);
     await click(buttonText('ແຍກປົກ & ເນື້ອໃນ'));
+    // This accepted legacy journey intentionally uses the existing imposed workflow.
+    await click(document.querySelector('[role="switch"]')!);
     await selectFile('cover', cover.file); await selectFile('inner', inner.file);
     await until(() => !splitSend().disabled); await click(splitSend());
     await until(() => !!buttonText('ຕໍ່ໄປ: ກຳນົດສະເປັກ'));
@@ -737,7 +763,8 @@ test('actual PreflightPage navigation sends split originals into mounted quotati
     expect((document.querySelector('[aria-label="Width mm"]') as HTMLInputElement).value).toBe('210');
     await click(sidebar.querySelector('button')!);
     expect(document.querySelector('iframe,object,embed')).toBeNull();
-    expect(document.querySelectorAll('section[data-artwork-role]')).toHaveLength(1);
+    expect(document.querySelectorAll('section[data-artwork-role]')).toHaveLength(0);
+    expect(document.querySelector('[data-testid="selected-artwork-editor"]')?.textContent).toContain('EnglishVocabulary.pdf');
     await click(Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('ສະຫຼຸບຕົ້ນທຶນ'))!);
     await click(buttonText('Confirm Order')); await until(() => !!app!.confirmDialog);
     await act(async () => app!.confirmDialog.onConfirm());
@@ -835,6 +862,9 @@ test('actual single PreflightPage navigation retains one original and legacy pag
   try {
     await render(<AppProvider><Navigation /></AppProvider>); await selectFile('single', original.file);
     await until(() => !!buttonText('Send to Quotation'));
+    await until(() => document.body.textContent?.includes('3 ໜ້າ') === true);
+    await click(document.querySelector('[role="switch"]')!);
+    await until(() => !buttonText('Send to Quotation')!.disabled);
     await click(buttonText('Send to Quotation'));
     await until(() => !!buttonText('ຕໍ່ໄປ: ກຳນົດສະເປັກ'));
     expect(document.body.textContent).toContain('single_original.pdf');
@@ -857,6 +887,9 @@ test('actual batch PreflightPage client fallback navigation preserves one set wi
   Object.defineProperty(input, 'files', { value: files, configurable: true });
   await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
   await until(() => !!buttonText('ສົ່ງໄປຍັງໃບສະເໜີລາຄາ'));
+  await until(() => document.body.textContent?.includes('photo_two.png') === true);
+  await click(document.querySelector('[role="switch"]')!);
+  await until(() => !buttonText('ສົ່ງໄປຍັງໃບສະເໜີລາຄາ')!.disabled);
   await click(buttonText('ສົ່ງໄປຍັງໃບສະເໜີລາຄາ'));
   await until(() => !!buttonText('ຕໍ່ໄປ: ກຳນົດສະເປັກ'));
   expect(document.body.textContent).toContain('Photo Prints');
@@ -914,9 +947,10 @@ test('actual AppContext creates isolated A/B order IDs and snapshots even at the
     // Existing Go fixture has POST/GET map storage only. Translate this one isolated PUT
     // to fixture map storage; this is transport simulation, never a business handler/DB check.
     vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
-      if (String(input) === `/api/v1/orders/${bId}` && init?.method === 'PUT') {
+      if (new URL(String(input), origin).pathname === `/api/v1/orders/${bId}` && init?.method === 'PUT') {
         updateReadback = realFetch(`${origin}/api/v1/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...bSnapshot, ...JSON.parse(init.body as string), id: bId }) });
-        return updateReadback;
+        const saved = await (await updateReadback).json();
+        return new Response(JSON.stringify({ status: 'success', committed: true, updated_id: bId, data: saved }));
       }
       return dispatcher(input, init);
     });
@@ -973,6 +1007,17 @@ import CustomerOrders from '../src/features/orders/components/CustomerOrders';
 import '../src/i18n';
 for (const stage of ['reception','production'] as const) test(`actual Orders navigation keeps persisted B ${stage} originals after uploaded invoice quotation C creates order C`,async()=>{
   const unregister=authorize(token);let app:ReturnType<typeof useApp>;
+  const previousTransport = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input), origin).pathname;
+    if (path === '/api/v1/orders' && !init?.method) {
+      // Minimal fixture has individual readback but no collection route: aggregate only actual persisted responses.
+      const ids = [savedB.id, ...orderPosts.map(post => post.response.id)];
+      const rows = await Promise.all([...new Set(ids)].map(async id => (await realFetch(`${origin}/api/v1/orders/${id}`)).json()));
+      return new Response(JSON.stringify(rows));
+    }
+    return previousTransport(input, init);
+  });
   const originalB=pdfFile('B_original.pdf',2),originalC=pdfFile('Customer_Invoice_ord-2285_INV-ord-2285.pdf',3);
   const metadataB=await uploadOriginal(originalB);
   const itemB=mapQuotationItemToOrderItem({id:'B-item',name:'B original job',printVolume:1,pagesPerBook:2,jobWidth:210,jobHeight:297,artworkUrl:metadataB.url,fileName:originalB.file.name,fileSize:originalB.bytes.length,mimeType:'application/pdf',artworkParts:[{role:'inner',source:{url:metadataB.url,name:originalB.file.name,size:originalB.bytes.length,mimeType:'application/pdf'},pageCount:2,widthMM:210,heightMM:297,colorMode:'CMYK',coverage:{c:1,m:2,y:3,k:4}}]},0);
@@ -987,8 +1032,14 @@ for (const stage of ['reception','production'] as const) test(`actual Orders nav
     await render(<AppProvider><Navigation/></AppProvider>);await openB();expect(document.body.textContent).toContain('B original job');
     // Exercise invoice export from the actual selected production page before uploading C.
     if(stage==='production'){expect(document.body.textContent).toContain('Step 2: Press & Finishing Tracking');await click(byTitle('ໃບບິນລູກຄ້າ (Invoice / Receipt)'));await click(buttonText('PNG'));await until(()=>downloads.some(d=>d.name.includes('Customer_Invoice')));await click(byTitle('Close (Esc)'));}
-    const before=structuredClone(app!.orders.find(order=>order.id===savedB.id));expect(before.items).toEqual(readB.items);
-    await click(buttonText('Fixture navigation Preflight'));await selectFile('single',originalC.file);await until(()=>!!buttonText('Send to Quotation'));await click(buttonText('Send to Quotation'));
+    const before=structuredClone(app!.orders.find(order=>order.id===savedB.id));expect(before.items).toMatchObject(readB.items);
+    await click(buttonText('Fixture navigation Preflight'));await selectFile('single',originalC.file);
+    await until(()=>!!buttonText('Send to Quotation'));
+    // Select after analysis finishes; selecting a new file resets the mode to OFF.
+    await click(document.querySelector('[aria-label="ຈັດວາງເຈ້ຍ ແລະ ຕັດ"]')!);
+    expect(document.querySelector('[aria-label="ຈັດວາງເຈ້ຍ ແລະ ຕັດ"]')?.getAttribute('aria-checked')).toBe('true');
+    await click(buttonText('Send to Quotation'));
+    await until(() => !!buttonText('ຕໍ່ໄປ: ກຳນົດສະເປັກ'));
     await click(buttonText('ຕໍ່ໄປ: ກຳນົດສະເປັກ'));await click(Array.from(document.querySelectorAll('button')).find(b=>b.textContent?.includes('ສະຫຼຸບຕົ້ນທຶນ'))!);await click(buttonText('Confirm Order'));await until(()=>!!app!.confirmDialog);await act(async()=>app!.confirmDialog.onConfirm());await until(()=>orderPosts.length===1);
     expect(app!.orders.find(order=>order.id===savedB.id)).toEqual(before);
     await click(buttonText('Fixture navigation Orders'));await openB();
@@ -1692,4 +1743,912 @@ test('P2-PROFILE actual header/sidebar retain persisted identity, expose one log
     expect(document.body.textContent).not.toContain('Private fixture content'); expect(trigger()).toBeNull(); expect(document.querySelector('input[type="password"]')).toBeTruthy();
     const denied = await realFetch(`${origin}/uploads/artworks/sample_document.pdf`); expect([401,403]).toContain(denied.status);
   } finally { useAuthStore.setState(previous); }
+});
+
+
+test('P2-SESSION prior-account API and refresh responses cannot update or logout the next session', async () => {
+  const previous = useAuthStore.getState(); const delayed = deferred<Response>();
+  useAuthStore.getState().login('session-A-token', { username: 'session-A', fullName: 'A', role: 'sales' }, true, 'refresh-A');
+  vi.mocked(globalThis.fetch).mockImplementationOnce(() => delayed.promise);
+  const request = apiFetch<Response>('/api/v1/quotations');
+  useAuthStore.getState().logout(); useAuthStore.getState().login('session-B-token', { username: 'session-B', fullName: 'B', role: 'finance' }, true, 'refresh-B');
+  delayed.resolve(new Response('{}', { status: 401 })); await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+  expect(useAuthStore.getState().token).toBe('session-B-token'); expect(useAuthStore.getState().user?.username).toBe('session-B');
+  const refresh = deferred<Response>(); vi.mocked(globalThis.fetch).mockImplementationOnce(() => refresh.promise);
+  const oldRefresh = useAuthStore.getState().silentRefreshToken();
+  useAuthStore.getState().logout(); useAuthStore.getState().login('session-C-token', { username: 'session-C', fullName: 'C', role: 'admin' }, true, 'refresh-C');
+  refresh.resolve(new Response(JSON.stringify({ token: 'stale-B', refresh_token: 'stale-refresh-B' })));
+  expect(await oldRefresh).toBeNull(); expect(useAuthStore.getState().token).toBe('session-C-token'); expect(localStorage.getItem('token')).toBe('session-C-token');
+  useAuthStore.setState(previous);
+});
+
+test('P2-SESSION account-scoped AppContext caches preserve legacy storage and cannot expose prior-account quotes', async () => {
+  const transport = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => /\/api\/v1\/quotations$/.test(String(input)) ? new Response(JSON.stringify({ status: 'error' }), { status: 503 }) : transport(input, init));
+  const previous = useAuthStore.getState();
+  localStorage.setItem('ss_print_quotations_v6', JSON.stringify([{ ...conversionFixture(), title: 'Legacy unowned private quote' }]));
+  localStorage.setItem('ssp_private:session-A:ss_print_quotations_v6', JSON.stringify([{ ...conversionFixture(), title: 'Account A private quote' }]));
+  useAuthStore.getState().login(token, { username: 'session-A', fullName: 'A', role: 'admin' }, true);
+  function Probe() { const app = useApp(); return <output>{app.quotations.map(quote => quote.title).join('|')}</output>; }
+  await render(<AppProvider key="A"><Probe /></AppProvider>); expect(document.querySelector('output')!.textContent).toContain('Account A private quote');
+  useAuthStore.getState().logout(); useAuthStore.getState().login(token, { username: 'session-B', fullName: 'B', role: 'admin' }, true);
+  await render(<AppProvider key="B"><Probe /></AppProvider>); expect(document.querySelector('output')!.textContent).not.toContain('Account A'); expect(document.querySelector('output')!.textContent).not.toContain('Legacy unowned');
+  expect(localStorage.getItem('ss_print_quotations_v6')).toContain('Legacy unowned private quote'); expect(localStorage.getItem('ssp_private:session-A:ss_print_quotations_v6')).toContain('Account A private quote');
+  useAuthStore.setState(previous);
+});
+
+
+test('P2-IMPOSITION OFF mapper strips cutting operations without changing original files or legacy behavior', () => {
+  const original: any = { file_name: 'inner.pdf', file_url: '/uploads/inner.pdf', total_pages: 3, avg_cov_c: 1, avg_cov_m: 2, avg_cov_y: 3, avg_cov_k: 4, target_width_mm: 210, target_height_mm: 297, cuts_per_sheet_override: 8, cover_cuts_per_sheet_override: 4, imposition_summary: 'old cut summary', is_split_cover: true, cover_result: { file_name: 'cover.pdf', file_url: '/uploads/cover.pdf', total_pages: 2 }, inner_result: { file_name: 'inner.pdf', file_url: '/uploads/inner.pdf', total_pages: 3 } };
+  const mapped = mapPreflightToSpecs(original, 0);
+  expect(mapped.imposition_mode).toBe('OFF'); expect(mapped.cutsPerSheetOverride).toBeUndefined(); expect(mapped.impositionSummary).toBeUndefined();
+  const item = { ...mapped, multipleImagesPerSheet: true, selectedPostPressIds: ['cut', 'bind'] };
+  const cost = { totalParentSheets: 4, paperUnitCost: 25, netCost: 100, laborCost: 10, packagingDeliveryCost: 0 };
+  const output = mapQuotationItemToOrderItem(item, 0, cost, { id: 'paper', name: 'A4' }, [{ id: 'cut', postPressSubtype: 'guillotine' }, { id: 'bind', postPressSubtype: 'binding' }]);
+  for (const specs of [output.specs, output.specifications]) {
+    expect(specs.imposition_mode).toBe('OFF'); expect(specs.paper_cutting_ticket).toBeUndefined(); expect(specs.paper_cutting_tickets).toBeUndefined(); expect(specs.multi_image_print.enabled).toBe(false);
+    expect(specs.materials.paper?.unit_cost).toBe(25); expect(specs.materials.machinery.map(m => m.id)).toEqual(['bind']);
+  }
+  expect(output.artworkParts?.map(p => p.source.url)).toEqual(['/uploads/cover.pdf', '/uploads/inner.pdf']);
+  const on = mapPreflightToSpecs({ ...original, imposition_mode: 'ON' }, 0); expect(on.cutsPerSheetOverride).toBe(8);
+  const legacy = mapQuotationItemToOrderItem({ ...item, imposition_mode: undefined }, 0, cost, { id: 'paper', name: 'A4' });
+  expect(legacy.imposition_mode).toBeUndefined(); expect(legacy.specs.paper_cutting_ticket).toBeTruthy(); expect(original.cuts_per_sheet_override).toBe(8);
+});
+
+test('P2-IMPOSITION pre-cut stock validation accepts rotation and rejects unknown or parent sheet dimensions', () => {
+  expect(preCutStockMatches({ id: 'a', name: 'A4 paper', specs: { standardSize: 'A4' } }, 297, 210)).toBe(true);
+  expect(preCutStockMatches({ id: 'custom', specs: { width: 100, height: 150 } }, 100, 150)).toBe(true);
+  expect(preCutStockMatches({ id: 'unknown', name: 'A4' }, 210, 297)).toBe(false);
+  expect(preCutStockMatches({ id: 'conflict', specs: { standardSize: 'A4', width_mm: 100, height_mm: 150 } }, 100, 150)).toBe(false);
+  expect(preCutStockMatches({ id: 'parent', category: 'parent_sheet', specs: { width: 210, height: 297 } }, 210, 297)).toBe(false);
+  expect(preCutStockMatches({ id: 'a', name: 'A4' }, 100, 150)).toBe(false);
+});
+
+
+test('P2-IMPOSITION mounted paper switch hides both panels OFF and restores existing ON controls', async () => {
+  function Screen() {
+    const [item, setItem] = React.useState<any>({ id: 'mode-check', imposition_mode: 'OFF', paperId: 'a4', jobWidth: 210, jobHeight: 297, name: 'Document', includeCover: false });
+    return <PaperAndCoverSection activeItem={item} updateActiveItem={patch => setItem(old => ({ ...old, ...patch }))} activeCalc={{ cutsPerSheet: 1, paperCost: 100 }} papers={[{ id: 'a4', name: 'A4', category: 'paper' } as any]} isOpen onToggle={() => {}} onOpenPaperSearch={() => {}} formatCurrency={String} getFIFOCostPerSheet={() => 100} currentLang="lo" />;
+  }
+  await render(<Screen />);
+  const toggle = document.querySelector('[role="switch"]') as HTMLInputElement;
+  expect(toggle.getAttribute('aria-checked')).toBe('false'); expect(toggle.getAttribute('aria-label')).toBe('ຈັດວາງເຈ້ຍ ແລະ ຕັດ');
+  expect(document.querySelector('[data-testid="imposition-layout-panel"]')).toBeNull(); expect(document.querySelector('[data-testid="imposition-cutting-panel"]')).toBeNull();
+  await click(toggle); expect(toggle.getAttribute('aria-checked')).toBe('true');
+  expect(document.querySelector('[data-testid="imposition-layout-panel"]')).not.toBeNull(); expect(document.querySelector('[data-testid="imposition-cutting-panel"]')).not.toBeNull();
+  await click(toggle); expect(document.querySelector('[data-testid="imposition-layout-panel"]')).toBeNull(); expect(document.querySelector('[data-testid="imposition-cutting-panel"]')).toBeNull();
+});
+
+
+test('P2-GUIDE mounted filtered reorder sends only selected guide pair with authentication', async () => {
+  const unregister = authorize(token), requests: { url: string; body?: any }[] = [];
+  const rows = ['hidden', 'match-one', 'match-two'].map((id, index) => ({ id, nameLo: id, nameEn: id, category: 'art', categoryNameLo: '', categoryNameEn: '', finishLo: '', gsm: 80, suitableForLo: [], suitableForEn: [], sortOrder: (index + 1) * 10, isActive: true }));
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (url.includes('/material-guide') || url.includes('/material-categories')) {
+      expect(new Headers(init?.headers).get('Authorization')).toBe(`Bearer ${token}`);
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      return new Response(JSON.stringify({ status: 'success', ...(init?.method ? { committed: true, data: [] } : { data: url.includes('/material-categories') ? [] : rows }) }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    return realFetch(input, init);
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  try {
+    await render(<QueryClientProvider client={client}><MaterialManagement /></QueryClientProvider>);
+    await until(() => document.querySelectorAll('tbody tr').length === 3);
+    const input = document.querySelector('input[placeholder^="ຄົ້ນຫາ"]') as HTMLInputElement;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'match');
+    await act(async () => input.dispatchEvent(new Event('input', { bubbles: true })));
+    await until(() => document.querySelectorAll('tbody tr').length === 2);
+    await click(document.querySelector('tbody tr button[title="ຍ້າຍລົງ"]')!);
+    await until(() => requests.some(r => r.body));
+    expect(requests.find(r => r.body)!.body).toEqual([{ id: 'match-one', sortOrder: 30 }, { id: 'match-two', sortOrder: 20 }]);
+    expect(requests.some(r => /\/api\/v1\/materials(?:$|\?)/.test(r.url))).toBe(false);
+  } finally { await client.cancelQueries(); client.clear(); unregister(); }
+});
+
+
+test('P2-SESSION delayed private binary cannot create a preview after account changes', async () => {
+  const previous = useAuthStore.getState();
+  let resolve!: (value: Response) => void;
+  useAuthStore.getState().login(token, { username: 'binary-A', role: 'admin' }, false);
+  vi.mocked(globalThis.fetch).mockImplementation(() => new Promise<Response>(done => { resolve = done; }));
+  try {
+    const pending = fetchAuthenticatedBlob('/uploads/old-account.pdf');
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    useAuthStore.getState().login(token, { username: 'binary-B', role: 'admin' }, false);
+    resolve(new Response(new Uint8Array([37,80,68,70,45]), { headers: { 'Content-Type': 'application/pdf' } }));
+    await rejected; expect(blobs.size).toBe(0); expect(useAuthStore.getState().user?.username).toBe('binary-B');
+  } finally { useAuthStore.setState(previous); }
+});
+
+
+test('P2-DEPOSIT controlled pill reflects acknowledged mode and blocks pending or ineligible changes', async () => {
+  const change = vi.fn();
+  const props = { orderIdDisplay: 'fixture-deposit-mode', totalAmountLAK: 2431, isPaymentConfirmed: false, currentLang: 'lo', formatLAK: String, onConfirmFullPayment: vi.fn(), onConfirmDepositPayment: vi.fn(), onRevertPayment: vi.fn(), onRejectSlip: vi.fn(), onDepositModeChange: change };
+  await render(<PaymentSlipCard {...props} />);
+  let toggle = document.querySelector('[role="switch"][aria-label="ໂໝດມັດຈຳ"]') as HTMLButtonElement;
+  expect(toggle.getAttribute('aria-checked')).toBe('false'); expect(toggle.className).toContain('bg-slate-300'); expect(toggle.textContent).toBe('');
+  await click(toggle); expect(change).toHaveBeenCalledWith('ON'); expect(toggle.getAttribute('aria-checked')).toBe('false');
+  await render(<PaymentSlipCard {...props} depositMode="ON" depositModePending />);
+  toggle = document.querySelector('[role="switch"]') as HTMLButtonElement;
+  expect(toggle.getAttribute('aria-checked')).toBe('true'); expect(toggle.className).toContain('bg-emerald-500'); expect(toggle.querySelector('span')?.className).toContain('translate-x-5'); expect(toggle.disabled).toBe(true); expect(document.body.textContent).toContain('ກຳລັງບັນທຶກໂໝດມັດຈຳ');
+  await render(<PaymentSlipCard {...props} depositModeDisabledReason="ລູກຄ້າບໍ່ມີສິດມັດຈຳ" />);
+  expect((document.querySelector('[role="switch"]') as HTMLButtonElement).disabled).toBe(true); expect(document.body.textContent).toContain('ລູກຄ້າບໍ່ມີສິດມັດຈຳ');
+});
+
+
+test('P2-SESSION global interceptor never refreshes or retries an A request under the next account', async () => {
+  const original = useAuthStore.getState(), originalFetch = window.fetch, flag = (window as any).__ss_fetch_intercepted__;
+  const refresh = vi.fn(async () => 'next-token');
+  try {
+    for (const status of [401, 200]) {
+      let resolve!: (response: Response) => void;
+      const transport = vi.fn(() => new Promise<Response>(done => { resolve = done; }));
+      window.fetch = transport; delete (window as any).__ss_fetch_intercepted__;
+      useAuthStore.getState().login(token, { username: 'interceptor-A', role: 'admin' }, false);
+      setupGlobalFetchInterceptor();
+      const request = window.fetch('/api/v1/orders', { method: 'POST', body: '{"fixture":"A"}' });
+      const rejected = expect(request).rejects.toMatchObject({ name: 'AbortError' });
+      useAuthStore.getState().login(token, { username: 'interceptor-B', role: 'admin' }, false);
+      useAuthStore.setState({ silentRefreshToken: refresh });
+      resolve(new Response('{}', { status })); await rejected;
+      expect(transport).toHaveBeenCalledTimes(1); expect(refresh).not.toHaveBeenCalled();
+    }
+    let finish!: (data: any) => void;
+    const response = new Response('{}'); response.json = () => new Promise<any>(done => { finish = done; });
+    window.fetch = vi.fn(async () => response); delete (window as any).__ss_fetch_intercepted__;
+    setupGlobalFetchInterceptor(); const received = await window.fetch('/api/v1/orders'); const cloned = received.clone(); const body = received.json();
+    const bodyRejected = expect(body).rejects.toMatchObject({ name: 'AbortError' });
+    useAuthStore.getState().login(token, { username: 'interceptor-C', role: 'admin' }, false); finish({ private: 'B' }); await bodyRejected;
+    await expect(cloned.json()).rejects.toMatchObject({ name: 'AbortError' });
+    expect(() => received.clone()).toThrow();
+  } finally { window.fetch = originalFetch; (window as any).__ss_fetch_intercepted__ = flag; useAuthStore.setState(original); }
+});
+
+
+test('P2-DEPOSIT exact percentage target rejects thousand rounding and validates authoritative summary', () => {
+  expect(percentageTarget('2431.00', '100.00')).toBe('2431.00'); expect(percentageTarget('0.01', '50.00')).toBe('0.01');
+  expect(() => percentageTarget('2431.001', '50')).toThrow();
+  expect(() => confirmedPaymentSummary({ order_id: 'A', deposit_mode: 'OFF', deposit_target_percent: '100.00', deposit_target_amount_lak: '2431.00', payment_revision: 0, payment_status: 'UNPAID', received_net_lak: '0.00', remaining_lak: '2000.00', total_lak: '2431.00', legacy_opening_received_lak: '0.00' }, 'A')).toThrow();
+});
+
+test('P2-DEPOSIT actual reception policy and receipt remain pending until matching confirmation; reversal retains original', async () => {
+  localStorage.setItem('ss_print_customers_v6', JSON.stringify([{ id: 'fixture-customer', name: 'Disposable customer', phone: '02000000000', address: 'Fixture', depositEligible: true }]));
+  const unregister = authorize(token); const previous = useAuthStore.getState(); useAuthStore.setState({ user: { ...previous.user!, role: 'admin' } });
+  const summary: any = { order_id: 'fixture-payment-order', deposit_mode: 'OFF', deposit_target_percent: '100.00', deposit_target_amount_lak: '2431.00', payment_revision: 0, payment_status: 'UNPAID', received_net_lak: '0.00', remaining_lak: '2431.00', total_lak: '2431.00', legacy_opening_received_lak: '0.00' };
+  let failReview = true;
+  const requests: any[] = []; let records: any[] = []; const previousFetch = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const url = String(input), payload = init?.body ? JSON.parse(String(init.body)) : null;
+    const json = (data: any) => new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } });
+    if (url.includes('/fixture-payment-order/payment-records') && !init?.method) return json({ status: 'success', data: { summary, records, legacy_opening: { provenance: 'UNKNOWN', received_lak: '0.00', reversible: false } } });
+    if (url.endsWith('/finance/payment-config')) return json({ status: 'success', data: { manual_qr_enabled: true, gateway_enabled: false, portal_enabled: false, payment_method_id: 'fixture-method', revision: 0 } });
+    if (url.includes('/payment-policy')) {
+      requests.push({ type: 'policy', payload }); expect(new Headers(init?.headers).get('Idempotency-Key')).toBeTruthy();
+      Object.assign(summary, { deposit_mode: payload.deposit_mode, deposit_target_percent: payload.deposit_target_percent, deposit_target_amount_lak: percentageTarget(summary.remaining_lak, payload.deposit_target_percent), payment_revision: summary.payment_revision + 1 });
+      return json({ status: 'success', committed: true, data: summary });
+    }
+    if (url.endsWith('/payment-records') && init?.method === 'POST') {
+      requests.push({ type: 'request', payload }); summary.payment_revision++;
+      const record = { id: 'fixture-receipt', order_id: summary.order_id, state: 'PENDING', record_kind: 'RECEIPT', purpose: payload.purpose, requested_amount_lak: payload.requested_amount_lak, actual_received_amount_lak: null, evidence_url: payload.evidence_url, created_at: '2026-10-04', reversal_of: null, reason: null };
+      records = [record]; return json({ status: 'success', committed: true, data: { record, summary } });
+    }
+    if (url.endsWith('/finance/verify-slip') && payload?.payment_record_id) {
+      requests.push({ type: 'review', payload }); if (failReview) return json({ message: 'STALE_PAYMENT_REVISION' }, 409); const record = { ...records[0], state: 'CONFIRMED', actual_received_amount_lak: payload.actual_received_amount_lak }; records = [record];
+      Object.assign(summary, { received_net_lak: '1215.50', remaining_lak: '1215.50', payment_status: 'PARTIAL', payment_revision: summary.payment_revision + 1 });
+      return json({ status: 'success', committed: true, orderId: summary.order_id, newStatus: 'WAITING_DEPOSIT', record, summary });
+    }
+    if (url.endsWith('/fixture-receipt/reversals')) {
+      requests.push({ type: 'reversal', payload }); const record = { ...records[0], id: 'fixture-reversal', record_kind: 'REVERSAL', reversal_of: 'fixture-receipt', reason: payload.reason, actual_received_amount_lak: payload.amount_lak };
+      Object.assign(summary, { received_net_lak: '1000.00', remaining_lak: '1431.00', payment_revision: summary.payment_revision + 1 });
+      return json({ status: 'success', committed: true, data: { record, summary, original_record_id: 'fixture-receipt' } });
+    }
+    return previousFetch(input, init);
+  });
+  const status = vi.fn(), updateMoney = vi.fn();
+  try {
+    await render(<AppProvider><OrderReceptionPage order={{ id: summary.order_id, customer_id: 'fixture-customer', totalPriceCharged: 2431, status: 'WAITING_DEPOSIT', paymentSlipUrl: '/uploads/fixture-slip.png' }} onBack={() => {}} onSelectStep={() => {}} currentLang="lo" formatLAK={String} handleStatusChange={status} onUpdatePayment={updateMoney} showToast={() => {}} /></AppProvider>);
+    await until(() => !(document.querySelector('[aria-label="ໂໝດມັດຈຳ"]') as HTMLButtonElement).disabled);
+    await click(document.querySelector('[aria-label="ໂໝດມັດຈຳ"]')!); await until(() => document.querySelector('[aria-label="ໂໝດມັດຈຳ"]')?.getAttribute('aria-checked') === 'true');
+    await click(buttonText('ສ້າງຄຳຂໍມັດຈຳ')); await until(() => document.body.textContent?.includes('ລໍຖ້າກວດ') === true);
+    expect(requests.find(r => r.type === 'request').payload.requested_amount_lak).toBe('1215.50'); expect(document.body.textContent).toContain('ຮັບແລ້ວ: 0'); expect(updateMoney).not.toHaveBeenCalled();
+    await click(buttonText('ຢືນຢັນຍອດຮັບຈິງ'));
+    await changeInput('ຈຳນວນເງິນທີ່ຮັບຈິງ (LAK)', '1.234'); await click(buttonText('ບັນທຶກຍອດຮັບຈິງ')); expect(requests.filter(r => r.type === 'review')).toHaveLength(0);
+    await click(buttonText('ຍົກເລີກ')); expect(document.querySelector('form[aria-label="ຢືນຢັນຮັບເງິນ"]')).toBeNull();
+    await click(buttonText('ຢືນຢັນຍອດຮັບຈິງ')); await click(buttonText('ບັນທຶກຍອດຮັບຈິງ')); await until(() => document.body.textContent!.includes('STALE_PAYMENT_REVISION'));
+    expect((document.querySelector('input[aria-label="ຈຳນວນເງິນທີ່ຮັບຈິງ (LAK)"]') as HTMLInputElement).value).toBe('1215.50'); expect(summary.received_net_lak).toBe('0.00');
+    failReview = false; await click(buttonText('ບັນທຶກຍອດຮັບຈິງ')); await until(() => document.body.textContent?.includes('ຮັບແລ້ວ: 1215.5') === true);
+    expect(status).not.toHaveBeenCalled(); expect(updateMoney).not.toHaveBeenCalled();
+    vi.spyOn(window, 'prompt').mockReturnValueOnce('215.50').mockReturnValueOnce('Disposable correction'); await click(buttonText('ຍ້ອນການຊຳລະ')); await until(() => document.body.textContent?.includes('ລາຍການຍ້ອນ') === true);
+    expect(document.body.textContent).toContain('ລາຍການຮັບເງິນ'); expect(document.body.textContent).toContain('ຮັບແລ້ວ: 1000');
+  } finally { unregister(); }
+});
+
+
+test('P2-DATA master stock preserves zero and exact unit costs, ignores inbound overrides and accepts authoritative empty', async () => {
+  const restore = authorize(token);
+  const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  let rows: any[] = [{ id: 'master-paper', sku: 'PAP-MASTER', name: 'Master paper', category: 'Paper', stock_qty: '0', purchase_multiplier: '500', cost_per_purchase_unit: '100000', cost_per_consumption_unit: '123.45', consumption_unit: 'sheet', purchase_unit: 'pack', reorder_threshold: '0', technical_specs: { standardSize: 'A4' }, updated_at: '2026-10-04T00:00:00Z', is_active: true }];
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (/\/api\/v1\/materials$/.test(url)) return new Response(JSON.stringify({ status: 'success', data: rows }));
+    return previous(input, init);
+  });
+  let app: ReturnType<typeof useApp>;
+  function Probe() { app = useApp(); return null; }
+  try {
+    await render(<AppProvider><Probe /></AppProvider>);
+    await act(async () => app!.refreshData());
+    const item = app!.inventory.find((item: any) => item.id === 'master-paper');
+    expect(item.stockQty).toBe(0);
+    expect(item.costPerConsumptionUnit).toBe(123.45);
+    expect(item.batches).toEqual([]);
+    expect(item.technical_specs).toEqual({ standardSize: 'A4' });
+    rows = [];
+    await act(async () => app!.refreshData());
+    expect(app!.inventory).toEqual([]);
+  } finally { restore(); }
+});
+
+
+test('P2-CRUD earnings publishes only a matching committed server ID and preserves failures for retry', async () => {
+  const restore = authorize(token);
+  const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  let fail = true;
+  const posts: { body: any; key: string }[] = [];
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    if (/\/api\/v1\/hr\/earnings$/.test(String(input))) {
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        posts.push({ body, key: new Headers(init.headers).get('Idempotency-Key')! });
+        return fail ? new Response(JSON.stringify({ status: 'error' }), { status: 503 }) : new Response(JSON.stringify({ status: 'success', committed: true, data: { ...body, earnedAmountLAK: 30, id: 'server-earning-1', recordedAt: '2026-10-04T00:00:00Z' } }));
+      }
+      return new Response(JSON.stringify({ status: 'success', data: [] }));
+    }
+    return previous(input, init);
+  });
+  let app: ReturnType<typeof useApp>;
+  function Probe() { app = useApp(); return null; }
+  const record = { employeeId: 'synthetic-employee', employeeName: 'Synthetic', orderId: 'synthetic-order', orderNumber: 'Synthetic', customerName: 'Synthetic', stepId: 'synthetic-step', stepName: 'Synthetic', impressions: 10, ratePerImpression: 2.5, earnedAmount: 25 };
+  try {
+    await render(<AppProvider><Probe /></AppProvider>);
+    await act(async () => app!.refreshData());
+    expect(app!.earningRecords).toEqual([]);
+    await act(async () => { await expect(app!.addEarningRecord(record)).rejects.toThrow(); });
+    expect(app!.earningRecords).toEqual([]);
+    fail = false;
+    await act(async () => app!.addEarningRecord(record));
+    expect(app!.earningRecords[0].id).toBe('server-earning-1');
+    expect(app!.earningRecords[0].earnedAmount).toBe(30);
+    expect(posts[0].body.earnedAmountLAK).toBe(25);
+    expect(posts[0].key).toBe(posts[1].key);
+  } finally { restore(); }
+});
+
+
+test('P2-HR actual employee modal retains a failed draft and publishes only canonical committed employee', async () => {
+  const restore = authorize(token);
+  const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  let fail = true;
+  const posts: any[] = [];
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (/\/api\/employees$/.test(url)) {
+      if (init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body)); posts.push({ payload, key: new Headers(init.headers).get('Idempotency-Key') });
+        return fail ? new Response(JSON.stringify({ status: 'error', message: 'Synthetic storage unavailable' }), { status: 503 }) : new Response(JSON.stringify({ status: 'success', committed: true, employee: { ...payload, id: 'server-employee', createdAt: '2026-10-04T00:00:00Z' }, login_account: null }));
+      }
+      return new Response(JSON.stringify({ status: 'success', data: [] }));
+    }
+    if (/\/api\/v1\/admin\/users$/.test(url)) return new Response(JSON.stringify({ status: 'success', data: [] }));
+    return previous(input, init);
+  });
+  try {
+    await render(<AppProvider><EmployeeManagement /></AppProvider>);
+    await until(() => !!Array.from(document.querySelectorAll('button')).find(button => /Add New Employee|ເພີ່ມພະນັກງານໃໝ່/.test(button.textContent || '')));
+    await click(Array.from(document.querySelectorAll('button')).find(button => /Add New Employee|ເພີ່ມພະນັກງານໃໝ່/.test(button.textContent || ''))!);
+    const fill = async (selector: string, value: string) => {
+      const field = document.querySelector(selector) as HTMLInputElement;
+      await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, value); field.dispatchEvent(new Event('input', { bubbles: true })); });
+    };
+    await fill('input[placeholder="ສົມຈິດ ແກ້ວມະນີ"]', 'Synthetic employee');
+    await fill('input[placeholder="020-XXXX-XXXX"]', '02000000000');
+    const save = () => Array.from(document.querySelectorAll('button')).find(button => /^(Add Employee|ເພີ່ມພະນັກງານ)$/.test((button.textContent || '').trim()))!;
+    await click(save());
+    await until(() => posts.length === 1);
+    expect(document.querySelector('input[placeholder="ສົມຈິດ ແກ້ວມະນີ"]')).not.toBeNull();
+    expect(posts[0].payload.id).toBeUndefined();
+    fail = false;
+    await click(save());
+    await until(() => posts.length === 2 && !document.querySelector('input[placeholder="ສົມຈິດ ແກ້ວມະນີ"]'));
+    expect(posts[0].key).toBe(posts[1].key);
+    expect(container.textContent).toContain('Synthetic employee');
+  } finally { restore(); }
+});
+
+
+test('P2-HR employee and login account submit atomically with canonical IDs and no default password', async () => {
+  const restore = authorize(token);
+  const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  let fail = true;
+  const posts: any[] = [];
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (/\/api\/employees$/.test(url)) {
+      if (init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body)); posts.push({ payload, key: new Headers(init.headers).get('Idempotency-Key') });
+        return fail ? new Response(JSON.stringify({ status: 'error', message: 'Synthetic storage unavailable' }), { status: 503 }) : new Response(JSON.stringify({ status: 'success', committed: true, employee: { ...payload, id: 'server-employee', createdAt: '2026-10-04T00:00:00Z' }, login_account: { ...payload.login_account, id: 'server-account', employeeId: 'server-employee' } }));
+      }
+      return new Response(JSON.stringify({ status: 'success', data: [] }));
+    }
+    if (/\/api\/v1\/admin\/users$/.test(url)) return new Response(JSON.stringify({ status: 'success', data: [] }));
+    return previous(input, init);
+  });
+  try {
+    await render(<AppProvider><EmployeeManagement /></AppProvider>);
+    await until(() => !!Array.from(document.querySelectorAll('button')).find(button => /Add New Employee|ເພີ່ມພະນັກງານໃໝ່/.test(button.textContent || '')));
+    await click(Array.from(document.querySelectorAll('button')).find(button => /Add New Employee|ເພີ່ມພະນັກງານໃໝ່/.test(button.textContent || ''))!);
+    const fill = async (selector: string, value: string) => {
+      const field = document.querySelector(selector) as HTMLInputElement;
+      await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, value); field.dispatchEvent(new Event('input', { bubbles: true })); });
+    };
+    await fill('input[placeholder="ສົມຈິດ ແກ້ວມະນີ"]', 'Synthetic employee');
+    await fill('input[placeholder="020-XXXX-XXXX"]', '02000000000');
+    await click(document.querySelector('[aria-label="ບັນຊີເຂົ້າລະບົບພະນັກງານ"]')!);
+    expect((document.querySelector('input[type="password"]') as HTMLInputElement).value).toBe('');
+    await fill('input[placeholder="somchit.k"]', 'synthetic.employee');
+    await fill('input[type="password"]', 'synthetic-only-password');
+    const save = () => Array.from(document.querySelectorAll('button')).find(button => /^(Add Employee|ເພີ່ມພະນັກງານ)$/.test((button.textContent || '').trim()))!;
+    await click(save());
+    await until(() => posts.length === 1);
+    expect(document.querySelector('input[placeholder="ສົມຈິດ ແກ້ວມະນີ"]')).not.toBeNull();
+    expect(posts[0].payload.id).toBeUndefined();
+    expect(posts[0].payload.login_account.id).toBeUndefined();
+    expect(posts[0].payload.login_account.username).toBe('synthetic.employee');
+    expect(posts[0].payload.login_account.password).toBe('synthetic-only-password');
+    expect(posts[0].payload.userAccount).toBeUndefined();
+    fail = false;
+    await click(save());
+    await until(() => posts.length === 2 && !document.querySelector('input[placeholder="ສົມຈິດ ແກ້ວມະນີ"]'));
+    expect(posts[0].key).toBe(posts[1].key);
+    expect(container.textContent).toContain('Synthetic employee');
+  } finally { restore(); }
+});
+
+
+test('P2-DATA actual profitability shows only server rows, true empty and error without sample figures', async () => {
+  const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  let status = 200;
+  let rows: any[] = [{ job_id: 'server-job', job_name: 'Server job', customer_name: 'Synthetic customer', revenue: 0, total_cost: 25, gross_profit: -25, profit_margin_percent: 0 }];
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => /\/api\/v1\/finance\/job-profitability$/.test(String(input)) ? new Response(JSON.stringify({ status: status === 200 ? 'success' : 'error', data: rows }), { status }) : previous(input, init));
+  await render(<JobProfitabilityAudit />);
+  await until(() => container.textContent!.includes('server-job'));
+  expect(container.textContent).toContain('-25'); expect(container.textContent).not.toContain('14,500,000');
+  rows = []; await click(buttonText('ອັບເດດ'));
+  await until(() => container.textContent!.includes('ຍັງບໍ່ມີຂໍ້ມູນກຳໄລງານ'));
+  status = 503; await click(buttonText('ອັບເດດ'));
+  await until(() => !!container.querySelector('[role="alert"]'));
+  expect(container.textContent).not.toContain('ຍັງບໍ່ມີຂໍ້ມູນກຳໄລງານ');
+});
+
+test('P2-PAY actual finance configuration preserves failed draft and saves keyed manual QR only', async () => {
+  const restore = authorize(token);
+  const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  let fail = true;
+  const posts: any[] = [];
+  const config = { manual_qr_enabled: false, payment_method_id: null, portal_enabled: false, gateway_enabled: false, revision: 0 };
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    if (/\/api\/v1\/finance\/payment-config$/.test(String(input))) {
+      if (init?.method === 'PUT') {
+        const payload = JSON.parse(String(init.body)); posts.push({ payload, key: new Headers(init.headers).get('Idempotency-Key') });
+        return fail ? new Response(JSON.stringify({ status: 'error', message: 'Synthetic configuration failure' }), { status: 503 }) : new Response(JSON.stringify({ status: 'success', committed: true, data: { ...config, manual_qr_enabled: true, payment_method_id: 'configured-method', revision: 1 } }));
+      }
+      return new Response(JSON.stringify({ status: 'success', data: config }));
+    }
+    if (/\/api\/v1\/payment-methods$/.test(String(input))) return new Response(JSON.stringify({ status: 'success', data: [{ id: 'configured-method', bankName: 'Synthetic', accountName: 'Synthetic', isActive: true }] }));
+    return previous(input, init);
+  });
+  try {
+    await render(<AppProvider><FinanceDashboard /></AppProvider>);
+    await until(() => !(container.querySelector('[role="switch"]') as HTMLButtonElement)?.disabled);
+    await until(() => !!container.querySelector('option[value="configured-method"]'));
+    const method = Array.from(container.querySelectorAll('select')).find(select => select.querySelector('option[value="configured-method"]'))!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(method, 'configured-method'); method.dispatchEvent(new Event('change', { bubbles: true })); });
+    await click(container.querySelector('[role="switch"]')!);
+    await click(buttonText('ບັນທຶກການຕັ້ງຄ່າ'));
+    await until(() => posts.length === 1 && container.textContent!.includes('Synthetic configuration failure'));
+    expect(container.textContent).toContain('QR: ປິດ');
+    expect(container.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('true');
+    fail = false;
+    await click(buttonText('ບັນທຶກການຕັ້ງຄ່າ'));
+    await until(() => posts.length === 2 && container.textContent!.includes('QR: ເປີດ'));
+    expect(posts[0].key).toBe(posts[1].key);
+    expect(posts[0].payload.gateway_enabled).toBeUndefined();
+    expect(posts[0].payload.portal_enabled).toBeUndefined();
+  } finally { restore(); }
+});
+
+
+test('P2-CRUD quotation deletion retains server rows on failure and removes only acknowledged ID', async () => {
+  const restore = authorize(token);
+  const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const quote = conversionFixture();
+  let fail = true;
+  let deleted = false;
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input), 'http://localhost').pathname;
+    if (path === '/api/v1/quotations' && !init?.method) return new Response(JSON.stringify(deleted ? [] : [quote]));
+    if (path === `/api/v1/quotations/${quote.id}` && init?.method === 'DELETE') {
+      if (fail) return new Response(JSON.stringify({ status: 'error', message: 'Synthetic deletion failure' }), { status: 503 });
+      deleted = true;
+      return new Response(JSON.stringify({ status: 'success', deleted_id: quote.id }));
+    }
+    return previous(input, init);
+  });
+  let app: ReturnType<typeof useApp>;
+  function Probe() { app = useApp(); return null; }
+  try {
+    await render(<AppProvider><Probe /></AppProvider>);
+    await until(() => app!.quotations.some(row => row.id === quote.id));
+    await act(async () => { await expect(app!.deleteQuotation(quote.id)).rejects.toThrow(); });
+    expect(app!.quotations.some(row => row.id === quote.id)).toBe(true);
+    fail = false;
+    await act(async () => app!.deleteQuotation(quote.id));
+    expect(app!.quotations.some(row => row.id === quote.id)).toBe(false);
+  } finally { restore(); }
+});
+
+
+test('P2-CRUD order status failure preserves funds and successful response publishes canonical status only', async () => {
+  const restore = authorize(token);
+  const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const order = { id: 'status-order', order_no: 'STATUS-ORDER', customer_name: 'Synthetic customer', customer_id: 'synthetic-customer', status: 'PENDING_SLIP_CHECK', total_amount_lak: 100, deposit_amount: 20, items: [] };
+  let fail = true;
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input), 'http://localhost').pathname;
+    if (path === '/api/v1/orders' && !init?.method) return new Response(JSON.stringify([order]));
+    if (path === `/api/orders/${order.id}/status` && init?.method === 'PUT') {
+      return fail ? new Response(JSON.stringify({ error: 'Synthetic status failure' }), { status: 503 }) : new Response(JSON.stringify({ ...order, status: 'PREPRESS_CHECK' }));
+    }
+    return previous(input, init);
+  });
+  let app: ReturnType<typeof useApp>;
+  function Probe() { app = useApp(); return null; }
+  try {
+    await render(<AppProvider><Probe /></AppProvider>);
+    await until(() => app!.orders.some(row => row.id === order.id));
+    const before = structuredClone(app!.orders.find(row => row.id === order.id));
+    await act(async () => { expect(await app!.updateOrderStatus(order.id, 'PREPRESS_CHECK')).toBeNull(); });
+    expect(app!.orders.find(row => row.id === order.id)).toEqual(before);
+    fail = false;
+    await act(async () => app!.updateOrderStatus(order.id, 'PREPRESS_CHECK'));
+    const saved = app!.orders.find(row => row.id === order.id)!;
+    expect(saved.status).toBe('PREPRESS_CHECK');
+    expect(saved.depositAmountPaid).toBe(before!.depositAmountPaid);
+    expect(saved.remainingUnpaidBalance).toBe(before!.remainingUnpaidBalance);
+  } finally { restore(); }
+});
+
+
+test('P2-PAY actual reception uploads a real slip, retains failed draft and requests only committed evidence', async () => {
+  const restore = authorize(token);
+  const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const summary: any = { order_id: 'upload-slip-order', deposit_mode: 'OFF', deposit_target_percent: '100.00', deposit_target_amount_lak: '100.00', payment_revision: 0, payment_status: 'UNPAID', received_net_lak: '0.00', remaining_lak: '100.00', total_lak: '100.00', legacy_opening_received_lak: '0.00' };
+  const file = new File([new Uint8Array([1,2,3])], 'synthetic-slip.png', { type: 'image/png', lastModified: 123 });
+  const uploadKeys: string[] = []; const requests: any[] = []; let fail = true;
+  const canonicalUrl = '/api/v1/orders/files/orders/upload-slip-order/server-slip.png';
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input), origin).pathname;
+    if (path === '/api/v1/orders/upload') {
+      expect(init?.body).toBeInstanceOf(FormData);
+      const form = init!.body as FormData;
+      expect(form.get('file')).toBe(file); expect(form.get('file_type')).toBe('payment_slip'); expect(form.get('order_no')).toBe(summary.order_id);
+      expect(form.get('expected_payment_revision')).toBe('0');
+      uploadKeys.push(new Headers(init!.headers).get('Idempotency-Key')!);
+      if (fail) return new Response(JSON.stringify({ status: 'error', message: 'Synthetic upload failure' }), { status: 503 });
+      summary.payment_revision = 1;
+      return new Response(JSON.stringify({ status: 'success', committed: true, data: { asset_id: 'server-slip', file_name: file.name, file_url: canonicalUrl, mime_type: file.type, size: file.size, order_id: summary.order_id, summary } }));
+    }
+    if (path === `/api/v1/orders/${summary.order_id}/payment-records`) {
+      if (init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body)); requests.push(payload);
+        return new Response(JSON.stringify({ status: 'success', committed: true, data: { record: { ...payload, id: 'server-receipt', order_id: summary.order_id, state: 'PENDING', record_kind: 'RECEIPT', actual_received_amount_lak: null }, summary } }));
+      }
+      return new Response(JSON.stringify({ status: 'success', data: { records: [], summary, legacy_opening: { provenance: 'UNKNOWN', received_lak: '0.00', reversible: false } } }));
+    }
+    if (path === '/api/v1/finance/payment-config') return new Response(JSON.stringify({ status: 'success', data: { manual_qr_enabled: true, payment_method_id: 'server-method', gateway_enabled: false, portal_enabled: false, revision: 0 } }));
+    return previous(input, init);
+  });
+  try {
+    await render(<AppProvider><OrderReceptionPage order={{ id: summary.order_id, totalPriceCharged: 100, status: 'PENDING_SLIP_CHECK', items: [] }} onBack={() => {}} onSelectStep={() => {}} currentLang="lo" formatLAK={String} handleStatusChange={vi.fn()} showToast={() => {}} /></AppProvider>);
+    await until(() => document.body.textContent?.includes('ຮັບແລ້ວ: 0') === true);
+    const input = document.querySelector('input[accept="image/*,.pdf"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+    await until(() => document.body.textContent?.includes('ລອງບັນທຶກສະລິບໃໝ່') === true);
+    expect(requests).toEqual([]); fail = false;
+    await click(buttonText('ລອງບັນທຶກສະລິບໃໝ່'));
+    await until(() => uploadKeys.length === 2 && !document.body.textContent?.includes('ລອງບັນທຶກສະລິບໃໝ່'));
+    expect(uploadKeys[0]).toBe(uploadKeys[1]);
+    await click(buttonText('ສ້າງຄຳຂໍຊຳລະຍອດຄ້າງ')); await until(() => requests.length === 1);
+    expect(requests[0].evidence_url).toBe(canonicalUrl); expect(requests[0].expected_payment_revision).toBe(1);
+    expect(document.body.textContent).toContain('ຮັບແລ້ວ: 0');
+  } finally { restore(); }
+});
+
+
+test('P2-CRUD actual edit modal replaces one original with isolated versioned payload and retains stale draft', async () => {
+  const restore = authorize(token);
+  const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const order: any = { id: 'original-edit-order', updated_at: '2026-10-04T00:00:00.000001Z', customer_name: 'Synthetic customer', status: 'PENDING_SLIP_CHECK', total_amount_lak: 100, deposit_lak: 0, items: [{ id: 'original-item', item_name: 'Synthetic original', quantity: 1, page_count: 1, paper_size: 'A4', artwork_url: '/api/v1/orders/files/orders/original-edit-order/old.pdf', specs: {} }] };
+  const file = new File([new Uint8Array([1,2,3])], 'replacement.pdf', { type: 'application/pdf' });
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    if (new URL(String(input), origin).pathname === '/api/v1/orders/upload') {
+      const form = init!.body as FormData;
+      expect(form.get('order_no')).toBe(order.id); expect(form.get('item_id')).toBe('original-item'); expect(form.get('artwork_role')).toBe('single');
+      return new Response(JSON.stringify({ asset_id: 'server-original', file_name: file.name, file_url: '/api/v1/orders/files/orders/original-edit-order/new.pdf', order_no: order.id, item_id: 'original-item', file_type: 'single' }));
+    }
+    return previous(input, init);
+  });
+  let fail = true; const saves: any[] = []; const close = vi.fn();
+  const save = async (payload: any) => { saves.push(payload); if (fail) throw new Error('ITEM_EDIT_STALE'); };
+  try {
+    await render(<AppProvider><EditOrderModal isOpen onClose={close} order={order} onSave={save} /></AppProvider>);
+    await click(buttonText('2. ລາຍການສິນຄ້າ'));
+    const input = Array.from(document.querySelectorAll('input[type="file"]')).find(field => field.getAttribute('accept') === '.pdf,.png,.jpg,.jpeg') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+    await until(() => document.body.textContent?.includes('ເລືອກໄຟລ໌ໃໝ່ແລ້ວ') === true);
+    await click(buttonText('3. ສະຫຼຸບການເງິນ')); await click(buttonText('ບັນທຶກການແກ້ໄຂອໍເດີ'));
+    await until(() => saves.length === 1);
+    expect(close).not.toHaveBeenCalled(); expect(document.body.textContent).toContain('ITEM_EDIT_STALE');
+    expect(Object.keys(saves[0]).sort()).toEqual(['expected_updated_at','id','items','reason']);
+    expect(saves[0].expected_updated_at).toBe(order.updated_at); expect(saves[0].items[0].id).toBe('original-item');
+    expect(saves[0].total_price).toBeUndefined(); expect(saves[0].deposit_amount).toBeUndefined(); expect(saves[0].items[0].specifications).toBeUndefined();
+    expect(order.items[0].artwork_url).toContain('old.pdf'); fail = false;
+    await click(buttonText('ບັນທຶກການແກ້ໄຂອໍເດີ')); await until(() => close.mock.calls.length === 1);
+    expect(saves[1]).toEqual(saves[0]);
+  } finally { restore(); }
+});
+
+
+test('P2-PAY actual order modal applies only a bound approved source and retains failed price draft', async () => {
+  const restore = authorize(token); const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const order: any = { id: 'price-target', updated_at: '2026-10-04T00:00:00.000001Z', customer_name: 'Synthetic customer', status: 'PENDING_SLIP_CHECK', total_amount_lak: 100, deposit_lak: 0, items: [] };
+  const quote: any = { ...conversionFixture(), status: 'ACCEPTED', price_correction_source: { target_order_id: order.id, customer_id: 'synthetic-customer', order_work_fingerprint: 'server-work' } };
+  let fail = true; const requests: any[] = [];
+  const summary = { order_id: order.id, deposit_mode: 'OFF', deposit_target_percent: '100.00', deposit_target_amount_lak: '100.00', payment_revision: 0, payment_status: 'UNPAID', received_net_lak: '0.00', remaining_lak: '100.00', total_lak: '100.00', legacy_opening_received_lak: '0.00' };
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input), origin).pathname;
+    if (path === '/api/v1/quotations' && !init?.method) return new Response(JSON.stringify([quote]));
+    if (path === `/api/v1/orders/${order.id}/payment-records`) return new Response(JSON.stringify({ status: 'success', data: { records: [], summary, legacy_opening: { provenance: 'UNKNOWN', received_lak: '0.00', reversible: false } } }));
+    if (path === `/api/v1/orders/${order.id}` && init?.method === 'PUT') {
+      const payload = JSON.parse(String(init.body)); requests.push({ payload, key: new Headers(init.headers).get('Idempotency-Key') });
+      if (fail) return new Response(JSON.stringify({ status: 'error', message: 'PRICE_SOURCE_STALE' }), { status: 409 });
+      return new Response(JSON.stringify({ status: 'success', committed: true, data: { ...summary, total_lak: '2600.00', remaining_lak: '2600.00', deposit_target_amount_lak: '2600.00', payment_revision: 1 }, price_review: { source: 'approved_quotation', source_quotation_id: quote.id, source_quotation_updated_at: quote.updated_at, approval_audit_id: 'server-approval', commercial_fingerprint: 'server-commercial', target_order_id: order.id, customer_id: 'synthetic-customer', previous_total_lak: '100.00', total_lak: '2600.00', reason: payload.reason, reviewer_id: 'server-reviewer' } }));
+    }
+    return previous(input, init);
+  });
+  const close = vi.fn();
+  try {
+    await render(<AppProvider><EditOrderModal isOpen order={order} onSave={vi.fn()} onClose={close} /></AppProvider>);
+    await until(() => !!document.querySelector(`option[value="${quote.id}"]`));
+    const select = document.querySelector('[aria-label="ໃບສະເໜີປັບລາຄາ"]') as HTMLSelectElement;
+    await act(async () => { select.value = quote.id; select.dispatchEvent(new Event('change', { bubbles: true })); });
+    const reason = document.querySelector('[aria-label="ເຫດຜົນປັບລາຄາ"]') as HTMLInputElement;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(reason, 'Synthetic approved correction'); reason.dispatchEvent(new Event('input', { bubbles: true })); });
+    await click(buttonText('ປັບລາຄາຕາມໃບສະເໜີ')); await until(() => document.body.textContent?.includes('PRICE_SOURCE_STALE') === true);
+    expect(close).not.toHaveBeenCalled(); expect(reason.value).toBe('Synthetic approved correction');
+    expect(requests[0].payload).toEqual({ total_price: '2600.00', reason: 'Synthetic approved correction', expected_payment_revision: 0, source_quotation_id: quote.id, source_quotation_updated_at: quote.updated_at });
+    fail = false; await click(buttonText('ປັບລາຄາຕາມໃບສະເໜີ')); await until(() => close.mock.calls.length === 1);
+    expect(requests[0].key).toBe(requests[1].key); expect(order.total_amount_lak).toBe(100);
+  } finally { restore(); }
+});
+
+
+test('P2-PAY bound source approval rejects legacy acknowledgment and stale response while preserving its reason', async () => {
+  const restore = authorize(token); const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  let quote: any = { ...conversionFixture(), status: 'REQUIRES_MANAGER_APPROVAL', price_correction_source: { target_order_id: 'bound-target', customer_id: 'bound-customer', order_work_fingerprint: 'bound-work' } };
+  const requests: any[] = []; let result = 'legacy';
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input), origin).pathname;
+    if (path === '/api/v1/quotations' && !init?.method) return new Response(JSON.stringify([quote]));
+    if (path === `/api/v1/quotations/${quote.id}/approve`) {
+      requests.push(JSON.parse(String(init?.body)));
+      if (result === 'legacy') return new Response(JSON.stringify({ status: 'success', committed: true, target_type: 'quotation', quotation_id: quote.id, quotation_status: 'ACCEPTED' }));
+      if (result === 'stale') return new Response(JSON.stringify({ status: 'error', code: 'PRICE_SOURCE_STALE' }), { status: 409 });
+      quote = { ...quote, status: 'ACCEPTED', updated_at: '2026-10-04T00:00:00.000002Z' };
+      return new Response(JSON.stringify({ status: 'success', committed: true, data: quote, updated_at: quote.updated_at, price_source_approval: { approval_audit_id: 'server-approval', source_quotation_id: quote.id, source_quotation_updated_at: quote.updated_at, commercial_fingerprint: 'server-commercial', total_lak: '2600.00', target_order_id: 'bound-target', customer_id: 'bound-customer', actor_id: 'server-actor', actor_role: 'manager' } }));
+    }
+    return previous(input, init);
+  });
+  let app: ReturnType<typeof useApp>;
+  function Journey() { app = useApp(); return <QuotationManager />; }
+  try {
+    await render(<AppProvider><Journey /></AppProvider>); await until(() => app!.quotations.some(row => row.id === quote.id));
+    await click(byTitle('ປະຫວັດໃບສະເໜີ')); await click(buttonText('ອະນຸມັດສ່ວນຫຼຸດ'));
+    const reason = document.querySelector('textarea[placeholder^="ໃສ່ເຫດຜົນການອະນຸມັດ"]') as HTMLTextAreaElement;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(reason, 'Synthetic source approval'); reason.dispatchEvent(new Event('input', { bubbles: true })); });
+    const approve = () => Array.from(document.querySelectorAll('button')).find(button => button.textContent?.includes('(Approve)'))!;
+    await click(approve()); await until(() => requests.length === 1 && !approve().hasAttribute('disabled'));
+    expect(reason.value).toBe('Synthetic source approval'); expect(app!.quotations[0].status).toBe('REQUIRES_MANAGER_APPROVAL');
+    result = 'stale'; await click(approve()); await until(() => requests.length === 2 && !approve().hasAttribute('disabled'));
+    expect(document.body.contains(reason)).toBe(true); result = 'success'; await click(approve());
+    await until(() => app!.quotations[0].status === 'ACCEPTED' && !document.body.contains(reason));
+    expect(requests[0].expected_updated_at).toBe('2026-10-03T00:00:00.000001Z'); expect(requests[1]).toEqual(requests[0]); expect(requests[2]).toEqual(requests[0]);
+    expect(app!.quotations[0].updated_at).toBe('2026-10-04T00:00:00.000002Z');
+  } finally { restore(); }
+});
+
+test('P2-CRUD narrow tracking commit requires full readback and cannot erase old original items on failed reload', async () => {
+  const restore = authorize(token); const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const original = { id: 'tracking-order', updated_at: '2026-10-04T00:00:00.000001Z', order_no: 'TRACKING', customer_name: 'Synthetic', status: 'IN_PRODUCTION', items: [{ id: 'tracking-original', item_name: 'Original', quantity: 1, artwork_url: '/api/v1/orders/files/orders/tracking-order/old.pdf', artwork_file_name: 'old.pdf', specs: {} }] };
+  let failedReadback = true; const writes: any[] = [];
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input), origin).pathname;
+    if (path === '/api/v1/orders' && !init?.method) return new Response(JSON.stringify([original]));
+    if (path === `/api/v1/orders/${original.id}`) {
+      if (init?.method === 'PUT') { writes.push(JSON.parse(String(init.body))); const { items, ...root } = original; return new Response(JSON.stringify({ status: 'success', committed: true, updated_id: original.id, data: root })); }
+      return failedReadback ? new Response('{}', { status: 503 }) : new Response(JSON.stringify({ ...original, updated_at: '2026-10-04T00:00:00.000002Z', courier_name: 'Synthetic courier', internal_tracking_code: 'TRACK-1', shipping_fee: 0 }));
+    }
+    return previous(input, init);
+  });
+  let app: ReturnType<typeof useApp>; function Probe() { app = useApp(); return null; }
+  try {
+    await render(<AppProvider><Probe /></AppProvider>); await until(() => app!.orders.some(order => order.id === original.id));
+    const before = structuredClone(app!.orders.find(order => order.id === original.id));
+    await act(async () => { await expect(app!.updateOrderTracking!(original.id, 'Synthetic courier', 'TRACK-1', 0)).rejects.toThrow(); });
+    expect(app!.orders.find(order => order.id === original.id)).toEqual(before);
+    failedReadback = false;
+    await act(async () => { await app!.updateOrderTracking!(original.id, 'Synthetic courier', 'TRACK-1', 0); });
+    expect(writes[1]).toEqual({ expected_updated_at: original.updated_at, courier_name: 'Synthetic courier', tracking_number: 'TRACK-1', shipping_fee: 0 });
+    const saved: any = app!.orders.find(order => order.id === original.id);
+    expect(saved.items[0].id).toBe('tracking-original'); expect(saved.items[0].artwork_url).toContain('old.pdf');
+    expect(saved.status).toBe('IN_PRODUCTION');
+  } finally { restore(); }
+});
+
+test('P2-PAY actual order source preparation saves exact bound item IDs and version; stale save retains retry', async () => {
+  const restore = authorize(token); const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const order: any = { id: 'source-prepare-order', updated_at: '2026-10-04T00:00:00.000001Z', customer_name: 'Synthetic bound customer', status: 'PENDING_SLIP_CHECK', items: [{ id: 'source-prepare-item', item_name: 'Synthetic original', quantity: 1, page_count: 1, paper_size: 'A4', artwork_url: '/api/v1/orders/files/orders/source-prepare-order/old.pdf', artwork_file_name: 'old.pdf', artwork_file_size: 123, specs: { imposition_mode: 'ON', jobWidth: 210, jobHeight: 297 } }] };
+  let fail = true; const writes: any[] = []; let app: ReturnType<typeof useApp>;
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input), origin).pathname;
+    if (path === '/api/v1/quotations' && init?.method === 'POST') {
+      const payload = JSON.parse(String(init.body)); writes.push(payload);
+      if (fail) return new Response(JSON.stringify({ code: 'PRICE_SOURCE_STALE' }), { status: 409 });
+      return new Response(JSON.stringify({ ...conversionFixture(), ...payload, committed: true, updated_at: '2026-10-04T00:00:00.000002Z', price_correction_source: { target_order_id: order.id, customer_id: 'server-customer', order_work_fingerprint: 'server-work' } }));
+    }
+    return previous(input, init);
+  });
+  function Journey() { app = useApp(); return app.activeTab === 'quotation' ? <QuotationManager /> : <EditOrderModal isOpen order={order} onSave={vi.fn()} onClose={() => {}} />; }
+  try {
+    await render(<AppProvider><Journey /></AppProvider>);
+    await click(buttonText('ຈັດທຳໃບສະເໜີປັບລາຄາ'));
+    await until(() => !!byTitle('Save draft'));
+    await click(byTitle('Save draft')); await until(() => writes.length === 1 && app!.toast?.type === 'error');
+    expect(app!.quotations.some(quote => quote.id === writes[0].id)).toBe(false);
+    expect(writes[0].price_correction_target_order_id).toBe(order.id); expect(writes[0].expected_order_updated_at).toBe(order.updated_at);
+    expect(writes[0].items.map((item: any) => item.id)).toEqual(['source-prepare-item']);
+    expect(writes[0].items[0].artwork_url).toContain('old.pdf');
+    fail = false; await click(byTitle('Save draft'));
+    await until(() => app!.quotations.some(quote => quote.id === writes[0].id));
+    expect(writes[1].id).toBe(writes[0].id); expect(order.items[0].artwork_url).toContain('old.pdf');
+  } finally { restore(); }
+});
+
+test('P2-PAY literal viewer role cannot apply price or upload replacement originals', async () => {
+  const restore = authorize(token); const previousUser = useAuthStore.getState().user!;
+  useAuthStore.setState({ user: { ...previousUser, role: 'viewer' } });
+  try {
+    const order = { id: 'viewer-order', updated_at: '2026-10-04T00:00:00Z', customer_name: 'Synthetic', status: 'PENDING_SLIP_CHECK', items: [{ id: 'viewer-item', item_name: 'Original', quantity: 1, page_count: 1, specs: {} }] };
+    await render(<AppProvider><EditOrderModal isOpen order={order} onSave={vi.fn()} onClose={() => {}} /></AppProvider>);
+    expect(buttonText('ປັບລາຄາຕາມໃບສະເໜີ').disabled).toBe(true);
+    await click(buttonText('2. ລາຍການສິນຄ້າ'));
+    expect(document.querySelector('input[accept=".pdf,.png,.jpg,.jpeg"]')).toBeNull();
+  } finally { useAuthStore.setState({ user: previousUser }); restore(); }
+});
+
+test('P2-DEMO actual reception proof picker retains stale bind, retries one upload and reloads canonical originals', async () => {
+  const restore = authorize(token); const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  let order: any = { id: 'demo-proof-order', updated_at: '2026-10-04T00:00:00.000001Z', customer_name: 'Synthetic', status: 'PENDING_SLIP_CHECK', total_amount_lak: 100, items: [{ id: 'demo-proof-item', item_name: 'Original', quantity: 1, artwork_url: '/api/v1/orders/files/orders/demo-proof-order/old.pdf', specs: {} }] };
+  const original = structuredClone(order.items); const file = pdfFile('proof.pdf').file;
+  let fail = true, uploads = 0; const writes: any[] = [];
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input), origin).pathname;
+    if (path === '/api/v1/orders' && !init?.method) return new Response(JSON.stringify([order]));
+    if (path === '/api/v1/orders/upload') { uploads++; const form = init!.body as FormData; expect(form.get('order_no')).toBe(order.id); expect(form.get('item_id')).toBe('demo-proof-item'); return new Response(JSON.stringify({ asset_id: 'private-proof', order_no: order.id, item_id: 'demo-proof-item', file_url: '/api/v1/orders/files/orders/demo-proof-order/proof.pdf', file_name: 'proof.pdf' })); }
+    if (path === `/api/v1/orders/${order.id}`) {
+      if (init?.method === 'PUT') {
+        const payload = JSON.parse(String(init.body)); writes.push(payload);
+        if (fail) return new Response(JSON.stringify({ status: 'error', message: 'STALE_ORDER_VERSION' }), { status: 409 });
+        order = { ...order, proofUrl: payload.proofUrl, status: 'WAITING_APPROVAL', updated_at: '2026-10-04T00:00:00.000002Z' };
+        const { items, ...root } = order; return new Response(JSON.stringify({ status: 'success', committed: true, updated_id: order.id, data: root }));
+      }
+      return new Response(JSON.stringify(order));
+    }
+    return previous(input, init);
+  });
+  let app: ReturnType<typeof useApp>;
+  function Journey() { app = useApp(); const current = app.orders.find(row => row.id === order.id); return current ? <OrderReceptionPage order={current} onBack={() => {}} onSelectStep={() => {}} currentLang="lo" formatLAK={String} handleStatusChange={vi.fn()} showToast={() => {}} onUpdateOrder={payload => app.updateOrderDetails(payload.id, payload)} /> : null; }
+  try {
+    await render(<AppProvider><Journey /></AppProvider>); await until(() => !!document.querySelector('input[aria-label="ອັບໂຫຼດ Digital Proof"]'));
+    const input = document.querySelector('input[aria-label="ອັບໂຫຼດ Digital Proof"]') as HTMLInputElement; Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+    await until(() => document.body.textContent?.includes('STALE_ORDER_VERSION') === true);
+    expect(app!.orders.find(row => row.id === order.id)?.status).toBe('PENDING_SLIP_CHECK');
+    fail = false; await click(buttonText('ລອງບັນທຶກ Proof ໃໝ່')); await until(() => app!.orders.find(row => row.id === order.id)?.status === 'WAITING_APPROVAL');
+    expect(uploads).toBe(1); expect(writes[1]).toEqual(writes[0]); expect(Object.keys(writes[0]).sort()).toEqual(['expected_updated_at','proofUrl']);
+    expect(order.items).toEqual(original); expect(app!.orders.find(row => row.id === order.id)?.items[0].artwork_url).toContain('old.pdf');
+  } finally { restore(); }
+});
+
+test('P2-DEMO actual reception configuration commits narrow workflow and never starts production', async () => {
+  const restore = authorize(token); const previous = vi.mocked(globalThis.fetch).getMockImplementation()!; const statusChange = vi.fn();
+  let order: any = { id: 'demo-workflow-order', updated_at: '2026-10-04T00:00:00.000001Z', customer_name: 'Synthetic', status: 'PENDING_SLIP_CHECK', items: [{ id: 'demo-workflow-item', item_name: 'Synthetic original', quantity: 1, current_step: 'PENDING', artwork_url: '/api/v1/orders/files/orders/demo-workflow-order/old.pdf', specs: {} }] }; const writes: any[] = [];
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input), origin).pathname;
+    if (path === '/api/v1/orders' && !init?.method) return new Response(JSON.stringify([order]));
+    if (path === `/api/v1/orders/${order.id}`) {
+      if (init?.method === 'PUT') { const payload = JSON.parse(String(init.body)); writes.push(payload); order = { ...order, productionWorkflow: payload.productionWorkflow, updated_at: '2026-10-04T00:00:00.000002Z' }; const { items, ...root } = order; return new Response(JSON.stringify({ status: 'success', committed: true, updated_id: order.id, data: root })); }
+      return new Response(JSON.stringify(order));
+    }
+    return previous(input, init);
+  });
+  let app: ReturnType<typeof useApp>; function Journey() { app = useApp(); const current = app.orders.find(row => row.id === order.id); return current ? <OrderReceptionPage order={current} onBack={() => {}} onSelectStep={() => {}} currentLang="lo" formatLAK={String} handleStatusChange={statusChange} showToast={() => {}} onUpdateOrder={payload => app.updateOrderDetails(payload.id, payload)} /> : null; }
+  try {
+    await render(<AppProvider><Journey /></AppProvider>); await until(() => !!buttonText('ຂະບວນການຜະລິດ (Production Process)'));
+    await click(buttonText('ຂະບວນການຜະລິດ (Production Process)')); await until(() => !!buttonText('ບັນທຶກສາຍງານຜະລິດ'));
+    await click(buttonText('ບັນທຶກສາຍງານຜະລິດ')); await until(() => writes.length === 1 && !!app!.orders.find(row => row.id === order.id)?.productionWorkflow);
+    expect(Object.keys(writes[0]).sort()).toEqual(['expected_updated_at','productionWorkflow']); expect(writes[0].productionWorkflow.startedAt).toBeUndefined();
+    expect(writes[0].productionWorkflow.steps.every((step: any) => step.status === 'PENDING' && step.jobId === 'demo-workflow-item')).toBe(true);
+    expect(statusChange).not.toHaveBeenCalled(); expect(app!.orders.find(row => row.id === order.id)?.status).toBe('PENDING_SLIP_CHECK');
+    expect(app!.orders.find(row => row.id === order.id)?.items[0].artwork_url).toContain('old.pdf');
+  } finally { restore(); }
+});
+
+test('P2-DEMO actual delivery packing failure retains state; committed narrow retry preserves original and settlement', async () => {
+  const restore = authorize(token); const previous = vi.mocked(globalThis.fetch).getMockImplementation()!; const toast = vi.fn();
+  let order: any = { id: 'demo-delivery-order', updated_at: '2026-10-04T00:00:00.000001Z', customer_name: 'Synthetic', status: 'COMPLETED', total_amount_lak: 100, deposit_lak: 100, remaining_lak: 0, payment_status: 'PAID', isPacked: false, items: [{ id: 'demo-delivery-item', item_name: 'Original', quantity: 1, current_step: 'READY_FOR_PICKUP', artwork_url: '/api/v1/orders/files/orders/demo-delivery-order/old.pdf', specs: {} }] };
+  let fail = true; const writes: any[] = [];
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input), origin).pathname;
+    if (path === '/api/v1/orders' && !init?.method) return new Response(JSON.stringify([order]));
+    if (path === `/api/v1/orders/${order.id}`) {
+      if (init?.method === 'PUT') { const payload = JSON.parse(String(init.body)); writes.push(payload); if (fail) return new Response(JSON.stringify({ status: 'error', message: 'STALE_ORDER_VERSION' }), { status: 409 }); order = { ...order, isPacked: payload.isPacked, updated_at: '2026-10-04T00:00:00.000002Z' }; const { items, ...root } = order; return new Response(JSON.stringify({ status: 'success', committed: true, updated_id: order.id, data: root })); }
+      return new Response(JSON.stringify(order));
+    }
+    return previous(input, init);
+  });
+  let app: ReturnType<typeof useApp>; function Journey() { app = useApp(); const current = app.orders.find(row => row.id === order.id); return current ? <OrderDeliveryPage order={current} onBack={() => {}} onSelectStep={() => {}} currentLang="lo" formatLAK={String} handleStatusChange={vi.fn()} showToast={toast} onUpdateOrder={payload => app.updateOrderDetails(payload.id, payload)} /> : null; }
+  try {
+    await render(<AppProvider><Journey /></AppProvider>); await until(() => !!buttonText('ກົດຢືນຢັນແພັກ'));
+    await click(buttonText('ກົດຢືນຢັນແພັກ')); await until(() => writes.length === 1 && toast.mock.calls.some(call => call[0] === 'STALE_ORDER_VERSION'));
+    expect(buttonText('ກົດຢືນຢັນແພັກ')).toBeTruthy(); expect(app!.orders.find(row => row.id === order.id)?.isPacked).toBe(false);
+    fail = false; await click(buttonText('ກົດຢືນຢັນແພັກ')); await until(() => app!.orders.find(row => row.id === order.id)?.isPacked === true);
+    expect(writes[1]).toEqual({ expected_updated_at: '2026-10-04T00:00:00.000001Z', isPacked: true });
+    const saved: any = app!.orders.find(row => row.id === order.id); expect(saved.items[0].artwork_url).toContain('old.pdf'); expect(saved.deposit_lak).toBe(100); expect(saved.remaining_lak).toBe(0);
+  } finally { restore(); }
+});
+
+
+test('P2-DEMO configured progress failure preserves step; canonical retry uses coupled earnings without separate POST', async () => {
+  const restore = authorize(token); const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  let order: any = { id: 'demo-progress', updated_at: '2026-10-04T00:00:00.000001Z', status: 'IN_PRODUCTION', stock_deducted_at: '2026-10-04T00:00:00Z', items: [{ id: 'job-one', quantity: 2, artwork_url: '/api/v1/orders/files/orders/demo-progress/old.pdf', specs: {} }], productionWorkflow: { templateId: 'custom', templateName: 'Configured', steps: [{ id: 'step-one', jobId: 'job-one', name: 'Actual step', category: 'PRESS', status: 'PENDING' }] } };
+  let fail = true; const writes: any[] = []; let earningPosts = 0; let earningReads = 0; const toast = vi.fn();
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input), origin).pathname;
+    if (path === '/api/v1/orders' && !init?.method) return new Response(JSON.stringify([order]));
+    if (path === '/api/v1/hr/earnings') { if (init?.method === 'POST') earningPosts++; else earningReads++; return new Response(JSON.stringify({ status: 'success', data: [] })); }
+    if (path === '/api/v1/orders/demo-progress') {
+      if (init?.method === 'PUT') {
+        const payload = JSON.parse(String(init.body)); writes.push(payload);
+        if (fail) return new Response(JSON.stringify({ message: 'STALE_ORDER_VERSION' }), { status: 409 });
+        order = { ...order, status: 'COMPLETED', updated_at: '2026-10-04T00:00:00.000002Z', productionWorkflow: { ...payload.productionWorkflow, steps: payload.productionWorkflow.steps.map((step: any) => ({ ...step, completedAt: '2026-10-04T01:00:00Z', completedBy: 'Server actor' })) } };
+        const { items, ...root } = order; return new Response(JSON.stringify({ status: 'success', committed: true, updated_id: order.id, data: root, earnings: [{ earnedAmountLAK: '400.00' }] }));
+      }
+      return new Response(JSON.stringify(order));
+    }
+    return previous(input, init);
+  });
+  let app: ReturnType<typeof useApp>; function Journey() { app = useApp(); const current = app.orders.find(row => row.id === order.id); return current ? <ProductionProcessFlowCard orderId={current.id} order={current} orderStatus={current.status} currentLang="lo" productionWorkflow={current.productionWorkflow} onAdvanceToStep3={() => {}} onUpdateStatus={vi.fn()} showToast={toast} onUpdateWorkflow={wf => app.updateOrderDetails(current.id, { expected_updated_at: current.updated_at, productionWorkflow: wf })} /> : null; }
+  try {
+    await render(<AppProvider><Journey /></AppProvider>); await until(() => !!buttonText('ກົດຢືນຢັນສຳເລັດ'));
+    await click(buttonText('ກົດຢືນຢັນສຳເລັດ')); await until(() => toast.mock.calls.some(call => call[0] === 'STALE_ORDER_VERSION'));
+    expect(app!.orders.find(row => row.id === order.id)?.productionWorkflow.steps[0].status).toBe('PENDING'); expect(earningPosts).toBe(0);
+    fail = false; const before = earningReads; await click(buttonText('ກົດຢືນຢັນສຳເລັດ')); await until(() => toast.mock.calls.some(call => String(call[0]).includes('400')));
+    expect(writes[1].productionWorkflow.steps[0]).toEqual({ id: 'step-one', jobId: 'job-one', name: 'Actual step', category: 'PRESS', status: 'COMPLETED' });
+    expect(earningReads).toBeGreaterThan(before); expect(earningPosts).toBe(0); expect(writes).toHaveLength(2);
+    const saved: any = app!.orders.find(row => row.id === order.id); expect(saved.items[0].artwork_url).toContain('old.pdf'); expect(saved.productionWorkflow.steps[0].completedBy).toBe('Server actor');
+  } finally { restore(); }
+});
+
+
+test('P2-PREVIEW 12MiB original first paint waits for full controlled transfer on demo-r4 candidate', async () => {
+  const restore = authorize(token); const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const doc = new jsPDF({ unit: 'pt', format: [100, 100] }); doc.setFillColor('#ff0000'); doc.rect(0, 0, 100, 100, 'F');
+  doc.internal.write('%' + 'x'.repeat(12 * 1024 * 1024));
+  const bytes = new Uint8Array(doc.output('arraybuffer')); const started = performance.now(); let controller: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({ start(c) { controller = c; c.enqueue(bytes.slice(0, 65536)); } });
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => String(input).includes('large-byte-owned.pdf')
+    ? new Response(stream, { headers: { 'Content-Type': 'application/pdf', 'Content-Length': String(bytes.length) } }) : previous(input, init));
+  try {
+    await render(<Lightbox src="/api/v1/orders/files/orders/preview-owned/large-byte-owned.pdf" fileName="large-byte-owned.pdf" onClose={() => {}} />);
+    await act(async () => { await new Promise(done => setTimeout(done, 100)); });
+    expect(document.querySelector('canvas[data-painted-page="1"]')).toBeNull();
+    const transferCompleted = performance.now(); controller!.enqueue(bytes.slice(65536)); controller!.close();
+    await until(() => !!document.querySelector('canvas[data-painted-page="1"]'));
+    const firstPaint = performance.now();
+    console.info('LARGE_BYTE_OBSERVATION', JSON.stringify({ candidate: 'demo-r4', bytes: bytes.length, controlledTransferMs: transferCompleted - started, postTransferDocumentAndPaintMs: firstPaint - transferCompleted, firstPaintMs: firstPaint - started, scope: 'mounted jsdom real PDF renderer; controlled response, not native network benchmark' }));
+    expect(bytes.length).toBeGreaterThan(12 * 1024 * 1024);
+  } finally { restore(); }
+});
+
+
+test('P2-CRUD actual dashboard tolerates root order missing items without inventing jobs or losing valid originals', async () => {
+  const restore = authorize(token); const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const rows = [{ id: 'legacy-root-only', status: 'PENDING', total_amount_lak: 50, deposit_lak: 0 }, { id: 'valid-root', status: 'PENDING', items: [{ id: 'actual-item', quantity: 1, artwork_url: '/api/v1/orders/files/orders/valid-root/original.pdf', specs: {} }] }];
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => new URL(String(input), origin).pathname === '/api/v1/orders' && !init?.method ? new Response(JSON.stringify(rows)) : previous(input, init));
+  let app: ReturnType<typeof useApp>; function DashboardCaller() { app = useApp(); app.getDashboardStats(); return <div data-testid="dashboard-alive">{app.orders.length}</div>; }
+  try {
+    await render(<AppProvider><DashboardCaller /></AppProvider>); await until(() => app!.orders.length === 2);
+    expect(document.querySelector('[data-testid="dashboard-alive"]')!.textContent).toBe('2');
+    const legacy: any = app!.orders.find(row => row.id === 'legacy-root-only'); expect(legacy.items).toEqual([]); expect(legacy.total_amount_lak).toBe(50);
+    const valid: any = app!.orders.find(row => row.id === 'valid-root'); expect(valid.items).toHaveLength(1); expect(valid.items[0].id).toBe('actual-item'); expect(valid.items[0].artwork_url).toContain('original.pdf');
+  } finally { restore(); }
+});
+
+
+test('P2-CRUD retained legacy cache renders dashboard before delayed refresh and survives failed order read without fictional items', async () => {
+  const restore = authorize(token); const previous = vi.mocked(globalThis.fetch).getMockImplementation()!; const pending = deferred<Response>(); let requested = false;
+  localStorage.setItem(`ssp_private:${encodeURIComponent(useAuthStore.getState().user!.username)}:ss_print_orders_v6`, JSON.stringify([{ id: 'cached-missing-items', depositAmountPaid: 0, remainingUnpaidBalance: 50, totalPriceCharged: 50, status: 'PENDING' }, { id: 'cached-valid', depositAmountPaid: 20, remainingUnpaidBalance: 0, totalPriceCharged: 20, status: 'PENDING', items: [{ id: 'paper-real', quantity: 1, artwork_url: '/api/v1/orders/files/orders/cached-valid/old.pdf' }] }]));
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => { if (new URL(String(input), origin).pathname === '/api/v1/orders' && !init?.method) { requested = true; return pending.promise; } return previous(input, init); });
+  let app: ReturnType<typeof useApp>; function DashboardCaller() { app = useApp(); const stats = app.getDashboardStats(); return <div data-testid="cached-dashboard-alive">{stats.totalRevenue}</div>; }
+  try {
+    await render(<AppProvider><DashboardCaller /></AppProvider>); await until(() => requested);
+    expect(document.querySelector('[data-testid="cached-dashboard-alive"]')!.textContent).toBe('20'); expect(app!.orders.find(row => row.id === 'cached-missing-items')?.items).toEqual([]);
+    const valid: any = app!.orders.find(row => row.id === 'cached-valid'); expect(valid.items[0].artwork_url).toContain('old.pdf'); expect(valid.totalPriceCharged).toBe(20);
+    pending.resolve(new Response(JSON.stringify({ status: 'error', message: 'storage unavailable' }), { status: 503 }));
+    await until(() => String(app!.toast?.message).includes('ບໍ່ສາມາດໂຫຼດອໍເດີ'));
+    expect(app!.orders).toHaveLength(2); expect(document.querySelector('[data-testid="cached-dashboard-alive"]')!.textContent).toBe('20'); expect(app!.orders.find(row => row.id === 'cached-valid')?.items[0].artwork_url).toContain('old.pdf');
+  } finally { restore(); }
+});
+
+
+test('P2-HR canonical technician unknown and owner show truthful roles in list top earner and detail', async () => {
+  const restore = authorize(token); const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const employees = [{ id: 'role-tech', nameLo: 'Owned Technician', nameEn: 'Owned Technician', role: 'TECHNICIAN' }, { id: 'role-unknown', nameLo: 'Owned Unknown', nameEn: 'Owned Unknown', role: 'UNRECOGNIZED' }, { id: 'role-owner', nameLo: 'Owned Owner', nameEn: 'Owned Owner', role: 'OWNER' }].map(row => ({ ...row, status: 'ACTIVE', salaryLAK: 0, pieceRatePerImpression: 1 }));
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input), origin).pathname;
+    if (path === '/api/employees') return new Response(JSON.stringify({ status: 'success', data: employees }));
+    if (path === '/api/v1/admin/users') return new Response(JSON.stringify({ status: 'success', data: [] }));
+    if (path === '/api/v1/hr/earnings') return new Response(JSON.stringify({ status: 'success', data: [{ id: 'actual-earning', employeeId: 'role-tech', impressions: 1, earnedAmountLAK: '1.00' }] }));
+    return previous(input, init);
+  });
+  try {
+    await render(<AppProvider><EmployeeManagement /></AppProvider>); await until(() => Array.from(document.querySelectorAll('h3')).some(node => node.textContent === 'Owned Technician'));
+    const card = (name: string) => Array.from(document.querySelectorAll('h3')).find(node => node.textContent === name)!.parentElement!;
+    expect(card('Owned Technician').textContent).toContain('ຊ່າງເຕັກນິກ'); expect(card('Owned Technician').textContent).not.toContain('CEO');
+    expect(card('Owned Unknown').textContent).toContain('UNRECOGNIZED'); expect(card('Owned Unknown').textContent).not.toContain('CEO');
+    expect(card('Owned Owner').textContent).toContain('ປະທານເຈົ້າໜ້າທີ່ບໍລິຫານ');
+    await until(() => Array.from(document.querySelectorAll('h4')).some(node => node.textContent === 'Owned Technician'));
+    const top = Array.from(document.querySelectorAll('h4')).find(node => node.textContent === 'Owned Technician')!;
+    expect(top.parentElement!.textContent).toContain('ຊ່າງເຕັກນິກ'); expect(top.parentElement!.textContent).not.toContain('CEO');
+    await click(top); await until(() => !document.querySelector('h4'));
+    expect(document.body.textContent).toContain('ຊ່າງເຕັກນິກ'); expect(document.body.textContent).not.toContain('CEO / Owner');
+  } finally { restore(); }
+});
+
+
+test('P2-DEMO source-less item never inherits sibling root; canonical proof version status and action remain visible', async () => {
+  const preview = vi.fn(); const items = [{ id: 'source-job', name: 'Own source', artwork_url: '/api/v1/orders/files/orders/owned/own.pdf', quantity: 1, specs: {} }, { id: 'empty-job', name: 'Unchanged', quantity: 1, specs: {} }];
+  const mapped = mapOrderToFormSpecs({ id: 'owned', artwork_url: '/api/v1/orders/files/orders/owned/root-inner.pdf', items }, [], []);
+  expect(mapped[0].fileUrl).toContain('own.pdf'); expect(mapped[1].fileUrl).toBe('');
+  await render(<AppProvider><ArtworkPrepressCard {...({ orderIdDisplay: 'owned', items, driveLink: '/api/v1/orders/files/orders/owned/root-inner.pdf', currentLang: 'lo', setLightbox: preview, proofUrl: '/api/v1/orders/files/orders/owned/proof.pdf', proofStatus: 'PENDING_CUSTOMER', proofVersion: 2 } as any)} /></AppProvider>);
+  expect(document.body.textContent).toContain('ລາຍການນີ້ຍັງບໍ່ມີໄຟລ໌ຕົ້ນສະບັບ');
+  const downloads = Array.from(document.querySelectorAll('button[title="ດາວໂຫຼດຕົ້ນສະບັບ"]')) as HTMLButtonElement[]; expect(downloads).toHaveLength(1); expect(downloads[0].disabled).toBe(false);
+  const views = Array.from(document.querySelectorAll('button[title="ເບິ່ງຕົວຢ່າງ"]')) as HTMLButtonElement[]; expect(views).toHaveLength(1);
+  expect(document.querySelector('section[aria-label="Digital Proof"]')!.textContent).toContain('ລໍຖ້າລູກຄ້າຢືນຢັນ'); expect(document.querySelector('section[aria-label="Digital Proof"]')!.textContent).toContain('ເວີຊັນ 2');
+  await click(buttonText('ເບິ່ງ Proof ທີ່ບັນທຶກແລ້ວ')); expect(preview).toHaveBeenCalledWith(expect.objectContaining({ src: '/api/v1/orders/files/orders/owned/proof.pdf' }));
 });

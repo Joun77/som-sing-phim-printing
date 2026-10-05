@@ -298,12 +298,12 @@ export default function TopHeader({ onToggleMobileSidebar, collapsed, onToggleCo
                 className="w-full py-2 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Settings className="w-3.5 h-3.5 text-sky-400" />
-                <span>{currentLang === 'en' ? 'Settings & Profile' : 'ຕັ້ງຄ່າລະບົບ & ໂປຣໄຟລ໌'}</span>
+                <span>ຕັ້ງຄ່າລະບົບ & ໂປຣໄຟລ໌</span>
               </button>
 
               <button ref={logoutRef} type="button"
                 onClick={() => {
-                  if (window.confirm(currentLang === 'en' ? 'Are you sure you want to sign out?' : 'ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການອອກຈາກລະບົບ?')) {
+                  if (window.confirm('ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການອອກຈາກລະບົບ?')) {
                     setProfileOpen(false);
                     useAuthStore.getState().logout();
                   }
@@ -311,7 +311,7 @@ export default function TopHeader({ onToggleMobileSidebar, collapsed, onToggleCo
                 className="w-full py-2 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span>{currentLang === 'en' ? 'Sign Out' : 'ອອກຈາກລະບົບ'}</span>
+                <span>ອອກຈາກລະບົບ</span>
               </button>
             </div>
           )}

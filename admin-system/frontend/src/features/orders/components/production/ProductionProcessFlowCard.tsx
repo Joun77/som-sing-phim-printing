@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Printer, 
   Scissors, 
@@ -30,7 +30,7 @@ interface ProductionProcessFlowCardProps {
   productionWorkflow?: ProductionWorkflow;
   onAdvanceToStep3: () => void;
   onUpdateStatus: (orderId: any, newStatus: string) => void;
-  onUpdateWorkflow?: (workflow: ProductionWorkflow) => void;
+  onUpdateWorkflow?: (workflow: ProductionWorkflow) => Promise<any>;
   showToast: (msg: string, type?: string) => void;
   order?: any;
 }
@@ -47,7 +47,8 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
   showToast,
   order,
 }) => {
-  const { employees = [], addEarningRecord } = useApp();
+  const progressPending = useRef(false);
+  const [savingProgress, setSavingProgress] = useState(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
 
   // Fallback default 4 stages if no dynamic workflow configured
@@ -108,121 +109,28 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
   const isAllProductionCompleted = steps.length > 0 && completedStepsCount === steps.length;
   const progressPercent = steps.length > 0 ? Math.round((completedStepsCount / steps.length) * 100) : 0;
 
-  const handleToggleStep = (stepId: string) => {
-    let completedStepItem: ProductionWorkflowStep | null = null;
-    let isNowDone = false;
-
-    // Retrieve active logged-in user or technician context
-    let currentUser = {
-      id: 'usr_admin',
-      name: 'Admin / Supervisor',
-      role: 'Production Supervisor'
-    };
+  const handleToggleStep = async (stepId: string) => {
+    if (progressPending.current) return;
+    if (!onUpdateWorkflow || !productionWorkflow?.steps?.length) {
+      showToast('ກະລຸນາບັນທຶກສາຍງານຜະລິດກ່ອນ', 'error'); return;
+    }
+    const selected = steps.find(step => step.id === stepId);
+    if (!selected || selected.status === 'COMPLETED') return;
+    progressPending.current = true; setSavingProgress(true);
     try {
-      const stored = localStorage.getItem('user') || localStorage.getItem('currentUser') || localStorage.getItem('auth_user');
-      if (stored) {
-        const u = JSON.parse(stored);
-        currentUser = {
-          id: u.id || u.userId || 'usr_current',
-          name: u.name || u.full_name || u.username || 'Current User',
-          role: u.role || 'Operator'
-        };
-      }
-    } catch {}
-
-    const updatedSteps = steps.map((step) => {
-      if (step.id === stepId) {
-        const isDone = step.status === 'COMPLETED';
-        const nextStatus: 'PENDING' | 'COMPLETED' = isDone ? 'PENDING' : 'COMPLETED';
-        isNowDone = nextStatus === 'COMPLETED';
-        
-        const operatorName = step.assignedStaffName || currentUser.name;
-        const operatorRole = step.assignedStaffRole || currentUser.role;
-        const operatorId = step.assignedTo || currentUser.id;
-
-        const updatedStep: ProductionWorkflowStep = {
-          ...step,
-          status: nextStatus,
-          completedAt: nextStatus === 'COMPLETED' ? new Date().toISOString() : null,
-          completedBy: nextStatus === 'COMPLETED' ? operatorName : null,
-          completed_by_id: nextStatus === 'COMPLETED' ? operatorId : undefined,
-          completed_by_name: nextStatus === 'COMPLETED' ? operatorName : undefined,
-          completed_by_role: nextStatus === 'COMPLETED' ? operatorRole : undefined,
-        };
-        completedStepItem = updatedStep;
-        return updatedStep;
-      }
-      return step;
-    });
-
-    setSteps(updatedSteps);
-
-    // Auto-calculate Technician Piece-Rate Incentive if marked COMPLETE
-    if (isNowDone && completedStepItem && addEarningRecord) {
-      const stepItem = completedStepItem as ProductionWorkflowStep;
-      const assignedEmp = employees.find(
-        (e) => e.id === stepItem.assignedTo || e.name === stepItem.assignedStaffName
-      ) || employees.find((e) => (e.role || '').includes('operator') || (e.role || '').includes('cutting')) || employees[0];
-
-      if (assignedEmp && assignedEmp.pieceRatePerImpression && Number(assignedEmp.pieceRatePerImpression) > 0) {
-        const pages = Number(order?.totalPages || orderSpecs?.totalPages || 1);
-        const copies = Number(order?.totalCopies || order?.quantity || orderSpecs?.quantity || 100);
-        const impressions = Number(order?.totalImpressions || orderSpecs?.impressions || (pages * copies));
-        const rate = Number(assignedEmp.pieceRatePerImpression);
-        const earned = Math.round(rate * Math.max(1, impressions));
-
-        addEarningRecord({
-          employeeId: assignedEmp.id,
-          employeeName: assignedEmp.name,
-          orderId: String(orderId),
-          orderNumber: order?.orderNumber || String(orderId),
-          customerName: order?.customerName || 'Customer',
-          stepId: stepItem.id,
-          stepName: stepItem.nameLao || stepItem.name,
-          impressions,
-          ratePerImpression: rate,
-          earnedAmount: earned,
-        });
-
-        showToast(
-          currentLang === 'lo'
-            ? `ບັນທຶກຄ່າແຮງງານພິເສດ (${assignedEmp.name}): +${earned.toLocaleString()} LAK`
-            : `Incentive recorded for ${assignedEmp.name}: +${earned.toLocaleString()} LAK`,
-          'success'
-        );
-      }
-    }
-
-    const newCompletedCount = updatedSteps.filter((s) => s.status === 'COMPLETED').length;
-    const allDone = newCompletedCount === updatedSteps.length;
-
-    const updatedWorkflow: ProductionWorkflow = {
-      templateId: productionWorkflow?.templateId || 'custom',
-      templateName: productionWorkflow?.templateName || 'Production Workflow',
-      templateNameLao: productionWorkflow?.templateNameLao || 'ຂະບວນການຜະລິດ',
-      steps: updatedSteps,
-      completedAt: allDone ? new Date().toISOString() : undefined,
-    };
-
-    if (onUpdateWorkflow) {
-      onUpdateWorkflow(updatedWorkflow);
-    }
-    if (order) {
-      order.productionWorkflow = updatedWorkflow;
-    }
-
-    // Status sync
-    if (allDone) {
-      onUpdateStatus(orderId, 'Ready');
-      showToast(
-        currentLang === 'lo' 
-          ? 'ຂະບວນການຜະລິດສຳເລັດ 100%! ປັບສະຖານະເປັນ ພ້ອມຈັດສົ່ງ (Ready for Pickup)' 
-          : 'All production steps completed! Status updated to Ready for Pickup', 
-        'success'
-      );
-    } else {
-      onUpdateStatus(orderId, 'IN_PRODUCTION');
-    }
+      const saved = await onUpdateWorkflow({ ...productionWorkflow,
+        steps: steps.map(step => step.id === stepId ? { ...step, status: 'COMPLETED' } : step),
+      });
+      if (!Array.isArray(saved?.productionWorkflow?.steps)) throw new Error('ບັນທຶກແລ້ວ ແຕ່ໂຫຼດຂັ້ນຕອນຄືນບໍ່ສຳເລັດ');
+      setSteps(saved.productionWorkflow.steps);
+      const earnings = Array.isArray(saved.earnings) ? saved.earnings : [];
+      const amount = earnings.reduce((sum: number, item: any) => sum + Number(item.earnedAmountLAK), 0);
+      showToast(earnings.length && Number.isFinite(amount)
+        ? `ບັນທຶກຂັ້ນຕອນ ແລະຄ່າຕອບແທນ ${amount.toLocaleString()} LAK ແລ້ວ`
+        : 'ບັນທຶກຂັ້ນຕອນຜະລິດແລ້ວ', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກຂັ້ນຕອນໄດ້', 'error');
+    } finally { progressPending.current = false; setSavingProgress(false); }
   };
 
   const getCategoryIcon = (category: WorkflowStepCategory) => {
@@ -438,6 +346,7 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
               {/* Action Button */}
               <button
                 type="button"
+                disabled={savingProgress || step.status === 'COMPLETED'}
                 onClick={() => handleToggleStep(step.id)}
                 className={`w-full py-2 px-3 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 ${
                   isDone
@@ -509,14 +418,10 @@ export const ProductionProcessFlowCard: React.FC<ProductionProcessFlowCardProps>
           onClose={() => setIsConfigModalOpen(false)}
           order={order || { id: orderId, productionWorkflow }}
           currentLang={currentLang}
-          onConfirmWorkflow={(newWorkflow) => {
+          onConfirmWorkflow={async (newWorkflow) => {
+            if (!onUpdateWorkflow) throw new Error('ບໍ່ມີທາງບັນທຶກສາຍງານ');
+            await onUpdateWorkflow(newWorkflow);
             setSteps(newWorkflow.steps);
-            if (onUpdateWorkflow) {
-              onUpdateWorkflow(newWorkflow);
-            }
-            if (order) {
-              order.productionWorkflow = newWorkflow;
-            }
             showToast(
               currentLang === 'lo' ? 'ອັບເດດສາຍງານການຜະລິດໃໝ່ຮຽບຮ້ອຍແລ້ວ' : 'Production workflow updated',
               'success'

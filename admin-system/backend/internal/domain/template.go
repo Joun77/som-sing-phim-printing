@@ -56,6 +56,7 @@ type AddonItemBreakdown struct {
 
 // PricingCalculationRequest represents request payload to calculate dynamic job pricing
 type PricingCalculationRequest struct {
+	ImpositionMode string                 `json:"imposition_mode,omitempty"`
 	TemplateID     string                 `json:"template_id" binding:"required"`
 	Quantity       int                    `json:"quantity" binding:"required,gt=0"`
 	ActualCoverage decimal.Decimal        `json:"actual_coverage"`

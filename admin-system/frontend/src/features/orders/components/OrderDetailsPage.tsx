@@ -205,11 +205,12 @@ export default function OrderDetailsPage({
     }
   };
 
-  const handleSaveTracking = () => {
+  const handleSaveTracking = async () => {
+    if (isSavingTracking) return;
     setIsSavingTracking(true);
     try {
       if (contextUpdateOrderTracking) {
-        contextUpdateOrderTracking(order.id, courierName, trackingNo, shippingFeeVal);
+        await contextUpdateOrderTracking(order.id, courierName, trackingNo, shippingFeeVal);
       }
       showToast(
         currentLang === 'lo' 
@@ -2485,15 +2486,9 @@ export default function OrderDetailsPage({
           inventory={inventory || contextInventory}
           equipment={equipment || contextEquipment}
           formatCurrency={formatLAK}
-          onSave={(updated) => {
-            if (contextUpdateOrderDetails) {
-              contextUpdateOrderDetails(updated.id, updated);
-            }
-            setIsEditModalOpen(false);
-            showToast(
-              currentLang === 'lo' ? 'ອັບເດດລາຍລະອຽດອໍເດີສຳເລັດ!' : 'Order details updated successfully!',
-              'success'
-            );
+          onSave={async (updated) => {
+            if (!contextUpdateOrderDetails) throw new Error('ບໍ່ມີຊ່ອງທາງບັນທຶກ');
+            await contextUpdateOrderDetails(updated.id, updated);
           }}
         />
       )}

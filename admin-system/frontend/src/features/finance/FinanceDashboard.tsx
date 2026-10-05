@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../../api/client';
+import { getPaymentConfiguration, setPaymentConfiguration } from '../../api/paymentReview';
+import { useApp } from '../../store/AppContext';
+import { useAuthStore } from '../../store/useAuthStore';
+import React, { useState, useEffect, useRef } from 'react';
 import { PaymentVerificationTable } from './PaymentVerificationTable';
 import { InvoiceTaxDocumentModal } from './InvoiceTaxDocumentModal';
 import { JobProfitabilityAudit } from './JobProfitabilityAudit';
-import { BankAccountConfigModal } from './components/BankAccountConfigModal';
+import { BankManagementModal } from './components/BankManagementModal';
 import { PLReportPage } from './PLReportPage';
 import { ExpenseEntryForm } from './ExpenseEntryForm';
 import { ARManagementPage } from './ARManagementPage';
@@ -38,8 +42,32 @@ interface FinanceSummary {
 }
 
 export const FinanceDashboard: React.FC = () => {
+  const { bankAccounts } = useApp();
+  const role = useAuthStore(state => state.user?.role);
+  const canConfigure = ['admin', 'manager', 'owner'].includes(role || '');
+  const [paymentConfig, setPaymentConfig] = useState<Awaited<ReturnType<typeof getPaymentConfiguration>> | null>(null);
+  const [manualDraft, setManualDraft] = useState(false);
+  const [methodDraft, setMethodDraft] = useState('');
+  const [configPending, setConfigPending] = useState(false);
+  const [configError, setConfigError] = useState('');
+  const configKeys = useRef(new Map<string, string>());
+  const loadConfig = async () => {
+    try { const config = await getPaymentConfiguration(); setPaymentConfig(config); setManualDraft(config.manual_qr_enabled); setMethodDraft(config.payment_method_id || ''); setConfigError(''); }
+    catch (error) { setConfigError(error instanceof Error ? error.message : 'ບໍ່ສາມາດໂຫຼດການຕັ້ງຄ່າໄດ້'); }
+  };
+  const saveConfig = async () => {
+    if (!canConfigure || !paymentConfig || configPending) return;
+    const fingerprint = JSON.stringify([manualDraft, methodDraft, paymentConfig.revision]);
+    if (!configKeys.current.has(fingerprint)) configKeys.current.set(fingerprint, crypto.randomUUID());
+    setConfigPending(true);
+    try { const config = await setPaymentConfiguration(manualDraft, methodDraft || null, paymentConfig.revision, configKeys.current.get(fingerprint)!); setPaymentConfig(config); setConfigError(''); }
+    catch (error) { setConfigError(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກການຕັ້ງຄ່າໄດ້'); }
+    finally { setConfigPending(false); }
+  };
+  useEffect(() => { void loadConfig(); }, []);
   const [activeTab, setActiveTab] = useState<'overview' | 'pl' | 'ar' | 'ap' | 'expenses' | 'profitability'>('overview');
   const [currency, setCurrency] = useState<'LAK' | 'THB' | 'USD'>('LAK');
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [showDocModal, setShowDocModal] = useState(false);
@@ -48,13 +76,12 @@ export const FinanceDashboard: React.FC = () => {
   const fetchFinanceSummary = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/finance/summary');
-      if (res.ok) {
-        const data = await res.json();
-        setSummary(data.data);
-      }
+      const res = await apiFetch('/api/v1/finance/summary');
+      const data = await res.json();
+      if (!res.ok || data?.status !== 'success' || !data.data || !['total_sales_lak','total_sales_thb','total_sales_usd','total_ar_unpaid_lak','total_ar_unpaid_thb','total_ar_unpaid_usd','total_ap_unpaid_lak','pending_slips_count','gross_profit_margin_percent','exchange_rate_thb','exchange_rate_usd'].every(key => typeof data.data[key] === 'number' && Number.isFinite(data.data[key]))) throw new Error('ບໍ່ສາມາດໂຫຼດສະຫຼຸບການເງິນໄດ້');
+      setSummary(data.data); setSummaryError(null);
     } catch (err) {
-      console.error('Failed to fetch finance summary:', err);
+      setSummaryError('ບໍ່ສາມາດໂຫຼດສະຫຼຸບການເງິນໄດ້. ກະລຸນາລອງໃໝ່');
     } finally {
       setLoading(false);
     }
@@ -67,9 +94,9 @@ export const FinanceDashboard: React.FC = () => {
   const getFormattedAmount = (lak: number, thb: number, usd: number) => {
     switch (currency) {
       case 'THB':
-        return `฿${(thb || lak / 800).toLocaleString('th-TH', { maximumFractionDigits: 2 })}`;
+        return `฿${(thb).toLocaleString('th-TH', { maximumFractionDigits: 2 })}`;
       case 'USD':
-        return `$${(usd || lak / 27000).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+        return `$${(usd).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
       case 'LAK':
       default:
         return `₭${lak.toLocaleString()}`;
@@ -78,6 +105,24 @@ export const FinanceDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in pb-12">
+      <section className="rounded-2xl border bg-white p-4 space-y-3" aria-label="ຕັ້ງຄ່າຮັບຊຳລະ">
+        <h3 className="font-bold">ຕັ້ງຄ່າຮັບຊຳລະ</h3>
+        {configError && <p role="alert">{configError}</p>}
+        <p>Gateway: ປິດ • ໜ້າລູກຄ້າ: ປິດ</p>
+        <p>{paymentConfig ? `QR: ${paymentConfig.manual_qr_enabled ? 'ເປີດ' : 'ປິດ'}` : 'ຍັງບໍ່ມີຂໍ້ມູນການຕັ້ງຄ່າ'}</p>
+        <label className="flex gap-3 items-center">ຮັບຊຳລະຜ່ານ QR
+          <button type="button" role="switch" aria-label="ຮັບຊຳລະຜ່ານ QR" aria-checked={manualDraft} disabled={!canConfigure || !paymentConfig || configPending} onClick={() => setManualDraft(value => !value)} className={`rounded-full px-4 py-2 focus-visible:ring-2 disabled:opacity-50 ${manualDraft ? 'bg-emerald-600 text-white' : 'bg-slate-200'}`}>{manualDraft ? 'ເປີດ' : 'ປິດ'}</button>
+        </label>
+        <label className="block">ບັນຊີຮັບເງິນ
+          <select value={methodDraft} disabled={!canConfigure || configPending} onChange={event => setMethodDraft(event.target.value)} className="m-2 rounded-lg border p-2">
+            <option value="">ກະລຸນາເລືອກບັນຊີ</option>
+            {bankAccounts.filter(method => method.isActive).map(method => <option key={method.id} value={method.id}>{method.bankName} • {method.accountName}</option>)}
+          </select>
+        </label>
+        <button onClick={saveConfig} disabled={!canConfigure || !paymentConfig || configPending} className="rounded-xl border p-2">{configPending ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກການຕັ້ງຄ່າ'}</button>
+        <button onClick={loadConfig} disabled={configPending} className="ml-2 rounded-xl border p-2">ລອງໂຫຼດໃໝ່</button>
+      </section>
+      {summaryError && <p role="alert">{summaryError}</p>}
       {/* Top Banner & Currency Switcher */}
       <div className="bg-gradient-to-r from-slate-900 via-primary-navy to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border border-slate-800">
         <div>
@@ -274,7 +319,7 @@ export const FinanceDashboard: React.FC = () => {
 
       {/* Bank Account Setup Modal */}
       {showBankModal && (
-        <BankAccountConfigModal onClose={() => setShowBankModal(false)} />
+        <BankManagementModal isOpen onClose={() => setShowBankModal(false)} />
       )}
     </div>
   );

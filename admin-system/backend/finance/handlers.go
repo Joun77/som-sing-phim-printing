@@ -1,10 +1,7 @@
 package finance
 
 import (
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -33,9 +30,12 @@ type FinanceSummaryResponse struct {
 
 // PaymentVerificationRequest represents slip approval or rejection
 type PaymentVerificationRequest struct {
-	OrderID         string `json:"order_id" binding:"required"`
-	Status          string `json:"status" binding:"required"` // "APPROVED" | "REJECTED"
-	RejectionReason string `json:"rejection_reason"`
+	PaymentRecordID         string `json:"payment_record_id"`
+	ActualReceivedAmountLAK string `json:"actual_received_amount_lak"`
+	ExpectedPaymentRevision *int64 `json:"expected_payment_revision"`
+	OrderID                 string `json:"order_id" binding:"required"`
+	Status                  string `json:"status" binding:"required"` // "APPROVED" | "REJECTED"
+	RejectionReason         string `json:"rejection_reason"`
 }
 
 // ARAgingItem represents accounts receivable aging per customer
@@ -137,6 +137,10 @@ type ChartOfAccountItem struct {
 
 // HandleGetFinanceSummary calculates real KPI metrics for owner
 func HandleGetFinanceSummary(c *gin.Context) {
+	if db.DB == nil {
+		WriteOperationError(c, operationError(503, "STORAGE_UNAVAILABLE"))
+		return
+	}
 	summary := FinanceSummaryResponse{
 		ExchangeRateTHB: 800.0,
 		ExchangeRateUSD: 27000.0,
@@ -154,7 +158,10 @@ func HandleGetFinanceSummary(c *gin.Context) {
 			FROM orders 
 			WHERE status IN ('IN_PRODUCTION', 'COMPLETED', 'DELIVERED', 'Paid', 'Completed')
 		`
-		_ = db.DB.QueryRow(querySales).Scan(&totalSales, &totalCost)
+		if err := db.DB.QueryRow(querySales).Scan(&totalSales, &totalCost); err != nil {
+			WriteOperationError(c, err)
+			return
+		}
 
 		// 2. Unpaid Accounts Receivable
 		queryAR := `
@@ -162,7 +169,10 @@ func HandleGetFinanceSummary(c *gin.Context) {
 			FROM orders 
 			WHERE status NOT IN ('CANCELLED', 'Draft')
 		`
-		_ = db.DB.QueryRow(queryAR).Scan(&totalAR)
+		if err := db.DB.QueryRow(queryAR).Scan(&totalAR); err != nil {
+			WriteOperationError(c, err)
+			return
+		}
 
 		// 3. Unpaid Accounts Payable
 		queryAP := `
@@ -170,7 +180,10 @@ func HandleGetFinanceSummary(c *gin.Context) {
 			FROM accounts_payable
 			WHERE status IN ('PENDING', 'OVERDUE')
 		`
-		_ = db.DB.QueryRow(queryAP).Scan(&totalAP)
+		if err := db.DB.QueryRow(queryAP).Scan(&totalAP); err != nil {
+			WriteOperationError(c, err)
+			return
+		}
 
 		// 4. Pending payment slips
 		querySlips := `
@@ -179,7 +192,10 @@ func HandleGetFinanceSummary(c *gin.Context) {
 			WHERE (payment_slip_url IS NOT NULL OR proof_url IS NOT NULL) 
 			  AND status IN ('PENDING_PAYMENT', 'Pending Payment', 'Verification Required')
 		`
-		_ = db.DB.QueryRow(querySlips).Scan(&pendingCount)
+		if err := db.DB.QueryRow(querySlips).Scan(&pendingCount); err != nil {
+			WriteOperationError(c, err)
+			return
+		}
 
 		summary.TotalSalesLAK = totalSales
 		summary.TotalSalesTHB = totalSales / 800.0
@@ -202,102 +218,15 @@ func HandleGetFinanceSummary(c *gin.Context) {
 // Approval confirms payment only; production starts through the stock-aware order flow.
 func HandleVerifyPaymentSlip(c *gin.Context) {
 	var req PaymentVerificationRequest
-	if err := c.ShouldBindJSON(&req); err != nil || (req.Status != "APPROVED" && req.Status != "REJECTED") {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid payment review"})
+	if c.ShouldBindJSON(&req) != nil || (req.Status != "APPROVED" && req.Status != "REJECTED") {
+		WriteOperationError(c, operationError(400, "INVALID_JSON"))
 		return
 	}
-	reviewer := c.GetString("user_id")
-	if reviewer == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "Authenticated reviewer required"})
-		return
-	}
-	if db.DB == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "Payment storage unavailable"})
-		return
-	}
-	tx, err := db.DB.BeginTx(c.Request.Context(), nil)
-	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "Payment storage unavailable"})
-		return
-	}
-	defer tx.Rollback()
-	var id, status, amountText, slipURL string
-	err = tx.QueryRowContext(c.Request.Context(), `SELECT id, status, COALESCE(total_amount_lak, total_price, 0)::text, COALESCE(payment_slip_url, proof_url, '') FROM orders WHERE id = $1 OR order_no = $1 FOR UPDATE`, req.OrderID).Scan(&id, &status, &amountText, &slipURL)
-	if err != nil {
-		code := http.StatusInternalServerError
-		if err == sql.ErrNoRows {
-			code = http.StatusNotFound
-		}
-		c.JSON(code, gin.H{"status": "error", "message": "Unable to load payment review"})
-		return
-	}
-	if status != "PENDING_SLIP_CHECK" && status != "PENDING_PAYMENT" && status != "WAITING_DEPOSIT" && status != "Verification Required" && status != "Pending Payment" {
-		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "Order is not awaiting payment review"})
-		return
-	}
-	if slipURL == "" {
-		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "Payment slip is missing"})
-		return
-	}
-	newStatus := "PAYMENT_REJECTED"
-	var result sql.Result
-	if req.Status == "APPROVED" {
-		amount, amountErr := decimal.NewFromString(amountText)
-		if amountErr != nil || !amount.IsPositive() {
-			c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "Order amount is invalid"})
-			return
-		}
-		newStatus = "PAID_PREPRESS"
-		result, err = tx.ExecContext(c.Request.Context(), `UPDATE orders SET status = 'PAID_PREPRESS', overall_status = 'PAID_PREPRESS', deposit_amount = $2, deposit_lak = $2, remaining_lak = 0, updated_at = NOW() WHERE id = $1`, id, amount.String())
-		if err == nil {
-			err = CreatePaymentReceivedJournal(tx, id, amount, "Manual QR slip review")
-		}
+	if req.PaymentRecordID != "" {
+		HandleReviewPaymentRecord(c, req)
 	} else {
-		result, err = tx.ExecContext(c.Request.Context(), `UPDATE orders SET status = 'PAYMENT_REJECTED', overall_status = 'PAYMENT_REJECTED', proof_rejection_reason = $2, updated_at = NOW() WHERE id = $1`, id, req.RejectionReason)
+		HandleLegacyFullReview(c, req)
 	}
-	if err == nil {
-		var affected int64
-		affected, err = result.RowsAffected()
-		if err == nil && affected != 1 {
-			err = fmt.Errorf("unexpected payment update count")
-		}
-	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
-		return
-	}
-	auditID := make([]byte, 16)
-	if _, err := rand.Read(auditID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
-		return
-	}
-	oldValues, err := json.Marshal(map[string]string{"status": status})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
-		return
-	}
-	newValues, err := json.Marshal(map[string]string{"status": newStatus, "overall_status": newStatus, "decision": req.Status, "rejection_reason": req.RejectionReason})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
-		return
-	}
-	audit, err := tx.ExecContext(c.Request.Context(), `INSERT INTO audit_logs(id,user_id,user_name,action,resource_type,resource_id,old_values,new_values,ip_address,created_at) VALUES($1,$2,$3,'MANUAL_SLIP_REVIEW','ORDER',$4,$5,$6,$7,NOW())`, hex.EncodeToString(auditID), reviewer, c.GetString("username"), id, string(oldValues), string(newValues), c.ClientIP())
-	if err == nil {
-		var count int64
-		count, err = audit.RowsAffected()
-		if err == nil && count != 1 {
-			err = fmt.Errorf("unexpected review audit count")
-		}
-	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
-		return
-	}
-	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "orderId": id, "newStatus": newStatus})
 }
 
 type PendingSlipOrderDTO struct {
@@ -357,6 +286,10 @@ func HandleGetPendingSlips(c *gin.Context) {
 
 // HandleGetARAging returns accounts receivable aging report grouped by customer and age buckets
 func HandleGetARAging(c *gin.Context) {
+	if db.DB == nil {
+		WriteOperationError(c, operationError(503, "STORAGE_UNAVAILABLE"))
+		return
+	}
 	var items []ARAgingItem
 
 	if db.DB != nil {
@@ -374,11 +307,19 @@ func HandleGetARAging(c *gin.Context) {
 			GROUP BY COALESCE(customer_id, customer_name, 'Unknown'), customer_name
 			ORDER BY total_due DESC
 		`)
-		if err == nil {
+		if err != nil {
+			WriteOperationError(c, err)
+			return
+		}
+		{
 			defer rows.Close()
 			for rows.Next() {
 				var item ARAgingItem
-				if err := rows.Scan(&item.CustomerID, &item.CustomerName, &item.TotalDue, &item.Days30, &item.Days60, &item.Days90Plus); err == nil {
+				if err := rows.Scan(&item.CustomerID, &item.CustomerName, &item.TotalDue, &item.Days30, &item.Days60, &item.Days90Plus); err != nil {
+					WriteOperationError(c, err)
+					return
+				}
+				{
 					item.Current = item.Days30
 					items = append(items, item)
 				}
@@ -399,6 +340,10 @@ func HandleGetARAging(c *gin.Context) {
 
 // HandleGetPLReport calculates real Profit & Loss statement based on journal entries or order/expense aggregations
 func HandleGetPLReport(c *gin.Context) {
+	if db.DB == nil {
+		WriteOperationError(c, operationError(503, "STORAGE_UNAVAILABLE"))
+		return
+	}
 	fromDate := c.DefaultQuery("from", time.Now().AddDate(0, -1, 0).Format("2006-01-02"))
 	toDate := c.DefaultQuery("to", time.Now().Format("2006-01-02"))
 
@@ -406,55 +351,73 @@ func HandleGetPLReport(c *gin.Context) {
 
 	if db.DB != nil {
 		// 1. Revenue from orders / journal lines
-		_ = db.DB.QueryRow(`
+		if err := db.DB.QueryRow(`
 			SELECT COALESCE(SUM(credit - debit), 0)
 			FROM journal_lines jl
 			JOIN chart_of_accounts coa ON jl.account_id = coa.id
 			JOIN journal_entries je ON jl.entry_id = je.id
 			WHERE coa.code = '4100' AND je.entry_date BETWEEN $1 AND $2
-		`, fromDate, toDate).Scan(&revenue)
+		`, fromDate, toDate).Scan(&revenue); err != nil {
+			WriteOperationError(c, err)
+			return
+		}
 
 		if revenue == 0 {
 			// Fallback direct order aggregation if no journal entries exist yet
-			_ = db.DB.QueryRow(`
+			if err := db.DB.QueryRow(`
 				SELECT COALESCE(SUM(COALESCE(total_price, total_amount_lak, 0)), 0)
 				FROM orders
 				WHERE status IN ('IN_PRODUCTION', 'COMPLETED', 'DELIVERED', 'Paid')
 				  AND DATE(created_at) BETWEEN $1 AND $2
-			`, fromDate, toDate).Scan(&revenue)
+			`, fromDate, toDate).Scan(&revenue); err != nil {
+				WriteOperationError(c, err)
+				return
+			}
 		}
 
 		// 2. COGS
-		_ = db.DB.QueryRow(`
+		if err := db.DB.QueryRow(`
 			SELECT COALESCE(SUM(debit - credit), 0)
 			FROM journal_lines jl
 			JOIN chart_of_accounts coa ON jl.account_id = coa.id
 			JOIN journal_entries je ON jl.entry_id = je.id
 			WHERE coa.code = '5100' AND je.entry_date BETWEEN $1 AND $2
-		`, fromDate, toDate).Scan(&paperCOGS)
+		`, fromDate, toDate).Scan(&paperCOGS); err != nil {
+			WriteOperationError(c, err)
+			return
+		}
 
-		_ = db.DB.QueryRow(`
+		if err := db.DB.QueryRow(`
 			SELECT COALESCE(SUM(debit - credit), 0)
 			FROM journal_lines jl
 			JOIN chart_of_accounts coa ON jl.account_id = coa.id
 			JOIN journal_entries je ON jl.entry_id = je.id
 			WHERE coa.code = '5200' AND je.entry_date BETWEEN $1 AND $2
-		`, fromDate, toDate).Scan(&inkCOGS)
+		`, fromDate, toDate).Scan(&inkCOGS); err != nil {
+			WriteOperationError(c, err)
+			return
+		}
 
-		_ = db.DB.QueryRow(`
+		if err := db.DB.QueryRow(`
 			SELECT COALESCE(SUM(debit - credit), 0)
 			FROM journal_lines jl
 			JOIN chart_of_accounts coa ON jl.account_id = coa.id
 			JOIN journal_entries je ON jl.entry_id = je.id
 			WHERE coa.code = '5300' AND je.entry_date BETWEEN $1 AND $2
-		`, fromDate, toDate).Scan(&spoilageCOGS)
+		`, fromDate, toDate).Scan(&spoilageCOGS); err != nil {
+			WriteOperationError(c, err)
+			return
+		}
 
 		// 3. Operational Expenses (6100-6500)
-		_ = db.DB.QueryRow(`
+		if err := db.DB.QueryRow(`
 			SELECT COALESCE(SUM(amount), 0)
 			FROM expense_records
 			WHERE expense_date BETWEEN $1 AND $2
-		`, fromDate, toDate).Scan(&expenses)
+		`, fromDate, toDate).Scan(&expenses); err != nil {
+			WriteOperationError(c, err)
+			return
+		}
 	}
 
 	totalCOGS := paperCOGS + inkCOGS + spoilageCOGS
@@ -485,31 +448,44 @@ func HandleGetPLReport(c *gin.Context) {
 
 // HandleGetCashFlow calculates inflow vs outflow metrics
 func HandleGetCashFlow(c *gin.Context) {
+	if db.DB == nil {
+		WriteOperationError(c, operationError(503, "STORAGE_UNAVAILABLE"))
+		return
+	}
 	period := c.DefaultQuery("period", "monthly")
 	year := c.DefaultQuery("year", fmt.Sprintf("%d", time.Now().Year()))
 
 	var inflow, outflow float64
 
 	if db.DB != nil {
-		_ = db.DB.QueryRow(`
+		if err := db.DB.QueryRow(`
 			SELECT COALESCE(SUM(COALESCE(total_price, total_amount_lak, 0)), 0)
 			FROM orders
 			WHERE status IN ('IN_PRODUCTION', 'COMPLETED', 'DELIVERED', 'Paid')
 			  AND EXTRACT(YEAR FROM created_at) = $1
-		`, year).Scan(&inflow)
+		`, year).Scan(&inflow); err != nil {
+			WriteOperationError(c, err)
+			return
+		}
 
 		var expenseSum, apPaidSum float64
-		_ = db.DB.QueryRow(`
+		if err := db.DB.QueryRow(`
 			SELECT COALESCE(SUM(amount), 0)
 			FROM expense_records
 			WHERE EXTRACT(YEAR FROM expense_date) = $1
-		`, year).Scan(&expenseSum)
+		`, year).Scan(&expenseSum); err != nil {
+			WriteOperationError(c, err)
+			return
+		}
 
-		_ = db.DB.QueryRow(`
+		if err := db.DB.QueryRow(`
 			SELECT COALESCE(SUM(amount), 0)
 			FROM accounts_payable
 			WHERE status = 'PAID' AND EXTRACT(YEAR FROM paid_at) = $1
-		`, year).Scan(&apPaidSum)
+		`, year).Scan(&apPaidSum); err != nil {
+			WriteOperationError(c, err)
+			return
+		}
 
 		outflow = expenseSum + apPaidSum
 	}
@@ -563,7 +539,10 @@ func HandleCreateExpense(c *gin.Context) {
 	}
 
 	// Auto-Journal for Expense
-	_ = CreateExpenseJournal(tx, expenseID, req.AccountCode, decimal.NewFromFloat(req.Amount), "1110", req.Description)
+	if err = CreateExpenseJournal(tx, expenseID, req.AccountCode, decimal.NewFromFloat(req.Amount), "1110", req.Description); err != nil {
+		WriteOperationError(c, err)
+		return
+	}
 
 	if err := tx.Commit(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to commit expense transaction"})
@@ -575,6 +554,10 @@ func HandleCreateExpense(c *gin.Context) {
 
 // HandleGetExpenses lists recent expense records
 func HandleGetExpenses(c *gin.Context) {
+	if db.DB == nil {
+		WriteOperationError(c, operationError(503, "STORAGE_UNAVAILABLE"))
+		return
+	}
 	var list []ExpenseRecord
 
 	if db.DB != nil {
@@ -586,7 +569,11 @@ func HandleGetExpenses(c *gin.Context) {
 			ORDER BY expense_date DESC, created_at DESC
 			LIMIT 100
 		`)
-		if err == nil {
+		if err != nil {
+			WriteOperationError(c, err)
+			return
+		}
+		{
 			defer rows.Close()
 			for rows.Next() {
 				var item ExpenseRecord
@@ -594,7 +581,11 @@ func HandleGetExpenses(c *gin.Context) {
 					&item.ID, &item.AccountID, &item.Category, &item.Amount, &item.Currency,
 					&item.Description, &item.ReceiptURL, &item.ExpenseDate,
 					&item.RecordedBy, &item.CreatedAt,
-				); err == nil {
+				); err != nil {
+					WriteOperationError(c, err)
+					return
+				}
+				{
 					list = append(list, item)
 				}
 			}
@@ -614,6 +605,10 @@ func HandleGetExpenses(c *gin.Context) {
 
 // HandleGetJobProfitability returns top 20 completed jobs ranked by gross profit
 func HandleGetJobProfitability(c *gin.Context) {
+	if db.DB == nil {
+		WriteOperationError(c, operationError(503, "STORAGE_UNAVAILABLE"))
+		return
+	}
 	var list []JobProfitabilityItem
 
 	if db.DB != nil {
@@ -635,7 +630,11 @@ func HandleGetJobProfitability(c *gin.Context) {
 			ORDER BY gross_profit DESC
 			LIMIT 20
 		`)
-		if err == nil {
+		if err != nil {
+			WriteOperationError(c, err)
+			return
+		}
+		{
 			defer rows.Close()
 			for rows.Next() {
 				var item JobProfitabilityItem
@@ -643,7 +642,11 @@ func HandleGetJobProfitability(c *gin.Context) {
 				if err := rows.Scan(
 					&dummyID, &item.JobID, &item.CustomerName, &item.Revenue,
 					&item.TotalCost, &item.GrossProfit, &item.ProfitMargin, &item.CompletedDate,
-				); err == nil {
+				); err != nil {
+					WriteOperationError(c, err)
+					return
+				}
+				{
 					item.JobName = "Print Job #" + item.JobID
 					list = append(list, item)
 				}
@@ -668,51 +671,14 @@ func HandleGetAR(c *gin.Context) {
 }
 
 // HandleRecordARPayment records customer invoice settlement
-func HandleRecordARPayment(c *gin.Context) {
-	orderID := c.Param("id")
-	var req struct {
-		Amount        float64 `json:"amount" binding:"required,gt=0"`
-		PaymentMethod string  `json:"payment_method"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
-		return
-	}
-
-	if db.DB != nil {
-		tx, err := db.DB.Begin()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to begin transaction"})
-			return
-		}
-		defer tx.Rollback()
-
-		_, err = tx.Exec(`
-			UPDATE orders
-			SET deposit_amount = deposit_amount + $1,
-			    deposit_lak = deposit_lak + $1,
-			    remaining_lak = GREATEST(0, remaining_lak - $1),
-			    updated_at = NOW()
-			WHERE id = $2 OR order_no = $2
-		`, req.Amount, orderID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to update AR record"})
-			return
-		}
-
-		_ = CreatePaymentReceivedJournal(tx, orderID, decimal.NewFromFloat(req.Amount), req.PaymentMethod)
-
-		if err := tx.Commit(); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to commit AR payment"})
-			return
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "AR payment recorded successfully"})
-}
+func HandleRecordARPayment(c *gin.Context) { HandleCreatePaymentRecord(c) }
 
 // HandleGetAP lists accounts payable records
 func HandleGetAP(c *gin.Context) {
+	if db.DB == nil {
+		WriteOperationError(c, operationError(503, "STORAGE_UNAVAILABLE"))
+		return
+	}
 	var list []AccountsPayableItem
 
 	if db.DB != nil {
@@ -723,7 +689,11 @@ func HandleGetAP(c *gin.Context) {
 			FROM accounts_payable
 			ORDER BY due_date ASC, created_at DESC
 		`)
-		if err == nil {
+		if err != nil {
+			WriteOperationError(c, err)
+			return
+		}
+		{
 			defer rows.Close()
 			for rows.Next() {
 				var item AccountsPayableItem
@@ -732,7 +702,11 @@ func HandleGetAP(c *gin.Context) {
 					&item.ID, &item.SupplierName, &item.InboundTransactionID,
 					&item.Amount, &item.Currency, &item.DueDate,
 					&paidAt, &item.Status, &item.Notes, &item.CreatedAt,
-				); err == nil {
+				); err != nil {
+					WriteOperationError(c, err)
+					return
+				}
+				{
 					if paidAt.Valid {
 						item.PaidAt = &paidAt.String
 					}
@@ -755,25 +729,59 @@ func HandleGetAP(c *gin.Context) {
 
 // HandleRecordAPPayment records supplier AP settlement
 func HandleRecordAPPayment(c *gin.Context) {
-	apID := c.Param("id")
-
-	if db.DB != nil {
-		_, err := db.DB.Exec(`
-			UPDATE accounts_payable
-			SET status = 'PAID', paid_at = NOW()
-			WHERE id::text = $1
-		`, apID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to record AP payment: " + err.Error()})
-			return
-		}
+	if !reviewRole(c) {
+		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "AP payment settled successfully"})
+	id := c.Param("id")
+	tx, replay, fp, err := BeginOperation(c, "SUPPLIER_AP_SETTLEMENT", gin.H{"ap_id": id})
+	if err != nil {
+		WriteOperationError(c, err)
+		return
+	}
+	if replay != nil {
+		c.Data(200, "application/json", replay)
+		return
+	}
+	defer tx.Rollback()
+	var status, amountText, currency string
+	err = tx.QueryRowContext(c.Request.Context(), `SELECT status::text,amount::text,currency FROM accounts_payable WHERE id=$1::uuid FOR UPDATE`, id).Scan(&status, &amountText, &currency)
+	if err != nil {
+		WriteOperationError(c, err)
+		return
+	}
+	if status != "PENDING" && status != "OVERDUE" {
+		WriteOperationError(c, operationError(409, "AP_ALREADY_DECIDED"))
+		return
+	}
+	amount, err := ParsePaymentAmount(amountText)
+	if err != nil || !amount.IsPositive() || currency != "LAK" {
+		WriteOperationError(c, operationError(422, "AP_CURRENCY_OR_AMOUNT_UNSUPPORTED"))
+		return
+	}
+	err = insertJournalEntry(tx, time.Now(), "Supplier AP settlement", "AP_SETTLEMENT", id, []JournalLineSpec{{AccountCode: "2100", Debit: amount, Credit: decimal.Zero, Currency: currency}, {AccountCode: "1110", Debit: decimal.Zero, Credit: amount, Currency: currency}})
+	if err != nil {
+		WriteOperationError(c, err)
+		return
+	}
+	_, err = tx.ExecContext(c.Request.Context(), `UPDATE accounts_payable SET status='PAID',paid_at=NOW() WHERE id=$1::uuid`, id)
+	if err != nil {
+		WriteOperationError(c, err)
+		return
+	}
+	response := gin.H{"status": "success", "committed": true, "data": gin.H{"id": id, "status": "PAID", "amount_lak": amount.StringFixed(2)}}
+	if err = CommitOperation(c, tx, "SUPPLIER_AP_SETTLEMENT", "ACCOUNTS_PAYABLE", id, fp, response); err != nil {
+		WriteOperationError(c, err)
+		return
+	}
+	c.JSON(200, response)
 }
 
 // HandleGetChartOfAccounts lists Chart of Accounts for selection
 func HandleGetChartOfAccounts(c *gin.Context) {
+	if db.DB == nil {
+		WriteOperationError(c, operationError(503, "STORAGE_UNAVAILABLE"))
+		return
+	}
 	var list []ChartOfAccountItem
 
 	if db.DB != nil {
@@ -783,11 +791,19 @@ func HandleGetChartOfAccounts(c *gin.Context) {
 			WHERE is_active = true
 			ORDER BY sort_order ASC, code ASC
 		`)
-		if err == nil {
+		if err != nil {
+			WriteOperationError(c, err)
+			return
+		}
+		{
 			defer rows.Close()
 			for rows.Next() {
 				var item ChartOfAccountItem
-				if err := rows.Scan(&item.ID, &item.Code, &item.Name, &item.AccountType, &item.SortOrder, &item.IsActive); err == nil {
+				if err := rows.Scan(&item.ID, &item.Code, &item.Name, &item.AccountType, &item.SortOrder, &item.IsActive); err != nil {
+					WriteOperationError(c, err)
+					return
+				}
+				{
 					list = append(list, item)
 				}
 			}
@@ -799,15 +815,7 @@ func HandleGetChartOfAccounts(c *gin.Context) {
 	}
 
 	if list == nil {
-		list = []ChartOfAccountItem{
-			{Code: "1100", Name: "เงินสด (Cash)", AccountType: "ASSET"},
-			{Code: "1110", Name: "เงินฝากธนาคาร LAK (BCEL)", AccountType: "ASSET"},
-			{Code: "6100", Name: "ค่าจ้างและเงินเดือน", AccountType: "EXPENSE"},
-			{Code: "6200", Name: "ค่าเช่าสถานที่", AccountType: "EXPENSE"},
-			{Code: "6300", Name: "ค่าไฟฟ้าและสาธารณูปโภค", AccountType: "EXPENSE"},
-			{Code: "6400", Name: "ค่าซ่อมบำรุงรักษาเครื่อง", AccountType: "EXPENSE"},
-			{Code: "6500", Name: "ค่าใช้จ่ายดำเนินงานทั่วไป", AccountType: "EXPENSE"},
-		}
+		list = []ChartOfAccountItem{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": list})

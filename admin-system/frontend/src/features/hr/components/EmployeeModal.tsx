@@ -40,6 +40,7 @@ export interface EmployeeShiftConfig {
 
 export interface EmployeeModalProps {
   isEditing: boolean;
+  isSaving?: boolean;
   form: any;
   setForm: React.Dispatch<React.SetStateAction<any>>;
   onSave: () => void;
@@ -218,6 +219,7 @@ const ALL_PAGE_IDS = ALL_SYSTEM_PAGE_GROUPS.flatMap(g => g.pages.map(p => p.id))
 
 export const EmployeeModal: React.FC<EmployeeModalProps> = ({
   isEditing,
+  isSaving = false,
   form,
   setForm,
   onSave,
@@ -364,6 +366,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
             <button
               type="button"
               onClick={onClose}
+              disabled={isSaving}
               className="px-5 py-2.5 border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
             >
               {T('ຍົກເລີກ', 'Cancel')}
@@ -371,9 +374,11 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
             <button
               type="button"
               onClick={onSave}
+              disabled={isSaving}
+              aria-busy={isSaving}
               className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black shadow-md transition cursor-pointer"
             >
-              {isEditing ? T('ບັນທຶກການແກ້ໄຂ', 'Save Changes') : T('ເພີ່ມພະນັກງານ', 'Add Employee')}
+              {isSaving ? T('ກຳລັງບັນທຶກ...', 'Saving...') : isEditing ? T('ບັນທຶກການແກ້ໄຂ', 'Save Changes') : T('ເພີ່ມພະນັກງານ', 'Add Employee')}
             </button>
           </div>
         </div>
@@ -618,6 +623,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
                 type="button"
                 role="switch"
                 aria-checked={Boolean(form.hasLoginAccount)}
+                aria-label="ບັນຊີເຂົ້າລະບົບພະນັກງານ"
                 onClick={() => {
                   const nextVal = !form.hasLoginAccount;
                   F('hasLoginAccount', nextVal);
@@ -625,7 +631,6 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
                     const raw = form.nameEn || form.name || 'user';
                     const suggested = raw.toLowerCase().replace(/[^a-z0-9]/g, '.').replace(/\.+/g, '.').replace(/^\.|\.$/g, '');
                     F('username', suggested || 'staff.user');
-                    if (!form.password) F('password', '123456');
                     if (!form.permissions || form.permissions.length === 0) {
                       F('permissions', ['dashboard', 'orders', 'tracker']);
                     }
@@ -674,7 +679,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
                       value={form.password || ''}
                       onChange={e => F('password', e.target.value)}
                       className="w-full px-3 py-2.5 pr-10 bg-white border border-slate-300 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-                      placeholder={isEditing ? '•••••••• (ບໍ່ປ່ຽນແປງ)' : '123456'}
+                      placeholder={isEditing ? '•••••••• (ບໍ່ປ່ຽນແປງ)' : 'ຕັ້ງລະຫັດຜ່ານ'}
                       required={!isEditing && form.hasLoginAccount}
                     />
                     <button

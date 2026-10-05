@@ -1,4 +1,6 @@
+import { createPaymentRecord, getPaymentHistory, getPaymentConfiguration, paymentDecimal } from '../api/paymentReview';
 import { confirmedSavedQuotation, normalizeSavedQuotation, confirmedSavedConversion } from '../features/orders/utils/confirmedConversion';
+import { useAuthStore } from './useAuthStore';
 import { apiFetch } from '../api/client';
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { AppContextValue, EarningRecord } from '../types';
@@ -452,6 +454,21 @@ export const unrecordDeletedId = (id: string, scope: TombstoneScope = 'all') => 
 };
 
 export const AppProvider = ({ children }) => {
+  const cacheSession = useRef({ user: useAuthStore.getState().user?.username, generation: useAuthStore.getState().sessionGeneration }).current;
+  // Preserve unowned legacy storage; private caches belong to the authenticated account.
+  const localStorage = useMemo(() => {
+    const shared = new Set(['ss_print_currency_v6', 'ss_print_rates_v1', 'ss_print_rate_mode_v1', 'ss_print_rates_updated_v1', 'i18nextLng', 'somsing_lang']);
+    const prefix = `ssp_private:${encodeURIComponent(cacheSession.user || 'anonymous')}:`;
+    const current = () => useAuthStore.getState().sessionGeneration === cacheSession.generation && useAuthStore.getState().user?.username === cacheSession.user;
+    const keyFor = (key: string) => shared.has(key) ? key : prefix + key;
+    return {
+      getItem: (key: string) => shared.has(key) ? globalThis.localStorage.getItem(key) : cacheSession.user && current() ? globalThis.localStorage.getItem(keyFor(key)) : null,
+      setItem: (key: string, value: string) => { if (shared.has(key) || (cacheSession.user && current())) globalThis.localStorage.setItem(keyFor(key), value); },
+      removeItem: (key: string) => { if (shared.has(key) || (cacheSession.user && current())) globalThis.localStorage.removeItem(keyFor(key)); },
+      get length() { return Object.keys(globalThis.localStorage).filter(key => key.startsWith(prefix)).length; },
+      key: (index: number) => Object.keys(globalThis.localStorage).filter(key => key.startsWith(prefix))[index]?.slice(prefix.length) || null,
+    };
+  }, [cacheSession]);
   // Sync activeTab with URL search params (?tab=...) for bookmarking & refresh retention
   const [activeTab, setActiveTabState] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -642,68 +659,32 @@ export const AppProvider = ({ children }) => {
     if (saved) {
       try { return JSON.parse(saved); } catch (e) {}
     }
-    return [
-      {
-        id: 'EARN-101',
-        employeeId: 'EMP-001',
-        employeeName: 'ສົມສິດ ອິນທິລາດ',
-        orderId: 'ORD-20260804-001',
-        orderNumber: 'ORD-20260804-001',
-        customerName: 'ບໍລິສັດ ຈະເລີນພອນ',
-        stepId: 'step_default_print',
-        stepName: 'Digital / Offset Printing',
-        impressions: 2500,
-        ratePerImpression: 5,
-        earnedAmount: 12500,
-        recordedAt: '2026-08-04T10:30:00.000Z'
-      },
-      {
-        id: 'EARN-102',
-        employeeId: 'EMP-002',
-        employeeName: 'ຄຳຜັນ ວົງວິໄລ',
-        orderId: 'ORD-20260804-002',
-        orderNumber: 'ORD-20260804-002',
-        customerName: 'ຮ້ານອາຫານ ດາວຄຳ',
-        stepId: 'step_default_cut',
-        stepName: 'Guillotine Precision Cutting',
-        impressions: 1200,
-        ratePerImpression: 5,
-        earnedAmount: 6000,
-        recordedAt: '2026-08-04T11:15:00.000Z'
-      }
-    ];
+    return [];
   });
 
   useEffect(() => {
     safeSetItem('ss_print_earning_records_v1', earningRecords);
   }, [earningRecords]);
 
-  const addEarningRecord = (record: Omit<EarningRecord, 'id' | 'recordedAt'>) => {
-    const newRecord: EarningRecord = {
-      ...record,
-      id: `EARN-${Date.now().toString().slice(-6)}`,
-      recordedAt: new Date().toISOString()
-    };
-    setEarningRecords(prev => [newRecord, ...prev]);
-
-    fetch('/api/v1/hr/earnings', {
+  const earningRequestKeys = useRef(new Map<string, string>());
+  const addEarningRecord = async (record: Omit<EarningRecord, 'id' | 'recordedAt'>) => {
+    const payload = JSON.stringify({ ...record, earnedAmountLAK: record.earnedAmount });
+    if (!earningRequestKeys.current.has(payload)) earningRequestKeys.current.set(payload, crypto.randomUUID());
+    const response = await apiFetch('/api/v1/hr/earnings', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newRecord)
-    }).catch(err => console.warn('Add technician earning API notice:', err));
-
-    showToast('ບັນທຶກຄ່າຕອບແທນຊ່າງພິມຮຽບຮ້ອຍແລ້ວ!', 'success');
-
-    // Also update impressionsProduced on the employee
-    setEmployees((prev: any[]) => prev.map(emp => {
-      if (emp.id === record.employeeId) {
-        return {
-          ...emp,
-          impressionsProduced: (Number(emp.impressionsProduced) || 0) + Number(record.impressions || 0)
-        };
-      }
-      return emp;
-    }));
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': earningRequestKeys.current.get(payload)! },
+      body: payload,
+    });
+    const body = await response.json();
+    if (!response.ok || body?.status !== 'success' || body?.committed !== true ||
+        !body.data?.id || body.data.employeeId !== record.employeeId ||
+        body.data.orderId !== record.orderId || body.data.stepId !== record.stepId ||
+        !Number.isFinite(Number(body.data.earnedAmountLAK)) || Number(body.data.earnedAmountLAK) < 0) {
+      throw new Error('ບໍ່ສາມາດບັນທຶກຄ່າຕອບແທນໄດ້. ກະລຸນາລອງໃໝ່');
+    }
+    const saved = { ...body.data, earnedAmount: Number(body.data.earnedAmountLAK) };
+    setEarningRecords(prev => [saved, ...prev.filter(item => item.id !== saved.id)]);
+    return saved;
   };
 
   // ---- Machine status widget (Running / Setup / Downtime / Maintenance) ----
@@ -748,27 +729,23 @@ export const AppProvider = ({ children }) => {
   // ---- Couriers & Logistics Master Data ----
   const [couriers, setCouriers] = useState(() => {
     const saved = localStorage.getItem('ss_print_couriers_v1');
-    return saved ? JSON.parse(saved) : initialCouriers;
+    return saved ? JSON.parse(saved) : [];
   });
 
   useEffect(() => {
     safeSetItem('ss_print_couriers_v1', couriers);
-    if (couriers && couriers.length > 0) {
-      syncCouriersToBackend(couriers);
-    }
+
   }, [couriers]);
 
   // ---- Payment Methods / Bank Accounts Master Data ----
   const [bankAccounts, setBankAccounts] = useState(() => {
     const saved = localStorage.getItem('ss_print_bank_accounts_v1');
-    return saved ? JSON.parse(saved) : initialPaymentMethods;
+    return saved ? JSON.parse(saved) : [];
   });
 
   useEffect(() => {
     safeSetItem('ss_print_bank_accounts_v1', bankAccounts);
-    if (bankAccounts && bankAccounts.length > 0) {
-      syncBankAccountsToBackend(bankAccounts);
-    }
+
   }, [bankAccounts]);
 
   // ---- Role-Based Access Control (simulation) ----
@@ -968,80 +945,9 @@ export const AppProvider = ({ children }) => {
 
   const [equipmentApiError, setEquipmentApiError] = useState<string | null>(null);
 
-  const [equipment, setEquipment] = useState(() => {
-    const deletedEqIds = getDeletedIds('equipment');
-    // Authentic equipment backed by real PostgreSQL records should never be filtered out by initial tombstones:
-    deletedEqIds.delete('PRN-9614');
-    deletedEqIds.delete('prn-9614');
-    deletedEqIds.delete('PRN-6317');
-    deletedEqIds.delete('prn-6317');
-    deletedEqIds.delete('MAC-5707');
-    deletedEqIds.delete('mac-5707');
-    deletedEqIds.delete('MAC-6821');
-    deletedEqIds.delete('mac-6821');
-
-    const saved = localStorage.getItem('ss_print_equipment_v6');
-    if (saved !== null) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const map = new Map<string, any>();
-          parsed.filter(i =>
-            i && i.id &&
-            !deletedEqIds.has(i.id) &&
-            !deletedEqIds.has(i.id.toLowerCase()) &&
-            !LEGACY_MOCK_IDS.has(i.id.toLowerCase())
-          ).forEach(i => {
-            // Self-healing / reconciliation of legacy misplaced seed in localStorage:
-            let baseItem = i;
-            if (i.id === 'MAC-6821' || i.id === 'PRN-6317') {
-              const broSeed = DEFAULT_MACHINERY_SEED.find(s => s.id === 'PRN-6317');
-              baseItem = { ...broSeed, ...i, id: 'PRN-6317' };
-            } else if (i.id === 'MAC-5707' || i.id === 'PRN-9614') {
-              const epSeed = DEFAULT_MACHINERY_SEED.find(s => s.id === 'PRN-9614');
-              baseItem = { ...epSeed, ...i, id: 'PRN-9614' };
-            } else if (i.id === 'MAC-4190' || i.id === 'MAC-CUTTER-920' || i.id === 'MAC-BINDER-K5' || LEGACY_MOCK_IDS.has(i.id.toLowerCase())) {
-              // Unverified mock machinery without backing evidence in DB/inbound: skip / drop
-              return;
-            } else {
-              const seed = DEFAULT_MACHINERY_SEED.find(s => s.id === i.id);
-              if (seed && (!i.name || i.name === i.id || !i.price || i.price === 0)) {
-                baseItem = {
-                  ...seed,
-                  ...i,
-                  name: seed.name,
-                  brand: seed.brand,
-                  model: seed.model,
-                  category: seed.category,
-                  printerCategory: seed.printerCategory,
-                  price: seed.price,
-                  purchaseCost: seed.price,
-                  purchasePrice: seed.price,
-                  MachinePrice: seed.price,
-                  printedPagesCapacity: seed.printedPagesCapacity,
-                  expectedLifeA4Pages: seed.expectedLifeA4Pages,
-                  components: (i.components && i.components.length > 0) ? i.components : seed.components,
-                  oemBaselineInks: (i.oemBaselineInks && i.oemBaselineInks.length > 0) ? i.oemBaselineInks : seed.oemBaselineInks,
-                  specs: { ...(seed.specs || {}), ...(i.specs || {}) }
-                };
-              }
-            }
-
-            const canonicalCat = resolveCanonicalEquipmentCategory(baseItem.category, baseItem);
-            const prnSubtype = canonicalCat === 'Printer' ? resolvePrinterSubtype(baseItem) : undefined;
-            const finalized = {
-              ...baseItem,
-              category: canonicalCat,
-              printerCategory: canonicalCat === 'Printer' ? (baseItem.printerCategory || prnSubtype) : undefined
-            };
-
-            map.set(finalized.id, finalized);
-          });
-          if (map.size > 0) return Array.from(map.values());
-        }
-      } catch (e) {}
-    }
-    return DEFAULT_MACHINERY_SEED;
+  const [equipment, setEquipment] = useState<any[]>(() => {
+    try { const cached = JSON.parse(localStorage.getItem('ss_print_equipment_v6') || '[]'); return Array.isArray(cached) ? cached : []; }
+    catch { return []; }
   });
 
   const normalizeBackendOrder = (serverItem: any) => {
@@ -1071,15 +977,16 @@ export const AppProvider = ({ children }) => {
 
     const orderId = serverItem.id || serverItem.order_no || serverItem.orderNo || serverItem.order_number;
     const orderNo = serverItem.order_no || serverItem.order_number || serverItem.orderNo || orderId;
-    const totalAmount = Number(serverItem.total_amount_lak) || Number(serverItem.total_price) || 0;
-    const depositAmount = Number(serverItem.deposit_lak) || Number(serverItem.deposit_amount) || 0;
-    const remainingAmount = Number(serverItem.remaining_lak) || (totalAmount - depositAmount);
+    const totalAmount = Number(serverItem.total_lak ?? serverItem.total_amount_lak ?? serverItem.total_price ?? 0);
+    const depositAmount = Number(serverItem.received_net_lak ?? serverItem.deposit_lak ?? serverItem.deposit_amount ?? 0);
+    const remainingAmount = Number(serverItem.remaining_lak ?? (totalAmount - depositAmount));
     const overallStatus = serverItem.overall_status || serverItem.status || 'Pending';
     const customerName = serverItem.customer_name || serverItem.customerName || 'ລູກຄ້າທົ່ວໄປ (Customer)';
     const phone = serverItem.customer_phone || serverItem.phone || '';
     const paymentStatus = serverItem.payment_status || serverItem.paymentStatus || (depositAmount >= totalAmount && totalAmount > 0 ? 'Paid' : (depositAmount > 0 ? 'Partial' : 'Unpaid'));
 
     return {
+      ...serverItem,
       id: orderId,
       orderNo: orderNo,
       orderNumber: orderNo,
@@ -1087,7 +994,7 @@ export const AppProvider = ({ children }) => {
       customer_name: customerName,
       customerPhone: phone,
       phone: phone,
-      items: items.length > 0 ? items : undefined,
+      items,
       totalAmount: totalAmount,
       total_amount_lak: totalAmount,
       totalPriceCharged: totalAmount,
@@ -1112,415 +1019,82 @@ export const AppProvider = ({ children }) => {
 
   const refreshData = async () => {
     const deletedIds = getDeletedIds();
-    let inbItems: any[] = [];
-
-    // Pre-fetch inbound transactions for assets & inventory merging
     try {
-      const inbRes = await fetch('/api/inbound', { headers: getAuthHeaders() });
-      if (inbRes && inbRes.ok) {
-        const inbData = await inbRes.json();
-        inbItems = Array.isArray(inbData) ? inbData : (inbData?.data || []);
-      }
-    } catch (e) {}
+      const response = await apiFetch('/api/equipment');
+      const body = await response.json();
+      const rows = Array.isArray(body) ? body : body?.data;
+      if (!response.ok || body?.status === 'error' || !Array.isArray(rows)) throw new Error('ບໍ່ສາມາດໂຫຼດເຄື່ອງຈັກໄດ້');
+      const saved = rows.map((item: any) => {
+        if (!item.id) throw new Error('ຂໍ້ມູນເຄື່ອງຈັກບໍ່ຄົບຖ້ວນ');
+        const category = resolveCanonicalEquipmentCategory(item.category, item);
+        return { ...item, category, specs: item.specs ?? item.technical_specs ?? {}, ...(category === 'Printer' ? { printerCategory: item.printerCategory ?? resolvePrinterSubtype(item) } : {}) };
+      });
+      setEquipment(saved); safeSetItem('ss_print_equipment_v6', saved); setEquipmentApiError(null);
+    } catch (error) { setEquipmentApiError(error instanceof Error ? error.message : 'ບໍ່ສາມາດໂຫຼດເຄື່ອງຈັກໄດ້'); }
 
-    // 1. Assets / Equipment & Inbound Printers (Database Fetch)
+    // Master stock is authoritative; receiving transactions are history, not stock balances.
     try {
-      let res = await fetch('/api/equipment', { headers: getAuthHeaders() });
-      if (!res.ok) {
-        res = await fetch('/api/v1/assets', { headers: getAuthHeaders() });
+      const res = await apiFetch('/api/v1/materials');
+      const body = await res.json();
+      if (!res.ok || body?.status !== 'success' || !Array.isArray(body.data)) {
+        throw new Error('ບໍ່ສາມາດໂຫຼດຂໍ້ມູນສິນຄ້າໄດ້');
       }
-
-      if (!res.ok) {
-        setEquipmentApiError(`API error: HTTP ${res.status} ${res.statusText}`);
-      } else {
-        setEquipmentApiError(null);
-        const resData = await res.json();
-        const rawItems = Array.isArray(resData) ? resData : (resData?.data || []);
-
-        const printerInbounds = inbItems.filter((i: any) => {
-          return isAssetItem(i.category, i);
-        }).map((p: any) => {
-          const cat = (p.category || '').toLowerCase();
-          const sub = (p.postPressSubtype || p.specs?.postPressSubtype || p.specs?.category || '').toLowerCase();
-          const name = (p.itemName || p.name || `${p.specs?.brand || ''} ${p.specs?.model || ''}`).toLowerCase();
-
-          const resolvedCategory = resolveCanonicalEquipmentCategory(p.category, p);
-          const isPrinter = resolvedCategory === 'Printer';
-          const isCutter = resolvedCategory === 'Cutter';
-          const isBinder = resolvedCategory === 'Binder';
-          const isLaminator = resolvedCategory === 'Laminator';
-          const resolvedSubtype = isPrinter ? resolvePrinterSubtype(p) : undefined;
-          const resolvedPhoto = p.imageUrl || p.itemPhoto || p.productPhoto || p.image || p.docs?.productPhoto || p.specs?.productPhoto || p.specs?.productImage || (Array.isArray(p.actual_images) && p.actual_images[0]) || (Array.isArray(p.specs?.actual_images) && p.specs?.actual_images[0]) || null;
-
-          const defaultLife = isPrinter ? 200000 : isCutter ? 100000 : isBinder ? 30000 : 50000;
-          const realLife = Number(p.specs?.expectedLife || p.specs?.expectedLifeA4Pages || p.expectedLifeA4Pages || p.TargetTotalPages || p.printedPagesCapacity || defaultLife);
-
-          const rawOemSlots = p.specs?.oemBaselineInks || p.specs?.printerInkSlots || p.oemBaselineInks || p.printerInkSlots || [];
-
-          const explicitInkjet =
-            (p.specs?.printerCategory || '').toLowerCase().includes('inkjet') ||
-            (p.specs?.machineryTypeCategory || '').toLowerCase().includes('inkjet') ||
-            (p.printerCategory || '').toLowerCase().includes('inkjet') ||
-            sub.includes('inkjet') ||
-            cat.includes('inkjet') ||
-            name.includes('ecotank') || name.includes('epson') || name.includes('l15150') || name.includes('inkjet') || name.includes('ink tank') || name.includes('maxify');
-
-          const isLaserPrn = resolvedCategory === 'Printer' && !explicitInkjet && (
-            (p.specs?.printerCategory || '').toLowerCase().includes('laser') ||
-            (p.specs?.machineryTypeCategory || '').toLowerCase().includes('laser') ||
-            (p.printerCategory || '').toLowerCase().includes('laser') ||
-            sub.includes('laser') ||
-            cat.includes('laser') ||
-            p.specs?.inkType === 'Toner' ||
-            name.includes('laser') || name.includes('xerox') || name.includes('c8055') || name.includes('c5005') ||
-            (p.specs?.wearDrumUnitCost !== undefined && Number(p.specs?.wearDrumUnitCost) > 0)
-          );
-          const isInkjetPrn = resolvedCategory === 'Printer' && !isLaserPrn;
-
-          let dynamicInitialComponents: any[] = [];
-          if (isLaserPrn) {
-            dynamicInitialComponents = [
-              { id: 'part-drum', name: 'OPC Drum Unit', nameLo: 'ຊຸດດຣັມສ້າງພາບ (Drum Unit)', usage: 0, threshold: 85, cost: Number(p.specs?.wearDrumUnitCost || p.wearDrumUnitCost || 1500000), lifeVal: Number(p.specs?.wearDrumUnitLife || p.wearDrumUnitLife || 50000), unitLabel: 'pages' },
-              { id: 'part-fuser', name: 'Fuser Fixing Assembly', nameLo: 'ຊຸດຄວາມຮ້ອນ (Fuser Unit)', usage: 0, threshold: 90, cost: Number(p.specs?.wearFuserUnitCost || p.wearFuserUnitCost || 2000000), lifeVal: Number(p.specs?.wearFuserUnitLife || p.wearFuserUnitLife || 100000), unitLabel: 'pages' },
-              { id: 'part-itb', name: 'Transfer Belt', nameLo: 'ສາຍພານຖ່າຍທອດພາບ (Transfer Belt)', usage: 0, threshold: 90, cost: Number(p.specs?.wearTransferBeltCost || p.wearTransferBeltCost || 1800000), lifeVal: Number(p.specs?.wearTransferBeltLife || p.wearTransferBeltLife || 100000), unitLabel: 'pages' },
-              { id: 'part-pickup', name: 'Pickup Roller', nameLo: 'ຊຸດລູກກິ້ງດຶງເຈ້ຍ (Pickup Roller)', usage: 0, threshold: 85, cost: Number(p.specs?.wearPickupRollerCost || p.wearPickupRollerCost || 150000), lifeVal: Number(p.specs?.wearPickupRollerLife || p.wearPickupRollerLife || 30000), unitLabel: 'pages' },
-              { id: 'part-waste', name: 'Waste Toner Box', nameLo: 'ກ່ອງເກັບຜົງໝຶກເສຍ (Waste Toner Box)', usage: 0, threshold: 90, cost: Number(p.specs?.wearWasteTonerBoxCost || p.wearWasteTonerBoxCost || 350000), lifeVal: Number(p.specs?.wearWasteTonerBoxLife || p.wearWasteTonerBoxLife || 30000), unitLabel: 'pages' },
-            ];
-          } else if (isInkjetPrn) {
-            dynamicInitialComponents = [
-              { id: 'part-maint', name: 'Maintenance Waste Box', nameLo: 'ຊຸດຊັບໝຶກ (Maintenance Box)', usage: 0, threshold: 85, cost: Number(p.specs?.wearMaintBoxCost || p.wearMaintBoxCost || 450000), lifeVal: Number(p.specs?.wearMaintBoxLife || p.wearMaintBoxLife || 25000), unitLabel: 'pages' },
-              { id: 'part-head', name: 'Precision Inkjet Printhead', nameLo: 'ຫົວພິມຄວາມລະອຽດສູງ (Printhead)', usage: 0, threshold: 90, cost: Number(p.specs?.wearPrintheadCost || p.wearPrintheadCost || 4500000), lifeVal: Number(p.specs?.wearPrintheadLife || p.wearPrintheadLife || 100000), unitLabel: 'pages' },
-              { id: 'part-pickup', name: 'Feed Pickup Roller', nameLo: 'ຢາງດຶງເຈ້ຍ (Pickup Roller)', usage: 0, threshold: 85, cost: Number(p.specs?.wearPickupRollerCost || p.wearPickupRollerCost || 150000), lifeVal: Number(p.specs?.wearPickupRollerLife || p.wearPickupRollerLife || 30000), unitLabel: 'pages' },
-              { id: 'part-belt', name: 'Carriage Drive Belt', nameLo: 'ສາຍພານຫົວພິມ (Carriage Belt)', usage: 0, threshold: 90, cost: Number(p.specs?.wearCarriageBeltCost || p.wearCarriageBeltCost || 500000), lifeVal: Number(p.specs?.wearCarriageBeltLife || p.wearCarriageBeltLife || 50000), unitLabel: 'pages' },
-            ];
-          } else if (isCutter) {
-            dynamicInitialComponents = [
-              { id: 'part-sharp', name: 'Sharpening Blade Service', nameLo: 'ຄ່າຈ້າງລັບຄົມໃບມີດຕັດເຈ້ຍ', usage: 0, threshold: 90, cost: Number(p.specs?.wearSharpeningCost || p.wearSharpeningCost || 150000), lifeVal: Number(p.specs?.wearSharpeningIntervalCuts || p.wearSharpeningIntervalCuts || 10000), unitLabel: 'cuts' },
-              { id: 'part-stick', name: 'Cutting Stick Pad', nameLo: 'ໄມ້ຮອງໃບມີດຕັດ (Cutting Stick)', usage: 0, threshold: 85, cost: Number(p.specs?.wearCuttingStickCost || p.wearCuttingStickCost || 100000), lifeVal: Number(p.specs?.wearCuttingStickLifeCuts || p.wearCuttingStickLifeCuts || 20000), unitLabel: 'cuts' },
-              { id: 'part-blade', name: 'Plotter Cutting Blade', nameLo: 'ໃບມີດພລັອດເຕີ (Plotter Blade)', usage: 0, threshold: 90, cost: Number(p.specs?.wearBladeCost || p.wearBladeCost || 250000), lifeVal: Number(p.specs?.wearBladeLifeMeters || p.wearBladeLifeMeters || 5000), unitLabel: 'm' },
-            ];
-          } else if (isLaminator) {
-            dynamicInitialComponents = [
-              { id: 'part-roller', name: 'Silicone Heat Rollers', nameLo: 'ລູກກິ້ງຢາງຄວາມຮ້ອນ (Silicone Rollers)', usage: 0, threshold: 85, cost: Number(p.specs?.wearSiliconeRollerCost || p.wearSiliconeRollerCost || 1200000), lifeVal: Number(p.specs?.wearSiliconeRollerLifeMeters || p.wearSiliconeRollerLifeMeters || 20000), unitLabel: 'm' },
-              { id: 'part-heat', name: 'Heating Element Core', nameLo: 'ແທ່ງຄວາມຮ້ອນ (Heating Element)', usage: 0, threshold: 90, cost: Number(p.specs?.wearHeatingElementCost || p.wearHeatingElementCost || 800000), lifeVal: Number(p.specs?.wearHeatingElementHours || p.wearHeatingElementHours || 5000), unitLabel: 'hours' },
-            ];
-          } else if (isBinder) {
-            dynamicInitialComponents = [
-              { id: 'part-mill', name: 'Spine Milling Cutter', nameLo: 'ໃບມີດປາດສັນປຶ້ມ (Milling Cutter)', usage: 0, threshold: 85, cost: Number(p.specs?.wearMillingCutterCost || p.wearMillingCutterCost || 800000), lifeVal: Number(p.specs?.wearMillingCutterLifeBooks || p.wearMillingCutterLifeBooks || 10000), unitLabel: 'books' },
-              { id: 'part-punch', name: 'Wire Punching Pins Set', nameLo: 'ຊຸດເຂັມເຈາະຮູສັນລວດ (Punching Pins)', usage: 0, threshold: 90, cost: Number(p.specs?.wearPunchingPinsCost || p.wearPunchingPinsCost || 600000), lifeVal: Number(p.specs?.wearPunchingPinsLifePunches || p.wearPunchingPinsLifePunches || 20000), unitLabel: 'punches' },
-            ];
-          }
-
-          const effectiveComponents = (Array.isArray(p.components) && p.components.length > 0)
-            ? p.components
-            : dynamicInitialComponents;
-
-          return {
-            id: p.id || p.skuCode,
-            name: p.itemName || p.name || `${p.specs?.brand || ''} ${p.specs?.model || ''}`.trim() || p.id,
-            brand: p.specs?.brand || p.brand || '',
-            model: p.specs?.model || p.model || '',
-            serialNumber: p.specs?.serialNumber || p.serialNumber || p.skuCode || '',
-            category: resolvedCategory,
-            postPressSubtype: sub || (isPrinter ? (isLaserPrn ? 'laser' : 'inkjet') : isCutter ? 'guillotine' : isBinder ? 'binder' : 'laminator'),
-            printerCategory: isPrinter ? (p.specs?.printerCategory || p.printerCategory || (isLaserPrn ? 'Laser Printer' : 'Inkjet Printer')) : undefined,
-            colorSchemeType: p.specs?.colorSchemeType || p.colorSchemeType || 'CMYK',
-            totalColorSlots: Number(p.specs?.totalColorSlots || p.totalColorSlots || 4),
-            oemBaselineInks: rawOemSlots,
-            printerInkSlots: rawOemSlots,
-            purchaseCost: Number(p.totalPrice || p.price || p.purchaseCost || p.unitPrice || 0),
-            expectedLifeA4Pages: isPrinter ? realLife : undefined,
-            TargetTotalPages: realLife,
-            printedPagesCapacity: realLife,
-            lifespanYears: Number(p.specs?.lifespanYears || p.lifespanYears || 5),
-            maintenanceRatePercent: Number(p.specs?.maintenanceRatePercent || p.maintenanceRatePercent || 0),
-            costPerConsumptionUnit: Number(p.specs?.costPerConsumptionUnit || p.costPerConsumptionUnit || p.calculatedCostPerPage || 0),
-            calculatedCostPerPage: Number(p.specs?.calculatedCostPerPage || p.calculatedCostPerPage || 0),
-            status: 'In Use',
-            location: p.specs?.location || p.location || 'Main Press Floor',
-            imageUrl: resolvedPhoto,
-            itemPhoto: resolvedPhoto,
-            productPhoto: resolvedPhoto,
-            docs: {
-              productPhoto: resolvedPhoto,
-              paymentSlip: p.payment_slip || p.docs?.paymentSlip || null
-            },
-            components: effectiveComponents,
-            specs: {
-              ...p.specs,
-              components: effectiveComponents,
-              oemBaselineInks: rawOemSlots,
-              printerInkSlots: rawOemSlots,
-              productPhoto: resolvedPhoto
-            }
-          };
-        });
-
-        setEquipment(prevEq => {
-          const mapById = new Map();
-
-          // 1. Authoritative Database Items overwrite local state (Database is Single Source of Truth)
-          const isDbSource = resData?.source === 'database' || (Array.isArray(rawItems) && rawItems.length > 0);
-          if (isDbSource) {
-            (rawItems || []).forEach((dbItem: any) => {
-              if (dbItem?.id) {
-                unrecordDeletedId(dbItem.id, 'all');
-                if (dbItem.serialNumber) unrecordDeletedId(dbItem.serialNumber, 'all');
-                if (dbItem.id === 'PRN-6317') unrecordDeletedId('MAC-6821', 'all');
-                if (dbItem.id === 'PRN-9614') unrecordDeletedId('MAC-5707', 'all');
-              }
-            });
-          }
-
-          (rawItems || []).forEach((dbItem: any) => {
-            if (!dbItem || !dbItem.id) return;
-            if (LEGACY_MOCK_IDS.has(dbItem.id.toLowerCase())) return;
-
-            const canonicalCat = resolveCanonicalEquipmentCategory(dbItem.category, dbItem);
-            const prnSubtype = canonicalCat === 'Printer' ? resolvePrinterSubtype(dbItem) : undefined;
-            const resolvedPrice = Number(dbItem.price || dbItem.priceCost || dbItem.purchaseCost || 0);
-            const resolvedCapacity = Number(dbItem.expectedLifeA4Pages || dbItem.printedPagesCapacity || 200000);
-
-            const authoritativeItem = {
-              ...dbItem,
-              name: dbItem.name || `${dbItem.brand || ''} ${dbItem.model || ''}`.trim() || dbItem.id,
-              brand: dbItem.brand || '',
-              model: dbItem.model || '',
-              category: canonicalCat,
-              printerCategory: canonicalCat === 'Printer' ? (dbItem.printerCategory || prnSubtype) : undefined,
-              price: resolvedPrice,
-              purchaseCost: resolvedPrice,
-              purchasePrice: resolvedPrice,
-              MachinePrice: resolvedPrice,
-              unitPrice: resolvedPrice,
-              printedPagesCapacity: resolvedCapacity,
-              expectedLifeA4Pages: resolvedCapacity,
-              TargetTotalPages: resolvedCapacity,
-              colorSchemeType: dbItem.colorSchemeType || 'CMYK',
-              specs: {
-                ...(dbItem.specs || {}),
-                ...(dbItem.technical_specs || {}),
-                brand: dbItem.brand,
-                model: dbItem.model,
-                category: canonicalCat,
-                printerCategory: canonicalCat === 'Printer' ? (dbItem.printerCategory || prnSubtype) : undefined
-              }
-            };
-
-            // DB item is source of truth!
-            mapById.set(dbItem.id, authoritativeItem);
-
-            // Reconcile and purge duplicate alias keys
-            if (dbItem.id === 'PRN-6317' || dbItem.id === 'MAC-6821') {
-              mapById.delete('MAC-6821');
-            }
-            if (dbItem.id === 'PRN-9614' || dbItem.id === 'MAC-5707') {
-              mapById.delete('MAC-5707');
-            }
-            mapById.delete('MAC-4190');
-            mapById.delete('MAC-CUTTER-920');
-            mapById.delete('MAC-BINDER-K5');
-          });
-
-          // 2. Merge Inbound Items with alias reconciliation
-          const deletedEqIds = getDeletedIds('equipment');
-          printerInbounds.forEach((inbItem: any) => {
-            let targetId = inbItem.skuCode || inbItem.id;
-            if (targetId === 'PRN-6317' || targetId === 'MAC-6821' || (inbItem.brand === 'Brother' && (inbItem.model?.includes('2740') || inbItem.name?.includes('2740')))) {
-              targetId = 'PRN-6317';
-              mapById.delete('MAC-6821');
-            } else if (targetId === 'PRN-9614' || targetId === 'MAC-5707' || (inbItem.brand === 'Epson' && (inbItem.model?.includes('15150') || inbItem.name?.includes('15150')))) {
-              targetId = 'PRN-9614';
-              mapById.delete('MAC-5707');
-            }
-
-            if (mapById.has(targetId)) {
-              const existing = mapById.get(targetId);
-              // DB/master item takes precedence; merge only auxiliary specs
-              mapById.set(targetId, {
-                ...inbItem,
-                ...existing, // DB item fields win
-                id: targetId,
-                specs: { ...(inbItem.specs || {}), ...(existing.specs || {}) }
-              });
-            } else if (!deletedEqIds.has(targetId) && !deletedEqIds.has(targetId.toLowerCase()) && !LEGACY_MOCK_IDS.has(targetId.toLowerCase())) {
-              mapById.set(targetId, { ...inbItem, id: targetId });
-            }
-          });
-
-          // 3. Purge all unsupported seeds and stale localStorage entries that lack DB or Inbound evidence
-          mapById.delete('MAC-CUTTER-920');
-          mapById.delete('MAC-BINDER-K5');
-          mapById.delete('MAC-4190');
-          mapById.delete('MAC-5707');
-          mapById.delete('MAC-6821');
-
-          const finalEq = Array.from(mapById.values());
-          safeSetItem('ss_print_equipment_v6', finalEq);
-          return finalEq;
-        });
-      }
-    } catch (e: any) {
-      console.error("[EQUIPMENT FETCH ERROR]", e);
-      setEquipmentApiError(e?.message || "ERR_CONNECTION_REFUSED - ບໍ່ສາມາດເຊື່ອມຕໍ່ Backend Equipment API ໄດ້");
+      const numeric = (value: unknown) => {
+        if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) {
+          throw new Error('ຂໍ້ມູນສິນຄ້າບໍ່ຄົບຖ້ວນ');
+        }
+        return Number(value);
+      };
+      const masterInventory = body.data.map((item: any) => {
+        if (!item.id || !item.sku) throw new Error('ຂໍ້ມູນສິນຄ້າບໍ່ຄົບຖ້ວນ');
+        return {
+          ...item,
+          skuCode: item.sku,
+          stockQty: numeric(item.stock_qty),
+          purchaseMultiplier: numeric(item.purchase_multiplier),
+          costPerPurchaseUnit: numeric(item.cost_per_purchase_unit),
+          costPerConsumptionUnit: numeric(item.cost_per_consumption_unit),
+          consumptionUnit: item.consumption_unit,
+          purchaseUnit: item.purchase_unit,
+          reorderThreshold: numeric(item.reorder_threshold),
+          specs: item.technical_specs || {},
+          updatedAt: item.updated_at,
+          batches: [],
+        };
+      });
+      setInventory(masterInventory);
+      safeSetItem('ss_print_inventory_v6', masterInventory);
+    } catch (error) {
+      console.error('[INVENTORY FETCH ERROR]', error);
+      showToast('ບໍ່ສາມາດໂຫຼດຂໍ້ມູນສິນຄ້າໄດ້. ກະລຸນາລອງໃໝ່', 'error');
     }
 
-    // 2. Inventory Items
+    // Successful collection reads replace cached collections, including an empty result.
     try {
-      const res = await fetch('/api/inventory/items', { headers: getAuthHeaders() });
-      let dbInventory: any[] = [];
-      if (res && res.ok) {
-        const resData = await res.json();
-        if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
-          dbInventory = resData.data.map(sanitizeInventoryItem);
-        }
-      }
+      const res = await apiFetch('/api/v1/orders');
+      const data = await res.json();
+      const serverList = Array.isArray(data) ? data : data?.data;
+      if (!res.ok || !Array.isArray(serverList) || data?.status === 'error') throw new Error('ບໍ່ສາມາດໂຫຼດອໍເດີໄດ້');
+      const saved = serverList.map(normalizeBackendOrder);
+      setOrders(saved);
+      safeSetItem('ss_print_orders_v6', saved);
+    } catch (error) {
+      console.error('[ORDERS FETCH ERROR]', error);
+      showToast('ບໍ່ສາມາດໂຫຼດອໍເດີໄດ້. ກະລຸນາລອງໃໝ່', 'error');
+    }
 
-      // Merge Inbound items (Inks, Consumables, Raw Materials, Paper) directly from PostgreSQL inbound transactions
-      const inboundMaterials = inbItems.filter((i: any) => {
-        const c = (i.category || '').toUpperCase();
-        const sku = (i.skuCode || i.id || '').toUpperCase();
-        const name = (i.itemName || i.name || '').toUpperCase();
-        return c.includes('INK') || c.includes('PAPER') || c.includes('CONSUMABLE') || c.includes('MATERIAL') ||
-               name.includes('INK') || name.includes('TONER') || sku.startsWith('INK') || sku.startsWith('PAP') || sku.startsWith('MAT');
-      }).map((m: any) => {
-        const c = (m.category || '').toUpperCase();
-        const isPaper = c.includes('PAPER') || c.includes('MATERIAL') || (m.itemName || m.name || '').toLowerCase().includes('paper');
-        let multiplier = Number(m.specs?.sheets_per_pack || m.specs?.sheets_per_ream || m.specs?.sheetsPerPack || m.purchaseMultiplier || m.purchase_multiplier);
-        if (isPaper && (!multiplier || multiplier <= 1)) {
-          multiplier = 500;
-        }
-        const qty = Number(m.quantity || m.importQty || 1);
-        const totalSheets = isPaper ? (qty > 0 && qty <= 100 ? qty * multiplier : qty) : qty;
-
-        // Prioritize direct stored costPerConsumptionUnit / costPerSheet
-        const directConsCost = Number(
-          m.costPerConsumptionUnit ||
-          m.cost_per_consumption_unit ||
-          m.costPerSheet ||
-          m.specs?.costPerConsumptionUnit ||
-          m.specs?.costPerSheet ||
-          0
-        );
-
-        let pPrice = Number(m.costPerPurchaseUnit || m.unitPrice || 0);
-        if (pPrice <= 0 && m.totalPrice && qty > 0) {
-          pPrice = Math.round(Number(m.totalPrice) / qty);
-        }
-        if (pPrice <= 0) pPrice = isPaper ? 60000 : 95000;
-
-        let cPrice = directConsCost;
-        if (cPrice <= 0) {
-          cPrice = isPaper && multiplier > 0 ? Math.round((pPrice / multiplier) * 100) / 100 : pPrice;
-        }
-
-        return sanitizeInventoryItem({
-          id: m.skuCode || m.id,
-          sku: m.skuCode || m.id,
-          skuCode: m.skuCode || m.id,
-          name: m.itemName || m.name || m.skuCode || m.id,
-          category: isPaper ? 'Paper' : (m.category || 'Consumable'),
-          supplier: m.supplierName || m.supplier || 'Supplier',
-          supplierName: m.supplierName || m.supplier || 'Supplier',
-          stockQty: totalSheets,
-          unitPrice: pPrice,
-          costPerPurchaseUnit: pPrice,
-          costPerConsumptionUnit: cPrice,
-          consumptionUnit: isPaper ? 'ແຜ່ນ' : (m.unit || 'ຕຸກ'),
-          purchaseUnit: isPaper ? 'ແພັກ' : (m.unit || 'ຕຸກ'),
-          purchaseMultiplier: multiplier,
-          imageUrl: m.specs?.productImage || m.imageUrl || m.productImage || (m.actual_images && m.actual_images[0]) || null,
-          productImage: m.specs?.productImage || m.imageUrl || m.productImage || (m.actual_images && m.actual_images[0]) || null,
-          brand: m.specs?.brand || m.brand || '',
-          volume: Number(m.specs?.volume || m.specs?.volume_ml || 140),
-          specs: m.specs || {}
-        });
-      });
-
-
-      const combinedInventory = [...dbInventory, ...inboundMaterials];
-
-      if (combinedInventory.length > 0) {
-        setInventory(prevInv => {
-          const mapById = new Map();
-          (prevInv || []).filter(i => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach(item => mapById.set(item.id, item));
-          combinedInventory.filter((i: any) => !deletedIds.has(i.id) && !deletedIds.has(i.id.toLowerCase())).forEach((item: any) => {
-            if (mapById.has(item.id)) {
-              mapById.set(item.id, { ...mapById.get(item.id), ...item });
-            } else {
-              mapById.set(item.id, item);
-            }
-          });
-          const merged = Array.from(mapById.values());
-          safeSetItem('ss_print_inventory_v6', merged);
-          return merged;
-        });
-      }
-    } catch (e) {}
-
-
-    // 3. Orders (DB-First Single Source of Truth Safe Merge Strategy)
     try {
-      let res = await fetch('/api/v1/orders', { headers: getAuthHeaders() });
-      if (!res.ok) res = await fetch('/api/orders', { headers: getAuthHeaders() });
-      if (res && res.ok) {
-        const data = await res.json();
-        const serverList = Array.isArray(data) ? data : (data?.data && Array.isArray(data.data) ? data.data : []);
-        if (serverList.length > 0) {
-          setOrders(prev => {
-            const mapById = new Map();
-            // 1. Put local cached orders first as fallback
-            prev.forEach((item: any) => {
-              const id = item.id || item.orderNo || item.order_no;
-              if (id) mapById.set(id, item);
-            });
-            // 2. Put live database orders over local state (PostgreSQL DB is Single Source of Truth)
-            serverList.forEach((item: any) => {
-              const id = item.id || item.orderNo || item.order_no;
-              if (id) {
-                const existingLocal = mapById.get(id) || {};
-                const normalized = normalizeBackendOrder(item);
-                mapById.set(id, { ...existingLocal, ...item, ...normalized });
-              }
-            });
-            const merged = Array.from(mapById.values());
-            safeSetItem('ss_print_orders_v6', merged);
-            return merged;
-          });
-        }
-      }
-    } catch (e) {}
-
-    // 3.5. Quotations (DB-First Single Source of Truth Safe Merge Strategy)
-    try {
-      let res = await fetch('/api/v1/quotations', { headers: getAuthHeaders() });
-      if (!res.ok) res = await fetch('/api/quotations', { headers: getAuthHeaders() });
-      if (res && res.ok) {
-        const data = await res.json();
-        const serverList = Array.isArray(data) ? data : (data?.data && Array.isArray(data.data) ? data.data : []);
-        if (serverList.length > 0) {
-          setQuotations(prev => {
-            const mapById = new Map();
-            // 1. Put local cached quotations first
-            prev.forEach((item: any) => {
-              const id = item.id || item.quotation_no;
-              if (id) mapById.set(id, item);
-            });
-            // 2. Put live database quotations over local state
-            serverList.forEach((item: any) => {
-              const id = item.id || item.quotation_no;
-              if (id) {
-                const existingLocal = mapById.get(id) || {};
-                mapById.set(id, { ...existingLocal, ...normalizeSavedQuotation(item) });
-              }
-            });
-            const merged = Array.from(mapById.values());
-            safeSetItem('ss_print_quotations_v6', merged);
-            return merged;
-          });
-        }
-      }
-    } catch (e) {}
+      const res = await apiFetch('/api/v1/quotations');
+      const data = await res.json();
+      const serverList = Array.isArray(data) ? data : data?.data;
+      if (!res.ok || !Array.isArray(serverList) || data?.status === 'error') throw new Error('ບໍ່ສາມາດໂຫຼດໃບສະເໜີລາຄາໄດ້');
+      const saved = serverList.map(normalizeSavedQuotation);
+      setQuotations(saved);
+      safeSetItem('ss_print_quotations_v6', saved);
+    } catch (error) {
+      console.error('[QUOTATIONS FETCH ERROR]', error);
+      showToast('ບໍ່ສາມາດໂຫຼດໃບສະເໜີລາຄາໄດ້. ກະລຸນາລອງໃໝ່', 'error');
+    }
 
     // 4. Customers
     try {
@@ -1582,11 +1156,11 @@ export const AppProvider = ({ children }) => {
 
     // 7. Technician Earnings
     try {
-      const res = await fetch('/api/v1/hr/earnings');
+      const res = await apiFetch('/api/v1/hr/earnings');
       if (res && res.ok) {
         const resData = await res.json();
-        if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
-          setEarningRecords(resData.data);
+        if (resData && resData.status === 'success' && Array.isArray(resData.data)) {
+          setEarningRecords(resData.data.map((item: any) => ({ ...item, earnedAmount: Number(item.earnedAmountLAK) })));
         }
       }
     } catch (e) {}
@@ -1613,54 +1187,13 @@ export const AppProvider = ({ children }) => {
       }
     } catch (e) {}
 
-    const localCouriers = localStorage.getItem('ss_print_couriers_v1');
-    if (localCouriers) {
+    for (const [path, publish] of [['/api/v1/couriers', setCouriers], ['/api/v1/payment-methods', setBankAccounts]] as const) {
       try {
-        const parsed = JSON.parse(localCouriers);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          fetch('/api/v1/admin/couriers/sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(parsed)
-          }).catch(err => console.warn('Couriers sync notice:', err));
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    } else {
-      fetch('/api/v1/couriers')
-        .then(res => (res && res.ok ? res.json() : null))
-        .then(resData => {
-          if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
-            setCouriers(resData.data);
-          }
-        })
-        .catch(err => console.warn('Couriers fetch notice:', err));
-    }
-
-    const localBanks = localStorage.getItem('ss_print_bank_accounts_v1');
-    if (localBanks) {
-      try {
-        const parsed = JSON.parse(localBanks);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          fetch('/api/v1/admin/payment-methods/sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(parsed)
-          }).catch(err => console.warn('Payment methods sync notice:', err));
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    } else {
-      fetch('/api/v1/payment-methods')
-        .then(res => (res && res.ok ? res.json() : null))
-        .then(resData => {
-          if (resData && resData.status === 'success' && Array.isArray(resData.data) && resData.data.length > 0) {
-            setBankAccounts(resData.data);
-          }
-        })
-        .catch(err => console.warn('Payment methods fetch notice:', err));
+        const response = await apiFetch(path);
+        const body = await response.json();
+        if (!response.ok || body?.status !== 'success' || !Array.isArray(body.data)) throw new Error('ບໍ່ສາມາດໂຫຼດຂໍ້ມູນຕັ້ງຄ່າໄດ້');
+        publish(body.data);
+      } catch (error) { console.error('[SETTINGS FETCH ERROR]', error); }
     }
 
     // 4. Offcuts Scrap Registry (Backend Sync)
@@ -1822,6 +1355,7 @@ export const AppProvider = ({ children }) => {
   const [orders, setOrders] = useState(() => {
     const saved = localStorage.getItem('ss_print_orders_v6');
     let baseList = saved ? JSON.parse(saved) : initialOrders;
+    baseList = baseList.map((order: any) => ({ ...order, items: Array.isArray(order.items) ? order.items : [] }));
 
     // Merge any customer-service placed orders
     try {
@@ -3236,7 +2770,7 @@ export const AppProvider = ({ children }) => {
     let materialCostForOrders = 0;
 
     orders.forEach(order => {
-      order.items.forEach(item => {
+      (Array.isArray(order.items) ? order.items : []).forEach(item => {
         const invItem = inventory.find(i => i.id === item.id);
         const itemCost = item.quantity * (invItem?.costPerConsumptionUnit || item.unitCost || 0);
 
@@ -3263,7 +2797,7 @@ export const AppProvider = ({ children }) => {
 
     let machineDepreciationFromOrders = 0;
     orders.forEach(order => {
-      const pageCountItem = order.items.find(item => item.id.startsWith('paper'));
+      const pageCountItem = (Array.isArray(order.items) ? order.items : []).find(item => typeof item.id === 'string' && item.id.startsWith('paper'));
       if (pageCountItem) {
         machineDepreciationFromOrders += pageCountItem.quantity * 90;
       }
@@ -3283,7 +2817,7 @@ export const AppProvider = ({ children }) => {
 
     // Material deadstock warnings: materials with zero consumption in active orders
     const activeOrderedIds = new Set();
-    orders.forEach(o => o.items.forEach(i => activeOrderedIds.add(i.id)));
+    orders.forEach(o => (Array.isArray(o.items) ? o.items : []).forEach(i => activeOrderedIds.add(i.id)));
     const deadstockItems = inventory.filter(inv => !activeOrderedIds.has(inv.id));
 
     // Machine production efficiencies: calculated from print count vs limit ratio or mock index
@@ -3313,425 +2847,142 @@ export const AppProvider = ({ children }) => {
   };
 
   // State actions
-  const addOrder = (orderData, autoDeduct = true) => {
-    if (!(orderData.customer_name || orderData.customerName || '').trim()) {
-      showToast('ກະລຸນາເລືອກ ຫຼື ລະບຸຊື່ລູກຄ້າກ່ອນສ້າງອໍເດີ', 'error');
-      return;
-    }
-    // A saved order owns its JSON snapshot; later editor changes cannot mutate it.
-    orderData = structuredClone(orderData);
-    const formatDateTime = () => {
-      const now = new Date('2026-08-04T09:30:00');
-      const pad = (n) => n.toString().padStart(2, '0');
-      return `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const createOrderRequests = useRef(new Map<string, { id: string; key: string; saved?: any }>());
+  const addOrder = async (input: any, _autoDeduct = false) => {
+    const snapshot = structuredClone(input);
+    const customerName = String(snapshot.customer_name || snapshot.customerName || '').trim();
+    if (!customerName) throw new Error('ກະລຸນາລະບຸລູກຄ້າກ່ອນສ້າງອໍເດີ');
+    if (!Array.isArray(snapshot.items) || !snapshot.items.length) throw new Error('ກະລຸນາເພີ່ມລາຍການງານ');
+    if ([snapshot.depositAmountPaid, snapshot.deposit_amount, snapshot.deposit_lak, snapshot.paidAmount, snapshot.received_net_lak].some(value => value !== undefined && Number(value) !== 0)) throw new Error('ສ້າງອໍເດີກ່ອນ ແລ້ວສ້າງຄຳຂໍຊຳລະເພື່ອກວດສະລິບ');
+    const fingerprint = JSON.stringify(snapshot);
+    if (!createOrderRequests.current.has(fingerprint)) createOrderRequests.current.set(fingerprint, { id: snapshot.id || `ord-${crypto.randomUUID()}`, key: crypto.randomUUID() });
+    const request = createOrderRequests.current.get(fingerprint)!;
+    if (request.saved) return request.saved;
+    const payload = {
+      ...snapshot, id: request.id, order_no: snapshot.order_no || snapshot.orderNo || request.id,
+      customer_name: customerName, customer_id: snapshot.customer_id || snapshot.customerId || '',
+      customer_phone: snapshot.customer_phone || snapshot.phone || '', customer_address: snapshot.customer_address || snapshot.address || '',
+      total_amount_lak: snapshot.total_amount_lak ?? snapshot.totalPriceCharged ?? snapshot.totalAmount ?? snapshot.total_price ?? 0,
+      deposit_mode: 'OFF',
     };
-
-    const itemsWithLots = orderData.items.map(orderedItem => {
-      const item = inventory.find(i => i.id === orderedItem.id);
-      let remaining = orderedItem.quantity;
-      const lotsUsed = [];
-      if (item && item.batches && item.batches.length > 0) {
-        const sorted = [...item.batches].sort((a,b) => a.purchaseDate.localeCompare(b.purchaseDate));
-        for (let b of sorted) {
-          if (b.currentQty > 0) {
-            const take = Math.min(remaining, b.currentQty);
-            lotsUsed.push({ lotId: b.id, qty: take, cost: b.costPerSheet });
-            remaining -= take;
-            if (remaining <= 0) break;
-          }
-        }
-      }
-      if (remaining > 0) {
-        lotsUsed.push({ lotId: 'RESERVE', qty: remaining, cost: item ? item.costPerConsumptionUnit : 0 });
-      }
-      return {
-        ...orderedItem,
-        lotsUsed
-      };
-    });
-
-    const resolvedArtworkUrl = orderData.artworkUrl || orderData.artwork_url || orderData.artworkLink || (orderData.items && orderData.items[0]?.artworkUrl) || (orderData.items && orderData.items[0]?.inner_file_url) || '';
-    const resolvedArtworkFileName = orderData.artworkFileName || orderData.artwork_file_name || (orderData.items && orderData.items[0]?.artworkFileName) || (resolvedArtworkUrl ? resolvedArtworkUrl.split('/').pop()?.split('?')[0] : '');
-    const resolvedArtworkFileSize = orderData.artworkFileSize || orderData.artwork_file_size || (orderData.items && orderData.items[0]?.artworkFileSize) || 0;
-
-    const newOrder = {
-      id: `ord-${crypto.randomUUID()}`,
-      date: new Date().toISOString().split('T')[0],
-      createdTime: formatDateTime(),
-      productionStartTime: null,
-      productionEndTime: null,
-      actualDeliveryTime: null,
-      onTimeStatus: null,
-      artworkUrl: resolvedArtworkUrl,
-      artwork_url: resolvedArtworkUrl,
-      artworkFileName: resolvedArtworkFileName,
-      artwork_file_name: resolvedArtworkFileName,
-      artworkFileSize: resolvedArtworkFileSize,
-      artwork_file_size: resolvedArtworkFileSize,
-      artworkLink: resolvedArtworkUrl || orderData.artworkLink,
-      googleDriveLink: resolvedArtworkUrl || orderData.artworkLink || orderData.googleDriveLink,
-      driveLink: resolvedArtworkUrl || orderData.artworkLink || orderData.driveLink,
-      preflight: {
-        cmyk: 'Not Checked',
-        bleed: 'Not Checked',
-        resolution: 'Not Checked',
-        approvedTimestamp: null,
-        versions: [
-          { url: resolvedArtworkUrl || orderData.artworkLink || 'https://drive.google.com/som-sing-proof.pdf', version: 1, uploadedAt: formatDateTime() }
-        ]
-      },
-      activityLog: [
-        { timestamp: formatDateTime(), description: 'ເປີດອໍເດີໃໝ່ໃນລະບົບ (New Order Created)' }
-      ],
-      ...orderData,
-      items: itemsWithLots
-    };
-
-    if (autoDeduct) {
-      newOrder.items.forEach(orderedItem => {
-        deductStockFIFO(orderedItem.id, orderedItem.quantity);
-      });
-
-      // Update equipment pages printed count
-      setEquipment(prev => {
-        return prev.map(eq => {
-          const comps = Array.isArray(eq.components) ? eq.components : [];
-          if (eq.category === 'Printer') {
-            const paperOrdered = orderData.items.find(i => i.id.startsWith('paper'));
-            const pagesCount = paperOrdered ? paperOrdered.quantity : 0;
-
-            const updatedComponents = comps.map(c => {
-              const increment = Math.round((pagesCount / 1000) * 10) / 10;
-              return {
-                ...c,
-                usage: Math.min(100, Math.round((c.usage + increment) * 10) / 10)
-              };
-            });
-
-            return {
-              ...eq,
-              printedCount: (eq.printedCount || 0) + pagesCount,
-              components: updatedComponents
-            };
-          }
-          if (eq.category === 'Cutter') {
-            const updatedComponents = comps.map(c => {
-              if (c.name?.includes('Blade')) {
-                return { ...c, usage: Math.min(100, c.usage + 1) };
-              }
-              return c;
-            });
-            return {
-              ...eq,
-              printedCount: (eq.printedCount || 0) + 1,
-              components: updatedComponents
-            };
-          }
-          return eq;
-        });
-      });
-    }
-
-    setOrders(prev => {
-      const updated = [newOrder, ...prev];
-      safeSetItem('ss_print_orders_v6', updated);
-      return updated;
-    });
-
-    // Canonical root fields match the actual Go CreateOrderRequest decoder.
-    // Keep local aliases and immutable item snapshots; quoting never verifies payment.
-    const createPayload = {
-      ...newOrder,
-      order_no: newOrder.order_no || newOrder.orderNo || newOrder.id,
-      customer_name: (newOrder.customer_name || newOrder.customerName).trim(),
-      customer_id: newOrder.customer_id || newOrder.customerId || '',
-      customer_phone: newOrder.customer_phone || newOrder.phone || '',
-      customer_address: newOrder.customer_address || newOrder.address || '',
-      customer_email: newOrder.customer_email || newOrder.email || '',
-      total_amount_lak: newOrder.total_amount_lak ?? newOrder.totalPriceCharged ?? newOrder.totalAmount ?? 0,
-    };
-    apiFetch<Response>('/api/orders', {
-      method: 'POST',
-      body: JSON.stringify(createPayload)
-    }).catch(err => console.log('Order DB sync background notice:', err));
+    const response = await apiFetch('/api/orders', { method: 'POST', headers: { 'Idempotency-Key': request.key }, body: JSON.stringify(payload) });
+    const body = await response.json();
+    // Existing order creation contract returns the canonical order directly after persistence.
+    if (!response.ok || !body?.id || body.id !== request.id || !Array.isArray(body.items)) throw new Error(body?.message || body?.error || 'ບໍ່ສາມາດຢືນຢັນການສ້າງອໍເດີໄດ້');
+    const saved = normalizeBackendOrder(body);
+    request.saved = saved;
+    setOrders(previous => [saved, ...previous.filter(item => item.id !== saved.id)]);
+    return saved;
   };
 
-  const updateOrderStatus = (orderId, newStatus) => {
-    const formatDateTime = () => {
-      const now = new Date('2026-08-04T12:00:00');
-      const pad = (n) => n.toString().padStart(2, '0');
-      return `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    };
-
-    setOrders(prev => prev.map(ord => {
-      if (ord.id === orderId) {
-        const timeNow = formatDateTime();
-        const updates: Record<string, any> = { status: newStatus };
-
-        if (newStatus === 'Printing') {
-          updates.productionStartTime = timeNow;
-        } else if (newStatus === 'Ready') {
-          updates.productionEndTime = timeNow;
-        } else if (newStatus === 'Delivered') {
-          updates.actualDeliveryTime = timeNow;
-          const promDate = new Date(ord.promisedDeliveryDate);
-          const actDate = new Date('2026-08-04');
-
-          updates.onTimeStatus = actDate <= promDate ? 'On-Time' : 'Late';
-          updates.paymentStatus = 'Fully Paid';
-          updates.depositAmountPaid = ord.totalPriceCharged;
-          updates.remainingUnpaidBalance = 0;
-          updates.paidDateTime = timeNow;
-        }
-
-        const logs = ord.activityLog || [];
-        const statusNames = {
-          Received: 'ໄດ້ຮັບອໍເດີ (Received)',
-          Printing: 'ເລີ່ມພິມແຜ່ນງານ (Press Printing)',
-          Cutting: 'ຕັດແລະເຄືອບ (Cutting & Binding)',
-          Ready: 'ຜະລິດສຳເລັດ/ກຽມຈັດສົ່ງ (Ready for Delivery)',
-          Delivered: 'ຈັດສົ່ງສຳເລັດ (Delivered)',
-          Cancelled: 'ຍົກເລີກອໍເດີ (Cancelled)'
-        };
-        const statusText = statusNames[newStatus] || newStatus;
-        const newLog = {
-          timestamp: timeNow,
-          description: `ປ່ຽນສະຖານະອໍເດີເປັນ: ${statusText}`
-        };
-
-        return {
-          ...ord,
-          ...updates,
-          activityLog: [newLog, ...logs]
-        };
-      }
-      return ord;
-    }));
-
-    // Sync status to backend API and Broadcast across tabs for Real-time customer tracking
+  const updateOrderStatus = async (orderId: string, newStatus: string) => {
     const backendStatusMap: Record<string, string> = {
-      Received: 'PENDING_SLIP_CHECK',
-      Pending: 'PENDING_SLIP_CHECK',
-      'Pre-Press': 'PREPRESS_CHECK',
-      Queued: 'READY_TO_PRINT',
-      Printing: 'IN_PRODUCTION',
-      Cutting: 'POST_PRESS',
-      'Post-Press': 'POST_PRESS',
-      Ready: 'READY_TO_PRINT',
-      'Ready for Delivery': 'DELIVERED',
-      Delivered: 'DELIVERED',
-      Completed: 'COMPLETED',
-      Cancelled: 'CANCELLED',
+      Received: 'PENDING_SLIP_CHECK', Pending: 'PENDING_SLIP_CHECK',
+      'Pre-Press': 'PREPRESS_CHECK', Queued: 'READY_TO_PRINT', Printing: 'IN_PRODUCTION',
+      Cutting: 'POST_PRESS', 'Post-Press': 'POST_PRESS', Ready: 'READY_TO_PRINT',
+      'Ready for Delivery': 'DELIVERED', Delivered: 'DELIVERED', Completed: 'COMPLETED', Cancelled: 'CANCELLED',
     };
     const targetStatus = backendStatusMap[newStatus] || newStatus;
-
-    fetch(`/api/orders/${orderId}/status`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: targetStatus }),
-    }).catch(() => {
-      fetch(`/api/v1/orders/${orderId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: targetStatus }),
-      }).catch(() => {});
-    });
-
     try {
-      if (typeof BroadcastChannel !== 'undefined') {
-        const bc = new BroadcastChannel('ssp_order_sync');
-        bc.postMessage({ type: 'ORDER_STATUS_UPDATED', orderId, status: targetStatus, timestamp: Date.now() });
-        bc.close();
+      const response = await apiFetch(`/api/orders/${encodeURIComponent(orderId)}/status`, {
+        method: 'PUT', body: JSON.stringify({ status: targetStatus }),
+      });
+      const result = await response.json();
+      if (!response.ok || result?.id !== orderId || result.status !== targetStatus) {
+        throw new Error(result?.message || result?.error || 'ບໍ່ສາມາດຢືນຢັນສະຖານະອໍເດີໄດ້');
       }
-      localStorage.setItem('ssp_order_last_updated', JSON.stringify({ orderId, status: targetStatus, timestamp: Date.now() }));
-    } catch {}
+      const saved = normalizeBackendOrder(result);
+      setOrders(previous => previous.map(item => item.id === orderId ? saved : item));
+      return saved;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດປ່ຽນສະຖານະໄດ້', 'error');
+      return null;
+    }
   };
 
-  const startOrderProduction = (orderId: string): boolean => {
-    let orderToDeduct: any = null;
-    let alreadyDeducted = false;
-
-    setOrders(prev => prev.map(ord => {
-      if (ord.id === orderId) {
-        if (ord.stockDeducted || ord.status === 'Printing' || ord.status === 'IN_PRODUCTION') {
-          alreadyDeducted = true;
-          return ord;
-        }
-        orderToDeduct = ord;
-        const now = new Date();
-        const pad = (n: number) => n.toString().padStart(2, '0');
-        const timeNow = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-        const logs = ord.activityLog || [];
-        const newLog = {
-          timestamp: timeNow,
-          description: 'ສັ່ງພິມ ແລະ ຕັດສະຕັອກວັດຖຸດິບ (Order sent to press & stock deducted)'
-        };
-        return {
-          ...ord,
-          status: 'Printing',
-          stockDeducted: true,
-          stockDeductedAt: timeNow,
-          productionStartTime: timeNow,
-          activityLog: [newLog, ...logs]
-        };
-      }
-      return ord;
-    }));
-
-    if (alreadyDeducted) {
-      showToast('ອໍເດີນີ້ໄດ້ຕັດສະຕັອກໄປແລ້ວ', 'info');
-      return false;
-    }
-
-    if (orderToDeduct) {
-      deductStockForOrder(orderToDeduct);
-      showToast('ສັ່ງພິມ ແລະ ຕັດສະຕັອກກະດາດ/ນ້ຳມຶກຮຽບຮ້ອຍແລ້ວ!', 'success');
-
-      fetch(`/api/orders/${orderId}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'IN_PRODUCTION' })
-      }).catch(err => console.log('Order status sync notice:', err));
-
-      return true;
-    }
-    return false;
+  const startOrderProduction = async (orderId: string): Promise<boolean> => {
+    return !!(await updateOrderStatus(orderId, 'IN_PRODUCTION'));
   };
 
   const updateOrderTracking = async (orderId: string, courierName: string, trackingNo: string, shippingFee?: number, branchCode?: string) => {
-    setOrders(prev => prev.map(ord => {
-      if (ord.id === orderId || ord.orderNo === orderId || ord.orderNumber === orderId) {
-        const now = new Date();
-        const pad = (n: number) => n.toString().padStart(2, '0');
-        const timeNow = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-        const logs = ord.activityLog || [];
-        const branchTxt = branchCode ? ` (ສາຂາ: ${branchCode})` : '';
-        const newLog = {
-          timestamp: timeNow,
-          description: `ອັບເດດຂໍ້ມູນການຈັດສົ່ງ: ${courierName}${branchTxt} (ເລກພັດສະດຸ: ${trackingNo || 'ບໍ່ມີ'})`
-        };
-        return {
-          ...ord,
-          deliveryMethod: courierName,
-          courier: courierName,
-          courier_name: courierName,
-          trackingNumber: trackingNo,
-          internal_tracking_code: trackingNo,
-          tracking_code: trackingNo,
-          branchCode: branchCode || ord.branchCode,
-          branch_code: branchCode || ord.branch_code,
-          courierBranch: branchCode || ord.courierBranch,
-          shippingFee: shippingFee !== undefined ? shippingFee : (ord.shippingFee || 0),
-          status: 'SHIPPED',
-          overall_status: 'SHIPPED',
-          activityLog: [newLog, ...logs]
-        };
-      }
-      return ord;
-    }));
+    const existing = orders.find(order => order.id === orderId || order.orderNo === orderId || order.orderNumber === orderId);
+    if (!existing) throw new Error('ບໍ່ພົບອໍເດີ');
+    return updateOrderDetails(existing.id, {
+      expected_updated_at: existing.updated_at,
+      courier_name: courierName, tracking_number: trackingNo,
+      ...(shippingFee === undefined ? {} : { shipping_fee: shippingFee }),
+      ...(branchCode === undefined ? {} : { branch_code: branchCode }),
+    });
+  };
 
-    showToast(`ບັນທຶກເລກພັດສະດຸ ${trackingNo || ''} ສຳເລັດແລ້ວ!`, 'success');
-
+  const receiptRequestKeys = useRef(new Map<string, string>());
+  const receiptRequestsPending = useRef(new Set<string>());
+  const settleOrderBalance = async (orderId: string, amountPaid: string | number, _method: string, reference?: string) => {
+    if (receiptRequestsPending.current.has(orderId)) throw new Error('ກຳລັງບັນທຶກຄຳຂໍຊຳລະ');
+    receiptRequestsPending.current.add(orderId);
     try {
-      await fetch(`/api/v1/orders/${orderId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          courier_name: courierName,
-          courier: courierName,
-          internal_tracking_code: trackingNo,
-          tracking_number: trackingNo,
-          tracking_code: trackingNo,
-          shipping_fee: shippingFee,
-          branch_code: branchCode,
-          status: 'SHIPPED',
-          overall_status: 'SHIPPED'
-        })
-      });
-    } catch (err) {
-      console.log('Order tracking sync notice:', err);
+      const order = orders.find(item => item.id === orderId);
+      const evidence = order?.paymentSlipUrl || order?.payment_slip_url;
+      if (!evidence) throw new Error('ກະລຸນາອັບໂຫຼດສະລິບໃນອໍເດີກ່ອນ');
+      const { summary } = await getPaymentHistory(orderId);
+      const config = await getPaymentConfiguration();
+      if (!config.manual_qr_enabled || !config.payment_method_id) throw new Error('ຍັງບໍ່ໄດ້ຕັ້ງຄ່າຮັບຊຳລະ');
+      const payload = {
+        purpose: summary.deposit_mode === 'ON' ? 'DEPOSIT' as const : Number(summary.received_net_lak) > 0 ? 'REMAINING' as const : 'FULL' as const,
+        requested_amount_lak: paymentDecimal(amountPaid),
+        payment_method_id: config.payment_method_id,
+        evidence_url: evidence,
+        expected_payment_revision: summary.payment_revision,
+        ...(reference ? { reference } : {}),
+      };
+      const fingerprint = JSON.stringify([orderId, payload]);
+      if (!receiptRequestKeys.current.has(fingerprint)) receiptRequestKeys.current.set(fingerprint, crypto.randomUUID());
+      const result = await createPaymentRecord(orderId, payload, receiptRequestKeys.current.get(fingerprint)!);
+      await refreshData();
+      return result;
+    } finally { receiptRequestsPending.current.delete(orderId); }
+  };
+
+  // A caller's paid label is never authoritative money. Read the committed server state.
+  const updateOrderPaymentStatus = async (_orderId: string, ..._legacyArguments: any[]) => {
+    await refreshData();
+  };
+
+  const orderWritePending = useRef(new Set<string>());
+  const updateOrderDetails = async (orderId: string, updatedOrder: any) => {
+    if (orderWritePending.current.has(orderId)) throw new Error('ກຳລັງບັນທຶກອໍເດີ; ກະລຸນາລໍຖ້າ');
+    orderWritePending.current.add(orderId);
+    try {
+    const payload = structuredClone(updatedOrder); delete payload.id;
+    const response = await apiFetch(`/api/v1/orders/${encodeURIComponent(orderId)}`, { method: 'PUT', body: JSON.stringify(payload) });
+    const body = await response.json();
+    if (!response.ok || body?.status !== 'success' || body?.committed !== true || body.updated_id !== orderId || body.data?.id !== orderId) throw new Error(body?.message || body?.error || 'ບໍ່ສາມາດບັນທຶກອໍເດີໄດ້');
+    let canonical = body.data;
+    if (!Array.isArray(canonical.items) || Array.isArray(body.earnings)) {
+      const readback = await apiFetch(`/api/v1/orders/${encodeURIComponent(orderId)}`);
+      canonical = await readback.json();
+      if (!readback.ok || canonical?.id !== orderId || !Array.isArray(canonical.items)) throw new Error('ບັນທຶກແລ້ວ ແຕ່ໂຫຼດລາຍການອໍເດີຄືນບໍ່ສຳເລັດ');
     }
+    if (payload.expected_updated_at && (typeof canonical.updated_at !== 'string' || canonical.updated_at === payload.expected_updated_at)) throw new Error('ບໍ່ມີເວີຊັນອໍເດີໃໝ່ຢືນຢັນ');
+    const saved = normalizeBackendOrder(canonical);
+    setOrders(previous => previous.map(item => item.id === orderId ? saved : item));
+    if (Array.isArray(body.earnings)) {
+      const earningsResponse = await apiFetch('/api/v1/hr/earnings');
+      const earningsBody = await earningsResponse.json();
+      if (!earningsResponse.ok || earningsBody?.status !== 'success' || !Array.isArray(earningsBody.data)) throw new Error('ຂັ້ນຕອນບັນທຶກແລ້ວ ແຕ່ໂຫຼດຄ່າຕອບແທນຄືນບໍ່ສຳເລັດ');
+      setEarningRecords(earningsBody.data.map((item: any) => ({ ...item, earnedAmount: Number(item.earnedAmountLAK) })));
+    }
+    showToast('ບັນທຶກອໍເດີສຳເລັດ', 'success');
+    return { ...saved, ...(Array.isArray(body.earnings) ? { earnings: body.earnings } : {}) };
+    } finally { orderWritePending.current.delete(orderId); }
   };
 
-  const settleOrderBalance = (orderId, amountPaid, method, slipNote) => {
-    const formatDateTime = () => {
-      const now = new Date('2026-08-04T10:00:00');
-      const pad = (n) => n.toString().padStart(2, '0');
-      return `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    };
-
-    setOrders(prev => prev.map(ord => {
-      if (ord.id === orderId) {
-        const newDeposit = ord.depositAmountPaid + amountPaid;
-        const newRemaining = Math.max(0, ord.totalPriceCharged - newDeposit);
-        const fullyPaid = newRemaining === 0;
-        const timeNow = formatDateTime();
-
-        const logs = ord.activityLog || [];
-        const newLog = {
-          timestamp: timeNow,
-          description: `ຊຳຣະຍອດຄ້າງຈຳນວນ ${amountPaid.toLocaleString()} LAK ຜ່ານ ${method} (${slipNote || 'ບໍ່ມີໝາຍເຫດ'})`
-        };
-
-        return {
-          ...ord,
-          depositAmountPaid: newDeposit,
-          remainingUnpaidBalance: newRemaining,
-          paymentMethod: method,
-          paymentSlipNote: slipNote || ord.paymentSlipNote,
-          paymentStatus: fullyPaid ? 'Fully Paid' : 'Deposit Paid',
-          paidDateTime: fullyPaid ? timeNow : ord.paidDateTime,
-          activityLog: [newLog, ...logs]
-        };
-      }
-      return ord;
-    }));
-  };
-
-  const updateOrderPaymentStatus = (orderId, newPaymentStatus, depositAmount, remainingBalance, slipUrl) => {
-    setOrders(prev => prev.map(ord => {
-      if (ord.id === orderId) {
-        const total = Number(ord.totalPriceCharged || ord.totalAmount || ord.total_amount_lak || 0);
-        const dep = depositAmount !== undefined ? depositAmount : (newPaymentStatus === 'Paid' ? total : (newPaymentStatus === 'Deposit' ? Math.round(total / 2) : 0));
-        const rem = remainingBalance !== undefined ? remainingBalance : (newPaymentStatus === 'Paid' ? 0 : (total - (dep || 0)));
-        return {
-          ...ord,
-          paymentStatus: newPaymentStatus,
-          depositAmountPaid: dep,
-          remainingUnpaidBalance: rem,
-          ...(slipUrl ? { paymentSlipUrl: slipUrl } : {})
-        };
-      }
-      return ord;
-    }));
-  };
-
-  const updateOrderDetails = (orderId: string, updatedOrder: any) => {
-    updatedOrder = structuredClone(updatedOrder);
-    setOrders(prev => {
-      const updated = prev.map(ord => (ord.id === orderId || ord.orderNo === orderId || ord.orderNumber === orderId) ? { ...ord, ...updatedOrder } : ord);
-      safeSetItem('ss_print_orders_v6', updated);
-      return updated;
-    });
-
-    // PostgreSQL Backend Sync
-    fetch(`/api/v1/orders/${orderId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedOrder)
-    }).catch(err => console.log('Order update DB notice:', err));
-
-    showToast(`ອັບເດດອໍເດີ #${updatedOrder.orderNo || orderId} ຮຽບຮ້ອຍແລ້ວ!`, 'success');
-  };
-
-  const deleteOrder = (orderId: string) => {
-    setOrders(prev => {
-      const updated = prev.filter(ord => ord.id !== orderId && ord.orderNo !== orderId && ord.orderNumber !== orderId);
-      safeSetItem('ss_print_orders_v6', updated);
-      return updated;
-    });
-    fetch(`/api/v1/orders/${orderId}`, { method: 'DELETE' }).catch(() => {});
-    showToast(`ລົບອໍເດີ #${orderId} ອອກຈາກລະບົບຮຽບຮ້ອຍແລ້ວ`, 'info');
+  const deleteOrder = async (orderId: string) => {
+    const response = await apiFetch(`/api/v1/orders/${encodeURIComponent(orderId)}`, { method: 'DELETE' });
+    const body = await response.json();
+    if (!response.ok || body?.status !== 'success' || body?.committed !== true || body.deleted_id !== orderId) throw new Error(body?.message || 'ບໍ່ສາມາດລຶບອໍເດີໄດ້');
+    setOrders(previous => previous.filter(item => item.id !== orderId));
+    showToast('ລຶບອໍເດີສຳເລັດ', 'success');
   };
 
   const addSpoilageLog = async (logData: any) => {
@@ -4328,6 +3579,7 @@ export const AppProvider = ({ children }) => {
         shipping_fee: quote.shippingFee ?? quote.shipping_fee,
         expiry_date: quote.expiresAt ?? quote.expiry_date ?? '', notes: quote.notes ?? '',
         commercial_snapshot: quote.commercial_snapshot,
+        ...(quote.price_correction_target_order_id ? { price_correction_target_order_id: quote.price_correction_target_order_id, expected_order_updated_at: quote.expected_order_updated_at } : {}),
         ...(quote.snapshot_completion_reason ? { snapshot_completion_reason: quote.snapshot_completion_reason } : {}),
         items,
       };
@@ -4362,14 +3614,14 @@ export const AppProvider = ({ children }) => {
     return updateQuotation(previous.id, { ...fields, version, versions: [{ version, date: new Date().toISOString(), total: fields.grandTotal, note }, ...(previous.versions ?? [])] });
   };
 
-  const deleteQuotation = (quotationId: string) => {
-    setQuotations(prev => {
-      const updated = prev.filter(q => q.id !== quotationId && q.quotationNumber !== quotationId);
-      safeSetItem('ss_print_quotations_v6', updated);
-      return updated;
-    });
-    fetch(`/api/v1/quotations/${quotationId}`, { method: 'DELETE' }).catch(() => {});
-    showToast('ລົບໃບສະເໜີລາຄາຮຽບຮ້ອຍແລ້ວ', 'info');
+  const deleteQuotation = async (quotationId: string) => {
+    const id = quotations.find(q => q.id === quotationId || q.quotationNumber === quotationId)?.id || quotationId;
+    const response = await apiFetch(`/api/v1/quotations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const result = await response.json();
+    if (!response.ok || result?.status !== 'success' || result.deleted_id !== id) {
+      throw new Error(result?.message || 'ບໍ່ສາມາດຢືນຢັນການລົບໄດ້');
+    }
+    setQuotations(prev => prev.filter(q => q.id !== id));
   };
 
   // Convert an accepted quotation into a production order + job ticket
@@ -4544,90 +3796,38 @@ export const AppProvider = ({ children }) => {
     showToast('ອັບເດດສະຖານະການຈັດສົ່ງຮຽບຮ້ອຍແລ້ວ!', 'success');
   };
 
-  const addCustomer = (customerData) => {
-    const newCust = {
-      id: customerData.id || `cust-${Date.now().toString().slice(-4)}`,
-      name: customerData.name,
-      phone: customerData.phone || '-',
-      address: customerData.address || '-',
-      creditLimit: Number(customerData.creditLimit) || 1000000,
-      paymentTerms: customerData.paymentTerms || 'Net 30',
-      instagram: customerData.instagram || '',
-      line: customerData.line || '',
-      facebook: customerData.facebook || ''
-    };
-    setCustomers(prev => [...prev, newCust]);
-
-    fetch('/api/customers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newCust)
-    }).catch(err => console.warn('Add customer API notice:', err));
+  const customerMutationKeys = useRef(new Map<string, string>());
+  const saveCustomer = async (customerId: string | null, fields: any) => {
+    const payload = customerId ? { ...customers.find(item => item.id === customerId), ...fields } : { ...fields };
+    delete payload.id;
+    const fingerprint = JSON.stringify([customerId, payload]);
+    if (!customerMutationKeys.current.has(fingerprint)) customerMutationKeys.current.set(fingerprint, crypto.randomUUID());
+    const response = await apiFetch(customerId ? `/api/customers/${encodeURIComponent(customerId)}` : '/api/customers', {
+      method: customerId ? 'PUT' : 'POST', headers: { 'Idempotency-Key': customerMutationKeys.current.get(fingerprint)! }, body: JSON.stringify(payload),
+    });
+    const body = await response.json();
+    if (!response.ok || body?.status !== 'success' || body?.committed !== true || !body.data?.id || (customerId && body.data.id !== customerId)) throw new Error(body?.message || 'ບໍ່ສາມາດບັນທຶກລູກຄ້າໄດ້');
+    setCustomers(previous => [body.data, ...previous.filter(item => item.id !== body.data.id)]);
+    return body.data;
   };
-
-  const updateCustomer = (customerId, updatedFields) => {
-    setCustomers(prev => prev.map(c => {
-      if (c.id === customerId) {
-        const updated = { ...c, ...updatedFields };
-        fetch(`/api/customers/${customerId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updated)
-        }).catch(err => console.warn('Update customer API notice:', err));
-        return updated;
-      }
-      return c;
-    }));
-  };
+  const addCustomer = (fields: any) => saveCustomer(null, fields);
+  const updateCustomer = (id: string, fields: any) => saveCustomer(id, fields);
 
   const deleteCustomer = async (customerId: string) => {
-    try {
-      const res = await fetch(`/api/customers/${customerId}`, { method: 'DELETE' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.message || data.error || 'Failed to delete customer');
-      }
-      setCustomers(prev => prev.filter(c => c.id !== customerId));
-      return { success: true };
-    } catch (err: any) {
-      console.warn('Delete customer error:', err);
-      throw err;
-    }
+    const response = await apiFetch(`/api/customers/${encodeURIComponent(customerId)}`, { method: 'DELETE' });
+    const body = await response.json();
+    if (!response.ok || body?.status !== 'success' || body?.committed !== true || body.id !== customerId) throw new Error(body?.message || 'ບໍ່ສາມາດລຶບລູກຄ້າໄດ້');
+    setCustomers(previous => previous.filter(item => item.id !== customerId));
+    return { success: true };
   };
 
-  const bulkDeleteCustomers = async (customerIds: string[]) => {
-    try {
-      const res = await fetch('/api/customers/bulk-delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: customerIds })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.deleted && Array.isArray(data.deleted)) {
-        const deletedSet = new Set(data.deleted);
-        setCustomers(prev => prev.filter(c => !deletedSet.has(c.id)));
-      } else {
-        // Local fallback: delete only those without orders
-        const eligible = customerIds.filter(id => {
-          const cust = customers.find(c => c.id === id);
-          const hasOrders = orders.some(o => o.customerName === cust?.name || o.customerId === id);
-          return !hasOrders;
-        });
-        const eligibleSet = new Set(eligible);
-        setCustomers(prev => prev.filter(c => !eligibleSet.has(c.id)));
-      }
-      return data;
-    } catch (err) {
-      console.warn('Bulk delete customer notice:', err);
-      const eligible = customerIds.filter(id => {
-        const cust = customers.find(c => c.id === id);
-        const hasOrders = orders.some(o => o.customerName === cust?.name || o.customerId === id);
-        return !hasOrders;
-      });
-      const eligibleSet = new Set(eligible);
-      setCustomers(prev => prev.filter(c => !eligibleSet.has(c.id)));
-      return { deleted: eligible, blocked: [] };
-    }
+  const bulkDeleteCustomers = async (ids: string[]) => {
+    const response = await apiFetch('/api/customers/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) });
+    const body = await response.json();
+    if (!response.ok || body?.status !== 'success' || body?.committed !== true || !Array.isArray(body.deleted) || !body.deleted.every((id: string) => ids.includes(id)) || !Array.isArray(body.blocked)) throw new Error(body?.message || 'ບໍ່ສາມາດລຶບລູກຄ້າໄດ້');
+    const deleted = new Set(body.deleted);
+    setCustomers(previous => previous.filter(item => !deleted.has(item.id)));
+    return body;
   };
 
   const fetchCustomerCategories = async () => {
@@ -4635,7 +3835,7 @@ export const AppProvider = ({ children }) => {
       const res = await fetch('/api/customers/categories');
       if (res.ok) {
         const data = await res.json();
-        if (data.status === 'success' && Array.isArray(data.data) && data.data.length > 0) {
+        if (data.status === 'success' && Array.isArray(data.data)) {
           setCustomerCategories(data.data);
           safeSetItem('ss_print_customer_categories_v1', data.data);
         }
@@ -5026,106 +4226,21 @@ export const AppProvider = ({ children }) => {
   };
 
   // ---- Couriers CRUD Helpers ----
-  const syncCouriersToBackend = async (list: any[]) => {
-    try {
-      await fetch('/api/v1/admin/couriers/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(list)
-      });
-    } catch (err) {
-      console.warn('Sync couriers error:', err);
-    }
+  const settingsMutation = async (kind: 'couriers' | 'payment-methods', id: string | null, fields?: any, remove = false) => {
+    const payload = { ...fields }; delete payload.id;
+    const response = await apiFetch(`/api/v1/admin/${kind}${id ? `/${encodeURIComponent(id)}` : ''}`, { method: remove ? 'DELETE' : id ? 'PUT' : 'POST', ...(!remove ? { body: JSON.stringify(payload) } : {}) });
+    const body = await response.json();
+    if (!response.ok || body?.status !== 'success' || body?.committed !== true || !body.data?.id || (id && body.data.id !== id)) throw new Error(body?.message || 'ບໍ່ສາມາດບັນທຶກຂໍ້ມູນຕັ້ງຄ່າໄດ້');
+    const publish = kind === 'couriers' ? setCouriers : setBankAccounts;
+    publish(previous => [body.data, ...previous.filter(item => item.id !== body.data.id)]);
+    return body.data;
   };
-
-  const addCourier = async (newCourier: any) => {
-    const courierObj = {
-      id: newCourier.id || `courier_${Date.now()}`,
-      name: newCourier.name,
-      shortName: newCourier.shortName || newCourier.name,
-      logoUrl: newCourier.logoUrl || '',
-      fee: Number(newCourier.fee) || 0,
-      eta: newCourier.eta || '1-2 ວັນ',
-      freeAbove: Number(newCourier.freeAbove) || 0,
-      color: newCourier.color || '#2563eb',
-      isActive: newCourier.isActive !== false,
-      isDefault: Boolean(newCourier.isDefault)
-    };
-
-    setCouriers(prev => {
-      const nextList = [...prev.filter(c => c.id !== courierObj.id), courierObj];
-      syncCouriersToBackend(nextList);
-      return nextList;
-    });
-    return courierObj;
-  };
-
-  const updateCourier = async (id: string, updated: any) => {
-    setCouriers(prev => {
-      const nextList = prev.map(c => c.id === id ? { ...c, ...updated } : c);
-      syncCouriersToBackend(nextList);
-      return nextList;
-    });
-  };
-
-  const deleteCourier = async (id: string) => {
-    setCouriers(prev => {
-      const nextList = prev.filter(c => c.id !== id);
-      syncCouriersToBackend(nextList);
-      return nextList;
-    });
-  };
-
-  // ---- Bank Accounts CRUD Helpers ----
-  const syncBankAccountsToBackend = async (list: any[]) => {
-    try {
-      await fetch('/api/v1/admin/payment-methods/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(list)
-      });
-    } catch (err) {
-      console.warn('Sync bank accounts error:', err);
-    }
-  };
-
-  const addBankAccount = async (newBank: any) => {
-    const bankObj = {
-      id: newBank.id || `bank_${Date.now()}`,
-      bankName: newBank.bankName,
-      accountName: newBank.accountName,
-      accountNumber: newBank.accountNumber,
-      branch: newBank.branch || '',
-      qrCodeUrl: newBank.qrCodeUrl || '',
-      logoUrl: newBank.logoUrl || '',
-      promptpayName: newBank.promptpayName || '',
-      isActive: newBank.isActive !== false,
-      isDefault: Boolean(newBank.isDefault)
-    };
-
-    setBankAccounts(prev => {
-      const nextList = [...prev.filter(b => b.id !== bankObj.id), bankObj];
-      syncBankAccountsToBackend(nextList);
-      return nextList;
-    });
-    return bankObj;
-  };
-
-  const updateBankAccount = async (id: string, updated: any) => {
-    setBankAccounts(prev => {
-      const nextList = prev.map(b => b.id === id ? { ...b, ...updated } : b);
-      syncBankAccountsToBackend(nextList);
-      return nextList;
-    });
-  };
-
-  const deleteBankAccount = async (id: string) => {
-    setBankAccounts(prev => {
-      const nextList = prev.filter(b => b.id !== id);
-      syncBankAccountsToBackend(nextList);
-      return nextList;
-    });
-  };
+  const addCourier = (fields: any) => settingsMutation('couriers', null, fields);
+  const updateCourier = (id: string, fields: any) => settingsMutation('couriers', id, { ...couriers.find(item => item.id === id), ...fields });
+  const deleteCourier = (id: string) => settingsMutation('couriers', id, undefined, true);
+  const addBankAccount = (fields: any) => settingsMutation('payment-methods', null, fields);
+  const updateBankAccount = (id: string, fields: any) => settingsMutation('payment-methods', id, { ...bankAccounts.find(item => item.id === id), ...fields });
+  const deleteBankAccount = (id: string) => settingsMutation('payment-methods', id, undefined, true);
 
   return (
     <AppContext.Provider value={{

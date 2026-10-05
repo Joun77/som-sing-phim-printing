@@ -160,14 +160,18 @@ export default function HistoryAnalytics({ hideHeader = false }) {
 
   const unpaidOrders = orders.filter(o => o.remainingUnpaidBalance > 0);
 
-  const handleSettleSubmit = (e) => {
+  const handleSettleSubmit = async (e) => {
     e.preventDefault();
     if (!settleOrderId || settleAmount <= 0) return;
-    settleOrderBalance(settleOrderId, Number(settleAmount), settleMethod, settleSlip);
-    alert(currentLang === 'lo' ? 'ຊຳຣະລ້ຽງໜີ້ສຳເລັດ!' : 'Balance settled successfully!');
-    setSettleOrderId(null);
-    setSettleAmount(0);
-    setSettleSlip('');
+    try {
+      await settleOrderBalance(settleOrderId, Number(settleAmount), settleMethod, settleSlip);
+      alert('ບັນທຶກຄຳຂໍຊຳລະແລ້ວ. ລໍຖ້າກວດສະລິບ');
+      setSettleOrderId(null);
+      setSettleAmount(0);
+      setSettleSlip('');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກຄຳຂໍໄດ້');
+    }
   };
 
   const handleOpenSettle = (order) => {

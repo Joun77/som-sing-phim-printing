@@ -15,6 +15,14 @@ import (
 
 // HandlePreflightPDF handles multipart PDF file upload and runs CMYK analysis
 func HandlePreflightPDF(c *gin.Context) {
+	mode := c.PostForm("imposition_mode")
+	if mode == "" {
+		mode = "OFF"
+	}
+	if mode != "OFF" && mode != "ON" {
+		c.JSON(422, gin.H{"status": "error", "code": "INVALID_IMPOSITION_MODE"})
+		return
+	}
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing 'file' in multipart form data", "details": err.Error()})
@@ -51,20 +59,22 @@ func HandlePreflightPDF(c *gin.Context) {
 
 	// Attach accessible static file URL
 	result.FileURL = fmt.Sprintf("/api/v1/orders/files/preflight/%s", safeFileName)
+	result.ImpositionMode = mode
 
 	c.JSON(http.StatusOK, result)
 }
 
 // BatchPreflightResult represents aggregated CMYK color coverage and individual results for multiple files
 type BatchPreflightResult struct {
-	TotalFiles          int                 `json:"total_files"`
-	AvgCovC             float64             `json:"avg_cov_c"`
-	AvgCovM             float64             `json:"avg_cov_m"`
-	AvgCovY             float64             `json:"avg_cov_y"`
-	AvgCovK             float64             `json:"avg_cov_k"`
-	LowDpiCount         int                 `json:"low_dpi_count"`
-	SuggestedImposition BatchImpositionInfo `json:"suggested_imposition"`
-	Files               []PreflightResult   `json:"files"`
+	ImpositionMode      string               `json:"imposition_mode"`
+	TotalFiles          int                  `json:"total_files"`
+	AvgCovC             float64              `json:"avg_cov_c"`
+	AvgCovM             float64              `json:"avg_cov_m"`
+	AvgCovY             float64              `json:"avg_cov_y"`
+	AvgCovK             float64              `json:"avg_cov_k"`
+	LowDpiCount         int                  `json:"low_dpi_count"`
+	SuggestedImposition *BatchImpositionInfo `json:"suggested_imposition,omitempty"`
+	Files               []PreflightResult    `json:"files"`
 }
 
 // BatchImpositionInfo holds summary layout calculations
@@ -79,6 +89,14 @@ type BatchImpositionInfo struct {
 
 // HandleBatchPreflight handles multipart form upload of up to 100 images/PDFs simultaneously
 func HandleBatchPreflight(c *gin.Context) {
+	mode := c.PostForm("imposition_mode")
+	if mode == "" {
+		mode = "OFF"
+	}
+	if mode != "OFF" && mode != "ON" {
+		c.JSON(422, gin.H{"status": "error", "code": "INVALID_IMPOSITION_MODE"})
+		return
+	}
 	form, err := c.MultipartForm()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse multipart form", "details": err.Error()})
@@ -195,7 +213,7 @@ func HandleBatchPreflight(c *gin.Context) {
 		AvgCovY:     avgY,
 		AvgCovK:     avgK,
 		LowDpiCount: lowDpiCount,
-		SuggestedImposition: BatchImpositionInfo{
+		SuggestedImposition: &BatchImpositionInfo{
 			ParentSheet:    "A4",
 			CutsPerSheet:   cutsPerSheet,
 			RequiredSheets: reqSheets,
@@ -206,6 +224,12 @@ func HandleBatchPreflight(c *gin.Context) {
 		Files: results,
 	}
 
+	response.ImpositionMode = mode
+	if mode == "OFF" {
+		response.SuggestedImposition = nil
+	}
+	for i := range response.Files {
+		response.Files[i].ImpositionMode = mode
+	}
 	c.JSON(http.StatusOK, response)
 }
-

@@ -289,7 +289,7 @@ export const QuotationHistoryModal: React.FC<QuotationHistoryModalProps> = ({
                         : `Revise → v${(quote.version || 1) + 1}`}
                     </button>
 
-                    {quote.status === 'REQUIRES_MANAGER_APPROVAL' && (
+                    {(quote.status === 'REQUIRES_MANAGER_APPROVAL' || ((quote.price_correction_source?.target_order_id || quote.price_correction_target_order_id) && ['Draft','Pending','ACCEPTED'].includes(quote.status))) && (
                       <button
                         type="button"
                         onClick={() => onOpenApproval(quote)}
@@ -304,7 +304,7 @@ export const QuotationHistoryModal: React.FC<QuotationHistoryModalProps> = ({
                       </button>
                     )}
 
-                    {(quote.status === 'Pending' ||
+                    {!quote.price_correction_source?.target_order_id && !quote.price_correction_target_order_id && (quote.status === 'Pending' ||
                       quote.status === 'Approved' || quote.status === 'ACCEPTED' || quote.status === 'REQUIRES_MANAGER_APPROVAL' ||
                       quote.status === 'Draft') && (
                       <button

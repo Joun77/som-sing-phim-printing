@@ -14,3 +14,36 @@ export function parentSheetDimensions(paper: any, parentSheetSize?: string) {
   if (paper?.name?.includes('A5') || paper?.specs?.standardSize === 'A5') return {sheetWidth:148,sheetHeight:210};
   return {sheetWidth:Number(paper?.specs?.width)||210,sheetHeight:Number(paper?.specs?.height)||297};
 }
+
+/** Read only structured selected-stock geometry; the server owns snapshots/version. */
+export function preCutStockDimensions(paper: any): { sheetWidth: number; sheetHeight: number } | undefined {
+  if (!paper?.id || (paper.category && String(paper.category).toLowerCase() !== 'paper') || paper.is_active === false) return;
+  const raw = paper.technical_specs ?? paper.specs ?? {};
+  const sources = [raw, raw.specs].filter(Boolean);
+  let dimensions: number[] | undefined;
+  for (const specs of sources) {
+    if (specs.unit !== undefined && specs.unit !== 'mm') return;
+    if (['roll', 'parent_sheet', '31x43', 'rigid'].includes(String(specs.paperFormat || specs.paper_format || '').toLowerCase())) return;
+    const candidates: number[][] = [];
+    for (const [wk, hk] of [['width_mm', 'height_mm'], ['width', 'height']]) {
+      if (specs[wk] !== undefined || specs[hk] !== undefined) {
+        if (typeof specs[wk] !== 'number' || typeof specs[hk] !== 'number') return;
+        candidates.push([specs[wk], specs[hk]]);
+      }
+    }
+    if (specs.standardSize !== undefined) {
+      const preset = ({ A3: [297, 420], A4: [210, 297], A5: [148, 210] } as Record<string, number[]>)[String(specs.standardSize).toUpperCase()];
+      if (!preset) return;
+      candidates.push(preset);
+    }
+    for (const candidate of candidates) {
+      if (!candidate.every(n => Number.isFinite(n) && n > 0) || (dimensions && (dimensions[0] !== candidate[0] || dimensions[1] !== candidate[1]))) return;
+      dimensions = candidate;
+    }
+  }
+  return dimensions ? { sheetWidth: dimensions[0], sheetHeight: dimensions[1] } : undefined;
+}
+export function preCutStockMatches(paper: any, width: number, height: number) {
+  const dimensions = preCutStockDimensions(paper);
+  return !!dimensions && Number.isFinite(width) && Number.isFinite(height) && ((dimensions.sheetWidth === width && dimensions.sheetHeight === height) || (dimensions.sheetWidth === height && dimensions.sheetHeight === width));
+}

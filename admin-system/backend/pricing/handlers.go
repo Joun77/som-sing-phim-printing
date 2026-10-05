@@ -1,7 +1,9 @@
 package pricing
 
 import (
+	"errors"
 	"net/http"
+	"somsing.local/backend/finance"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,6 +24,11 @@ func HandleCalculatePrice(c *gin.Context) {
 	// Compute pricing breakdown
 	res, err := CalculateJobPricing(req)
 	if err != nil {
+		var op *finance.OperationError
+		if errors.As(err, &op) {
+			finance.WriteOperationError(c, err)
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Pricing engine calculation failure",
 			"details": err.Error(),
@@ -45,7 +52,10 @@ func HandleCalculateBatchImposition(c *gin.Context) {
 		return
 	}
 
+	if req.ImpositionMode != "" && req.ImpositionMode != "ON" {
+		finance.WriteOperationError(c, &finance.OperationError{Status: 422, Code: "IMPOSITION_MODE_UNSUPPORTED"})
+		return
+	}
 	res := CalculateBatchImposition(req)
 	c.JSON(http.StatusOK, res)
 }
-

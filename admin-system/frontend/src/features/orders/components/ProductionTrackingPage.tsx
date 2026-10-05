@@ -30,7 +30,7 @@ interface ProductionTrackingPageProps {
   getPaymentStatusIcon: (status: string) => React.ReactNode;
   setLightbox?: (v: { src: string; title: string } | null) => void;
   onEditOrder?: (order: any) => void;
-  onUpdateOrder?: (order: any) => void;
+  onUpdateOrder?: (order: any) => Promise<any>;
 }
 
 export const ProductionTrackingPage: React.FC<ProductionTrackingPageProps> = ({
@@ -184,11 +184,9 @@ export const ProductionTrackingPage: React.FC<ProductionTrackingPageProps> = ({
             order={order}
             onAdvanceToStep3={() => onSelectStep(3)}
             onUpdateStatus={handleStatusChange}
-            onUpdateWorkflow={(wf) => {
-              order.productionWorkflow = wf;
-              if (onUpdateOrder) {
-                onUpdateOrder({ ...order, productionWorkflow: wf });
-              }
+            onUpdateWorkflow={async (wf) => {
+              if (!onUpdateOrder) throw new Error('ບໍ່ມີທາງບັນທຶກອໍເດີ');
+              return await onUpdateOrder({ id: order.id, expected_updated_at: order.updated_at, productionWorkflow: wf });
             }}
             showToast={showToast}
           />

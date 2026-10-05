@@ -135,16 +135,16 @@ export const BankManagementModal: React.FC<BankManagementModalProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bankName.trim() || !accountNumber.trim()) {
+    if (!bankName.trim() || !accountName.trim() || !accountNumber.trim()) {
       showToast(currentLang === 'lo' ? 'ກະລຸນາໃສ່ຊື່ທະນາຄານ ແລະ ເລກບັນຊີ' : 'Please enter bank name and account number', 'warning');
       return;
     }
 
+    try {
     if (isEditing) {
       await updateBankAccount(isEditing, {
         bankName: bankName.trim(),
-        accountName: accountName.trim() || 'Som-Sing Phim Printing Shop',
-        shopName: shopName.trim() || 'Som-Sing Phim Printing',
+        accountName: accountName.trim(),
         accountNumber: accountNumber.trim(),
         branch: branch.trim(),
         qrCodeUrl,
@@ -160,11 +160,10 @@ export const BankManagementModal: React.FC<BankManagementModalProps> = ({
       await addBankAccount({
         id: newId,
         bankName: bankName.trim(),
-        accountName: accountName.trim() || 'Som-Sing Phim Printing Shop',
-        shopName: shopName.trim() || 'Som-Sing Phim Printing',
+        accountName: accountName.trim(),
         accountNumber: accountNumber.trim(),
-        branch: branch.trim() || 'Vientiane Head Office',
-        qrCodeUrl: qrCodeUrl || '/assets/images/bcel-qr-placeholder.png',
+        branch: branch.trim(),
+        qrCodeUrl,
         logoUrl,
         promptpayName: shopName.trim() || promptpayName.trim() || 'Som-Sing Phim',
         isActive: true,
@@ -176,16 +175,19 @@ export const BankManagementModal: React.FC<BankManagementModalProps> = ({
     }
 
     resetForm();
+    } catch (error) { showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກໄດ້', 'error'); }
   };
 
   const handleDelete = async (id: string, name: string) => {
     if (confirm(currentLang === 'lo' ? `ຕ້ອງການລຶບບັນຊີ "${name}" ແທ້ບໍ່?` : `Delete bank account "${name}"?`)) {
+      try {
       await deleteBankAccount(id);
       showToast(
         currentLang === 'lo' ? 'ລຶບບັນຊີທະນາຄານຮຽບຮ້ອຍ' : 'Bank account deleted',
         'info'
       );
       if (isEditing === id) resetForm();
+      } catch (error) { showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດລຶບໄດ້', 'error'); }
     }
   };
 

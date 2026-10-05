@@ -1,11 +1,16 @@
 package pricing
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"somsing.local/backend/db"
+	"somsing.local/backend/finance"
 	"strings"
+	"time"
 
 	"somsing.local/backend/inventory"
 
@@ -58,16 +63,18 @@ type CustomFinishingOption struct {
 
 // CalculationRequest represents the payload from the frontend spec builder
 type CalculationRequest struct {
-	JobName             string              `json:"job_name" binding:"required"`
-	Quantity            int                 `json:"quantity" binding:"required,gt=0"`
-	PaperSku            string              `json:"paper_sku"`
-	PaperName           string              `json:"paper_name"`
-	PaperCostPerUnit    float64             `json:"paper_cost_per_unit"`     // Cost per ream/pack or unit
-	PaperCostIsPerSheet bool                `json:"paper_cost_is_per_sheet"` // If true, PaperCostPerUnit is already per parent sheet
-	PaperFormat         string              `json:"paper_format"`            // "sheet" | "roll"
-	SheetsPerPack       int                 `json:"sheets_per_pack"`         // Sheets per pack/ream (default 500 if pack cost)
-	CutsPerSheet        int                 `json:"cuts_per_sheet"`          // Number of brochure/job pieces cut per large sheet (default 1)
-	Allocations         []PrinterAllocation `json:"allocations"`
+	ImpositionMode         string                  `json:"imposition_mode,omitempty"`
+	StockDimensionSnapshot *StockDimensionSnapshot `json:"stock_dimension_snapshot,omitempty"`
+	JobName                string                  `json:"job_name" binding:"required"`
+	Quantity               int                     `json:"quantity" binding:"required,gt=0"`
+	PaperSku               string                  `json:"paper_sku"`
+	PaperName              string                  `json:"paper_name"`
+	PaperCostPerUnit       float64                 `json:"paper_cost_per_unit"`     // Cost per ream/pack or unit
+	PaperCostIsPerSheet    bool                    `json:"paper_cost_is_per_sheet"` // If true, PaperCostPerUnit is already per parent sheet
+	PaperFormat            string                  `json:"paper_format"`            // "sheet" | "roll"
+	SheetsPerPack          int                     `json:"sheets_per_pack"`         // Sheets per pack/ream (default 500 if pack cost)
+	CutsPerSheet           int                     `json:"cuts_per_sheet"`          // Number of brochure/job pieces cut per large sheet (default 1)
+	Allocations            []PrinterAllocation     `json:"allocations"`
 
 	// Multi-Printer & Channel Color Separation (Task 3)
 	PrintingProcesses  []PrinterProcessSetup   `json:"printing_processes"`
@@ -208,11 +215,13 @@ type CostBreakdownItem struct {
 
 // CalculationResponse details the cost breakdown and sale prices
 type CalculationResponse struct {
-	JobName        string            `json:"job_name"`
-	Quantity       int               `json:"quantity"`
-	AreaFactor     float64           `json:"area_factor"`
-	TotalBreakdown CostBreakdownItem `json:"total_breakdown"`
-	UnitBreakdown  CostBreakdownItem `json:"unit_breakdown"`
+	ImpositionMode         string                  `json:"imposition_mode,omitempty"`
+	StockDimensionSnapshot *StockDimensionSnapshot `json:"stock_dimension_snapshot,omitempty"`
+	JobName                string                  `json:"job_name"`
+	Quantity               int                     `json:"quantity"`
+	AreaFactor             float64                 `json:"area_factor"`
+	TotalBreakdown         CostBreakdownItem       `json:"total_breakdown"`
+	UnitBreakdown          CostBreakdownItem       `json:"unit_breakdown"`
 
 	// Cost breakdown
 	PaperCost             float64 `json:"paper_cost"`
@@ -392,6 +401,49 @@ func CalculateCutLayout(jobW, jobH, parentW, parentH float64) int {
 
 // CalculateJobPricing performs the backend pricing engine math with Decimal precision
 func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
+	if req.ImpositionMode != "" && req.ImpositionMode != "OFF" && req.ImpositionMode != "ON" {
+		return CalculationResponse{}, &finance.OperationError{Status: 422, Code: "INVALID_IMPOSITION_MODE"}
+	}
+	if req.ImpositionMode == "OFF" {
+		if req.RequiresGuillotineCut || req.GuillotineFlatFeeLAK > 0 || req.CutsPerSheet > 1 || req.Use31x43ParentSheet || req.PaperFormat == "roll" || req.PaperFormat == "parent_sheet" || req.PaperFormat == "31x43" || req.IsRigidSubstrate {
+			return CalculationResponse{}, &finance.OperationError{Status: 422, Code: "OFF_CUTTING_OPTIONS_FORBIDDEN"}
+		}
+		for _, process := range req.FinishingProcesses {
+			kind := strings.ToUpper(process.FinishingType)
+			if kind == "CUT" || kind == "TRIM" || strings.Contains(kind, "CUTTING") || strings.Contains(kind, "GUILLOTINE") || strings.Contains(kind, "TRIMMING") {
+				return CalculationResponse{}, &finance.OperationError{Status: 422, Code: "OFF_CUTTING_OPTIONS_FORBIDDEN"}
+			}
+		}
+
+		width, height := req.JobWidth, req.JobHeight
+		if width <= 0 {
+			width = req.UnfoldedWidthMM
+		}
+		if height <= 0 {
+			height = req.UnfoldedHeightMM
+		}
+		snapshot, cost, err := ResolvePrecutStock(context.Background(), nil, req.PaperSku, width, height)
+		if err != nil {
+			return CalculationResponse{}, err
+		}
+		if req.StockDimensionSnapshot != nil && *req.StockDimensionSnapshot != *snapshot {
+			if req.StockDimensionSnapshot.Version != snapshot.Version {
+				return CalculationResponse{}, &finance.OperationError{Status: 409, Code: "STOCK_DIMENSION_SNAPSHOT_STALE"}
+			}
+			return CalculationResponse{}, &finance.OperationError{Status: 422, Code: "STOCK_DIMENSION_SNAPSHOT_INVALID"}
+		}
+		req.StockDimensionSnapshot = snapshot
+		req.PaperCostPerUnit = cost
+		req.PaperCostIsPerSheet = true
+		req.SheetsPerPack = 1
+		req.CutsPerSheet = 1
+		req.JobWidth = width
+		req.JobHeight = height
+		req.ParentSheetWidthMM = 0
+		req.ParentSheetHeightMM = 0
+		req.PaperFormat = "sheet"
+	}
+
 	// ── Input Validation & Sanitization ──────────────────────────────────────────
 	req.JobName = strings.TrimSpace(req.JobName)
 	if req.JobName == "" {
@@ -1096,6 +1148,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	volumeDiscountFloat, _ := dVolumeDiscountPct.Round(2).Float64()
 
 	response := CalculationResponse{
+		ImpositionMode: req.ImpositionMode, StockDimensionSnapshot: req.StockDimensionSnapshot,
 		JobName:                 req.JobName,
 		Quantity:                req.Quantity,
 		AreaFactor:              roundToTwoDecimals(dAreaFactor.InexactFloat64()),
@@ -1184,3 +1237,143 @@ func ValidateAndCalculateAllocations(targetQty int, allocations []PrinterAllocat
 	res, _ := dTotalCost.Round(2).Float64()
 	return res, nil
 }
+
+type StockDimensionSnapshot struct {
+	MaterialID  string  `json:"material_id"`
+	SKU         string  `json:"sku"`
+	WidthMM     float64 `json:"width_mm"`
+	HeightMM    float64 `json:"height_mm"`
+	Unit        string  `json:"unit"`
+	Orientation string  `json:"orientation"`
+	Source      string  `json:"source"`
+	SourcePath  string  `json:"source_path"`
+	Version     string  `json:"version"`
+}
+
+func precutError() error {
+	return &finance.OperationError{Status: 422, Code: "PRECUT_STOCK_DIMENSIONS_INCOMPATIBLE"}
+}
+func ResolvePrecutStock(ctx context.Context, tx *sql.Tx, key string, width, height float64) (*StockDimensionSnapshot, float64, error) {
+	if key == "" || !finitePositive(width) || !finitePositive(height) {
+		return nil, 0, precutError()
+	}
+	if tx == nil && db.DB == nil {
+		return nil, 0, &finance.OperationError{Status: 503, Code: "STORAGE_UNAVAILABLE"}
+	}
+	query := `SELECT id,sku,category,COALESCE(is_active,false),COALESCE(technical_specs,'{}'::jsonb),updated_at,cost_per_consumption_unit::text,consumption_unit FROM materials WHERE id=$1 OR sku=$1`
+	if tx != nil {
+		query += " FOR SHARE"
+	}
+	var rows *sql.Rows
+	var err error
+	if tx != nil {
+		rows, err = tx.QueryContext(ctx, query, key)
+	} else {
+		rows, err = db.DB.QueryContext(ctx, query, key)
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var snapshot StockDimensionSnapshot
+	var category, costText, unit string
+	var active bool
+	var raw []byte
+	var updated time.Time
+	count := 0
+	for rows.Next() {
+		count++
+		if err = rows.Scan(&snapshot.MaterialID, &snapshot.SKU, &category, &active, &raw, &updated, &costText, &unit); err != nil {
+			return nil, 0, err
+		}
+	}
+	if err = rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	if count != 1 || !active || strings.ToLower(category) != "paper" {
+		return nil, 0, precutError()
+	}
+	if strings.ToLower(unit) != "sheet" && strings.ToLower(unit) != "sheets" && unit != "ແຜ່ນ" {
+		return nil, 0, precutError()
+	}
+	var specs map[string]any
+	if json.Unmarshal(raw, &specs) != nil {
+		return nil, 0, precutError()
+	}
+	type dimensionSource struct {
+		values map[string]any
+		prefix string
+	}
+	sources := []dimensionSource{{specs, ""}}
+	if nested, ok := specs["specs"].(map[string]any); ok {
+		sources = append(sources, dimensionSource{nested, "specs."})
+	}
+	dimensionKnown := false
+	set := func(w, h float64, path string) error {
+		if !finitePositive(w) || !finitePositive(h) {
+			return precutError()
+		}
+		if dimensionKnown && (snapshot.WidthMM != w || snapshot.HeightMM != h) {
+			return precutError()
+		}
+		if !dimensionKnown {
+			snapshot.WidthMM = w
+			snapshot.HeightMM = h
+			snapshot.SourcePath = path
+			dimensionKnown = true
+		}
+		return nil
+	}
+	for _, source := range sources {
+		if u, has := source.values["unit"]; has && u != "mm" {
+			return nil, 0, precutError()
+		}
+		for _, pair := range [][2]string{{"width_mm", "height_mm"}, {"width", "height"}} {
+			w, hasW := source.values[pair[0]]
+			h, hasH := source.values[pair[1]]
+			if !hasW && !hasH {
+				continue
+			}
+			wf, okW := w.(float64)
+			hf, okH := h.(float64)
+			if !okW || !okH {
+				return nil, 0, precutError()
+			}
+			if err = set(wf, hf, source.prefix+pair[0]+"/"+pair[1]); err != nil {
+				return nil, 0, err
+			}
+		}
+		if value, has := source.values["standardSize"]; has {
+			preset, ok := value.(string)
+			if !ok {
+				return nil, 0, precutError()
+			}
+			dimensions, ok := map[string][2]float64{"A3": {297, 420}, "A4": {210, 297}, "A5": {148, 210}}[strings.ToUpper(preset)]
+			if !ok {
+				return nil, 0, precutError()
+			}
+			if err = set(dimensions[0], dimensions[1], source.prefix+"standardSize"); err != nil {
+				return nil, 0, err
+			}
+		}
+	}
+	if !dimensionKnown {
+		return nil, 0, precutError()
+	}
+	snapshot.Orientation = "DIRECT"
+	if snapshot.WidthMM != width || snapshot.HeightMM != height {
+		if snapshot.WidthMM != height || snapshot.HeightMM != width {
+			return nil, 0, precutError()
+		}
+		snapshot.Orientation = "ROTATED"
+	}
+	snapshot.Source = "materials.technical_specs"
+	snapshot.Unit = "mm"
+	snapshot.Version = updated.UTC().Format(time.RFC3339Nano)
+	cost, err := decimal.NewFromString(costText)
+	if err != nil || cost.IsNegative() {
+		return nil, 0, precutError()
+	}
+	return &snapshot, cost.InexactFloat64(), nil
+}
+func finitePositive(v float64) bool { return v > 0 && !math.IsNaN(v) && !math.IsInf(v, 0) }
