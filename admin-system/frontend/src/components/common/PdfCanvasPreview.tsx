@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useAuthStore } from '../../store/useAuthStore';
+import type { AuthenticatedPdfRange } from '../../api/client';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { getMediaViewerCopy } from './mediaViewerCopy';
 import { configurePdfWorker } from '../../lib/pdfWorker';
@@ -59,15 +61,15 @@ function PageCanvas({ document, page, scale, sourceUrl, fit = 'zoom', thumbnail 
     })();
     return () => { active = false; render?.cancel(); /* document destroy owns page cleanup: main and thumbnail can share a page */ };
   }, [document, page, scale, fit, fit === 'zoom' ? 0 : size.width, fit === 'zoom' ? 0 : size.height, thumbnail, onPaint, copy.pdfError]);
-  return <div ref={host} className={thumbnail ? 'flex justify-center h-28' : 'flex-1 min-w-0 min-h-0 h-full overflow-hidden relative'} data-testid={thumbnail ? 'pdf-thumbnail' : 'pdf-canvas-preview'}>
+  return <div ref={host} className={thumbnail ? 'flex justify-center h-28 overflow-hidden' : 'flex-1 min-w-0 min-h-0 h-full overflow-hidden relative'} data-testid={thumbnail ? 'pdf-thumbnail' : 'pdf-canvas-preview'}>
     {painting && !error && <span role="status" className="absolute top-1 right-2 z-10 text-xs text-slate-300">{thumbnail ? '…' : copy.rendering}</span>}
     {error && <div><p role="alert" className="text-rose-600">{error}</p>{onRetry && <button type="button" onClick={onRetry}>{copy.retry}</button>}</div>}
-    <div className="w-full h-full overflow-auto flex flex-col items-center p-4"><canvas ref={canvas} aria-label={thumbnail ? `${copy.thumbnail} ${page}` : `${copy.pdfPage} ${page}`} data-source={sourceUrl} data-page={page} data-scale={scale} hidden={!hasPaint || !!error} className="bg-white shadow-xl shrink-0" /></div>
+    <div className={thumbnail ? "w-full h-full overflow-hidden flex items-center justify-center p-0" : "w-full h-full overflow-auto flex flex-col items-center p-4"}><canvas ref={canvas} aria-label={thumbnail ? `${copy.thumbnail} ${page}` : `${copy.pdfPage} ${page}`} data-source={sourceUrl} data-page={page} data-scale={scale} hidden={!hasPaint || !!error} className="bg-white shadow-xl shrink-0" /></div>
   </div>;
 }
 
 /** One original document, one main canvas and a bounded window of thumbnail canvases. */
-export default function PdfCanvasPreview({ blob, page, scale, sourceUrl, onRetry, onPageChange, onPageCount, fit = 'zoom', language = 'lo' }: { language?: string; blob: Blob; page: number; scale: number; sourceUrl?: string; onRetry?: () => void; onPageChange?: (page: number) => void; onPageCount?: (pages: number) => void; fit?: PdfFit }) {
+export default function PdfCanvasPreview({ blob, pdfRange, page, scale, sourceUrl, onRetry, onPageChange, onPageCount, fit = 'zoom', language = 'lo' }: { language?: string; blob: Blob; pdfRange?: AuthenticatedPdfRange; page: number; scale: number; sourceUrl?: string; onRetry?: () => void; onPageChange?: (page: number) => void; onPageCount?: (pages: number) => void; fit?: PdfFit }) {
   const copy = getMediaViewerCopy(language);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState('');
@@ -81,13 +83,38 @@ export default function PdfCanvasPreview({ blob, page, scale, sourceUrl, onRetry
     void (async () => {
       try {
         const lib = await import('pdfjs-dist/legacy/build/pdf.mjs'); configurePdfWorker(lib);
-        const bytes = await blob.arrayBuffer(); if (!active) return;
-        task = lib.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, useSystemFonts: true, disableFontFace: false });
-        const pdf = await task.promise; if (active) { setDocument(pdf); onPageCount?.(pdf.numPages); }
-      } catch (e) { if (active) setError(copy.pdfError); }
+        if (!active) return;
+        let pdfDoc: PDFDocumentProxy | null = null;
+        if (pdfRange && (!blob || blob.size < pdfRange.length)) {
+          try {
+            const range = new lib.PDFDataRangeTransport(pdfRange.length, pdfRange.initialData, true);
+            range.requestDataRange = (begin: number, end: number) => {
+              void pdfRange.read(begin, end).then(bytes => { if (active) range.onDataRange(begin, bytes); }).catch(() => { if (active) setError(copy.pdfError); pdfRange.abort(); void task?.destroy(); });
+            };
+            range.abort = () => pdfRange.abort();
+            task = lib.getDocument({ range, length: pdfRange.length, disableStream: true, disableAutoFetch: true, rangeChunkSize: 65536, isEvalSupported: false, useSystemFonts: true, disableFontFace: false });
+            pdfDoc = await task.promise;
+          } catch (rangeErr) {
+            console.warn('[PdfCanvasPreview] Range transport failed, falling back to full binary:', rangeErr);
+          }
+        }
+        if (!pdfDoc && blob) {
+          const bytes = await blob.arrayBuffer(); if (!active) return;
+          task = lib.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, useSystemFonts: true, disableFontFace: false });
+          pdfDoc = await task.promise;
+        }
+        if (active && pdfDoc) { setDocument(pdfDoc); onPageCount?.(pdfDoc.numPages); }
+      } catch (e) {
+        if (active) {
+          console.error('[PdfCanvasPreview] Document loading error:', e);
+          setError(copy.pdfError);
+        }
+      }
     })();
-    return () => { active = false; void task?.destroy(); };
-  }, [blob, onPageCount]);
+    const generation = useAuthStore.getState().sessionGeneration;
+    const unsubscribe = useAuthStore.subscribe(state => { if (state.sessionGeneration !== generation) { active = false; pdfRange?.abort(); void task?.destroy(); setDocument(null); setError(copy.pdfError); } });
+    return () => { active = false; unsubscribe(); pdfRange?.abort(); void task?.destroy(); };
+  }, [blob, pdfRange, onPageCount]);
   useEffect(() => {
     if (!sidebar.current) return;
     const top = (page - 1) * 150;

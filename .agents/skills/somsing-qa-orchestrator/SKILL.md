@@ -3,6 +3,11 @@ name: somsing-qa-orchestrator
 description: Audits the Somsin Printing (Som Sing Phim) ERP ecosystem, verifies business logic and pricing formulas, diagnoses bugs, and decomposes findings into structured, phased execution prompt files in .agents/tasks/. Use when the user asks to audit a module in Som Sing Phim, run QA verification on printing workflows, or generate phased implementation tasks for AI agents.
 allowed-tools: client
 ---
+
+## Shared Codex / Antigravity standard
+
+Before this specialty workflow, read [the shared working standard](../somsing-dev-coordinator/references/shared-working-standard.md). Both apps use the same task, source identity, product standards and evidence criteria; tool adapters differ. This reference governs conflicting historical workflow/UI/verification examples below, while direct human instructions retain priority.
+
 # Somsin QA Orchestrator
 
 End-to-end QA auditing, domain verification, and phased task decomposition specifically tailored for the Somsin Printing (Som Sing Phim) ERP ecosystem.

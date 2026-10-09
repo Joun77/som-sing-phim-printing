@@ -197,7 +197,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
   const approvedSources = (quotations || []).filter((quote: any) => quote.status === 'ACCEPTED' && !quote.convertedOrderId && !quote.converted_order_id && quoteTarget(quote) === order?.id);
   const preparePriceSource = () => {
     if (!order.updated_at) { setSaveError('ກະລຸນາໂຫຼດອໍເດີຈາກເຊີບເວີກ່ອນ'); return; }
-    setPrefilledOrderSpecs({ replacementQuoteItems: mapOrderToFormSpecs(order, inventory, equipment).map((row: any) => { const original = order.items.find((item: any) => item.id === row.id); const parts = getArtworkParts(original); return { ...row, printVolume: row.quantity, artworkUrl: row.fileUrl, jobSizePreset: row.paperSize, imposition_mode: original?.specs?.imposition_mode, stock_dimension_snapshot: original?.specs?.stock_dimension_snapshot, ...(parts.length ? { artworkParts: parts, includeCover: true } : {}) }; }), price_correction_target_order_id: order.id, expected_order_updated_at: order.updated_at, customerName: order.customerName || order.customer_name, customerPhone: order.customerPhone || order.customer_phone, customerAddress: order.customerAddress || order.address });
+    setPrefilledOrderSpecs({ replacementQuoteItems: mapOrderToFormSpecs(order, inventory, equipment).map((row: any) => { const original = order.items.find((item: any) => item.id === row.id); const parts = getArtworkParts(original); return { ...row, specs: structuredClone(original?.specs || row.specs || {}), printVolume: row.quantity, artworkUrl: row.fileUrl, jobSizePreset: row.paperSize, imposition_mode: original?.specs?.imposition_mode, stock_dimension_snapshot: original?.specs?.stock_dimension_snapshot, ...(parts.length ? { artworkParts: parts, includeCover: true } : {}) }; }), price_correction_target_order_id: order.id, expected_order_updated_at: order.updated_at, customerName: order.customerName || order.customer_name, customerPhone: order.customerPhone || order.customer_phone, customerAddress: order.customerAddress || order.address });
     setActiveTab('quotation'); onClose();
   };
   const applyApprovedPrice = async () => {
@@ -462,8 +462,20 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
     const finalFullAddress = buildFullAddress() || customerAddress.trim();
 
     // Source replacement is held separately. Every spec change requires repricing.
-    const work = (rows: any[]) => rows.map(({ unitPrice, totalPrice, costingDetails, ...specs }) => specs);
-    if (JSON.stringify(work(items)) !== JSON.stringify(work(initialItems.current))) {
+    const commercialWork = (rows: any[]) => rows.map((it: any) => ({
+      id: it.id,
+      quantity: Number(it.quantity || 1),
+      jobWidth: Number(it.jobWidth || 210),
+      jobHeight: Number(it.jobHeight || 297),
+      paperId: String(it.paperId || ''),
+      paperSize: String(it.paperSize || ''),
+      colorPrintMode: String(it.colorPrintMode || it.colorMode || ''),
+      pagesPerBook: Number(it.pagesPerBook || it.pages || 1),
+      bindingMethod: String(it.bindingMethod || 'none'),
+      coating: String(it.coating || 'none'),
+      imposition_mode: String(it.imposition_mode || it.specs?.imposition_mode || 'ON'),
+    }));
+    if (JSON.stringify(commercialWork(items)) !== JSON.stringify(commercialWork(initialItems.current))) {
       setSaveError('REPRICE_REQUIRED: ປ່ຽນສະເປກວຽກຕ້ອງຄິດລາຄາ ແລະ ອະນຸມັດໃໝ່'); return;
     }
     if (orderNotes !== (order.notes || order.orderNotes || '')) { setSaveError('ບັນທຶກໝາຍເຫດຍັງບໍ່ຮອງຮັບ; ກະລຸນາຄືນຄ່າເດີມ'); return; }

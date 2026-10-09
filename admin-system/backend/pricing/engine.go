@@ -24,12 +24,22 @@ type ColorChannel struct {
 	IsSpotColor bool    `json:"is_spot_color"`
 }
 
+// Float64Ptr returns a pointer to the passed float64
+func Float64Ptr(v float64) *float64 {
+	return &v
+}
+
+// IntPtr returns a pointer to the passed int
+func IntPtr(v int) *int {
+	return &v
+}
+
 // PrinterProcessSetup represents a specific printer allocation with color modes
 type PrinterProcessSetup struct {
 	PrinterAssetID string         `json:"printer_asset_id"`
 	Sequence       int            `json:"sequence"`
-	ColorMode      string         `json:"color_mode"` // "AVERAGE" | "SEPARATE_CHANNEL"
-	AverageDensity float64        `json:"average_density_pct"`
+	ColorMode      string         `json:"color_mode"` // "AVERAGE" | "SEPARATE_CHANNEL" | "MONO_K"
+	AverageDensity *float64       `json:"average_density_pct,omitempty"`
 	AllocatedPages int            `json:"allocated_pages"`
 	CostPerPage    float64        `json:"cost_per_page"`
 	ColorChannels  []ColorChannel `json:"color_channels"`
@@ -74,6 +84,7 @@ type CalculationRequest struct {
 	PaperFormat            string                  `json:"paper_format"`            // "sheet" | "roll"
 	SheetsPerPack          int                     `json:"sheets_per_pack"`         // Sheets per pack/ream (default 500 if pack cost)
 	CutsPerSheet           int                     `json:"cuts_per_sheet"`          // Number of brochure/job pieces cut per large sheet (default 1)
+	ManualSheetCount       int                     `json:"manual_sheet_count,omitempty"` // User manual override for required stock sheets
 	Allocations            []PrinterAllocation     `json:"allocations"`
 
 	// Multi-Printer & Channel Color Separation (Task 3)
@@ -106,12 +117,12 @@ type CalculationRequest struct {
 	InkCostPerMl       float64 `json:"ink_cost_per_ml"`
 
 	// Split Ink spec (Black K vs Color CMY)
-	InkCoverageKPercent   float64 `json:"ink_coverage_k_percent"`
-	InkCoverageCMYPercent float64 `json:"ink_coverage_cmy_percent"`
-	InkCostKPerMl         float64 `json:"ink_cost_k_per_ml"`
-	InkCostCMYPerMl       float64 `json:"ink_cost_cmy_per_ml"`
-	IsoYieldK             float64 `json:"iso_yield_k"`   // ISO 5% A4 yield for K (default 4000)
-	IsoYieldCMY           float64 `json:"iso_yield_cmy"` // ISO 5% A4 yield for CMY (default 4000)
+	InkCoverageKPercent   *float64 `json:"ink_coverage_k_percent,omitempty"`
+	InkCoverageCMYPercent *float64 `json:"ink_coverage_cmy_percent,omitempty"`
+	InkCostKPerMl         float64  `json:"ink_cost_k_per_ml"`
+	InkCostCMYPerMl       float64  `json:"ink_cost_cmy_per_ml"`
+	IsoYieldK             float64  `json:"iso_yield_k"`   // ISO 5% A4 yield for K (default 4000)
+	IsoYieldCMY           float64  `json:"iso_yield_cmy"` // ISO 5% A4 yield for CMY (default 4000)
 
 	// Printer / Machine Depreciation and Maintenance
 	MachinePrice           float64 `json:"machine_price"`
@@ -156,11 +167,17 @@ type CalculationRequest struct {
 	DepositPercent  float64 `json:"deposit_percent"`  // e.g. 0, 30, 50, 100
 
 	// Dynamic Preflight & Book Specifics
-	PageCount             int     `json:"page_count"`              // Number of pages in booklet/book (default 1)
-	AvgCovC               float64 `json:"avg_cov_c"`               // Average Cyan % from preflight
-	AvgCovM               float64 `json:"avg_cov_m"`               // Average Magenta % from preflight
-	AvgCovY               float64 `json:"avg_cov_y"`               // Average Yellow % from preflight
-	AvgCovK               float64 `json:"avg_cov_k"`               // Average Black/Key % from preflight
+	PageCount             int      `json:"page_count"`              // Number of pages in booklet/book (default 1)
+	IsDoubleSided         bool     `json:"is_double_sided"`          // Duplex printing flag (R1)
+	AvgCovC               *float64 `json:"avg_cov_c,omitempty"`     // Average Cyan % from preflight
+	AvgCovM               *float64 `json:"avg_cov_m,omitempty"`     // Average Magenta % from preflight
+	AvgCovY               *float64 `json:"avg_cov_y,omitempty"`     // Average Yellow % from preflight
+	AvgCovK               *float64 `json:"avg_cov_k,omitempty"`     // Average Black/Key % from preflight
+
+	// Mixed Color & Mono Population Fields (R3)
+	ColorPagesCount       *int     `json:"color_pages_count,omitempty"`
+	MonoPagesCount        *int     `json:"mono_pages_count,omitempty"`
+	MonoAvgCovK           *float64 `json:"mono_avg_cov_k,omitempty"`
 	SpineWidthMM          float64 `json:"spine_width_mm"`          // Computed spine width in mm
 	PaperGSM              float64 `json:"paper_gsm"`               // Paper grammage (e.g. 80, 260)
 	BindingLifetimeCycles float64 `json:"binding_lifetime_cycles"` // Lifecycle cycles for binding machine
@@ -405,14 +422,8 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		return CalculationResponse{}, &finance.OperationError{Status: 422, Code: "INVALID_IMPOSITION_MODE"}
 	}
 	if req.ImpositionMode == "OFF" {
-		if req.RequiresGuillotineCut || req.GuillotineFlatFeeLAK > 0 || req.CutsPerSheet > 1 || req.Use31x43ParentSheet || req.PaperFormat == "roll" || req.PaperFormat == "parent_sheet" || req.PaperFormat == "31x43" || req.IsRigidSubstrate {
+		if req.Use31x43ParentSheet || req.PaperFormat == "roll" || req.PaperFormat == "parent_sheet" || req.PaperFormat == "31x43" || req.IsRigidSubstrate {
 			return CalculationResponse{}, &finance.OperationError{Status: 422, Code: "OFF_CUTTING_OPTIONS_FORBIDDEN"}
-		}
-		for _, process := range req.FinishingProcesses {
-			kind := strings.ToUpper(process.FinishingType)
-			if kind == "CUT" || kind == "TRIM" || strings.Contains(kind, "CUTTING") || strings.Contains(kind, "GUILLOTINE") || strings.Contains(kind, "TRIMMING") {
-				return CalculationResponse{}, &finance.OperationError{Status: 422, Code: "OFF_CUTTING_OPTIONS_FORBIDDEN"}
-			}
 		}
 
 		width, height := req.JobWidth, req.JobHeight
@@ -436,7 +447,20 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		req.PaperCostPerUnit = cost
 		req.PaperCostIsPerSheet = true
 		req.SheetsPerPack = 1
-		req.CutsPerSheet = 1
+		cuts := 1
+		if width > 0 && height > 0 && snapshot.WidthMM > 0 && snapshot.HeightMM > 0 {
+			p1 := int(snapshot.WidthMM/width) * int(snapshot.HeightMM/height)
+			p2 := int(snapshot.WidthMM/height) * int(snapshot.HeightMM/width)
+			if p1 > cuts {
+				cuts = p1
+			}
+			if p2 > cuts {
+				cuts = p2
+			}
+		}
+		if req.CutsPerSheet <= 0 {
+			req.CutsPerSheet = cuts
+		}
 		req.JobWidth = width
 		req.JobHeight = height
 		req.ParentSheetWidthMM = 0
@@ -460,6 +484,30 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	}
 	if req.PaperCostPerUnit < 0 || req.SetupCost < 0 || req.FinishingCost < 0 {
 		return CalculationResponse{}, errors.New("costs cannot be negative")
+	}
+
+	// Validate coverage values are non-negative (R2: strict rejection of negative sentinels)
+	isNeg := func(p *float64) bool { return p != nil && *p < 0 }
+	if isNeg(req.AvgCovC) || isNeg(req.AvgCovM) || isNeg(req.AvgCovY) || isNeg(req.AvgCovK) ||
+		isNeg(req.InkCoverageKPercent) || isNeg(req.InkCoverageCMYPercent) || isNeg(req.MonoAvgCovK) ||
+		req.InkCoveragePercent < 0 {
+		return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "INVALID_COVERAGE"}
+	}
+	for _, proc := range req.PrintingProcesses {
+		if isNeg(proc.AverageDensity) {
+			return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "INVALID_COVERAGE"}
+		}
+		for _, ch := range proc.ColorChannels {
+			if ch.DensityPct < 0 {
+				return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "INVALID_COVERAGE"}
+			}
+		}
+	}
+	if req.ColorPagesCount != nil && *req.ColorPagesCount < 0 {
+		return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "INVALID_PAGE_COUNT"}
+	}
+	if req.MonoPagesCount != nil && *req.MonoPagesCount < 0 {
+		return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "INVALID_PAGE_COUNT"}
 	}
 
 	// ── In-Memory Cache Lookup ──────────────────────────────────────────────────
@@ -587,12 +635,25 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		dJobAreaM2 := dJobW.Div(decimal.NewFromFloat(1000.0)).Mul(dJobH.Div(decimal.NewFromFloat(1000.0)))
 		dPaperCost = dPricePerM2.Mul(dJobAreaM2).Mul(dQuantity)
 	} else {
-		reqSheets := math.Ceil(float64(req.Quantity) / float64(cutsPerSheet))
+		pageCount := req.PageCount
+		if pageCount <= 0 {
+			pageCount = 1
+		}
+		sheetsPerCopy := float64(pageCount)
+		if req.IsDoubleSided {
+			sheetsPerCopy = math.Ceil(float64(pageCount) / 2.0)
+		}
+		reqSheets := math.Ceil((sheetsPerCopy * float64(req.Quantity)) / float64(cutsPerSheet))
 		spoilPct := req.SpoilagePercent
 		if spoilPct < 0 {
 			spoilPct = 0
 		}
-		totalLargeSheets := decimal.NewFromFloat(math.Ceil(reqSheets * (1.0 + spoilPct)))
+		reqSheetsDec := decimal.NewFromFloat(reqSheets)
+		spoilFactorDec := decimal.NewFromFloat(1.0).Add(decimal.NewFromFloat(spoilPct))
+		totalLargeSheets := reqSheetsDec.Mul(spoilFactorDec).Ceil()
+		if req.ManualSheetCount > 0 {
+			totalLargeSheets = decimal.NewFromInt(int64(req.ManualSheetCount))
+		}
 
 		sheetsPerPack := req.SheetsPerPack
 		dCostPerPack := decimal.NewFromFloat(req.PaperCostPerUnit)
@@ -679,7 +740,11 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		dInkCostCMY = decimal.Zero
 
 		for _, proc := range req.PrintingProcesses {
-			procQty := req.Quantity
+			pageCount := req.PageCount
+			if pageCount <= 0 {
+				pageCount = 1
+			}
+			procQty := req.Quantity * pageCount
 			if proc.AllocatedPages > 0 {
 				procQty = proc.AllocatedPages
 			}
@@ -699,11 +764,21 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 						dInkCost = dInkCost.Add(chCost)
 					}
 				}
+			} else if proc.ColorMode == "MONO_K" {
+				avgDensity := 15.0
+				if proc.AverageDensity != nil {
+					avgDensity = *proc.AverageDensity
+				}
+				totalPlates += 1 // 1 plate for K
+				dDensity := decimal.NewFromFloat(avgDensity)
+				kCost := dCostK.Div(dIsoK).Mul(dDensity.Div(dFive)).Mul(dAreaFactor).Mul(dProcQty)
+				dInkCostK = dInkCostK.Add(kCost)
+				dInkCost = dInkCost.Add(kCost)
 			} else {
 				// Average Density mode
-				avgDensity := proc.AverageDensity
-				if avgDensity <= 0 {
-					avgDensity = 100.0
+				avgDensity := 15.0
+				if proc.AverageDensity != nil {
+					avgDensity = *proc.AverageDensity
 				}
 				totalPlates += 4 // CMYK
 				dDensity := decimal.NewFromFloat(avgDensity)
@@ -719,33 +794,93 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 			dPlateCost = decimal.NewFromInt(int64(totalPlates)).Mul(decimal.NewFromFloat(req.PlateCostPerUnit))
 		}
 	} else {
-		// Standard legacy single/split ink or preflight multi-page CMYK calculation
-		pageMultiplier := 1.0
-		if req.PageCount > 1 {
-			pageMultiplier = float64(req.PageCount)
+		// Standard single/split ink or preflight multi-page CMYK calculation
+		pageCount := req.PageCount
+		if pageCount <= 0 {
+			pageCount = 1
 		}
-		dPageMult := decimal.NewFromFloat(pageMultiplier)
 
-		inkCovK := req.InkCoverageKPercent
-		inkCovCMY := req.InkCoverageCMYPercent
+		var inkCovK, inkCovCMY float64
+		hasPreflight := req.AvgCovC != nil || req.AvgCovM != nil || req.AvgCovY != nil || req.AvgCovK != nil
+		hasSplitInk := req.InkCoverageKPercent != nil || req.InkCoverageCMYPercent != nil
 
-		// Check if Preflight CMYK averages are provided
-		if req.AvgCovC > 0 || req.AvgCovM > 0 || req.AvgCovY > 0 || req.AvgCovK > 0 {
-			inkCovK = req.AvgCovK
-			inkCovCMY = req.AvgCovC + req.AvgCovM + req.AvgCovY
-		} else if inkCovK == 0 && inkCovCMY == 0 && req.InkCoveragePercent > 0 {
+		if hasPreflight {
+			if req.AvgCovK != nil {
+				inkCovK = *req.AvgCovK
+			}
+			covC, covM, covY := 0.0, 0.0, 0.0
+			if req.AvgCovC != nil {
+				covC = *req.AvgCovC
+			}
+			if req.AvgCovM != nil {
+				covM = *req.AvgCovM
+			}
+			if req.AvgCovY != nil {
+				covY = *req.AvgCovY
+			}
+			inkCovCMY = covC + covM + covY
+		} else if hasSplitInk {
+			if req.InkCoverageKPercent != nil {
+				inkCovK = *req.InkCoverageKPercent
+			}
+			if req.InkCoverageCMYPercent != nil {
+				inkCovCMY = *req.InkCoverageCMYPercent
+			}
+		} else if req.InkCoveragePercent > 0 {
 			inkCovK = req.InkCoveragePercent
 		}
+
 		if inkCovCMY < 0 {
 			inkCovCMY = 0.0
+		}
+		if inkCovK < 0 {
+			inkCovK = 0.0
 		}
 
 		dInkCovK := decimal.NewFromFloat(inkCovK)
 		dInkCovCMY := decimal.NewFromFloat(inkCovCMY)
 
-		dInkCostK = dCostK.Div(dIsoK).Mul(dInkCovK.Div(dFive)).Mul(dAreaFactor).Mul(dQuantity).Mul(dPageMult)
-		dInkCostCMY = dCostCMY.Div(dIsoCMY).Mul(dInkCovCMY.Div(dFive)).Mul(dAreaFactor).Mul(dQuantity).Mul(dPageMult)
-		dInkCost = dInkCostK.Add(dInkCostCMY)
+		// Check for population split (R3: mixed color & mono pages)
+		hasPageSplit := req.ColorPagesCount != nil || req.MonoPagesCount != nil
+		if hasPageSplit {
+			colorPages := 0
+			if req.ColorPagesCount != nil {
+				colorPages = *req.ColorPagesCount
+			}
+			monoPages := pageCount - colorPages
+			if req.MonoPagesCount != nil {
+				monoPages = *req.MonoPagesCount
+			}
+			if monoPages < 0 {
+				monoPages = 0
+			}
+			if colorPages < 0 {
+				colorPages = 0
+			}
+
+			// CMY ink: strictly color pages * quantity
+			dColorImpressions := decimal.NewFromInt(int64(colorPages)).Mul(dQuantity)
+			dInkCostCMY = dCostCMY.Div(dIsoCMY).Mul(dInkCovCMY.Div(dFive)).Mul(dAreaFactor).Mul(dColorImpressions)
+
+			// K ink: color pages K + mono pages K
+			monoCovK := inkCovK
+			if req.MonoAvgCovK != nil {
+				monoCovK = *req.MonoAvgCovK
+			}
+			dMonoCovK := decimal.NewFromFloat(monoCovK)
+			dMonoImpressions := decimal.NewFromInt(int64(monoPages)).Mul(dQuantity)
+
+			colorKCost := dCostK.Div(dIsoK).Mul(dInkCovK.Div(dFive)).Mul(dAreaFactor).Mul(dColorImpressions)
+			monoKCost := dCostK.Div(dIsoK).Mul(dMonoCovK.Div(dFive)).Mul(dAreaFactor).Mul(dMonoImpressions)
+			dInkCostK = colorKCost.Add(monoKCost)
+			dInkCost = dInkCostK.Add(dInkCostCMY)
+		} else {
+			// Uniform document population: all pages have inkCovK and inkCovCMY
+			dImpressions := decimal.NewFromInt(int64(pageCount)).Mul(dQuantity)
+			dInkCostK = dCostK.Div(dIsoK).Mul(dInkCovK.Div(dFive)).Mul(dAreaFactor).Mul(dImpressions)
+			dInkCostCMY = dCostCMY.Div(dIsoCMY).Mul(dInkCovCMY.Div(dFive)).Mul(dAreaFactor).Mul(dImpressions)
+			dInkCost = dInkCostK.Add(dInkCostCMY)
+		}
 
 		if req.PlateCostPerUnit > 0 {
 			dPlateCost = decimal.NewFromFloat(req.PlateCostPerUnit).Mul(decimal.NewFromInt(4))
@@ -756,15 +891,19 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	dDepreciationCost := decimal.Zero
 	dMaintenanceCost := decimal.Zero
 
+	pageCount := req.PageCount
+	if pageCount <= 0 {
+		pageCount = 1
+	}
 	dJobPages := dQuantity.Mul(dAreaFactor)
-	if req.PageCount > 1 {
-		dJobPages = dJobPages.Mul(decimal.NewFromInt(int64(req.PageCount)))
+	if pageCount > 1 {
+		dJobPages = dJobPages.Mul(decimal.NewFromInt(int64(pageCount)))
 	}
 
 	if len(req.PrintingProcesses) > 0 {
 		for _, proc := range req.PrintingProcesses {
 			if proc.CostPerPage > 0 {
-				pages := req.Quantity
+				pages := req.Quantity * pageCount
 				if proc.AllocatedPages > 0 {
 					pages = proc.AllocatedPages
 				}
@@ -1028,14 +1167,30 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 				for _, ch := range proc.ColorChannels {
 					totalJobCoverage += ch.DensityPct
 				}
-			} else if proc.AverageDensity > 0 {
-				totalJobCoverage += proc.AverageDensity
+			} else if proc.AverageDensity != nil && *proc.AverageDensity > 0 {
+				totalJobCoverage += *proc.AverageDensity
 			}
 		}
-	} else if req.AvgCovC > 0 || req.AvgCovM > 0 || req.AvgCovY > 0 || req.AvgCovK > 0 {
-		totalJobCoverage = req.AvgCovC + req.AvgCovM + req.AvgCovY + req.AvgCovK
-	} else if req.InkCoverageKPercent > 0 || req.InkCoverageCMYPercent > 0 {
-		totalJobCoverage = req.InkCoverageKPercent + req.InkCoverageCMYPercent
+	} else if req.AvgCovC != nil || req.AvgCovM != nil || req.AvgCovY != nil || req.AvgCovK != nil {
+		if req.AvgCovC != nil {
+			totalJobCoverage += *req.AvgCovC
+		}
+		if req.AvgCovM != nil {
+			totalJobCoverage += *req.AvgCovM
+		}
+		if req.AvgCovY != nil {
+			totalJobCoverage += *req.AvgCovY
+		}
+		if req.AvgCovK != nil {
+			totalJobCoverage += *req.AvgCovK
+		}
+	} else if req.InkCoverageKPercent != nil || req.InkCoverageCMYPercent != nil {
+		if req.InkCoverageKPercent != nil {
+			totalJobCoverage += *req.InkCoverageKPercent
+		}
+		if req.InkCoverageCMYPercent != nil {
+			totalJobCoverage += *req.InkCoverageCMYPercent
+		}
 	} else if req.InkCoveragePercent > 0 {
 		totalJobCoverage = req.InkCoveragePercent
 	}
@@ -1325,8 +1480,14 @@ func ResolvePrecutStock(ctx context.Context, tx *sql.Tx, key string, width, heig
 		return nil
 	}
 	for _, source := range sources {
-		if u, has := source.values["unit"]; has && u != "mm" {
+		if u, has := source.values["dimension_unit"]; has && u != "mm" {
 			return nil, 0, precutError()
+		}
+		if u, has := source.values["unit"]; has && u != "mm" {
+			unitStr := strings.ToLower(fmt.Sprintf("%v", u))
+			if unitStr == "cm" || unitStr == "in" || unitStr == "inch" || unitStr == "m" {
+				return nil, 0, precutError()
+			}
 		}
 		for _, pair := range [][2]string{{"width_mm", "height_mm"}, {"width", "height"}} {
 			w, hasW := source.values[pair[0]]
@@ -1361,11 +1522,12 @@ func ResolvePrecutStock(ctx context.Context, tx *sql.Tx, key string, width, heig
 		return nil, 0, precutError()
 	}
 	snapshot.Orientation = "DIRECT"
-	if snapshot.WidthMM != width || snapshot.HeightMM != height {
-		if snapshot.WidthMM != height || snapshot.HeightMM != width {
-			return nil, 0, precutError()
-		}
+	fitsDirect := snapshot.WidthMM >= width && snapshot.HeightMM >= height
+	fitsRotated := snapshot.WidthMM >= height && snapshot.HeightMM >= width
+	if !fitsDirect && fitsRotated {
 		snapshot.Orientation = "ROTATED"
+	} else if !fitsDirect && !fitsRotated {
+		snapshot.Orientation = "OVERSIZED"
 	}
 	snapshot.Source = "materials.technical_specs"
 	snapshot.Unit = "mm"

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchAuthenticatedBlob, type AuthenticatedBlobResult } from '../../../api/client';
+import { fetchAuthenticatedBlob, fetchAuthenticatedPreview, type AuthenticatedPdfRange, type AuthenticatedBlobResult } from '../../../api/client';
 import { configurePdfWorker } from '../../../lib/pdfWorker';
 
 /**
@@ -13,6 +13,7 @@ export interface LightboxAssetControllerState {
   errorKind?: 'missing' | 'temporary-unavailable' | 'load-failed';
   resolvedBlobUrl: string;
   resolvedBlob?: Blob;
+  resolvedPdfRange?: AuthenticatedPdfRange;
   resolvedType: string;
   resolvedSize: number;
   pdfPageCount: number | null;
@@ -102,7 +103,7 @@ export function computePrevPdfPage(currentPage: number): number {
 export function createLightboxAssetController(callbacks: {
   onStateChange: (state: Partial<LightboxAssetControllerState>) => void;
   revokeUrl: (url: string) => void;
-  fetchBlob: (url: string) => Promise<{ blobUrl: string; contentType: string; size: number; blob?: Blob }>;
+  fetchBlob: (url: string, signal?: AbortSignal) => Promise<{ blobUrl: string; contentType: string; size: number; blob?: Blob; pdfRange?: AuthenticatedPdfRange }>;
 }) {
   let requestGen = 0;
   let isMounted = true;
@@ -110,11 +111,15 @@ export function createLightboxAssetController(callbacks: {
   const createdBlobs = new Set<string>();
   let fetchCount = 0;
 
+  let currentRange: AuthenticatedPdfRange | undefined;
+  let pendingController: AbortController | undefined;
   return {
     mount: () => {
       isMounted = true;
     },
     unmount: () => {
+      pendingController?.abort();
+      currentRange?.abort(); currentRange = undefined;
       isMounted = false;
       requestGen++;
       createdBlobs.forEach((url) => {
@@ -126,9 +131,13 @@ export function createLightboxAssetController(callbacks: {
       currentBlobUrl = null;
     },
     invalidatePending: () => {
+      pendingController?.abort();
+      currentRange?.abort(); currentRange = undefined;
       requestGen++;
     },
     loadAsset: async (item: LightboxAssetItem | undefined) => {
+      pendingController?.abort();
+      currentRange?.abort(); currentRange = undefined;
       const sourceUrl = item?.originalUrl || item?.url;
       // Increment generation immediately so any pending request is superseded
       const reqGen = ++requestGen;
@@ -144,13 +153,13 @@ export function createLightboxAssetController(callbacks: {
         callbacks.onStateChange({
           loadingStatus: 'error',
           errorMessage: 'ບໍ່ພົບ URL ຂອງໄຟລ໌ (No media URL provided)', errorKind: 'missing', resolvedType: '', resolvedSize: 0,
-          resolvedBlobUrl: '', resolvedBlob: undefined,
+          resolvedBlobUrl: '', resolvedBlob: undefined, resolvedPdfRange: undefined,
           pdfPageCount: null,
         });
         return;
       }
 
-      callbacks.onStateChange({ loadingStatus: 'loading', errorMessage: '', errorKind: undefined, resolvedType: item.contentType || '', resolvedSize: item.size || 0, resolvedBlobUrl: '', resolvedBlob: undefined, pdfPageCount: null });
+      callbacks.onStateChange({ loadingStatus: 'loading', errorMessage: '', errorKind: undefined, resolvedType: item.contentType || '', resolvedSize: item.size || 0, resolvedBlobUrl: '', resolvedBlob: undefined, resolvedPdfRange: undefined, pdfPageCount: null });
 
       // Revoke previous blob if created by us and different from item.url
       if (currentBlobUrl && currentBlobUrl !== item.url) {
@@ -161,13 +170,16 @@ export function createLightboxAssetController(callbacks: {
         currentBlobUrl = null;
       }
 
+      pendingController = new AbortController();
+      const signal = pendingController.signal;
       fetchCount++;
 
       try {
-        const result = await callbacks.fetchBlob(sourceUrl);
+        const result = await callbacks.fetchBlob(sourceUrl, signal);
 
         // Stale or unmounted guard
         if (!isMounted || reqGen !== requestGen) {
+          result.pdfRange?.abort();
           if (result.blobUrl && result.blobUrl !== sourceUrl) {
             try {
               callbacks.revokeUrl(result.blobUrl);
@@ -176,6 +188,7 @@ export function createLightboxAssetController(callbacks: {
           return;
         }
 
+        currentRange = result.pdfRange;
         let pageCount: number | null = null;
         // Validated response bytes take precedence over stale caller MIME hints.
         const detectedType = result.contentType || item.contentType || '';
@@ -198,7 +211,7 @@ export function createLightboxAssetController(callbacks: {
         callbacks.onStateChange({
           loadingStatus: 'success',
           resolvedBlobUrl: result.blobUrl,
-          resolvedBlob: result.blob,
+          resolvedBlob: result.blob, resolvedPdfRange: result.pdfRange,
           resolvedType: detectedType,
           resolvedSize: result.size || item.size || 0,
           pdfPageCount: pageCount,
@@ -209,7 +222,7 @@ export function createLightboxAssetController(callbacks: {
           loadingStatus: 'error',
           errorMessage: err.message || 'Failed to load artwork binary',
           errorKind: sourceUrl.startsWith('blob:') ? 'temporary-unavailable' : 'load-failed',
-          resolvedBlobUrl: '', resolvedBlob: undefined,
+          resolvedBlobUrl: '', resolvedBlob: undefined, resolvedPdfRange: undefined,
           pdfPageCount: null,
         });
       }
@@ -230,7 +243,7 @@ export function createLightboxAssetController(callbacks: {
 export function useLightboxAssetController({
   activeItem,
   fileSize = 0,
-  fetchBlobFn = fetchAuthenticatedBlob,
+  fetchBlobFn = fetchAuthenticatedPreview,
   revokeUrlFn = (url: string) => {
     try {
       URL.revokeObjectURL(url);
@@ -239,13 +252,13 @@ export function useLightboxAssetController({
 }: {
   activeItem?: LightboxAssetItem;
   fileSize?: number;
-  fetchBlobFn?: (url: string) => Promise<AuthenticatedBlobResult>;
+  fetchBlobFn?: (url: string, signal?: AbortSignal) => Promise<AuthenticatedBlobResult>;
   revokeUrlFn?: (url: string) => void;
 }) {
   const [state, setState] = useState<LightboxAssetControllerState>({
     loadingStatus: 'idle',
     errorMessage: '',
-    resolvedBlobUrl: '', resolvedBlob: undefined,
+    resolvedBlobUrl: '', resolvedBlob: undefined, resolvedPdfRange: undefined,
     resolvedType: activeItem?.contentType || '',
     resolvedSize: activeItem?.size || fileSize || 0,
     pdfPageCount: null,

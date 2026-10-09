@@ -159,7 +159,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
       return rawBatch
         .map((f: any, idx: number) => ({
           name: f.name || f.file_name || `Photo_${String(idx + 1).padStart(2, '0')}.jpg`,
-          canonicalUrl: typeof f === 'string' ? f : (f.url || f.file_url || f.preview_url || ''),
+          canonicalUrl: typeof f === 'string' ? f : (f.originalUrl || f.file_url || f.url || ''),
           size: f.size || f.file_size,
         }))
         .filter((item) => Boolean(item.canonicalUrl));
@@ -270,9 +270,10 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
     };
   }, [JSON.stringify(rawPhotos.map((p) => [p.canonicalUrl, p.name, p.size]))]);
 
-  const photos: { name: string; url: string; size?: number }[] = rawPhotos.map((p) => ({
+  const photos: { name: string; url: string; originalUrl: string; size?: number }[] = rawPhotos.map((p) => ({
     name: p.name,
     url: blobMap[p.canonicalUrl] || '',
+    originalUrl: p.canonicalUrl,
     size: p.size,
   })).filter((photo) => Boolean(photo.url));
 
@@ -308,7 +309,7 @@ export const ArtworkPreviewCard: React.FC<ArtworkPreviewCardProps> = ({
         photos: photos.map((p, idx) => ({
           name: p.name || `Photo #${idx + 1}`,
           url: p.url,
-          originalUrl: rawPhotos.find((r) => r.name === p.name)?.canonicalUrl || p.url,
+          originalUrl: p.originalUrl,
           contentType: 'image/jpeg',
         })),
         initialPhotoIndex: index,

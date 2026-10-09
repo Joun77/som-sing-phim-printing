@@ -34,7 +34,19 @@ export interface PricingCalculationInput {
   target_margin_percent?: number;
   discount_percent?: number;
   tax_percent?: number;
-  target_currency?: string;
+  page_count?: number;
+  is_double_sided?: boolean;
+  color_pages_count?: number;
+  mono_pages_count?: number;
+  mono_pages_avg_k?: number;
+  avg_cov_c?: number;
+  avg_cov_m?: number;
+  avg_cov_y?: number;
+  avg_cov_k?: number;
+  cuts_per_sheet?: number;
+  manual_sheet_count?: number;
+  imposition_mode?: string;
+  stock_dimension_snapshot?: any;
   [key: string]: any;
 }
 
@@ -93,6 +105,17 @@ export interface PricingCalculationResult {
   * Calls the Go Backend Pricing Engine API to compute job costs & price pipeline.
   */
 export async function calculateBackendPricing(input: PricingCalculationInput): Promise<PricingCalculationResult> {
+  if (
+    (input.avg_cov_c !== undefined && input.avg_cov_c < 0) ||
+    (input.avg_cov_m !== undefined && input.avg_cov_m < 0) ||
+    (input.avg_cov_y !== undefined && input.avg_cov_y < 0) ||
+    (input.avg_cov_k !== undefined && input.avg_cov_k < 0) ||
+    (input.ink_coverage_k_percent !== undefined && input.ink_coverage_k_percent < 0) ||
+    (input.ink_coverage_cmy_percent !== undefined && input.ink_coverage_cmy_percent < 0)
+  ) {
+    throw new Error('ຄ່າ Coverage ບໍ່ສາມາດເປັນຄ່າລົບໄດ້ (Coverage cannot be negative)');
+  }
+
   const payload = {
     job_name: input.job_name || 'Print Job',
     quantity: Math.max(1, input.quantity || 1),
@@ -104,9 +127,22 @@ export async function calculateBackendPricing(input: PricingCalculationInput): P
     paper_roll_price_per_m2: input.paper_roll_price_per_m2 || 0,
     setup_cost: input.setup_cost || 0,
     finishing_cost: input.finishing_cost || 0,
-    base_profit_pct: input.base_profit_pct || input.target_margin_percent || 30,
-    ink_coverage_k_percent: input.ink_coverage_k_percent || 5,
-    ink_coverage_cmy_percent: input.ink_coverage_cmy_percent || 15,
+    base_profit_pct: input.base_profit_pct ?? input.target_margin_percent ?? 30,
+    page_count: input.page_count ?? 1,
+    is_double_sided: Boolean(input.is_double_sided),
+    color_pages_count: input.color_pages_count ?? 0,
+    mono_pages_count: input.mono_pages_count ?? 0,
+    mono_pages_avg_k: input.mono_pages_avg_k,
+    avg_cov_c: input.avg_cov_c,
+    avg_cov_m: input.avg_cov_m,
+    avg_cov_y: input.avg_cov_y,
+    avg_cov_k: input.avg_cov_k,
+    cuts_per_sheet: input.cuts_per_sheet,
+    manual_sheet_count: input.manual_sheet_count,
+    imposition_mode: input.imposition_mode,
+    stock_dimension_snapshot: input.stock_dimension_snapshot,
+    ink_coverage_k_percent: input.ink_coverage_k_percent ?? 5,
+    ink_coverage_cmy_percent: input.ink_coverage_cmy_percent ?? 15,
     ink_cost_k_per_ml: input.ink_cost_k_per_ml || 250000,
     ink_cost_cmy_per_ml: input.ink_cost_cmy_per_ml || 250000,
     iso_yield_k: input.iso_yield_k || 4000,

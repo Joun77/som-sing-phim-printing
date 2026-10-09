@@ -78,11 +78,18 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
   const customerPhone = order.phone || order.customer_phone || '02058866339';
   const deliveryAddress = order.address || order.delivery_address || 'Saysettha, Vientiane';
   const courier = order.deliveryMethod || order.shippingCourier || 'Anousith Express';
-  const trackingNo = order.trackingNumber || 'ANO-8899201948LA';
-  const totalAmountLAK = Number(order.totalPriceCharged || order.totalAmount || order.total_amount_lak || 86250);
+  const trackingNo = order.tracking_code || order.trackingCode || order.tracking_number || order.trackingNumber || order.internal_tracking_code || '';
+  const totalAmountLAK = Number(order.totalPriceCharged || order.totalAmount || order.total_amount_lak || 0);
   const paymentSlipUrl = order.paymentSlipUrl || order.payment_slip_url || order.slipUrl || order.slipImage;
   const driveLink = order.driveLink || order.googleDriveLink;
   const orderDate = order.date || new Date().toISOString().split('T')[0];
+
+  const paymentRecord = Array.isArray(order.payment_records) && order.payment_records.length > 0
+    ? order.payment_records[0]
+    : (Array.isArray(order.payments) && order.payments.length > 0 ? order.payments[0] : null);
+  const paymentReceiptNo = order.receipt_no || order.receipt_number || paymentRecord?.receipt_number || paymentRecord?.reference || paymentRecord?.id || `REC-${orderIdDisplay}`;
+  const paymentMethodDisplay = order.payment_method || order.paymentMethod || paymentRecord?.channel || (paymentSlipUrl ? 'ຫຼັກຖານການໂອນ (Bank Slip)' : '—');
+  const paymentVerifier = order.payment_verified_by || paymentRecord?.reviewed_by || (currentLang === 'lo' ? 'ກວດສອບໂດຍບັນຊີ Som Sing Phim' : 'Verified by Som-Sing Accounting');
 
   const village = order.village || '';
   const district = order.district || '';
@@ -106,24 +113,36 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
   ];
 
   // Actual Realized Production Costing Metrics (COGS & Realized Gross Margin)
-  const allocatedPrinterName = order.allocated_printer_name || order.allocatedPrinterName || 'Konica Minolta AccurioPress C4070';
-  const paperBrandDisplay = order.items?.[0]?.paper_brand || order.paper_brand || order.paperBrand || 'Double A';
-  const paperWeightDisplay = order.items?.[0]?.paper_weight || order.paper_weight || order.paperWeight || '260g';
-  const paperNameDisplay = order.items?.[0]?.paper_name || order.paper_name || order.paperName || `${paperBrandDisplay} Art Card ${paperWeightDisplay}`;
+  const allocatedPrinterName = order.allocated_printer_name || order.allocatedPrinterName || (order.printer_name || order.printerName || '—');
+  const paperBrandDisplay = order.items?.[0]?.paper_brand || order.paper_brand || order.paperBrand || '';
+  const paperWeightDisplay = order.items?.[0]?.paper_weight || order.paper_weight || order.paperWeight || '';
+  const paperNameDisplay = order.items?.[0]?.paper_name || order.items?.[0]?.specs?.paperName || order.paper_name || order.paperName || (paperBrandDisplay ? `${paperBrandDisplay} Art Card ${paperWeightDisplay}` : '—');
 
-  const defaultPaperCost = Math.round(totalAmountLAK * 0.35);
-  const defaultInkCost = Math.round(totalAmountLAK * 0.15);
-  const defaultLaborCost = Math.round(totalAmountLAK * 0.12);
-  const defaultFinishingCost = Math.round(totalAmountLAK * 0.08);
-  const defaultSpoilageCost = Math.round(totalAmountLAK * 0.05);
+  const realizedPaperCost = order.realized_paper_cost !== undefined && order.realized_paper_cost !== null
+    ? Number(order.realized_paper_cost)
+    : (order.paper_cost !== undefined && order.paper_cost !== null ? Number(order.paper_cost) : 0);
 
-  const realizedPaperCost = Number(order.realized_paper_cost || order.paper_cost || defaultPaperCost);
-  const realizedInkCost = Number(order.realized_ink_cost || order.ink_cost || defaultInkCost);
-  const realizedLaborCost = Number(order.realized_labor_cost || order.labor_cost || defaultLaborCost);
-  const realizedFinishingCost = Number(order.realized_finishing_cost || order.finishing_cost || defaultFinishingCost);
-  const realizedSpoilageCost = Number(order.realized_spoilage_cost || order.spoilage_cost || defaultSpoilageCost);
+  const realizedInkCost = order.realized_ink_cost !== undefined && order.realized_ink_cost !== null
+    ? Number(order.realized_ink_cost)
+    : (order.ink_cost !== undefined && order.ink_cost !== null ? Number(order.ink_cost) : 0);
 
-  const totalProductionCost = realizedPaperCost + realizedInkCost + realizedLaborCost + realizedFinishingCost + realizedSpoilageCost;
+  const realizedLaborCost = order.realized_labor_cost !== undefined && order.realized_labor_cost !== null
+    ? Number(order.realized_labor_cost)
+    : (order.labor_cost !== undefined && order.labor_cost !== null
+      ? Number(order.labor_cost)
+      : (order.technician_earnings_lak !== undefined ? Number(order.technician_earnings_lak) : (order.actual_labor_cost !== undefined ? Number(order.actual_labor_cost) : 0)));
+
+  const realizedFinishingCost = order.realized_finishing_cost !== undefined && order.realized_finishing_cost !== null
+    ? Number(order.realized_finishing_cost)
+    : (order.finishing_cost !== undefined && order.finishing_cost !== null ? Number(order.finishing_cost) : 0);
+
+  const realizedSpoilageCost = order.realized_spoilage_cost !== undefined && order.realized_spoilage_cost !== null
+    ? Number(order.realized_spoilage_cost)
+    : (order.spoilage_cost !== undefined && order.spoilage_cost !== null ? Number(order.spoilage_cost) : 0);
+
+  const totalProductionCost = order.realized_total_cost !== undefined && order.realized_total_cost !== null
+    ? Number(order.realized_total_cost)
+    : (realizedPaperCost + realizedInkCost + realizedLaborCost + realizedFinishingCost + realizedSpoilageCost);
   const realizedGrossProfit = Math.max(0, totalAmountLAK - totalProductionCost);
   const realizedGrossMarginPct = totalAmountLAK > 0 ? (realizedGrossProfit / totalAmountLAK) * 100 : 0;
   const costRatioPct = totalAmountLAK > 0 ? (totalProductionCost / totalAmountLAK) * 100 : 0;
@@ -291,7 +310,7 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                     <span>ຂົນສົ່ງ: <strong>{courier}</strong></span>
                   </span>
                   <span className="font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-lg border border-sky-200">
-                    {trackingNo}
+                    {trackingNo || '—'}
                   </span>
                 </div>
               </div>
@@ -317,7 +336,7 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                 </h3>
               </div>
               <span className="px-3 py-1 rounded-xl text-xs font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                <span>ຊຳລະຄົບຖ້ວນ 100% (100% PAID)</span>
+                <span>{order.payment_state === 'PAID' || order.paymentStatus === 'Paid' ? 'ຊຳລະຄົບຖ້ວນ 100% (100% PAID)' : (order.payment_state || order.paymentStatus || 'UNPAID')}</span>
               </span>
             </div>
 
@@ -331,7 +350,7 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                   </span>
                   <div className="flex items-center gap-1.5 font-black text-slate-800 text-xs">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span>BCEL OnePay (QR Code)</span>
+                    <span>{paymentMethodDisplay}</span>
                   </div>
                 </div>
 
@@ -355,18 +374,18 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                   ) : (
                     <div className="text-center p-2">
                       <CreditCard className="w-8 h-8 text-emerald-600 mx-auto opacity-80" />
-                      <span className="text-[10.5px] font-bold text-slate-700 block mt-1">OnePay Slip Verified</span>
+                      <span className="text-[10.5px] font-bold text-slate-700 block mt-1">ບໍ່ມີສະລິບແນບ</span>
                     </div>
                   )}
                 </div>
 
                 <div className="space-y-0.5 text-[10.5px] pt-1 border-t border-slate-200">
                   <div className="font-mono text-slate-500 truncate">
-                    Ref: <strong className="text-slate-700">SSP-PAY-{orderIdDisplay}</strong>
+                    Ref: <strong className="text-slate-700">{paymentReceiptNo}</strong>
                   </div>
                   <div className="text-emerald-700 font-semibold flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                    <span>Verified by Cashier (Som-Sing Printing)</span>
+                    <span>{paymentVerifier}</span>
                   </div>
                 </div>
               </div>
@@ -409,7 +428,7 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
           </div>
 
           <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex justify-between items-center font-mono">
-            <span>Ref: SSP-PAY-{orderIdDisplay}</span>
+            <span>Ref: {paymentReceiptNo}</span>
             <span className="text-emerald-700 font-black">ບັນຊີປິດຍອດສົມບູນ</span>
           </div>
         </div>

@@ -3,6 +3,11 @@ name: somsing-delivery-lead
 description: ทักษะและความเชี่ยวชาญสำหรับหัวหน้าฝ่ายส่งมอบและรวบรวมผลงาน (Delivery Lead & Code Integrator) ในระบบ Som Sing Phim รับผิดชอบการรวบรวมผลลัพธ์จากทีมนักพัฒนา (DB, Backend, Frontend, UX/UI, Security), ตรวจสอบความพร้อมเบื้องต้น (Build & Pre-check), จัดทำชุดส่งมอบ (Delivery Package), และส่งรายงานผลรวมให้ QA Tester ตรวจสอบ
 ---
 
+## Shared Codex / Antigravity standard
+
+Before this specialty workflow, read [the shared working standard](../somsing-dev-coordinator/references/shared-working-standard.md). Both apps use the same task, source identity, product standards and evidence criteria; tool adapters differ. This reference governs conflicting historical workflow/UI/verification examples below, while direct human instructions retain priority.
+
+
 # Somsin Delivery Lead & Integrator Skill
 
 ทักษะคู่มือหัวหน้าฝ่ายส่งมอบและรวบรวมผลงาน (Delivery Lead & System Integrator) ประจำระบบโรงพิมพ์ **Som Sing Phim (สมสิงห์การพิมพ์)** ทำหน้าที่เป็นตัวกลางเชื่อมระหว่าง **ทีมผู้ลงมือพัฒนา (Dev Specialists)** กับ **ผู้ตรวจรับงาน (QA Tester)**

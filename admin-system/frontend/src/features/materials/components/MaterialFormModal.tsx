@@ -134,6 +134,10 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
       return;
     }
 
+    if (!nameEn.trim()) {
+      setActiveLangTab('en'); setErrorMsg('ກະລຸນາລະບຸຊື່ເຈ້ຍ (ພາສາອັງກິດ)'); return;
+    }
+
     const payload: CreateMaterialInput = {
       category,
       categoryNameLo,
@@ -406,10 +410,12 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Material Name (English)</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">ຊື່ເຈ້ຍ (ພາສາອັງກິດ) *</label>
                     <input
                       type="text"
                       value={nameEn}
+                      required
+                      aria-label="ຊື່ເຈ້ຍ (ພາສາອັງກິດ)"
                       onChange={(e) => setNameEn(e.target.value)}
                       placeholder="Double-Sided Coated Art Card"
                       className="w-full text-sm border-slate-200 rounded-lg px-3 py-2 bg-white border focus:ring-2 focus:ring-blue-500 outline-none"

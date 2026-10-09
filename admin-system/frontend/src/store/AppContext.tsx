@@ -1,5 +1,5 @@
 import { createPaymentRecord, getPaymentHistory, getPaymentConfiguration, paymentDecimal } from '../api/paymentReview';
-import { confirmedSavedQuotation, normalizeSavedQuotation, confirmedSavedConversion } from '../features/orders/utils/confirmedConversion';
+import { confirmedSavedQuotation, normalizeSavedQuotation, confirmedSavedConversion, conversionSourceRevisionMatches } from '../features/orders/utils/confirmedConversion';
 import { useAuthStore } from './useAuthStore';
 import { apiFetch } from '../api/client';
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
@@ -2847,7 +2847,7 @@ export const AppProvider = ({ children }) => {
   };
 
   // State actions
-  const createOrderRequests = useRef(new Map<string, { id: string; key: string; saved?: any }>());
+  const createOrderRequests = useRef(new Map<string, { id: string; key: string; canonicalId?: string; saved?: any }>());
   const addOrder = async (input: any, _autoDeduct = false) => {
     const snapshot = structuredClone(input);
     const customerName = String(snapshot.customer_name || snapshot.customerName || '').trim();
@@ -2865,11 +2865,23 @@ export const AppProvider = ({ children }) => {
       total_amount_lak: snapshot.total_amount_lak ?? snapshot.totalPriceCharged ?? snapshot.totalAmount ?? snapshot.total_price ?? 0,
       deposit_mode: 'OFF',
     };
-    const response = await apiFetch('/api/orders', { method: 'POST', headers: { 'Idempotency-Key': request.key }, body: JSON.stringify(payload) });
-    const body = await response.json();
-    // Existing order creation contract returns the canonical order directly after persistence.
-    if (!response.ok || !body?.id || body.id !== request.id || !Array.isArray(body.items)) throw new Error(body?.message || body?.error || 'ບໍ່ສາມາດຢືນຢັນການສ້າງອໍເດີໄດ້');
-    const saved = normalizeBackendOrder(body);
+    if (!request.canonicalId) {
+      const response = await apiFetch('/api/orders', { method: 'POST', headers: { 'Idempotency-Key': request.key }, body: JSON.stringify(payload) });
+      const body = await response.json();
+      if (!response.ok || typeof body?.id !== 'string' || !body.id.trim() || !Array.isArray(body.items)) throw new Error(body?.message || body?.error || body?.code || 'ບໍ່ສາມາດຢືນຢັນການສ້າງອໍເດີໄດ້');
+      request.canonicalId = body.id;
+    }
+    // Acknowledged creation retries read only the persisted identity, never create again.
+    const readback = await apiFetch(`/api/v1/orders/${encodeURIComponent(request.canonicalId)}`);
+    const readbackBody = await readback.json();
+    const canonical = readbackBody?.data || readbackBody;
+    if (!readback.ok || canonical?.id !== request.canonicalId || !Array.isArray(canonical.items) || !canonical.items.length) throw new Error(readbackBody?.message || readbackBody?.error || readbackBody?.code || 'ຍັງບໍ່ຢືນຢັນອໍເດີທີ່ບັນທຶກ; ກະລຸນາລອງອີກຄັ້ງ');
+    const actualTotal = canonical.total_amount_lak ?? canonical.total_price;
+    const expectedTotal = Number(payload.total_amount_lak);
+    if (typeof actualTotal !== 'number' || !Number.isFinite(actualTotal) || !Number.isFinite(expectedTotal) || Math.round(actualTotal * 100) !== Math.round(expectedTotal * 100)) {
+      throw new Error(`ອໍເດີ ${request.canonicalId} ຖືກບັນທຶກແລ້ວ ແຕ່ຍອດເງິນບໍ່ກົງກັບໃບສະເໜີ. ກະລຸນາໃຫ້ຜູ້ດູແລກວດສອບກ່ອນສ້າງອໍເດີໃໝ່`);
+    }
+    const saved = normalizeBackendOrder(canonical);
     request.saved = saved;
     setOrders(previous => [saved, ...previous.filter(item => item.id !== saved.id)]);
     return saved;
@@ -2891,7 +2903,18 @@ export const AppProvider = ({ children }) => {
       if (!response.ok || result?.id !== orderId || result.status !== targetStatus) {
         throw new Error(result?.message || result?.error || 'ບໍ່ສາມາດຢືນຢັນສະຖານະອໍເດີໄດ້');
       }
-      const saved = normalizeBackendOrder(result);
+      // The status acknowledgment can precede the final persisted revision/demo hydration.
+      const readback = await apiFetch(`/api/v1/orders/${encodeURIComponent(orderId)}`);
+      const body = await readback.json();
+      const canonical = body?.data || body;
+      if (!readback.ok || canonical?.id !== orderId ||
+        (canonical.overall_status || canonical.status) !== targetStatus ||
+        typeof canonical.updated_at !== 'string' || !Number.isFinite(Date.parse(canonical.updated_at)) ||
+        !Array.isArray(canonical.items) ||
+        (targetStatus === 'IN_PRODUCTION' && !canonical.stock_deducted_at)) {
+        throw new Error(body?.message || body?.error || 'ບໍ່ສາມາດໂຫຼດສະຖານະທີ່ບັນທຶກໄດ້; ກະລຸນາໂຫຼດອໍເດີໃໝ່');
+      }
+      const saved = normalizeBackendOrder(canonical);
       setOrders(previous => previous.map(item => item.id === orderId ? saved : item));
       return saved;
     } catch (error) {
@@ -3626,8 +3649,8 @@ export const AppProvider = ({ children }) => {
 
   // Convert an accepted quotation into a production order + job ticket
   const convertingQuotations = useRef(new Set<string>());
-  const convertQuotationToOrder = async (quotationId: string) => {
-    const quotation = quotations.find(q => q.id === quotationId || q.quotationNumber === quotationId);
+  const convertQuotationToOrder = async (quotationId: string, committedQuotation?: any) => {
+    const quotation = committedQuotation?.id === quotationId ? committedQuotation : quotations.find(q => q.id === quotationId || q.quotationNumber === quotationId);
     if (!quotation || convertingQuotations.current.has(quotation.id)) return null;
     if (typeof quotation.updated_at !== 'string' || typeof quotation.total_selling_price !== 'number') {
       showToast('ຕ້ອງບັນທຶກ ຫຼື ໂຫຼດໃບສະເໜີລາຄາຈາກເຊີບເວີກ່ອນ', 'error');
@@ -3645,7 +3668,12 @@ export const AppProvider = ({ children }) => {
         showToast(result.code === 'quotation_snapshot_incomplete' ? 'ຂໍ້ມູນຕົ້ນທຶນບໍ່ຄົບ; ຕ້ອງໃຫ້ຜູ້ຈັດການກວດສອບກ່ອນ' : result.code === 'quotation_changed' ? 'ໃບສະເໜີລາຄາປ່ຽນແລ້ວ; ກະລຸນາໂຫຼດຂໍ້ມູນໃໝ່' : result.existing_order_id ? 'ອໍເດີມີແລ້ວ; ຕ້ອງກວດສອບກ່ອນ ແລະ ຈະບໍ່ສ້າງຊ້ຳ' : 'ແປງໃບສະເໜີບໍ່ສຳເລັດ; ສາມາດລອງອີກຄັ້ງ', 'error');
         return null;
       }
-      const { envelope, order } = confirmedSavedConversion(result, quotation.id);
+      const acknowledged = confirmedSavedConversion(result, quotation.id);
+      const canonicalResponse = await apiFetch(`/api/v1/orders/${encodeURIComponent(acknowledged.order.id)}`);
+      const canonicalBody = await canonicalResponse.json();
+      if (!canonicalResponse.ok) throw new Error('Canonical order readback failed');
+      const { envelope, order } = confirmedSavedConversion({ ...result, data: canonicalBody.data || canonicalBody }, quotation.id);
+      if (Math.round(order.total_amount_lak * 100) !== Math.round(quotation.total_selling_price * 100) || Math.round(Number(order.total_cost) * 100) !== Math.round(quotation.total_cost * 100) || !conversionSourceRevisionMatches(envelope, order, quotation) || order.items.length !== quotation.items.length || order.items.some((item, index) => ['quantity', 'unit_cost_lak', 'unit_price_lak', 'total_price_lak'].some(field => item[field] !== quotation.items[index][field]))) throw new Error('Committed conversion money or revision does not match saved quotation');
       const normalized = normalizeBackendOrder(order);
       const localOrder = { ...order, ...normalized,
         total_amount_lak: order.total_amount_lak, totalPriceCharged: order.total_amount_lak, totalAmount: order.total_amount_lak,

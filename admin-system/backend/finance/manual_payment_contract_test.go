@@ -176,6 +176,7 @@ func TestPendingSlips_FailClosed(t *testing.T) {
 func fixtureReviewIdentity(c *gin.Context) {
 	c.Set("user_id", "fixture-reviewer")
 	c.Set("username", "Fixture reviewer")
+	c.Set("user_role", "finance")
 	c.Next()
 }
 func TestManualApproval_RequiresReviewerIdentity(t *testing.T) {

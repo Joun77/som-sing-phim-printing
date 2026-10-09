@@ -86,12 +86,14 @@ export const MaterialManagement: React.FC = () => {
 
   const handleMove = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= filteredMaterials.length) return;
     const moved = filteredMaterials[index], neighbor = filteredMaterials[targetIndex];
     if (!moved || !neighbor || reorderMutation.isPending) return;
-    const payload = [
-      { id: moved.id, sortOrder: neighbor.sortOrder },
-      { id: neighbor.id, sortOrder: moved.sortOrder },
-    ];
+
+    const nextMaterials = [...filteredMaterials];
+    nextMaterials[index] = neighbor;
+    nextMaterials[targetIndex] = moved;
+    const payload = nextMaterials.map((m, i) => ({ id: m.id, sortOrder: (i + 1) * 10 }));
 
     setActionError('');
     await reorderMutation.mutateAsync(payload).catch(error => setActionError(error.message || 'ບໍ່ສາມາດຍ້າຍລາຍການໄດ້'));

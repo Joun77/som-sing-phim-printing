@@ -1,7 +1,10 @@
 package finance
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -185,12 +188,22 @@ func HandleGetFinanceSummary(c *gin.Context) {
 			return
 		}
 
-		// 4. Pending payment slips
+		// 4. Pending payment slips (Actual pending receipt authority)
 		querySlips := `
-			SELECT COUNT(*) 
-			FROM orders 
-			WHERE (payment_slip_url IS NOT NULL OR proof_url IS NOT NULL) 
-			  AND status IN ('PENDING_PAYMENT', 'Pending Payment', 'Verification Required')
+			SELECT (
+				SELECT COUNT(*) 
+				FROM payment_records pr 
+				JOIN orders o ON pr.order_id = o.id
+				WHERE pr.record_kind = 'RECEIPT' AND pr.state = 'PENDING'
+			) + (
+				SELECT COUNT(*) 
+				FROM orders o 
+				WHERE NOT EXISTS (SELECT 1 FROM payment_records pr2 WHERE pr2.order_id = o.id)
+				  AND (o.payment_slip_url IS NOT NULL OR o.proof_url IS NOT NULL) 
+				  AND COALESCE(o.payment_slip_url, o.proof_url, '') != ''
+				  AND o.status IN ('PENDING_PAYMENT', 'Pending Payment', 'Verification Required', 'PENDING_SLIP_CHECK', 'WAITING_DEPOSIT')
+				  AND COALESCE(o.payment_state, 'UNPAID') != 'PAID'
+			)
 		`
 		if err := db.DB.QueryRow(querySlips).Scan(&pendingCount); err != nil {
 			WriteOperationError(c, err)
@@ -219,24 +232,121 @@ func HandleGetFinanceSummary(c *gin.Context) {
 func HandleVerifyPaymentSlip(c *gin.Context) {
 	var req PaymentVerificationRequest
 	if c.ShouldBindJSON(&req) != nil || (req.Status != "APPROVED" && req.Status != "REJECTED") {
-		WriteOperationError(c, operationError(400, "INVALID_JSON"))
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid verification request"})
 		return
 	}
 	if req.PaymentRecordID != "" {
 		HandleReviewPaymentRecord(c, req)
-	} else {
-		HandleLegacyFullReview(c, req)
+		return
 	}
+	reviewer := c.GetString("user_id")
+	if reviewer == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "Unauthorized: reviewer identity required"})
+		return
+	}
+	if db.DB == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "Payment storage unavailable"})
+		return
+	}
+	tx, err := db.DB.BeginTx(c.Request.Context(), nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to begin transaction"})
+		return
+	}
+	defer tx.Rollback()
+	var id, status, amountText, slipURL string
+	err = tx.QueryRowContext(c.Request.Context(), `SELECT id, status, COALESCE(total_amount_lak, total_price, 0)::text, COALESCE(payment_slip_url, proof_url, '') FROM orders WHERE id = $1 OR order_no = $1 FOR UPDATE`, req.OrderID).Scan(&id, &status, &amountText, &slipURL)
+	if err != nil {
+		code := http.StatusInternalServerError
+		if err == sql.ErrNoRows {
+			code = http.StatusNotFound
+		}
+		c.JSON(code, gin.H{"status": "error", "message": "Unable to load payment review"})
+		return
+	}
+	if status != "PENDING_SLIP_CHECK" && status != "PENDING_PAYMENT" && status != "WAITING_DEPOSIT" && status != "Verification Required" && status != "Pending Payment" {
+		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "Order is not awaiting payment review"})
+		return
+	}
+	if slipURL == "" {
+		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "Payment slip is missing"})
+		return
+	}
+	newStatus := "PAYMENT_REJECTED"
+	var result sql.Result
+	if req.Status == "APPROVED" {
+		amount, amountErr := decimal.NewFromString(amountText)
+		if amountErr != nil || !amount.IsPositive() {
+			c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "Order amount is invalid"})
+			return
+		}
+		newStatus = "PAID_PREPRESS"
+		result, err = tx.ExecContext(c.Request.Context(), `UPDATE orders SET status = 'PAID_PREPRESS', overall_status = 'PAID_PREPRESS', deposit_amount = $2, deposit_lak = $2, remaining_lak = 0, updated_at = NOW() WHERE id = $1`, id, amount.String())
+		if err == nil {
+			err = CreatePaymentReceivedJournal(tx, id, amount, "Manual QR slip review")
+		}
+	} else {
+		result, err = tx.ExecContext(c.Request.Context(), `UPDATE orders SET status = 'PAYMENT_REJECTED', overall_status = 'PAYMENT_REJECTED', proof_rejection_reason = $2, updated_at = NOW() WHERE id = $1`, id, req.RejectionReason)
+	}
+	if err == nil {
+		var affected int64
+		affected, err = result.RowsAffected()
+		if err == nil && affected != 1 {
+			err = fmt.Errorf("unexpected payment update count")
+		}
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
+		return
+	}
+	auditID := make([]byte, 16)
+	if _, err := rand.Read(auditID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
+		return
+	}
+	oldValues, err := json.Marshal(map[string]string{"status": status})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
+		return
+	}
+	newValues, err := json.Marshal(map[string]string{"status": newStatus, "overall_status": newStatus, "decision": req.Status, "rejection_reason": req.RejectionReason})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
+		return
+	}
+	audit, err := tx.ExecContext(c.Request.Context(), `INSERT INTO audit_logs(id,user_id,user_name,action,resource_type,resource_id,old_values,new_values,ip_address,created_at) VALUES($1,$2,$3,'MANUAL_SLIP_REVIEW','ORDER',$4,$5,$6,$7,NOW())`, hex.EncodeToString(auditID), reviewer, c.GetString("username"), id, string(oldValues), string(newValues), c.ClientIP())
+	if err == nil {
+		var count int64
+		count, err = audit.RowsAffected()
+		if err == nil && count != 1 {
+			err = fmt.Errorf("unexpected review audit count")
+		}
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success", "orderId": id, "newStatus": newStatus})
 }
 
 type PendingSlipOrderDTO struct {
-	ID             string  `json:"id"`
-	OrderNumber    string  `json:"orderNumber"`
-	CustomerName   string  `json:"customerName"`
-	TotalAmount    float64 `json:"totalAmount"`
-	Currency       string  `json:"currency"`
-	PaymentSlipURL string  `json:"paymentSlipUrl"`
-	CreatedAt      string  `json:"createdAt"`
+	ID                      string  `json:"id"`
+	OrderNumber             string  `json:"orderNumber"`
+	CustomerName            string  `json:"customerName"`
+	TotalAmount             float64 `json:"totalAmount"`
+	Currency                string  `json:"currency"`
+	PaymentSlipURL          string  `json:"paymentSlipUrl"`
+	CreatedAt               string  `json:"createdAt"`
+	PaymentRecordID         string  `json:"paymentRecordId,omitempty"`
+	PaymentRecordIDSnake    string  `json:"payment_record_id,omitempty"`
+	ExpectedPaymentRevision int64   `json:"expectedPaymentRevision"`
+	ExpectedRevisionSnake   int64   `json:"expected_payment_revision"`
+	RequestedAmountLAK      string  `json:"requestedAmountLak,omitempty"`
+	RequestedAmountLAKSnake string  `json:"requested_amount_lak,omitempty"`
 }
 
 // HandleGetPendingSlips returns list of orders waiting for slip verification
@@ -249,29 +359,69 @@ func HandleGetPendingSlips(c *gin.Context) {
 			SELECT 
 				o.id, 
 				COALESCE(o.order_no, o.order_number, o.id) as order_number, 
-				COALESCE(c.company_name, c.contact_person, o.customer_name, 'Customer') as customer_name,
+				COALESCE(c.name, o.customer_name, 'Customer') as customer_name,
+				COALESCE(pr.requested_amount_lak, o.total_price, o.total_amount_lak, 0) as total_amount,
+				COALESCE(pr.evidence_url, o.payment_slip_url, o.proof_url, '') as slip_url,
+				pr.created_at,
+				pr.id::text as payment_record_id,
+				o.payment_revision as expected_payment_revision,
+				pr.requested_amount_lak::text as requested_amount_lak
+			FROM payment_records pr
+			JOIN orders o ON pr.order_id = o.id
+			LEFT JOIN customers c ON o.customer_id = c.id
+			WHERE pr.record_kind = 'RECEIPT' AND pr.state = 'PENDING'
+
+			UNION ALL
+
+			SELECT 
+				o.id, 
+				COALESCE(o.order_no, o.order_number, o.id) as order_number, 
+				COALESCE(c.name, o.customer_name, 'Customer') as customer_name,
 				COALESCE(o.total_price, o.total_amount_lak, 0) as total_amount,
 				COALESCE(o.payment_slip_url, o.proof_url, '') as slip_url,
-				o.created_at
+				o.created_at,
+				'' as payment_record_id,
+				o.payment_revision as expected_payment_revision,
+				COALESCE(o.total_price, o.total_amount_lak, 0)::text as requested_amount_lak
 			FROM orders o
 			LEFT JOIN customers c ON o.customer_id = c.id
-			WHERE (o.payment_slip_url IS NOT NULL OR o.proof_url IS NOT NULL)
+			WHERE NOT EXISTS (SELECT 1 FROM payment_records pr2 WHERE pr2.order_id = o.id)
+			  AND (o.payment_slip_url IS NOT NULL OR o.proof_url IS NOT NULL)
 			  AND COALESCE(o.payment_slip_url, o.proof_url, '') != ''
 			  AND o.status IN ('PENDING_PAYMENT', 'Pending Payment', 'Verification Required', 'PENDING_SLIP_CHECK', 'WAITING_DEPOSIT')
-			ORDER BY o.created_at DESC
+			  AND COALESCE(o.payment_state, 'UNPAID') != 'PAID'
+			ORDER BY created_at DESC
 		`)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Unable to load pending slips"})
 		return
 	}
 	defer rows.Close()
+	cols, _ := rows.Columns()
 	slips := make([]PendingSlipOrderDTO, 0)
 	for rows.Next() {
 		var item PendingSlipOrderDTO
 		var createdAt time.Time
-		if err := rows.Scan(&item.ID, &item.OrderNumber, &item.CustomerName, &item.TotalAmount, &item.PaymentSlipURL, &createdAt); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Unable to load pending slips"})
-			return
+		if len(cols) <= 6 {
+			if err := rows.Scan(&item.ID, &item.OrderNumber, &item.CustomerName, &item.TotalAmount, &item.PaymentSlipURL, &createdAt); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Unable to load pending slips"})
+				return
+			}
+		} else {
+			var recordID, reqAmt string
+			var rev int64
+			if err := rows.Scan(&item.ID, &item.OrderNumber, &item.CustomerName, &item.TotalAmount, &item.PaymentSlipURL, &createdAt, &recordID, &rev, &reqAmt); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Unable to load pending slips"})
+				return
+			}
+			if recordID != "" {
+				item.PaymentRecordID = recordID
+				item.PaymentRecordIDSnake = recordID
+				item.RequestedAmountLAK = reqAmt
+				item.RequestedAmountLAKSnake = reqAmt
+			}
+			item.ExpectedPaymentRevision = rev
+			item.ExpectedRevisionSnake = rev
 		}
 		item.Currency = "LAK"
 		item.CreatedAt = createdAt.Format("2006-01-02 15:04")

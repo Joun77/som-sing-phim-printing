@@ -13,6 +13,8 @@ function ImageThumbnail({ url, name, alt, language = 'lo', fit = 'cover', onUnav
 }
 /** PDFs use metadata only; images use the same authenticated/stale-safe controller as preview. */
 export default function ArtworkThumbnail(props: Props) {
-  if (/\.pdf$/i.test(props.name)) return <FileText aria-hidden="true" className="w-5 h-5 text-sky-500" />;
+  if (/\.pdf$/i.test(props.name) || /\.pdf$/i.test(props.url) || (props.url && props.url.toLowerCase().includes('.pdf'))) {
+    return <FileText aria-hidden="true" className="w-6 h-6 text-sky-500" />;
+  }
   return <ImageThumbnail {...props} />;
 }

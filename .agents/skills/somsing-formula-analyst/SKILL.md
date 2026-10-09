@@ -3,6 +3,11 @@ name: somsing-formula-analyst
 description: ทักษะและความเชี่ยวชาญสำหรับนักวิเคราะห์สูตรและวิศวกรรมต้นทุนงานพิมพ์ (Print Cost Engineer and Formula Analyst) ในระบบ Som Sing Phim ทำหน้าที่วิเคราะห์สเปกสินค้า วัสดุ และเครื่องจักร เพื่อถอดรหัสเป็นสูตรคณิตศาสตร์คำนวณต้นทุนต่อหน่วย (Unit Cost Formula), ออกแบบ Bill of Materials (BOM), คำนวณ Imposition, หมึกพิมพ์, ค่าเสื่อมเครื่องจักร, งานแปรรูปหลังพิมพ์ และจัดทำ Formula Specification ส่งต่อให้ Som-Zing Coordinator, Backend Developer และ Database Analyst
 ---
 
+## Shared Codex / Antigravity standard
+
+Before this specialty workflow, read [the shared working standard](../somsing-dev-coordinator/references/shared-working-standard.md). Both apps use the same task, source identity, product standards and evidence criteria; tool adapters differ. This reference governs conflicting historical workflow/UI/verification examples below, while direct human instructions retain priority.
+
+
 # Somsin Print Formula Analyst & Cost Engineer Skill
 
 ทักษะคู่มือนักวิเคราะห์สูตรและวิศวกรรมต้นทุนงานพิมพ์ (Print Cost Engineer and Formula Analyst) ประจำระบบโรงพิมพ์ **Som Sing Phim (สมสิงห์การพิมพ์)** ทำหน้าที่เป็นมันสมองในการคำนวณต้นทุน แปลงโจทย์สินค้า One-Stop Service ที่มีความหลากหลายและซับซ้อนให้กลายเป็นสูตรคำนวณต้นทุนต่อหน่วย (Unit Cost Formula) ที่ถูกต้องทางคณิตศาสตร์ พร้อมกำหนดโครงสร้างตัวแปร (Variables) และ Data Model สำหรับส่งมอบให้ทีมพัฒนาระบบ

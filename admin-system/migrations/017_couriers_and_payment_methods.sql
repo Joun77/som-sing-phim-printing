@@ -48,6 +48,7 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM payment_methods LIMIT 1) THEN
         INSERT INTO payment_methods (id, bank_name, account_name, account_number, branch, qr_code_url, promptpay_name, is_active, is_default) VALUES
         ('bcel_one', 'BCEL (ທະນາຄານການຄ້າຕ່າງປະເທດລາວ ມະຫາຊົນ)', 'Som-Sing Phim Printing Shop', '160-12-00-01234567-001', 'Vientiane Head Office', '/assets/images/bcel-qr-placeholder.png', 'Som-Sing Phim', true, true),
-        ('ldb_trust', 'LDB (ທະນາຄານ ພັດທະນາລາວ)', 'Som-Sing Phim Printing Shop', '010-00-11-98765432-001', 'Lane Xang Branch', '/assets/images/bcel-qr-placeholder.png', 'Som-Sing Phim', true, false);
+        ('ldb_trust', 'LDB (ທະນາຄານ ພັດທະນາລາວ)', 'Som-Sing Phim Printing Shop', '010-00-11-98765432-001', 'Lane Xang Branch', '/assets/images/bcel-qr-placeholder.png', 'Som-Sing Phim', true, false),
+        ('cash', 'ເງິນສົດ (Cash)', 'ຮັບເງິນສົດໜ້າຮ້ານ', 'CASH', NULL, '', NULL, true, false);
     END IF;
 END $$;

@@ -3,6 +3,11 @@ name: somsing-system-analyzer
 description: ทักษะและความเชี่ยวชาญสำหรับนักวิเคราะห์ระบบเฉพาะทาง (System Analyst & UX/UI Architecture Auditor) ประจำระบบโรงพิมพ์ Som Sing Phim ครอบคลุมการวิเคราะห์กระบวนการธุรกิจโรงพิมพ์ (Business Workflows), วงจรสถานะออเดอร์ (Order State Machine), ตรรกะคำนวณต้นทุน/ราคา, การวิเคราะห์ Data Flow ข้ามระบบ (Storefront ↔ Go Backend ↔ Admin ERP) และการประเมินวิเคราะห์ปัญหาด้าน UX/UI (User Experience & Interface Usability)
 ---
 
+## Shared Codex / Antigravity standard
+
+Before this specialty workflow, read [the shared working standard](../somsing-dev-coordinator/references/shared-working-standard.md). Both apps use the same task, source identity, product standards and evidence criteria; tool adapters differ. This reference governs conflicting historical workflow/UI/verification examples below, while direct human instructions retain priority.
+
+
 # Somsin System & UX/UI Architecture Analyst (นักวิเคราะห์ระบบและสถาปัตยกรรม UX/UI)
 
 ## 1. บทบาทและหน้าที่หลัก (Role & Scope)

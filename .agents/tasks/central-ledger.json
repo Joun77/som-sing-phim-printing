@@ -1,0 +1,144 @@
+{
+  "project": "som-sing-phim-printing",
+  "phase": "Phase 2 & UX/UI Overhaul",
+  "created_at": "2026-10-09T00:05:00+07:00",
+  "updated_at": "2026-10-09T23:55:00+07:00",
+  "ledger_version": "1.2.0",
+  "tasks": [
+    {
+      "id": "TSK-01-UXUI",
+      "title": "UX/UI & Lao Copy System Overhaul",
+      "owner_role": "UX/UI Designer & Front-end Developer",
+      "model_tier": "flash",
+      "status": "COMPLETED",
+      "dependencies": [],
+      "acceptance_criteria": "All visible UI copy in authentic Lao, no unicode emojis, Lucide icons used."
+    },
+    {
+      "id": "TSK-02-UNIT",
+      "title": "Preflight & Unit Normalization (technical_specs.unit fix)",
+      "owner_role": "Back-end Developer & Front-end Developer",
+      "model_tier": "pro",
+      "status": "COMPLETED",
+      "dependencies": ["TSK-01-UXUI"],
+      "acceptance_criteria": "Distinguish dimension unit (mm) from consumption unit (sheet), imposition OFF handles paper specs cleanly."
+    },
+    {
+      "id": "TSK-03-PREV",
+      "title": "PDF Inline Canvas Preview",
+      "owner_role": "Front-end Developer",
+      "model_tier": "flash",
+      "status": "COMPLETED",
+      "dependencies": ["TSK-01-UXUI"],
+      "acceptance_criteria": "Fast first page PDF rendering without synchronous full-preflight blocking."
+    },
+    {
+      "id": "TSK-04-F08",
+      "title": "Digital Proof Contract Sync (F8 Response)",
+      "owner_role": "Back-end Developer",
+      "model_tier": "pro",
+      "status": "COMPLETED",
+      "dependencies": [],
+      "acceptance_criteria": "proof_review.go returns committed: true, updated_id, proof_url, proof_version on HTTP 200."
+    },
+    {
+      "id": "TSK-05-F04",
+      "title": "Finance Residual State Sync (F4 Card 3 Counter)",
+      "owner_role": "Front-end Developer",
+      "model_tier": "flash",
+      "status": "COMPLETED",
+      "dependencies": [],
+      "acceptance_criteria": "Approving slip immediately updates Card 3 pending count via TanStack query invalidation."
+    },
+    {
+      "id": "TSK-06-F06",
+      "title": "Repricing Item Payload Integrity (F6)",
+      "owner_role": "Back-end Developer",
+      "model_tier": "pro",
+      "status": "COMPLETED",
+      "dependencies": ["TSK-02-UNIT"],
+      "acceptance_criteria": "Replacement quote creation succeeds with HTTP 200 without PRICE_SOURCE_ITEMS_MISMATCH."
+    },
+    {
+      "id": "TSK-07-F07",
+      "title": "Artwork Replacement Spec Protection (F7)",
+      "owner_role": "Front-end Developer & Back-end Developer",
+      "model_tier": "pro",
+      "status": "COMPLETED",
+      "dependencies": ["TSK-06-F06"],
+      "acceptance_criteria": "Replacing pre-work PDF artwork without changing dimensions does not trip REPRICE_REQUIRED."
+    },
+    {
+      "id": "TSK-08-F09",
+      "title": "Actual Payment Record Durability (F9)",
+      "owner_role": "Front-end Developer & Back-end Developer",
+      "model_tier": "flash",
+      "status": "COMPLETED",
+      "dependencies": ["TSK-05-F04"],
+      "acceptance_criteria": "OrderCompletedSummaryPage renders actual payment slips and verified records, no hardcoded mock text."
+    },
+    {
+      "id": "TSK-09-BASE",
+      "title": "Baseline Preservation Audit (F1, F2, F3, F5)",
+      "owner_role": "Delivery Manager",
+      "model_tier": "pro",
+      "status": "COMPLETED",
+      "dependencies": ["TSK-01-UXUI", "TSK-02-UNIT", "TSK-03-PREV", "TSK-04-F08", "TSK-05-F04", "TSK-06-F06", "TSK-07-F07", "TSK-08-F09"],
+      "acceptance_criteria": "Existing passed tests continue to pass; no regressions in pricing or stock lifecycle."
+    },
+    {
+      "id": "TSK-10-PKG",
+      "title": "Freeze Package & Manifest Preparation",
+      "owner_role": "Delivery Manager",
+      "model_tier": "pro",
+      "status": "COMPLETED",
+      "dependencies": ["TSK-09-BASE"],
+      "acceptance_criteria": "Build passes cleanly, manifest file generated with file hashes."
+    },
+    {
+      "id": "TSK-11-QA",
+      "title": "Independent Antigravity Verification",
+      "owner_role": "QA-Tester",
+      "model_tier": "pro",
+      "status": "COMPLETED",
+      "dependencies": ["TSK-10-PKG"],
+      "acceptance_criteria": "Internal verification matrix yields 100% PASS ready for Codex QA recheck."
+    },
+    {
+      "id": "TSK-12-RR-PAPER",
+      "title": "Automatic Paper Consumption & Decoupled Dimensions (Gap 1)",
+      "owner_role": "Back-end Developer & Front-end Developer",
+      "model_tier": "pro",
+      "status": "COMPLETED",
+      "dependencies": ["TSK-02-UNIT"],
+      "acceptance_criteria": "A4 on A3 stock supports 2 cuts in OFF mode; stock/job mismatch does not block save; manual overrides preserved."
+    },
+    {
+      "id": "TSK-13-RR-ZEROCOV",
+      "title": "Zero Coverage Preservation (Gap 2)",
+      "owner_role": "Back-end Developer & Front-end Developer",
+      "model_tier": "flash",
+      "status": "COMPLETED",
+      "dependencies": ["TSK-02-UNIT"],
+      "acceptance_criteria": "Legitimate 0% CMYK channel coverage is strictly preserved and never overwritten by average or fallback."
+    },
+    {
+      "id": "TSK-14-RR-INKAREA",
+      "title": "Printed-Area Ink Calculation (Gap 3)",
+      "owner_role": "Front-end Developer & Back-end Developer",
+      "model_tier": "pro",
+      "status": "COMPLETED",
+      "dependencies": ["TSK-12-RR-PAPER", "TSK-13-RR-ZEROCOV"],
+      "acceptance_criteria": "Ink is calculated on actual finished job area and impressions, decoupled from parent sheet margins/waste."
+    },
+    {
+      "id": "TSK-15-RR-CASHBANK",
+      "title": "Reproducible Counter Cash & Explicit Bank Selection (Gap 4)",
+      "owner_role": "Back-end Developer & Front-end Developer",
+      "model_tier": "pro",
+      "status": "COMPLETED",
+      "dependencies": ["TSK-08-F09"],
+      "acceptance_criteria": "Cash method in canonical migrations; foreign keys preserved; bank transfer uses explicitly selected receiving account without silent bcel_one default."
+    }
+  ]
+}

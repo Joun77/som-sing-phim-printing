@@ -12,12 +12,25 @@ export interface ConfirmedConversionOrder extends Record<string, unknown> {
 export function confirmedConversionOrder(value: unknown): ConfirmedConversionOrder {
   if (!value || typeof value !== 'object') throw new Error('Order reconciliation requires a server response');
   const raw = value as Record<string, unknown>;
-  const record = (raw.data && typeof raw.data === 'object' ? raw.data : raw) as Record<string, unknown>;
+  const source = (raw.data && typeof raw.data === 'object' ? raw.data : raw) as Record<string, unknown>;
+  const record = { ...source };
+  // The payment-enabled order DTO serializes remaining_lak as exact decimal text.
+  if (typeof record.remaining_lak === 'string') {
+    if (!/^\d+\.\d{2}$/.test(record.remaining_lak)) throw new Error('Invalid authoritative remaining_lak decimal');
+    const cents = BigInt(record.remaining_lak.replace('.', ''));
+    if (cents > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Authoritative remaining_lak exceeds supported precision');
+    const normalized = Number(cents) / 100;
+    if (Math.round(normalized * 100) !== Number(cents)) throw new Error('Authoritative remaining_lak loses precision');
+    record.remaining_lak = normalized;
+  }
   const status = record.overall_status ?? record.status;
   if (typeof record.id !== 'string' || !record.id.trim() || typeof status !== 'string' || !status || (record.status && record.overall_status && record.status !== record.overall_status)) throw new Error('Order reconciliation requires a matching server identity/status');
   for (const field of ['total_amount_lak', 'deposit_lak', 'remaining_lak', 'total_cost']) {
     if (typeof record[field] !== 'number' || !Number.isFinite(record[field]) || record[field] < 0) throw new Error(`Order reconciliation requires authoritative ${field}`);
   }
+  if (['total_amount_lak', 'deposit_lak', 'remaining_lak'].some(field => Number(Number(record[field]).toFixed(2)) !== record[field])) throw new Error('Unsupported authoritative money precision');
+  const moneyCents = ['total_amount_lak', 'deposit_lak', 'remaining_lak'].map(field => Math.round(Number(record[field]) * 100));
+  if (!moneyCents.every(Number.isSafeInteger) || moneyCents[2] !== Math.max(0, moneyCents[0] - moneyCents[1])) throw new Error('Conflicting authoritative balance');
   if (Math.abs(Number(record.remaining_lak) - Math.max(0, Number(record.total_amount_lak) - Number(record.deposit_lak))) > 0.01) throw new Error('Conflicting authoritative balance');
   for (const [alias, canonical] of [['total_price', 'total_amount_lak'], ['deposit_amount', 'deposit_lak']]) {
     if (record[alias] !== undefined && record[alias] !== record[canonical]) throw new Error('Order reconciliation returned conflicting money aliases');
@@ -81,4 +94,25 @@ export function confirmedSavedConversion(value: unknown, quotationId: string) {
   if (envelope.status !== 'success' || envelope.committed !== true || envelope.quotation_id !== quotationId || envelope.quotation_status !== 'CONVERTED' || envelope.idempotency_key !== key || order.idempotency_key !== key || envelope.order_id !== order.id || (envelope.orderId !== undefined && envelope.orderId !== order.id) || envelope.order_number !== order.order_no || (envelope.orderNumber !== undefined && envelope.orderNumber !== order.order_no) || typeof envelope.source_quotation_updated_at !== 'string' || !envelope.source_quotation_updated_at || typeof envelope.replayed !== 'boolean' || typeof envelope.approval_required !== 'boolean') throw new Error('Uncommitted or mismatched quotation conversion');
   if (envelope.replayed === false && (order.deposit_lak !== 0 || order.remaining_lak !== order.total_amount_lak)) throw new Error('New conversion cannot fabricate a receipt');
   return { envelope, order };
+}
+
+/**
+ * Validates the immutable conversion source revision. A converted quotation row's updated_at advances when CONVERTED is
+ * recorded, so recovery must compare the replay envelope with the saved canonical conversion linkage, not the row timestamp.
+ * Without saved linkage (first conversion of a just-saved quotation) the acknowledged row revision must still match.
+ */
+export function conversionSourceRevisionMatches(
+  envelope: { source_quotation_updated_at?: unknown; idempotency_key?: unknown },
+  order: { id: string },
+  quotation: { id: string; updated_at?: unknown; conversion?: unknown },
+): boolean {
+  const revision = envelope.source_quotation_updated_at;
+  if (typeof revision !== 'string' || !revision) return false;
+  const link = quotation.conversion as Record<string, unknown> | null | undefined;
+  if (link) {
+    return link.quotation_id === quotation.id && link.order_id === order.id
+      && link.idempotency_key === `quotation-conversion:${quotation.id}` && envelope.idempotency_key === link.idempotency_key
+      && typeof link.source_updated_at === 'string' && link.source_updated_at === revision;
+  }
+  return revision === quotation.updated_at;
 }

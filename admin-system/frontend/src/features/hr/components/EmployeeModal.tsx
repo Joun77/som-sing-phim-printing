@@ -328,7 +328,8 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
     }
   };
 
-  const currentRole = roles.find(r => r.id === form.role) || roles[0];
+  const currentRole = roles.find(r => r.id.toLowerCase() === String(form.role || '').toLowerCase());
+  const accountEnabled = form.hasLoginAccount && form.loginAccountActive === true;
   const selectedPagesCount = (form.permissions || []).includes('ALL') || (form.permissions || []).includes('*')
     ? ALL_PAGE_IDS.length
     : ALL_PAGE_IDS.filter(id => (form.permissions || []).includes(id)).length;
@@ -428,10 +429,12 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
             <div className="space-y-1.5">
               <label className="text-xs font-black text-slate-600 uppercase">{T('ໜ້າທີ່ / ຕຳແໜ່ງ *', 'Role *')}</label>
               <select
-                value={form.role}
+                aria-label="ຕຳແໜ່ງພະນັກງານ"
+                value={currentRole?.id || form.role}
                 onChange={e => handleRoleChange(e.target.value)}
                 className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 cursor-pointer focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-100 outline-none"
               >
+                {!currentRole && <option value={form.role}>{String(form.role || '—')}</option>}
                 {roles.map(r => (
                   <option key={r.id} value={r.id}>
                     {lang === 'lo' ? r.labelLo : r.labelEn}
@@ -613,19 +616,21 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
             <div className="flex items-center gap-3 bg-slate-50 p-2 px-3 rounded-2xl border border-slate-200 self-start sm:self-auto">
               <div className="text-right">
                 <span className="text-xs font-black block text-slate-800">
-                  {form.hasLoginAccount ? T('ເປີດໃຊ້ງານບັນຊີ', 'Account Enabled') : T('ປິດໃຊ້ງານ', 'Disabled')}
+                  {accountEnabled ? T('ເປີດໃຊ້ງານບັນຊີ', 'Account Enabled') : T('ປິດໃຊ້ງານ', 'Disabled')}
                 </span>
                 <span className="text-[10px] text-slate-400 block font-medium">
-                  {form.hasLoginAccount ? T('ສາມາດເຂົ້າສູ່ລະບົບໄດ້', 'Can sign in') : T('ບໍ່ມີສິດເຂົ້າລະບົບ', 'No login rights')}
+                  {accountEnabled ? T('ສາມາດເຂົ້າສູ່ລະບົບໄດ້', 'Can sign in') : T('ບໍ່ມີສິດເຂົ້າລະບົບ', 'No login rights')}
                 </span>
               </div>
               <button
                 type="button"
                 role="switch"
-                aria-checked={Boolean(form.hasLoginAccount)}
+                aria-checked={Boolean(accountEnabled)}
                 aria-label="ບັນຊີເຂົ້າລະບົບພະນັກງານ"
                 onClick={() => {
+                  if (form.loginAccount?.id) { F('loginAccountActive', !accountEnabled); return; }
                   const nextVal = !form.hasLoginAccount;
+                  F('loginAccountActive', nextVal);
                   F('hasLoginAccount', nextVal);
                   if (nextVal && !form.username) {
                     const raw = form.nameEn || form.name || 'user';
@@ -637,12 +642,12 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
                   }
                 }}
                 className={`relative inline-flex h-7 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 ${
-                  form.hasLoginAccount ? 'bg-sky-600' : 'bg-slate-300'
+                  accountEnabled ? 'bg-sky-600' : 'bg-slate-300'
                 }`}
               >
                 <span
                   className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-md ring-0 transition duration-300 ease-in-out ${
-                    form.hasLoginAccount ? 'translate-x-7' : 'translate-x-0'
+                    accountEnabled ? 'translate-x-7' : 'translate-x-0'
                   }`}
                 />
               </button>

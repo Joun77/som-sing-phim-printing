@@ -1,7 +1,10 @@
-// Vite emits this installed package's worker as a local, version-matched asset.
-// A static URL also remains importable by the existing Node regression runner.
+// Local version-matched asset copied to public/ for clean web preview and dev serving.
+// Also preserves file URL compatibility for Node regression runners.
 export function getPdfWorkerSrc(): string {
-  return new URL('../../node_modules/pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
+  if (typeof window !== 'undefined' && window.location) {
+    return '/pdf.worker.min.mjs';
+  }
+  return new URL('../../node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href;
 }
 
 export function configurePdfWorker(targetLib: {

@@ -1603,10 +1603,6 @@ func HandleUploadOrderFile(c *gin.Context) {
 	// 5. This validation executes BEFORE any directory creation (os.MkdirAll) or file writes,
 	//    guaranteeing zero disk side-effects on validation failure.
 	order, exists := findOrder(orderNo)
-	if orderNo != "temp_order" || exists {
-		handleConcreteArtworkUpload(c, file, orderNo)
-		return
-	}
 	if exists {
 		if len(order.Items) == 0 {
 			c.JSON(http.StatusBadRequest, gin.H{
@@ -1639,6 +1635,10 @@ func HandleUploadOrderFile(c *gin.Context) {
 			})
 			return
 		}
+	}
+	if c.PostForm("artwork_role") != "" && db.DB != nil {
+		handleConcreteArtworkUpload(c, file, orderNo)
+		return
 	}
 
 	rawFileType := c.DefaultPostForm("file_type", "inner")
@@ -2248,16 +2248,9 @@ func handleQuotationDecision(c *gin.Context, reject bool) {
 		c.JSON(400, gin.H{"status": "error", "code": "invalid_request", "message": "Invalid manager decision request"})
 		return
 	}
-	if !reject {
-		hint, err := loadQuotation(db.DB, id, false)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			sendQuotationFailure(c, err)
-			return
-		}
-		if request.ExpectedUpdatedAt != "" || hint.PriceCorrectionSource != nil {
-			approvePriceSource(c, request.ExpectedUpdatedAt)
-			return
-		}
+	if !reject && request.ExpectedUpdatedAt != "" {
+		approvePriceSource(c, request.ExpectedUpdatedAt)
+		return
 	}
 	orderStatus, quoteStatus := StatusWaitingDeposit, "ACCEPTED"
 	if reject {
@@ -2588,15 +2581,21 @@ func HandleUpdateOrder(c *gin.Context) {
 		finance.WriteOperationError(c, &finance.OperationError{Status: 422, Code: "USE_ORDER_STATUS_ROUTE"})
 		return
 	}
-	columns := map[string]string{"customer_name": "customer_name", "customerName": "customer_name", "customer_phone": "customer_phone", "customerPhone": "customer_phone", "delivery_date": "delivery_date", "deliveryDate": "delivery_date", "google_drive_link": "google_drive_link", "artworkLink": "google_drive_link", "courier_name": "courier_name", "courier": "courier_name", "deliveryMethod": "courier_name", "internal_tracking_code": "internal_tracking_code", "tracking_number": "internal_tracking_code", "tracking_code": "internal_tracking_code", "trackingNumber": "internal_tracking_code", "branch_code": "branch_code", "courierBranch": "branch_code", "shipping_fee": "shipping_fee", "shippingFee": "shipping_fee"}
+	columns := map[string]string{"customer_name": "customer_name", "customerName": "customer_name", "customer_phone": "customer_phone", "customerPhone": "customer_phone", "delivery_date": "delivery_date", "deliveryDate": "delivery_date", "google_drive_link": "google_drive_link", "artworkLink": "google_drive_link", "courier_name": "courier_name", "courier": "courier_name", "deliveryMethod": "courier_name", "internal_tracking_code": "internal_tracking_code", "tracking_number": "internal_tracking_code", "tracking_code": "internal_tracking_code", "trackingNumber": "internal_tracking_code", "branch_code": "branch_code", "courierBranch": "branch_code", "shipping_fee": "shipping_fee", "shippingFee": "shipping_fee", "payment_slip_url": "payment_slip_url", "paymentSlipUrl": "payment_slip_url"}
 	args := []any{}
 	sets := []string{}
 	seen := map[string]bool{}
 	for key, value := range body {
+		if key == "id" || key == "expected_updated_at" || key == "expectedUpdatedAt" {
+			continue
+		}
 		column, ok := columns[key]
-		if !ok || seen[column] {
+		if !ok {
 			finance.WriteOperationError(c, &finance.OperationError{Status: 422, Code: "INVALID_ORDER_FIELD"})
 			return
+		}
+		if seen[column] {
+			continue
 		}
 		seen[column] = true
 		args = append(args, value)
@@ -3385,7 +3384,7 @@ func ownedReplacementAsset(c *gin.Context, tx *sql.Tx, orderID, itemID, role, ur
 	if err != nil {
 		return nil, artworkPatchError(409, "REPRICE_REQUIRED")
 	}
-	if original["pages"] != pages || replacement["pages"] != pages || !quoteObjectsEqual(original, replacement) {
+	if original["pages"] != pages || replacement["pages"] != pages {
 		return nil, artworkPatchError(409, "REPRICE_REQUIRED")
 	}
 	return asset, nil
@@ -3400,7 +3399,7 @@ func normalizeArtworkParts(c *gin.Context, tx *sql.Tx, orderID, itemID string, i
 	for _, value := range old {
 		part := quoteObject(value)
 		role := quotationString(part, "role")
-		if role != "cover" && role != "inner" || byRole[role] != nil {
+		if (role != "cover" && role != "inner" && role != "single") || byRole[role] != nil {
 			return nil, artworkPatchError(409, "REPRICE_REQUIRED")
 		}
 		byRole[role] = part
@@ -3612,6 +3611,35 @@ func handleItemArtworkReplacement(c *gin.Context, body map[string]any) {
 		partsInput, hasParts := supplied["artwork_parts"]
 		oldParts, _ := specs["artwork_parts"].([]any)
 		if len(oldParts) > 0 {
+			if !hasParts && supplied["artwork_url"] != nil && len(oldParts) == 1 {
+				oldPart := quoteObject(oldParts[0])
+				role := quotationString(oldPart, "role")
+				if role == "" {
+					role = "single"
+				}
+				pageCount := quotationPositiveInt(oldPart, "pageCount")
+				if pageCount <= 0 {
+					pageCount = quotationPositiveInt(updated, "page_count", "pages")
+				}
+				if pageCount <= 0 {
+					pageCount = 1
+				}
+				newPart := map[string]any{
+					"role":      role,
+					"pageCount": pageCount,
+					"source": map[string]any{
+						"url":      supplied["artwork_url"],
+						"name":     supplied["artwork_file_name"],
+						"size":     supplied["artwork_file_size"],
+						"mimeType": "application/pdf",
+					},
+				}
+				partsInput = []any{newPart}
+				hasParts = true
+				delete(supplied, "artwork_url")
+				delete(supplied, "artwork_file_name")
+				delete(supplied, "artwork_file_size")
+			}
 			if !hasParts || supplied["artwork"] != nil || supplied["artwork_url"] != nil {
 				err = artworkPatchError(409, "REPRICE_REQUIRED")
 				break
@@ -3628,12 +3656,15 @@ func handleItemArtworkReplacement(c *gin.Context, body map[string]any) {
 				role := quotationString(part, "role")
 				url := quotationString(source, "url")
 				column := role + "_file_url"
+				if role == "single" {
+					column = "inner_file_url"
+				}
 				if requested, has := supplied[column]; has && requested != url {
 					err = artworkPatchError(422, "CONFLICTING_ARTWORK_FIELDS")
 					break
 				}
 				updated[column] = url
-				if role == "inner" || specs["artwork_url"] == nil {
+				if role == "inner" || role == "single" || specs["artwork_url"] == nil {
 					specs["artwork_url"] = url
 					specs["artwork_file_name"] = source["name"]
 					specs["artwork_file_size"] = source["size"]

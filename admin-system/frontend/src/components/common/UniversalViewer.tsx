@@ -134,7 +134,7 @@ export default function Lightbox({
     errorMessage,
     errorKind,
     resolvedBlobUrl,
-    resolvedBlob,
+    resolvedBlob, resolvedPdfRange,
     resolvedType,
     resolvedSize,
     reload,
@@ -171,8 +171,9 @@ export default function Lightbox({
     finally { if (active === downloadGeneration.current) setIsDownloading(false); }
   };
 
-  const isPdf = resolvedType.includes('pdf');
-  const isImage = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp'].includes(resolvedType);
+  const isPdf = resolvedType.includes('pdf') || Boolean(activeItem?.name?.toLowerCase().endsWith('.pdf') || activeItem?.url?.toLowerCase().includes('.pdf') || fileName?.toLowerCase().endsWith('.pdf'));
+  const isImage = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp'].includes(resolvedType) ||
+    (!isPdf && Boolean(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'].some(ext => (activeItem?.name || activeItem?.url || fileName || '').toLowerCase().includes(ext))));
 
   const displayTitle = activeItem?.name || fileName || title || copy.preview;
   const formattedSize = formatMediaSize(resolvedSize, language);
@@ -337,7 +338,7 @@ export default function Lightbox({
       {loadingStatus === 'success' && resolvedBlobUrl && (
         <div className="w-full h-full min-h-0 flex flex-col items-center overflow-hidden">
           {isPdf ? (
-            resolvedBlob ? <PdfCanvasPreview key={resolvedBlobUrl} blob={resolvedBlob} language={language} page={clampPdfPage(pdfPage, pdfPageCount)} scale={zoomScale} fit={pdfFit} onPageChange={setPdfPage} onPageCount={setPdfPageCount} sourceUrl={resolvedBlobUrl} onRetry={reload} /> : <p role="alert">{copy.pdfError}</p>
+            resolvedBlob ? <PdfCanvasPreview key={resolvedBlobUrl} blob={resolvedBlob} pdfRange={resolvedPdfRange} language={language} page={clampPdfPage(pdfPage, pdfPageCount)} scale={zoomScale} fit={pdfFit} onPageChange={setPdfPage} onPageCount={setPdfPageCount} sourceUrl={resolvedBlobUrl} onRetry={reload} /> : <p role="alert">{copy.pdfError}</p>
           ) : isImage ? imageError ? <div role="alert" className="text-white">{copy.imageError}<button type="button" onClick={() => { setImageError(false); reload(); }}>{copy.retry}</button></div> : (
             <div className="flex items-center justify-center min-h-[300px] w-full h-full overflow-hidden cursor-grab touch-none" onPointerDown={e => { drag.current = { x: e.clientX - pan.x, y: e.clientY - pan.y }; e.currentTarget.setPointerCapture?.(e.pointerId); }} onPointerMove={e => { if (drag.current) setPan({ x: e.clientX - drag.current.x, y: e.clientY - drag.current.y }); }} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
               <img

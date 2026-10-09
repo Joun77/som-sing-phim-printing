@@ -3,6 +3,11 @@ name: somsing-dev-coordinator
 description: Coordinate implementation in Antigravity for the Som Sing Phim printing project. Select existing specialist skills, maintain a shared task, and hand off evidence to Codex for independent review. Use for Som Sing Phim feature development and bug fixes requiring development coordination.
 ---
 
+## Shared Codex / Antigravity standard
+
+Before this specialty workflow, read [the shared working standard](references/shared-working-standard.md). Both apps use the same task, source identity, product standards and evidence criteria; tool adapters differ. This reference governs conflicting historical workflow/UI/verification examples below, while direct human instructions retain priority.
+
+
 # Som Sing Phim development coordinator
 
 Operate inside the Som Sing Phim project. Antigravity owns development; Codex owns independent review. There are two work-owning sides. Specialist skills are instructions you load as needed, not a requirement to launch additional agents.

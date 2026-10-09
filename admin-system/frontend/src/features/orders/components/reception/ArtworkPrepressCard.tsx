@@ -63,6 +63,7 @@ interface ArtworkPrepressCardProps {
   onUploadProof?: (proofUrl: string) => void;
   onUploadProofFile?: (file: File) => Promise<void>;
   onConfigureWorkflow?: () => void;
+  onDecideProof?: (action: 'APPROVE' | 'REJECT', feedback: string) => Promise<void>;
   productionWorkflow?: any;
   setLightbox?: (lb: any) => void;
 }
@@ -92,10 +93,24 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
   onOpenDriveLink,
   onAttachArtwork,
   onUploadProof, onUploadProofFile,
-  onConfigureWorkflow,
+  onConfigureWorkflow, onDecideProof,
   productionWorkflow,
   setLightbox,
 }) => {
+  const [decisionPending, setDecisionPending] = useState(false);
+  const [decisionError, setDecisionError] = useState('');
+  const [decisionFeedback, setDecisionFeedback] = useState('');
+  const decisionLock = useRef(false);
+  const decisionGeneration = useRef(0);
+  useEffect(() => { decisionGeneration.current++; decisionLock.current = false; setDecisionPending(false); setDecisionError(''); setDecisionFeedback(''); return () => { decisionGeneration.current++; }; }, [orderIdDisplay, proofUrl, proofVersion]);
+  const decideProof = async (action: 'APPROVE' | 'REJECT') => {
+    if (!onDecideProof || decisionLock.current) return;
+    if (action === 'REJECT' && !decisionFeedback.trim()) { setDecisionError('ກະລຸນາລະບຸເຫດຜົນ'); return; }
+    decisionLock.current = true; const generation = decisionGeneration.current; setDecisionPending(true); setDecisionError('');
+    try { await onDecideProof(action, decisionFeedback.trim()); }
+    catch (error) { if (generation === decisionGeneration.current) setDecisionError(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກຜົນ Proof ໄດ້'); }
+    finally { if (generation === decisionGeneration.current) { decisionLock.current = false; setDecisionPending(false); } }
+  };
   const [unavailable, setUnavailable] = useState<string[]>([]);
   const markUnavailable = useCallback((url: string) => setUnavailable(previous => previous.includes(url) ? previous : [...previous, url]), []);
   const { customerCategories = [], showToast } = useApp();
@@ -261,18 +276,69 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
             </span>
           </div>
 
-          {proofUrl && <section aria-label="Digital Proof" className="p-3 rounded-xl border border-blue-200 bg-blue-50 space-y-2">
-            <p>Digital Proof • {({ PENDING_CUSTOMER: 'ລໍຖ້າລູກຄ້າຢືນຢັນ', APPROVED: 'ຢືນຢັນແລ້ວ', REJECTED: 'ປະຕິເສດ' } as Record<string, string>)[proofStatus || ''] || proofStatus || 'ບັນທຶກແລ້ວ'} • ເວີຊັນ {proofVersion ?? '—'}</p>
-            <button type="button" disabled={!setLightbox} onClick={() => setLightbox?.({ src: proofUrl, title: 'Digital Proof', fileName: proofUrl.split('/').pop(), documentNumber: `#${orderIdDisplay}` })}>ເບິ່ງ Proof ທີ່ບັນທຶກແລ້ວ</button>
-          </section>}
+          {proofUrl && (
+            <section
+              aria-label="Digital Proof"
+              className="p-4.5 rounded-2xl border border-sky-200/90 bg-gradient-to-br from-sky-50/90 via-indigo-50/40 to-white shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3.5"
+            >
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-11 h-11 rounded-2xl bg-white border border-sky-200 text-sky-600 flex items-center justify-center shrink-0 shadow-xs">
+                  <FileText className="w-5 h-5 text-sky-600" />
+                </div>
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-black text-slate-800 text-xs">{currentLang === 'lo' ? 'ໄຟລ໌ Digital Proof' : 'Digital Proof File'}</span>
+                    <span className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-[10px] font-mono font-bold text-slate-700 shadow-2xs">
+                      v{proofVersion ?? 1}
+                    </span>
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10.5px] font-bold border ${
+                      proofStatus === 'APPROVED'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : proofStatus === 'REJECTED'
+                        ? 'bg-rose-50 text-rose-700 border-rose-200'
+                        : 'bg-amber-50 text-amber-700 border-amber-200'
+                    }`}>
+                      {proofStatus === 'APPROVED' ? (
+                        <>
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>{currentLang === 'lo' ? 'ຢືນຢັນແລ້ວ' : 'Approved'}</span>
+                        </>
+                      ) : proofStatus === 'REJECTED' ? (
+                        <>
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>{currentLang === 'lo' ? 'ປະຕິເສດ' : 'Rejected'}</span>
+                        </>
+                      ) : (
+                        <span>{({ PENDING_CUSTOMER: currentLang === 'lo' ? 'ລໍຖ້າລູກຄ້າຢືນຢັນ' : 'Pending Customer', APPROVED: currentLang === 'lo' ? 'ຢືນຢັນແລ້ວ' : 'Approved', REJECTED: currentLang === 'lo' ? 'ປະຕິເສດ' : 'Rejected' } as Record<string, string>)[proofStatus || ''] || proofStatus || (currentLang === 'lo' ? 'ບັນທຶກແລ້ວ' : 'Saved')}</span>
+                      )}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-mono truncate max-w-xs sm:max-w-sm">
+                    {proofUrl.split('/').pop()?.split('?')[0] || 'digital-proof.pdf'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={!setLightbox}
+                onClick={() => setLightbox?.({ src: proofUrl, title: 'Digital Proof', fileName: proofUrl.split('/').pop(), documentNumber: `#${orderIdDisplay}` })}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold transition shadow-xs cursor-pointer active:scale-95 disabled:opacity-50 shrink-0"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>{currentLang === 'lo' ? 'ເປີດເບິ່ງ Proof ຕົວຈິງ' : 'View Saved Proof'}</span>
+              </button>
+            </section>
+          )}
           {Array.isArray(items) && items.length > 0 ? (
             <div className="space-y-2.5 divide-y divide-slate-200/60">
               {items.map((it: any, idx: number) => {
                 const sizeText = it.jobWidth && it.jobHeight ? `${it.jobWidth}×${it.jobHeight}mm (${it.paperSize || 'Custom'})` : (it.paperSize || 'A4');
-                const paperText = it.paperSku || it.paperId || it.paperType || it.paper_name || 'Art Card 260g';
-                const totalPages = it.pagesPerBook || it.page_count || it.pages || 1;
-                const colorPages = it.colorPages || (it.colorPrintMode === 'MONO_K' ? 0 : totalPages);
-                const bwPages = it.bwPages || (it.colorPrintMode === 'MONO_K' ? totalPages : 0);
+                const itSpecs = it.specs || it.specifications || {};
+                const paperText = it.paperSku || it.paperId || it.paperType || it.paper_name || itSpecs.paper_name || itSpecs.paperType || itSpecs.paper || it.paper || 'Art Card 260g';
+                const totalPages = it.pagesPerBook || it.page_count || it.pages || itSpecs.page_count || itSpecs.pages || 1;
+                const isMono = it.colorPrintMode === 'MONO_K' || it.color_mode === 'MONO_K' || itSpecs.color_mode === 'MONO_K' || itSpecs.colorPrintMode === 'MONO_K' || it.color_mode === 'Monochrome';
+                const colorPages = typeof it.colorPages === 'number' ? it.colorPages : (typeof itSpecs.color_pages === 'number' ? itSpecs.color_pages : (isMono ? 0 : totalPages));
+                const bwPages = typeof it.bwPages === 'number' ? it.bwPages : (typeof itSpecs.bw_pages === 'number' ? itSpecs.bw_pages : (isMono ? totalPages : 0));
 
                 const itArtworkUrl = it.artwork?.file_url || it.artworkUrl || it.artwork_url || it.fileUrl || it.file_url || it.cover_file_url || it.inner_file_url || '';
                 const itArtworkFileName = it.artwork?.file_name || it.artworkFileName || it.artwork_file_name || it.fileName || it.file_name || (itArtworkUrl ? itArtworkUrl.split('/').pop()?.split('?')[0] : '');
@@ -509,13 +575,154 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
         </div>
       </div>
 
-      {/* Action Button for Artwork & Press Order (Step 2 Toggle State) */}
-      {onUploadProofFile && <section className="p-3 rounded-xl border space-y-2" aria-label="Digital Proof">
-        <label className="text-xs font-bold">ອັບໂຫຼດ Digital Proof<input type="file" accept=".pdf,.png,.jpg,.jpeg" aria-label="ອັບໂຫຼດ Digital Proof" disabled={proofPending} onChange={event => { const file = event.target.files?.[0]; if (file) { setProofFile(file); void saveProofFile(file); } }} /></label>
-        {proofFile && <p className="text-xs">{proofFile.name}</p>}
-        {proofError && <p role="alert" className="text-xs text-rose-700">{proofError}</p>}
-        {proofFile && proofError && <button type="button" disabled={proofPending} onClick={() => void saveProofFile(proofFile)}>ລອງບັນທຶກ Proof ໃໝ່</button>}
-      </section>}
+      {/* Action Section for Digital Proof Upload & Decision */}
+      {onUploadProofFile && (
+        <section
+          className="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-3.5"
+          aria-label="Digital Proof"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center">
+                <FileText className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-800">
+                  {currentLang === 'lo' ? 'ອັບໂຫລດ Digital Proof' : 'Upload Digital Proof'}
+                </h4>
+                <p className="text-[11px] text-slate-400 font-medium">
+                  {currentLang === 'lo' ? 'ຮອງຮັບໄຟລ໌ PDF, PNG, JPG ເພື່ອໃຫ້ລູກຄ້າກວດສອບ' : 'Upload customer-facing proof document'}
+                </p>
+              </div>
+            </div>
+            {proofPending && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-indigo-50 text-indigo-700 text-xs font-bold">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>{currentLang === 'lo' ? 'ກຳລັງອັບໂຫຼດ...' : 'Uploading...'}</span>
+              </span>
+            )}
+          </div>
+
+          <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/20 hover:bg-indigo-50/40 rounded-2xl cursor-pointer transition group">
+            <div className="w-10 h-10 rounded-xl bg-indigo-100/80 text-indigo-600 flex items-center justify-center mb-2 group-hover:scale-105 transition">
+              <Download className="w-5 h-5 rotate-180" />
+            </div>
+            <span className="text-xs font-bold text-slate-700 group-hover:text-indigo-700 transition">
+              {currentLang === 'lo' ? 'ເລືອກໄຟລ໌ Digital Proof ຫຼື ລາກວາງໃສ່ບ່ອນນີ້' : 'Select Digital Proof file or drag & drop'}
+            </span>
+            <span className="text-[11px] text-slate-400 mt-0.5">
+              PDF, PNG, JPG (Max 50MB)
+            </span>
+            <input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg"
+              aria-label="ອັບໂຫຼດ Digital Proof"
+              disabled={proofPending}
+              onChange={event => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  setProofFile(file);
+                  void saveProofFile(file);
+                }
+              }}
+              className="hidden"
+            />
+          </label>
+
+          {proofFile && (
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span className="font-mono text-slate-700 font-bold truncate">{proofFile.name}</span>
+              </div>
+              <span className="text-[11px] text-slate-400 font-mono shrink-0">
+                {(proofFile.size / 1024 / 1024).toFixed(2)} MB
+              </span>
+            </div>
+          )}
+
+          {proofError && (
+            <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{proofError}</span>
+              </div>
+              {proofFile && (
+                <button
+                  type="button"
+                  disabled={proofPending}
+                  onClick={() => void saveProofFile(proofFile)}
+                  className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold transition cursor-pointer"
+                >
+                  {currentLang === 'lo' ? 'ລອງບັນທຶກໃໝ່' : 'Retry'}
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {onDecideProof && proofUrl && !isArtworkApproved && (
+        <section
+          aria-label="ຜົນກວດ Proof"
+          className="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-3.5"
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-slate-800">
+                {currentLang === 'lo' ? 'ການຕັດສິນໃຈ Digital Proof' : 'Digital Proof Review Decision'}
+              </h4>
+              <p className="text-[11px] text-slate-400 font-medium">
+                {currentLang === 'lo' ? 'ບັນທຶກຜົນກວດສອບພ້ອມຄຳເຫັນກ່ອນເລີ່ມພິມ' : 'Approve or reject customer-reviewed proof'}
+              </p>
+            </div>
+          </div>
+
+          <label className="block text-xs font-bold text-slate-700 space-y-1">
+            <span>{currentLang === 'lo' ? 'ຄຳເຫັນ / ເຫດຜົນ (ຖ້າປະຕິເສດ ຕ້ອງລະບຸເຫດຜົນ)' : 'Feedback / Reason (required if rejected)'}</span>
+            <textarea
+              aria-label="ຄຳເຫັນ Proof"
+              rows={3}
+              placeholder={currentLang === 'lo' ? 'ປ້ອນຄຳເຫັນ ຫຼື ເຫດຜົນການກວດສອບ...' : 'Enter feedback or reason for rejection...'}
+              value={decisionFeedback}
+              disabled={decisionPending}
+              onChange={event => setDecisionFeedback(event.target.value)}
+              className="block w-full border border-slate-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-sky-500 focus:outline-none transition resize-none"
+            />
+          </label>
+
+          {decisionError && (
+            <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{decisionError}</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              disabled={decisionPending}
+              onClick={() => void decideProof('APPROVE')}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <Check className="w-4 h-4" />
+              <span>{currentLang === 'lo' ? 'ອະນຸມັດ Proof' : 'Approve Proof'}</span>
+            </button>
+            <button
+              type="button"
+              disabled={decisionPending}
+              onClick={() => void decideProof('REJECT')}
+              className="px-4 py-2 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <X className="w-4 h-4" />
+              <span>{currentLang === 'lo' ? 'ປະຕິເສດ Proof' : 'Reject Proof'}</span>
+            </button>
+          </div>
+        </section>
+      )}
       <div className="pt-2">
         {isArtworkApproved ? (
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
@@ -523,7 +730,7 @@ export const ArtworkPrepressCard: React.FC<ArtworkPrepressCardProps> = ({
               <div className="flex items-center gap-2 min-w-0">
                 <Printer className="w-4 h-4 text-sky-600 shrink-0" />
                 <div className="min-w-0">
-                  <span className="block truncate">{currentLang === 'lo' ? 'ໄຟລ໌ພ້ອມພິມ & ກຳລັງດຳເນີນການຜະລິດ' : 'In Production Queue'}</span>
+                  <span className="block truncate">{currentLang === 'lo' ? 'ອະນຸມັດ Proof ແລ້ວ' : 'Proof Approved'}</span>
                   {productionWorkflow?.templateName && (
                     <span className="text-[10px] text-sky-600 block truncate font-medium">
                       Template: {productionWorkflow.templateNameLao || productionWorkflow.templateName} ({productionWorkflow.steps?.length || 0} steps)

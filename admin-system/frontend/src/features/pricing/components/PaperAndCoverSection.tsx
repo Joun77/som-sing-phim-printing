@@ -1,3 +1,4 @@
+import { preCutStockDescription } from '../../../utils/impositionLayout';
 import React from 'react';
 import { Scissors, Bookmark, Search, ChevronUp, ChevronDown, FileText, CheckCircle2, Layers, Tag, Sparkles } from 'lucide-react';
 import type { QuotationItem } from './QuotationManager';
@@ -60,7 +61,7 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
           </span>
           <span className="text-[11px] font-bold px-2 py-0.5 bg-sky-50 text-sky-700 rounded-lg border border-sky-200 font-sans flex items-center gap-1">
             <Scissors className="w-3 h-3" />
-            {activeItem.imposition_mode === 'OFF' ? 'ເຈ້ຍຕັດໄວ້' : `${activeCalc.cutsPerSheet} ຕັດ/ແຜ່ນ`} • {formatCurrency(activeCalc.paperCost)}
+            {activeItem.imposition_mode === 'OFF' ? `${activeCalc.cutsPerSheet} ຕັດ/ແຜ່ນ (ເຈ້ຍຕັດໄວ້)` : `${activeCalc.cutsPerSheet} ຕັດ/ແຜ່ນ`} • {formatCurrency(activeCalc.paperCost)}
           </span>
         </div>
         <div className="flex items-center gap-2 text-slate-400">
@@ -166,6 +167,7 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
                       </option>
                     ))}
                   </select>
+                  {activeItem.imposition_mode === 'OFF' && <p className="text-xs text-slate-600">{preCutStockDescription(papers.find(paper => paper.id === activeItem.coverPaperId))}</p>}
                 </div>
 
                 {/* Cover Print Mode */}
@@ -326,6 +328,7 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
                 );
               })}
             </select>
+            {activeItem.imposition_mode === 'OFF' && <p className="text-xs text-slate-600">{preCutStockDescription(papers.find(paper => paper.id === activeItem.paperId))}</p>}
 
             {/* Parent Sheet Imposition Preset Selector */}
             {activeItem.imposition_mode !== 'OFF' && <div data-testid="imposition-layout-panel" className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
@@ -717,12 +720,45 @@ export const PaperAndCoverSection: React.FC<PaperAndCoverSectionProps> = ({
                       </div>
 
                       <div className="p-2 bg-sky-50 border border-sky-300 rounded-xl">
-                        <span className="text-[10px] font-bold text-sky-800 uppercase block">3. ແຜ່ນແມ່ທີ່ຕ້ອງຕັດ</span>
-                        <strong className="text-sm font-black text-indigo-700 font-sans block mt-0.5">
-                          {totalSheets.toLocaleString()} ແຜ່ນແມ່
-                        </strong>
-                        <span className="text-[10px] text-slate-600">
-                          (ພິມ {reqSheets} + ເສຍ {spoilSheets})
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-sky-800 uppercase block">3. ແຜ່ນແມ່ທີ່ຕ້ອງຕັດ</span>
+                          <button
+                            type="button"
+                            disabled={sourceLocked}
+                            onClick={() => {
+                              if (activeItem.manualSheetCount !== undefined && activeItem.manualSheetCount !== null) {
+                                updateActiveItem({ manualSheetCount: undefined });
+                              } else {
+                                updateActiveItem({ manualSheetCount: totalSheets });
+                              }
+                            }}
+                            className="text-[10px] font-bold text-sky-700 hover:text-sky-900 underline cursor-pointer"
+                          >
+                            {activeItem.manualSheetCount ? 'ອັດຕະໂນມັດ (Auto)' : 'ກຳນົດເອງ (Manual)'}
+                          </button>
+                        </div>
+                        {activeItem.manualSheetCount ? (
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min={1}
+                              disabled={sourceLocked}
+                              value={activeItem.manualSheetCount}
+                              onChange={(e) => {
+                                const val = Math.max(1, parseInt(e.target.value) || 1);
+                                updateActiveItem({ manualSheetCount: val });
+                              }}
+                              className="w-24 px-2 py-0.5 bg-white border border-sky-400 rounded-lg text-sm font-black text-indigo-700 font-mono focus:ring-2 focus:ring-sky-500"
+                            />
+                            <span className="text-xs font-bold text-slate-700">ແຜ່ນ</span>
+                          </div>
+                        ) : (
+                          <strong className="text-sm font-black text-indigo-700 font-sans block mt-0.5">
+                            {totalSheets.toLocaleString()} ແຜ່ນແມ່
+                          </strong>
+                        )}
+                        <span className="text-[10px] text-slate-600 block mt-0.5">
+                          {activeItem.manualSheetCount ? '(ຜູ້ໃຊ້ກຳນົດເອງ - ຄິດລາຄາຕາມແຜ່ນນີ້)' : `(ພິມ ${reqSheets} + ເສຍ ${spoilSheets})`}
                         </span>
                       </div>
                     </div>

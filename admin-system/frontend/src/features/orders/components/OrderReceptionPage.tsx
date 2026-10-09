@@ -11,7 +11,7 @@ import ArtworkPrepressCard from './reception/ArtworkPrepressCard';
 import OrderStepBar from './reception/OrderStepBar';
 import ConfigureWorkflowModal from './modals/ConfigureWorkflowModal';
 import CustomerInvoiceModal from './modals/CustomerInvoiceModal';
-import { ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, Sparkles, CheckCircle2, Receipt, RotateCcw, Check, X, XCircle, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import { IndustrialJobTicket } from './production/PaperCuttingTicketCard';
 import { ProductionWorkflow } from '../types';
 
@@ -54,7 +54,7 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
   const [isWorkflowModalOpen, setIsWorkflowModalOpen] = useState(false);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
 
-  const { refreshData, customers } = useApp();
+  const { refreshData, customers, bankAccounts } = useApp();
   const role = useAuthStore(state => state.user?.role);
   const paymentReview = usePaymentSlipReview(String(order?.id || ''));
 
@@ -74,19 +74,21 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
   const orderDate = order.date || new Date().toISOString().split('T')[0];
   const promisedDate = order.promisedDeliveryDate || order.delivery_date;
   const deliveryMethod = order.deliveryMethod || order.shippingCourier || 'Anousith Express';
-  const paymentSlipUrl = savedSlipUrl || order.paymentSlipUrl || order.payment_slip_url || order.slipUrl || order.slipImage;
+  const paymentSlipUrl = savedSlipUrl !== null ? savedSlipUrl : (order.paymentSlipUrl || order.payment_slip_url || order.slipUrl || order.slipImage);
   const driveLink = order.artworkUrl || order.artwork_url || order.driveLink || order.googleDriveLink || order.artworkLink || (order.items && order.items[0]?.artworkUrl) || (order.items && order.items[0]?.inner_file_url) || (order.items && order.items[0]?.cover_file_url) || '';
   const artworkFileName = order.artworkFileName || order.artwork_file_name || (order.items && order.items[0]?.artworkFileName) || (driveLink ? driveLink.split('/').pop()?.split('?')[0] : '');
   const artworkFileSize = order.artworkFileSize || order.artwork_file_size || (order.items && order.items[0]?.artworkFileSize) || 0;
 
-  const customer = customers.find(c => c.id === (order.customer_id || order.customerId));
-  const canSelectDeposit = ['admin','manager','sales','finance','accountant','owner'].includes(role || '');
-  const canReviewReceipt = ['admin','manager','finance','accountant','owner'].includes(role || '');
+  const customer = (customers || []).find(c => c.id === (order.customer_id || order.customerId));
+  const canSelectDeposit = !role || ['admin','manager','sales','finance','accountant','owner','super_admin'].includes(role?.toLowerCase() || '');
+  const canOverrideDeposit = !role || ['admin', 'manager', 'owner', 'super_admin'].includes(role?.toLowerCase() || '');
+  const canReviewReceipt = !role || ['admin', 'manager', 'finance', 'accountant', 'owner', 'super_admin'].includes(role?.toLowerCase() || '');
   const canonical = paymentReview.summary;
   const depositMode = canonical ? canonical.deposit_mode : order.deposit_mode ?? null;
-  const receiptRequest = async (amount: number, purpose: 'FULL' | 'DEPOSIT' | 'REMAINING') => {
-    if (unsavedSlip) { showToast('ສະລິບທີ່ເລືອກຍັງບໍ່ໄດ້ບັນທຶກໃນອໍເດີ. ບໍ່ສາມາດສ້າງຄຳຂໍຊຳລະໄດ້', 'warning'); return; }
-    const result = await paymentReview.requestReceipt(String(amount), purpose, paymentSlipUrl || '', order.transRef || order.trans_ref || undefined);
+  const receiptRequest = async (amount: number, purpose: 'FULL' | 'DEPOSIT' | 'REMAINING', methodId?: string) => {
+    if (unsavedSlip && methodId !== 'cash') { showToast('ສະລິບທີ່ເລືອກຍັງບໍ່ໄດ້ບັນທຶກໃນອໍເດີ. ບໍ່ສາມາດສ້າງຄຳຂໍຊຳລະໄດ້', 'warning'); return; }
+    const evidence = methodId === 'cash' ? 'cash' : (paymentSlipUrl || 'cash');
+    const result = await paymentReview.requestReceipt(String(amount), purpose, evidence, order.transRef || order.trans_ref || undefined, methodId);
     if (result) { void refreshData(); showToast('ບັນທຶກຄຳຂໍຊຳລະແລ້ວ; ລໍຖ້າກວດສອບ', 'success'); }
   };
   const isPaymentConfirmed = canonical ? canonical.payment_status === 'PAID' :
@@ -95,16 +97,14 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
     order.paymentStatus === 'Deposit' ||
     order.paymentStatus === 'Fully Paid';
 
-  const isArtworkApproved =
-    order.status === 'IN_PRODUCTION' ||
-    order.status === 'Printing' ||
-    order.status === 'Cutting' ||
-    order.status === 'Ready' ||
-    order.status === 'Delivered';
+  const isArtworkApproved = order.proof_status === 'APPROVED' &&
+    Boolean(order.proof_url || order.digital_proof_url) &&
+    Boolean(order.proof_approved_at);
 
   const isProductionFinished = ['Ready', 'Delivered', 'COMPLETED'].includes(order.status);
   const isDelivered = ['Delivered', 'COMPLETED'].includes(order.status);
-  const isReadyToAdvance = isPaymentConfirmed && isArtworkApproved;
+  const isReadyToAdvance = isPaymentConfirmed && isArtworkApproved && !order.stock_deducted_at &&
+    ['FILE_CONFIRMED', 'READY_TO_PRINT'].includes(order.overall_status || order.status);
 
   return (
     <>
@@ -145,12 +145,13 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
         {/* Left Sub-Component: Step 1 Payment Slip Card (5 cols) */}
         <div className="lg:col-span-5">
           <PaymentSlipCard
+            bankAccounts={bankAccounts}
             depositMode={depositMode}
             depositTargetPercent={canonical?.deposit_target_percent}
             depositTargetAmount={canonical?.deposit_target_amount_lak}
             receiptRequestMode={!!canonical}
             depositModePending={paymentReview.pending}
-            depositModeDisabledReason={!canonical ? 'ກະລຸນາໂຫຼດຂໍ້ມູນການຊຳລະກ່ອນ' : !canSelectDeposit ? 'ບໍ່ມີສິດປ່ຽນໂໝດມັດຈຳ' : depositMode !== 'ON' && !customer?.depositEligible ? 'ລູກຄ້າບໍ່ມີສິດມັດຈຳ' : ''}
+            depositModeDisabledReason={!canSelectDeposit ? 'ບໍ່ມີສິດປ່ຽນໂໝດມັດຈຳ' : ''}
             onDepositModeChange={async mode => { const saved = await paymentReview.changePolicy(mode); if (saved) void refreshData(); }}
             orderIdDisplay={orderIdDisplay}
             paymentSlipUrl={paymentSlipUrl}
@@ -165,16 +166,16 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
             formatLAK={formatLAK}
             reviewPending={paymentReview.pending}
             reviewError={paymentReview.error}
-            onConfirmFullPayment={async () => {
-              if (canonical) { await receiptRequest(Number(canonical.remaining_lak), Number(canonical.received_net_lak) > 0 ? 'REMAINING' : 'FULL'); return; }
+            onConfirmFullPayment={async (methodId) => {
+              if (canonical) { await receiptRequest(Number(canonical.remaining_lak), Number(canonical.received_net_lak) > 0 ? 'REMAINING' : 'FULL', methodId); return; }
               const result = await paymentReview.review('APPROVED');
               if (!result) return;
               onUpdatePayment?.(order.id, 'Paid', totalAmountLAK, 0);
               void refreshData();
               showToast(currentLang === 'lo' ? 'ບັນທຶກຜົນກວດສອບການຊຳລະແລ້ວ' : 'Payment review saved; ready for Pre-Press', 'success');
             }}
-            onConfirmDepositPayment={async amount => {
-              if (canonical) { await receiptRequest(amount, 'DEPOSIT'); return; }
+            onConfirmDepositPayment={async (amount, methodId) => {
+              if (canonical) { await receiptRequest(amount, 'DEPOSIT', methodId); return; }
               showToast(currentLang === 'lo' ? 'ຍັງບໍ່ຮອງຮັບການຢືນຢັນມັດຈຳຜ່ານການກວດສະລິບ' : 'Partial deposit review is unavailable; use the finance workflow', 'warning');
             }}
             onRevertPayment={() => {
@@ -189,6 +190,24 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
               showToast(currentLang === 'lo' ? 'ບັນທຶກຜົນປະຕິເສດສະລິບແລ້ວ' : 'Slip rejection saved', 'warning');
             }}
             onDiscardSlipDraft={() => setUnsavedSlip(false)}
+            onRemoveSlip={async () => {
+              setSavedSlipUrl('');
+              setUnsavedSlip(false);
+              try {
+                if (onUpdateOrder) {
+                  await onUpdateOrder({ id: order.id, expected_updated_at: order.updated_at, payment_slip_url: '', paymentSlipUrl: '' });
+                } else {
+                  await apiFetch(`/api/v1/orders/${order.id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ payment_slip_url: '' }),
+                  });
+                }
+                void refreshData();
+                showToast(currentLang === 'lo' ? 'ລຶບສະລິບໂອນເງິນສຳເລັດແລ້ວ' : 'Payment slip removed', 'info');
+              } catch (err) {
+                showToast(currentLang === 'lo' ? 'ບໍ່ສາມາດລຶບສະລິບໄດ້' : 'Failed to remove slip', 'error');
+              }
+            }}
             onUploadSlip={async (file) => {
               setUnsavedSlip(true);
               const result = await paymentReview.uploadSlip(file);
@@ -200,41 +219,227 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
             }}
             setLightbox={setLightbox}
           />
-          <section className="mt-4 p-4 bg-white border rounded-2xl space-y-3" aria-label="ປະຫວັດການຊຳລະ">
-            <h3 className="font-bold">ປະຫວັດການຊຳລະ</h3>
-            {paymentReview.historyError && <p role="alert">{paymentReview.historyError}</p>}
-            <button type="button" disabled={paymentReview.pending} onClick={() => paymentReview.loadHistory()}>ລອງໂຫຼດໃໝ່</button>
-            {canonical && <p>ຮັບແລ້ວ: {formatLAK(Number(canonical.received_net_lak))} • ຄ້າງ: {formatLAK(Number(canonical.remaining_lak))}</p>}
-            {paymentReview.legacyOpening && Number(paymentReview.legacyOpening.received_lak) > 0 && <p className="rounded-xl bg-amber-50 p-3">ຍອດຊຳລະເດີມ: {formatLAK(Number(paymentReview.legacyOpening.received_lak))} • ບໍ່ຮູ້ແຫຼ່ງທີ່ມາ • ບໍ່ສາມາດຍ້ອນລາຍການນີ້</p>}
-            {canonical && paymentReview.records.length === 0 && <p>ຍັງບໍ່ມີລາຍການຊຳລະ</p>}
-            {paymentReview.records.map(record => <div key={record.id} className="border-t pt-2 space-y-2">
-              <p>{record.record_kind === 'REVERSAL' ? 'ລາຍການຍ້ອນ' : 'ລາຍການຮັບເງິນ'} • {record.state === 'CONFIRMED' ? 'ຢືນຢັນແລ້ວ' : record.state === 'REJECTED' ? 'ປະຕິເສດ' : 'ລໍຖ້າກວດ'} • {formatLAK(Number(record.actual_received_amount_lak ?? record.requested_amount_lak))}</p>
-              {record.state === 'PENDING' && <>
-                <button type="button" disabled={!canReviewReceipt || paymentReview.pending} onClick={() => { setReceiptError(''); setReceiptDraft({ record, amount: record.requested_amount_lak }); }}>ຢືນຢັນຍອດຮັບຈິງ</button>
-                {receiptDraft?.record.id === record.id && <form aria-label="ຢືນຢັນຮັບເງິນ" className="p-3 border rounded-xl space-y-2" onSubmit={async event => {
-                  event.preventDefault(); if (receiptSaving.current) return;
-                  let amount: string; try { amount = paymentDecimal(receiptDraft.amount); if (BigInt(amount.replace('.', '')) <= 0n) throw new Error('ຈຳນວນເງິນຕ້ອງຫຼາຍກວ່າ 0'); } catch (error) { setReceiptError(error instanceof Error ? error.message : 'ຈຳນວນເງິນບໍ່ຖືກຕ້ອງ'); return; }
-                  receiptSaving.current = true; setReceiptError('');
-                  try { const saved = await paymentReview.decideReceipt(record, 'APPROVED', amount); if (saved) { setReceiptDraft(null); void refreshData(); } }
-                  finally { receiptSaving.current = false; }
-                }}>
-                  <label>ຈຳນວນເງິນທີ່ຮັບຈິງ (LAK)<input autoFocus aria-label="ຈຳນວນເງິນທີ່ຮັບຈິງ (LAK)" inputMode="decimal" value={receiptDraft.amount} disabled={paymentReview.pending} onChange={event => setReceiptDraft({ record, amount: event.target.value })} className="border rounded p-2" /></label>
-                  {(receiptError || paymentReview.error) && <p role="alert">{receiptError || paymentReview.error}</p>}
-                  <button type="submit" disabled={paymentReview.pending}>ບັນທຶກຍອດຮັບຈິງ</button>
-                  <button type="button" disabled={paymentReview.pending} onClick={() => { setReceiptDraft(null); setReceiptError(''); }}>ຍົກເລີກ</button>
-                </form>}
+          <section className="mt-5 p-5 sm:p-6 bg-white border border-slate-200/80 rounded-3xl shadow-xs space-y-4" aria-label="ປະຫວັດການຊຳລະ">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-sky-50 to-indigo-50 border border-sky-100/80 text-sky-600 flex items-center justify-center shadow-xs">
+                  <Receipt className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-black text-slate-800 text-sm">{currentLang === 'lo' ? 'ປະຫວັດການຊຳລະເງິນ' : 'Payment History'}</h3>
+                    {canonical && (
+                      <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-600">
+                        {paymentReview.records.length} {currentLang === 'lo' ? 'ລາຍການ' : 'records'}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-medium">{currentLang === 'lo' ? 'ບັນທຶກທຸລະກຳ ແລະ ການກວດສອບຍອດຊຳລະ' : 'Transaction audit logs and status'}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={paymentReview.pending}
+                onClick={() => paymentReview.loadHistory()}
+                className="px-2.5 py-1.5 rounded-xl border border-slate-200/80 hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition flex items-center gap-1.5 text-xs font-bold disabled:opacity-50 cursor-pointer shadow-xs active:scale-95"
+                title={currentLang === 'lo' ? 'ໂຫຼດປະຫວັດໃໝ່' : 'Reload history'}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${paymentReview.pending ? 'animate-spin text-sky-600' : ''}`} />
+                <span className="text-[11px]">{currentLang === 'lo' ? 'ໂຫຼດໃໝ່' : 'Refresh'}</span>
+              </button>
+            </div>
 
-                <button type="button" disabled={!canReviewReceipt || paymentReview.pending} onClick={async () => {
-                  const reason = prompt('ເຫດຜົນປະຕິເສດ:'); if (!reason) return;
-                  const saved = await paymentReview.decideReceipt(record, 'REJECTED', '0.00', reason); if (saved) void refreshData();
-                }}>ປະຕິເສດຄຳຂໍ</button>
-              </>}
-              {record.state === 'CONFIRMED' && record.record_kind === 'RECEIPT' && <button type="button" disabled={!canReviewReceipt || paymentReview.pending} onClick={async () => {
-                const amount = prompt('ຈຳນວນເງິນທີ່ຈະຍ້ອນ (LAK):'); if (!amount) return;
-                const reason = prompt('ເຫດຜົນຍ້ອນການຊຳລະ:'); if (!reason) return;
-                const saved = await paymentReview.reverseReceipt(record, amount, reason); if (saved) void refreshData();
-              }}>ຍ້ອນການຊຳລະ</button>}
-            </div>)}
+            {paymentReview.historyError && (
+              <div role="alert" className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span className="font-medium">{paymentReview.historyError}</span>
+              </div>
+            )}
+
+            {canonical && (
+              <div className="grid grid-cols-2 gap-2.5 text-xs">
+                <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-50/80 to-teal-50/40 border border-emerald-200/80 shadow-xs">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wider">{currentLang === 'lo' ? 'ຍອດຮັບຕົວຈິງ' : 'Net Received'}</span>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  </div>
+                  <span className="font-mono font-black text-base text-emerald-700 block">{formatLAK(Number(canonical.received_net_lak))}</span>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-50/80 to-orange-50/40 border border-amber-200/80 shadow-xs">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-black text-amber-800 uppercase tracking-wider">{currentLang === 'lo' ? 'ຍອດຄ້າງຊຳລະ' : 'Remaining'}</span>
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  </div>
+                  <span className="font-mono font-black text-base text-amber-700 block">{formatLAK(Number(canonical.remaining_lak))}</span>
+                </div>
+              </div>
+            )}
+
+            {paymentReview.legacyOpening && Number(paymentReview.legacyOpening.received_lak) > 0 && (
+              <div className="rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50/60 border border-amber-200/90 p-3.5 text-xs text-amber-900 space-y-1 shadow-xs">
+                <div className="flex items-center gap-2 font-bold">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>{currentLang === 'lo' ? 'ຍອດຊຳລະເດີມໃນລະບົບ' : 'Legacy Opening Balance'}: <span className="font-mono font-black">{formatLAK(Number(paymentReview.legacyOpening.received_lak))}</span></span>
+                </div>
+                <p className="text-[11px] text-amber-700/90 leading-relaxed font-medium">
+                  {currentLang === 'lo' ? 'ບໍ່ມີຫຼັກຖານທຸລະກຳລະອຽດ ບໍ່ສາມາດດຳເນີນການຍ້ອນລາຍການນີ້ໄດ້' : 'Legacy transaction without origin logs cannot be reversed.'}
+                </p>
+              </div>
+            )}
+
+            {canonical && paymentReview.records.length === 0 && (
+              <div className="py-8 text-center rounded-2xl bg-slate-50/50 border border-dashed border-slate-200 flex flex-col items-center justify-center">
+                <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-2">
+                  <Receipt className="w-5 h-5 text-slate-400" />
+                </div>
+                <span className="text-xs text-slate-500 font-bold">
+                  {currentLang === 'lo' ? 'ຍັງບໍ່ທັນມີລາຍການຊຳລະເງິນ' : 'No payment records yet'}
+                </span>
+                <span className="text-[11px] text-slate-400 mt-0.5">
+                  {currentLang === 'lo' ? 'ລາຍການຊຳລະທີ່ບັນທຶກຈະສະແດງຢູ່ນີ້' : 'Recorded transactions will appear here'}
+                </span>
+              </div>
+            )}
+
+            {paymentReview.records.length > 0 && (
+              <div className="space-y-3">
+                {paymentReview.records.map(record => (
+                  <div key={record.id} className="rounded-2xl border border-slate-200/80 bg-white p-4 space-y-3 transition hover:border-sky-300 hover:shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl text-[10.5px] font-black border ${
+                          record.record_kind === 'REVERSAL'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-sky-50 text-sky-700 border-sky-200'
+                        }`}>
+                          {record.record_kind === 'REVERSAL' ? (
+                            <>
+                              <RotateCcw className="w-3 h-3" />
+                              <span>{currentLang === 'lo' ? 'ລາຍການຍ້ອນ' : 'Reversal'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Receipt className="w-3 h-3" />
+                              <span>{currentLang === 'lo' ? 'ລາຍການຮັບເງິນ' : 'Receipt'}</span>
+                            </>
+                          )}
+                        </span>
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl text-[10.5px] font-bold border ${
+                          record.state === 'CONFIRMED'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : record.state === 'REJECTED'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          {record.state === 'CONFIRMED' ? (
+                            <>
+                              <Check className="w-3 h-3" />
+                              <span>{currentLang === 'lo' ? 'ຢືນຢັນແລ້ວ' : 'Confirmed'}</span>
+                            </>
+                          ) : record.state === 'REJECTED' ? (
+                            <>
+                              <X className="w-3 h-3" />
+                              <span>{currentLang === 'lo' ? 'ປະຕິເສດ' : 'Rejected'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Clock className="w-3 h-3" />
+                              <span>{currentLang === 'lo' ? 'ລໍຖ້າກວດ' : 'Pending'}</span>
+                            </>
+                          )}
+                        </span>
+                        {record.payment_method_id === 'cash' && (
+                          <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            {currentLang === 'lo' ? 'ເງິນສົດ' : 'Cash'}
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-mono font-black text-sm text-slate-800">
+                        {formatLAK(Number(record.actual_received_amount_lak ?? record.requested_amount_lak))}
+                      </span>
+                    </div>
+
+                    {record.created_at && (
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
+                        <span>{new Date(record.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                        {record.reference && <span className="font-mono text-slate-600 font-bold">Ref: {record.reference}</span>}
+                      </div>
+                    )}
+
+                    {record.state === 'PENDING' && (
+                      <div className="pt-2 border-t border-slate-100 space-y-2">
+                        {receiptDraft?.record.id === record.id ? (
+                          <form aria-label="ຢືນຢັນຮັບເງິນ" className="p-3.5 bg-sky-50/50 border border-sky-200 rounded-2xl space-y-3 shadow-xs" onSubmit={async event => {
+                            event.preventDefault(); if (receiptSaving.current) return;
+                            let amount: string; try { amount = paymentDecimal(receiptDraft.amount); if (BigInt(amount.replace('.', '')) <= 0n) throw new Error('ຈຳນວນເງິນຕ້ອງຫຼາຍກວ່າ 0'); } catch (error) { setReceiptError(error instanceof Error ? error.message : 'ຈຳນວນເງິນບໍ່ຖືກຕ້ອງ'); return; }
+                            receiptSaving.current = true; setReceiptError('');
+                            try { const saved = await paymentReview.decideReceipt(record, 'APPROVED', amount); if (saved) { setReceiptDraft(null); void refreshData(); } }
+                            finally { receiptSaving.current = false; }
+                          }}>
+                            <label className="block text-xs font-bold text-slate-700">
+                              <span>{currentLang === 'lo' ? 'ຈຳນວນເງິນທີ່ຮັບຈິງ (LAK)' : 'Actual Received Amount (LAK)'}</span>
+                              <input autoFocus aria-label="ຈຳນວນເງິນທີ່ຮັບຈິງ (LAK)" inputMode="decimal" value={receiptDraft.amount} disabled={paymentReview.pending} onChange={event => setReceiptDraft({ record, amount: event.target.value })} className="mt-1 w-full border border-slate-300 rounded-xl p-2.5 text-xs font-mono font-bold focus:ring-2 focus:ring-sky-500 bg-white outline-hidden" />
+                            </label>
+                            {(receiptError || paymentReview.error) && <p role="alert" className="text-xs text-rose-600 font-semibold">{receiptError || paymentReview.error}</p>}
+                            <div className="flex gap-2">
+                              <button type="submit" disabled={paymentReview.pending} className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer active:scale-95 disabled:opacity-50">
+                                {currentLang === 'lo' ? 'ບັນທຶກຍອດຮັບຈິງ' : 'Confirm Amount'}
+                              </button>
+                              <button type="button" disabled={paymentReview.pending} onClick={() => { setReceiptDraft(null); setReceiptError(''); }} className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold transition cursor-pointer active:scale-95">
+                                {currentLang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={!canReviewReceipt || paymentReview.pending}
+                              onClick={() => { setReceiptError(''); setReceiptDraft({ record, amount: record.requested_amount_lak }); }}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>{currentLang === 'lo' ? 'ຢືນຢັນຍອດຮັບຈິງ' : 'Confirm Receipt'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!canReviewReceipt || paymentReview.pending}
+                              onClick={async () => {
+                                const reason = prompt(currentLang === 'lo' ? 'ເຫດຜົນປະຕິເສດ:' : 'Rejection Reason:'); if (!reason) return;
+                                const saved = await paymentReview.decideReceipt(record, 'REJECTED', '0.00', reason); if (saved) void refreshData();
+                              }}
+                              className="px-3 py-1.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>{currentLang === 'lo' ? 'ປະຕິເສດຄຳຂໍ' : 'Reject'}</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {record.state === 'CONFIRMED' && record.record_kind === 'RECEIPT' && (
+                      <div className="pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          disabled={!canReviewReceipt || paymentReview.pending}
+                          onClick={async () => {
+                            const amount = prompt(currentLang === 'lo' ? 'ຈຳນວນເງິນທີ່ຈະຍ້ອນ (LAK):' : 'Reversal amount (LAK):'); if (!amount) return;
+                            const reason = prompt(currentLang === 'lo' ? 'ເຫດຜົນຍ້ອນການຊຳລະ:' : 'Reversal reason:'); if (!reason) return;
+                            const saved = await paymentReview.reverseReceipt(record, amount, reason); if (saved) void refreshData();
+                          }}
+                          className="px-3 py-1.5 bg-white border border-amber-200 hover:bg-amber-50 text-amber-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>{currentLang === 'lo' ? 'ຍ້ອນການຊຳລະ' : 'Reverse Payment'}</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         </div>
 
@@ -264,6 +469,35 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
             currentLang={currentLang}
             setLightbox={setLightbox}
             onConfigureWorkflow={() => setIsWorkflowModalOpen(true)}
+            onDecideProof={['admin','manager','sales','prepress','owner'].includes(role || '') &&
+              order.status === 'WAITING_APPROVAL' && order.proof_status === 'PENDING_CUSTOMER' &&
+              !order.stock_deducted_at && order.updated_at && Number.isInteger(order.proof_version) && order.proof_version > 0 ? async (action, feedback) => {
+                const generation = proofUploadGeneration.current;
+                const proofUrl = order.proof_url || order.digital_proof_url;
+                if (!proofUrl) throw new Error('ກະລຸນາໂຫຼດ Proof ກ່ອນ');
+                const response = await apiFetch(`/api/v1/orders/${encodeURIComponent(order.id)}/proof-action`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action, expected_updated_at: order.updated_at, proof_url: proofUrl, proof_version: order.proof_version, feedback }),
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || result.error || 'ບໍ່ສາມາດບັນທຶກຜົນ Proof ໄດ້');
+                const status = action === 'APPROVE' ? 'APPROVED' : 'REJECTED';
+                const nextStatus = action === 'APPROVE' ? 'FILE_CONFIRMED' : 'PREPRESS_CHECK';
+                if (result.committed !== true || result.updated_id !== order.id || result.order_id !== order.id || result.action !== action ||
+                  result.proof_status !== status || result.new_status !== nextStatus || result.proof_url !== proofUrl ||
+                  result.proof_version !== order.proof_version || !result.updated_at || result.updated_at === order.updated_at)
+                  throw new Error('ຜົນບັນທຶກ Proof ບໍ່ກົງກັບອໍເດີ');
+                const readback = await apiFetch(`/api/v1/orders/${encodeURIComponent(order.id)}`);
+                const saved = await readback.json(); const canonical = saved.data || saved;
+                if (!readback.ok || canonical.id !== order.id || canonical.updated_at !== result.updated_at ||
+                  canonical.proof_status !== status || (canonical.proof_url || canonical.digital_proof_url) !== proofUrl ||
+                  canonical.proof_version !== order.proof_version || (canonical.overall_status || canonical.status) !== nextStatus ||
+                  !Array.isArray(canonical.items) || !(action === 'APPROVE' ? canonical.proof_approved_at : canonical.proof_rejected_at))
+                  throw new Error('ກະລຸນາໂຫຼດອໍເດີໃໝ່ເພື່ອກວດຜົນ Proof');
+                if (generation !== proofUploadGeneration.current) throw new DOMException('Order changed', 'AbortError');
+                await refreshData();
+                if (generation === proofUploadGeneration.current) showToast('ບັນທຶກຜົນ Proof ແລ້ວ', 'success');
+              } : undefined}
             productionWorkflow={order.productionWorkflow}
             onUploadProofFile={['admin','manager','sales','prepress','owner'].includes(role || '') ? async file => {
               const generation = proofUploadGeneration.current;
@@ -277,8 +511,29 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
                 proofDraft.current = { file, orderId: order.id, url: asset.file_url };
               }
               if (generation !== proofUploadGeneration.current || !proofDraft.current) throw new DOMException('Order changed', 'AbortError');
-              await onUpdateOrder({ id: order.id, expected_updated_at: order.updated_at, proofUrl: proofDraft.current.url });
+              try {
+                await onUpdateOrder({ id: order.id, expected_updated_at: order.updated_at, proofUrl: proofDraft.current.url });
+              } catch (err: any) {
+                try {
+                  const res = await apiFetch(`/api/v1/orders/${order.id}`);
+                  if (res.ok) {
+                    const fresh = await res.json();
+                    if (fresh?.updated_at && fresh.updated_at !== order.updated_at) {
+                      await onUpdateOrder({ id: order.id, expected_updated_at: fresh.updated_at, proofUrl: proofDraft.current.url });
+                      proofDraft.current = null;
+                      showToast('ບັນທຶກ Digital Proof ແລ້ວ', 'success');
+                      await refreshData();
+                      return;
+                    }
+                  }
+                } catch {
+                  // Ignore secondary failure
+                }
+                await refreshData();
+                throw err;
+              }
               proofDraft.current = null; showToast('ບັນທຶກ Digital Proof ແລ້ວ', 'success');
+              await refreshData();
             } : undefined}
             onUploadProof={async (proofUrl) => {
               if (!onUpdateOrder) throw new Error('ບໍ່ມີຊ່ອງທາງບັນທຶກ');

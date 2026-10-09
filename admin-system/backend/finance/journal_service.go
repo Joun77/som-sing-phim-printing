@@ -83,7 +83,7 @@ func insertJournalEntry(tx *sql.Tx, date time.Time, description, refType, refID 
 		_, err = tx.Exec(`
 			INSERT INTO journal_lines (entry_id, account_id, debit, credit, currency, notes)
 			VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6)
-		`, entryID, acctID, l.Debit.StringFixed(2), l.Credit.StringFixed(2), currency, l.Notes)
+		`, entryID, acctID, l.Debit.InexactFloat64(), l.Credit.InexactFloat64(), currency, l.Notes)
 		if err != nil {
 			return fmt.Errorf("failed to insert journal line for account %s: %w", l.AccountCode, err)
 		}

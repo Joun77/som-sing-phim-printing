@@ -30,6 +30,8 @@ export interface PaymentRecord {
   id: string; order_id: string; record_kind: 'RECEIPT' | 'REVERSAL'; state: 'PENDING' | 'CONFIRMED' | 'REJECTED';
   requested_amount_lak: string; actual_received_amount_lak: string | null; evidence_url: string; reversal_of: string | null; reason: string | null;
   purpose: string; reference: string | null; created_at: string;
+  payment_method_id?: string | null;
+  method?: string | null;
 }
 export function paymentDecimal(value: string | number): string {
   const text = String(value);

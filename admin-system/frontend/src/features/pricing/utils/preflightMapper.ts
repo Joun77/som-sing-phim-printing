@@ -42,7 +42,7 @@ export const mapPreflightToSpecs = (pfResult: PreflightResult, itemsLength: numb
   return {
     imposition_mode: pfResult.imposition_mode ?? 'OFF',
     jobName: cleanName,
-    artworkParts: isSplit && coverRes && innerRes ? [{ ...sourcePart('cover', coverRes, pfResult.cover_paper_id), cutsPerSheet: preCut ? undefined : pfResult.cover_cuts_per_sheet_override }, { ...sourcePart('inner', innerRes, pfResult.selected_paper_id), cutsPerSheet: preCut ? undefined : pfResult.cuts_per_sheet_override }] : undefined,
+    artworkParts: isSplit && coverRes && innerRes ? [{ ...sourcePart('cover', coverRes, pfResult.cover_paper_id), cutsPerSheet: pfResult.cover_cuts_per_sheet_override }, { ...sourcePart('inner', innerRes, pfResult.selected_paper_id), cutsPerSheet: pfResult.cuts_per_sheet_override }] : undefined,
     fileName: innerRes?.file_name || pfResult.file_name,
     fileSize: innerRes?.file_size || pfResult.file_size,
     previewThumbnailUrl: innerRes?.preview_thumbnail_url || pfResult.preview_thumbnail_url,
@@ -65,9 +65,9 @@ export const mapPreflightToSpecs = (pfResult: PreflightResult, itemsLength: numb
     suggestedPaper: pfResult.target_paper_size || 'A4',
     paperId: pfResult.selected_paper_id,
     coverPaperId: pfResult.cover_paper_id,
-    cutsPerSheetOverride: preCut ? undefined : pfResult.cuts_per_sheet_override !== undefined ? pfResult.cuts_per_sheet_override : (batchImp?.cuts_per_sheet ? Number(batchImp.cuts_per_sheet) : undefined),
-    coverCutsPerSheetOverride: preCut ? undefined : pfResult.cover_cuts_per_sheet_override,
-    impositionSummary: preCut ? undefined : pfResult.imposition_summary || batchImp?.summary_lao,
+    cutsPerSheetOverride: pfResult.cuts_per_sheet_override !== undefined ? pfResult.cuts_per_sheet_override : (batchImp?.cuts_per_sheet ? Number(batchImp.cuts_per_sheet) : undefined),
+    coverCutsPerSheetOverride: pfResult.cover_cuts_per_sheet_override,
+    impositionSummary: pfResult.imposition_summary || batchImp?.summary_lao,
     colorPrintMode: detectedColorMode,
     cCoverage: covC,
     mCoverage: covM,
@@ -82,10 +82,9 @@ export const mapPreflightToSpecs = (pfResult: PreflightResult, itemsLength: numb
 export const mapQuotationItemToOrderItem = (item: any, idx: number, calc?: any, paperItem?: any, equipment: any[] = []) => {
   const parts: ArtworkPart[] | undefined = item.artworkParts ? structuredClone(item.artworkParts) : undefined;
   if (item.imposition_mode === 'OFF') parts?.forEach(part => {
-    delete part.cutsPerSheet;
-    if (part.printSettings) {
-      delete part.printSettings.cutsPerSheetOverride; delete part.printSettings.parentSheetSize;
-      part.printSettings.multipleImagesPerSheet = false;
+    // Preserve cutsPerSheet and overrides even in OFF mode (e.g. 2 pieces A4 on A3 stock)
+    if (part.printSettings && part.printSettings.cutsPerSheetOverride !== undefined) {
+      part.cutsPerSheet = part.printSettings.cutsPerSheetOverride;
     }
   });
   const batchFiles = item.batchFiles || item.preflightData?.batch_files;
@@ -133,13 +132,28 @@ export const mapQuotationItemToOrderItem = (item: any, idx: number, calc?: any, 
     },
     batch_files: batchSnapshot,
     drive_link: item.artworkUrl,
-    avg_cov_c: item.cCoverage || 0,
-    avg_cov_m: item.mCoverage || 0,
-    avg_cov_y: item.yCoverage || 0,
-    avg_cov_k: item.kCoverage || 0,
+    avg_cov_c: item.cCoverage ?? item.avg_cov_c ?? 0,
+    avg_cov_m: item.mCoverage ?? item.avg_cov_m ?? 0,
+    avg_cov_y: item.yCoverage ?? item.avg_cov_y ?? 0,
+    avg_cov_k: item.kCoverage ?? item.avg_cov_k ?? 0,
+    manualSheetCount: item.manualSheetCount ? Number(item.manualSheetCount) : ((item as any).manual_sheet_count ? Number((item as any).manual_sheet_count) : undefined),
+    manual_sheet_count: item.manualSheetCount ? Number(item.manualSheetCount) : ((item as any).manual_sheet_count ? Number((item as any).manual_sheet_count) : undefined),
+    cutsPerSheetOverride: item.cutsPerSheetOverride,
+    colorPages: item.colorPages ?? item.preflightData?.color_pages_count ?? 0,
+    monoPages: item.monoPages ?? item.preflightData?.mono_pages_count ?? 0,
+    monoPagesAvgK: item.monoPagesAvgK ?? item.preflightData?.mono_pages_avg_k,
     specifications: {
       imposition_mode: item.imposition_mode,
       stock_dimension_snapshot: item.stock_dimension_snapshot,
+      manual_sheet_count: item.manualSheetCount ? Number(item.manualSheetCount) : ((item as any).manual_sheet_count ? Number((item as any).manual_sheet_count) : undefined),
+      cuts_per_sheet: item.cutsPerSheetOverride ?? item.cutsPerSheet ?? 1,
+      color_pages_count: item.colorPages ?? item.preflightData?.color_pages_count ?? 0,
+      mono_pages_count: item.monoPages ?? item.preflightData?.mono_pages_count ?? 0,
+      mono_pages_avg_k: item.monoPagesAvgK ?? item.preflightData?.mono_pages_avg_k,
+      avg_cov_c: item.cCoverage ?? item.avg_cov_c ?? 0,
+      avg_cov_m: item.mCoverage ?? item.avg_cov_m ?? 0,
+      avg_cov_y: item.yCoverage ?? item.avg_cov_y ?? 0,
+      avg_cov_k: item.kCoverage ?? item.avg_cov_k ?? 0,
       job_width: Number(item.jobWidth), job_height: Number(item.jobHeight),
       batch_files: structuredClone(batchSnapshot),
       multi_image_print: { enabled: item.imposition_mode !== 'OFF' && !!item.multipleImagesPerSheet, images_per_sheet: item.imagesPerSheet || 4 },
@@ -196,8 +210,21 @@ export const mapQuotationItemToOrderItem = (item: any, idx: number, calc?: any, 
       part_pricing_status: parts?.length ? (calc?.partCosts ? 'separate_parts' : 'not_calculated') : undefined,
       pages: innerPart?.pageCount || item.pagesPerBook || item.pageCount || 1,
       paperName: paperItem?.name || 'Standard Paper',
-      colorMode: item.colorPrintMode || 'CMYK',
       isDoubleSided: item.isDoubleSided,
+      manual_sheet_count: item.manualSheetCount ? Number(item.manualSheetCount) : ((item as any).manual_sheet_count ? Number((item as any).manual_sheet_count) : undefined),
+      manualSheetCount: item.manualSheetCount ? Number(item.manualSheetCount) : ((item as any).manual_sheet_count ? Number((item as any).manual_sheet_count) : undefined),
+      cuts_per_sheet: item.cutsPerSheetOverride ?? item.cutsPerSheet ?? 1,
+      cutsPerSheetOverride: item.cutsPerSheetOverride,
+      colorPages: item.colorPages ?? item.preflightData?.color_pages_count ?? 0,
+      color_pages_count: item.colorPages ?? item.preflightData?.color_pages_count ?? 0,
+      monoPages: item.monoPages ?? item.preflightData?.mono_pages_count ?? 0,
+      mono_pages_count: item.monoPages ?? item.preflightData?.mono_pages_count ?? 0,
+      monoPagesAvgK: item.monoPagesAvgK ?? item.preflightData?.mono_pages_avg_k,
+      mono_pages_avg_k: item.monoPagesAvgK ?? item.preflightData?.mono_pages_avg_k,
+      cCoverage: item.cCoverage ?? item.avg_cov_c ?? 0,
+      mCoverage: item.mCoverage ?? item.avg_cov_m ?? 0,
+      yCoverage: item.yCoverage ?? item.avg_cov_y ?? 0,
+      kCoverage: item.kCoverage ?? item.avg_cov_k ?? 0,
       printerAllocations: item.printerAllocations,
       fileName: item.fileName,
       artworkUrl: item.artworkUrl,

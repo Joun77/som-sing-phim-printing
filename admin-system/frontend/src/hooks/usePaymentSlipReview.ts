@@ -63,17 +63,26 @@ export function usePaymentSlipReview(orderId: string) {
     finally { if (current === generation.current) { lock.current = false; setPending(false); } }
   };
   const changePolicy = (mode: 'OFF' | 'ON', percent = mode === 'OFF' ? '100.00' : '50.00') => operation(async () => {
-    if (!summary) throw new Error('ກະລຸນາໂຫຼດຂໍ້ມູນການຊຳລະກ່ອນ');
-    const payload = [mode, percent, summary.payment_revision];
-    return { summary: await setPaymentPolicy(orderId, mode, percent, summary.payment_revision, keyFor('policy', payload)) };
+    let curSummary = summary;
+    if (!curSummary) {
+      const history = await getPaymentHistory(orderId);
+      curSummary = history.summary;
+      setSummary(history.summary);
+      setRecords(history.records);
+    }
+    if (!curSummary) throw new Error('ກະລຸນາໂຫຼດຂໍ້ມູນການຊຳລະກ່ອນ');
+    const payload = [mode, percent, curSummary.payment_revision];
+    return { summary: await setPaymentPolicy(orderId, mode, percent, curSummary.payment_revision, keyFor('policy', payload)) };
   });
   const uploadSlip = (file: File) => operation(async () => {
     if (!summary) throw new Error('ກະລຸນາໂຫຼດຂໍ້ມູນຊຳລະກ່ອນ');
     return uploadPaymentSlip(orderId, file, summary.payment_revision, keyFor('upload-slip', [file.name, file.size, file.lastModified, summary.payment_revision]));
   });
-  const requestReceipt = (amount: string, purpose: 'FULL' | 'DEPOSIT' | 'REMAINING', evidence: string, reference?: string) => operation(async () => {
-    if (!summary || !configuration?.manual_qr_enabled || !configuration.payment_method_id) throw new Error('ຊ່ອງທາງຊຳລະຍັງບໍ່ພ້ອມ');
-    const payload = { purpose, requested_amount_lak: paymentDecimal(amount), payment_method_id: configuration.payment_method_id, evidence_url: evidence, reference, expected_payment_revision: summary.payment_revision };
+  const requestReceipt = (amount: string, purpose: 'FULL' | 'DEPOSIT' | 'REMAINING', evidence: string, reference?: string, methodId?: string) => operation(async () => {
+    if (!summary) throw new Error('ກະລຸນາໂຫຼດຂໍ້ມູນການຊຳລະກ່ອນ');
+    const paymentMethod = methodId || configuration?.payment_method_id;
+    if (!paymentMethod) throw new Error('ກະລຸນາເລືອກບັນຊີຮັບເງິນ');
+    const payload = { purpose, requested_amount_lak: paymentDecimal(amount), payment_method_id: paymentMethod, evidence_url: evidence, reference, expected_payment_revision: summary.payment_revision };
     return createPaymentRecord(orderId, payload, keyFor('request', payload));
   });
   const decideReceipt = (record: PaymentRecord, status: 'APPROVED' | 'REJECTED', actual: string, reason?: string) => operation(async () => {

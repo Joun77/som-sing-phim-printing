@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { CheckCircle2, XCircle, Eye, DollarSign, ShieldAlert, RefreshCw } from 'lucide-react';
 import { useApp } from '../../store/AppContext';
 import { apiFetch } from '../../api/client';
-import { reviewPaymentSlip } from '../../api/paymentReview';
+import { reviewPaymentSlip, reviewPaymentRecord } from '../../api/paymentReview';
 import ArtworkThumbnail from '../../components/common/ArtworkThumbnail';
 
 interface PendingSlipOrder {
@@ -13,9 +13,42 @@ interface PendingSlipOrder {
   currency: string;
   paymentSlipUrl: string;
   createdAt: string;
+  paymentRecordId?: string;
+  payment_record_id?: string;
+  expectedPaymentRevision?: number;
+  expected_payment_revision?: number;
+  requestedAmountLak?: string;
+  requested_amount_lak?: string;
 }
 
-export const PaymentVerificationTable: React.FC = () => {
+const translatePaymentError = (err: unknown): string => {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes('LEGACY_PARTIAL_REQUIRES_RECEIPT') || msg.includes('409')) {
+    return 'ລາຍການນີ້ມີຍອດຊຳລະບາງສ່ວນແລ້ວ ກະລຸນາກວດສອບຜ່ານໃບຮັບເງິນສະເພາະ';
+  }
+  if (msg.includes('PAYMENT_CHANNEL_DISABLED')) {
+    return 'ຊ່ອງທາງການຊຳລະເງິນຖືກປິດໃຊ້ງານ';
+  }
+  if (msg.includes('PAYMENT_ALREADY_DECIDED')) {
+    return 'ລາຍການນີ້ໄດ້ຮັບການກວດສອບແລ້ວ';
+  }
+  if (msg.includes('REVISION_MISMATCH')) {
+    return 'ຂໍ້ມູນການຊຳລະມີການປ່ຽນແປງ ກະລຸນາໂຫຼດຄືນໃໝ່';
+  }
+  if (msg.includes('Payment review was not saved')) {
+    return 'ບໍ່ສາມາດບັນທຶກການກວດສອບສະລິບໄດ້';
+  }
+  if (msg.includes('Payment list unavailable')) {
+    return 'ບໍ່ສາມາດດຶງລາຍການສະລິບໄດ້';
+  }
+  return msg || 'ການກວດສອບສະລິບບໍ່ສຳເລັດ';
+};
+
+interface PaymentVerificationTableProps {
+  onCountChange?: (count: number) => void;
+}
+
+export const PaymentVerificationTable: React.FC<PaymentVerificationTableProps> = ({ onCountChange }) => {
   const { refreshData } = useApp();
   const [selectedSlip, setSelectedSlip] = useState<PendingSlipOrder | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -37,10 +70,13 @@ export const PaymentVerificationTable: React.FC = () => {
       const res = await apiFetch<Response>('/api/v1/finance/pending-slips');
       if (!res.ok) throw new Error(`ບໍ່ສາມາດໂຫຼດລາຍການສະລິບໄດ້ (HTTP ${res.status})`);
       const data: unknown = await res.json();
-      if (!Array.isArray(data) || !data.every(item => item && typeof item.id === 'string' && typeof item.orderNumber === 'string' && typeof item.customerName === 'string' && typeof item.totalAmount === 'number' && Number.isFinite(item.totalAmount) && typeof item.currency === 'string' && typeof item.paymentSlipUrl === 'string' && typeof item.createdAt === 'string')) throw new Error('Invalid payment review list');
-      if (generation === loadGeneration.current) setSlips(data);
+      if (!Array.isArray(data) || !data.every(item => item && typeof item.id === 'string' && typeof item.orderNumber === 'string' && typeof item.customerName === 'string' && typeof item.totalAmount === 'number' && Number.isFinite(item.totalAmount) && typeof item.currency === 'string' && typeof item.paymentSlipUrl === 'string' && typeof item.createdAt === 'string')) throw new Error('ລາຍການສະລິບບໍ່ຖືກຕ້ອງ');
+      if (generation === loadGeneration.current) {
+        setSlips(data as PendingSlipOrder[]);
+        onCountChange?.(data.length);
+      }
     } catch (err) {
-      if (generation === loadGeneration.current) setError(err instanceof Error ? err.message : 'Payment list unavailable');
+      if (generation === loadGeneration.current) setError(translatePaymentError(err));
     } finally {
       if (generation === loadGeneration.current) setLoading(false);
     }
@@ -59,12 +95,23 @@ export const PaymentVerificationTable: React.FC = () => {
     setReviewing(true);
     setError('');
     try {
-      await reviewPaymentSlip(orderId, 'APPROVED');
-      setSlips((prev) => prev.filter((s) => s.id !== orderId));
+      const slip = slips.find(s => s.id === orderId);
+      const recordId = slip?.paymentRecordId || slip?.payment_record_id;
+      if (recordId) {
+        const rev = slip?.expectedPaymentRevision ?? slip?.expected_payment_revision ?? 0;
+        const amount = slip?.requestedAmountLak || slip?.requested_amount_lak || String(slip?.totalAmount ?? 0);
+        const idempotencyKey = `payment-review:${recordId}:${Date.now()}`;
+        await reviewPaymentRecord(orderId, recordId, 'APPROVED', amount, rev, idempotencyKey);
+      } else {
+        await reviewPaymentSlip(orderId, 'APPROVED');
+      }
+      const nextSlips = slips.filter((s) => s.id !== orderId);
+      setSlips(nextSlips);
+      onCountChange?.(nextSlips.length);
       setSelectedSlip(null);
       if (refreshData) refreshData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Payment review failed');
+      setError(translatePaymentError(err));
     } finally {
       reviewLock.current = false;
       setReviewing(false);
@@ -80,14 +127,25 @@ export const PaymentVerificationTable: React.FC = () => {
     setReviewing(true);
     setError('');
     try {
-      await reviewPaymentSlip(selectedSlip.id, 'REJECTED', rejectReason || 'ສລິບບໍ່ຖືກຕ້ອງ ຫຼື ຍອດເງິນບໍ່ຄົບ');
-      setSlips((prev) => prev.filter((s) => s.id !== selectedSlip.id));
+      const recordId = selectedSlip.paymentRecordId || selectedSlip.payment_record_id;
+      const reason = rejectReason || 'ສລິບບໍ່ຖືກຕ້ອງ ຫຼື ຍອດເງິນບໍ່ຄົບ';
+      if (recordId) {
+        const rev = selectedSlip.expectedPaymentRevision ?? selectedSlip.expected_payment_revision ?? 0;
+        const amount = selectedSlip.requestedAmountLak || selectedSlip.requested_amount_lak || String(selectedSlip.totalAmount);
+        const idempotencyKey = `payment-review:${recordId}:${Date.now()}`;
+        await reviewPaymentRecord(selectedSlip.id, recordId, 'REJECTED', amount, rev, idempotencyKey, reason);
+      } else {
+        await reviewPaymentSlip(selectedSlip.id, 'REJECTED', reason);
+      }
+      const nextSlips = slips.filter((s) => s.id !== selectedSlip.id);
+      setSlips(nextSlips);
+      onCountChange?.(nextSlips.length);
       setShowRejectModal(false);
       setSelectedSlip(null);
       setRejectReason('');
       if (refreshData) refreshData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Payment review failed');
+      setError(translatePaymentError(err));
     } finally {
       reviewLock.current = false;
       setReviewing(false);

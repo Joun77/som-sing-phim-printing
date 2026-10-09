@@ -78,7 +78,7 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string; isPublicMode?
               total_amount_lak: totalAmt,
               deposit_lak: depositAmt,
               remaining_lak: remainingAmt,
-              overall_status: localOrd.status === 'Completed' ? 'COMPLETED' : 'IN_PRODUCTION',
+              overall_status: (localOrd as any).overall_status || (localOrd.status === 'Completed' ? 'COMPLETED' : localOrd.status) || '',
               delivery_date: rawDeliveryDate,
               created_at: (localOrd as any).createdTime || new Date().toISOString(),
               updated_at: new Date().toISOString(),
@@ -196,7 +196,7 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string; isPublicMode?
     } else {
       setOrder(null);
     }
-  }, [selectedOrderNo]);
+  }, [selectedOrderNo, orders, isPublicMode]);
 
   const user = useAuthStore((state) => state.user);
 
@@ -377,7 +377,7 @@ export const ShopFloorTracker: React.FC<{ initialOrderNo?: string; isPublicMode?
                   <div className="flex flex-col gap-1">
                     <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Status</span>
                     <span className="inline-flex max-w-fit items-center px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl font-bold font-mono text-sm">
-                      {(order.status || (order as any).overall_status || 'IN_PRODUCTION')}
+                      {((order as any).overall_status || order.status || '—')}
                     </span>
                   </div>
                   

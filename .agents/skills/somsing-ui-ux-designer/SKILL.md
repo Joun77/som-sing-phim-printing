@@ -3,6 +3,11 @@ name: somsing-ui-ux-designer
 description: ทักษะและความเชี่ยวชาญสำหรับนักออกแบบ UI/UX (UX/UI Designer) ในระบบ Som Sing Phim รวบรวมและผสานแนวทางการออกแบบ Design System, การจัดสไตล์ด้วย Tailwind/CSS, การเลือก Palette/Typography, Layout สำหรับงานพิมพ์และแดชบอร์ด Admin ERP, และการคุมกฎห้ามใช้ Unicode Emoji โดยเด็ดขาด
 ---
 
+## Shared Codex / Antigravity standard
+
+Before this specialty workflow, read [the shared working standard](../somsing-dev-coordinator/references/shared-working-standard.md). Both apps use the same task, source identity, product standards and evidence criteria; tool adapters differ. This reference governs conflicting historical workflow/UI/verification examples below, while direct human instructions retain priority.
+
+
 # Somsin UI/UX Designer Skill (ศูนย์รวมสกิล UX/UI)
 
 ทักษะคู่มือนักออกแบบและผู้เชี่ยวชาญด้าน UI/UX สำหรับระบบโรงพิมพ์ **Som Sing Phim (สมสิงห์การพิมพ์)** ครอบคลุมการออกแบบทั้งส่วน **Admin ERP** และ **Customer Service Storefront** 

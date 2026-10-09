@@ -1,5 +1,6 @@
-import { preCutStockMatches } from '../utils/impositionLayout';
+import { preCutStockError, preCutStockDescription } from '../utils/impositionLayout';
 import UniversalViewer from './common/UniversalViewer';
+import PdfCanvasPreview from './common/PdfCanvasPreview';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   UploadCloud,
@@ -74,14 +75,17 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
   const [file, setFile] = useState<File | null>(null);
   const [originalPreviewOpen, setOriginalPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [currentPdfPage, setCurrentPdfPage] = useState<number>(1);
+  const [pdfPageCount, setPdfPageCount] = useState<number | null>(null);
+  const [splitPreviewItem, setSplitPreviewItem] = useState<{ url: string; name: string; size?: number } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number; pct: number }>({ current: 0, total: 0, pct: 0 });
   const [impositionMode, setImpositionMode] = useState<'OFF' | 'ON'>('OFF');
   const [impositionError, setImpositionError] = useState('');
   const compatibleStock = (paper: InventoryItem | null, width: number, height: number) => {
-    if (impositionMode === 'ON' || preCutStockMatches(paper, width, height)) { setImpositionError(''); return true; }
-    setImpositionError('ຂະໜາດວຽກບໍ່ກົງກັບເຈ້ຍທີ່ຕັດໄວ້. ກະລຸນາເລືອກເຈ້ຍທີ່ເໝາະສົມ.');
-    return false;
+    const error = impositionMode === 'ON' ? '' : preCutStockError(paper, width, height);
+    setImpositionError(error);
+    return !error;
   };
   const [result, setResult] = useState<PreflightResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -931,8 +935,8 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       target_width_mm: customWidthMM,
       target_height_mm: customHeightMM,
       selected_paper_id: selectedPaper?.id,
-      cuts_per_sheet_override: impositionMode === 'OFF' ? undefined : effectiveCuts,
-      imposition_summary: impositionMode === 'OFF' ? undefined : impSummary,
+      cuts_per_sheet_override: singleCutsOverride !== undefined ? singleCutsOverride : (impositionMode === 'OFF' ? (effectiveCuts > 1 ? effectiveCuts : undefined) : effectiveCuts),
+      imposition_summary: impSummary,
     };
 
     if (onSendToQuotation) {
@@ -1226,7 +1230,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                 </div>
                 {(() => {
                   const cDims = getItemSheetDims(coverPaper || selectedPaper);
-                  if (impositionMode === 'OFF') return <div className="font-bold text-slate-700">{(coverPaper || selectedPaper)?.name || 'ເລືອກເຈ້ຍຈາກສາງ'}</div>;
+                  if (impositionMode === 'OFF') return <div className="font-bold text-slate-700">{(coverPaper || selectedPaper)?.name || 'ເລືອກເຈ້ຍຈາກສາງ'}<p className="text-xs font-normal mt-1">{preCutStockDescription((coverPaper || selectedPaper))}</p></div>;
                   const autoCuts = calculateBestFitImposition(cDims.w, cDims.h, (innerResult?.target_width_mm || 210) * 2, innerResult?.target_height_mm || 297);
                   const effectiveCuts = coverCutsOverride !== undefined ? coverCutsOverride : Math.max(1, autoCuts);
                   return (
@@ -1424,7 +1428,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                 </div>
                 {(() => {
                   const iDims = getItemSheetDims(innerPaper || selectedPaper);
-                  if (impositionMode === 'OFF') return <div className="font-bold text-slate-700">{(innerPaper || selectedPaper)?.name || 'ເລືອກເຈ້ຍຈາກສາງ'}</div>;
+                  if (impositionMode === 'OFF') return <div className="font-bold text-slate-700">{(innerPaper || selectedPaper)?.name || 'ເລືອກເຈ້ຍຈາກສາງ'}<p className="text-xs font-normal mt-1">{preCutStockDescription((innerPaper || selectedPaper))}</p></div>;
                   const autoCuts = calculateBestFitImposition(iDims.w, iDims.h, innerResult?.target_width_mm || 210, innerResult?.target_height_mm || 297);
                   const effectiveCuts = innerCutsOverride !== undefined ? innerCutsOverride : autoCuts;
                   return (
@@ -2051,7 +2055,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                 </div>
                 {selectedPaper ? (() => {
                   const pDims = getParentSheetDims();
-                  if (impositionMode === 'OFF') return <div className="font-bold text-slate-700">{(selectedPaper)?.name || 'ເລືອກເຈ້ຍຈາກສາງ'}</div>;
+                  if (impositionMode === 'OFF') return <div className="font-bold text-slate-700">{(selectedPaper)?.name || 'ເລືອກເຈ້ຍຈາກສາງ'}<p className="text-xs font-normal mt-1">{preCutStockDescription((selectedPaper))}</p></div>;
                   const autoCuts = calculateBestFitImposition(pDims.w, pDims.h, paperWidthMM, paperHeightMM);
                   const effectiveCuts = singleCutsOverride !== undefined ? singleCutsOverride : autoCuts;
                   return (
@@ -2270,14 +2274,49 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
 
                 {previewUrl && (
                   isImageFile(file.name) ? (
-                    <img
-                      src={cmykSimulatedUrl || previewUrl}
-                      alt="Artwork Preview"
-                      style={{ transform: `scale(${zoomLevel})` }}
-                      className="max-h-[600px] object-contain rounded-lg shadow-2xl transition-transform"
-                    />
+                    <div className="w-full flex flex-col items-center justify-center p-2">
+                      <img
+                        src={cmykSimulatedUrl || previewUrl}
+                        alt="Artwork Preview"
+                        style={{ transform: `scale(${zoomLevel})` }}
+                        className="max-h-[600px] object-contain rounded-lg shadow-2xl transition-transform"
+                      />
+                      <div className="mt-3 flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setOriginalPreviewOpen(true)}
+                          className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                        >
+                          <Eye className="w-4 h-4" />
+                          <span>{currentLang === 'lo' ? 'ເປີດເບິ່ງຕົວຢ່າງເຕັມຈໍ (Universal Preview)' : 'Open Full Preview'}</span>
+                        </button>
+                      </div>
+                    </div>
                   ) : (
-                    <button type="button" onClick={() => setOriginalPreviewOpen(true)} className="px-4 py-2 border rounded text-white">ສະແດງ PDF ຕົ້ນສະບັບ (Open original PDF)</button>
+                    <div className="w-full flex flex-col items-center justify-center p-2">
+                      <div className="w-full max-w-xl h-[480px] bg-slate-900 rounded-2xl overflow-hidden relative shadow-2xl border border-slate-700/60 flex items-center justify-center">
+                        <PdfCanvasPreview
+                          blob={file}
+                          page={currentPdfPage}
+                          scale={zoomLevel}
+                          fit="page"
+                          sourceUrl={previewUrl || undefined}
+                          language={currentLang}
+                          onPageChange={setCurrentPdfPage}
+                          onPageCount={setPdfPageCount}
+                        />
+                      </div>
+                      <div className="mt-3 flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setOriginalPreviewOpen(true)}
+                          className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                        >
+                          <Eye className="w-4 h-4" />
+                          <span>{currentLang === 'lo' ? 'ເປີດເບິ່ງຕົວຢ່າງເຕັມຈໍ (Universal Preview)' : 'Open Full Preview'}</span>
+                        </button>
+                      </div>
+                    </div>
                   )
                 )}
               </div>
@@ -2332,7 +2371,7 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
                     </div>
                     {selectedPaper ? (() => {
                       const pDims = getParentSheetDims();
-                  if (impositionMode === 'OFF') return <div className="font-bold text-slate-700">{(selectedPaper)?.name || 'ເລືອກເຈ້ຍຈາກສາງ'}</div>;
+                  if (impositionMode === 'OFF') return <div className="font-bold text-slate-700">{(selectedPaper)?.name || 'ເລືອກເຈ້ຍຈາກສາງ'}<p className="text-xs font-normal mt-1">{preCutStockDescription((selectedPaper))}</p></div>;
                       const autoCuts = calculateBestFitImposition(pDims.w, pDims.h, paperWidthMM, paperHeightMM);
                       const effectiveCuts = singleCutsOverride !== undefined ? singleCutsOverride : autoCuts;
                       return (
@@ -2742,7 +2781,8 @@ export const PreflightChecker: React.FC<PreflightCheckerProps> = ({
       )
     )}
 
-      {originalPreviewOpen && file && <UniversalViewer src={result?.file_url || previewUrl} fileName={file.name} fileSize={file.size} onClose={() => setOriginalPreviewOpen(false)} />}
+      {originalPreviewOpen && file && <UniversalViewer src={previewUrl || result?.file_url} fileName={file.name} fileSize={file.size} onClose={() => setOriginalPreviewOpen(false)} />}
+      {splitPreviewItem && <UniversalViewer src={splitPreviewItem.url} fileName={splitPreviewItem.name} fileSize={splitPreviewItem.size} onClose={() => setSplitPreviewItem(null)} />}
       {/* Lightbox Modal for Full View of Selected Photo */}
       {selectedPreviewPhoto && (
         <div

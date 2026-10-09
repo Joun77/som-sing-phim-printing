@@ -121,7 +121,7 @@ export const PrintJobItemsCard: React.FC<PrintJobItemsCardProps> = ({
 
           // Paper brand & specification breakdown
           const paperBrand = it.paper_brand || it.specifications?.paper_brand || it.specs?.paper_brand || '';
-          const paperType = it.paperType || it.paper || it.material || it.paper_name || it.specifications?.paper_name || 'Art Card 260g';
+          const paperType = it.paperType || it.paper || it.material || it.paper_name || it.specs?.paper_name || it.specifications?.paper_name || 'Art Card 260g';
           const paperWeight = it.paper_weight_gsm || it.specifications?.paper_weight || it.specs?.paper_weight || '';
           const size = it.paperSize || it.size || it.specifications?.paperSize || 'A4';
           
@@ -135,7 +135,7 @@ export const PrintJobItemsCard: React.FC<PrintJobItemsCardProps> = ({
           const hasCoating = Boolean(rawCoating && rawCoating !== 'none' && rawCoating !== 'None' && rawCoating !== 'ບໍ່ເຄືອບ' && rawCoating !== 'N/A');
           const lamination = hasCoating ? rawCoating : null;
 
-          const colorMode = it.colorPrintMode || it.colorMode || it.specifications?.color_mode || 'CMYK';
+          const colorMode = it.colorPrintMode || it.colorMode || it.specs?.color_mode || it.specifications?.color_mode || 'CMYK';
           const colorModeText = colorMode === 'MONO_K' || colorMode === 'Monochrome' ? 'ຂາວດຳ (Mono K)' : 'ສີ (CMYK Full Color)';
           
           // Machine allocation

@@ -17,7 +17,7 @@ import { QuotationShareModal } from './QuotationShareModal';
 import { PricingTemplatesModal } from './PricingTemplatesModal';
 import { QuotationHistoryModal } from './QuotationHistoryModal';
 import { PreflightItemCreationModal } from '../../../components/PreflightItemCreationModal';
-import { parentSheetDimensions, preCutStockDimensions, preCutStockMatches } from '@utils/impositionLayout';
+import { parentSheetDimensions, preCutStockDimensions, preCutStockError } from '@utils/impositionLayout';
 import ArtworkFileActions from '@features/orders/components/ArtworkFileActions';
 import { getArtworkFiles, formatArtworkSize } from '@features/orders/utils/artworkParts';
 import type { ArtworkPart, PreflightResult } from '@features/orders/types';
@@ -103,22 +103,29 @@ import {
 } from 'lucide-react';
 import { FormModalTemplate, FormSection } from '@components/common/FormModalTemplate';
 
-export interface ItemModuleToggles {
-  paper: boolean;               // 1. Paper / Substrate & Cut
-  printEngine: boolean;         // 2. Printing Process & Ink
-  postPressMachinery: boolean;  // 3. Post-Press Machinery
-  finishingMaterials: boolean;  // 4. Finishing Materials & Consumables (NEW)
-  laborAndSetup: boolean;       // 5. Labor & Setup
-  packagingDelivery: boolean;   // 6. Packaging & Delivery
-}
+import {
+  ItemModuleToggles,
+  DEFAULT_MODULE_TOGGLES,
+  QuotationItem,
+  getPresetDimensions,
+  resolveCoverageValue,
+  DEFAULT_SPOILAGE_TIERS,
+  getPrinterMachineRate,
+  calculateSingleItemFinancials,
+  calculateItemFinancials,
+  CalculationContext,
+  ItemFinancialResult,
+} from '../utils/quotationCalculation';
 
-export const DEFAULT_MODULE_TOGGLES: ItemModuleToggles = {
-  paper: true,
-  printEngine: true,
-  postPressMachinery: false,
-  finishingMaterials: false,
-  laborAndSetup: true,
-  packagingDelivery: false
+export type { ItemModuleToggles, QuotationItem, CalculationContext, ItemFinancialResult };
+export {
+  DEFAULT_MODULE_TOGGLES,
+  getPresetDimensions,
+  resolveCoverageValue,
+  DEFAULT_SPOILAGE_TIERS,
+  getPrinterMachineRate,
+  calculateSingleItemFinancials,
+  calculateItemFinancials,
 };
 
 const DEFAULT_CHANNELS = [
@@ -131,92 +138,6 @@ const DEFAULT_CHANNELS = [
 const DEFAULT_MONO_CHANNELS = [
   { channel_name: 'K', density_pct: 15, is_spot_color: false },
 ];
-
-export interface QuotationItem {
-  imposition_mode?: 'OFF' | 'ON';
-  stock_dimension_snapshot?: import('../../orders/types').StockDimensionSnapshot;
-  id: string;
-  name: string;
-  paperId: string;
-  jobSizePreset: string;
-  jobWidth: number;
-  jobHeight: number;
-  isDoubleSided: boolean;
-  printVolume: number;
-  pagesPerBook?: number;
-  unitName?: string;
-  includeCover?: boolean;
-  coverPaperId?: string;
-  coverPrintMode?: 'CMYK_1_SIDE' | 'CMYK_2_SIDES' | 'MONO_K';
-  coverPagesCount?: number;
-  colorPrintMode: 'CMYK' | 'MONO_K';
-  coverageMode: 'default' | 'advanced';
-  avgCoverage: number;
-  cCoverage: number;
-  mCoverage: number;
-  yCoverage: number;
-  kCoverage: number;
-  selectedPrinterId: string;
-  selectedInkSet: string;
-  finishingCutOption?: string;
-  bindingOption?: string;
-  printerAllocations: PrinterAllocation[];
-  selectedPostPressIds: string[];
-  finishingMaterials: FinishingMaterialItem[];
-  activeModules: ItemModuleToggles;
-  packagingCost: number;
-  deliveryCost: number;
-  selectedTemplateId?: string;
-  laborMode: 'manual' | 'percent';
-  laborPercent: number;
-  laborCostManual: number;
-  profitMargin: number;
-  discountPercent: number;
-  useSpoilage?: boolean;
-  spoilagePercent?: number;
-  cutsPerSheetOverride?: number;
-  coverCutsPerSheetOverride?: number;
-  impositionSummary?: string;
-  fileName?: string;
-  artworkUrl?: string;
-  fileSize?: number;
-  mimeType?: string;
-  previewThumbnailUrl?: string;
-  coverFileName?: string;
-  coverArtworkUrl?: string;
-  coverFileSize?: number;
-  artworkParts?: ArtworkPart[];
-  preflightData?: PreflightResult;
-  batchFiles?: any[];
-  multipleImagesPerSheet?: boolean;
-  imagesPerSheet?: number;
-  isBatchPhoto?: boolean;
-  photoCount?: number;
-  suggestedPaper?: string;
-  selectedPaperName?: string;
-  cutPerSheet?: number;
-  totalLargeSheets?: number;
-  parentSheetSize?: 'standard' | '31x43' | 'custom';
-  useOffcutRebate?: boolean;
-  selectedOffcutId?: string;
-  offcutRebateAmount?: number;
-  packagingType?: string;
-  requiresGuillotineCut?: boolean;
-}
-
-export const getPresetDimensions = (preset: string, currentW: number = 210, currentH: number = 297) => {
-  const p = (preset || '').trim().toLowerCase();
-  if (p === 'a3') return { w: 297, h: 420 };
-  if (p === 'a4') return { w: 210, h: 297 };
-  if (p === 'a5') return { w: 148, h: 210 };
-  if (p === 'a6') return { w: 105, h: 148 };
-  if (p.includes('5x7 cm') || p.includes('5x7cm') || p === '5x7 (cm)') return { w: 50, h: 70 };
-  if (p.includes('4x6') || p.includes('4*6') || p.includes('4"x6"') || p.includes('4"×6"')) return { w: 100, h: 150 };
-  if (p.includes('5x7"') || p.includes('5*7') || p.includes('5"x7"') || p.includes('5"×7"') || p === '5x7') return { w: 127, h: 178 };
-  if (p.includes('3x4') || p.includes('3*4') || p.includes('3"x4"')) return { w: 75, h: 100 };
-  if (p.includes('2x3') || p.includes('2*3') || p.includes('2"x3"') || p.includes('polaroid')) return { w: 54, h: 86 };
-  return { w: currentW || 210, h: currentH || 297 };
-};
 
 export default function QuotationManager({ onConvertToOrder, onBack, prefilledSpecs }: any) {
   const { 
@@ -328,52 +249,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     return !isPrinter;
   });
 
-  const spoilageTiers = [
-    { min: 1, max: 100, rate: 10 },
-    { min: 101, max: 500, rate: 7 },
-    { min: 501, max: 2000, rate: 5 },
-    { min: 2001, max: 1000000, rate: 3 },
-  ];
-
-  const getPrinterMachineRate = (p: any) => {
-    if (!p) return 1.20;
-    const accurate = getEquipmentAccurateCost(p);
-    if (accurate && accurate.totalMachineCost > 0) {
-      return accurate.totalMachineCost;
-    }
-    const assetValue = Number(
-      p.MachinePrice ?? 
-      p.price ?? 
-      p.unitPrice ?? 
-      p.purchaseCost ?? 
-      p.purchasePrice ?? 
-      p.unitCost ?? 
-      0
-    );
-    const lifespanYears = Number(p.lifespanYears || p.specs?.lifespanYears || 5);
-    const estMonthlyVolume = Number(p.estMonthlyVolume || p.specs?.estMonthlyVolume || 50000);
-    const maintenanceRatePct = Number(p.maintenanceRatePercent || p.maintenance_rate_percent || p.specs?.maintenanceRatePercent || 15);
-    const maintCostPerPage = Number(p.specs?.fixedMaintenanceCostPerPage || 0);
-
-    const totalMonths = lifespanYears * 12;
-    const targetPages = Number(
-      p.TargetTotalPages || 
-      p.printedPagesCapacity || 
-      p.expectedLifeA4Pages || 
-      p.lifetimePagesA4 || 
-      (estMonthlyVolume * totalMonths) || 
-      3000000
-    );
-    const monthlyDepr = totalMonths > 0 ? (assetValue / totalMonths) : 0;
-    const baseCostPerUnit = (estMonthlyVolume > 0 && monthlyDepr > 0)
-      ? (monthlyDepr / estMonthlyVolume)
-      : (targetPages > 0 ? (assetValue / targetPages) : 0);
-
-    const wearAllowancePerUnit = Math.round(baseCostPerUnit * (maintenanceRatePct / 100) * 1000) / 1000 + maintCostPerPage;
-    const netCostPerUnit = Math.round((baseCostPerUnit + wearAllowancePerUnit) * 1000) / 1000;
-
-    return netCostPerUnit > 0 ? netCostPerUnit : Number(p.calculatedCostPerPage || p.costPerPage || 1.20);
-  };
+  const spoilageTiers = DEFAULT_SPOILAGE_TIERS;
 
   const getPrinterActualInkCostPerPage = (p: any) => {
     if (!p) return 0;
@@ -764,15 +640,15 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     const channels = existingChannels && existingChannels.length > 0
       ? existingChannels.map(c => ({ ...c }))
       : (isMono ? [
-          { channel_name: 'K', density_pct: editorItem.kCoverage || 5, is_spot_color: false }
+          { channel_name: 'K', density_pct: resolveCoverageValue(editorItem.kCoverage, 5), is_spot_color: false }
         ] : [
-          { channel_name: 'C', density_pct: editorItem.cCoverage || 5, is_spot_color: false },
-          { channel_name: 'M', density_pct: editorItem.mCoverage || 5, is_spot_color: false },
-          { channel_name: 'Y', density_pct: editorItem.yCoverage || 5, is_spot_color: false },
-          { channel_name: 'K', density_pct: editorItem.kCoverage || 5, is_spot_color: false },
+          { channel_name: 'C', density_pct: resolveCoverageValue(editorItem.cCoverage, 5), is_spot_color: false },
+          { channel_name: 'M', density_pct: resolveCoverageValue(editorItem.mCoverage, 5), is_spot_color: false },
+          { channel_name: 'Y', density_pct: resolveCoverageValue(editorItem.yCoverage, 5), is_spot_color: false },
+          { channel_name: 'K', density_pct: resolveCoverageValue(editorItem.kCoverage, 5), is_spot_color: false },
         ]);
 
-    const avgDensity = firstAlloc?.average_density_pct || editorItem.avgCoverage || 5;
+    const avgDensity = resolveCoverageValue(firstAlloc?.average_density_pct ?? editorItem.avgCoverage, 5);
     const totalJobSheets = (Number(editorItem.printVolume) || 1) * Math.ceil(Math.max(1, Number(editorItem.pagesPerBook || 1)) / (isDuplex ? 2 : 1));
 
     if (mode === 'add' && (editorItem.printerAllocations || []).length > 0) {
@@ -1258,6 +1134,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   const [isSavingQuotation, setIsSavingQuotation] = useState(false);
   const savingQuotation = useRef(false);
   const pendingSaveId = useRef<string | null>(null);
+  const createIntents = useRef(new Map<string, { id: string; saved?: any }>());
+  const activeQuotationRef = useRef<{ id: string; saved: any; fingerprint: string } | null>(null);
   const [isTemplateOption, setIsTemplateOption] = useState(false);
   const [templateCategory, setTemplateCategory] = useState('sticker');
   const [selectedCustomerId, setSelectedCustomerId] = useState(customers[0]?.name || '');
@@ -1320,534 +1198,33 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     return addCustomer({ name: selectedCustomerId.trim(), phone: customerPhone, address: customerAddress, tier: selectedCustomerCategory, creditLimit: 0 });
   };
 
-  const calculateSingleItemFinancials = (item: QuotationItem, imposed?: { sheets: number; copies: number; capacity: number }) => {
-    const { w: jobW, h: jobH } = getPresetDimensions(item.jobSizePreset, item.jobWidth, item.jobHeight);
-    
-    const paperItem = inventory.find(p => 
-      p.id === item.paperId || 
-      p.sku === item.paperId || 
-      p.id?.toLowerCase() === item.paperId?.toLowerCase() ||
-      (p.sku && p.sku.toLowerCase() === item.paperId?.toLowerCase()) ||
-      p.name === item.paperId
-    );
-    const preCut = item.imposition_mode === 'OFF';
-    const {sheetWidth:parentW,sheetHeight:parentH} = preCut ? (preCutStockDimensions(paperItem) || { sheetWidth: Number(jobW), sheetHeight: Number(jobH) }) : parentSheetDimensions(paperItem, item.parentSheetSize);
-
-    const curW = Number(jobW) + (Number(bleedMargin) * 2);
-    const curH = Number(jobH) + (Number(bleedMargin) * 2);
-    const portraitCuts = Math.floor(parentW / curW) * Math.floor(parentH / curH);
-    const landscapeCuts = Math.floor(parentW / curH) * Math.floor(parentH / curW);
-    const autoCutsPerSheet = Math.max(1, portraitCuts, landscapeCuts);
-    const cutsPerSheet = preCut ? 1 : imposed?.capacity ?? ((item.cutsPerSheetOverride !== undefined && item.cutsPerSheetOverride > 0)
-      ? Number(item.cutsPerSheetOverride)
-      : autoCutsPerSheet);
-
-    // 1. Check if this is a Photo Print / Batch Multi-Photo item:
-    const isBatchPhoto = Boolean(
-      item.isBatchPhoto || 
-      item.name?.includes('Photo Prints') || 
-      (item.batchFiles && item.batchFiles.length > 0) ||
-      (item.preflightData as any)?.is_batch_photo
-    );
-
-    // 1. Pages & Sheets Breakdown:
-    const orderQty = Number(item.printVolume || 1);
-    const photoCountPerSet = Number(item.photoCount) || (item.batchFiles && item.batchFiles.length > 0 ? item.batchFiles.length : Number(item.pagesPerBook || 1));
-    const pagesPerBook = isBatchPhoto ? photoCountPerSet : Number(item.pagesPerBook || 1);
-    const hasCover = Boolean(!isBatchPhoto && item.includeCover && pagesPerBook >= 4);
-    const coverPagesCount = hasCover ? (Number(item.coverPagesCount) || 4) : 0;
-    const innerPagesPerBook = isBatchPhoto ? photoCountPerSet : Math.max(1, pagesPerBook - coverPagesCount);
-    
-    // For photo batch prints, each set contains photoCountPerSet individual photos
-    const innerSheetsPerBook = isBatchPhoto 
-      ? photoCountPerSet
-      : (item.isDoubleSided ? Math.ceil(innerPagesPerBook / 2) : innerPagesPerBook);
-
-    // 2. Inner Paper Sheets Calculation:
-    // For Batch Photo: totalPhotos = photoCountPerSet * orderQty; parent sheets = ceil(totalPhotos / cutsPerSheet)
-    const totalInnerSheets = imposed?.copies ?? innerSheetsPerBook * orderQty;
-    const innerParentSheetsNeeded = imposed?.sheets ?? (isBatchPhoto
-      ? Math.ceil(totalInnerSheets / Math.max(1, cutsPerSheet))
-      : Math.ceil(totalInnerSheets / Math.max(1, cutsPerSheet)));
-
-    const isSpoilageActive = item.useSpoilage !== false;
-    const tier = spoilageTiers.find(t => totalInnerSheets >= t.min && totalInnerSheets <= t.max);
-    const itemSpoilageRate = !isSpoilageActive
-      ? 0
-      : ((item.spoilagePercent !== undefined && item.spoilagePercent !== null)
-          ? Number(item.spoilagePercent)
-          : (tier ? tier.rate : 5));
-    const innerWastedSheets = (isSpoilageActive && itemSpoilageRate > 0)
-      ? Math.max(1, Math.ceil(innerParentSheetsNeeded * (itemSpoilageRate / 100)))
-      : 0;
-    const totalInnerParentSheets = innerParentSheetsNeeded + innerWastedSheets;
-
-    const fifoUnitCost = paperItem ? getFIFOCostPerSheet(paperItem.id, totalInnerParentSheets) : getFIFOCostPerSheet(item.paperId, totalInnerParentSheets);
-    const paperUnitCost = fifoUnitCost > 0 
-      ? fifoUnitCost 
-      : (paperItem 
-          ? (Number(paperItem.costPerConsumptionUnit) || Number(paperItem.costPerSheet) || (Number(paperItem.costPerPurchaseUnit) && Number(paperItem.purchaseMultiplier) ? Number(paperItem.costPerPurchaseUnit) / Number(paperItem.purchaseMultiplier) : 0) || Number(paperItem.unitCost) || 184)
-          : 184);
-
-    const innerPaperCost = totalInnerParentSheets * paperUnitCost;
-
-    // 3. Cover Paper Calculation (No lamination here - lamination is in post-press & consumables):
-    let coverPaperCost = 0;
-    let totalCoverParentSheets = 0;
-    let coverParentSheetsNeeded = 0;
-    let coverWastedSheets = 0;
-    let coverPaperUnitCost = 0;
-
-    if (hasCover) {
-      const coverPaperItem = inventory.find(p => p.id === item.coverPaperId) || paperItem;
-      const totalCoverSheets = 1 * orderQty; // 1 Spread sheet per book
-      const coverCutsPerSheet = preCut ? 1 : (item.coverCutsPerSheetOverride !== undefined && item.coverCutsPerSheetOverride > 0)
-        ? Number(item.coverCutsPerSheetOverride)
-        : 1;
-      coverParentSheetsNeeded = Math.ceil(totalCoverSheets / coverCutsPerSheet);
-      coverWastedSheets = (isSpoilageActive && itemSpoilageRate > 0)
-        ? Math.ceil(coverParentSheetsNeeded * (itemSpoilageRate / 100))
-        : 0;
-      totalCoverParentSheets = coverParentSheetsNeeded + coverWastedSheets;
-      
-      const coverFifo = coverPaperItem ? getFIFOCostPerSheet(coverPaperItem.id, totalCoverParentSheets) : 0;
-      coverPaperUnitCost = coverFifo > 0 ? coverFifo : (coverPaperItem ? (Number(coverPaperItem.unitCost) || Number(coverPaperItem.costPerSheet) || 850) : 850);
-      coverPaperCost = totalCoverParentSheets * coverPaperUnitCost;
-    }
-
-    const parentSheetsNeeded = innerParentSheetsNeeded + coverParentSheetsNeeded;
-    const wastedSheets = innerWastedSheets + coverWastedSheets;
-    const totalParentSheets = totalInnerParentSheets + totalCoverParentSheets;
-
-    const A4_AREA = 210 * 297;
-    const parentSheetAreaFactor = Math.max(0.2, (parentW * parentH) / A4_AREA);
-    // When gang-run or batch photo, multiple cuts fill the parent sheet, so ink applies to the parent sheet area
-    const printAreaFactor = (isBatchPhoto || cutsPerSheet > 1)
-      ? parentSheetAreaFactor
-      : Math.max(0.1, Math.min(parentSheetAreaFactor, (Number(jobW) * Number(jobH)) / A4_AREA));
-
-    let cyanMl = 0;
-    let magentaMl = 0;
-    let yellowMl = 0;
-    let blackMl = 0;
-    let totalInkCostAccum = 0;
-    let machDepr = 0;
-    let machMaint = 0;
-    let electricityCost = 0;
-
-    // For batch photo prints or gang-run sheets, the physical sheets fed into the printer = total parent sheets needed
-    const totalJobProductionSheets = (isBatchPhoto || cutsPerSheet > 1) 
-      ? innerParentSheetsNeeded 
-      : ((Number(item.printVolume) || 1) * Math.ceil(Math.max(1, Number(item.pagesPerBook || 1)) / (item.isDoubleSided ? 2 : 1)));
-
-    const allocations = (item.printerAllocations && item.printerAllocations.length > 0)
-      ? item.printerAllocations
-      : [
-          {
-            printer_id: item.selectedPrinterId || 'default',
-            printer_name: 'Default Printer',
-            allocated_pages: totalJobProductionSheets,
-            cost_per_page: 50,
-            is_double_sided: item.isDoubleSided || false,
-            color_mode: item.colorPrintMode || 'CMYK',
-            average_density_pct: item.avgCoverage || 15,
-            color_channels: [
-              { channel_name: 'C', density_pct: item.colorPrintMode === 'MONO_K' ? 0 : (item.cCoverage || item.avgCoverage || 15) },
-              { channel_name: 'M', density_pct: item.colorPrintMode === 'MONO_K' ? 0 : (item.mCoverage || item.avgCoverage || 15) },
-              { channel_name: 'Y', density_pct: item.colorPrintMode === 'MONO_K' ? 0 : (item.yCoverage || item.avgCoverage || 15) },
-              { channel_name: 'K', density_pct: item.kCoverage || item.avgCoverage || 15 }
-            ]
-          }
-        ];
-
-    allocations.forEach(alloc => {
-      const isDuplex = alloc.is_double_sided !== undefined ? alloc.is_double_sided : (item.isDoubleSided || false);
-      const allocPages = allocations.length === 1 
-        ? totalJobProductionSheets 
-        : Number(alloc.allocated_pages ?? totalJobProductionSheets);
-
-      const sideFactor = isDuplex ? 2 : 1;
-      const mode = alloc.color_mode || (item.colorPrintMode === 'MONO_K' ? 'MONO_K' : 'CMYK');
-      const isMonoAlloc = mode === 'MONO_K';
-
-      let cCov = 0;
-      let mCov = 0;
-      let yCov = 0;
-      let kCov = 15;
-
-      if (alloc.color_channels && alloc.color_channels.length > 0) {
-        const cCh = alloc.color_channels.find(ch => ch.channel_name === 'C');
-        const mCh = alloc.color_channels.find(ch => ch.channel_name === 'M');
-        const yCh = alloc.color_channels.find(ch => ch.channel_name === 'Y');
-        const kCh = alloc.color_channels.find(ch => ch.channel_name === 'K');
-        cCov = isMonoAlloc ? 0 : (cCh ? Number(cCh.density_pct) : 15);
-        mCov = isMonoAlloc ? 0 : (mCh ? Number(mCh.density_pct) : 15);
-        yCov = isMonoAlloc ? 0 : (yCh ? Number(yCh.density_pct) : 15);
-        kCov = kCh ? Number(kCh.density_pct) : 15;
-      } else {
-        const avg = Number(alloc.average_density_pct || item.avgCoverage || 15);
-        cCov = isMonoAlloc ? 0 : avg;
-        mCov = isMonoAlloc ? 0 : avg;
-        yCov = isMonoAlloc ? 0 : avg;
-        kCov = avg;
-      }
-
-      // Find allocated printer
-      const rawPrnId = (alloc.printer_id || '').split('__')[0];
-      const prn = equipment.find(e => e.id === rawPrnId || e.id === alloc.printer_id || e.name === alloc.printer_name);
-
-      // Active linked inventory inks and OEM specs for this printer
-      const activePrnLinks = printerColorLinks.filter(l => l.assetId === prn?.id || l.assetId === rawPrnId);
-      
-      const standardCmykSlots = [
-        { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500, oemPrice: 450000 },
-        { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
-        { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
-        { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 }
-      ];
-
-      const rawOemSlots = (prn?.oem_baseline_specs?.slots && prn?.oem_baseline_specs.slots.length > 0)
-        ? prn.oem_baseline_specs.slots
-        : (prn?.specs?.oem_baseline_specs?.slots && prn?.specs.oem_baseline_specs.slots.length > 0)
-          ? prn.specs.oem_baseline_specs.slots
-          : (prn?.oemBaselineInks && prn?.oemBaselineInks.length > 0)
-            ? prn.oemBaselineInks
-            : (prn?.specs?.oemBaselineInks && prn?.specs?.oemBaselineInks.length > 0)
-              ? prn.specs.oemBaselineInks
-              : (prn?.printerColorLinks && prn?.printerColorLinks.length > 0)
-                ? prn.printerColorLinks
-                : (prn?.specs?.printerColorLinks && prn?.specs?.printerColorLinks.length > 0)
-                  ? prn.specs.printerColorLinks
-                  : standardCmykSlots;
-
-      // Canonical Equipment Print Cost calculation (Depreciation, Wear Parts, and Direct/Linked Ink)
-      const prnPrintCost = prn ? calculateEquipmentPrintCost(prn, printerColorLinks, inventory, 'Printer') : null;
-      const accurateMachRate = prnPrintCost ? prnPrintCost.netCostPerUnit : (prn ? getPrinterMachineRate(prn) : 0);
-
-      const directColorInk = Number(prn?.colorInkCost || prn?.linkedInkCostPerPage || prn?.inkCostPerPage || (prnPrintCost ? prnPrintCost.linkedInkRatePerPage : 0) || 0);
-      const directBwInk = Number(prn?.bwInkCost || (directColorInk > 0 ? directColorInk * 0.15 : 0) || 0);
-
-      const computeChannel = (channelCode: 'C' | 'M' | 'Y' | 'K', covPct: number) => {
-        if (covPct <= 0) return { ml: 0, cost: 0 };
-
-        const idx = channelCode === 'K' ? 0 : channelCode === 'C' ? 1 : channelCode === 'M' ? 2 : 3;
-        const colorGroupName = channelCode === 'K' ? 'Black' : channelCode === 'C' ? 'Cyan' : channelCode === 'M' ? 'Magenta' : 'Yellow';
-
-        const oemSlot = rawOemSlots.find((s: any, sIdx: number) => {
-          const pos = (s.slotPosition || '').toUpperCase();
-          const grp = (s.colorGroup || '').toUpperCase();
-          const sku = (s.oemInkCode || '').toUpperCase();
-          if (channelCode === 'K') return pos.includes('BLACK') || pos.includes('(K') || pos.includes(' 1') || grp.includes('BLACK') || sku.endsWith('-BK') || sku.endsWith('-K') || sIdx === 0;
-          if (channelCode === 'C') return pos.includes('CYAN') || pos.includes('(C') || pos.includes(' 2') || grp.includes('CYAN') || sku.endsWith('-C') || sIdx === 1;
-          if (channelCode === 'M') return pos.includes('MAGENTA') || pos.includes('(M') || pos.includes(' 3') || grp.includes('MAGENTA') || sku.endsWith('-M') || sIdx === 2;
-          if (channelCode === 'Y') return pos.includes('YELLOW') || pos.includes('(Y') || pos.includes(' 4') || grp.includes('YELLOW') || sku.endsWith('-Y') || sIdx === 3;
-          return false;
-        }) || standardCmykSlots.find(s => s.colorGroup.toUpperCase().startsWith(channelCode === 'K' ? 'B' : channelCode));
-
-        const defaultPrice = channelCode === 'K' ? 450000 : 320000;
-        const defaultVol = channelCode === 'K' ? 127 : 70;
-        const defaultYield = channelCode === 'K' ? 7500 : 6000;
-
-        const oemVol = Number(oemSlot?.oemStandardVolumeMl || defaultVol);
-        const rawYield = Number(oemSlot?.oemStandardIsoYieldA4 || (channelCode === 'K' ? (prn?.blackYieldPages || defaultYield) : (prn?.colorYieldPages || defaultYield)));
-        const yld = rawYield > 500 ? rawYield : defaultYield;
-        const isoRateMlPerSheet = yld > 0 ? (oemVol / yld) : (channelCode === 'K' ? (127 / 7500) : (70 / 6000));
-
-        let slotBase5Pct = 0;
-
-        // User Direct Priority: Pull directly from the printer's verified ink cost per page
-        if (prnPrintCost && prnPrintCost.inkSlotsBreakdown && prnPrintCost.inkSlotsBreakdown.length > 0) {
-          const matchedSlot = prnPrintCost.inkSlotsBreakdown.find((s: any) => 
-            (s.colorGroup && s.colorGroup.toLowerCase().includes(colorGroupName.toLowerCase())) ||
-            (s.slotPosition && s.slotPosition.toLowerCase().includes(colorGroupName.toLowerCase())) ||
-            (channelCode === 'K' && (s.colorGroup?.toLowerCase().includes('black') || s.slotPosition?.toLowerCase().includes('black') || s.slotPosition?.includes('Slot 1'))) ||
-            (channelCode === 'C' && (s.colorGroup?.toLowerCase().includes('cyan') || s.slotPosition?.toLowerCase().includes('cyan') || s.slotPosition?.includes('Slot 2'))) ||
-            (channelCode === 'M' && (s.colorGroup?.toLowerCase().includes('magenta') || s.slotPosition?.toLowerCase().includes('magenta') || s.slotPosition?.includes('Slot 3'))) ||
-            (channelCode === 'Y' && (s.colorGroup?.toLowerCase().includes('yellow') || s.slotPosition?.toLowerCase().includes('yellow') || s.slotPosition?.includes('Slot 4')))
-          );
-          if (matchedSlot && matchedSlot.costPerPage > 0) {
-            slotBase5Pct = matchedSlot.costPerPage;
-          }
-        }
-
-        if (slotBase5Pct <= 0 && directColorInk > 0) {
-          if (channelCode === 'K') {
-            slotBase5Pct = directBwInk > 0 ? directBwInk : (directColorInk * 0.25);
-          } else {
-            slotBase5Pct = directBwInk > 0 ? Math.max(0, (directColorInk - directBwInk) / 3) : (directColorInk * 0.25);
-          }
-        }
-
-        if (slotBase5Pct <= 0) {
-          const slotPos = oemSlot?.slotPosition || `Slot ${idx + 1}`;
-          const link = activePrnLinks.find((lnk: any) => 
-            lnk.slotPosition === slotPos || 
-            (lnk.slotPosition && slotPos && (lnk.slotPosition.includes(slotPos) || slotPos.includes(lnk.slotPosition))) ||
-            (lnk.colorGroup && colorGroupName && lnk.colorGroup.toLowerCase() === colorGroupName.toLowerCase()) ||
-            (idx === 0 && (lnk.slotPosition?.includes('Slot 1') || lnk.colorGroup?.toLowerCase().includes('black') || lnk.colorGroup?.toLowerCase().includes('k'))) ||
-            (idx === 1 && (lnk.slotPosition?.includes('Slot 2') || lnk.colorGroup?.toLowerCase().includes('cyan') || lnk.colorGroup?.toLowerCase().includes('c'))) ||
-            (idx === 2 && (lnk.slotPosition?.includes('Slot 3') || lnk.colorGroup?.toLowerCase().includes('magenta') || lnk.colorGroup?.toLowerCase().includes('m'))) ||
-            (idx === 3 && (lnk.slotPosition?.includes('Slot 4') || lnk.colorGroup?.toLowerCase().includes('yellow') || lnk.colorGroup?.toLowerCase().includes('y')))
-          );
-
-          const linkedItem = link ? (inventory || []).find((inv: any) => inv.id === link.inkCode || inv.skuCode === link.inkCode || inv.sku === link.inkCode) : null;
-
-          slotBase5Pct = yld > 0 ? (Number(oemSlot?.oemPrice || defaultPrice) / yld) : ((Number(oemSlot?.oemPrice || defaultPrice) / oemVol) * isoRateMlPerSheet);
-
-          if (linkedItem) {
-            const bPrice = Number(linkedItem.unitPrice || linkedItem.costPerPurchaseUnit || defaultPrice);
-            const rawInkVol = Number(linkedItem.volume || linkedItem.specs?.volume || linkedItem.specs?.volume_ml || defaultVol);
-            const actualVol = rawInkVol > 1 ? rawInkVol : defaultVol;
-            const rawInkYield = Number(linkedItem.yield || linkedItem.standard_page_yield || linkedItem.specs?.yield || linkedItem.specs?.isoYield || 0);
-            const inkYield = rawInkYield > 500 ? rawInkYield : yld;
-            slotBase5Pct = inkYield > 0 ? (bPrice / inkYield) : ((bPrice / actualVol) * isoRateMlPerSheet);
-          }
-        }
-
-        const ml = isoRateMlPerSheet * (covPct / 5) * printAreaFactor * allocPages * sideFactor;
-        const cost = slotBase5Pct * (covPct / 5) * printAreaFactor * allocPages * sideFactor;
-        return { ml, cost };
-      };
-
-      const cResult = computeChannel('C', cCov);
-      const mResult = computeChannel('M', mCov);
-      const yResult = computeChannel('Y', yCov);
-      const kResult = computeChannel('K', kCov);
-
-      cyanMl += cResult.ml;
-      magentaMl += mResult.ml;
-      yellowMl += yResult.ml;
-      blackMl += kResult.ml;
-
-      totalInkCostAccum += (cResult.cost + mResult.cost + yResult.cost + kResult.cost);
-
-      const deprRate = prnPrintCost
-        ? prnPrintCost.baseCostPerUnit
-        : (accurateMachRate > 0 ? accurateMachRate * 0.65 : 0);
-
-      const maintRate = prnPrintCost
-        ? prnPrintCost.wearAllowancePerUnit
-        : (accurateMachRate > 0 ? accurateMachRate - deprRate : 0);
-
-      const deprPerSheet = deprRate * (printAreaFactor > 0 ? printAreaFactor : 1);
-      const maintPerSheet = maintRate * (printAreaFactor > 0 ? printAreaFactor : 1);
-
-      machDepr += Math.round(deprPerSheet * allocPages * sideFactor);
-      machMaint += Math.round(maintPerSheet * allocPages * sideFactor);
-    });
-
-    // Separate Cover Print Ink & Machine Overhead Calculation
-    let coverInkCost = 0;
-    let coverMachDepr = 0;
-    let coverMachMaint = 0;
-
-    if (hasCover) {
-      const coverPrnId = (item.selectedPrinterId || 'default').split('__')[0];
-      const coverPrn = equipment.find(e => e.id === coverPrnId || e.id === item.selectedPrinterId);
-      const coverSides = item.coverPrintMode === 'CMYK_2_SIDES' ? 2 : 1;
-      const isCoverMono = item.coverPrintMode === 'MONO_K';
-      const coverPrintSheets = orderQty; // 1 cover spread sheet per book
-
-      // Cover ink rate calculation
-      const coverPrnPrintCost = coverPrn ? calculateEquipmentPrintCost(coverPrn, printerColorLinks, inventory, 'Printer') : null;
-      const coverInkPerPage = coverPrn ? Number(coverPrn.colorInkCost || coverPrn.linkedInkCostPerPage || (coverPrnPrintCost ? coverPrnPrintCost.linkedInkRatePerPage : 0) || 56.09) : 56.09;
-      const coverInkUnitCost = isCoverMono ? (Number(coverPrn?.bwInkCost || (coverInkPerPage * 0.25) || 8.59)) : coverInkPerPage;
-      coverInkCost = Math.round(coverPrintSheets * coverSides * coverInkUnitCost * (parentSheetAreaFactor > 0 ? parentSheetAreaFactor : 1)); // Cover spread uses parent sheet area
-
-      // Cover machine depreciation & maintenance
-      const coverMachRate = coverPrnPrintCost ? coverPrnPrintCost.netCostPerUnit : (getPrinterMachineRate(coverPrn) || 139.67);
-      const coverDeprRate = coverPrnPrintCost ? coverPrnPrintCost.baseCostPerUnit : (coverMachRate * 0.65);
-      const coverMaintRate = coverPrnPrintCost ? coverPrnPrintCost.wearAllowancePerUnit : (coverMachRate - coverDeprRate);
-
-      coverMachDepr = Math.round(coverPrintSheets * coverSides * coverDeprRate * (parentSheetAreaFactor > 0 ? parentSheetAreaFactor : 1));
-      coverMachMaint = Math.round(coverPrintSheets * coverSides * coverMaintRate * (parentSheetAreaFactor > 0 ? parentSheetAreaFactor : 1));
-
-      totalInkCostAccum += coverInkCost;
-      machDepr += coverMachDepr;
-      machMaint += coverMachMaint;
-    }
-
-    const hasPaperModule = item.activeModules ? item.activeModules.paper : true;
-    const hasPrintEngineModule = item.activeModules ? item.activeModules.printEngine : true;
-    const hasPostPressModule = item.activeModules ? item.activeModules.postPressMachinery : true;
-    const hasFinishingMaterialsModule = item.activeModules ? item.activeModules.finishingMaterials : true;
-    const hasPackagingModule = item.activeModules ? item.activeModules.packagingDelivery : true;
-
-    // Offcut scrap paper rebate
-    const offcutRebate = Boolean(item.useOffcutRebate) ? Math.min(Math.round(innerPaperCost + coverPaperCost), Number(item.offcutRebateAmount || 0)) : 0;
-    const rawPaperCost = Math.max(0, Math.round(innerPaperCost + coverPaperCost - offcutRebate));
-    const rawInkCost = Math.round(totalInkCostAccum);
-    const rawMachineOverhead = machDepr + machMaint;
-
-    // Guillotine cutting setup fee: 0 LAK (Cutting is handled 100% via post-press machinery selection)
-    const guillotineFee = 0;
-
-    const rawPostPressCost = (item.selectedPostPressIds || []).reduce((sum, machId) => {
-      const mach = equipment.find(e => e.id === machId);
-      if (!mach || (preCut && String(mach.postPressSubtype || mach.specs?.postPressSubtype || '').toLowerCase() === 'guillotine')) return sum;
-      const accCost = getEquipmentAccurateCost(mach);
-      const rate = accCost.totalMachineCost > 0
-        ? accCost.totalMachineCost
-        : (Number((mach as any).costPerPage) || Number((mach as any).calculatedCostPerPage) || 0);
-      return sum + Math.round(rate * item.printVolume);
-    }, 0);
-
-    const rawFinishingMaterialsCost = (item.finishingMaterials || []).reduce((sum, mat) => {
-      const uCost = Number(mat.unitCost) || 0;
-      const q = Number(mat.qtyPerItem) || 1;
-      const isSqm = mat.calcMode === 'sqm' || 
-        (mat.unitName || '').toLowerCase().includes('m²') || 
-        (mat.unitName || '').toLowerCase().includes('m2') || 
-        (mat.unitName || '').toLowerCase().includes('ຕລ.ມ') || 
-        (mat.unitName || '').toLowerCase().includes('ຕາຕະລາງແມັດ');
-      if (isSqm) {
-        const itemAreaM2 = (Number(jobW || 210) * Number(jobH || 297)) / 1000000.0;
-        return sum + Math.round(uCost * itemAreaM2 * q * item.printVolume);
-      }
-      return sum + Math.round(uCost * q * item.printVolume);
-    }, 0);
-
-    const paperCost = hasPaperModule ? rawPaperCost : 0;
-    const inkCost = hasPrintEngineModule ? rawInkCost : 0;
-    const machineOverhead = hasPrintEngineModule ? rawMachineOverhead : 0;
-    const postPressCost = hasPostPressModule ? rawPostPressCost : 0;
-    const finishingMaterialsCost = hasFinishingMaterialsModule ? rawFinishingMaterialsCost : 0;
-
-    const directMatMach = paperCost + inkCost + machineOverhead + postPressCost + finishingMaterialsCost;
-    
-    // In Step 2 (Itemized Spec Studio), raw production cost is 100% direct materials & machinery
-    const netCost = directMatMach;
-
-    const hasLaborModule = item.activeModules?.laborAndSetup !== undefined
-      ? Boolean(item.activeModules.laborAndSetup)
-      : (item.laborPercent !== undefined ? Number(item.laborPercent) > 0 : false) || (item.laborMode === 'manual' && Number(item.laborCostManual || 0) > 0);
-
-    let laborCost = 0;
-    if (hasLaborModule) {
-      if (item.laborMode === 'manual') {
-        laborCost = Math.max(0, Number(item.laborCostManual || 0));
-      } else {
-        const pct = Math.max(0, Number(item.laborPercent ?? 0));
-        if (pct > 0) {
-          laborCost = Math.round(directMatMach * (pct / 100));
-        }
-      }
-    }
-
-    // Auto packaging calculation if preset selected
-    let calculatedPkgCost = Number(item.packagingCost || 0);
-    if (item.packagingType && item.packagingType !== 'none' && item.packagingType !== 'custom') {
-      if (item.packagingType === 'box_card') {
-        calculatedPkgCost = Math.ceil(Math.max(1, item.printVolume) / 100) * 3500;
-      } else if (item.packagingType === 'kraft_wrap') {
-        calculatedPkgCost = Math.ceil(Math.max(1, item.printVolume) / 500) * 2000;
-      } else if (item.packagingType === 'box_corrugated') {
-        calculatedPkgCost = Math.ceil(Math.max(1, item.printVolume) / 1000) * 8000;
-      } else if (item.packagingType === 'bubble_wrap') {
-        calculatedPkgCost = 5000;
-      }
-    }
-    const finalItemPkgCost = (item.packagingType && item.packagingType !== 'custom' && calculatedPkgCost > 0)
-      ? calculatedPkgCost
-      : Number(item.packagingCost || 0);
-
-    const packagingDeliveryCost = hasPackagingModule ? (finalItemPkgCost + Number(item.deliveryCost || 0)) : 0;
-
-    // Commercial cost (for Step 3 Selling Price calculation)
-    const totals = commercialTotals(netCost, laborCost, packagingDeliveryCost, item.printVolume, quotationProfitMargin ?? item.profitMargin ?? 40, quotationDiscountPercent ?? item.discountPercent ?? 0);
-    const { baseSellingPrice, discountAmt, sellingPrice: finalSellingPrice, unitPrice, unitCost, profit } = totals;
-
-    return {
-      cutsPerSheet: imposed?.capacity ?? cutsPerSheet,
-      parentSheetsNeeded,
-      totalParentSheets,
-      wastedSheets,
-      itemSpoilageRate,
-      isSpoilageActive,
-      paperUnitCost,
-      paperCost,
-      innerPaperCost,
-      coverPaperCost,
-      coverPaperUnitCost,
-      totalInnerSheets,
-      totalInnerParentSheets,
-      totalCoverParentSheets,
-      innerPagesPerBook,
-      innerSheetsPerBook,
-      hasCover,
-      isBatchPhoto,
-      photoCountPerSet,
-      totalPhotos: totalInnerSheets,
-      totalJobProductionSheets,
-      totalProductionSheets: totalJobProductionSheets,
-      cyanMl,
-      magentaMl,
-      yellowMl,
-      blackMl,
-      inkCost,
-      coverInkCost,
-      machineOverhead,
-      machDepr,
-      machMaint,
-      electricityCost: 0,
-      postPressCost,
-      finishingMaterialsCost,
-      packagingDeliveryCost,
-      packagingCost: finalItemPkgCost,
-      offcutRebate,
-      guillotineFee,
-      laborCost,
-      directMatMach,
-      netCost,
-      baseSellingPrice,
-      discountAmt,
-      sellingPrice: finalSellingPrice,
-      unitPrice,
-      unitCost,
-      profit,
-      marginPercent: finalSellingPrice > 0 ? (profit / finalSellingPrice) * 100 : 0
-    };
+  const calcContext: CalculationContext = {
+    inventory,
+    equipment,
+    printerColorLinks,
+    getFIFOCostPerSheet,
+    spoilageTiers,
+    bleedMargin,
+    quotationProfitMargin,
+    quotationDiscountPercent,
   };
 
-  const calculateItemFinancials = (item: QuotationItem) => {
-    const isPhoto = Boolean(item.isBatchPhoto || item.name?.includes('Photo Prints') || item.batchFiles?.length || (item.preflightData as any)?.is_batch_photo);
-    const capacity = Math.max(1, Math.floor(Number(item.imagesPerSheet) || 4));
-    const copies = (Number(item.photoCount) || item.batchFiles?.length || Number(item.pagesPerBook || 1)) * Number(item.printVolume || 1);
-    // One division: finished photos -> standard parent/printer sheets. OFF is the exact legacy path.
-    const imposed = item.imposition_mode !== 'OFF' && isPhoto && item.multipleImagesPerSheet && !item.artworkParts?.length ? { copies, capacity, sheets: Math.ceil(copies / capacity) } : undefined;
-    const shared = calculateSingleItemFinancials(item, imposed);
-    if (!item.artworkParts?.length) return { ...shared, partCosts: undefined, sharedCosts: undefined };
-    const partCosts = item.artworkParts.map(part => {
-      const cost = calculateSingleItemFinancials(itemForArtworkPart(item,part));
-      return { role: part.role, sourceUrl: part.source.url, pages: part.pageCount, paperCost: cost.paperCost, inkCost: cost.inkCost, machineOverhead: cost.machineOverhead, parentSheets: cost.totalParentSheets, productionSheets: cost.totalProductionSheets, cutsPerSheet: cost.cutsPerSheet, paperUnitCost: cost.paperUnitCost, wastedSheets: cost.wastedSheets, parentSheetsNeeded: cost.parentSheetsNeeded, totalSheets: cost.totalInnerSheets, sheetsPerCopy: cost.innerSheetsPerBook, machDepr: cost.machDepr, machMaint: cost.machMaint, cyanMl: cost.cyanMl, magentaMl: cost.magentaMl, yellowMl: cost.yellowMl, blackMl: cost.blackMl };
-    });
-    const sum = (key: 'paperCost' | 'inkCost' | 'machineOverhead' | 'parentSheets' | 'productionSheets' | 'wastedSheets' | 'parentSheetsNeeded' | 'machDepr' | 'machMaint' | 'cyanMl' | 'magentaMl' | 'yellowMl' | 'blackMl') => partCosts.reduce((total, part) => total + part[key], 0);
-    const paperBeforeRebate = sum('paperCost');
-    const offcutRebate = item.useOffcutRebate ? Math.min(paperBeforeRebate, Number(item.offcutRebateAmount || 0)) : 0;
-    const paperCost = Math.max(0, paperBeforeRebate - offcutRebate);
-    const inkCost = sum('inkCost'); const machineOverhead = sum('machineOverhead');
-    // Binding/finishing use the existing job workflow once, never once per source.
-    const netCost = paperCost + inkCost + machineOverhead + shared.postPressCost + shared.finishingMaterialsCost;
-    const laborCost = item.activeModules?.laborAndSetup
-      ? (item.laborMode === 'manual' ? Math.max(0, Number(item.laborCostManual || 0)) : Math.round(netCost * Math.max(0, Number(item.laborPercent || 0)) / 100)) : 0;
-    const totals = commercialTotals(netCost, laborCost, shared.packagingDeliveryCost, item.printVolume, quotationProfitMargin ?? item.profitMargin ?? 40, quotationDiscountPercent ?? item.discountPercent ?? 0);
-    const cover = partCosts.find(part => part.role === 'cover'); const inner = partCosts.find(part => part.role === 'inner');
-    return { ...shared, ...totals, paperCost, inkCost, machineOverhead, netCost, directMatMach: netCost, laborCost, offcutRebate,
-      coverPaperCost: cover?.paperCost || 0, innerPaperCost: inner?.paperCost || 0, coverInkCost: cover?.inkCost || 0,
-      machDepr: sum('machDepr'), machMaint: sum('machMaint'), cyanMl: sum('cyanMl'), magentaMl: sum('magentaMl'), yellowMl: sum('yellowMl'), blackMl: sum('blackMl'), wastedSheets: sum('wastedSheets'), parentSheetsNeeded: sum('parentSheetsNeeded'), totalInnerSheets: inner?.totalSheets || 0, innerSheetsPerBook: inner?.sheetsPerCopy || 0,
-      totalParentSheets: sum('parentSheets'), totalProductionSheets: sum('productionSheets'), totalJobProductionSheets: sum('productionSheets'),
-      totalInnerParentSheets: inner?.parentSheets || 0, totalCoverParentSheets: cover?.parentSheets || 0, innerPagesPerBook: item.artworkParts?.find(part => part.role === 'inner')?.pageCount || 0,
-      partCosts, sharedCosts: { postPressCost: shared.postPressCost, finishingMaterialsCost: shared.finishingMaterialsCost, laborCost, packagingDeliveryCost: shared.packagingDeliveryCost, offcutRebate } };
+  const calculateSingleItemFinancialsInternal = (item: QuotationItem, imposed?: { sheets: number; copies: number; capacity: number }) => {
+    return calculateSingleItemFinancials(item, calcContext, imposed);
   };
 
-  const impositionError = items.some(item => item.imposition_mode === 'OFF' && (item.artworkParts?.length
-    ? item.artworkParts.some(part => !preCutStockMatches(inventory.find(paper => paper.id === part.paperId), part.widthMM, part.heightMM))
-    : !preCutStockMatches(inventory.find(paper => paper.id === item.paperId), Number(item.jobWidth), Number(item.jobHeight))
-      || (item.includeCover && !preCutStockMatches(inventory.find(paper => paper.id === item.coverPaperId), Number(item.jobWidth) * 2, Number(item.jobHeight)))))
-    ? 'ຂະໜາດວຽກບໍ່ກົງກັບເຈ້ຍທີ່ຕັດໄວ້. ກະລຸນາເລືອກເຈ້ຍທີ່ເໝາະສົມ.' : '';
-  const calculatedItems = items.map(item => calculateItemFinancials(item));
-  const activeCalc = calculateItemFinancials(activeItem);
-  const editorCalc = selectedPart ? calculateSingleItemFinancials(itemForArtworkPart(activeItem, selectedPart)) : activeCalc;
+  const calculateItemFinancialsInternal = (item: QuotationItem) => {
+    return calculateItemFinancials(item, calcContext);
+  };
+
+  const impositionError = items.filter(item => item.imposition_mode === 'OFF').flatMap(item => item.artworkParts?.length
+    ? item.artworkParts.map(part => preCutStockError(inventory.find(paper => paper.id === part.paperId), part.widthMM, part.heightMM))
+    : [preCutStockError(inventory.find(paper => paper.id === item.paperId), Number(item.jobWidth), Number(item.jobHeight)),
+      ...(item.includeCover ? [preCutStockError(inventory.find(paper => paper.id === item.coverPaperId), Number(item.jobWidth) * 2, Number(item.jobHeight))] : [])]
+  ).find(Boolean) || '';
+  const calculatedItems = items.map(item => calculateItemFinancialsInternal(item));
+  const activeCalc = calculateItemFinancialsInternal(activeItem);
+  const editorCalc = selectedPart ? calculateSingleItemFinancialsInternal(itemForArtworkPart(activeItem, selectedPart)) : activeCalc;
 
   const grandPaperCost = calculatedItems.reduce((sum, c) => sum + c.paperCost, 0);
   const grandInkCost = calculatedItems.reduce((sum, c) => sum + c.inkCost, 0);
@@ -1882,10 +1259,40 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     window.print();
   };
 
+  const buildQuotationItems = () => {
+    return items.map((item, idx) => {
+      const calc = calculatedItems[idx];
+      const mapped = mapQuotationItemToOrderItem(item, idx, calc, inventory.find(p => p.id === item.paperId), equipment);
+      const rawSpecs = (item as any).specs;
+      const originalSpecs = priceCorrectionTarget && rawSpecs ? structuredClone(rawSpecs) : null;
+      return {
+        ...item,
+        ...mapped,
+        ...(originalSpecs ? { specs: { ...originalSpecs, ...mapped.specs, commercial_cost_snapshot: mapped.specs?.commercial_cost_snapshot } } : {}),
+        id: item.id,
+        name: item.name,
+        quantity: item.printVolume,
+        unitPrice: calc ? calc.unitPrice : 0,
+        subtotal: calc ? calc.sellingPrice : 0,
+        specSummary: `${item.jobSizePreset} (${item.jobWidth}x${item.jobHeight}mm) | ${inventory.find(p => p.id === item.paperId)?.name || 'Paper'} | ${item.colorPrintMode === 'MONO_K' ? 'Mono K' : 'CMYK'}`
+      };
+    });
+  };
+
+  const getDraftFingerprint = (builtItems: any[]) => {
+    const itemSigs = builtItems.map(it => `${it.name}_${it.quantity}_${it.unitPrice}_${it.paperId}_${it.colorPrintMode}`).join(';');
+    return `${selectedCustomerId.trim()}_${finalGrandTotal}_${grandNetCost}_${shippingFee}_${quotationSetupFee}_${itemSigs}`;
+  };
+
   // Convert Quotation to Order (Lifecycle: Created without immediate stock deduction - stock will be deducted at IN_PRODUCTION)
   const handleConfirmOrder = () => {
     if (priceCorrectionTarget) { showToast('ກະລຸນາບັນທຶກໃບສະເໜີປັບລາຄາ ແລະ ຂໍອະນຸມັດກ່ອນ', 'warning'); return; }
-    if (impositionError) { showToast(impositionError, 'error'); return; }
+    if (impositionError) { showToast(impositionError, 'warning'); }
+    const invalidItem = items.find(it => !it.jobWidth || !it.jobHeight || it.jobWidth <= 0 || it.jobHeight <= 0 || !it.printVolume || it.printVolume <= 0);
+    if (invalidItem) {
+      showToast(currentLang === 'lo' ? 'ກະລຸນາລະບຸຂະໜາດ ແລະ ຈຳນວນພິມໃຫ້ຖືກຕ້ອງ' : 'Specify valid job dimensions and quantity', 'error');
+      return;
+    }
     if (!selectedCustomerId.trim()) {
       showToast(currentLang === 'lo' ? 'ກະລຸນາເລືອກ ຫຼື ລະບຸຊື່ລູກຄ້າ' : 'Select or enter a customer name before creating the order', 'error');
       return;
@@ -1895,96 +1302,65 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       : `Confirm order creation (${items.length} items)? Total: ${formatCurrency(finalGrandTotal)} (Stock will be auto-deducted at IN_PRODUCTION stage)`;
 
     askConfirmation(msg, async () => {
+      if (savingQuotation.current) return;
+      savingQuotation.current = true; setIsSavingQuotation(true);
       try {
-      const savedCustomer = await ensureQuotationCustomer();
-      const orderItems: any[] = [];
+        const quoteItems = buildQuotationItems();
+        const resolvedPhone = customerPhone || customers.find(c => c.name === selectedCustomerId)?.phone || '';
+        const fp = getDraftFingerprint(quoteItems);
 
-      items.forEach((item, idx) => {
-        const calc = calculatedItems[idx];
-        const paperItem = inventory.find(p => p.id === item.paperId);
-        
-        // 1. Primary Finished Product Item (1 Quotation Item = 1 Order Job Item)
-        // Nested specifications contain materials, paper cutting ticket, and machinery allocations
-        orderItems.push(mapQuotationItemToOrderItem(item, idx, calc, paperItem, equipment));
-      });
-
-      const firstArtwork = items.find(i => i.artworkUrl)?.artworkUrl;
-      const firstFileName = items.find(i => i.fileName)?.fileName;
-      const firstFileSize = items.find(i => i.fileSize)?.fileSize;
-
-      // Pass autoDeduct = false to enforce stock deduction only at IN_PRODUCTION stage
-      await addOrder({
-        customerId: savedCustomer?.id,
-        customerName: selectedCustomerId,
-        phone: customerPhone || customers.find(c => c.name === selectedCustomerId)?.phone || '020 55889900',
-        items: orderItems,
-        totalPriceCharged: finalGrandTotal,
-        depositAmountPaid: 0,
-        remainingUnpaidBalance: finalGrandTotal,
-        paymentMethod: 'BCEL One',
-        paymentStatus: 'Unpaid',
-        status: 'WAITING_DEPOSIT',
-        shippingFee: Number(shippingFee || 0),
-        shippingMethod: shippingMethod,
-        artworkLink: firstArtwork || firstFileName || '',
-        artworkUrl: firstArtwork || '',
-        artwork_url: firstArtwork || '',
-        artworkFileName: firstFileName || '',
-        artwork_file_name: firstFileName || '',
-        artworkFileSize: firstFileSize || 0,
-        artwork_file_size: firstFileSize || 0,
-        notes: `Multi-Item Quotation Order (${items.length} items): ${items.map(i => `${i.name} (${i.printVolume} units)`).join(', ')}. Shipping: ${shippingMethod} (${formatCurrency(shippingFee)}). Payment terms: ${paymentTerms}. ${quotationNote ? `Note: ${quotationNote}` : ''}`,
-      }, false);
-
-      showToast(
-        currentLang === 'lo' 
-          ? `ເປີດອໍເດີ (${items.length} ລາຍການ) ສຳເລັດ! (ສະຕ໋ອກຈະຖືກຕັດເມື່ອເຂົ້າສູ່ຂັ້ນຕອນພິມ IN_PRODUCTION)` 
-          : `Order with ${items.length} items created successfully! (Inventory will be deducted at IN_PRODUCTION stage)`,
-        'success'
-      );
-
-      if (onConvertToOrder) {
-        const primaryItem = items[0];
-        const primaryCalc = calculatedItems[0];
-        onConvertToOrder({
-          artworkParts: primaryItem?.artworkParts,
-          paperId: primaryItem?.paperId,
-          paperName: primaryItem?.name,
-          quantity: primaryItem?.printVolume,
-          unitCost: primaryCalc?.unitPrice,
-          artworkUrl: firstArtwork,
-          artwork_url: firstArtwork,
-          artworkFileName: firstFileName,
-          artwork_file_name: firstFileName,
-          artworkFileSize: firstFileSize,
-          artwork_file_size: firstFileSize,
-          artworkLink: firstArtwork,
-          items: items.map((it, idx) => ({
-            ...mapQuotationItemToOrderItem(it, idx, calculatedItems[idx], inventory.find(p => p.id === it.paperId), equipment),
-            name: it.name,
-            paperId: it.paperId,
-            quantity: it.printVolume,
-            unitCost: calculatedItems[idx]?.unitPrice,
-            artworkUrl: it.artworkUrl,
-            fileName: it.fileName,
-            fileSize: it.fileSize,
-            jobSizePreset: it.jobSizePreset,
-            jobWidth: it.jobWidth,
-            jobHeight: it.jobHeight,
-            pagesPerBook: it.pagesPerBook
-          }))
-        });
-      }
-      if (setActiveTab) {
-        setActiveTab('orders');
-      }
+        let intent = createIntents.current.get(fp);
+        if (!intent && activeQuotationRef.current?.fingerprint === fp && activeQuotationRef.current.saved) {
+          intent = { id: activeQuotationRef.current.id, saved: activeQuotationRef.current.saved };
+          createIntents.current.set(fp, intent);
+        }
+        if (!intent) {
+          const newId = pendingSaveId.current ?? `quot-${crypto.randomUUID()}`;
+          intent = { id: newId };
+          createIntents.current.set(fp, intent);
+        }
+        if (!intent.saved) {
+          await ensureQuotationCustomer();
+          const snapshot = savedCommercialSnapshot();
+          const quoteData = {
+            id: intent.id,
+            title: quotationTitle.trim() || 'ໃບສະເໜີລາຄາງານພິມ',
+            customerName: selectedCustomerId.trim(),
+            phone: resolvedPhone,
+            customerPhone: resolvedPhone,
+            customerAddress,
+            items: quoteItems,
+            rawItems: structuredClone(items),
+            totalCost: grandNetCost,
+            grandTotal: finalGrandTotal,
+            setupFee: quotationSetupFee,
+            packagingCost: grandPackagingCost,
+            shippingFee: Number(shippingFee || 0),
+            commercial_snapshot: snapshot,
+            profitMargin: quotationProfitMargin,
+            discountPercent: Number(quotationDiscountPercent || 0),
+            notes: quotationNote,
+            status: grandProfitMargin < 25 ? 'REQUIRES_MANAGER_APPROVAL' : 'Pending',
+          };
+          intent.saved = await addQuotation(quoteData);
+          if (intent.saved) {
+            activeQuotationRef.current = { id: intent.saved.id, saved: intent.saved, fingerprint: fp };
+          }
+        }
+        if (!intent.saved) return;
+        const orderId = await convertQuotationToOrder(intent.saved.id, intent.saved);
+        if (!orderId) return;
+        if (onConvertToOrder) onConvertToOrder({ orderId, sourceQuotationId: intent.saved.id });
+        if (setActiveTab) setActiveTab('orders');
       } catch (error) { showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດສ້າງອໍເດີໄດ້', 'error'); }
+      finally { savingQuotation.current = false; setIsSavingQuotation(false); }
+
     });
   };
 
   // Open Save Modal
   const handleSaveQuotation = () => {
-    if (impositionError) { showToast(impositionError, 'error'); return; }
+    if (impositionError) { showToast(impositionError, 'warning'); }
     setIsSaveModalOpen(true);
   };
 
@@ -2000,34 +1376,28 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   // Confirm Save current quotation to history with versioning & template tag
   const handleConfirmSaveQuotation = async () => {
-    if (impositionError) { showToast(impositionError, 'error'); return; }
+    if (impositionError) { showToast(impositionError, 'warning'); }
+    const invalidItem = items.find(it => !it.jobWidth || !it.jobHeight || it.jobWidth <= 0 || it.jobHeight <= 0 || !it.printVolume || it.printVolume <= 0);
+    if (invalidItem) {
+      showToast(currentLang === 'lo' ? 'ກະລຸນາລະບຸຂະໜາດ ແລະ ຈຳນວນພິມໃຫ້ຖືກຕ້ອງ' : 'Specify valid job dimensions and quantity', 'error');
+      return;
+    }
     if (savingQuotation.current) return;
     savingQuotation.current = true; setIsSavingQuotation(true);
     try {
     await ensureQuotationCustomer();
-    const quoteItems = items.map((item, idx) => {
-      const calc = calculatedItems[idx];
-      return {
-        ...item,
-        ...mapQuotationItemToOrderItem(item, idx, calc, inventory.find(p => p.id === item.paperId), equipment),
-        id: item.id,
-        name: item.name,
-        quantity: item.printVolume,
-        unitPrice: calc.unitPrice,
-        subtotal: calc.sellingPrice,
-        specSummary: `${item.jobSizePreset} (${item.jobWidth}x${item.jobHeight}mm) | ${inventory.find(p => p.id === item.paperId)?.name || 'Paper'} | ${item.colorPrintMode === 'MONO_K' ? 'Mono K' : 'CMYK'}`
-      };
-    });
-
+    const quoteItems = buildQuotationItems();
     const resolvedPhone = customerPhone || customers.find(c => c.name === selectedCustomerId)?.phone || '';
+    const fp = getDraftFingerprint(quoteItems);
 
+    const quoteId = pendingSaveId.current ?? (pendingSaveId.current = `quot-${crypto.randomUUID()}`);
     const quoteData = {
       title: quotationTitle.trim() || 'ໃບສະເໜີລາຄາງານພິມ',
       isPricingTemplate: isTemplateOption,
       templateCategory: isTemplateOption ? templateCategory : undefined,
       customerName: selectedCustomerId.trim(),
       phone: resolvedPhone, customerPhone: resolvedPhone, customerAddress,
-      id: pendingSaveId.current ?? (pendingSaveId.current = `quot-${crypto.randomUUID()}`),
+      id: quoteId,
       totalCost: grandNetCost, setupFee: quotationSetupFee, packagingCost: grandPackagingCost,
       commercial_snapshot: savedCommercialSnapshot(),
       ...(priceCorrectionTarget || {}),
@@ -2054,7 +1424,33 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       version: 1
     };
 
-    if (!await addQuotation(quoteData)) return;
+    let saved: any = null;
+    try {
+      saved = await addQuotation(quoteData);
+    } catch (saveError) {
+      console.error('Save quotation exception:', saveError);
+      showToast(
+        currentLang === 'lo'
+          ? `ບໍ່ສາມາດບັນທຶກໃບສະເໜີລາຄາໄດ້: ${saveError instanceof Error ? saveError.message : 'ລະບົບເຊື່ອມຕໍ່ຂັດຂ້ອງ'}. ຂໍ້ມູນສະບັບຮ່າງຂອງທ່ານຍັງຖືກຮັກສາໄວ້ ຄົບຖ້ວນ.`
+          : `Failed to save quotation: ${saveError instanceof Error ? saveError.message : 'Network error'}. Your draft has been preserved.`,
+        'error'
+      );
+      return;
+    }
+
+    if (!saved) {
+      showToast(
+        currentLang === 'lo'
+          ? 'ບໍ່ສາມາດບັນທຶກໃບສະເໜີລາຄາໄດ້ (ລະບົບບໍ່ຕອບສະໜອງ ຫຼື ເຊື່ອມຕໍ່ຂັດຂ້ອງ). ຂໍ້ມູນສະບັບຮ່າງຂອງທ່ານຍັງຖືກຮັກສາໄວ້ ຄົບຖ້ວນ.'
+          : 'Failed to save quotation (no response received). Your draft has been preserved.',
+        'error'
+      );
+      return;
+    }
+
+    const actualId = (saved && typeof saved === 'object' && (saved as any).id) ? (saved as any).id : quoteId;
+    activeQuotationRef.current = { id: actualId, saved: saved || quoteData, fingerprint: fp };
+    createIntents.current.set(fp, { id: actualId, saved: saved || quoteData });
     pendingSaveId.current = null;
     setIsSaveModalOpen(false);
 
@@ -2078,7 +1474,14 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         'success'
       );
     }
-    } catch (error) { showToast(error instanceof Error ? error.message : 'ບໍ່ສາມາດບັນທຶກໄດ້', 'error'); } finally { savingQuotation.current = false; setIsSavingQuotation(false); }
+    } catch (error) { 
+      showToast(
+        currentLang === 'lo'
+          ? `ບໍ່ສາມາດບັນທຶກໃບສະເໜີລາຄາໄດ້: ${error instanceof Error ? error.message : 'ເກີດຂໍ້ຜິດພາດຂັດຂ້ອງ'}. ຂໍ້ມູນສະບັບຮ່າງຂອງທ່ານຍັງຖືກຮັກສາໄວ້ ຄົບຖ້ວນ.`
+          : `Failed to save quotation: ${error instanceof Error ? error.message : 'Unknown error'}. Your draft has been preserved.`,
+        'error'
+      ); 
+    } finally { savingQuotation.current = false; setIsSavingQuotation(false); }
   };
 
   // Financial decisions remain separate from lifecycle conversion.
@@ -2112,7 +1515,12 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   // Revise the active quotation (adds a new version row)
   const handleReviseQuotation = async (quotationId: string) => {
-    if (impositionError) { showToast(impositionError, 'error'); return; }
+    if (impositionError) { showToast(impositionError, 'warning'); }
+    const invalidItem = items.find(it => !it.jobWidth || !it.jobHeight || it.jobWidth <= 0 || it.jobHeight <= 0 || !it.printVolume || it.printVolume <= 0);
+    if (invalidItem) {
+      showToast(currentLang === 'lo' ? 'ກະລຸນາລະບຸຂະໜາດ ແລະ ຈຳນວນພິມໃຫ້ຖືກຕ້ອງ' : 'Specify valid job dimensions and quantity', 'error');
+      return;
+    }
     if (savingQuotation.current) return;
     savingQuotation.current = true; setIsSavingQuotation(true);
     try {
@@ -2137,9 +1545,28 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     });
   };
 
+  // Recover an already-committed conversion: replays the SAME saved quotation id/idempotency key (server replay,
+  // canonical readback + money validation in convertQuotationToOrder); never creates a new quotation or order.
+  const handleOpenConvertedOrder = async (quotation: any) => {
+    if (convertingQuoteId) return;
+    setConvertingQuoteId(quotation.id);
+    try {
+      const finalOrderId = await convertQuotationToOrder(quotation.id);
+      if (!finalOrderId) return;
+      setIsQuotationListOpen(false);
+      if (onConvertToOrder) onConvertToOrder({ orderId: finalOrderId, sourceQuotationId: quotation.id });
+      if (setActiveTab) setActiveTab('orders');
+    } finally { setConvertingQuoteId(null); }
+  };
+
   // Quick Save as Draft with Customer & Specs Snapshot
   const handleSaveDraft = async () => {
-    if (impositionError) { showToast(impositionError, 'error'); return; }
+    if (impositionError) { showToast(impositionError, 'warning'); }
+    const invalidItem = items.find(it => !it.jobWidth || !it.jobHeight || it.jobWidth <= 0 || it.jobHeight <= 0 || !it.printVolume || it.printVolume <= 0);
+    if (invalidItem) {
+      showToast(currentLang === 'lo' ? 'ກະລຸນາລະບຸຂະໜາດ ແລະ ຈຳນວນພິມໃຫ້ຖືກຕ້ອງ' : 'Specify valid job dimensions and quantity', 'error');
+      return;
+    }
     if (savingQuotation.current) return;
     savingQuotation.current = true; setIsSavingQuotation(true);
     try {
@@ -2202,7 +1629,34 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       fileName: items.find(it => it.fileName)?.fileName || '',
     };
 
-    if (!await addQuotation(draftData)) return;
+    let saved: any = null;
+    try {
+      saved = await addQuotation(draftData);
+    } catch (saveError) {
+      console.error('Save draft exception:', saveError);
+      showToast(
+        currentLang === 'lo'
+          ? `ບໍ່ສາມາດບັນທຶກສະບັບຮ່າງໄດ້: ${saveError instanceof Error ? saveError.message : 'ລະບົບເຊື່ອມຕໍ່ຂັດຂ້ອງ'}. ຂໍ້ມູນສະບັບຮ່າງຂອງທ່ານຍັງຖືກຮັກສາໄວ້ ຄົບຖ້ວນ.`
+          : `Failed to save draft: ${saveError instanceof Error ? saveError.message : 'Network error'}. Your draft has been preserved.`,
+        'error'
+      );
+      return;
+    }
+
+    if (!saved) {
+      showToast(
+        currentLang === 'lo'
+          ? 'ບໍ່ສາມາດບັນທຶກສະບັບຮ່າງໄດ້ (ລະບົບບໍ່ຕອບສະໜອງ ຫຼື ເຊື່ອມຕໍ່ຂັດຂ້ອງ). ຂໍ້ມູນສະບັບຮ່າງຂອງທ່ານຍັງຖືກຮັກສາໄວ້ ຄົບຖ້ວນ.'
+          : 'Failed to save draft (no response received). Your draft has been preserved.',
+        'error'
+      );
+      return;
+    }
+
+    const actualId = (saved && typeof saved === 'object' && (saved as any).id) ? (saved as any).id : draftData.id;
+    const fp = getDraftFingerprint(quoteItems);
+    activeQuotationRef.current = { id: actualId, saved: saved || draftData, fingerprint: fp };
+    createIntents.current.set(fp, { id: actualId, saved: saved || draftData });
     pendingSaveId.current = null;
     showToast(
       currentLang === 'lo'
@@ -2210,6 +1664,13 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         : `Draft "${draftData.title}" saved successfully!`,
       'success'
     );
+    } catch (error) {
+      showToast(
+        currentLang === 'lo'
+          ? `ບໍ່ສາມາດບັນທຶກສະບັບຮ່າງໄດ້: ${error instanceof Error ? error.message : 'ເກີດຂໍ້ຜິດພາດຂັດຂ້ອງ'}. ຂໍ້ມູນສະບັບຮ່າງຂອງທ່ານຍັງຖືກຮັກສາໄວ້ ຄົບຖ້ວນ.`
+          : `Failed to save draft: ${error instanceof Error ? error.message : 'Unknown error'}. Your draft has been preserved.`,
+        'error'
+      );
     } finally { savingQuotation.current = false; setIsSavingQuotation(false); }
   };
 
@@ -2248,11 +1709,17 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       printVolume: Math.max(1, Number(raw?.printVolume ?? raw?.quantity) || 100),
       colorPrintMode: raw?.colorPrintMode === 'MONO_K' ? 'MONO_K' : 'CMYK',
       coverageMode: raw?.coverageMode === 'advanced' ? 'advanced' : 'default',
-      avgCoverage: Number(raw?.avgCoverage) || 15,
-      cCoverage: Number(raw?.cCoverage) || 15,
-      mCoverage: Number(raw?.mCoverage) || 15,
-      yCoverage: Number(raw?.yCoverage) || 15,
-      kCoverage: Number(raw?.kCoverage) || 15,
+      avgCoverage: resolveCoverageValue(raw?.avgCoverage, 15),
+      cCoverage: resolveCoverageValue(raw?.cCoverage, 15),
+      mCoverage: resolveCoverageValue(raw?.mCoverage, 15),
+      yCoverage: resolveCoverageValue(raw?.yCoverage, 15),
+      kCoverage: resolveCoverageValue(raw?.kCoverage, 15),
+      cutsPerSheetOverride: raw?.cutsPerSheetOverride ?? raw?.specs?.cuts_per_sheet ?? raw?.specs?.cutsPerSheetOverride ?? raw?.specifications?.cuts_per_sheet,
+      manualSheetCount: raw?.manualSheetCount ?? raw?.manual_sheet_count ?? raw?.specs?.manual_sheet_count ?? raw?.specs?.manualSheetCount ?? raw?.specifications?.manual_sheet_count,
+      manual_sheet_count: raw?.manualSheetCount ?? raw?.manual_sheet_count ?? raw?.specs?.manual_sheet_count ?? raw?.specs?.manualSheetCount ?? raw?.specifications?.manual_sheet_count,
+      colorPages: raw?.colorPages ?? raw?.specs?.color_pages_count ?? raw?.specs?.colorPages ?? raw?.specifications?.color_pages_count ?? 0,
+      monoPages: raw?.monoPages ?? raw?.specs?.mono_pages_count ?? raw?.specs?.monoPages ?? raw?.specifications?.mono_pages_count ?? 0,
+      monoPagesAvgK: raw?.monoPagesAvgK ?? raw?.specs?.mono_pages_avg_k ?? raw?.specs?.monoPagesAvgK ?? raw?.specifications?.mono_pages_avg_k,
       selectedPrinterId: raw?.selectedPrinterId || raw?.machineId || defPrn,
       selectedInkSet: raw?.selectedInkSet || 'OEM',
       finishingCutOption: raw?.finishingCutOption || 'straight',
@@ -4472,6 +3939,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         onRevise={handleReviseQuotation}
         onDelete={handleDeleteQuotation}
         onConvertToOrder={handleConvertToOrder}
+        onOpenConvertedOrder={handleOpenConvertedOrder}
         onOpenApproval={setApprovalModalQuote}
         onSaveDraft={handleSaveDraft}
         isSaving={isSavingQuotation}

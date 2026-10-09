@@ -3,6 +3,11 @@ name: somsing-frontend-developer
 description: ทักษะและความเชี่ยวชาญสำหรับนักพัฒนา Frontend ในระบบ Som Sing Phim (Admin ERP และ Customer Service Storefront) ครอบคลุม React, TypeScript, TanStack Query, Tailwind CSS, การเชื่อมต่อ API และกฎการออกแบบ UI/UX ประจำระบบ
 ---
 
+## Shared Codex / Antigravity standard
+
+Before this specialty workflow, read [the shared working standard](../somsing-dev-coordinator/references/shared-working-standard.md). Both apps use the same task, source identity, product standards and evidence criteria; tool adapters differ. This reference governs conflicting historical workflow/UI/verification examples below, while direct human instructions retain priority.
+
+
 # Somsin Frontend Developer Skill
 
 ทักษะคู่มือนักพัฒนา Frontend สำหรับระบบโรงพิมพ์ **Som Sing Phim (สมสิงห์การพิมพ์)** ครอบคลุมการพัฒนาทั้งฝั่ง **Admin ERP** (`admin-system/frontend/`) และ **Customer Service Storefront** (`customer-service/`)

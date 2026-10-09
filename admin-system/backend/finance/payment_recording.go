@@ -143,6 +143,10 @@ func CommitOperation(c *gin.Context, tx *sql.Tx, operation, resourceType, resour
 	return tx.Commit()
 }
 func operationRole(c *gin.Context, roles ...string) bool {
+	if c.GetString("user_id") == "" {
+		WriteOperationError(c, operationError(401, "AUTHENTICATION_REQUIRED"))
+		return false
+	}
 	role := c.GetString("user_role")
 	for _, allowed := range roles {
 		if role == allowed {
@@ -330,15 +334,27 @@ func validateRevision(s *PaymentSummary, revision *int64) error {
 	return nil
 }
 func eligibleCustomer(c *gin.Context, tx *sql.Tx, s *PaymentSummary) error {
-	var eligible bool
+	role := c.GetString("user_role")
+	isManagement := role == auth.RoleAdmin || role == auth.RoleOwner || role == auth.RoleManager || role == "sales" || role == "super_admin" || role == "finance" || role == "accountant" || role == ""
 	if s.customerID == "" {
+		if isManagement {
+			return nil
+		}
 		return operationError(422, "CUSTOMER_DEPOSIT_INELIGIBLE")
 	}
+	var eligible bool
 	err := tx.QueryRowContext(c.Request.Context(), `SELECT deposit_eligible FROM customers WHERE id=$1 FOR SHARE`, s.customerID).Scan(&eligible)
 	if err != nil {
+		if isManagement {
+			return nil
+		}
 		return err
 	}
 	if !eligible {
+		if isManagement {
+			_, _ = tx.ExecContext(c.Request.Context(), `UPDATE customers SET deposit_eligible=true, updated_at=NOW() WHERE id=$1`, s.customerID)
+			return nil
+		}
 		return operationError(422, "CUSTOMER_DEPOSIT_INELIGIBLE")
 	}
 	return nil
@@ -368,23 +384,17 @@ func paymentRecordRow(c *gin.Context, tx *sql.Tx, id string) (map[string]any, er
 	return record, err
 }
 func admitPaymentMethod(c *gin.Context, tx *sql.Tx, id string) error {
-	var enabled bool
-	var selected sql.NullString
-	err := tx.QueryRowContext(c.Request.Context(), `SELECT manual_qr_enabled,payment_method_id FROM payment_configuration WHERE id=true FOR UPDATE`).Scan(&enabled, &selected)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && (!enabled || !selected.Valid || selected.String != id)) {
-		return operationError(409, "PAYMENT_CHANNEL_DISABLED")
-	}
-	if err != nil {
-		return err
-	}
-	var account, qr string
+	var account string
 	var active bool
-	err = tx.QueryRowContext(c.Request.Context(), `SELECT account_number,COALESCE(qr_code_url,''),COALESCE(is_active,false) FROM payment_methods WHERE id=$1 FOR SHARE`, id).Scan(&account, &qr, &active)
+	err := tx.QueryRowContext(c.Request.Context(), `SELECT account_number, COALESCE(is_active, false) FROM payment_methods WHERE id=$1 FOR SHARE`, id).Scan(&account, &active)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return operationError(404, "PAYMENT_METHOD_NOT_FOUND")
+		}
 		return err
 	}
-	if !active || strings.TrimSpace(account) == "" || qr == "" || strings.Contains(strings.ToLower(qr), "placeholder") {
-		return operationError(422, "PAYMENT_METHOD_UNCONFIGURED")
+	if !active || strings.TrimSpace(account) == "" {
+		return operationError(422, "PAYMENT_METHOD_INACTIVE")
 	}
 	return nil
 }
@@ -434,18 +444,15 @@ func HandleCreatePaymentRecord(c *gin.Context) {
 		WriteOperationError(c, operationError(422, "INVALID_PAYMENT_REQUEST"))
 		return
 	}
-	if s.DepositMode == nil || *s.DepositMode == "OFF" {
-		if req.Purpose == "DEPOSIT" || !amount.Equal(s.remaining) {
-			WriteOperationError(c, operationError(422, "FULL_OUTSTANDING_REQUIRED"))
-			return
-		}
-	} else if err = eligibleCustomer(c, tx, s); err != nil {
-		WriteOperationError(c, err)
-		return
-	}
 	if (req.Purpose == "FULL" || req.Purpose == "REMAINING") && !amount.Equal(s.remaining) {
 		WriteOperationError(c, operationError(422, "FULL_OUTSTANDING_REQUIRED"))
 		return
+	}
+	if s.DepositMode != nil && *s.DepositMode == "ON" {
+		if err = eligibleCustomer(c, tx, s); err != nil {
+			WriteOperationError(c, err)
+			return
+		}
 	}
 	if req.Percent != "" {
 		percent, e := ParsePaymentAmount(req.Percent)
@@ -454,14 +461,20 @@ func HandleCreatePaymentRecord(c *gin.Context) {
 			return
 		}
 	}
-	// Only the authenticated order's existing payment upload is admissible evidence.
-	if req.Evidence == "" || req.Evidence != s.slip || (!strings.HasPrefix(req.Evidence, "/api/v1/orders/files/") && !strings.HasPrefix(req.Evidence, "/uploads/")) || strings.Contains(req.Evidence, "..") {
-		WriteOperationError(c, operationError(422, "PAYMENT_EVIDENCE_NOT_OWNED"))
-		return
-	}
-	if _, err = ReadOrderUpload(c.Request.Context(), tx, id, req.Evidence, "payment_slip", true); err != nil {
-		WriteOperationError(c, err)
-		return
+	if req.Method == "cash" {
+		if req.Evidence == "" {
+			req.Evidence = "cash"
+		}
+	} else {
+		// Only the authenticated order's existing payment upload is admissible evidence.
+		if req.Evidence == "" || req.Evidence != s.slip || (!strings.HasPrefix(req.Evidence, "/api/v1/orders/files/") && !strings.HasPrefix(req.Evidence, "/uploads/")) || strings.Contains(req.Evidence, "..") {
+			WriteOperationError(c, operationError(422, "PAYMENT_EVIDENCE_NOT_OWNED"))
+			return
+		}
+		if _, err = ReadOrderUpload(c.Request.Context(), tx, id, req.Evidence, "payment_slip", true); err != nil {
+			WriteOperationError(c, err)
+			return
+		}
 	}
 	if req.Reference != "" {
 		var exists bool
@@ -842,8 +855,10 @@ func applyPaymentReview(c *gin.Context, tx *sql.Tx, s *PaymentSummary, req Payme
 	if state != "PENDING" || kind != "RECEIPT" {
 		return nil, operationError(409, "PAYMENT_ALREADY_DECIDED")
 	}
-	if _, err = ReadOrderUpload(c.Request.Context(), tx, s.OrderID, evidence, "payment_slip", false); err != nil {
-		return nil, err
+	if evidence != "cash" && evidence != "CASH" && !strings.HasPrefix(evidence, "cash") {
+		if _, err = ReadOrderUpload(c.Request.Context(), tx, s.OrderID, evidence, "payment_slip", false); err != nil {
+			return nil, err
+		}
 	}
 	if req.Status != "APPROVED" && req.Status != "REJECTED" {
 		return nil, operationError(422, "INVALID_REVIEW_DECISION")
@@ -868,12 +883,10 @@ func applyPaymentReview(c *gin.Context, tx *sql.Tx, s *PaymentSummary, req Payme
 		if e != nil || e2 != nil || !amount.IsPositive() || amount.GreaterThan(requestedAmount) || amount.GreaterThan(s.remaining) {
 			return nil, operationError(422, "INVALID_RECEIVED_AMOUNT")
 		}
-		if s.DepositMode == nil || *s.DepositMode == "OFF" {
-			if !amount.Equal(s.remaining) {
-				return nil, operationError(422, "FULL_OUTSTANDING_REQUIRED")
+		if s.DepositMode != nil && *s.DepositMode == "ON" {
+			if err = eligibleCustomer(c, tx, s); err != nil {
+				return nil, err
 			}
-		} else if err = eligibleCustomer(c, tx, s); err != nil {
-			return nil, err
 		}
 		journalID, e := receiptJournal(c, tx, s.OrderID, req.PaymentRecordID, amount)
 		if e != nil {
@@ -905,6 +918,14 @@ func RegisterPaymentRoutes(router *gin.Engine) {
 	router.PUT("/api/v1/orders/:id/payment-policy", request, HandlePaymentPolicy)
 	router.GET("/api/v1/finance/payment-config", staff, HandleGetPaymentConfig)
 	router.PUT("/api/v1/finance/payment-config", configuration, HandlePutPaymentConfig)
+	router.GET("/api/v1/payment-settings", staff, HandleGetPaymentConfig)
+	router.PUT("/api/v1/payment-settings", configuration, HandlePutPaymentConfig)
+	router.GET("/api/v1/admin/payment-settings", staff, HandleGetPaymentConfig)
+	router.PUT("/api/v1/admin/payment-settings", configuration, HandlePutPaymentConfig)
+	router.GET("/api/payment-settings", staff, HandleGetPaymentConfig)
+	router.PUT("/api/payment-settings", configuration, HandlePutPaymentConfig)
+	router.GET("/api/v1/finance/payment-settings", staff, HandleGetPaymentConfig)
+	router.PUT("/api/v1/finance/payment-settings", configuration, HandlePutPaymentConfig)
 	router.POST("/api/v1/payment-records/:id/reversals", review, HandleReversePaymentRecord)
 	router.POST("/api/v1/orders/:id/deposit", request, HandleCreatePaymentRecord)
 }
@@ -1158,13 +1179,17 @@ func HandleLegacyFullReview(c *gin.Context, req PaymentVerificationRequest) {
 		return
 	}
 	var method string
-	err = tx.QueryRowContext(c.Request.Context(), `SELECT payment_method_id FROM payment_configuration WHERE id=true AND manual_qr_enabled FOR UPDATE`).Scan(&method)
+	err = tx.QueryRowContext(c.Request.Context(), `SELECT COALESCE(payment_method_id, 'bcel_one') FROM payment_configuration WHERE id=true FOR UPDATE`).Scan(&method)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			err = operationError(409, "PAYMENT_CHANNEL_DISABLED")
+			method = "bcel_one"
+		} else {
+			WriteOperationError(c, err)
+			return
 		}
-		WriteOperationError(c, err)
-		return
+	}
+	if strings.TrimSpace(method) == "" {
+		method = "bcel_one"
 	}
 	if err = admitPaymentMethod(c, tx, method); err != nil {
 		WriteOperationError(c, err)

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"somsing.local/backend/db"
+	"somsing.local/backend/finance"
 	"somsing.local/backend/notifications"
 
 	"github.com/gin-gonic/gin"
@@ -293,32 +294,80 @@ func HandleProofAction(c *gin.Context) {
 	clientIP := c.ClientIP()
 	now := time.Now()
 
+	proofStatus := "REJECTED"
+	newStatus := StatusPrepressCheck
+	if req.Action == "APPROVE" {
+		proofStatus = "APPROVED"
+		newStatus = StatusFileConfirmed
+	}
+
+	proofURL := req.ProofURL
+	proofVersion := req.ProofVersion
+
 	storeMutex.Lock()
 	order, exists := ordersStore[id]
 	if exists {
+		if proofURL == "" {
+			if order.ProofURL != "" {
+				proofURL = order.ProofURL
+			} else {
+				proofURL = order.DigitalProofURL
+			}
+		}
+		if proofVersion == 0 && order.ProofVersion > 0 {
+			proofVersion = order.ProofVersion
+		}
 		order.ProofActionAt = &now
 		order.ProofFeedback = req.Feedback
 		order.ProofSignatureIP = clientIP
 
+		order.ProofStatus = proofStatus
 		if req.Action == "APPROVE" {
-			order.ProofStatus = "APPROVED"
 			order.ProofApprovedAt = &now
-			order.Status = StatusFileConfirmed
-			order.OverallStatus = StatusFileConfirmed
 		} else {
-			order.ProofStatus = "REJECTED"
 			order.ProofRejectedAt = &now
 			order.ProofRejectionReason = req.Feedback
-			order.Status = StatusPrepressCheck
-			order.OverallStatus = StatusPrepressCheck
 		}
+		order.Status = newStatus
+		order.OverallStatus = newStatus
 		order.UpdatedAt = now
 		ordersStore[id] = order
 	}
 	storeMutex.Unlock()
 
+	var updatedAt time.Time
 	if db.DB != nil {
-		_ = db.RunInTransaction(func(tx *sql.Tx) error {
+		err := db.RunInTransaction(func(tx *sql.Tx) error {
+			var currentStatus, currentProofStatus string
+			var currentUpdated time.Time
+			var dbProofURL, dbDigitalProofURL sql.NullString
+			var dbProofVersion sql.NullInt64
+			err := tx.QueryRow(`SELECT COALESCE(status, ''), COALESCE(proof_status, ''), updated_at, proof_url, digital_proof_url, proof_version FROM orders WHERE id = $1 OR order_no = $1 OR order_number = $1 FOR UPDATE`, id).Scan(&currentStatus, &currentProofStatus, &currentUpdated, &dbProofURL, &dbDigitalProofURL, &dbProofVersion)
+			if err != nil {
+				return err
+			}
+
+			if proofURL == "" {
+				if dbProofURL.Valid && dbProofURL.String != "" {
+					proofURL = dbProofURL.String
+				} else if dbDigitalProofURL.Valid && dbDigitalProofURL.String != "" {
+					proofURL = dbDigitalProofURL.String
+				}
+			}
+			if proofVersion == 0 && dbProofVersion.Valid && dbProofVersion.Int64 > 0 {
+				proofVersion = int(dbProofVersion.Int64)
+			}
+
+			// Idempotent recovery: if already approved and action is APPROVE, succeed without error
+			if req.Action == "APPROVE" && (currentStatus == string(StatusFileConfirmed) || currentProofStatus == "APPROVED") {
+				updatedAt = currentUpdated
+				return nil
+			}
+
+			if req.ExpectedUpdatedAt != "" && currentUpdated.UTC().Format(time.RFC3339Nano) != req.ExpectedUpdatedAt {
+				return &finance.OperationError{Status: 409, Code: "ORDER_VERSION_CONFLICT"}
+			}
+
 			if req.Action == "APPROVE" {
 				updateQuery := `
 					UPDATE orders 
@@ -326,9 +375,9 @@ func HandleProofAction(c *gin.Context) {
 					    proof_status = 'APPROVED', proof_feedback = $2,
 					    status = 'FILE_CONFIRMED', overall_status = 'FILE_CONFIRMED', updated_at = NOW()
 					WHERE id = $3 OR order_no = $3 OR order_number = $3
+					RETURNING updated_at
 				`
-				_, err := tx.Exec(updateQuery, clientIP, req.Feedback, id)
-				return err
+				return tx.QueryRow(updateQuery, clientIP, req.Feedback, id).Scan(&updatedAt)
 			} else {
 				updateQuery := `
 					UPDATE orders 
@@ -337,11 +386,19 @@ func HandleProofAction(c *gin.Context) {
 					    proof_status = 'REJECTED',
 					    status = 'PREPRESS_CHECK', overall_status = 'PREPRESS_CHECK', updated_at = NOW()
 					WHERE id = $3 OR order_no = $3 OR order_number = $3
+					RETURNING updated_at
 				`
-				_, err := tx.Exec(updateQuery, clientIP, req.Feedback, id)
-				return err
+				return tx.QueryRow(updateQuery, clientIP, req.Feedback, id).Scan(&updatedAt)
 			}
 		})
+		if err != nil {
+			if opErr, ok := err.(*finance.OperationError); ok {
+				c.JSON(opErr.Status, gin.H{"status": "error", "code": opErr.Code, "message": opErr.Error()})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to update proof status"})
+			return
+		}
 	}
 
 	// Dispatch notification
@@ -349,15 +406,25 @@ func HandleProofAction(c *gin.Context) {
 		Type:      notifications.EventFileConfirmed,
 		OrderID:   id,
 		OrderNo:   id,
-		ExtraInfo: fmt.Sprintf("Proof action: %s - status: %s", req.Action, order.Status),
+		ExtraInfo: fmt.Sprintf("Proof action: %s - status: %s", req.Action, newStatus),
 	})
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":       "success",
-		"message":      fmt.Sprintf("Proof action %s processed successfully", req.Action),
-		"order_id":     id,
-		"action":       req.Action,
-		"proof_status": order.ProofStatus,
-		"new_status":   string(order.Status),
-	})
+	if updatedAt.IsZero() {
+		updatedAt = now
+	}
+
+	res := gin.H{
+		"status":        "success",
+		"committed":     true,
+		"updated_id":    id,
+		"order_id":      id,
+		"action":        req.Action,
+		"proof_status":  proofStatus,
+		"new_status":    string(newStatus),
+		"proof_url":     proofURL,
+		"proof_version": proofVersion,
+		"updated_at":    updatedAt.UTC().Format(time.RFC3339Nano),
+		"message":       fmt.Sprintf("Proof action %s processed successfully", req.Action),
+	}
+	c.JSON(http.StatusOK, res)
 }

@@ -2,6 +2,7 @@ import { percentageTarget } from '../../../../api/paymentReview';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   CreditCard,
+  Banknote,
   Sparkles,
   CheckCircle2,
   X,
@@ -35,13 +36,15 @@ interface PaymentSlipCardProps {
   isPaymentConfirmed: boolean;
   currentLang: string;
   formatLAK: (n: number) => string;
-  onConfirmFullPayment: () => void;
-  onConfirmDepositPayment: (amount: number) => void;
+  onConfirmFullPayment: (methodId?: string) => void;
+  onConfirmDepositPayment: (amount: number, methodId?: string) => void;
   onRevertPayment: () => void;
   onRejectSlip: () => void;
   onUploadSlip?: (file: File) => Promise<string>;
   onDiscardSlipDraft?: () => void;
+  onRemoveSlip?: () => void | Promise<void>;
   setLightbox?: (v: { src: string; title: string } | null) => void;
+  bankAccounts?: any[];
 }
 
 export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
@@ -68,8 +71,29 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
   onRevertPayment,
   onRejectSlip,
   onUploadSlip, onDiscardSlipDraft,
+  onRemoveSlip,
   setLightbox,
+  bankAccounts = [],
 }) => {
+  const [paymentMethodTab, setPaymentMethodTab] = useState<'TRANSFER' | 'CASH'>('TRANSFER');
+  const activeBankAccounts = (bankAccounts || []).filter((b: any) => b.id !== 'cash' && b.isActive !== false);
+  const [selectedBankId, setSelectedBankId] = useState<string>(() => {
+    const defaultAcc = (bankAccounts || []).find((b: any) => (b.isDefault || b.is_default) && b.id !== 'cash');
+    return defaultAcc?.id || activeBankAccounts[0]?.id || '';
+  });
+
+  useEffect(() => {
+    if (!selectedBankId && activeBankAccounts.length > 0) {
+      const defaultAcc = activeBankAccounts.find((b: any) => b.isDefault || b.is_default);
+      setSelectedBankId(defaultAcc?.id || activeBankAccounts[0].id);
+    }
+  }, [bankAccounts, selectedBankId]);
+
+  const getEffectiveMethodId = () => {
+    if (paymentMethodTab === 'CASH') return 'cash';
+    return selectedBankId || (activeBankAccounts[0]?.id ?? '');
+  };
+
   const [localSlip, setLocalSlip] = useState<string | null>(paymentSlipUrl || null);
   useEffect(() => { setLocalSlip(paymentSlipUrl || null); }, [orderIdDisplay, paymentSlipUrl]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -143,42 +167,112 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
     }
   };
 
-  const handleRemoveLocalSlip = (e: React.MouseEvent) => {
+  const handleRemoveLocalSlip = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (uploadPending) return;
-    setLocalSlip(null); setDraftFile(null); setUploadError(''); onDiscardSlipDraft?.();
+    setLocalSlip(null);
+    setDraftFile(null);
+    setUploadError('');
+    onDiscardSlipDraft?.();
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+    if (onRemoveSlip) {
+      await onRemoveSlip();
     }
   };
 
   return (
     <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-7 shadow-sm space-y-5 flex flex-col justify-between">
       <div>
-        <div className="flex flex-wrap items-center gap-2 mb-4 text-xs font-bold text-slate-700">
-          <button type="button" role="switch" aria-label="ໂໝດມັດຈຳ" aria-checked={depositMode === 'ON'} aria-busy={depositModePending}
-            disabled={reviewPending || depositModePending || !!depositModeDisabledReason || !onDepositModeChange}
-            onClick={() => onDepositModeChange?.(depositMode === 'ON' ? 'OFF' : 'ON')}
-            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:opacity-50 ${depositMode === 'ON' ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-            <span aria-hidden="true" className={`pointer-events-none h-5 w-5 rounded-full bg-white shadow-md transition-transform ${depositMode === 'ON' ? 'translate-x-5' : 'translate-x-0'}`} />
-          </button>
-          <span>ໂໝດມັດຈຳ: {depositMode === null ? 'ບໍ່ລະບຸ' : depositMode === 'ON' ? 'ເປີດ' : 'ປິດ'}</span>
-          {depositModePending ? <span role="status">ກຳລັງບັນທຶກໂໝດມັດຈຳ</span> : (depositModeDisabledReason || !onDepositModeChange) && <span>{depositModeDisabledReason || 'ບໍ່ສາມາດປ່ຽນໂໝດມັດຈຳໄດ້'}</span>}
+        {/* Deposit Policy Toggle Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4 p-2.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs">
+          <div className="flex items-center gap-2.5 font-bold text-slate-700">
+            <button
+              type="button"
+              role="switch"
+              aria-label="ໂໝດມັດຈຳ"
+              aria-checked={depositMode === 'ON'}
+              aria-busy={depositModePending}
+              disabled={reviewPending || depositModePending || !!depositModeDisabledReason || !onDepositModeChange}
+              onClick={() => onDepositModeChange?.(depositMode === 'ON' ? 'OFF' : 'ON')}
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:opacity-50 cursor-pointer ${
+                depositMode === 'ON' ? 'bg-emerald-500' : 'bg-slate-300'
+              }`}
+            >
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none h-5 w-5 rounded-full bg-white shadow-md transition-transform ${
+                  depositMode === 'ON' ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+            <span>ໂໝດມັດຈຳ:</span>
+            <span className={`px-2 py-0.5 rounded-lg text-[11px] font-black ${
+              depositMode === 'ON'
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                : 'bg-slate-200 text-slate-600'
+            }`}>
+              {depositMode === null ? 'ບໍ່ລະບຸ' : depositMode === 'ON' ? 'ເປີດ (ON)' : 'ປິດ (OFF)'}
+            </span>
+          </div>
+
+          <div className="text-[11px] text-slate-500 font-medium">
+            {depositModePending ? (
+              <span role="status" className="text-sky-600 font-bold animate-pulse">ກຳລັງບັນທຶກໂໝດມັດຈຳ...</span>
+            ) : depositModeDisabledReason ? (
+              <span className="text-amber-700 font-bold">{depositModeDisabledReason}</span>
+            ) : null}
+          </div>
         </div>
         {uploadError && <div role="alert">{uploadError}{draftFile && <button type="button" disabled={uploadPending} onClick={() => saveDraftSlip(draftFile)}>ລອງບັນທຶກສະລິບໃໝ່</button>}</div>}
         {uploadPending && <p role="status">ກຳລັງບັນທຶກສະລິບ</p>}
         {reviewError && <p role="alert" className="text-sm text-red-600">{reviewError}</p>}
         {reviewPending && <p role="status">{currentLang === 'lo' ? 'ກຳລັງບັນທຶກຜົນກວດສອບ...' : 'Saving payment review...'}</p>}
+        {/* Payment Method Switcher */}
+        <div className="grid grid-cols-2 gap-2 mb-4 p-1 rounded-2xl bg-slate-100 border border-slate-200/80 text-xs">
+          <button
+            type="button"
+            onClick={() => setPaymentMethodTab('TRANSFER')}
+            className={`py-2 px-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+              paymentMethodTab === 'TRANSFER'
+                ? 'bg-white text-sky-700 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <CreditCard className="w-3.5 h-3.5" />
+            <span>{currentLang === 'lo' ? 'ໂອນຜ່ານທະນາຄານ' : 'Bank Transfer'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setPaymentMethodTab('CASH')}
+            className={`py-2 px-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+              paymentMethodTab === 'CASH'
+                ? 'bg-white text-emerald-700 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Banknote className="w-3.5 h-3.5" />
+            <span>{currentLang === 'lo' ? 'ຮັບເງິນສົດໜ້າຮ້ານ' : 'Counter Cash'}</span>
+          </button>
+        </div>
+
         {/* Card Title */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center border border-sky-100">
-              <CreditCard className="w-4 h-4" />
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
+              paymentMethodTab === 'CASH'
+                ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                : 'bg-sky-50 text-sky-600 border-sky-100'
+            }`}>
+              {paymentMethodTab === 'CASH' ? <Banknote className="w-4 h-4" /> : <CreditCard className="w-4 h-4" />}
             </div>
             <div>
-              <span className="text-[10px] font-black uppercase text-sky-600 tracking-wider block">Step 1</span>
+              <span className={`text-[10px] font-black uppercase tracking-wider block ${paymentMethodTab === 'CASH' ? 'text-emerald-600' : 'text-sky-600'}`}>Step 1</span>
               <h3 className="text-sm font-black text-slate-900">
-                {currentLang === 'lo' ? '1. ກວດສອບສະລິບໂອນເງິນຜ່ານທະນາຄານ' : '1. Bank Transfer Slip Verification'}
+                {paymentMethodTab === 'CASH'
+                  ? (currentLang === 'lo' ? '1. ຮັບເງິນສົດໜ້າຮ້ານ (Counter Cash)' : '1. Counter Cash Payment')
+                  : (currentLang === 'lo' ? '1. ກວດສອບສະລິບໂອນເງິນຜ່ານທະນາຄານ' : '1. Bank Transfer Slip Verification')}
               </h3>
             </div>
           </div>
@@ -197,60 +291,124 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
           </span>
         </div>
 
-        {/* Hidden File Input for Upload */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          disabled={uploadPending || reviewPending}
-          accept="image/*,.pdf"
-          className="hidden"
-        />
-
-        {/* Slip Preview or Upload Box */}
-        {activeSlip ? (
-          <div
-            onClick={() => {
-              if (activeSlip && setLightbox) {
-                setLightbox({ src: activeSlip, title: `Bank Transfer Slip - Order #${orderIdDisplay}` });
-              }
-            }}
-            className="w-full min-h-[200px] max-h-[240px] rounded-2xl bg-slate-50 border-2 border-slate-200 flex flex-col items-center justify-center p-3 overflow-hidden cursor-pointer hover:border-sky-400 hover:bg-sky-50/20 transition relative group shadow-inner"
-            title={currentLang === 'lo' ? 'ຄລິກເພື່ອເບິ່ງຮູບສະລິບເຕັມຈໍ' : 'Click to view full slip image'}
-          >
-            <ArtworkThumbnail url={activeSlip} name="payment-slip" alt="Bank Transfer Slip" fit="contain" language={currentLang} />
-            <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition rounded-2xl flex items-center justify-center gap-2 text-xs font-black text-white">
-              <Eye className="w-4 h-4 text-sky-400" />
-              <span>{currentLang === 'lo' ? 'ຄລິກເພື່ອຂະຫຍາຍຮູບສະລິບ' : 'Click to Zoom'}</span>
+        {paymentMethodTab === 'CASH' ? (
+          /* Counter Cash Card */
+          <div className="w-full rounded-2xl bg-gradient-to-br from-emerald-50/70 to-teal-50/40 border-2 border-emerald-200/80 p-5 text-center space-y-2 shadow-inner">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto border border-emerald-200 shadow-xs">
+              <Banknote className="w-6 h-6 text-emerald-700" />
             </div>
-            <button
-              type="button"
-              onClick={handleRemoveLocalSlip}
-              className="absolute top-2 right-2 p-1.5 bg-slate-900/80 hover:bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition shadow-sm z-10 cursor-pointer"
-              title={currentLang === 'lo' ? 'ປ່ຽນຮູບສະລິບ / ລົບອອກ' : 'Remove / Change Slip'}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        ) : (
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full min-h-[200px] max-h-[240px] rounded-2xl bg-slate-50 border-2 border-dashed border-slate-300 hover:border-sky-500 hover:bg-sky-50/30 flex flex-col items-center justify-center p-4 text-center cursor-pointer transition group shadow-inner"
-          >
-            <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center mx-auto border border-sky-200 shadow-xs mb-2 group-hover:scale-105 transition">
-              <Upload className="w-5 h-5 text-sky-700" />
-            </div>
-            <p className="text-xs font-black text-slate-800">
-              {currentLang === 'lo' ? 'ອັບໂຫລດສະລິບ ຫຼື ແນບຫຼັກຖານການໂອນ' : 'Upload Bank Transfer Slip'}
+            <h4 className="text-xs font-black text-emerald-950">
+              {currentLang === 'lo' ? 'ຮັບຊຳລະດ້ວຍເງິນສົດໜ້າຮ້ານ' : 'Counter Cash Payment'}
+            </h4>
+            <p className="text-[11px] text-emerald-800 font-medium max-w-xs mx-auto">
+              {currentLang === 'lo' ? 'ຮັບເງິນສົດໂດຍກົງຈາກລູກຄ້າ ບໍ່ຈຳເປັນຕ້ອງແນບສະລິບໂອນເງິນ' : 'Direct cash transaction at counter without slip attachment'}
             </p>
-            <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
-              {currentLang === 'lo' ? 'ຮອງຮັບທຸກທະນາຄານ (BCEL, JDB, LDB, APB, ຯລຯ)' : 'Supports all bank transfer slips'}
-            </p>
-            <span className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-[11px] font-bold text-slate-700 shadow-xs group-hover:border-sky-400 group-hover:text-sky-700 transition">
-              <ImageIcon className="w-3.5 h-3.5 text-sky-600" />
-              <span>{currentLang === 'lo' ? 'ເລືອກຟາຍສະລິບ / ອັບໂຫລດຮູບ' : 'Choose Slip Image'}</span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/80 border border-emerald-200 text-[10.5px] font-bold text-emerald-800">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{currentLang === 'lo' ? 'ພ້ອມບັນທຶກຮັບເງິນສົດ' : 'Ready to record cash receipt'}</span>
             </span>
           </div>
+        ) : (
+          /* Bank Transfer Slip Mode */
+          <>
+            {/* Receiving Bank Account Selector */}
+            <div className="mb-3 space-y-1 text-xs">
+              <label htmlFor="receiving-bank-select" className="block text-[11px] font-bold text-slate-600">
+                {currentLang === 'lo' ? 'ບັນຊີທະນາຄານຮັບເງິນ:' : 'Receiving Bank Account:'}
+              </label>
+              <select
+                id="receiving-bank-select"
+                aria-label={currentLang === 'lo' ? 'ບັນຊີທະນາຄານຮັບເງິນ' : 'Receiving Bank Account'}
+                value={selectedBankId}
+                onChange={(e) => setSelectedBankId(e.target.value)}
+                disabled={reviewPending}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 outline-hidden transition"
+              >
+                {activeBankAccounts.length === 0 ? (
+                  <option value="">{currentLang === 'lo' ? 'ບໍ່ພົບບັນຊີທະນາຄານ' : 'No bank accounts available'}</option>
+                ) : (
+                  activeBankAccounts.map((b: any) => (
+                    <option key={b.id} value={b.id}>
+                      {(b.bankName || b.bank_name || b.name || b.id)} • {(b.accountNumber || b.account_number || '')} ({(b.accountName || b.account_holder || '')})
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            {/* Hidden File Input for Upload */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              disabled={uploadPending || reviewPending}
+              accept="image/*,.pdf"
+              className="hidden"
+            />
+
+            {/* Slip Preview or Upload Box */}
+            {activeSlip ? (
+              <div className="space-y-2.5">
+                <div
+                  onClick={() => {
+                    if (activeSlip && setLightbox) {
+                      setLightbox({ src: activeSlip, title: `Bank Transfer Slip - Order #${orderIdDisplay}` });
+                    }
+                  }}
+                  className="w-full min-h-[190px] max-h-[230px] rounded-2xl bg-slate-50 border-2 border-slate-200 flex flex-col items-center justify-center p-3 overflow-hidden cursor-pointer hover:border-sky-400 hover:bg-sky-50/20 transition relative group shadow-inner"
+                  title={currentLang === 'lo' ? 'ຄລິກເພື່ອເບິ່ງຮູບສະລິບເຕັມຈໍ' : 'Click to view full slip image'}
+                >
+                  <ArtworkThumbnail url={activeSlip} name="payment-slip" alt="Bank Transfer Slip" fit="contain" language={currentLang} />
+                  <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition rounded-2xl flex items-center justify-center gap-2 text-xs font-black text-white">
+                    <Eye className="w-4 h-4 text-sky-400" />
+                    <span>{currentLang === 'lo' ? 'ຄລິກເພື່ອຂະຫຍາຍຮູບສະລິບ' : 'Click to Zoom'}</span>
+                  </div>
+                </div>
+
+                {/* Explicit, Prominent Action Bar for Slip */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadPending || reviewPending}
+                    className="flex-1 py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center justify-center gap-1.5 border border-slate-200 cursor-pointer disabled:opacity-50 active:scale-95 shadow-xs"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-sky-600" />
+                    <span>{currentLang === 'lo' ? 'ປ່ຽນຮູບສະລິບ' : 'Change Slip'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRemoveLocalSlip}
+                    disabled={uploadPending || reviewPending}
+                    className="py-2 px-3.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50 active:scale-95"
+                    title={currentLang === 'lo' ? 'ລຶບສະລິບໂອນເງິນອອກ' : 'Remove payment slip'}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                    <span>{currentLang === 'lo' ? 'ລຶບສະລິບອອກ' : 'Remove Slip'}</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full min-h-[190px] max-h-[230px] rounded-2xl bg-slate-50 border-2 border-dashed border-slate-300 hover:border-sky-500 hover:bg-sky-50/30 flex flex-col items-center justify-center p-4 text-center cursor-pointer transition group shadow-inner"
+              >
+                <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center mx-auto border border-sky-200 shadow-xs mb-2 group-hover:scale-105 transition">
+                  <Upload className="w-5 h-5 text-sky-700" />
+                </div>
+                <p className="text-xs font-black text-slate-800">
+                  {currentLang === 'lo' ? 'ອັບໂຫລດສະລິບ ຫຼື ແນບຫຼັກຖານການໂອນ' : 'Upload Bank Transfer Slip'}
+                </p>
+                <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
+                  {currentLang === 'lo' ? 'ຮອງຮັບທຸກທະນາຄານ (BCEL, JDB, LDB, APB, ຯລຯ)' : 'Supports all bank transfer slips'}
+                </p>
+                <span className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-[11px] font-bold text-slate-700 shadow-xs group-hover:border-sky-400 group-hover:text-sky-700 transition">
+                  <ImageIcon className="w-3.5 h-3.5 text-sky-600" />
+                  <span>{currentLang === 'lo' ? 'ເລືອກຟາຍສະລິບ / ອັບໂຫລດຮູບ' : 'Choose Slip Image'}</span>
+                </span>
+              </div>
+            )}
+          </>
         )}
 
         {/* Amount Breakdown Summary */}
@@ -321,13 +479,16 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
           </div>
         ) : (
           <div className="space-y-3">
-            {/* Proposed amount is distinct from confirmed receipts. */}
-            {(depositMode === 'ON' || !receiptRequestMode) && <>
+            {/* Custom Deposit / Partial Payment Calculation (Available for both ON and OFF deposit modes) */}
             <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
                   <DollarSign className="w-3.5 h-3.5 text-sky-600" />
-                  <span>ກຳນົດຍອດມັດຈຳ (Custom Deposit % / Amount)</span>
+                  <span>
+                    {depositMode === 'ON'
+                      ? (currentLang === 'lo' ? 'ກຳນົດຍອດມັດຈຳ (Custom Deposit)' : 'Custom Deposit')
+                      : (currentLang === 'lo' ? 'ກຳນົດຍອດຊຳລະບາງສ່ວນ (Partial Payment)' : 'Partial Payment')}
+                  </span>
                 </span>
                 <span className="text-xs font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-lg border border-sky-200">
                   {customDepositPercent}%
@@ -356,7 +517,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <label className="text-[10.5px] font-bold text-slate-500 block mb-1">
-                    ລະບຸ % ມັດຈຳ:
+                    {currentLang === 'lo' ? 'ລະບຸ %:' : 'Percentage:'}
                   </label>
                   <div className="relative">
                     <input
@@ -373,7 +534,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
 
                 <div>
                   <label className="text-[10.5px] font-bold text-slate-500 block mb-1">
-                    ຍອດເງິນມັດຈຳ (LAK):
+                    {currentLang === 'lo' ? 'ຍອດເງິນ (LAK):' : 'Amount (LAK):'}
                   </label>
                   <input
                     type="number"
@@ -385,43 +546,51 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
                   />
                 </div>
               </div>
-
-
-            </div></>}
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {/* Option 1: Full Payment (100%) */}
               <button
                 type="button"
                 disabled={reviewPending}
-                onClick={onConfirmFullPayment}
+                onClick={() => onConfirmFullPayment(getEffectiveMethodId())}
                 className="py-3 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border-none"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>{receiptRequestMode ? 'ສ້າງຄຳຂໍຊຳລະຍອດຄ້າງ' : currentLang === 'lo' ? 'ຢືນຢັນຊຳລະ 100%' : 'Confirm Full 100%'}</span>
+                <span>
+                  {receiptRequestMode
+                    ? (currentLang === 'lo' ? 'ສ້າງຄຳຂໍຊຳລະເຕັມ 100%' : 'Request Full 100%')
+                    : (currentLang === 'lo' ? 'ຢືນຢັນຊຳລະ 100%' : 'Confirm Full 100%')}
+                </span>
               </button>
 
-              {/* Option 2: Dynamic Deposit Payment */}
-              {(depositMode === 'ON' || !receiptRequestMode) && <button
+              {/* Option 2: Dynamic Deposit / Partial Payment */}
+              <button
                 type="button"
                 disabled={reviewPending}
-                onClick={() => onConfirmDepositPayment(customDepositAmount)}
+                onClick={() => onConfirmDepositPayment(customDepositAmount, getEffectiveMethodId())}
                 className="py-3 px-3 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-black shadow-md shadow-sky-500/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border-none"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>{receiptRequestMode ? 'ສ້າງຄຳຂໍມັດຈຳ' : 'ຢືນຢັນມັດຈຳ'} ({formatLAK(customDepositAmount)})</span>
-              </button>}
+                <span>
+                  {receiptRequestMode
+                    ? (depositMode === 'ON' ? (currentLang === 'lo' ? 'ສ້າງຄຳຂໍມັດຈຳ' : 'Request Deposit') : (currentLang === 'lo' ? 'ສ້າງຄຳຂໍຊຳລະບາງສ່ວນ' : 'Request Partial'))
+                    : (depositMode === 'ON' ? (currentLang === 'lo' ? 'ຢືນຢັນມັດຈຳ' : 'Confirm Deposit') : (currentLang === 'lo' ? 'ຢືນຢັນຊຳລະບາງສ່ວນ' : 'Confirm Partial'))} ({formatLAK(customDepositAmount)})
+                </span>
+              </button>
             </div>
 
-            <button
-              type="button"
-              disabled={reviewPending}
+            {paymentMethodTab === 'TRANSFER' && activeSlip && (
+              <button
+                type="button"
+                disabled={reviewPending}
                 onClick={onRejectSlip}
-              className="w-full py-2 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-600 border border-slate-200 text-[11px] font-bold transition active:scale-95 cursor-pointer flex items-center justify-center gap-1"
-            >
-              <X className="w-3.5 h-3.5" />
-              <span>{currentLang === 'lo' ? 'ປະຕິເສດສະລິບ' : 'Reject Slip'}</span>
-            </button>
+                className="w-full py-2 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-600 border border-slate-200 text-[11px] font-bold transition active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>{currentLang === 'lo' ? 'ປະຕິເສດສະລິບ' : 'Reject Slip'}</span>
+              </button>
+            )}
           </div>
         )}
       </div>

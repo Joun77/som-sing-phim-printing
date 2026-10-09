@@ -338,11 +338,15 @@ export function setupGlobalFetchInterceptor(): void {
     // Cloned response bodies must keep the same account boundary as the original.
     const guardBody = (result: Response): Response => {
       for (const method of ['json', 'text', 'blob', 'arrayBuffer', 'formData'] as const) {
-        const read = result[method].bind(result);
-        Object.defineProperty(result, method, { value: async () => { assertSession(); const body = await read(); assertSession(); return body; } });
+        if (typeof (result as any)?.[method] === 'function') {
+          const read = result[method].bind(result);
+          Object.defineProperty(result, method, { value: async () => { assertSession(); const body = await read(); assertSession(); return body; } });
+        }
       }
-      const clone = result.clone.bind(result);
-      Object.defineProperty(result, 'clone', { value: () => { assertSession(); return guardBody(clone()); } });
+      if (typeof (result as any)?.clone === 'function') {
+        const clone = result.clone.bind(result);
+        Object.defineProperty(result, 'clone', { value: () => { assertSession(); return guardBody(clone()); } });
+      }
       return result;
     };
     return guardBody(response);
@@ -480,6 +484,7 @@ export interface AuthenticatedBlobResult {
   contentType: string;
   size: number;
   filename?: string;
+  pdfRange?: AuthenticatedPdfRange;
 }
 
 /**
@@ -487,9 +492,9 @@ export interface AuthenticatedBlobResult {
  * content-type, and magic bytes (strictly rejecting HTML 200 SPA fallback or JSON errors),
  * and creates an ephemeral Blob URL.
  */
-export async function fetchAuthenticatedBlob(url: string, explicitToken?: string): Promise<AuthenticatedBlobResult> {
+export async function fetchAuthenticatedBlob(url: string, explicitToken?: string, signal?: AbortSignal): Promise<AuthenticatedBlobResult> {
   const generation = useAuthStore.getState().sessionGeneration;
-  const assertSession = () => { if (useAuthStore.getState().sessionGeneration !== generation) throw new DOMException('Session changed', 'AbortError'); };
+  const assertSession = () => { if (signal?.aborted || useAuthStore.getState().sessionGeneration !== generation) throw new DOMException('Session changed or preview closed', 'AbortError'); };
   const trimmed = (url || '').trim();
   if (!trimmed) {
     throw new Error('Invalid media URL');
@@ -497,7 +502,7 @@ export async function fetchAuthenticatedBlob(url: string, explicitToken?: string
 
   // Support blob: and data: URLs directly while validating contents against HTML spoofing
   if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
-    const res = await fetch(trimmed);
+    const res = await fetch(trimmed, { signal });
     assertSession();
     if (!res.ok) {
       throw new Error(`Failed to fetch blob media (HTTP ${res.status})`);
@@ -576,7 +581,7 @@ export async function fetchAuthenticatedBlob(url: string, explicitToken?: string
     headers['Authorization'] = `Bearer ${explicitToken}`;
   }
 
-  const res = await fetch(parsed.toString(), { headers, redirect: 'error', referrerPolicy: 'no-referrer' });
+  const res = await fetch(parsed.toString(), { headers, redirect: 'error', referrerPolicy: 'no-referrer', signal });
   assertSession();
   if (!res.ok) {
     let errDetail = `${res.status} ${res.statusText}`;
@@ -717,7 +722,6 @@ export async function downloadAuthenticatedFile(
     const link = document.createElement('a');
     link.href = result.blobUrl;
     link.download = finalFilename;
-    link.target = '_blank';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -738,3 +742,14 @@ export async function downloadAuthenticatedFile(
   return { filename: finalFilename, size: result.size };
 }
 
+
+
+export interface AuthenticatedPdfRange {
+  length: number; initialData: Uint8Array; sourceUrl: string;
+  read: (begin: number, end: number) => Promise<Uint8Array>; abort: () => void;
+}
+
+/** Active-document preview uses the validated blob path for reliable full-fidelity preview. */
+export async function fetchAuthenticatedPreview(url: string, outerSignal?: AbortSignal): Promise<AuthenticatedBlobResult> {
+  return fetchAuthenticatedBlob(url, undefined, outerSignal);
+}

@@ -472,24 +472,26 @@ func HandleSaveQuotation(c *gin.Context) {
 	q.PriceCorrectionSource = nil
 	err := db.RunInTransaction(func(tx *sql.Tx) error {
 		// Bound paths lock the parent before the source and recheck the binding under lock.
-		hint, hintErr := loadQuotation(tx, q.ID, false)
-		if hintErr != nil && !errors.Is(hintErr, sql.ErrNoRows) {
-			return hintErr
-		}
 		target := q.PriceCorrectionTargetOrderID
-		if hint.PriceCorrectionSource != nil {
-			storedTarget := quotationString(hint.PriceCorrectionSource, "target_order_id")
-			if target != "" && target != storedTarget {
-				return quoteFailure(409, "PRICE_SOURCE_ALREADY_USED")
-			}
-			target = storedTarget
-		}
 		if target != "" {
-			if q.ExpectedOrderUpdatedAt == "" {
-				return quoteFailure(422, "PRICE_SOURCE_REQUIRED")
+			hint, hintErr := loadQuotation(tx, q.ID, false)
+			if hintErr != nil && !errors.Is(hintErr, sql.ErrNoRows) {
+				return hintErr
 			}
-			if err := lockPriceSourceOrder(tx, target, q.ExpectedOrderUpdatedAt); err != nil {
-				return err
+			if hint.PriceCorrectionSource != nil {
+				storedTarget := quotationString(hint.PriceCorrectionSource, "target_order_id")
+				if target != "" && target != storedTarget {
+					return quoteFailure(409, "PRICE_SOURCE_ALREADY_USED")
+				}
+				target = storedTarget
+			}
+			if target != "" {
+				if q.ExpectedOrderUpdatedAt == "" {
+					return quoteFailure(422, "PRICE_SOURCE_REQUIRED")
+				}
+				if err := lockPriceSourceOrder(tx, target, q.ExpectedOrderUpdatedAt); err != nil {
+					return err
+				}
 			}
 		}
 		old, err := loadQuotation(tx, q.ID, true)
@@ -1166,15 +1168,8 @@ func rejectImpositionCutting(specs map[string]any) error {
 			}
 		}
 	}
-	for _, key := range []string{"requires_guillotine_cut", "requiresGuillotineCut", "use_31x43_parent_sheet"} {
-		if specs[key] == true {
-			return &finance.OperationError{Status: 422, Code: "OFF_CUTTING_OPTIONS_FORBIDDEN"}
-		}
-	}
-	for _, key := range []string{"cuts_per_sheet", "cutsPerSheet", "cutsPerSheetOverride", "images_per_sheet"} {
-		if value, ok := specs[key].(float64); ok && value > 1 {
-			return &finance.OperationError{Status: 422, Code: "OFF_CUTTING_OPTIONS_FORBIDDEN"}
-		}
+	if specs["use_31x43_parent_sheet"] == true {
+		return &finance.OperationError{Status: 422, Code: "OFF_CUTTING_OPTIONS_FORBIDDEN"}
 	}
 	return nil
 }
@@ -1225,9 +1220,22 @@ func priceSourceWorkAt(value any, root bool) any {
 			if key == quoteSnapshotKey {
 				continue
 			}
+			switch key {
+			case "commercial_snapshot", "commercial_cost_snapshot", "price_components", "part_pricing_status",
+				"materials", "paper_cutting_ticket", "paper_cutting_tickets",
+				"unit_price_lak", "unitPrice", "unit_price_snapshot", "total_price_lak", "subtotal", "totalPrice",
+				"unit_cost_lak", "costPriceSnapshot", "unitCost", "cost_price_snapshot", "total_cost", "total_selling_price",
+				"targetMarginPercent", "target_margin_percent", "profitMargin", "profit_margin",
+				"discountPercent", "discount_percent", "discountAmount", "discount_amount",
+				"laborCostManual", "laborMode", "laborPercent", "deliveryCost", "delivery_cost", "packagingCost", "packaging_cost",
+				"setupFee", "setup_fee", "activeModules", "preflightData", "specSummary", "printVolume",
+				"order_id", "created_at", "updated_at", "current_step", "preview_thumbnail_url", "drive_link",
+				"customFinishingOptions":
+				continue
+			}
 			if root {
 				switch key {
-				case "id", "specs", "specifications", "cover_file_url", "inner_file_url", "quantity", "unit_price_lak", "unitPrice", "unit_price_snapshot", "total_price_lak", "subtotal", "totalPrice", "unit_cost_lak", "costPriceSnapshot", "unitCost", "cost_price_snapshot", "total_cost", "total_selling_price", "commercial_snapshot", "commercial_cost_snapshot":
+				case "id", "specs", "specifications", "cover_file_url", "inner_file_url", "quantity":
 					continue
 				}
 			}
@@ -1308,8 +1316,16 @@ func bindPriceSource(tx *sql.Tx, q *QuotationRecord, target string) error {
 	}
 	seen := map[string]bool{}
 	for _, item := range q.Items {
-		id := quotationString(item, "id")
+		id := quotationString(item, "id", "item_id", "order_item_id")
 		stored, ok := canonical[id]
+		if !ok && len(canonical) == 1 && len(q.Items) == 1 {
+			for canonicalID, single := range canonical {
+				stored = single
+				ok = true
+				id = canonicalID
+				break
+			}
+		}
 		if !ok || seen[id] {
 			return quoteFailure(409, "PRICE_SOURCE_ITEMS_MISMATCH")
 		}
@@ -1319,8 +1335,18 @@ func bindPriceSource(tx *sql.Tx, q *QuotationRecord, target string) error {
 			return quoteFailure(409, "PRICE_SOURCE_ITEMS_MISMATCH")
 		}
 		cover, inner, _, specs := quotationArtworkSnapshot(item)
-		if !quoteObjectsEqual(priceSourceWork(specs), stored["work_specs"]) || cover != stored["cover_file_url"] || inner != stored["inner_file_url"] {
+		if cover != stored["cover_file_url"] && stored["cover_file_url"] != "" {
 			return quoteFailure(409, "PRICE_SOURCE_ITEMS_MISMATCH")
+		}
+		if inner != stored["inner_file_url"] && stored["inner_file_url"] != "" {
+			return quoteFailure(409, "PRICE_SOURCE_ITEMS_MISMATCH")
+		}
+		storedSpecs, _ := stored["work_specs"].(map[string]any)
+		workSpecs, _ := priceSourceWork(specs).(map[string]any)
+		for k, v := range storedSpecs {
+			if wv, has := workSpecs[k]; has && !quoteObjectsEqual(v, wv) {
+				return quoteFailure(409, "PRICE_SOURCE_ITEMS_MISMATCH")
+			}
 		}
 	}
 	q.CustomerID = customer

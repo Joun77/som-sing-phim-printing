@@ -3,6 +3,11 @@ name: somsing-security-specialist
 description: ทักษะและความเชี่ยวชาญสำหรับผู้เชี่ยวชาญด้านความปลอดภัย (Security Specialist) ในระบบ Som Sing Phim ครอบคลุมการตรวจสอบช่องโหว่ (Vulnerability Audit), การยืนยันสิทธิ์และตัวตน (Authentication & Authorization / RBAC), ความปลอดภัยของ API และการป้องกัน SQL Injection / XSS / CSRF, การจัดการ Secret, และการรักษาความปลอดภัยของข้อมูลธุรกรรมและไฟล์อัปโหลด
 ---
 
+## Shared Codex / Antigravity standard
+
+Before this specialty workflow, read [the shared working standard](../somsing-dev-coordinator/references/shared-working-standard.md). Both apps use the same task, source identity, product standards and evidence criteria; tool adapters differ. This reference governs conflicting historical workflow/UI/verification examples below, while direct human instructions retain priority.
+
+
 # Somsin Security Specialist Skill
 
 ทักษะคู่มือผู้เชี่ยวชาญด้านความปลอดภัยของระบบ (Security Specialist & Auditor) สำหรับระบบโรงพิมพ์ **Som Sing Phim (สมสิงห์การพิมพ์)** ครอบคลุมทั้งฝั่ง Frontend (Admin ERP & Storefront), Go Backend และฐานข้อมูล PostgreSQL

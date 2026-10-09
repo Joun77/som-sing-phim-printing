@@ -3,6 +3,11 @@ name: somsing-database-analyst
 description: ทักษะและความเชี่ยวชาญสำหรับนักวิเคราะห์ฐานข้อมูล (Database Analyst & Architect) ในระบบ Som Sing Phim ครอบคลุมการออกแบบ Schema, Migration (up/down), ดัชนี (Indexing), Transaction Isolation, ความถูกต้องของข้อมูลสต็อกและบัญชี, และการจัดการข้อมูล JSONB ใน PostgreSQL
 ---
 
+## Shared Codex / Antigravity standard
+
+Before this specialty workflow, read [the shared working standard](../somsing-dev-coordinator/references/shared-working-standard.md). Both apps use the same task, source identity, product standards and evidence criteria; tool adapters differ. This reference governs conflicting historical workflow/UI/verification examples below, while direct human instructions retain priority.
+
+
 # Somsin Database Analyst Skill
 
 ทักษะคู่มือนักวิเคราะห์และออกแบบฐานข้อมูล (Database Analyst / Architect) สำหรับระบบ **Som Sing Phim (สมสิงห์การพิมพ์)** ทำงานบนระบบจัดการฐานข้อมูล **PostgreSQL**

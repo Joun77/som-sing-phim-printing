@@ -139,9 +139,14 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({ isOp
 
   const handleMove = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= categories.length) return;
     const moved = categories[index], neighbor = categories[targetIndex];
     if (!moved || !neighbor || reorderMutation.isPending) return;
-    const payload = [{ id: moved.id, sortOrder: neighbor.sortOrder }, { id: neighbor.id, sortOrder: moved.sortOrder }];
+
+    const nextCategories = [...categories];
+    nextCategories[index] = neighbor;
+    nextCategories[targetIndex] = moved;
+    const payload = nextCategories.map((c, i) => ({ id: c.id, sortOrder: (i + 1) * 10 }));
 
     try { await reorderMutation.mutateAsync(payload); setActionError(''); }
     catch (error) { setActionError(error instanceof Error ? error.message : 'ບໍ່ສາມາດຈັດລຳດັບໄດ້'); }

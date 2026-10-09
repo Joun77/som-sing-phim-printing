@@ -3,6 +3,9 @@ export interface QuotationItem {
   quantity: number;
   unitPrice: number;
   id?: string;
+  manualSheetCount?: number;
+  manual_sheet_count?: number;
+  [key: string]: any;
 }
 
 export interface QuotationVersion {

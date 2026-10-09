@@ -23,6 +23,7 @@ interface QuotationHistoryModalProps {
   onRevise: (quoteId: string) => void;
   onDelete: (quote: Quotation) => void;
   onConvertToOrder: (quote: Quotation) => void;
+  onOpenConvertedOrder?: (quote: Quotation) => void;
   onOpenApproval: (quote: Quotation) => void;
   onSaveDraft: () => void;
   isSaving?: boolean;
@@ -39,6 +40,7 @@ export const QuotationHistoryModal: React.FC<QuotationHistoryModalProps> = ({
   onRevise,
   onDelete,
   onConvertToOrder,
+  onOpenConvertedOrder,
   onOpenApproval,
   onSaveDraft,
   isSaving = false,
@@ -331,6 +333,17 @@ export const QuotationHistoryModal: React.FC<QuotationHistoryModalProps> = ({
                           {quote.convertedOrderId})
                         </span>
                       </span>
+                    )}
+                    {quote.convertedOrderId && onOpenConvertedOrder && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenConvertedOrder(quote)}
+                        disabled={convertingQuoteId === quote.id}
+                        aria-busy={convertingQuoteId === quote.id}
+                        className="px-3 py-1.5 text-xs font-black bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition cursor-pointer shadow-2xs disabled:opacity-60"
+                      >
+                        {convertingQuoteId === quote.id ? 'ກຳລັງກວດສອບອໍເດີ...' : 'ເປີດອໍເດີທີ່ມີແລ້ວ →'}
+                      </button>
                     )}
                   </div>
 

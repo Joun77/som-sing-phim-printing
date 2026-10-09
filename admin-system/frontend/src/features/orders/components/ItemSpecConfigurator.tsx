@@ -102,6 +102,9 @@ export function calculateItemCosting(item: any, inventory: any[] = [], equipment
 
   const hasPaperModule = item.activeModules ? item.activeModules.paper : true;
 
+  const impositionMode = item?.imposition_mode || item?.specs?.imposition_mode || item?.specifications?.imposition_mode || 'ON';
+  const isOff = impositionMode === 'OFF';
+
   if (hasPaperModule) {
     if (isRollFed) {
       totalSqMeters = Math.round(totalSqMetersForJob * 100) / 100;
@@ -109,6 +112,14 @@ export function calculateItemCosting(item: any, inventory: any[] = [], equipment
       const rollMaterialCostPerM2 = rollItem ? (rollItem.costPerM2 || rollItem.costPerSheet || 15000) : Number(item.rollMaterialCostPerM2 || 15000);
       totalPaperCost = Math.round(totalSqMeters * rollMaterialCostPerM2);
       paperUnitCost = rollMaterialCostPerM2;
+    } else if (isOff) {
+      cuts = 1;
+      parentSheetsNeeded = qty;
+      wastedSheets = Math.ceil(parentSheetsNeeded * (itemSpoilageRate / 100));
+      totalParentSheets = parentSheetsNeeded + wastedSheets;
+      const paperItem = inventory ? inventory.find(p => p.id === item.paperId) : null;
+      paperUnitCost = paperItem ? (paperItem.costPerConsumptionUnit || paperItem.costPerSheet || 1860) : 1860;
+      totalPaperCost = Math.round(totalParentSheets * paperUnitCost);
     } else {
       const paperItem = inventory ? inventory.find(p => p.id === item.paperId) : null;
       let parentW = 330, parentH = 480;
@@ -470,6 +481,7 @@ export default function ItemSpecConfigurator({
   const [tempItem, setTempItem] = useState(() => {
     const base = {
       mediaType: 'Sheet-fed',
+      imposition_mode: item?.imposition_mode || item?.specs?.imposition_mode || item?.specifications?.imposition_mode || 'ON',
       paperId: item?.paperId || defaultPaperId,
       printerId: item?.printerId || defaultPrinterId,
       jobSizePreset: item?.jobSizePreset || 'A4',
@@ -547,8 +559,11 @@ export default function ItemSpecConfigurator({
     return calculateItemCosting(tempItem, inventory, equipment);
   }, [tempItem, inventory, equipment]);
 
+  const isOff = (tempItem.imposition_mode || item?.imposition_mode || item?.specs?.imposition_mode || item?.specifications?.imposition_mode) === 'OFF';
+
   // Smart Offcut Suggestion Logic
   const matchingOffcut = useMemo(() => {
+    if (isOff) return null;
     if (!inventory || !Array.isArray(inventory)) return null;
     const jobW = Number(tempItem.jobWidth || 210);
     const jobH = Number(tempItem.jobHeight || 297);
@@ -1187,12 +1202,14 @@ export default function ItemSpecConfigurator({
               <div className="flex items-center gap-2.5">
                 <span className="w-6 h-6 rounded-lg bg-sky-600 text-white flex items-center justify-center font-sans font-black text-xs shadow-xs">3</span>
                 <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                  ເລືອກເຈ້ຍ & ຂະໜາດຕັດ (Paper & Cut Specs)
+                  {isOff ? 'ເລືອກເຈ້ຍ (Paper Specs - Pre-cut Substrate)' : 'ເລືອກເຈ້ຍ & ຂະໜາດຕັດ (Paper & Cut Specs)'}
                 </span>
-                <span className="text-[11px] font-bold px-2 py-0.5 bg-sky-50 text-sky-700 rounded-lg border border-sky-200 font-sans flex items-center gap-1">
-                  <Scissors className="w-3 h-3" />
-                  {costing.cuts} ຕັດ • {formatLAK(costing.totalPaperCost)}
-                </span>
+                {!isOff && (
+                  <span className="text-[11px] font-bold px-2 py-0.5 bg-sky-50 text-sky-700 rounded-lg border border-sky-200 font-sans flex items-center gap-1">
+                    <Scissors className="w-3 h-3" />
+                    {costing.cuts} ຕັດ • {formatLAK(costing.totalPaperCost)}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2 text-slate-400">
                 <span className="text-[11px] font-medium hidden sm:inline">{openPhases.phase3 ? 'ພັບເກັບ' : 'ເປີດເບິ່ງ'}</span>
@@ -1243,15 +1260,17 @@ export default function ItemSpecConfigurator({
                         className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold bg-white focus:outline-none focus:ring-2 focus:ring-sky-400"
                       />
                     </div>
-                    <div>
-                      <span className="text-[11px] font-bold text-slate-500 uppercase block mb-1">ຕັດເຜື່ອຂອບ Bleed (mm)</span>
-                      <input
-                        type="number"
-                        value={tempItem.bleedMargin !== undefined ? tempItem.bleedMargin : 2}
-                        onChange={(e) => updateField('bleedMargin', Number(e.target.value) || 2)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold bg-white focus:outline-none focus:ring-2 focus:ring-sky-400"
-                      />
-                    </div>
+                    {!isOff && (
+                      <div>
+                        <span className="text-[11px] font-bold text-slate-500 uppercase block mb-1">ຕັດເຜື່ອຂອບ Bleed (mm)</span>
+                        <input
+                          type="number"
+                          value={tempItem.bleedMargin !== undefined ? tempItem.bleedMargin : 2}
+                          onChange={(e) => updateField('bleedMargin', Number(e.target.value) || 2)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold bg-white focus:outline-none focus:ring-2 focus:ring-sky-400"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1274,7 +1293,7 @@ export default function ItemSpecConfigurator({
                 </div>
 
                 {/* Smart Offcut Suggestion Callout Banner */}
-                {matchingOffcut && matchingOffcut.id !== tempItem.paperId && (
+                {!isOff && matchingOffcut && matchingOffcut.id !== tempItem.paperId && (
                   <div className="p-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-2xl text-xs space-y-2.5 animate-fade-in shadow-xs">
                     <div className="flex items-center justify-between text-emerald-950 font-black">
                       <span className="flex items-center gap-1.5">
@@ -1317,70 +1336,94 @@ export default function ItemSpecConfigurator({
                 )}
 
                 {/* Paper Calculation Summary Box */}
-                <div className="p-4 bg-sky-50/90 border border-sky-200 rounded-2xl text-xs space-y-2.5">
-                  <div className="flex justify-between items-center text-sky-950 font-black">
-                    <span className="flex items-center gap-1.5">
-                      <Scissors className="w-4 h-4 text-sky-600" />
-                      <span>ສະຫຼຸບການໃຊ້ເຈ້ຍ ({tempItem.name || 'Item'})</span>
-                    </span>
-                    <span className="px-2.5 py-0.5 bg-sky-100 text-sky-900 rounded-md font-bold font-sans">
-                      {costing.cuts} ຊິ້ນ/ແຜ່ນ
-                    </span>
+                {isOff ? (
+                  <div className="p-4 bg-sky-50/90 border border-sky-200 rounded-2xl text-xs space-y-2.5">
+                    <div className="flex justify-between items-center text-sky-950 font-black">
+                      <span className="flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-sky-600" />
+                        <span>ສະຫຼຸບວັດສະດຸພິມກົງ ({tempItem.name || 'Item'})</span>
+                      </span>
+                      <span className="px-2.5 py-0.5 bg-sky-100 text-sky-900 rounded-md font-bold font-sans">
+                        ພິມກົງຂະໜາດຈິງ (1:1 Pre-Cut)
+                      </span>
+                    </div>
+                    <div className="text-slate-700 space-y-1.5 font-medium">
+                      <div className="flex justify-between">
+                        <span>ຕົ້ນທຶນເຈ້ຍຕໍ່ແຜ່ນ (Unit Cost):</span>
+                        <span className="font-sans font-bold text-slate-900">{formatLAK(costing.paperUnitCost)} / ແຜ່ນ</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>ຈຳນວນແຜ່ນທີ່ຕ້ອງໃຊ້ (Substrate Sheets):</span>
+                        <span className="font-sans font-bold text-slate-900">{(Number(tempItem.quantity || tempItem.printVolume || 1)).toLocaleString()} ແຜ່ນ</span>
+                      </div>
+                    </div>
                   </div>
-                  
-                  <div className="text-slate-700 space-y-1.5 font-medium">
-                    <div className="flex justify-between">
-                      <span>ຕົ້ນທຶນເຈ້ຍຕໍ່ແຜ່ນ (Unit Cost):</span>
-                      <span className="font-sans font-bold text-slate-900">{formatLAK(costing.paperUnitCost)} / ແຜ່ນ</span>
+                ) : (
+                  <div className="p-4 bg-sky-50/90 border border-sky-200 rounded-2xl text-xs space-y-2.5">
+                    <div className="flex justify-between items-center text-sky-950 font-black">
+                      <span className="flex items-center gap-1.5">
+                        <Scissors className="w-4 h-4 text-sky-600" />
+                        <span>ສະຫຼຸບການໃຊ້ເຈ້ຍ ({tempItem.name || 'Item'})</span>
+                      </span>
+                      <span className="px-2.5 py-0.5 bg-sky-100 text-sky-900 rounded-md font-bold font-sans">
+                        {costing.cuts} ຊິ້ນ/ແຜ່ນ
+                      </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span>ຈຳນວນແຜ່ນທີ່ຕ້ອງໃຊ້ (Base Sheets):</span>
-                      <span className="font-sans font-bold text-slate-900">{costing.parentSheetsNeeded.toLocaleString()} ແຜ່ນ</span>
-                    </div>
-                    <div className="space-y-1.5 pt-0.5 border-t border-sky-200/50">
-                      <div className="flex justify-between items-center text-amber-800 font-semibold">
-                        <span className="flex items-center gap-1.5">
-                          <span>ເຜື່ອເສຍຫາຍ (Spoilage Tier):</span>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-900 rounded font-sans">
-                            {costing.itemSpoilageRate}% ({tempItem.spoilagePercent !== undefined ? 'Custom' : 'Auto Tier'})
+                    
+                    <div className="text-slate-700 space-y-1.5 font-medium">
+                      <div className="flex justify-between">
+                        <span>ຕົ້ນທຶນເຈ້ຍຕໍ່ແຜ່ນ (Unit Cost):</span>
+                        <span className="font-sans font-bold text-slate-900">{formatLAK(costing.paperUnitCost)} / ແຜ່ນ</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>ຈຳນວນແຜ່ນທີ່ຕ້ອງໃຊ້ (Base Sheets):</span>
+                        <span className="font-sans font-bold text-slate-900">{costing.parentSheetsNeeded.toLocaleString()} ແຜ່ນ</span>
+                      </div>
+                      <div className="space-y-1.5 pt-0.5 border-t border-sky-200/50">
+                        <div className="flex justify-between items-center text-amber-800 font-semibold">
+                          <span className="flex items-center gap-1.5">
+                            <span>ເຜື່ອເສຍຫາຍ (Spoilage Tier):</span>
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-900 rounded font-sans">
+                              {costing.itemSpoilageRate}% ({tempItem.spoilagePercent !== undefined ? 'Custom' : 'Auto Tier'})
+                            </span>
                           </span>
-                        </span>
-                        <span className="font-sans font-bold text-amber-900">+{costing.wastedSheets.toLocaleString()} ແຜ່ນ</span>
-                      </div>
+                          <span className="font-sans font-bold text-amber-900">+{costing.wastedSheets.toLocaleString()} ແຜ່ນ</span>
+                        </div>
 
-                      {/* Quick Spoilage % Chips */}
-                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                        <span className="text-[10px] text-slate-400 font-bold">ປັບ % ເຜື່ອເສຍ:</span>
-                        {[
-                          { label: 'Auto Tier', val: undefined },
-                          { label: '3%', val: 3 },
-                          { label: '5%', val: 5 },
-                          { label: '7%', val: 7 },
-                          { label: '10%', val: 10 },
-                          { label: '15%', val: 15 },
-                        ].map(chip => {
-                          const isSelected = chip.val === undefined 
-                            ? tempItem.spoilagePercent === undefined 
-                            : tempItem.spoilagePercent === chip.val;
-                          return (
-                            <button
-                              key={chip.label}
-                              type="button"
-                              onClick={() => updateField('spoilagePercent', chip.val)}
-                              className={`px-2 py-0.5 rounded text-[10px] font-black transition cursor-pointer ${
-                                isSelected
-                                  ? 'bg-amber-600 text-white shadow-xs'
-                                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-amber-50'
-                              }`}
-                            >
-                              {chip.label}
-                            </button>
-                          );
-                        })}
+                        {/* Quick Spoilage % Chips */}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                          <span className="text-[10px] text-slate-400 font-bold">ປັບ % ເຜື່ອເສຍ:</span>
+                          {[
+                            { label: 'Auto Tier', val: undefined },
+                            { label: '3%', val: 3 },
+                            { label: '5%', val: 5 },
+                            { label: '7%', val: 7 },
+                            { label: '10%', val: 10 },
+                            { label: '15%', val: 15 },
+                          ].map(chip => {
+                            const isSelected = chip.val === undefined 
+                              ? tempItem.spoilagePercent === undefined 
+                              : tempItem.spoilagePercent === chip.val;
+                            return (
+                              <button
+                                key={chip.label}
+                                type="button"
+                                onClick={() => updateField('spoilagePercent', chip.val)}
+                                className={`px-2 py-0.5 rounded text-[10px] font-black transition cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-amber-600 text-white shadow-xs'
+                                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-amber-50'
+                                }`}
+                              >
+                                {chip.label}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
           </div>

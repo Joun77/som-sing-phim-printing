@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"somsing.local/backend/finance"
 	"somsing.local/backend/pricing"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -187,7 +188,7 @@ type PrinterProcessSetup struct {
 	PrinterAssetID string         `json:"printer_asset_id" binding:"required"`
 	Sequence       int            `json:"sequence"`
 	ColorMode      string         `json:"color_mode"` // "AVERAGE" | "SEPARATE_CHANNEL"
-	AverageDensity float64        `json:"average_density_pct"`
+	AverageDensity *float64       `json:"average_density_pct,omitempty"`
 	ColorChannels  []ColorChannel `json:"color_channels"`
 }
 
@@ -376,6 +377,9 @@ type ProofActionRequest struct {
 	Action            string `json:"action" binding:"required"` // "APPROVE" | "REJECT"
 	Feedback          string `json:"feedback"`
 	CustomerSignature string `json:"customerSignature"`
+	ExpectedUpdatedAt string `json:"expected_updated_at"`
+	ProofURL          string `json:"proof_url"`
+	ProofVersion      int    `json:"proof_version"`
 }
 
 type ApproveProofRequest struct {
@@ -449,4 +453,65 @@ func (o Order) MarshalJSON() ([]byte, error) {
 		result[key] = value
 	}
 	return json.Marshal(result)
+}
+
+func (o *Order) UnmarshalJSON(data []byte) error {
+	type orderAlias Order
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	var target orderAlias
+	parseFloat := func(key string) float64 {
+		b, ok := raw[key]
+		if !ok || len(b) == 0 {
+			return 0
+		}
+		var f float64
+		if err := json.Unmarshal(b, &f); err == nil {
+			return f
+		}
+		var s string
+		if err := json.Unmarshal(b, &s); err == nil {
+			val, _ := strconv.ParseFloat(s, 64)
+			return val
+		}
+		return 0
+	}
+	remVal := parseFloat("remaining_lak")
+	depVal := parseFloat("deposit_lak")
+	depAmt := parseFloat("deposit_amount")
+	totAmt := parseFloat("total_amount_lak")
+	totPrc := parseFloat("total_price")
+	delete(raw, "remaining_lak")
+	delete(raw, "deposit_lak")
+	delete(raw, "deposit_amount")
+	delete(raw, "total_amount_lak")
+	delete(raw, "total_price")
+	cleaned, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(cleaned, &target); err != nil {
+		return err
+	}
+	*o = Order(target)
+	o.RemainingLAK = remVal
+	o.DepositLAK = depVal
+	o.DepositAmount = depAmt
+	if o.DepositLAK != 0 && o.DepositAmount == 0 {
+		o.DepositAmount = o.DepositLAK
+	}
+	if o.DepositAmount != 0 && o.DepositLAK == 0 {
+		o.DepositLAK = o.DepositAmount
+	}
+	o.TotalAmountLAK = totAmt
+	o.TotalPrice = totPrc
+	if o.TotalAmountLAK != 0 && o.TotalPrice == 0 {
+		o.TotalPrice = o.TotalAmountLAK
+	}
+	if o.TotalPrice != 0 && o.TotalAmountLAK == 0 {
+		o.TotalAmountLAK = o.TotalPrice
+	}
+	return nil
 }

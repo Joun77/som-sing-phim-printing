@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { FormModalTemplate } from '../../../components/common/FormModalTemplate';
+import React, { useState, useRef } from 'react';
 import { Plus, Edit3, Trash2, HelpCircle, Check, X, ArrowUp, ArrowDown } from 'lucide-react';
 import { ProductFAQ, CreateFAQInput } from '../types';
 import {
@@ -17,7 +18,10 @@ export const FaqManagement: React.FC = () => {
   const reorderMutation = useReorderFAQs();
 
   const [isAdding, setIsAdding] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ProductFAQ | null>(null);
+  const deleteLock = useRef(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingActive, setEditingActive] = useState<boolean | undefined>();
 
   // Form states
   const [questionLo, setQuestionLo] = useState('');
@@ -41,6 +45,7 @@ export const FaqManagement: React.FC = () => {
 
   const startEdit = (faq: ProductFAQ) => {
     setEditingId(faq.id);
+    setEditingActive(faq.isActive);
     setQuestionLo(faq.questionLo || '');
     setQuestionEn(faq.questionEn || '');
     setAnswerLo(faq.answerLo || '');
@@ -61,6 +66,7 @@ export const FaqManagement: React.FC = () => {
 
     try {
       if (editingId) {
+        if (typeof editingActive !== 'boolean') throw new Error('ກະລຸນາໂຫຼດສະຖານະ FAQ ໃໝ່');
         await updateMutation.mutateAsync({
           id: editingId,
           input: {
@@ -70,7 +76,7 @@ export const FaqManagement: React.FC = () => {
             answerLo: answerLo.trim(),
             answerEn: answerEn.trim(),
             sortOrder: Number(sortOrder) || 0,
-            isActive: true,
+            isActive: editingActive,
           },
         });
       } else {
@@ -90,18 +96,24 @@ export const FaqManagement: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (window.confirm('ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບ FAQ ນີ້?')) {
-      try { await deleteMutation.mutateAsync(id); setActionError(''); }
-      catch (error) { setActionError(error instanceof Error ? error.message : 'ບໍ່ສາມາດລຶບໄດ້'); }
-    }
+  const handleDelete = async () => {
+    if (!deleteTarget || deleteLock.current) return;
+    deleteLock.current = true; setActionError('');
+    try { await deleteMutation.mutateAsync(deleteTarget.id); setDeleteTarget(null); }
+    catch (error) { setActionError(error instanceof Error ? error.message : 'ບໍ່ສາມາດປິດ FAQ ໄດ້'); }
+    finally { deleteLock.current = false; }
   };
 
   const handleMove = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= faqs.length) return;
     const moved = faqs[index], neighbor = faqs[targetIndex];
     if (!moved || !neighbor || reorderMutation.isPending) return;
-    const payload = [{ id: moved.id, sortOrder: neighbor.sortOrder }, { id: neighbor.id, sortOrder: moved.sortOrder }];
+
+    const nextFaqs = [...faqs];
+    nextFaqs[index] = neighbor;
+    nextFaqs[targetIndex] = moved;
+    const payload = nextFaqs.map((faq, i) => ({ id: faq.id, sortOrder: (i + 1) * 10 }));
 
     try { await reorderMutation.mutateAsync(payload); setActionError(''); }
     catch (error) { setActionError(error instanceof Error ? error.message : 'ບໍ່ສາມາດຈັດລຳດັບໄດ້'); }
@@ -281,6 +293,7 @@ export const FaqManagement: React.FC = () => {
                 </div>
                 <div className="space-y-1 flex-1">
                   <h4 className="text-sm font-bold text-slate-800">{faq.questionLo}</h4>
+                  <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${faq.isActive === false ? "bg-slate-100 text-slate-600" : "bg-emerald-50 text-emerald-700"}`}>{faq.isActive === false ? "ປິດໃຊ້ງານ" : faq.isActive === true ? "ໃຊ້ງານ" : "ຍັງບໍ່ຢືນຢັນສະຖານະ"}</span>
                   {faq.questionEn && (
                     <p className="text-xs text-slate-500 italic">{faq.questionEn}</p>
                   )}
@@ -321,7 +334,7 @@ export const FaqManagement: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDelete(faq.id)}
+                  onClick={() => { setActionError(''); setDeleteTarget(faq); }}
                   className="p-1 text-rose-500 hover:bg-rose-50 rounded"
                   title="ລຶບ"
                 >
@@ -332,6 +345,10 @@ export const FaqManagement: React.FC = () => {
           ))
         )}
       </div>
+      {deleteTarget && <FormModalTemplate isOpen onClose={() => { if (!deleteLock.current) setDeleteTarget(null); }} title="ຢືນຢັນປິດໃຊ້ FAQ" footerActions={<div className="flex gap-2"><button type="button" disabled={deleteMutation.isPending} onClick={() => setDeleteTarget(null)}>ຍົກເລີກ</button><button type="button" disabled={deleteMutation.isPending} onClick={() => void handleDelete()}>ຢືນຢັນປິດ FAQ</button></div>}>
+        <p>{deleteTarget.questionLo}</p><p className="text-xs">FAQ ນີ້ຈະຖືກປິດໃຊ້ງານ.</p>
+        {actionError && <p role="alert" className="text-rose-700">{actionError}</p>}
+      </FormModalTemplate>}
     </div>
   );
 };

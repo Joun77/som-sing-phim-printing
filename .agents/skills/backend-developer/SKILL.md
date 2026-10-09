@@ -3,6 +3,11 @@ name: somsing-backend-developer
 description: ทักษะและความเชี่ยวชาญสำหรับนักพัฒนา Backend ในระบบ Som Sing Phim ครอบคลุมภาษา Go, Gin/Fiber, สถาปัตยกรรม Layered Architecture, การจัดการ Transaction ทางการเงินและสต็อก, RESTful APIs, และการเชื่อมต่อ PostgreSQL โดยไม่ใช้ ORM
 ---
 
+## Shared Codex / Antigravity standard
+
+Before this specialty workflow, read [the shared working standard](../somsing-dev-coordinator/references/shared-working-standard.md). Both apps use the same task, source identity, product standards and evidence criteria; tool adapters differ. This reference governs conflicting historical workflow/UI/verification examples below, while direct human instructions retain priority.
+
+
 # Somsin Backend Developer Skill
 
 ทักษะคู่มือนักพัฒนา Backend ประจำระบบโรงพิมพ์ **Som Sing Phim (สมสิงห์การพิมพ์)** พัฒนาด้วยภาษา **Go (Golang)** ทำงานร่วมกับฐานข้อมูล **PostgreSQL** โดยใช้ไลบรารีมาตรฐาน `database/sql` ร่วมกับไดรเวอร์ `lib/pq` หรือ `pgx`

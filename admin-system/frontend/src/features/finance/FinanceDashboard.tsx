@@ -46,14 +46,19 @@ export const FinanceDashboard: React.FC = () => {
   const role = useAuthStore(state => state.user?.role);
   const canConfigure = ['admin', 'manager', 'owner'].includes(role || '');
   const [paymentConfig, setPaymentConfig] = useState<Awaited<ReturnType<typeof getPaymentConfiguration>> | null>(null);
+  const [tableSlipsCount, setTableSlipsCount] = useState<number | null>(null);
   const [manualDraft, setManualDraft] = useState(false);
   const [methodDraft, setMethodDraft] = useState('');
+  const selectedBankAccount = bankAccounts.find(account => account.id === methodDraft);
   const [configPending, setConfigPending] = useState(false);
   const [configError, setConfigError] = useState('');
+  const [configLoading, setConfigLoading] = useState(true);
   const configKeys = useRef(new Map<string, string>());
   const loadConfig = async () => {
+    setConfigLoading(true);
     try { const config = await getPaymentConfiguration(); setPaymentConfig(config); setManualDraft(config.manual_qr_enabled); setMethodDraft(config.payment_method_id || ''); setConfigError(''); }
-    catch (error) { setConfigError(error instanceof Error ? error.message : 'ບໍ່ສາມາດໂຫຼດການຕັ້ງຄ່າໄດ້'); }
+    catch (error) { setPaymentConfig(null); setConfigError(error instanceof Error ? error.message : 'ບໍ່ສາມາດໂຫຼດການຕັ້ງຄ່າໄດ້'); }
+    finally { setConfigLoading(false); }
   };
   const saveConfig = async () => {
     if (!canConfigure || !paymentConfig || configPending) return;
@@ -105,23 +110,6 @@ export const FinanceDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in pb-12">
-      <section className="rounded-2xl border bg-white p-4 space-y-3" aria-label="ຕັ້ງຄ່າຮັບຊຳລະ">
-        <h3 className="font-bold">ຕັ້ງຄ່າຮັບຊຳລະ</h3>
-        {configError && <p role="alert">{configError}</p>}
-        <p>Gateway: ປິດ • ໜ້າລູກຄ້າ: ປິດ</p>
-        <p>{paymentConfig ? `QR: ${paymentConfig.manual_qr_enabled ? 'ເປີດ' : 'ປິດ'}` : 'ຍັງບໍ່ມີຂໍ້ມູນການຕັ້ງຄ່າ'}</p>
-        <label className="flex gap-3 items-center">ຮັບຊຳລະຜ່ານ QR
-          <button type="button" role="switch" aria-label="ຮັບຊຳລະຜ່ານ QR" aria-checked={manualDraft} disabled={!canConfigure || !paymentConfig || configPending} onClick={() => setManualDraft(value => !value)} className={`rounded-full px-4 py-2 focus-visible:ring-2 disabled:opacity-50 ${manualDraft ? 'bg-emerald-600 text-white' : 'bg-slate-200'}`}>{manualDraft ? 'ເປີດ' : 'ປິດ'}</button>
-        </label>
-        <label className="block">ບັນຊີຮັບເງິນ
-          <select value={methodDraft} disabled={!canConfigure || configPending} onChange={event => setMethodDraft(event.target.value)} className="m-2 rounded-lg border p-2">
-            <option value="">ກະລຸນາເລືອກບັນຊີ</option>
-            {bankAccounts.filter(method => method.isActive).map(method => <option key={method.id} value={method.id}>{method.bankName} • {method.accountName}</option>)}
-          </select>
-        </label>
-        <button onClick={saveConfig} disabled={!canConfigure || !paymentConfig || configPending} className="rounded-xl border p-2">{configPending ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກການຕັ້ງຄ່າ'}</button>
-        <button onClick={loadConfig} disabled={configPending} className="ml-2 rounded-xl border p-2">ລອງໂຫຼດໃໝ່</button>
-      </section>
       {summaryError && <p role="alert">{summaryError}</p>}
       {/* Top Banner & Currency Switcher */}
       <div className="bg-gradient-to-r from-slate-900 via-primary-navy to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border border-slate-800">
@@ -166,6 +154,23 @@ export const FinanceDashboard: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <section aria-label="ຕັ້ງຄ່າຮັບຊຳລະ" aria-busy={configLoading || configPending} className="rounded-3xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-6 py-5">
+          <div className="flex items-center gap-3"><div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600"><Wallet className="h-5 w-5" /></div><div><h3 className="text-base font-extrabold text-slate-900">ຕັ້ງຄ່າຮັບຊຳລະ</h3><p className="mt-1 text-sm text-slate-500">ເລືອກບັນຊີ ແລະ ກຳນົດການຮັບຊຳລະຜ່ານ QR</p></div></div>
+          <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">{configLoading ? 'ກຳລັງໂຫຼດ...' : paymentConfig ? `QR: ${paymentConfig.manual_qr_enabled ? 'ເປີດ' : 'ປິດ'}` : 'ຍັງບໍ່ຢືນຢັນການຕັ້ງຄ່າ'}</span>
+        </div>
+        <div className="space-y-5 p-6">
+          {configLoading ? <div aria-label="ກຳລັງໂຫຼດການຕັ້ງຄ່າ" className="animate-pulse space-y-3"><div className="h-12 rounded-xl bg-slate-100" /><div className="h-12 rounded-xl bg-slate-100" /></div> : <>
+            {configError && <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p className="font-bold">ບໍ່ສາມາດຢືນຢັນການຕັ້ງຄ່າໄດ້</p><p className="mt-1">{configError}</p><p className="mt-1">ກະລຸນາລອງໂຫຼດໃໝ່. ຫາກຍັງບໍ່ໄດ້ ໃຫ້ຜູ້ດູແລກວດສອບບໍລິການຮັບຊຳລະ.</p></div>}
+            {paymentConfig && <div className="grid gap-5 lg:grid-cols-2">
+              <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4"><div><p className="font-bold text-slate-800">ຮັບຊຳລະຜ່ານ QR</p><p className="mt-1 text-xs text-slate-500">ກວດສອບສະລິບກ່ອນຢືນຢັນຮັບເງິນ</p></div><div className="flex items-center gap-2"><span className="text-xs font-bold text-slate-600">{manualDraft ? 'ເປີດ' : 'ປິດ'}</span><button type="button" role="switch" aria-label="ຮັບຊຳລະຜ່ານ QR" aria-checked={manualDraft} disabled={!canConfigure || configPending} onClick={() => setManualDraft(value => !value)} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:opacity-50 ${manualDraft ? 'bg-emerald-500' : 'bg-slate-300'}`}><span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${manualDraft ? 'translate-x-6' : 'translate-x-1'} left-0`} /></button></div></div>
+              <label className="space-y-2 text-sm font-bold text-slate-700">ບັນຊີຮັບເງິນ<select value={methodDraft} disabled={!canConfigure || configPending} onChange={event => setMethodDraft(event.target.value)} className="block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-50"><option value="">ກະລຸນາເລືອກບັນຊີ</option>{bankAccounts.filter(method => method.isActive).map(method => <option key={method.id} value={method.id}>{method.bankName} • {method.accountName}</option>)}</select>{selectedBankAccount && <span data-testid="selected-payment-account-detail" className="block whitespace-normal break-words rounded-xl bg-slate-50 p-3 text-sm font-medium text-slate-700"><span className="block">{selectedBankAccount.bankName}</span><span className="block">{selectedBankAccount.accountName}</span><span className="block">{selectedBankAccount.accountNumber}</span></span>}</label>
+            </div>}
+          </>}
+          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4"><div className="flex flex-wrap gap-2">{['Gateway', 'ໜ້າລູກຄ້າ'].map(label => <span key={label} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">{label}: {paymentConfig ? 'ປິດ' : 'ຍັງບໍ່ຢືນຢັນ'}</span>)}</div><div className="flex gap-2"><button type="button" onClick={loadConfig} disabled={configPending || configLoading} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"><RefreshCw className="h-4 w-4" />ລອງໂຫຼດໃໝ່</button><button type="button" onClick={saveConfig} disabled={!canConfigure || !paymentConfig || configPending || configLoading} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-40"><CheckCircle2 className="h-4 w-4" />{configPending ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກການຕັ້ງຄ່າ'}</button></div></div>
+        </div>
+      </section>
 
       {/* Module Navigation Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto bg-white p-2.5 rounded-2xl border border-slate-100 shadow-xs">
@@ -248,7 +253,7 @@ export const FinanceDashboard: React.FC = () => {
                 </div>
               </div>
               <div className="text-3xl font-black text-slate-900 tracking-tight">
-                {summary ? summary.pending_slips_count : 0} <span className="text-base font-bold text-slate-400">ລາຍການ</span>
+                {tableSlipsCount !== null ? tableSlipsCount : (summary ? summary.pending_slips_count : 0)} <span className="text-base font-bold text-slate-400">ລາຍການ</span>
               </div>
               <p className="text-xs font-semibold text-emerald-600">
                 ລໍຖ້າອະນຸມັດປົດລັອກເຂົ້າສູ່ Production
@@ -293,7 +298,7 @@ export const FinanceDashboard: React.FC = () => {
           </div>
 
           {/* Slip Verification Table Section */}
-          <PaymentVerificationTable />
+          <PaymentVerificationTable onCountChange={setTableSlipsCount} />
         </div>
       )}
 

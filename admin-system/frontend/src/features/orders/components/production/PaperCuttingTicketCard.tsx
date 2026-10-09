@@ -211,11 +211,11 @@ export const IndustrialJobTicket: React.FC<JobTicketProps> = ({
             const spoilageSheets = Math.ceil(parentSheetsNet * (spoilagePct / 100)) + 3; // base 3 buffer sheets
             const totalParentSheets = parentSheetsNet + spoilageSheets;
 
-            const paperName = it.paper_name || it.paper || it.paperType || 'Art Matt 150gsm';
+            const paperName = it.paper_name || it.paper || it.paperType || it.specs?.paper_name || it.specifications?.paper_name || 'Art Matt 150gsm';
             const paperLot = it.paper_lot || `LOT-P-${paperName.slice(0, 3).toUpperCase()}-01`;
             const parentSheet = it.parent_sheet_size || '330 × 483 mm (SRA3+)';
             const cutSize = it.cut_size || it.size || '210 × 297 mm (A4)';
-            const colorMode = it.color_mode || '4/4 CMYK Full Color';
+            const colorMode = it.color_mode || it.specs?.color_mode || it.specifications?.color_mode || '4/4 CMYK Full Color';
             const machine = it.assigned_machine || 'Konica Minolta AccurioPress C4080';
             const lamination = it.lamination || 'None';
             const binding = it.binding || it.finishing || 'Trim & Cut';

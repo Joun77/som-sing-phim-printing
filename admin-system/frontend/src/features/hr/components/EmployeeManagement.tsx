@@ -49,6 +49,7 @@ const emptyForm = {
   status: 'active', skills: '', avatar: '',
   pieceRatePerImpression: 5, salesCommissionRate: 0, impressionsProduced: 0,
   hasLoginAccount: false,
+  loginAccountActive: false,
   username: '',
   password: '',
   systemRole: 'production',
@@ -211,6 +212,7 @@ export default function EmployeeManagement() {
       pieceRatePerImpression: emp.pieceRatePerImpression !== undefined ? emp.pieceRatePerImpression : 5,
       salesCommissionRate: emp.salesCommissionRate || 0,
       hasLoginAccount: Boolean(emp.hasLoginAccount || emp.loginAccount || emp.username),
+      loginAccountActive: emp.loginAccount?.isActive,
       username: emp.username || emp.loginAccount?.username || '',
       password: '',
       systemRole: emp.systemRole || emp.loginAccount?.role || (emp.role === 'ceo' ? 'ceo' : 'production'),
@@ -230,6 +232,9 @@ export default function EmployeeManagement() {
     }
 
     if (form.hasLoginAccount) {
+      if (typeof form.loginAccountActive !== 'boolean') {
+        showToast(T('ກະລຸນາໂຫຼດສະຖານະບັນຊີເຂົ້າລະບົບໃໝ່', 'Reload the login account status'), 'error'); return;
+      }
       if (!form.username?.trim()) {
         showToast(T('ກະລຸນາປ້ອນຊື່ຜູ້ໃຊ້ເຂົ້າລະບົບ (Username is required)', 'Username is required for system login'), 'warning');
         return;
@@ -250,7 +255,7 @@ export default function EmployeeManagement() {
       ...(form.hasLoginAccount ? { login_account: {
         ...(form.loginAccount?.id ? { id: form.loginAccount.id } : {}),
         username: form.username.trim(), fullName: form.nameEn || form.name,
-        role: form.systemRole, permissions: form.permissions || [], isActive: form.status !== 'inactive',
+        role: form.systemRole, permissions: form.permissions || [], isActive: form.loginAccountActive,
         ...(form.password ? { password: form.password } : {}),
       } } : {}),
     };
@@ -377,7 +382,8 @@ export default function EmployeeManagement() {
               <div className="flex gap-2 pt-2 border-t">
                 <button
                   type="button"
-                  onClick={() => openEdit(emp)}
+                  aria-label={T('ແກ້ໄຂພະນັກງານ', 'Edit Employee')}
+                    onClick={() => openEdit(emp)}
                   className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black transition hover:bg-slate-700 active:scale-95 cursor-pointer"
                 >
                   <Pencil className="w-3.5 h-3.5" /> {T('ແກ້ໄຂ', 'Edit')}
@@ -847,6 +853,7 @@ export default function EmployeeManagement() {
                   </button>
                   <button
                     type="button"
+                    aria-label={T('ແກ້ໄຂພະນັກງານ', 'Edit Employee')}
                     onClick={() => openEdit(emp)}
                     className="px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-100 transition active:scale-95 cursor-pointer"
                   >

@@ -1,3 +1,6 @@
+import { confirmedConversionOrder } from '../src/features/orders/utils/confirmedConversion';
+import { FaqManagement } from '../src/features/materials/components/FaqManagement';
+import { ShopFloorTracker } from '../src/features/production/ShopFloorTracker';
 import { mapOrderToFormSpecs } from '../src/utils/orderDataMapper';
 import { ProductionProcessFlowCard } from '../src/features/orders/components/production/ProductionProcessFlowCard';
 import { OrderDeliveryPage } from '../src/features/orders/components/OrderDeliveryPage';
@@ -11,7 +14,7 @@ import PaymentSlipCard from '../src/features/orders/components/reception/Payment
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MaterialManagement } from '../src/features/materials/components/MaterialManagement';
 import { PaperAndCoverSection } from '../src/features/pricing/components/PaperAndCoverSection';
-import { preCutStockMatches } from '../src/utils/impositionLayout';
+import { preCutStockMatches, preCutStockValidation, preCutStockError } from '../src/utils/impositionLayout';
 import TopHeader from '../src/components/TopHeader';
 import Sidebar from '../src/components/Sidebar';
 import { ProtectedRoute } from '../src/components/ProtectedRoute';
@@ -2146,7 +2149,7 @@ test('P2-PAY actual finance configuration preserves failed draft and saves keyed
       }
       return new Response(JSON.stringify({ status: 'success', data: config }));
     }
-    if (/\/api\/v1\/payment-methods$/.test(String(input))) return new Response(JSON.stringify({ status: 'success', data: [{ id: 'configured-method', bankName: 'Synthetic', accountName: 'Synthetic', isActive: true }] }));
+    if (/\/api\/v1\/payment-methods$/.test(String(input))) return new Response(JSON.stringify({ status: 'success', data: [{ id: 'configured-method', bankName: 'Synthetic bank with a long full identity', accountName: 'Synthetic account holder long full identity', accountNumber: '160-12-00-01234567-001', isActive: true }] }));
     return previous(input, init);
   });
   try {
@@ -2155,6 +2158,8 @@ test('P2-PAY actual finance configuration preserves failed draft and saves keyed
     await until(() => !!container.querySelector('option[value="configured-method"]'));
     const method = Array.from(container.querySelectorAll('select')).find(select => select.querySelector('option[value="configured-method"]'))!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(method, 'configured-method'); method.dispatchEvent(new Event('change', { bubbles: true })); });
+    expect(container.querySelector('[data-testid="selected-payment-account-detail"]')!.textContent).toContain('Synthetic account holder long full identity');
+    expect(container.querySelector('[data-testid="selected-payment-account-detail"]')!.textContent).toContain('160-12-00-01234567-001');
     await click(container.querySelector('[role="switch"]')!);
     await click(buttonText('ບັນທຶກການຕັ້ງຄ່າ'));
     await until(() => posts.length === 1 && container.textContent!.includes('Synthetic configuration failure'));
@@ -2651,4 +2656,246 @@ test('P2-DEMO source-less item never inherits sibling root; canonical proof vers
   const views = Array.from(document.querySelectorAll('button[title="ເບິ່ງຕົວຢ່າງ"]')) as HTMLButtonElement[]; expect(views).toHaveLength(1);
   expect(document.querySelector('section[aria-label="Digital Proof"]')!.textContent).toContain('ລໍຖ້າລູກຄ້າຢືນຢັນ'); expect(document.querySelector('section[aria-label="Digital Proof"]')!.textContent).toContain('ເວີຊັນ 2');
   await click(buttonText('ເບິ່ງ Proof ທີ່ບັນທຶກແລ້ວ')); expect(preview).toHaveBeenCalledWith(expect.objectContaining({ src: '/api/v1/orders/files/orders/owned/proof.pdf' }));
+});
+
+
+test('P2-START actual paid reception uses saved proof approval before production and never infers it from status', async () => {
+  const restore = authorize(token); const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const summary = { order_id: 'start-proof', deposit_mode: 'OFF', deposit_target_percent: '100.00', deposit_target_amount_lak: '100.00', payment_revision: 1, payment_status: 'PAID', received_net_lak: '100.00', remaining_lak: '0.00', total_lak: '100.00', legacy_opening_received_lak: '0.00' };
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    if (String(input).includes('/start-proof/payment-records') && !init?.method) return new Response(JSON.stringify({ status: 'success', data: { summary, records: [], legacy_opening: { provenance: 'UNKNOWN', received_lak: '0.00', reversible: false } } }));
+    return previous(input, init);
+  });
+  const status = vi.fn().mockResolvedValue(true), selected = vi.fn();
+  const view = (proof: any) => <AppProvider><OrderReceptionPage order={{ id: 'start-proof', items: [], paymentStatus: 'Paid', ...proof }} onBack={() => {}} onSelectStep={selected} currentLang="lo" formatLAK={String} handleStatusChange={status} showToast={() => {}} /></AppProvider>;
+  try {
+    for (const proof of [{status:'IN_PRODUCTION'}, {status:'WAITING_APPROVAL',proof_status:'PENDING',proof_url:'/proof.pdf'}, {status:'FILE_CONFIRMED',proof_status:'REJECTED',proof_url:'/proof.pdf',proof_approved_at:'old'}, {status:'FILE_CONFIRMED',proof_status:'APPROVED',proof_approved_at:'now'}]) {
+      await render(view(proof)); expect(buttonText('ສົ່ງເຂົ້າຂະບວນການຜະລິດ (Step 2)')).toBeFalsy();
+    }
+    await render(view({status:'FILE_CONFIRMED',proof_status:'APPROVED',proof_url:'/proof.pdf',proof_approved_at:'2026-10-06T00:00:00Z'}));
+    await until(() => !!buttonText('ສົ່ງເຂົ້າຂະບວນການຜະລິດ (Step 2)')); await click(buttonText('ສົ່ງເຂົ້າຂະບວນການຜະລິດ (Step 2)'));
+    expect(status).toHaveBeenCalledWith('start-proof','IN_PRODUCTION'); expect(selected).toHaveBeenCalledWith(2);
+  } finally { restore(); }
+});
+
+
+test('P2-START actual tracker detail preserves canonical waiting status after order reload', async () => {
+  const restore = authorize(token); const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const order = { id: 'tracker-waiting', order_no: 'TRACKER-WAITING', status: 'WAITING_APPROVAL', overall_status: 'WAITING_APPROVAL', customer_name: 'Synthetic tracker', items: [{id:'tracker-item',item_name:'Original',quantity:1,page_count:1,specs:{},artwork_url:'/old.pdf'}] };
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    if (new URL(String(input), origin).pathname === '/api/v1/orders' && !init?.method) return new Response(JSON.stringify([order]));
+    return previous(input, init);
+  });
+  let app: ReturnType<typeof useApp>;
+  function Journey() { app = useApp(); return app.orders.some(row => row.id === order.id) ? <ShopFloorTracker initialOrderNo={order.id} /> : null; }
+  try {
+    await render(<AppProvider><Journey /></AppProvider>);
+    await until(() => document.body.textContent?.includes('WAITING_APPROVAL') === true);
+    expect(document.body.textContent).not.toContain('IN_PRODUCTION');
+    order.status = 'FILE_CONFIRMED'; order.overall_status = 'FILE_CONFIRMED';
+    await act(async () => { await app!.refreshData(); });
+    await until(() => document.body.textContent?.includes('FILE_CONFIRMED') === true);
+    expect(document.body.textContent).not.toContain('WAITING_APPROVAL'); expect(document.body.textContent).not.toContain('IN_PRODUCTION');
+  } finally { restore(); }
+});
+
+
+test('P2-START actual proof decision requires rejection reason and retains failed draft without approval', async () => {
+  const restore = authorize(token); const decide = vi.fn().mockRejectedValue(new Error('STALE_PROOF_VERSION'));
+  try {
+    await render(<AppProvider><ArtworkPrepressCard orderIdDisplay="proof-decision" customerName="Synthetic" customerPhone="" items={[]} proofUrl="/proof.pdf" proofStatus="PENDING" proofVersion={2} currentLang="lo" isArtworkApproved={false} onApproveArtwork={() => {}} onRevertArtwork={() => {}} onOpenDriveLink={() => {}} onDecideProof={decide} /></AppProvider>);
+    await click(buttonText('ປະຕິເສດ Proof')); expect(decide).not.toHaveBeenCalled();
+    const feedback = document.querySelector('[aria-label="ຄຳເຫັນ Proof"]') as HTMLTextAreaElement;
+    await act(async () => { const setValue = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!; setValue.call(feedback, 'Wrong margin'); feedback.dispatchEvent(new window.Event('input', {bubbles:true})); feedback.dispatchEvent(new window.Event('change', {bubbles:true})); });
+    await click(buttonText('ປະຕິເສດ Proof')); await until(() => document.body.textContent!.includes('STALE_PROOF_VERSION'));
+    expect(decide).toHaveBeenCalledWith('REJECT', 'Wrong margin'); expect(feedback.value).toBe('Wrong margin'); expect(buttonText('ອະນຸມັດ Proof')).toBeTruthy();
+  } finally { restore(); }
+});
+
+test('P2-START actual reception proof decision waits for committed canonical readback; stale failure retains pending', async () => {
+  const restore = authorize(token); const previous = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  let order: any = { id:'proof-start-journey',updated_at:'2026-10-06T00:00:00.000001Z',status:'WAITING_APPROVAL',overall_status:'WAITING_APPROVAL',proof_status:'PENDING_CUSTOMER',proof_url:'/proof.pdf',proof_version:2,items:[{id:'original',quantity:1,artwork_url:'/old.pdf',specs:{}}] };
+  const original = structuredClone(order.items); let fail = true; const writes: any[] = [];
+  const summary = {order_id:order.id,deposit_mode:'OFF',deposit_target_percent:'100.00',deposit_target_amount_lak:'100.00',payment_revision:1,payment_status:'PAID',received_net_lak:'100.00',remaining_lak:'0.00',total_lak:'100.00',legacy_opening_received_lak:'0.00'};
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input),origin).pathname;
+    if(path === '/api/v1/orders' && !init?.method) return new Response(JSON.stringify([order]));
+    if(path === `/api/v1/orders/${order.id}/payment-records`) return new Response(JSON.stringify({status:'success',data:{summary,records:[],legacy_opening:{provenance:'UNKNOWN',received_lak:'0.00',reversible:false}}}));
+    if(path === `/api/v1/orders/${order.id}/proof-action`) {
+      const payload=JSON.parse(String(init?.body)); writes.push(payload);
+      if(fail) return new Response(JSON.stringify({error:'STALE_ORDER_VERSION'}),{status:409});
+      order={...order,status:'FILE_CONFIRMED',overall_status:'FILE_CONFIRMED',proof_status:'APPROVED',proof_approved_at:'2026-10-06T00:00:01Z',updated_at:'2026-10-06T00:00:00.000002Z'};
+      return new Response(JSON.stringify({status:'success',committed:true,updated_id:order.id,order_id:order.id,action:'APPROVE',proof_status:'APPROVED',new_status:'FILE_CONFIRMED',proof_url:order.proof_url,proof_version:2,updated_at:order.updated_at,data:order}));
+    }
+    if(path === `/api/v1/orders/${order.id}` && !init?.method) return new Response(JSON.stringify(order));
+    return previous(input,init);
+  });
+  let app:ReturnType<typeof useApp>; const start=vi.fn();
+  function Journey(){app=useApp();const saved=app.orders.find(row=>row.id===order.id);return saved ? <OrderReceptionPage order={saved} onBack={()=>{}} onSelectStep={()=>{}} currentLang="lo" formatLAK={String} handleStatusChange={start} showToast={()=>{}}/>:null;}
+  try {
+    await render(<AppProvider><Journey/></AppProvider>); await until(()=>!!buttonText('ອະນຸມັດ Proof'));
+    expect(buttonText('ສົ່ງເຂົ້າຂະບວນການຜະລິດ (Step 2)')).toBeFalsy();
+    await click(buttonText('ອະນຸມັດ Proof')); await until(()=>document.body.textContent!.includes('STALE_ORDER_VERSION'));
+    expect(app!.orders.find(row=>row.id===order.id)?.proof_status).toBe('PENDING_CUSTOMER'); expect(start).not.toHaveBeenCalled();
+    fail=false;await click(buttonText('ອະນຸມັດ Proof'));await until(()=>!!buttonText('ສົ່ງເຂົ້າຂະບວນການຜະລິດ (Step 2)'));
+    expect(writes[1]).toEqual({action:'APPROVE',expected_updated_at:'2026-10-06T00:00:00.000001Z',proof_url:'/proof.pdf',proof_version:2,feedback:''});
+    expect(app!.orders.find(row=>row.id===order.id)?.items).toEqual(expect.arrayContaining([expect.objectContaining({id:'original',artwork_url:'/old.pdf'})]));expect(order.items).toEqual(original);
+    await act(async()=>{await app!.refreshData();});expect(buttonText('ສົ່ງເຂົ້າຂະບວນການຜະລິດ (Step 2)')).toBeTruthy();
+  }finally{restore();}
+});
+
+test('P2-START-READBACK actual reception to first completion uses final GET revision without reload', async () => {
+  const restore=authorize(token), previous=vi.mocked(globalThis.fetch).getMockImplementation()!;
+  let order:any={id:'start-readback',updated_at:'2026-10-06T00:00:00.000001Z',status:'FILE_CONFIRMED',overall_status:'FILE_CONFIRMED',paymentStatus:'Paid',proof_status:'APPROVED',proof_url:'/proof.pdf',proof_approved_at:'2026-10-06T00:00:00Z',items:[{id:'job-start',quantity:2,page_count:1,artwork_url:'/old.pdf',specs:{}}],productionWorkflow:{templateId:'custom',templateName:'Saved',steps:[{id:'first',jobId:'job-start',name:'First',category:'PRESS',status:'PENDING'}]}};
+  const originals=structuredClone(order.items),writes:any[]=[];let reads=0,release:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});const revision='2026-10-06T00:00:00.000002Z';
+  vi.mocked(globalThis.fetch).mockImplementation(async(input,init)=>{
+    const path=new URL(String(input),origin).pathname;
+    if(path==='/api/v1/orders'&&!init?.method)return new Response(JSON.stringify([order]));
+    if(path===`/api/orders/${order.id}/status`){const old={...order};order={...order,status:'IN_PRODUCTION',overall_status:'IN_PRODUCTION',updated_at:revision,stock_deducted_at:'2026-10-06T00:00:01Z'};return new Response(JSON.stringify({...old,status:'IN_PRODUCTION'}));}
+    if(path===`/api/v1/orders/${order.id}`){
+      if(init?.method==='PUT'){const p=JSON.parse(String(init.body));writes.push(p);if(p.expected_updated_at!==revision)return new Response(JSON.stringify({error:'STALE_ORDER_VERSION'}),{status:409});order={...order,updated_at:'2026-10-06T00:00:00.000003Z',productionWorkflow:p.productionWorkflow};return new Response(JSON.stringify({status:'success',committed:true,updated_id:order.id,data:order,earnings:[]}));}
+      reads++;if(reads===1)await held;return new Response(JSON.stringify(order));
+    }return previous(input,init);
+  });
+  let app:ReturnType<typeof useApp>;const toast=vi.fn();
+  function Journey(){app=useApp();const [selected,setSelected]=React.useState<any>(null),[step,setStep]=React.useState(1);const current=selected||app.orders.find(row=>row.id===order.id);if(!current)return null;
+    return step===1?<OrderReceptionPage order={current} onBack={()=>{}} onSelectStep={setStep} currentLang="lo" formatLAK={String} handleStatusChange={async(id,status)=>{const saved=await app.updateOrderStatus(id,status);if(saved)setSelected(saved);return saved;}} showToast={toast}/>:<ProductionProcessFlowCard orderId={current.id} order={current} orderStatus={current.status} currentLang="lo" productionWorkflow={current.productionWorkflow} onAdvanceToStep3={()=>{}} onUpdateStatus={vi.fn()} showToast={toast} onUpdateWorkflow={async wf=>{const saved=await app.updateOrderDetails(current.id,{expected_updated_at:current.updated_at,productionWorkflow:wf});setSelected(saved);return saved;}}/>;}
+  try{await render(<AppProvider><Journey/></AppProvider>);await until(()=>!!buttonText('ສົ່ງເຂົ້າຂະບວນການຜະລິດ (Step 2)'));await click(buttonText('ສົ່ງເຂົ້າຂະບວນການຜະລິດ (Step 2)'));await until(()=>reads===1);expect(buttonText('ກົດຢືນຢັນສຳເລັດ')).toBeFalsy();await act(async()=>{release!();await tick();});
+    await until(()=>!!buttonText('ກົດຢືນຢັນສຳເລັດ'));await click(buttonText('ກົດຢືນຢັນສຳເລັດ'));await until(()=>writes.length===1);expect(writes[0].expected_updated_at).toBe(revision);expect(writes[0].productionWorkflow.steps[0].status).toBe('COMPLETED');expect(order.items).toEqual(originals);expect(toast.mock.calls.some(call=>String(call[0]).includes('STALE_ORDER_VERSION'))).toBe(false);
+  }finally{release!();restore();}
+});
+
+test('P2-START-READBACK failed or incomplete canonical GET never publishes status acknowledgment', async () => {
+  const restore=authorize(token),previous=vi.mocked(globalThis.fetch).getMockImplementation()!;let app:ReturnType<typeof useApp>;let mode='failure';
+  const original={id:'start-readback-negative',status:'FILE_CONFIRMED',overall_status:'FILE_CONFIRMED',updated_at:'2026-10-06T00:00:00.000001Z',items:[{id:'original',artwork_url:'/old.pdf',quantity:1}]};
+  vi.mocked(globalThis.fetch).mockImplementation(async(input,init)=>{const path=new URL(String(input),origin).pathname;
+    if(path==='/api/v1/orders'&&!init?.method)return new Response(JSON.stringify([original]));
+    if(path===`/api/orders/${original.id}/status`)return new Response(JSON.stringify({...original,status:'IN_PRODUCTION'}));
+    if(path===`/api/v1/orders/${original.id}`)return mode==='failure'?new Response(JSON.stringify({error:'READBACK_FAILED'}),{status:503}):new Response(JSON.stringify({...original,status:'IN_PRODUCTION',overall_status:'IN_PRODUCTION',updated_at:'2026-10-06T00:00:00.000002Z',stock_deducted_at:'2026-10-06T00:00:01Z',items:undefined}));
+    return previous(input,init);
+  });
+  function Journey(){app=useApp();return null;}
+  try{await render(<AppProvider><Journey/></AppProvider>);await until(()=>app!.orders.some(row=>row.id===original.id));for(const failure of ['failure','incomplete']){mode=failure;let saved:any;await act(async()=>{saved=await app!.updateOrderStatus(original.id,'IN_PRODUCTION');});expect(saved).toBeNull();expect(app!.orders.find(row=>row.id===original.id)?.updated_at).toBe(original.updated_at);expect(app!.orders.find(row=>row.id===original.id)?.status).toBe('FILE_CONFIRMED');}}
+  finally{restore();}
+});
+
+test('P2-PDF-CALLER duplicate filenames retain distinct originals through actual gallery and complete download', async () => {
+  const restore=authorize(token),previous=vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const make=(color:string)=>{const doc=new jsPDF({unit:'pt',format:[100,100]});doc.setFillColor(color);doc.rect(0,0,100,100,'F');doc.addPage();doc.text(color,10,20);doc.internal.write('%'+'x'.repeat(300000));return new Uint8Array(doc.output('arraybuffer'));};
+  const urls=['/api/v1/orders/files/orders/caller-original-A.pdf','/api/v1/orders/files/orders/caller-original-B.pdf'],originals=[make('#ff0000'),make('#0000ff')],requests:{url:string,range:string|null}[]=[];
+  vi.mocked(globalThis.fetch).mockImplementation(async(input,init)=>{const path=new URL(String(input),origin).pathname,idx=urls.indexOf(path);if(idx<0)return previous(input,init);
+    const headers=new Headers(init?.headers),range=(init?.headers as Record<string,string>)?.Range||headers.get('Range');requests.push({url:path,range});const bytes=originals[idx];expect(headers.get('Authorization')).toMatch(/^Bearer /);
+    if(!range)return new Response(bytes,{headers:{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="stored.pdf"'}});
+    const match=/^bytes=(\d+)-(\d+)$/.exec(range)!;const begin=Number(match[1]),end=Math.min(Number(match[2])+1,bytes.length);return new Response(bytes.slice(begin,end),{status:206,headers:{'Content-Type':'application/pdf','Content-Range':`bytes ${begin}-${end-1}/${bytes.length}`,'Content-Length':String(end-begin),ETag:`"file-${idx}"`}});
+  });
+  let last:any;function Journey(){const[preview,setPreview]=React.useState<any>(null);return <><ArtworkPreviewCard orderIdDisplay="pdf-caller" currentLang="lo" order={{items:[{batch_files:urls.map(url=>({file_name:'same-original.pdf',url:image,file_url:url,originalUrl:url,file_size:originals[0].length}))}]}} onOpenDriveLink={()=>{}} setLightbox={value=>{last=value;setPreview(value);}}/>{preview&&<Lightbox {...preview} onClose={()=>setPreview(null)}/>}</>;}
+  try{
+    await render(<Journey/>);await until(()=>document.querySelectorAll('button[title="same-original.pdf"]').length===2);expect(requests).toHaveLength(0);
+    await click(Array.from(document.querySelectorAll('button')).find(button=>button.textContent?.includes('ເບິ່ງທັງໝົດ'))!);await click(document.querySelector('button[aria-label="ເບິ່ງຕົວຢ່າງຮູບ 2"]')!);
+    expect(last.photos.map((photo:any)=>photo.originalUrl)).toEqual(urls);expect(last.initialPhotoIndex).toBe(1);
+    await until(()=>!!document.querySelector('canvas[data-painted-page="1"]'));expect(requests.every(row=>row.url===urls[1]&&!!row.range)).toBe(true);
+    await act(async()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true})));await until(()=>requests.some(row=>row.url===urls[0])&&!!document.querySelector('canvas[data-painted-page="1"]'));
+    await act(async()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true})));await until(()=>requests.filter(row=>row.url===urls[1]).length>=3&&!!document.querySelector('canvas[data-painted-page="1"]'));
+    const download=Array.from(document.querySelectorAll('[role="dialog"] button')).find(button=>button.getAttribute('aria-label')==='ດາວໂຫຼດຕົ້ນສະບັບ')!;expect(download).toBeTruthy();await click(download);await until(()=>downloads.length>0);
+    expect(downloads.at(-1)!.name).toBe('same-original.pdf');expect(new Uint8Array(await downloads.at(-1)!.blob!.arrayBuffer())).toEqual(originals[1]);expect(requests.some(row=>row.url===urls[1]&&!row.range)).toBe(true);
+  }finally{restore();}
+});
+
+test('P2-IMPOSITION-REASON actual single Preflight distinguishes no stock, missing dimensions and mismatch; matching and rotated A4 send OFF', async () => {
+  const restore=authorize(token),previous=vi.mocked(globalThis.fetch).getMockImplementation()!,send=vi.fn();
+  const stocks=[['A4 match',{width_mm:210,height_mm:297}],['A4 rotated',{width_mm:297,height_mm:210}],['A3 mismatch',{standardSize:'A3'}],['Unknown dimensions',{}]].map(([name,specs],index)=>({id:`stock-${index}`,sku:`STOCK-${index}`,name,category:'paper',stock_qty:100,purchase_multiplier:1,cost_per_purchase_unit:10,cost_per_consumption_unit:10,consumption_unit:'sheet',is_active:true,reorder_threshold:0,technical_specs:specs}));
+  vi.mocked(globalThis.fetch).mockImplementation(async(input,init)=>new URL(String(input),origin).pathname==='/api/v1/materials'?new Response(JSON.stringify({status:'success',data:stocks})):previous(input,init));
+  const proceed=()=>buttonText('ສົ່ງຄ່າໄປໃຊ້ໃນໃບສະເໜີລາຄາ (Send to Quotation)');
+  try{
+    await mountPreflight(send,false);await selectFile('single',pdfFile('a4-original.pdf').file);await until(()=>!!proceed()&&!(proceed() as HTMLButtonElement).disabled);
+    await click(proceed());expect(send).not.toHaveBeenCalled();expect(document.body.textContent).toContain('ກະລຸນາເລືອກເຈ້ຍຈາກສາງກ່ອນສົ່ງຂໍ້ມູນ');expect(document.body.textContent).not.toContain('ຂະໜາດວຽກບໍ່ກົງ');
+    for(const [idx,name] of [[0,'A4 match'],[1,'A4 rotated'],[2,'A3 mismatch'],[3,'Unknown dimensions']] as const){
+      await click(buttonText(idx===0?'ເລືອກເຈ້ຍຈາກສາງ':'ປ່ຽນເຈ້ຍ'));const card=Array.from(document.querySelectorAll('div.cursor-pointer')).find(node=>node.textContent?.includes(name))!;expect(card).toBeTruthy();await click(card);await click(proceed());
+      if(idx<2){expect(send).toHaveBeenCalledTimes(idx+1);expect(send.mock.calls[idx][0].selected_paper_id).toBe(`stock-${idx}`);expect(send.mock.calls[idx][0].imposition_mode).toBe('OFF');}
+      else if(idx===2){expect(send).toHaveBeenCalledTimes(2);expect(document.body.textContent).toContain('ຂະໜາດວຽກບໍ່ກົງ');}
+      else{expect(send).toHaveBeenCalledTimes(2);expect(document.body.textContent).toContain('ບໍ່ມີຂະໜາດໃບເຈ້ຍທີ່ໃຊ້ໄດ້');expect(document.body.textContent).not.toContain('ຂະໜາດວຽກບໍ່ກົງ');}
+    }
+  }finally{restore();}
+});
+
+test('P2-IMPOSITION-REASON actual quotation missing stock displays selection guidance instead of dimension mismatch', async()=>{
+  const restore=authorize(token);try{await render(<AppProvider><QuotationManager prefilledSpecs={{imposition_mode:'OFF',paperId:'absent-stock',jobWidth:210,jobHeight:297,pageCount:1}}/></AppProvider>);await until(()=>document.body.textContent!.includes('ກະລຸນາເລືອກເຈ້ຍຈາກສາງກ່ອນສົ່ງຂໍ້ມູນ'));expect(document.body.textContent).not.toContain('ຂະໜາດວຽກບໍ່ກົງ');}finally{restore();}
+});
+
+
+test('P2-IMPOSITION-REASON canonical DTO nested geometry stays exact and identifies invalid/conflicting stock data',()=>{
+  const selected={id:'green-fixture',category:'paper',is_active:true,consumption_unit:'sheet',technical_specs:{specs:{width_mm:210,height_mm:297,unit:'mm'}}};
+  expect(preCutStockValidation({...selected,specs:selected.technical_specs}).dimensions).toEqual({sheetWidth:210,sheetHeight:297});
+  expect(preCutStockError(selected,297,210)).toBe('');expect(preCutStockError(selected,0,297)).toContain('ກະລຸນາລະບຸຄວາມກວ້າງ');
+  expect(preCutStockValidation({...selected,technical_specs:{width_mm:'210',height_mm:'297'}}).error).toContain('width_mm/height_mm');
+  expect(preCutStockValidation({...selected,technical_specs:{width_mm:210,height_mm:297,standardSize:'A3'}}).error).toContain('ຂັດແຍ່ງ');
+  expect(preCutStockValidation({...selected,technical_specs:{unit:'cm',width:21,height:29.7}}).error).toContain('unit ຕ້ອງເປັນ mm');
+  expect(preCutStockValidation({...selected,technical_specs:{paperFormat:'roll',width:210,height:297}}).error).toContain('Imposition OFF');
+  expect(preCutStockValidation({...selected,technical_specs:{size:'A4'},name:'Green Read Paper A4'}).error).toContain('ບໍ່ມີຂະໜາດ');
+  expect(preCutStockValidation({...selected,technical_specs:{standardSize:'A4',specs:{width_mm:297,height_mm:210}}}).error).toContain('ຂັດແຍ່ງ');
+  expect(selected.technical_specs.specs).toEqual({width_mm:210,height_mm:297,unit:'mm'});
+});
+
+for (const readbackFails of [false, true]) test(`P2-NEW-CREATE server generated identity canonical readback ${readbackFails ? 'failure retains draft and retry key' : 'publishes server order and reload'}`, async () => {
+  const dispatcher = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  const writes: {body:any; key:string|null}[] = []; let failReadback = readbackFails;
+  const canonical = {id:'server-owned-order-42', order_no:'ORD-42', customer_name:'Synthetic new create', updated_at:'2026-10-06T00:00:00Z', status:'WAITING_DEPOSIT', items:[{id:'server-item',name:'Synthetic',quantity:1}], total_amount_lak:100, deposit_amount:0};
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input),origin).pathname;
+    if(path === '/api/orders' && init?.method === 'POST') {writes.push({body:JSON.parse(String(init.body)),key:new Headers(init.headers).get('Idempotency-Key')}); return new Response(JSON.stringify(canonical),{status:201});}
+    if(path === '/api/v1/orders/server-owned-order-42') return new Response(JSON.stringify(failReadback ? {code:'READBACK_UNAVAILABLE'} : {data:canonical}),{status:failReadback?503:200});
+    return dispatcher(input,init);
+  });
+  let app:ReturnType<typeof useApp>; function Probe(){app=useApp(); return null;}
+  const unregister=authorize(token);
+  try {
+    await render(<AppProvider><Probe/></AppProvider>); await tick();
+    const draft={customerName:'Synthetic new create',items:[{name:'Synthetic',quantity:1}],totalPriceCharged:100}; const before=structuredClone(draft);
+    const previous=structuredClone(app!.orders); let saved:any;
+    if(readbackFails){ await expect(app!.addOrder(draft,false)).rejects.toThrow('READBACK_UNAVAILABLE'); expect(app!.orders).toEqual(previous); failReadback=false; }
+    await act(async()=>{saved=await app!.addOrder(draft,false);});
+    expect(saved.id).toBe(canonical.id); expect(writes[0].body.id).not.toBe(canonical.id); expect(app!.orders.some(o=>o.id===canonical.id)).toBe(true); expect(draft).toEqual(before);
+    expect(writes).toHaveLength(1);
+    await act(async()=>{await app!.addOrder(draft,false);}); expect(writes).toHaveLength(1);
+  } finally {unregister();}
+});
+
+test('P2-NEW-MONEY actual create mismatch preserves committed identity and never repeats POST on retry',async()=>{
+ const restore=authorize(token),previous=vi.mocked(globalThis.fetch).getMockImplementation()!;let writes=0,reads=0;
+ const persisted={id:'mismatched-committed-order',items:[{id:'committed-item',quantity:1}],total_amount_lak:28778.75};
+ vi.mocked(globalThis.fetch).mockImplementation(async(input,init)=>{const path=new URL(String(input),origin).pathname;if(path==='/api/orders'&&init?.method==='POST'){writes++;return new Response(JSON.stringify(persisted),{status:201});}if(path==='/api/v1/orders/mismatched-committed-order'){reads++;return new Response(JSON.stringify(persisted));}return previous(input,init);});
+ let app:ReturnType<typeof useApp>;function Probe(){app=useApp();return null;}
+ try{await render(<AppProvider><Probe/></AppProvider>);await tick();const before=structuredClone(app!.orders),draft={customerName:'Synthetic price mismatch',items:[{name:'Owned',quantity:1}],totalPriceCharged:184};for(let n=0;n<2;n++)await expect(app!.addOrder(draft,false)).rejects.toThrow('mismatched-committed-order');expect(writes).toBe(1);expect(reads).toBe(2);expect(app!.orders).toEqual(before);expect(draft.totalPriceCharged).toBe(184);}
+ finally{restore();}
+});
+
+for(const failFirstRead of [false,true])test(`P2-NEW-QUOTE actual Confirm Order saves commercial quote and converts committed snapshot ${failFirstRead?'readback retry':'success'}`,async()=>{
+ const restore=authorize(token),previous=vi.mocked(globalThis.fetch).getMockImplementation()!;let saved:any,reply:any,readFails=failFirstRead;const saves:any[]=[],converts:any[]=[];let rawCreates=0;const navigation=vi.fn();
+ vi.mocked(globalThis.fetch).mockImplementation(async(input,init)=>{const path=new URL(String(input),origin).pathname;
+  if(path==='/api/v1/materials')return new Response(JSON.stringify({status:'success',data:[{id:'paper-1',name:'Owned A4 sheet',sku:'OWNED-A4',category:'paper',is_active:true,cost_price:25,stock_qty:100,purchase_multiplier:1,cost_per_purchase_unit:25,cost_per_consumption_unit:25,reorder_threshold:1,consumption_unit:'sheet',technical_specs:{width_mm:210,height_mm:297}}]}));
+  if(path==='/api/orders'&&init?.method==='POST'){rawCreates++;return new Response('{}',{status:500});}
+  if(path==='/api/v1/quotations'&&init?.method==='POST'){saved={...JSON.parse(String(init.body)),updated_at:'2026-10-07T00:00:00.123Z',committed:true};saves.push(saved);return new Response(JSON.stringify(saved),{status:201});}
+  if(path.endsWith('/convert')&&init?.method==='POST'){converts.push({body:JSON.parse(String(init.body)),key:new Headers(init.headers).get('Idempotency-Key')});reply=conversionReply(saved,converts.length>1);reply.data.remaining_lak=reply.data.remaining_lak.toFixed(2) as any;return new Response(JSON.stringify(reply),{status:converts.length>1?200:201});}
+  if(path==='/api/v1/orders/canonical-order') {if(readFails)return new Response('{}',{status:503});return new Response(JSON.stringify(reply.data));}
+  return previous(input,init);
+ });
+ const specs={jobName:'Owned create snapshot',pageCount:3,jobWidth:210,jobHeight:297,selected_paper_id:'paper-1',paperId:'paper-1',includeCover:false,imposition_mode:'OFF'};let app:ReturnType<typeof useApp>;function Probe(){app=useApp();return <QuotationManager onConvertToOrder={navigation} prefilledSpecs={specs}/>;}
+ const confirm=async()=>{await click(buttonText('Confirm Order'));await until(()=>!!app!.confirmDialog);await act(async()=>app!.confirmDialog.onConfirm());};
+ try{await render(<AppProvider><Probe/></AppProvider>);await until(()=>app!.inventory.some(p=>p.id==='paper-1'&&p.technical_specs?.width_mm===210));const customer=document.querySelector('input[placeholder="ພິມຄົ້ນຫາຊື່ ຫຼື ພິມຊື່ລູກຄ້າໃໝ່..."]') as HTMLInputElement;await act(async()=>customer.focus());await click(Array.from(document.querySelectorAll('div.cursor-pointer')).find(el=>el.classList.contains('justify-between')&&el.textContent?.includes('Disposable Phase1 Customer'))!);await click(buttonText('ຕໍ່ໄປ: ກຳນົດສະເປັກ'));await click(Array.from(document.querySelectorAll('button')).find(b=>b.textContent?.includes('ສະຫຼຸບຕົ້ນທຶນ'))!);await confirm();await until(()=>converts.length===1);
+  if(failFirstRead){await until(()=>app!.toast?.type==='error');expect(navigation).not.toHaveBeenCalled();readFails=false;await confirm();}
+  await until(()=>navigation.mock.calls.length===1);expect(rawCreates).toBe(0);expect(saves).toHaveLength(1);expect(saved.total_selling_price).toBe(saved.commercial_snapshot.final_total_lak);expect(saved.total_cost).toBe(saved.commercial_snapshot.total_cost_lak);expect(converts[0].body).toEqual({expected_updated_at:saved.updated_at,expected_total_selling_price:saved.total_selling_price});expect(converts.at(-1).key).toBe(`quotation-conversion:${saved.id}`);expect(app!.orders.find(o=>o.id==='canonical-order')?.totalPriceCharged).toBe(saved.total_selling_price);expect(navigation.mock.calls[0][0].orderId).toBe('canonical-order');
+ }finally{restore();}
+});
+
+
+test('P2-FAQ-STATE ordinary inactive edit retains false and truthful state after refetch',async()=>{
+ const restore=authorize(token),previous=vi.mocked(globalThis.fetch).getMockImplementation()!,qc=new QueryClient({defaultOptions:{queries:{retry:false}}});let row={id:'inactive-owned',questionLo:'Owned inactive',questionEn:'Owned',answerLo:'Answer',answerEn:'Answer',sortOrder:10,isActive:false};const writes:any[]=[];
+ vi.mocked(globalThis.fetch).mockImplementation(async(input,init)=>{const path=new URL(String(input),origin).pathname;if(path==='/api/v1/faqs')return new Response(JSON.stringify({status:'success',data:[row]}));if(path==='/api/v1/admin/faqs/inactive-owned'&&init?.method==='PUT'){const body=JSON.parse(String(init.body));writes.push(body);row={...row,...body};return new Response(JSON.stringify({status:'success',committed:true,data:row}));}return previous(input,init);});
+ try{await render(<QueryClientProvider client={qc}><FaqManagement/></QueryClientProvider>);await until(()=>!!document.querySelector('button[title="ແກ້ໄຂ"]'));expect(document.body.textContent).toContain('ປິດໃຊ້ງານ');await click(document.querySelector('button[title="ແກ້ໄຂ"]')!);await act(async()=>{document.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));});await until(()=>writes.length===1&&!document.querySelector('form'));expect(writes[0].isActive).toBe(false);expect(document.body.textContent).toContain('ປິດໃຊ້ງານ');}finally{qc.clear();restore();}
+});
+
+
+test('P2-CONVERSION-DECIMAL exact remaining text normalizes without mutating DTO and rejects malformed/unsafe/conflicting money',()=>{
+ const source=conversionReply().data;for(const [total,paid,left] of [[184,0,'184.00'],[184.75,0.5,'184.25'],[0,0,'0.00']] as const){const dto={...source,total_amount_lak:total,total_price:total,deposit_lak:paid,deposit_amount:paid,remaining_lak:left};expect(confirmedConversionOrder(dto).remaining_lak).toBe(Number(left));expect(dto.remaining_lak).toBe(left);}
+ for(const value of ['184','184.0','184.000',' 184.00','1.84e2','NaN','-1.00','900719925474099100.00',null])expect(()=>confirmedConversionOrder({...source,remaining_lak:value})).toThrow();expect(()=>confirmedConversionOrder({...source,remaining_lak:'2599.99'})).toThrow('balance');
 });
