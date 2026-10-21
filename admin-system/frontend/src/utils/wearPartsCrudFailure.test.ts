@@ -141,4 +141,42 @@ describe('Wear Parts CRUD API Failure Guard & Local State Immunity', () => {
     const delRes = await deleteWearPartRequest('PRN-9614', 'wp-01', {}, successFetch);
     assert.strictEqual(delRes.ok, true, 'DELETE request should succeed');
   });
+
+  it('Template or temp wear parts (part-* or temp-*) must trigger POST to acquire real DB ID', async () => {
+    const postCalls: { url: string; body: any }[] = [];
+    const templateComponents: WearPartComponent[] = [
+      { id: 'part-12345', name: 'Pickup Roller', cost: 600000, lifeVal: 50000 },
+      { id: 'temp-67890', name: 'Carriage Belt', cost: 600000, lifeVal: 50000 }
+    ];
+
+    const mockFetch = (async (url: string, init?: any) => {
+      postCalls.push({ url, body: JSON.parse(init?.body || '{}') });
+      return {
+        ok: true,
+        status: 201,
+        json: async () => ({
+          success: true,
+          data: { id: `real-uuid-${postCalls.length}` }
+        })
+      };
+    }) as unknown as typeof fetch;
+
+    const res = await saveWearPartsRequest(
+      'PRN-9614',
+      templateComponents,
+      {
+        'Pickup Roller': { cost: 650000, life: 55000 },
+        'Carriage Belt': { cost: 620000, life: 52000 }
+      },
+      {},
+      mockFetch
+    );
+
+    assert.strictEqual(res.ok, true);
+    assert.strictEqual(postCalls.length, 2, 'Must make 2 POST calls for 2 template parts');
+    assert.strictEqual(postCalls[0].url, '/api/v1/equipment/PRN-9614/wear-parts');
+    assert.strictEqual(templateComponents[0].id, 'real-uuid-1', 'Must mutate part.id to acquired DB UUID');
+    assert.strictEqual(templateComponents[1].id, 'real-uuid-2', 'Must mutate part.id to acquired DB UUID');
+  });
 });
+

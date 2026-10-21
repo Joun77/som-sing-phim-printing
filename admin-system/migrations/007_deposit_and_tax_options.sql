@@ -4,29 +4,17 @@
 DO $$ 
 BEGIN
     -- Quotations table
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'quotations') THEN
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'quotations' AND column_name = 'deposit_percentage') THEN
-            ALTER TABLE quotations ADD COLUMN deposit_percentage DECIMAL(18,4) DEFAULT 30.0;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'quotations' AND column_name = 'tax_mode') THEN
-            ALTER TABLE quotations ADD COLUMN tax_mode VARCHAR(50) DEFAULT 'EXCLUDED';
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'quotations' AND column_name = 'tax_rate') THEN
-            ALTER TABLE quotations ADD COLUMN tax_rate DECIMAL(18,4) DEFAULT 0.07;
-        END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'quotations') THEN
+        ALTER TABLE quotations ADD COLUMN IF NOT EXISTS deposit_percentage DECIMAL(18,4) DEFAULT 30.0;
+        ALTER TABLE quotations ADD COLUMN IF NOT EXISTS tax_mode VARCHAR(50) DEFAULT 'EXCLUDED';
+        ALTER TABLE quotations ADD COLUMN IF NOT EXISTS tax_rate DECIMAL(18,4) DEFAULT 0.07;
     END IF;
 
     -- Orders table
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'orders') THEN
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'deposit_percentage') THEN
-            ALTER TABLE orders ADD COLUMN deposit_percentage DECIMAL(18,4) DEFAULT 30.0;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'tax_mode') THEN
-            ALTER TABLE orders ADD COLUMN tax_mode VARCHAR(50) DEFAULT 'EXCLUDED';
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'tax_rate') THEN
-            ALTER TABLE orders ADD COLUMN tax_rate DECIMAL(18,4) DEFAULT 0.07;
-        END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'orders') THEN
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS deposit_percentage DECIMAL(18,4) DEFAULT 30.0;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_mode VARCHAR(50) DEFAULT 'EXCLUDED';
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_rate DECIMAL(18,4) DEFAULT 0.07;
     END IF;
 
 END $$;

@@ -100,7 +100,7 @@ export const PaymentVerificationTable: React.FC<PaymentVerificationTableProps> =
       if (recordId) {
         const rev = slip?.expectedPaymentRevision ?? slip?.expected_payment_revision ?? 0;
         const amount = slip?.requestedAmountLak || slip?.requested_amount_lak || String(slip?.totalAmount ?? 0);
-        const idempotencyKey = `payment-review:${recordId}:${Date.now()}`;
+        const idempotencyKey = `payment-review:${recordId}:${rev}:APPROVED`;
         await reviewPaymentRecord(orderId, recordId, 'APPROVED', amount, rev, idempotencyKey);
       } else {
         await reviewPaymentSlip(orderId, 'APPROVED');
@@ -132,7 +132,7 @@ export const PaymentVerificationTable: React.FC<PaymentVerificationTableProps> =
       if (recordId) {
         const rev = selectedSlip.expectedPaymentRevision ?? selectedSlip.expected_payment_revision ?? 0;
         const amount = selectedSlip.requestedAmountLak || selectedSlip.requested_amount_lak || String(selectedSlip.totalAmount);
-        const idempotencyKey = `payment-review:${recordId}:${Date.now()}`;
+        const idempotencyKey = `payment-review:${recordId}:${rev}:REJECTED`;
         await reviewPaymentRecord(selectedSlip.id, recordId, 'REJECTED', amount, rev, idempotencyKey, reason);
       } else {
         await reviewPaymentSlip(selectedSlip.id, 'REJECTED', reason);

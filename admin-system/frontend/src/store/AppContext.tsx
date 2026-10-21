@@ -58,10 +58,10 @@ export const DEFAULT_MACHINERY_SEED = [
     wearCarriageBeltLife: 50000,
     wearPrintheadCost: 4000000,
     wearPrintheadLife: 100000,
-    colorInkCost: 60.17,
-    bwInkCost: 12.67,
-    linkedInkCostPerPage: 60.17,
-    inkCostPerPage: 60.17,
+    colorInkCost: 49.96,
+    bwInkCost: 2.46,
+    linkedInkCostPerPage: 49.96,
+    inkCostPerPage: 49.96,
     components: [
       { name: 'Pickup Roller', nameLo: 'ລູກຢາງດຶງເຈ້ຍ', usage: 12, threshold: 90, cost: 600000, lifeVal: 50000, unitLabel: 'ໜ້າ' },
       { name: 'Maintenance Box', nameLo: 'ກ່ອງຊັບໝຶກເສຍ', usage: 24, threshold: 90, cost: 700000, lifeVal: 50000, unitLabel: 'ໜ້າ' },
@@ -88,12 +88,12 @@ export const DEFAULT_MACHINERY_SEED = [
       resolution: '4800 x 2400 dpi',
       maxPrintWidthMm: 329,
       maxPrintLengthMm: 483,
-      colorInkCost: 60.17,
-      bwInkCost: 12.67,
-      linkedInkCostPerPage: 60.17,
-      inkCostPerPage: 60.17,
+      colorInkCost: 49.96,
+      bwInkCost: 2.46,
+      linkedInkCostPerPage: 49.96,
+      inkCostPerPage: 49.96,
       inkSlotsBreakdown: [
-        { slot: 'Slot 1 (K - Black)', colorGroup: 'Black', costPerPage: 12.67, inkSku: 'INK-9826' },
+        { slot: 'Slot 1 (K - Black)', colorGroup: 'Black', costPerPage: 2.46, inkSku: 'INK-9826' },
         { slot: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', costPerPage: 15.83, inkSku: 'INK-8713' },
         { slot: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', costPerPage: 15.83, inkSku: 'INK-0365' },
         { slot: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', costPerPage: 15.83, inkSku: 'INK-6588' }
@@ -150,24 +150,24 @@ export const DEFAULT_INKS_SEED = [
     id: 'INK-9826',
     sku: 'INK-9826',
     skuCode: 'INK-9826',
-    name: 'Epson 008 Black Pigment Ink (127ml)',
+    name: 'Epson 008 Black Pigment Ink (1,000ml Bulk)',
     category: 'Ink',
     stockQty: 25,
-    unitPrice: 95000,
-    costPerPurchaseUnit: 95000,
-    costPerConsumptionUnit: 95000,
-    consumptionUnit: 'ຕຸກ',
+    unitPrice: 145000,
+    costPerPurchaseUnit: 145000,
+    costPerConsumptionUnit: 145,
+    consumptionUnit: 'ml',
     purchaseUnit: 'ຕຸກ',
     brand: 'Epson',
-    volume: 127,
+    volume: 1000,
     specs: {
       sku: 'INK-9826',
       brand: 'Epson',
       model: '008',
       colorGroup: 'Black',
-      volume: 127,
-      volume_ml: 127,
-      expectedYield: 7500,
+      volume: 1000,
+      volume_ml: 1000,
+      oemStandardVolumeMl: 127,
       standard_page_yield: 7500,
       inkBaseType: 'Pigment'
     }
@@ -3165,35 +3165,55 @@ export const AppProvider = ({ children }) => {
     }).catch(err => console.log('API equipment sync notice:', err));
   };
 
-  const updateEquipment = (eqId: string, updatedFields: Record<string, any>) => {
-    let fullPayload: any = { id: eqId, ...updatedFields };
+  const updateEquipment = async (eqId: string, updatedFields: Record<string, any>): Promise<{ ok: boolean; error?: string }> => {
+    const existing = equipment.find(
+      eq => eq.id === eqId || eq.id?.toLowerCase() === eqId?.toLowerCase() || eq.serialNumber === eqId
+    );
+    let fullPayload: any = { ...(existing || {}), id: eqId, ...updatedFields };
+    if (fullPayload.purchaseCost && fullPayload.printedPagesCapacity) {
+      fullPayload.calculatedCostPerPage = fullPayload.purchaseCost / fullPayload.printedPagesCapacity;
+    }
 
-    setEquipment(prev => {
-      const next = prev.map(eq => {
-        if (eq.id === eqId || eq.id?.toLowerCase() === eqId?.toLowerCase() || eq.serialNumber === eqId) {
-          const merged = { ...eq, ...updatedFields };
-          if (merged.purchaseCost && merged.printedPagesCapacity) {
-            merged.calculatedCostPerPage = merged.purchaseCost / merged.printedPagesCapacity;
-          }
-          fullPayload = { ...merged };
-          return merged;
-        }
-        return eq;
+    try {
+      let res = await fetch(`/api/equipment/${eqId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(fullPayload)
       });
-      safeSetItem('ss_print_equipment_v6', next);
-      return next;
-    });
+      if (!res.ok) {
+        res = await fetch(`/api/v1/assets/${eqId}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(fullPayload)
+        });
+      }
 
-    fetch(`/api/equipment/${eqId}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(fullPayload)
-    }).catch(err => console.log('API equipment update notice:', err));
-    fetch(`/api/v1/assets/${eqId}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(fullPayload)
-    }).catch(err => console.log('API assets update notice:', err));
+      if (!res.ok) {
+        let errMsg = `Failed to update equipment (HTTP ${res.status})`;
+        try {
+          const errData = await res.json();
+          if (errData.error) errMsg = errData.error;
+          else if (errData.message) errMsg = errData.message;
+        } catch (_) {}
+        return { ok: false, error: errMsg };
+      }
+
+      // Only on successful API confirmation: mutate React state and localStorage
+      setEquipment(prev => {
+        const next = prev.map(eq => {
+          if (eq.id === eqId || eq.id?.toLowerCase() === eqId?.toLowerCase() || eq.serialNumber === eqId) {
+            return { ...eq, ...fullPayload };
+          }
+          return eq;
+        });
+        safeSetItem('ss_print_equipment_v6', next);
+        return next;
+      });
+
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: err.message || 'Network error updating equipment' };
+    }
   };
 
   const updateEquipmentComponents = (eqId: string, components: any[]) => {

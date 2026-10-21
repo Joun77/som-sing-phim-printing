@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -85,6 +86,10 @@ func RateLimitMiddleware(maxRequests int, window time.Duration) gin.HandlerFunc 
 	limiter := NewIPRateLimiter(maxRequests, window)
 
 	return func(c *gin.Context) {
+		if os.Getenv("ENVIRONMENT") == "test" || os.Getenv("RATE_LIMIT_DISABLED") == "true" {
+			c.Next()
+			return
+		}
 		clientIP := c.ClientIP()
 		if !limiter.allow(clientIP) {
 			c.Header("Retry-After", "60")

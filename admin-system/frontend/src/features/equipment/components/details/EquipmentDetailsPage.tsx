@@ -37,6 +37,13 @@ import { resolveMachineImage, calculateMachineWearPartsRate, getEquipmentAccurat
 import { getAuthHeaders } from '@utils/authHeaders';
 import { saveWearPartsRequest, createWearPartRequest, deleteWearPartRequest } from '@utils/wearPartsService';
 
+export const WEAR_PART_TEMPLATES = [
+  { name: 'Bypass Pickup Roller', nameLo: 'ລູກຢາງດຶງເຈ້ຍ Bypass', cost: 150000, life: 30000, category: 'roller', unit: 'pages' },
+  { name: 'Ink Damper Assembly', nameLo: 'ຊຸດແດມເປີກັ່ນຕອງໝຶກ (Ink Damper)', cost: 200000, life: 40000, category: 'damper', unit: 'pages' },
+  { name: 'Suction Pump Unit', nameLo: 'ຊຸດປ້ຳດູດໝຶກຫົວພິມ (Capping Pump)', cost: 650000, life: 50000, category: 'pump', unit: 'pages' },
+  { name: 'Vacuum Platen Belt', nameLo: 'ສາຍພານດູດສູນຍາກາດ (Vacuum Belt)', cost: 400000, life: 60000, category: 'belt', unit: 'pages' }
+];
+
 export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmentId: string; onBack: () => void }) {
   const { 
     equipment, 
@@ -500,35 +507,45 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
     }
   }, [assetValue, targetLifetimeCapacity, isEditingCoreParams]);
 
-  const handleSaveCoreParams = () => {
+  const handleSaveCoreParams = async () => {
     const finalPrice = Math.max(0, Number(editPrice));
     const finalCap = Math.max(1, Number(editCapacity));
     const newBase = finalCap > 0 ? (finalPrice / finalCap) : 0;
     const nRate = Math.round((newBase + wearAllowancePerUnit) * 1000) / 1000;
 
-    updateEquipment(machine.id, {
-      price: finalPrice,
-      unitPrice: finalPrice,
-      MachinePrice: finalPrice,
-      purchaseCost: finalPrice,
-      purchasePrice: finalPrice,
-      TargetTotalPages: finalCap,
-      printedPagesCapacity: finalCap,
-      expectedLifeA4Pages: isPrinter ? finalCap : undefined,
-      specs: {
-        ...(machine.specs || {}),
+    try {
+      const res = await updateEquipment(machine.id, {
         price: finalPrice,
+        unitPrice: finalPrice,
+        MachinePrice: finalPrice,
         purchaseCost: finalPrice,
-        expectedLife: finalCap,
+        purchasePrice: finalPrice,
+        TargetTotalPages: finalCap,
+        printedPagesCapacity: finalCap,
         expectedLifeA4Pages: isPrinter ? finalCap : undefined,
-      },
-      costPerConsumptionUnit: nRate,
-      calculatedCostPerPage: nRate,
-      maintenanceCostPerPage: nRate
-    });
+        specs: {
+          ...(machine.specs || {}),
+          price: finalPrice,
+          purchaseCost: finalPrice,
+          expectedLife: finalCap,
+          expectedLifeA4Pages: isPrinter ? finalCap : undefined,
+        },
+        costPerConsumptionUnit: nRate,
+        calculatedCostPerPage: nRate,
+        maintenanceCostPerPage: nRate
+      });
 
-    setIsEditingCoreParams(false);
-    showToast(currentLang === 'lo' ? 'ບັນທຶກພາຣາມິເຕີຕົ້ນທຶນເຄື່ອງຈັກສຳເລັດ' : 'Saved core machine parameters successfully', 'success');
+      if (res && res.ok === false) {
+        showToast(res.error || (currentLang === 'lo' ? 'ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກພາຣາມິເຕີ' : 'Failed to save core machine parameters'), 'error');
+        return; // Retain draft state in edit inputs
+      }
+
+      setIsEditingCoreParams(false);
+      showToast(currentLang === 'lo' ? 'ບັນທຶກພາຣາມິເຕີຕົ້ນທຶນເຄື່ອງຈັກສຳເລັດ' : 'Saved core machine parameters successfully', 'success');
+    } catch (err: any) {
+      showToast(err?.message || (currentLang === 'lo' ? 'ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກພາຣາມິເຕີ' : 'Failed to save core machine parameters'), 'error');
+      // Retain draft state in edit inputs
+    }
   };
 
   const handleSaveAllWearParts = async () => {
@@ -575,13 +592,18 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
     const newWearRate = updatedComponents.reduce((acc: number, c: any) => acc + (Number(c.costPerUnit) || 0), 0);
     const newNetRate = Math.round((baseCostPerUnit + newWearRate) * 1000) / 1000;
 
-    updateEquipment(machine.id, {
+    const updateRes = await updateEquipment(machine.id, {
       specs: updatedSpecs,
       components: updatedComponents,
       costPerConsumptionUnit: newNetRate,
       calculatedCostPerPage: newNetRate,
       maintenanceCostPerPage: newNetRate
     });
+
+    if (updateRes && updateRes.ok === false) {
+      showToast(updateRes.error || (currentLang === 'lo' ? 'ເກີດຂໍ້ຜິດພາດໃນການອັບເດດເຄື່ອງຈັກ' : 'Failed to update equipment snapshot'), 'error');
+      return;
+    }
 
     await fetchWearParts();
     setIsEditingWearParts(false);
@@ -643,12 +665,17 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
     const newWearRate = updatedComps.reduce((acc, c) => acc + (Number(c.costPerUnit) || 0), 0);
     const newNetRate = Math.round((baseCostPerUnit + newWearRate) * 1000) / 1000;
 
-    updateEquipment(machine.id, {
+    const updateRes = await updateEquipment(machine.id, {
       components: updatedComps,
       costPerConsumptionUnit: newNetRate,
       calculatedCostPerPage: newNetRate,
       maintenanceCostPerPage: newNetRate
     });
+
+    if (updateRes && updateRes.ok === false) {
+      showToast(updateRes.error || (currentLang === 'lo' ? 'ເກີດຂໍ້ຜິດພາດໃນການອັບເດດເຄື່ອງຈັກ' : 'Failed to update equipment snapshot'), 'error');
+      return;
+    }
 
     setIsAddingPart(false);
     setNewPartName('');
@@ -681,12 +708,17 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
       const newWearRate = updatedComps.reduce((acc, c) => acc + (Number(c.costPerUnit) || 0), 0);
       const newNetRate = Math.round((baseCostPerUnit + newWearRate) * 1000) / 1000;
 
-      updateEquipment(machine.id, {
+      const updateRes = await updateEquipment(machine.id, {
         components: updatedComps,
         costPerConsumptionUnit: newNetRate,
         calculatedCostPerPage: newNetRate,
         maintenanceCostPerPage: newNetRate
       });
+
+      if (updateRes && updateRes.ok === false) {
+        showToast(updateRes.error || (currentLang === 'lo' ? 'ເກີດຂໍ້ຜິດພາດໃນການອັບເດດເຄື່ອງຈັກ' : 'Failed to update equipment snapshot'), 'error');
+        return;
+      }
 
       showToast(currentLang === 'lo' ? 'ລຶບອະໄຫຼ່ສຳເລັດ' : 'Deleted wear part successfully', 'info');
     });
@@ -781,7 +813,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
     machine?.category
   );
 
-  // Authoritative ink cost: prioritize persistent actual linked ink cost from machine (e.g. 60.17 LAK)
+  // Authoritative ink cost: prioritize dynamic calculation from linked slots/inventory
   const persistentColorInkCost = Number(
     machine?.colorInkCost || 
     machine?.linkedInkCostPerPage || 
@@ -792,17 +824,17 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
   
   const cachedBreakdown = (machine?.specs as any)?.inkSlotsBreakdown || [];
 
-  // Effective cost: persistent actual linked cost takes precedence over fallback estimation
-  const effectiveInkCost = persistentColorInkCost > 0 
-    ? persistentColorInkCost 
-    : equipmentCostResult.linkedInkRatePerPage;
+  // Effective ink cost: fresh calculation takes priority; fallback only if no links/breakdown
+  const effectiveInkCost = equipmentCostResult.linkedInkRatePerPage > 0 
+    ? equipmentCostResult.linkedInkRatePerPage 
+    : persistentColorInkCost;
 
   const totalLinkedInkCostPerPage = !isPostPressMachine ? effectiveInkCost : 0;
 
-  // Breakdown details: prioritize cached actual breakdown from linked slots
-  const linkedInksDetails = cachedBreakdown.length > 0 
-    ? cachedBreakdown 
-    : equipmentCostResult.inkSlotsBreakdown;
+  // Breakdown details: prioritize fresh calculation from linked slots
+  const linkedInksDetails = equipmentCostResult.inkSlotsBreakdown.length > 0 
+    ? equipmentCostResult.inkSlotsBreakdown 
+    : cachedBreakdown;
 
   const grandTotalCostPerPage = Math.round((netCostPerUnit + totalLinkedInkCostPerPage) * 100) / 100;
 
@@ -826,11 +858,11 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
             <span>{currentLang === 'lo' ? 'ກັບໜ້າຈັດຮາຍການເຄື່ອງຈັກ' : 'Back to Machinery'}</span>
           </button>
 
-          <div>
+          <div data-testid="equipment-header-section">
             <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
-              <span>{machine.name}</span>
+              <span data-testid="equipment-header-name">{machine.name}</span>
             </h2>
-            <p className="text-xs font-semibold text-slate-400">ID: {machine.id} | S/N: {machine.serialNumber || machine.sn || '-'}</p>
+            <p data-testid="equipment-header-id" className="text-xs font-semibold text-slate-400">ID: {machine.id} | S/N: {machine.serialNumber || machine.sn || '-'}</p>
           </div>
         </div>
 
@@ -861,7 +893,7 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
       </div>
 
       {/* COMPREHENSIVE COST-PER-PAGE & PRODUCTION OVERHEAD ENGINE CARD */}
-      <div className="bg-white p-6 rounded-3xl border border-sky-200/80 shadow-md space-y-6">
+      <div data-testid="equipment-cost-breakdown-card" className="bg-white p-6 rounded-3xl border border-sky-200/80 shadow-md space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-sky-50 rounded-2xl border border-sky-200 text-sky-700">
@@ -879,24 +911,24 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
             </div>
           </div>
 
-          <div className="bg-sky-50/80 px-5 py-3 rounded-2xl border border-sky-200 text-right shrink-0">
+          <div data-testid="equipment-details-header-grand-total" className="bg-sky-50/80 px-5 py-3 rounded-2xl border border-sky-200 text-right shrink-0">
             <span className="text-[10px] uppercase font-black text-sky-800 block tracking-wider">
-              {currentLang === 'lo' ? 'ຕົ້ນທຶນລວມການພິມສຸດທິ / ໜ້າ' : 'Grand Total Direct Cost / Page'}
+              {currentLang === 'lo' ? 'ຕົ້ນທຶນລວມການພິມສຸດທິ / ໜ້າ (ISO 5% A4)' : 'Grand Total Direct Cost / Page (ISO 5% A4)'}
             </span>
-            <span className="text-xl font-black font-mono text-sky-700">
-              {formatUnitLAK(grandTotalCostPerPage)} <span className="text-xs font-bold text-slate-500">/ {machineUnitLabel}</span>
+            <span data-testid="header-grand-total-value" className="text-xl font-black font-mono text-sky-700">
+              {formatUnitPrecisionLAK(grandTotalCostPerPage)} <span className="text-xs font-bold text-slate-500">/ {machineUnitLabel}</span>
             </span>
           </div>
         </div>
 
         {/* Visual Equation Formula Bar */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-1">
+          <div data-testid="equipment-details-depreciation" className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-1">
             <span className="text-[10px] text-slate-500 uppercase font-black block">
               {currentLang === 'lo' ? '1. ຄ່າເສື່ອມເຄື່ອງຈັກ' : '1. Machine Depreciation'}
             </span>
             <div className="flex items-baseline justify-between">
-              <span className="text-sm font-black font-mono text-slate-900">{formatUnitLAK(baseCostPerUnit)}</span>
+              <span data-testid="depreciation-value" className="text-sm font-black font-mono text-slate-900">{formatUnitPrecisionLAK(baseCostPerUnit)}</span>
               <span className="text-[10px] text-slate-400 font-bold">/ {machineUnitLabel}</span>
             </div>
             <span className="text-[9px] text-slate-400 block truncate">
@@ -904,12 +936,12 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
             </span>
           </div>
 
-          <div className="bg-indigo-50/60 p-4 rounded-2xl border border-indigo-100 space-y-1">
+          <div data-testid="equipment-details-wear-parts" className="bg-indigo-50/60 p-4 rounded-2xl border border-indigo-100 space-y-1">
             <span className="text-[10px] text-indigo-700 uppercase font-black block">
               {currentLang === 'lo' ? '2. ອະໄຫຼ່ສິ້ນເປືອງ (Wear Parts)' : '2. Wear Parts Rate'}
             </span>
             <div className="flex items-baseline justify-between">
-              <span className="text-sm font-black font-mono text-indigo-700">+{formatUnitLAK(wearAllowancePerUnit)}</span>
+              <span data-testid="wear-parts-value" className="text-sm font-black font-mono text-indigo-700">+{formatUnitPrecisionLAK(wearAllowancePerUnit)}</span>
               <span className="text-[10px] text-indigo-400 font-bold">/ {machineUnitLabel}</span>
             </div>
             <span className="text-[9px] text-indigo-500 block truncate">
@@ -918,21 +950,21 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
           </div>
 
           {!isPostPressMachine ? (
-            <div className="bg-purple-50/60 p-4 rounded-2xl border border-purple-100 space-y-1">
+            <div data-testid="equipment-details-ink-cost" className="bg-purple-50/60 p-4 rounded-2xl border border-purple-100 space-y-1">
               <span className="text-[10px] text-purple-700 uppercase font-black block">
                 {currentLang === 'lo' 
-                  ? `3. ຕົ້ນທຶນນ້ຳໝຶກ (${linkedInksDetails.length > 0 ? linkedInksDetails.length : 4} ສີ)` 
-                  : `3. Linked Inks Cost (${linkedInksDetails.length > 0 ? linkedInksDetails.length : 4} Colors)`}
+                  ? `3. ຕົ້ນທຶນນ້ຳໝຶກອ້າງອີງ (${linkedInksDetails.length > 0 ? linkedInksDetails.length : 4} ສີ, ISO 5% A4)` 
+                  : `3. Reference Ink Cost (${linkedInksDetails.length > 0 ? linkedInksDetails.length : 4} Colors, ISO 5% A4)`}
               </span>
               <div className="flex items-baseline justify-between">
-                <span className="text-sm font-black font-mono text-purple-700">+{formatUnitLAK(totalLinkedInkCostPerPage)}</span>
+                <span data-testid="ink-cost-value" className="text-sm font-black font-mono text-purple-700">+{formatUnitPrecisionLAK(totalLinkedInkCostPerPage)}</span>
                 <span className="text-[10px] text-purple-400 font-bold">/ ໜ້າ A4</span>
               </div>
               <span className="text-[9px] text-purple-500 block truncate">
                 {linkedInksDetails.length > 0 
-                  ? linkedInksDetails.map(i => `${i.colorGroup || i.slot}: ${formatUnitLAK(i.costPerPage)}`).join(' | ') 
+                  ? linkedInksDetails.map(i => `${i.colorGroup || i.slot}: ${formatUnitPrecisionLAK(i.costPerPage)}`).join(' | ') 
                   : (totalLinkedInkCostPerPage > 0 
-                      ? `${currentLang === 'lo' ? 'ຕົ້ນທຶນສະເລ່ຍ' : 'Average cost'}: ${formatUnitLAK(totalLinkedInkCostPerPage)}` 
+                      ? `${currentLang === 'lo' ? 'ຕົ້ນທຶນສະເລ່ຍ' : 'Average cost'}: ${formatUnitPrecisionLAK(totalLinkedInkCostPerPage)}` 
                       : (currentLang === 'lo' ? 'ຍັງບໍ່ໄດ້ຜູກໝຶກ' : 'No inks linked'))}
               </span>
 
@@ -952,12 +984,12 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
             </div>
           )}
 
-          <div className="bg-emerald-50/80 p-4 rounded-2xl border border-emerald-200 space-y-1">
+          <div data-testid="equipment-details-grand-total" className="bg-emerald-50/80 p-4 rounded-2xl border border-emerald-200 space-y-1">
             <span className="text-[10px] text-emerald-800 uppercase font-black block">
-              {currentLang === 'lo' ? '4. ຕົ້ນທຶນລວມສຸດທິ (Total)' : '4. Net Combined Rate'}
+              {currentLang === 'lo' ? '4. ຕົ້ນທຶນລວມສຸດທິ (ISO 5% A4)' : '4. Net Combined Rate (ISO 5% A4)'}
             </span>
             <div className="flex items-baseline justify-between">
-              <span className="text-sm font-black font-mono text-emerald-700">={formatUnitLAK(grandTotalCostPerPage)}</span>
+              <span data-testid="grand-total-value" className="text-sm font-black font-mono text-emerald-700">={formatUnitPrecisionLAK(grandTotalCostPerPage)}</span>
               <span className="text-[10px] text-emerald-600 font-bold">/ {isPostPressMachine ? 'ແຜ່ນ' : 'ໜ້າ'}</span>
             </div>
             <span className="text-[9px] text-emerald-600 font-bold block truncate">
@@ -1566,6 +1598,31 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                       <X className="w-4 h-4" />
                     </button>
                   </div>
+                  {/* Wear Part Template Quick-Select */}
+                  <div className="flex flex-wrap items-center gap-2 p-2 bg-sky-100/70 rounded-xl border border-sky-200">
+                    <span className="text-[10px] font-black text-sky-900 uppercase">
+                      {currentLang === 'lo' ? 'ເລືອກຈາກແມ່ແບບອະໄຫຼ່:' : 'Template Preset:'}
+                    </span>
+                    <div className="flex flex-wrap gap-1.5" data-testid="wear-part-template-list">
+                      {WEAR_PART_TEMPLATES.map((tmpl) => (
+                        <button
+                          key={tmpl.name}
+                          type="button"
+                          data-template-name={tmpl.name}
+                          onClick={() => {
+                            setNewPartName(tmpl.name);
+                            setNewPartNameLo(tmpl.nameLo);
+                            setNewPartCost(tmpl.cost);
+                            setNewPartLife(tmpl.life);
+                            setNewPartUnit(tmpl.unit);
+                          }}
+                          className="px-2 py-0.5 bg-white hover:bg-sky-50 text-sky-900 border border-sky-300 rounded-lg text-[11px] font-bold transition cursor-pointer shadow-2xs hover:border-sky-400"
+                        >
+                          + {tmpl.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                     <div>
                       <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">
@@ -1633,7 +1690,8 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5"
+                      onClick={handleAddWearPart}
+                      className="px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>{currentLang === 'lo' ? 'ຢືນຢັນເພີ່ມອະໄຫຼ່' : 'Confirm Add Part'}</span>
@@ -1861,12 +1919,12 @@ export default function EquipmentDetailsPage({ equipmentId, onBack }: { equipmen
                   <span className="font-black text-slate-400 text-sm">=</span>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div data-testid="equipment-details-machine-subtotal" className="flex items-center gap-3">
                   <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider text-right">
                     {currentLang === 'lo' ? '3. ຕົ້ນທຶນເຄື່ອງຈັກສຸດທິ' : '3. Net Effective Rate'}
                   </span>
                   <div className="bg-emerald-50 text-emerald-900 border border-emerald-300 px-4 py-2 rounded-xl font-mono font-black text-base shadow-2xs flex items-baseline gap-1.5">
-                    <span className="text-emerald-700 font-black">{formatUnitLAK(netCostPerUnit)}</span>
+                    <span data-testid="machine-subtotal-value" className="text-emerald-700 font-black">{formatUnitLAK(netCostPerUnit)}</span>
                     <span className="text-xs text-emerald-600 font-bold">LAK / {machineUnitLabel}</span>
                   </div>
                 </div>

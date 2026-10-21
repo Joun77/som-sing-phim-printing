@@ -2,8 +2,9 @@
   "project": "som-sing-phim-printing",
   "phase": "Phase 2 & UX/UI Overhaul",
   "created_at": "2026-10-09T00:05:00+07:00",
-  "updated_at": "2026-10-09T23:55:00+07:00",
-  "ledger_version": "1.2.0",
+  "updated_at": "2026-10-22T02:51:00+07:00",
+  "ledger_version": "2.6.0",
+  "notes": "AE-ACTUAL-COST-CORRECTION: Completed round resolving both independently reproduced actual-cost defects. Defect 1 (Back-end): HandleGetJobProfitability accepts complete zero costs (actual_cost=0.0, complete=true, revenue=1000 -> gross_profit=1000, margin=100%) and preserves historical uncertainty for unrecorded/incomplete costs. Defect 2 (Front-end): OrderCompletedSummaryPage strictly honors PARTIAL/UNKNOWN status, validates component sums against total, suppresses 90% margin, and renders Lao incomplete notice. DB Analyst confirmed Migration 050 compatibility (no DB changes). Independent QA verified all 8 acceptance criteria (8/8 PASS) across isolated runtime (port 55690, fixture DB da2c2cd18551, frontend 5176). Package frozen at ready_for_review.",
   "tasks": [
     {
       "id": "TSK-01-UXUI",
@@ -139,6 +140,70 @@
       "status": "COMPLETED",
       "dependencies": ["TSK-08-F09"],
       "acceptance_criteria": "Cash method in canonical migrations; foreign keys preserved; bank transfer uses explicitly selected receiving account without silent bcel_one default."
+    },
+    {
+      "id": "TSK-16-PHASE-A",
+      "title": "Phase A: Durable Equipment Settings and Consistent Costs",
+      "owner_role": "Front-end Developer, Back-end Developer, UX/UI Designer, QA-Tester",
+      "model_tier": "current_selected",
+      "status": "ready_for_review",
+      "dependencies": [],
+      "acceptance_criteria": "A1: Save core settings and wear parts, reload/reopen, and compare UI/API/DB. A2: API/DB failure shows failure, retains inputs and does not claim success; atomic wear save-all + checked equipment sync (FE-09). A3: Controlled Epson fixture: depreciation 90 + wear 78 + ink 49.96 = 217.96 LAK across actual callers (QA-05), explicit zero preserved (QA-09/BE-09), no duplicate maintenance % (BE-08), cache invalidated on rate change (BE-11)."
+    },
+    {
+      "id": "TSK-17-PHASE-B",
+      "title": "Phase B: Quotation Validation Without Size-Mismatch Blocking",
+      "owner_role": "Front-end Developer & Back-end Developer",
+      "model_tier": "current_selected",
+      "status": "ready_for_review",
+      "dependencies": ["TSK-16-PHASE-A"],
+      "acceptance_criteria": "B1: A4 on A3 two-up with cutting saves/converts and reads back 2 parent sheets for 3 pages (QA-07), preserves cutting work (FE-11). B2: Incomplete draft saves/reopens with canonical identity; missing required data blocks confirmation with shared Universal Lao modal and field navigation (QA-10/FE-08); commercial equation validation (BE-02). B3: Mixed color/mono ink 321.83 LAK (QA-06), contradictory populations rejected (QA-12/BE-07), missing top-level coverage rejected (BE-06), mechanical rate not scaled by area (FE-07)."
+    },
+    {
+      "id": "TSK-18-PHASE-C",
+      "title": "Phase C: Payment Context, Deposit Policy and Duplicate Prevention",
+      "owner_role": "Front-end Developer & Back-end Developer",
+      "model_tier": "current_selected",
+      "status": "ready_for_review",
+      "dependencies": ["TSK-17-PHASE-B"],
+      "acceptance_criteria": "C1: Deposit OFF hides partial controls/shows one full remaining action, server enforces OFF full balance on request and review (QA-04/FE-01/BE-04/DB-02); ON custom & 100% single action. C2: Legacy verify-slip routed through durable receipt writer with owned evidence (QA-01/BE-01); cash debits 1100 not 1110 (QA-02/DB-03). C3: ONLINE/COUNTER context persisted per receipt; CRM eligibility never mutated by payment/policy (QA-03/BE-03/BE-10/DB-04/FE-02). C4: Reconcile existing pending receipt before creating new one; durable retry identity across reload (FE-04). C5: Shared Universal Lao modals for receive/approve/reject/reverse (QA-11/FE-03)."
+    },
+    {
+      "id": "TSK-19-PHASE-D",
+      "title": "Phase D: Canonical Order Summary and Honest Actual Costs",
+      "owner_role": "Front-end Developer & Back-end Developer",
+      "model_tier": "current_selected",
+      "status": "ready_for_review",
+      "dependencies": ["TSK-18-PHASE-C"],
+      "acceptance_criteria": "D1: Payment totals/methods/context/evidence/verifier read from canonical payment records without fabricating REC-orderId (FE-06); legacy history & order list remain readable without 409. D2: Separate estimated vs actual costs; require all actual cost components before showing finalized margin (estimate-only 100 or partial paper-only 100 on 1000 revenue shows incomplete, not 90%); complete actual 1200 on 1000 shows -200 / -20% (QA-08/FE-05/DB-05)."
+    },
+    {
+      "id": "TSK-20-PHASE-E",
+      "title": "Phase E: Joined Independent Acceptance (CODEX-AE-20261016)",
+      "owner_role": "Delivery Manager & QA-Tester",
+      "model_tier": "current_selected",
+      "status": "ready_for_review",
+      "dependencies": ["TSK-19-PHASE-D"],
+      "acceptance_criteria": "Joined FE/BE package frozen with hashes, additive migrations applied cleanly, verified actual browser->API->DB->reopen journeys across all failed and affected NOT VERIFIED criteria while preserving passing controls."
+    },
+    {
+      "id": "TSK-21-RECHECK-20261020",
+      "title": "Consolidated Correction of Preliminary Review Findings (AE-RECHECK-20261020)",
+      "owner_role": "Delivery Manager, Front-end Developer, Back-end Developer, DB Analyst, Independent QA Owner",
+      "model_tier": "current_selected",
+      "status": "ready_for_review",
+      "dependencies": ["TSK-20-PHASE-E"],
+      "acceptance_criteria": "Finding 1: OrderCompletedSummaryPage truthful verifier and receipt provenance (no fake CONFIRMED/accounting labels). Finding 2: DB migration 049 preserved byte-identical; migration 050 reconciles legitimate zero costs, provenance tracking, and order_actual_cost_logs audit table. Finding 3: payment_recording.go legacy money reconciliation strictly audited without in-memory waiver. Finding 4: Independent QA test harness asserts exact 321.83 LAK mixed ink oracle. Finding 5: pricing/engine.go continuous monotonic coverage semantics without 15% heuristic jump. Full 1,629-file cryptographic manifest generated."
+    },
+    {
+      "id": "TSK-22-ACTUAL-COST-CORRECTION",
+      "title": "Fix Independently Reproduced Actual-Cost Defects (AE-ACTUAL-COST-CORRECTION)",
+      "owner_role": "Delivery Manager, Front-end Developer, Back-end Developer, DB Analyst, Independent QA Owner",
+      "model_tier": "current_selected",
+      "status": "ready_for_review",
+      "dependencies": ["TSK-21-RECHECK-20261020"],
+      "acceptance_criteria": "1. Defect 1 (Back-end): HandleGetJobProfitability distinguishes verified complete zero costs from missing/unknown costs; complete zero cost returns cost 0, complete true, revenue 1000 -> profit 1000, margin 100%; incomplete/unknown remain incomplete without finalized margin; preserves historical uncertainty. 2. Defect 2 (Front-end): OrderCompletedSummaryPage honors canonical incomplete/PARTIAL state, validates component sums, suppresses 90% margin on inconsistent/partial costs, displays Lao incomplete notice. 3. DB Analyst: verifies compatibility with Migration 050 schema. 4. Independent QA: reproduces both defects before fix, verifies 8 acceptance criteria across isolated runtime (port 55690, fixture DB da2c2cd18551, frontend 5176), and produces before/after evidence."
     }
   ]
 }
+

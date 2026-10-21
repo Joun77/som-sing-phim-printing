@@ -901,7 +901,7 @@ CREATE TABLE journal_entries (id text, reference_type text, reference_id text);`
 				t.Fatal("PG original metadata changed")
 			}
 		}
-		must("UPDATE orders SET deposit_lak=125,deposit_amount=125,remaining_lak=total_amount_lak-125,status='IN_PRODUCTION',overall_status='IN_PRODUCTION' WHERE id=$1", persisted.ID)
+		must("UPDATE orders SET deposit_lak=125,deposit_amount=125,remaining_lak=total_amount_lak-125,payment_opening_received_lak=125,status='IN_PRODUCTION',overall_status='IN_PRODUCTION' WHERE id=$1", persisted.ID)
 		validReplay := quotationTestPost(r, "POST", "/api/v1/quotations/"+saved.ID+"/convert", map[string]any{}, auth.RoleSales)
 		if validReplay.Code != 200 {
 			t.Fatalf("valid single/batch original proof%d %s", validReplay.Code, validReplay.Body.String())

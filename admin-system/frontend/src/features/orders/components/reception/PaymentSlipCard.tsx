@@ -36,8 +36,8 @@ interface PaymentSlipCardProps {
   isPaymentConfirmed: boolean;
   currentLang: string;
   formatLAK: (n: number) => string;
-  onConfirmFullPayment: (methodId?: string) => void;
-  onConfirmDepositPayment: (amount: number, methodId?: string) => void;
+  onConfirmFullPayment: (methodId?: string, paymentContext?: 'ONLINE' | 'COUNTER') => void;
+  onConfirmDepositPayment: (amount: number, methodId?: string, paymentContext?: 'ONLINE' | 'COUNTER') => void;
   onRevertPayment: () => void;
   onRejectSlip: () => void;
   onUploadSlip?: (file: File) => Promise<string>;
@@ -76,6 +76,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
   bankAccounts = [],
 }) => {
   const [paymentMethodTab, setPaymentMethodTab] = useState<'TRANSFER' | 'CASH'>('TRANSFER');
+  const [paymentContextTab, setPaymentContextTab] = useState<'ONLINE' | 'COUNTER'>('COUNTER');
   const activeBankAccounts = (bankAccounts || []).filter((b: any) => b.id !== 'cash' && b.isActive !== false);
   const [selectedBankId, setSelectedBankId] = useState<string>(() => {
     const defaultAcc = (bankAccounts || []).find((b: any) => (b.isDefault || b.is_default) && b.id !== 'cash');
@@ -92,6 +93,10 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
   const getEffectiveMethodId = () => {
     if (paymentMethodTab === 'CASH') return 'cash';
     return selectedBankId || (activeBankAccounts[0]?.id ?? '');
+  };
+  const getEffectivePaymentContext = (): 'ONLINE' | 'COUNTER' => {
+    if (paymentMethodTab === 'CASH') return 'COUNTER';
+    return paymentContextTab;
   };
 
   const [localSlip, setLocalSlip] = useState<string | null>(paymentSlipUrl || null);
@@ -230,7 +235,7 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
         {reviewError && <p role="alert" className="text-sm text-red-600">{reviewError}</p>}
         {reviewPending && <p role="status">{currentLang === 'lo' ? 'ກຳລັງບັນທຶກຜົນກວດສອບ...' : 'Saving payment review...'}</p>}
         {/* Payment Method Switcher */}
-        <div className="grid grid-cols-2 gap-2 mb-4 p-1 rounded-2xl bg-slate-100 border border-slate-200/80 text-xs">
+        <div className="grid grid-cols-2 gap-2 mb-2 p-1 rounded-2xl bg-slate-100 border border-slate-200/80 text-xs">
           <button
             type="button"
             onClick={() => setPaymentMethodTab('TRANSFER')}
@@ -256,6 +261,34 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
             <span>{currentLang === 'lo' ? 'ຮັບເງິນສົດໜ້າຮ້ານ' : 'Counter Cash'}</span>
           </button>
         </div>
+
+        {/* Transaction Context Switcher (Online vs Counter) */}
+        {paymentMethodTab === 'TRANSFER' && (
+          <div className="grid grid-cols-2 gap-2 mb-4 p-1 rounded-xl bg-slate-50 border border-slate-200/60 text-[11px]">
+            <button
+              type="button"
+              onClick={() => setPaymentContextTab('COUNTER')}
+              className={`py-1.5 px-2 rounded-lg font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                paymentContextTab === 'COUNTER'
+                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span>{currentLang === 'lo' ? 'ໜ້າຮ້ານ (Counter QR)' : 'Counter QR'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaymentContextTab('ONLINE')}
+              className={`py-1.5 px-2 rounded-lg font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                paymentContextTab === 'ONLINE'
+                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span>{currentLang === 'lo' ? 'ອອນລາຍ (Online Slip)' : 'Online Slip'}</span>
+            </button>
+          </div>
+        )}
 
         {/* Card Title */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
@@ -479,105 +512,111 @@ export const PaymentSlipCard: React.FC<PaymentSlipCardProps> = ({
           </div>
         ) : (
           <div className="space-y-3">
-            {/* Custom Deposit / Partial Payment Calculation (Available for both ON and OFF deposit modes) */}
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                  <DollarSign className="w-3.5 h-3.5 text-sky-600" />
-                  <span>
-                    {depositMode === 'ON'
-                      ? (currentLang === 'lo' ? 'ກຳນົດຍອດມັດຈຳ (Custom Deposit)' : 'Custom Deposit')
-                      : (currentLang === 'lo' ? 'ກຳນົດຍອດຊຳລະບາງສ່ວນ (Partial Payment)' : 'Partial Payment')}
+            {/* Custom Deposit / Partial Payment Calculation (Only shown when depositMode is ON) */}
+            {depositMode === 'ON' && (
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                    <DollarSign className="w-3.5 h-3.5 text-sky-600" />
+                    <span>
+                      {currentLang === 'lo' ? 'ກຳນົດຍອດມັດຈຳ (Custom Deposit)' : 'Custom Deposit'}
+                    </span>
                   </span>
-                </span>
-                <span className="text-xs font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-lg border border-sky-200">
-                  {customDepositPercent}%
-                </span>
-              </div>
+                  <span className="text-xs font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-lg border border-sky-200">
+                    {customDepositPercent}%
+                  </span>
+                </div>
 
-              {/* Preset Buttons */}
-              <div className="grid grid-cols-4 gap-1.5">
-                {[30, 50, 70, 100].map((pct) => (
-                  <button
-                    key={pct}
-                    type="button"
-                    onClick={() => handlePercentChange(pct)}
-                    className={`py-1.5 rounded-xl text-xs font-black transition cursor-pointer border ${
-                      customDepositPercent === pct
-                        ? 'bg-sky-500 text-white border-sky-600 shadow-xs font-black'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {pct}%
-                  </button>
-                ))}
-              </div>
+                {/* Preset Buttons */}
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[30, 50, 70, 100].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => handlePercentChange(pct)}
+                      className={`py-1.5 rounded-xl text-xs font-black transition cursor-pointer border ${
+                        customDepositPercent === pct
+                          ? 'bg-sky-500 text-white border-sky-600 shadow-xs font-black'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
 
-              {/* Direct Inputs: % and Kip */}
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <label className="text-[10.5px] font-bold text-slate-500 block mb-1">
-                    {currentLang === 'lo' ? 'ລະບຸ %:' : 'Percentage:'}
-                  </label>
-                  <div className="relative">
+                {/* Direct Inputs: % and Kip */}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <label className="text-[10.5px] font-bold text-slate-500 block mb-1">
+                      {currentLang === 'lo' ? 'ລະບຸ %:' : 'Percentage:'}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={customDepositPercent || ''}
+                        onChange={(e) => handlePercentChange(Number(e.target.value) || 0)}
+                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold focus:border-sky-500 outline-hidden"
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">%</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10.5px] font-bold text-slate-500 block mb-1">
+                      {currentLang === 'lo' ? 'ຍອດເງິນ (LAK):' : 'Amount (LAK):'}
+                    </label>
                     <input
                       type="number"
-                      min={1}
-                      max={100}
-                      value={customDepositPercent || ''}
-                      onChange={(e) => handlePercentChange(Number(e.target.value) || 0)}
-                      className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold focus:border-sky-500 outline-hidden"
+                      min={0}
+                      step={0.01}
+                      value={customDepositAmount || ''}
+                      onChange={(e) => handleAmountChange(Number(e.target.value) || 0)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold focus:border-sky-500 outline-hidden"
                     />
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">%</span>
                   </div>
                 </div>
-
-                <div>
-                  <label className="text-[10.5px] font-bold text-slate-500 block mb-1">
-                    {currentLang === 'lo' ? 'ຍອດເງິນ (LAK):' : 'Amount (LAK):'}
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={customDepositAmount || ''}
-                    onChange={(e) => handleAmountChange(Number(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold focus:border-sky-500 outline-hidden"
-                  />
-                </div>
               </div>
-            </div>
+            )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {/* Option 1: Full Payment (100%) */}
+            <div className={`grid gap-2 ${depositMode === 'ON' && customDepositPercent < 100 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+              {/* Option 1: Full Payment (100% / Remaining balance) */}
               <button
                 type="button"
                 disabled={reviewPending}
-                onClick={() => onConfirmFullPayment(getEffectiveMethodId())}
+                onClick={() => onConfirmFullPayment(getEffectiveMethodId(), getEffectivePaymentContext())}
                 className="py-3 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border-none"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>
                   {receiptRequestMode
-                    ? (currentLang === 'lo' ? 'ສ້າງຄຳຂໍຊຳລະເຕັມ 100%' : 'Request Full 100%')
-                    : (currentLang === 'lo' ? 'ຢືນຢັນຊຳລະ 100%' : 'Confirm Full 100%')}
+                    ? (effectiveDepositPaid > 0
+                        ? (currentLang === 'lo' ? `ສ້າງຄຳຂໍຊຳລະຍອດທີ່ເຫຼືອ (${formatLAK(effectiveRemaining)})` : `Request Remaining (${formatLAK(effectiveRemaining)})`)
+                        : (currentLang === 'lo' ? 'ສ້າງຄຳຂໍຊຳລະເຕັມ 100%' : 'Request Full 100%'))
+                    : (effectiveDepositPaid > 0
+                        ? (currentLang === 'lo' ? `ຢືນຢັນຊຳລະຍອດທີ່ເຫຼືອ (${formatLAK(effectiveRemaining)})` : `Confirm Remaining (${formatLAK(effectiveRemaining)})`)
+                        : (currentLang === 'lo' ? 'ຢືນຢັນຊຳລະ 100%' : 'Confirm Full 100%'))}
                 </span>
               </button>
 
-              {/* Option 2: Dynamic Deposit / Partial Payment */}
-              <button
-                type="button"
-                disabled={reviewPending}
-                onClick={() => onConfirmDepositPayment(customDepositAmount, getEffectiveMethodId())}
-                className="py-3 px-3 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-black shadow-md shadow-sky-500/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border-none"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>
-                  {receiptRequestMode
-                    ? (depositMode === 'ON' ? (currentLang === 'lo' ? 'ສ້າງຄຳຂໍມັດຈຳ' : 'Request Deposit') : (currentLang === 'lo' ? 'ສ້າງຄຳຂໍຊຳລະບາງສ່ວນ' : 'Request Partial'))
-                    : (depositMode === 'ON' ? (currentLang === 'lo' ? 'ຢືນຢັນມັດຈຳ' : 'Confirm Deposit') : (currentLang === 'lo' ? 'ຢືນຢັນຊຳລະບາງສ່ວນ' : 'Confirm Partial'))} ({formatLAK(customDepositAmount)})
-                </span>
-              </button>
+              {/* Option 2: Dynamic Deposit (Only available when depositMode is ON and percent < 100) */}
+              {depositMode === 'ON' && customDepositPercent < 100 && (
+                <button
+                  type="button"
+                  disabled={reviewPending}
+                  onClick={() => onConfirmDepositPayment(customDepositAmount, getEffectiveMethodId(), getEffectivePaymentContext())}
+                  className="py-3 px-3 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-black shadow-md shadow-sky-500/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border-none"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>
+                    {receiptRequestMode
+                      ? (currentLang === 'lo' ? 'ສ້າງຄຳຂໍມັດຈຳ' : 'Request Deposit')
+                      : (currentLang === 'lo' ? 'ຢືນຢັນມັດຈຳ' : 'Confirm Deposit')} ({formatLAK(customDepositAmount)})
+                  </span>
+                </button>
+              )}
             </div>
 
             {paymentMethodTab === 'TRANSFER' && activeSlip && (

@@ -8,6 +8,8 @@ interface AvailablePrinter {
   name: string;
   cost_per_page?: number;
   ink_cost_per_page?: number;
+  depreciation_per_page?: number;
+  maintenance_per_page?: number;
   printerCategory?: string;
   colorSchemeType?: string;
 }
@@ -278,6 +280,8 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
               ? Math.round((activeCalc.machineOverhead / targetQuantity) * 100) / 100
               : machCost;
             const totalPerSheet = Math.round((realInkPerSheet + realMachPerSheet) * 100) / 100;
+            const depCost = matchedPrn?.depreciation_per_page !== undefined ? matchedPrn.depreciation_per_page : 90;
+            const wearCost = matchedPrn?.maintenance_per_page !== undefined ? matchedPrn.maintenance_per_page : 78;
 
             const formatVal = (val: number) => {
               if (Number.isInteger(val)) return val.toLocaleString();
@@ -287,6 +291,8 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
             return (
               <div
                 key={item.printer_id}
+                data-testid="allocator-printer-card"
+                data-printer-id={rawPrnId}
                 className="p-4 bg-white border border-slate-200/90 rounded-2xl shadow-xs space-y-3 hover:border-indigo-300 transition"
               >
                 {/* Printer Header & Quota */}
@@ -297,7 +303,7 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
                     </span>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-black text-slate-900 font-sans">
+                        <span data-testid="allocator-printer-name" className="text-xs font-black text-slate-900 font-sans">
                           {item.printer_name}
                         </span>
                         <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-black font-sans">
@@ -305,13 +311,20 @@ export const ManualPrinterAllocator: React.FC<Props> = ({
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[10px] text-slate-500 font-medium">
-                        <span className="text-indigo-900 font-bold font-sans bg-indigo-50/80 px-2 py-0.5 rounded border border-indigo-100">
+                        <span data-testid="allocator-ink-cost" className="text-indigo-900 font-bold font-sans bg-indigo-50/80 px-2 py-0.5 rounded border border-indigo-100">
                           ໝຶກຈິງ: LAK {formatVal(realInkPerSheet)} / ແຜ່ນ ({paperSizeName || (jobSizePreset && jobSizePreset.toUpperCase() !== 'CUSTOM' ? jobSizePreset : 'A4')})
                         </span>
                         <span>•</span>
-                        <span>ຄ່າເຄື່ອງ & ອາໄຫຼ່: LAK {formatVal(realMachPerSheet)} / ແຜ່ນ</span>
+                        <span data-testid="allocator-machine-cost">
+                          ຄ່າເຄື່ອງ & ອາໄຫຼ່: LAK {formatVal(realMachPerSheet)} / ແຜ່ນ
+                        </span>
+                        {depCost > 0 && (
+                          <span data-testid="allocator-depreciation-wear" className="text-slate-400 text-[9px] font-sans">
+                            (ຄ່າເສື່ອມ LAK {formatVal(depCost)} + ອະໄຫຼ່ LAK {formatVal(wearCost)})
+                          </span>
+                        )}
                         <span>•</span>
-                        <span className="text-purple-700 font-black font-sans bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                        <span data-testid="allocator-total-cost" className="text-purple-700 font-black font-sans bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
                           ຕົ້ນທຶນພິມລວມ: LAK {formatVal(totalPerSheet)} / ແຜ່ນ
                         </span>
                         {inkCost > 0 && Math.abs(inkCost - realInkPerSheet) > 0.05 && (

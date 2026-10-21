@@ -129,7 +129,7 @@ export async function saveWearPartsRequest(
   customFetch: typeof fetch = fetch
 ): Promise<WearPartApiResponse> {
   for (const part of parts) {
-    const draft = drafts[part.name];
+    const draft = drafts[part.name] || (part.id ? drafts[part.id] : undefined);
     if (draft) {
       const updatedCost = Number(draft.cost);
       const updatedLife = Number(draft.life);
@@ -153,6 +153,27 @@ export async function saveWearPartsRequest(
         );
         if (!res.ok) {
           return { ok: false, error: res.error || `Failed to update wear part ${part.name}` };
+        }
+      } else {
+        // Persist template/temp wear parts via POST to acquire real DB records
+        const res = await postWearPartApi(
+          machineId,
+          {
+            name: updatedName,
+            nameLo: updatedNameLo,
+            category: part.category || part.part_category || 'Roller',
+            cost: updatedCost,
+            life: updatedLife,
+            unit: updatedUnit || 'pages'
+          },
+          headers,
+          customFetch
+        );
+        if (!res.ok) {
+          return { ok: false, error: res.error || `Failed to create wear part ${part.name}` };
+        }
+        if (res.id) {
+          part.id = res.id;
         }
       }
     }

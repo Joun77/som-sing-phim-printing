@@ -583,6 +583,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
     setPreviewColorItem(part ? artworkEditorItem(item, part) : item);
   };
   const [activeProductionTab, setActiveProductionTab] = useState<'specs' | 'print' | 'postpress'>('specs');
+  const [validationErrors, setValidationErrors] = useState<Array<{ field: string; message: string; tab?: 'specs' | 'print' | 'postpress' }>>([]);
 
   const handleSyncColorsToActivePrinter = (colors: { c: number; m: number; y: number; k: number }) => {
     const isMono = editorItem.colorPrintMode === 'MONO_K';
@@ -1287,14 +1288,19 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   // Convert Quotation to Order (Lifecycle: Created without immediate stock deduction - stock will be deducted at IN_PRODUCTION)
   const handleConfirmOrder = () => {
     if (priceCorrectionTarget) { showToast('ກະລຸນາບັນທຶກໃບສະເໜີປັບລາຄາ ແລະ ຂໍອະນຸມັດກ່ອນ', 'warning'); return; }
-    if (impositionError) { showToast(impositionError, 'warning'); }
+    const errors: Array<{ field: string; message: string; tab?: 'specs' | 'print' | 'postpress' }> = [];
+    if (!selectedCustomerId.trim()) {
+      errors.push({ field: 'customer', message: currentLang === 'lo' ? 'ກະລຸນາເລືອກ ຫຼື ລະບຸຊື່ລູກຄ້າ' : 'Customer name is required' });
+    }
     const invalidItem = items.find(it => !it.jobWidth || !it.jobHeight || it.jobWidth <= 0 || it.jobHeight <= 0 || !it.printVolume || it.printVolume <= 0);
     if (invalidItem) {
-      showToast(currentLang === 'lo' ? 'ກະລຸນາລະບຸຂະໜາດ ແລະ ຈຳນວນພິມໃຫ້ຖືກຕ້ອງ' : 'Specify valid job dimensions and quantity', 'error');
-      return;
+      errors.push({ field: 'dimensions', message: currentLang === 'lo' ? 'ກະລຸນາລະບຸຂະໜາດ ແລະ ຈຳນວນພິມໃຫ້ຖືກຕ້ອງ' : 'Specify valid job dimensions and quantity', tab: 'specs' });
     }
-    if (!selectedCustomerId.trim()) {
-      showToast(currentLang === 'lo' ? 'ກະລຸນາເລືອກ ຫຼື ລະບຸຊື່ລູກຄ້າ' : 'Select or enter a customer name before creating the order', 'error');
+    if (impositionError) {
+      errors.push({ field: 'imposition', message: impositionError, tab: 'specs' });
+    }
+    if (errors.length > 0) {
+      setValidationErrors(errors);
       return;
     }
     const msg = currentLang === 'lo'
@@ -1376,10 +1382,20 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
 
   // Confirm Save current quotation to history with versioning & template tag
   const handleConfirmSaveQuotation = async () => {
-    if (impositionError) { showToast(impositionError, 'warning'); }
+    const errors: Array<{ field: string; message: string; tab?: 'specs' | 'print' | 'postpress' }> = [];
+    if (!selectedCustomerId.trim()) {
+      errors.push({ field: 'customer', message: currentLang === 'lo' ? 'ກະລຸນາເລືອກ ຫຼື ລະບຸຊື່ລູກຄ້າ' : 'Customer name is required' });
+    }
     const invalidItem = items.find(it => !it.jobWidth || !it.jobHeight || it.jobWidth <= 0 || it.jobHeight <= 0 || !it.printVolume || it.printVolume <= 0);
     if (invalidItem) {
-      showToast(currentLang === 'lo' ? 'ກະລຸນາລະບຸຂະໜາດ ແລະ ຈຳນວນພິມໃຫ້ຖືກຕ້ອງ' : 'Specify valid job dimensions and quantity', 'error');
+      errors.push({ field: 'dimensions', message: currentLang === 'lo' ? 'ກະລຸນາລະບຸຂະໜາດ ແລະ ຈຳນວນພິມໃຫ້ຖືກຕ້ອງ' : 'Specify valid job dimensions and quantity', tab: 'specs' });
+    }
+    if (impositionError) {
+      errors.push({ field: 'imposition', message: impositionError, tab: 'specs' });
+    }
+    if (errors.length > 0) {
+      setValidationErrors(errors);
+      setIsSaveModalOpen(false);
       return;
     }
     if (savingQuotation.current) return;
@@ -1562,11 +1578,6 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
   // Quick Save as Draft with Customer & Specs Snapshot
   const handleSaveDraft = async () => {
     if (impositionError) { showToast(impositionError, 'warning'); }
-    const invalidItem = items.find(it => !it.jobWidth || !it.jobHeight || it.jobWidth <= 0 || it.jobHeight <= 0 || !it.printVolume || it.printVolume <= 0);
-    if (invalidItem) {
-      showToast(currentLang === 'lo' ? 'ກະລຸນາລະບຸຂະໜາດ ແລະ ຈຳນວນພິມໃຫ້ຖືກຕ້ອງ' : 'Specify valid job dimensions and quantity', 'error');
-      return;
-    }
     if (savingQuotation.current) return;
     savingQuotation.current = true; setIsSavingQuotation(true);
     try {
@@ -1587,8 +1598,8 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         id: item.id,
         name: item.name,
         quantity: item.printVolume,
-        unitPrice: calc.unitPrice,
-        subtotal: calc.sellingPrice,
+        unitPrice: calc ? calc.unitPrice : 0,
+        subtotal: calc ? calc.sellingPrice : 0,
         specSummary: `${item.jobSizePreset} (${item.jobWidth}x${item.jobHeight}mm) | ${paperObj?.name || 'Paper'} | ${item.colorPrintMode === 'MONO_K' ? 'Mono K' : 'CMYK'}${postPressNames ? ` | ${postPressNames}` : ''}${consumablesNames ? ` | ${consumablesNames}` : ''}`
       };
     });
@@ -1601,7 +1612,7 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
       phone: resolvedPhone, customerPhone: resolvedPhone, customerAddress,
       id: pendingSaveId.current ?? (pendingSaveId.current = `quot-${crypto.randomUUID()}`),
       totalCost: grandNetCost, setupFee: quotationSetupFee, packagingCost: grandPackagingCost,
-      commercial_snapshot: savedCommercialSnapshot(),
+      ...(finalGrandTotal > 0 ? { commercial_snapshot: savedCommercialSnapshot() } : {}),
       ...(priceCorrectionTarget || {}),
       rawItems: JSON.parse(JSON.stringify(items)),
       items: quoteItems,
@@ -4078,6 +4089,50 @@ export default function QuotationManager({ onConvertToOrder, onBack, prefilledSp
         inventory={inventory}
         formatCurrency={formatCurrency}
       />
+
+      {/* VALIDATION ERRORS MODAL */}
+      {validationErrors.length > 0 && (
+        <FormModalTemplate
+          isOpen={true}
+          onClose={() => setValidationErrors([])}
+          title={currentLang === 'lo' ? 'ຂໍ້ມູນທີ່ຈຳເປັນຍັງບໍ່ຄົບຖ້ວນ' : 'Required Information Incomplete'}
+          subtitle={currentLang === 'lo' ? 'ກະລຸນາກວດສອບ ແລະ ປ້ອນຂໍ້ມູນລຸ່ມນີ້ກ່ອນດຳເນີນການ' : 'Please check and complete the required fields below'}
+          icon={<AlertTriangle className="w-5 h-5 text-amber-500" />}
+          maxWidthClass="max-w-md"
+          footerActions={
+            <button
+              type="button"
+              onClick={() => setValidationErrors([])}
+              className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer"
+            >
+              {currentLang === 'lo' ? 'ເຂົ້າໃຈແລ້ວ' : 'Understood'}
+            </button>
+          }
+        >
+          <div className="space-y-3 py-2">
+            {validationErrors.map((err, idx) => (
+              <div key={idx} className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start justify-between gap-3">
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-amber-900 block">{err.message}</span>
+                  <span className="text-[10px] text-amber-700 font-mono">Field: {err.field}</span>
+                </div>
+                {err.tab && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveProductionTab(err.tab!);
+                      setValidationErrors([]);
+                    }}
+                    className="px-2.5 py-1 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 text-[10px] font-black rounded-lg transition shrink-0 cursor-pointer"
+                  >
+                    {currentLang === 'lo' ? 'ໄປທີ່ແທັບ' : 'Go to tab'}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </FormModalTemplate>
+      )}
 
       {/* PRINT-ONLY CSS HELPER TO ISOLATE PREVIEW DOCUMENT */}
       <style>{`

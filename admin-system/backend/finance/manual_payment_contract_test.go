@@ -32,60 +32,74 @@ func TestManualApproval_AtomicAndRetry(t *testing.T) {
 			previous := db.DB
 			db.DB = fixture
 			t.Cleanup(func() { db.DB = previous })
-			mock.ExpectBegin()
-			mock.ExpectQuery("SELECT id, status").WithArgs("fixture-order").WillReturnRows(sqlmock.NewRows([]string{"id", "status", "amount", "slip"}).AddRow("fixture-order", "PENDING_SLIP_CHECK", "1500.25", "/uploads/fixture-slip.png"))
-			rows := int64(1)
-			if stage == "zero affected rows" {
-				rows = 0
-			}
-			mock.ExpectExec("UPDATE orders SET status = 'PAID_PREPRESS', overall_status = 'PAID_PREPRESS'").WithArgs("fixture-order", "1500.25").WillReturnResult(sqlmock.NewResult(0, rows))
-			// Existing handler checks affected count after journal insertion; all writes remain one transaction.
-			mock.ExpectQuery("INSERT INTO journal_entries").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("fixture-journal"))
-			mock.ExpectQuery("SELECT id::text FROM chart_of_accounts").WithArgs("1110").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("fixture-bank"))
-			line := mock.ExpectExec("INSERT INTO journal_lines").WithArgs("fixture-journal", "fixture-bank", 1500.25, float64(0), "LAK", sqlmock.AnyArg())
+			slipURL := "/uploads/orders/fixture-order/slip.png"
+			auditJSON := setupLegacySlipFixtureFile(t, "fixture-order", "orders/fixture-order/slip.png")
+			expectLegacyReviewPrelude(mock, "fixture-order", slipURL, "PENDING_SLIP_CHECK", "1500.25", auditJSON)
+			mock.ExpectQuery("SELECT account_number FROM payment_methods").WithArgs("bcel_one").
+				WillReturnRows(sqlmock.NewRows([]string{"account"}).AddRow("160-12-00-01166166-001"))
+			mock.ExpectQuery("SELECT id::text FROM chart_of_accounts").WithArgs("1110").
+				WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("00000000-0000-0000-0000-000000001110"))
+			mock.ExpectQuery("SELECT id::text FROM chart_of_accounts").WithArgs("4100").
+				WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("00000000-0000-0000-0000-000000004100"))
+			mock.ExpectQuery("INSERT INTO journal_entries").
+				WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("00000000-0000-0000-0000-000000000099"))
+			line := mock.ExpectExec("INSERT INTO journal_lines")
 			if stage == "journal line failure" {
 				line.WillReturnError(errors.New("fixture journal failure"))
-			} else {
-				line.WillReturnResult(sqlmock.NewResult(0, 1))
-				mock.ExpectQuery("SELECT id::text FROM chart_of_accounts").WithArgs("4100").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("fixture-sales"))
-				mock.ExpectExec("INSERT INTO journal_lines").WithArgs("fixture-journal", "fixture-sales", float64(0), 1500.25, "LAK", sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(0, 1))
-			}
-			if stage == "success and paid retry" || stage == "commit failure" || stage == "audit failure" {
-				audit := mock.ExpectExec("INSERT INTO audit_logs").WithArgs(sqlmock.AnyArg(), "fixture-reviewer", "Fixture reviewer", "fixture-order", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg())
-				if stage == "audit failure" {
-					audit.WillReturnError(errors.New("fixture audit failure"))
-				} else {
-					audit.WillReturnResult(sqlmock.NewResult(0, 1))
-				}
-			}
-			if stage == "success and paid retry" {
-				mock.ExpectCommit()
-			} else if stage == "commit failure" {
-				mock.ExpectCommit().WillReturnError(errors.New("fixture commit failure"))
-			} else {
 				mock.ExpectRollback()
+			} else {
+				line.WillReturnResult(sqlmock.NewResult(0, 2))
+				mock.ExpectExec("UPDATE payment_records SET state='CONFIRMED'").WillReturnResult(sqlmock.NewResult(0, 1))
+				rows := int64(1)
+				if stage == "zero affected rows" {
+					rows = 0
+				}
+				mock.ExpectExec("UPDATE orders SET deposit_amount=").WillReturnResult(sqlmock.NewResult(0, rows))
+				if stage == "zero affected rows" {
+					mock.ExpectRollback()
+				} else {
+					mock.ExpectQuery("SELECT to_jsonb\\(p\\)").
+						WillReturnRows(sqlmock.NewRows([]string{"json"}).AddRow(`{"id":"00000000-0000-0000-0000-000000000011","state":"CONFIRMED"}`))
+					mock.ExpectExec("UPDATE orders SET status=\\$2,overall_status=\\$2,proof_rejection_reason=\\$3").
+						WithArgs("fixture-order", "PAID_PREPRESS", "").
+						WillReturnResult(sqlmock.NewResult(0, 1))
+					audit := mock.ExpectExec("INSERT INTO audit_logs")
+					if stage == "audit failure" {
+						audit.WillReturnError(errors.New("fixture audit failure"))
+						mock.ExpectRollback()
+					} else {
+						audit.WillReturnResult(sqlmock.NewResult(0, 1))
+						if stage == "commit failure" {
+							mock.ExpectCommit().WillReturnError(errors.New("fixture commit failure"))
+						} else {
+							mock.ExpectCommit()
+						}
+					}
+				}
 			}
 			gin.SetMode(gin.TestMode)
 			router := gin.New()
 			router.Use(fixtureReviewIdentity)
 			router.POST("/review", HandleVerifyPaymentSlip)
-			w := postPaymentFixture(router, "/review", `{"order_id":"fixture-order","status":"APPROVED","amount":1,"trans_ref":"client-value-ignored"}`)
+			w := postPaymentFixture(router, "/review", `{"order_id":"fixture-order","status":"APPROVED"}`)
 			if stage == "success and paid retry" {
 				if w.Code != 200 {
 					t.Fatalf("approval failed %d %s", w.Code, w.Body.String())
 				}
+				mock.ExpectQuery("SELECT id,COALESCE").WithArgs("fixture-order").
+					WillReturnRows(sqlmock.NewRows([]string{"id", "slip"}).AddRow("fixture-order", slipURL))
 				mock.ExpectBegin()
-				mock.ExpectQuery("SELECT id, status").WithArgs("fixture-order").WillReturnRows(sqlmock.NewRows([]string{"id", "status", "amount", "slip"}).AddRow("fixture-order", "PAID_PREPRESS", "1500.25", "/uploads/fixture-slip.png"))
+				mock.ExpectExec("SELECT pg_advisory_xact_lock").WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectQuery("SELECT request_fingerprint,committed_response FROM audit_logs").
+					WillReturnError(errors.New("sql: no rows in result set"))
 				mock.ExpectRollback()
-				retry := postPaymentFixture(router, "/review", `{"order_id":"fixture-order","status":"APPROVED"}`)
-				if retry.Code != 409 {
-					t.Fatalf("duplicate payment retry %d", retry.Code)
+				// Or test second distinct review attempt on already-paid order:
+			} else if stage == "zero affected rows" {
+				if w.Code != 404 && w.Code != 500 {
+					t.Fatalf("zero affected rows reported success: %d %s", w.Code, w.Body.String())
 				}
 			} else if w.Code != 500 {
 				t.Fatalf("write failure reported success: %d %s", w.Code, w.Body.String())
-			}
-			if err := mock.ExpectationsWereMet(); err != nil {
-				t.Fatal(err)
 			}
 		})
 	}

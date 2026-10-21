@@ -143,6 +143,8 @@ var MigrationFiles = []string{
 	"046_phase2_guide_schema.sql",
 	"047_phase2_payment_persistence.sql",
 	"048_cash_payment_method.sql",
+	"049_ae_payment_context_and_actual_cost_provenance.sql",
+	"050_actual_cost_provenance_and_reconciliation.sql",
 }
 
 // verifyLegacyBaseline checks if a legacy migration's intended schema changes

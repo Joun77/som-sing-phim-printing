@@ -1,0 +1,66 @@
+[
+  {
+    "criterionId": "CRITERION-1",
+    "name": "HandleGetJobProfitability Accepts Complete Zero Costs",
+    "status": "PASS",
+    "detail": "TestCodexCompleteZeroActualCost passed: actual_cost=0.0, complete=true, revenue=1000 -> gross_profit=1000, margin=100%",
+    "evidence": {},
+    "timestamp": "2026-10-21T19:49:41.525Z"
+  },
+  {
+    "criterionId": "CRITERION-2",
+    "name": "Job Profitability Incomplete/Unknown Distinction",
+    "status": "PASS",
+    "detail": "Partial nulls, all nulls, mismatched sums, and negative totals correctly remain incomplete with nil actual_cost and 0 margin",
+    "evidence": {},
+    "timestamp": "2026-10-21T19:49:41.670Z"
+  },
+  {
+    "criterionId": "CRITERION-3",
+    "name": "Summary Suppresses Finalized Margin on Inconsistent PARTIAL Cost",
+    "status": "PASS",
+    "detail": "OrderCompletedSummaryPage suppresses 90.0% margin when status is PARTIAL and components disagree with total",
+    "evidence": {},
+    "timestamp": "2026-10-21T19:49:43.491Z"
+  },
+  {
+    "criterionId": "CRITERION-4",
+    "name": "Summary Component Consistency Validation & Lao Notice",
+    "status": "PASS",
+    "detail": "OrderCompletedSummaryPage checks component sums, honors PARTIAL status, and displays Lao incomplete notice (\"ຂໍ້ມູນຕົ້ນທຶນການຜະລິດຕົວຈິງຍັງບໍ່ຄົບຖ້ວນ\")",
+    "evidence": {},
+    "timestamp": "2026-10-21T19:49:43.491Z"
+  },
+  {
+    "criterionId": "CRITERION-5",
+    "name": "Summary Complete Zero Cost Preservation",
+    "status": "PASS",
+    "detail": "Legitimate zero costs (0 finishing & spoilage) preserved with truthful margin and zero COGS",
+    "evidence": {},
+    "timestamp": "2026-10-21T19:49:44.735Z"
+  },
+  {
+    "criterionId": "CRITERION-6",
+    "name": "Full Frontend Provenance Vitest Suite (7/7)",
+    "status": "PASS",
+    "detail": "All 7 tests in order-completed-summary-provenance.test.tsx passed in Vitest jsdom",
+    "evidence": {},
+    "timestamp": "2026-10-21T19:49:46.092Z"
+  },
+  {
+    "criterionId": "CRITERION-7",
+    "name": "Full Backend Finance & Pricing Suites",
+    "status": "PASS",
+    "detail": "All 17 finance tests and all 38 pricing tests passed with 0 failures",
+    "evidence": {},
+    "timestamp": "2026-10-21T19:49:46.474Z"
+  },
+  {
+    "criterionId": "CRITERION-8",
+    "name": "Live Isolated Multi-Layer Runtime Verification",
+    "status": "PASS",
+    "detail": "Backend (55690), Frontend (5176), and Fixture DB (55432) verified: ORD-VIP-DEMO-01 complete=true, cost=0, margin=100%; ae-8f3da2-partial-cost complete=false, cost=null; proxy healthy",
+    "evidence": {},
+    "timestamp": "2026-10-21T19:49:46.516Z"
+  }
+]

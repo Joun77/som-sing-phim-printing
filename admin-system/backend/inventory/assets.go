@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net/http"
@@ -597,26 +598,138 @@ func HandleInboundAssetV1(c *gin.Context) {
 
 // HandleUpdateAssetV1 updates master technical specs & components in PostgreSQL
 func HandleUpdateAssetV1(c *gin.Context) {
-	rawID := c.Param("id")
+	rawID := strings.TrimSpace(c.Param("id"))
+	if rawID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Equipment ID is required"})
+		return
+	}
 	id := ResolveEquipmentAlias(rawID)
 
+	var rawBody []byte
+	var err error
+	if c.Request.Body != nil {
+		rawBody, err = io.ReadAll(c.Request.Body)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Failed to read request body"})
+			return
+		}
+	}
+	if len(rawBody) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Empty request body"})
+		return
+	}
+
+	var rawMap map[string]interface{}
+	if err := json.Unmarshal(rawBody, &rawMap); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": err.Error()})
+		return
+	}
+
 	var item EquipmentItem
-	if err := c.ShouldBindJSON(&item); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := json.Unmarshal(rawBody, &item); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": err.Error()})
+		return
+	}
+
+	// Map alternative / camelCase / snake_case field names if primary field is unset
+	if item.Price == 0 {
+		for _, k := range []string{"purchasePrice", "purchaseCost", "purchase_price", "price_cost", "MachinePrice", "unitPrice"} {
+			if v, ok := rawMap[k]; ok {
+				if f, ok := v.(float64); ok && f != 0 {
+					item.Price = f
+					break
+				}
+			}
+		}
+	}
+	if item.ExpectedLifeA4Pages == 0 {
+		for _, k := range []string{"printedPagesCapacity", "expected_life_a4_pages", "expectedLifespan", "lifetimePagesA4", "TargetTotalPages"} {
+			if v, ok := rawMap[k]; ok {
+				if f, ok := v.(float64); ok && f != 0 {
+					item.ExpectedLifeA4Pages = int(f)
+					break
+				}
+			}
+		}
+	}
+	if item.MaintenanceRatePercent == 0 {
+		for _, k := range []string{"maintenance_rate_percent"} {
+			if v, ok := rawMap[k]; ok {
+				if f, ok := v.(float64); ok && f != 0 {
+					item.MaintenanceRatePercent = f
+					break
+				}
+			}
+		}
+	}
+	if specs, ok := rawMap["specs"].(map[string]interface{}); ok && len(specs) > 0 {
+		if item.TechnicalSpecs == nil {
+			item.TechnicalSpecs = make(map[string]interface{})
+		}
+		for sk, sv := range specs {
+			item.TechnicalSpecs[sk] = sv
+		}
+	}
+
+	// Strict validations per Phase A specification
+	if item.Price < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "purchase price cannot be negative"})
+		return
+	}
+	if item.ExpectedLifeA4Pages < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "expected lifespan cannot be negative"})
+		return
+	}
+	if item.MaintenanceRatePercent < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "maintenance rate percent cannot be negative"})
+		return
+	}
+	if item.TotalColorSlots < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "total color slots cannot be negative"})
+		return
+	}
+
+	// Strict A2 guard: Database persistence is mandatory; never return 200 on uncommitted or unavailable DB
+	if db.DB == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status": "error",
+			"error":  "database unavailable: equipment persistence requires database connection",
+		})
 		return
 	}
 
 	item.ID = id
 	item.UpdatedAt = time.Now().Format(time.RFC3339)
 
-	assetStoreMutex.Lock()
-	existingItem, exists := equipmentStore[id]
-	if !exists && db.DB != nil {
-		existingItem, _ = getEquipmentByIDFromDB(id)
+	var existingItem EquipmentItem
+	existingItem, _ = getEquipmentByIDFromDB(id)
+	if existingItem.ID == "" {
+		assetStoreMutex.RLock()
+		existingItem = equipmentStore[id]
+		assetStoreMutex.RUnlock()
 	}
 
-	// Merge partial fields: do not let 0 or blank values wipe out existing data
-	if item.Price == 0 && existingItem.Price > 0 {
+	hasAnyRawKey := func(m map[string]interface{}, keys ...string) bool {
+		for _, k := range keys {
+			if val, exists := m[k]; exists && val != nil {
+				return true
+			}
+		}
+		if specs, ok := m["specs"].(map[string]interface{}); ok {
+			for _, k := range keys {
+				if val, exists := specs[k]; exists && val != nil {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	priceExplicit := hasAnyRawKey(rawMap, "price", "purchasePrice", "purchaseCost", "purchase_price", "price_cost", "MachinePrice", "unitPrice")
+	lifeExplicit := hasAnyRawKey(rawMap, "expectedLifeA4Pages", "printedPagesCapacity", "expected_life_a4_pages", "expectedLifespan", "lifetimePagesA4", "TargetTotalPages", "expectedLife")
+	maintExplicit := hasAnyRawKey(rawMap, "maintenanceRatePercent", "maintenance_rate_percent")
+
+	// Merge partial fields: only fall back to existingItem when key was omitted in request
+	if !priceExplicit && item.Price == 0 && existingItem.Price > 0 {
 		item.Price = existingItem.Price
 	}
 	if item.Name == "" && existingItem.Name != "" {
@@ -643,10 +756,10 @@ func HandleUpdateAssetV1(c *gin.Context) {
 	if item.TotalColorSlots == 0 && existingItem.TotalColorSlots > 0 {
 		item.TotalColorSlots = existingItem.TotalColorSlots
 	}
-	if item.ExpectedLifeA4Pages == 0 && existingItem.ExpectedLifeA4Pages > 0 {
+	if !lifeExplicit && item.ExpectedLifeA4Pages == 0 && existingItem.ExpectedLifeA4Pages > 0 {
 		item.ExpectedLifeA4Pages = existingItem.ExpectedLifeA4Pages
 	}
-	if item.MaintenanceRatePercent == 0 && existingItem.MaintenanceRatePercent > 0 {
+	if !maintExplicit && item.MaintenanceRatePercent == 0 && existingItem.MaintenanceRatePercent > 0 {
 		item.MaintenanceRatePercent = existingItem.MaintenanceRatePercent
 	}
 	if item.Vendor == "" && existingItem.Vendor != "" {
@@ -683,23 +796,46 @@ func HandleUpdateAssetV1(c *gin.Context) {
 		item.OemBaselineSpecs = existingItem.OemBaselineSpecs
 	}
 	if len(item.TechnicalSpecs) == 0 && len(existingItem.TechnicalSpecs) > 0 {
-		item.TechnicalSpecs = existingItem.TechnicalSpecs
+		item.TechnicalSpecs = make(map[string]interface{})
+		for k, v := range existingItem.TechnicalSpecs {
+			item.TechnicalSpecs[k] = v
+		}
+	}
+	if item.TechnicalSpecs == nil {
+		item.TechnicalSpecs = make(map[string]interface{})
+	}
+	if priceExplicit {
+		item.TechnicalSpecs["purchaseCost"] = item.Price
+		item.TechnicalSpecs["price"] = item.Price
+	}
+	if lifeExplicit {
+		item.TechnicalSpecs["expectedLifeA4Pages"] = item.ExpectedLifeA4Pages
+		item.TechnicalSpecs["expectedLife"] = item.ExpectedLifeA4Pages
+	}
+	if maintExplicit {
+		item.TechnicalSpecs["maintenanceRatePercent"] = item.MaintenanceRatePercent
 	}
 
+	// Persist to PostgreSQL first
+	err = updateEquipmentInDB(id, item)
+	if err != nil {
+		log.Printf("[DB ERROR] Failed to update printer in DB: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"error":   "failed to persist equipment to database",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Commit to in-memory store only after DB persistence succeeds
+	assetStoreMutex.Lock()
 	equipmentStore[id] = item
 	if rawID != id {
 		delete(equipmentStore, rawID)
 	}
 	assetStoreMutex.Unlock()
-
-	if db.DB != nil {
-		err := updateEquipmentInDB(id, item)
-		if err != nil {
-			log.Printf("[DB ERROR] Failed to update printer in DB: %v", err)
-		} else {
-			log.Printf("[DB SUCCESS] Printer %s updated in PostgreSQL!", id)
-		}
-	}
+	NotifyEquipmentMutated()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
@@ -889,8 +1025,101 @@ func getEquipmentFromDB() ([]EquipmentItem, error) {
 	}
 
 	_ = enrichEquipmentWithInkLinksFromDB(items)
+	_ = enrichEquipmentWithWearPartsFromDB(items)
 
 	return items, nil
+}
+
+func enrichEquipmentWithWearPartsFromDB(items []EquipmentItem) error {
+	if db.DB == nil || len(items) == 0 {
+		return nil
+	}
+
+	query := `
+		SELECT id, asset_id, part_name_lo, part_name_en, part_category,
+		       cost_price_lak, expected_lifespan_units, unit_type, current_counter,
+		       is_active
+		FROM machine_wear_parts
+		WHERE is_active = true
+		ORDER BY asset_id, created_at
+	`
+	rows, err := db.DB.Query(query)
+	if err != nil {
+		log.Printf("[DB WEAR PARTS QUERY ERROR] %v", err)
+		return err
+	}
+	defer rows.Close()
+
+	type partRow struct {
+		id       string
+		assetID  string
+		nameLo   string
+		nameEn   string
+		category string
+		cost     float64
+		life     int64
+		unitType string
+		counter  int64
+		isActive bool
+	}
+
+	partsByAsset := make(map[string][]partRow)
+	for rows.Next() {
+		var pr partRow
+		if err := rows.Scan(&pr.id, &pr.assetID, &pr.nameLo, &pr.nameEn, &pr.category, &pr.cost, &pr.life, &pr.unitType, &pr.counter, &pr.isActive); err == nil {
+			partsByAsset[pr.assetID] = append(partsByAsset[pr.assetID], pr)
+		}
+	}
+
+	for i := range items {
+		assetID := items[i].ID
+		partRows, ok := partsByAsset[assetID]
+		if !ok {
+			canonical := ResolveEquipmentAlias(assetID)
+			partRows, ok = partsByAsset[canonical]
+		}
+		if !ok || len(partRows) == 0 {
+			continue
+		}
+
+		var compObjs []interface{}
+		var totalWearRate float64
+		for _, pr := range partRows {
+			costPerUnit := 0.0
+			if pr.life > 0 {
+				costPerUnit = pr.cost / float64(pr.life)
+			}
+			totalWearRate += costPerUnit
+
+			compObjs = append(compObjs, map[string]interface{}{
+				"id":                      pr.id,
+				"name":                    pr.nameEn,
+				"nameEn":                  pr.nameEn,
+				"nameLo":                  pr.nameLo,
+				"category":                pr.category,
+				"cost":                    pr.cost,
+				"cost_price_lak":          pr.cost,
+				"lifeVal":                 pr.life,
+				"expected_lifespan_units": pr.life,
+				"costPerUnit":             costPerUnit,
+				"wear_cost_per_unit_lak":  costPerUnit,
+				"unitLabel":               pr.unitType,
+				"unit_type":               pr.unitType,
+				"current_counter":         pr.counter,
+				"usage":                   0,
+				"threshold":               85,
+			})
+		}
+
+		items[i].Components = compObjs
+		if items[i].TechnicalSpecs == nil {
+			items[i].TechnicalSpecs = make(map[string]interface{})
+		}
+		items[i].TechnicalSpecs["components"] = compObjs
+		items[i].TechnicalSpecs["wearPartsRate"] = totalWearRate
+	}
+
+	return nil
 }
 
 func enrichEquipmentWithInkLinksFromDB(items []EquipmentItem) error {
@@ -904,7 +1133,8 @@ func enrichEquipmentWithInkLinksFromDB(items []EquipmentItem) error {
 		       COALESCE(imc.color_name, pcl.ink_code),
 		       COALESCE(imc.color_group, ''),
 		       COALESCE(imc.unit_price, 0),
-		       COALESCE(imc.ink_base_type::text, 'Pigment')
+		       COALESCE(imc.ink_base_type::text, 'Pigment'),
+		       COALESCE((imc.technical_specs->>'volume_ml')::numeric, NULLIF(REGEXP_REPLACE(imc.volume, '[^0-9.]', '', 'g'), '')::numeric, pcl.oem_standard_volume_ml, 1)::numeric
 		FROM printer_color_link pcl
 		LEFT JOIN ink_master_catalog imc ON pcl.ink_code = imc.ink_code
 		ORDER BY pcl.asset_id, pcl.slot_position
@@ -917,21 +1147,22 @@ func enrichEquipmentWithInkLinksFromDB(items []EquipmentItem) error {
 	defer rows.Close()
 
 	type inkLinkRow struct {
-		assetID      string
-		slotPosition string
-		inkCode      string
-		yield        int
-		volumeMl     float64
-		colorName    string
-		colorGroup   string
-		unitPrice    float64
-		inkBaseType  string
+		assetID          string
+		slotPosition     string
+		inkCode          string
+		yield            int
+		volumeMl         float64
+		colorName        string
+		colorGroup       string
+		unitPrice        float64
+		inkBaseType      string
+		containerVol     float64
 	}
 
 	linksByAsset := make(map[string][]inkLinkRow)
 	for rows.Next() {
 		var r inkLinkRow
-		if err := rows.Scan(&r.assetID, &r.slotPosition, &r.inkCode, &r.yield, &r.volumeMl, &r.colorName, &r.colorGroup, &r.unitPrice, &r.inkBaseType); err == nil {
+		if err := rows.Scan(&r.assetID, &r.slotPosition, &r.inkCode, &r.yield, &r.volumeMl, &r.colorName, &r.colorGroup, &r.unitPrice, &r.inkBaseType, &r.containerVol); err == nil {
 			linksByAsset[r.assetID] = append(linksByAsset[r.assetID], r)
 		}
 	}
@@ -953,7 +1184,13 @@ func enrichEquipmentWithInkLinksFromDB(items []EquipmentItem) error {
 		for _, r := range linkRows {
 			costPerPage := 0.0
 			if r.yield > 0 {
-				costPerPage = r.unitPrice / float64(r.yield)
+				if r.containerVol > 0 && r.volumeMl > 0 && r.containerVol > r.volumeMl*1.2 {
+					// Bulk refill bottle: cost per page = (unit_price / container_volume_ml) * (printer_consumption_rate_ml / iso_page_yield_a4)
+					costPerPage = (r.unitPrice / r.containerVol) * (r.volumeMl / float64(r.yield))
+				} else {
+					// Standard cartridge / bottle matching OEM printer capacity
+					costPerPage = r.unitPrice / float64(r.yield)
+				}
 			}
 			isBlack := strings.EqualFold(r.colorGroup, "Black") || strings.Contains(strings.ToUpper(r.slotPosition), "(K")
 			if isBlack {
@@ -1053,6 +1290,7 @@ func getEquipmentByIDFromDB(id string) (EquipmentItem, error) {
 
 	singleSlice := []EquipmentItem{item}
 	_ = enrichEquipmentWithInkLinksFromDB(singleSlice)
+	_ = enrichEquipmentWithWearPartsFromDB(singleSlice)
 	item = singleSlice[0]
 
 	return item, nil
@@ -1317,6 +1555,14 @@ func saveInboundToDB(assetID string, req InboundAssetRequest) error {
 	return err
 }
 
+var OnEquipmentMutated func()
+
+func NotifyEquipmentMutated() {
+	if OnEquipmentMutated != nil {
+		OnEquipmentMutated()
+	}
+}
+
 func updateEquipmentInDB(id string, item EquipmentItem) error {
 	pCat := NormalizePrinterCategory(item.PrinterCategory, item.Brand, item.Model, item.TechnicalSpecs)
 	item.PrinterCategory = pCat
@@ -1325,6 +1571,13 @@ func updateEquipmentInDB(id string, item EquipmentItem) error {
 	}
 	item.TechnicalSpecs["category"] = "Printer"
 	item.TechnicalSpecs["printerCategory"] = pCat
+	item.TechnicalSpecs["purchaseCost"] = item.Price
+	item.TechnicalSpecs["price"] = item.Price
+	item.TechnicalSpecs["expectedLifeA4Pages"] = item.ExpectedLifeA4Pages
+	item.TechnicalSpecs["expectedLife"] = item.ExpectedLifeA4Pages
+	if item.MaintenanceRatePercent > 0 {
+		item.TechnicalSpecs["maintenanceRatePercent"] = item.MaintenanceRatePercent
+	}
 
 	techBytes, _ := json.Marshal(item.TechnicalSpecs)
 	oemBytes, _ := json.Marshal(item.OemBaselineSpecs)
@@ -1338,10 +1591,10 @@ func updateEquipmentInDB(id string, item EquipmentItem) error {
 			warranty_expiry_year, status, location_dept, technical_specs,
 			oem_baseline_specs, components, product_image_url, receipt_invoice_url, updated_at
 		) VALUES (
-			$1, COALESCE(NULLIF($2, ''), 'SN-' || $1::text), COALESCE(NULLIF($3, ''), 'Generic'), COALESCE(NULLIF($4, ''), 'Model'), $5::printer_category_enum,
+			$1, $2, $3, $4, $5::printer_category_enum,
 			$6::printer_color_scheme_enum, $7, $8,
-			$9, CURRENT_DATE, $10, COALESCE(NULLIF($11, ''), 'Supplier'),
-			$12, $13::printer_status_enum, COALESCE(NULLIF($14, ''), 'Main Dept'), $15::jsonb,
+			$9, CURRENT_DATE, $10, $11,
+			$12, $13::printer_status_enum, $14, $15::jsonb,
 			$16::jsonb, $17::jsonb, $18, $19, NOW()
 		)
 		ON CONFLICT (asset_id) DO UPDATE SET
@@ -1351,9 +1604,9 @@ func updateEquipmentInDB(id string, item EquipmentItem) error {
 			category = EXCLUDED.category,
 			color_scheme_type = EXCLUDED.color_scheme_type,
 			total_color_slots = EXCLUDED.total_color_slots,
-			expected_life_a4_pages = CASE WHEN EXCLUDED.expected_life_a4_pages > 0 THEN EXCLUDED.expected_life_a4_pages ELSE printers.expected_life_a4_pages END,
+			expected_life_a4_pages = EXCLUDED.expected_life_a4_pages,
 			maintenance_rate_percent = EXCLUDED.maintenance_rate_percent,
-			price_cost = CASE WHEN EXCLUDED.price_cost > 0 THEN EXCLUDED.price_cost ELSE printers.price_cost END,
+			price_cost = EXCLUDED.price_cost,
 			vendor_supplier = COALESCE(NULLIF(EXCLUDED.vendor_supplier, ''), printers.vendor_supplier),
 			warranty_expiry_year = EXCLUDED.warranty_expiry_year,
 			status = EXCLUDED.status,
@@ -1363,6 +1616,30 @@ func updateEquipmentInDB(id string, item EquipmentItem) error {
 			components = EXCLUDED.components,
 			updated_at = NOW()
 	`
+
+	serial := item.SerialNumber
+	if serial == "" {
+		serial = "SN-" + id
+	}
+	brand := item.Brand
+	if brand == "" {
+		brand = "Generic"
+	}
+	model := item.Model
+	if model == "" {
+		model = item.Name
+		if model == "" {
+			model = "Model"
+		}
+	}
+	vendor := item.Vendor
+	if vendor == "" {
+		vendor = "Supplier"
+	}
+	location := item.Location
+	if location == "" {
+		location = "Main Dept"
+	}
 
 	pCat = NormalizePrinterCategory(item.PrinterCategory, item.Brand, item.Model, item.TechnicalSpecs)
 	if pCat == "" {
@@ -1381,10 +1658,10 @@ func updateEquipmentInDB(id string, item EquipmentItem) error {
 	}
 
 	_, err := db.DB.Exec(query,
-		id, item.SerialNumber, item.Brand, item.Model, pCat,
+		id, serial, brand, model, pCat,
 		cScheme, item.TotalColorSlots, item.ExpectedLifeA4Pages,
-		item.MaintenanceRatePercent, item.Price, item.Vendor,
-		item.WarrantyExpirationYear, status, item.Location,
+		item.MaintenanceRatePercent, item.Price, vendor,
+		item.WarrantyExpirationYear, status, location,
 		string(techBytes), string(oemBytes), string(compBytes),
 		item.ProductImageUrl, item.ReceiptInvoiceUrl,
 	)

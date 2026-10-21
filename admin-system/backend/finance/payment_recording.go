@@ -334,42 +334,50 @@ func validateRevision(s *PaymentSummary, revision *int64) error {
 	return nil
 }
 func eligibleCustomer(c *gin.Context, tx *sql.Tx, s *PaymentSummary) error {
-	role := c.GetString("user_role")
-	isManagement := role == auth.RoleAdmin || role == auth.RoleOwner || role == auth.RoleManager || role == "sales" || role == "super_admin" || role == "finance" || role == "accountant" || role == ""
-	if s.customerID == "" {
-		if isManagement {
-			return nil
-		}
+	if strings.TrimSpace(s.customerID) == "" {
 		return operationError(422, "CUSTOMER_DEPOSIT_INELIGIBLE")
 	}
 	var eligible bool
 	err := tx.QueryRowContext(c.Request.Context(), `SELECT deposit_eligible FROM customers WHERE id=$1 FOR SHARE`, s.customerID).Scan(&eligible)
 	if err != nil {
-		if isManagement {
-			return nil
+		if errors.Is(err, sql.ErrNoRows) {
+			return operationError(422, "CUSTOMER_DEPOSIT_INELIGIBLE")
 		}
 		return err
 	}
 	if !eligible {
-		if isManagement {
-			_, _ = tx.ExecContext(c.Request.Context(), `UPDATE customers SET deposit_eligible=true, updated_at=NOW() WHERE id=$1`, s.customerID)
-			return nil
-		}
 		return operationError(422, "CUSTOMER_DEPOSIT_INELIGIBLE")
 	}
 	return nil
 }
 
+func normalizePaymentContext(rawContext, method string) (string, error) {
+	ctxVal := strings.ToUpper(strings.TrimSpace(rawContext))
+	if ctxVal == "" {
+		if strings.EqualFold(strings.TrimSpace(method), "cash") {
+			return "COUNTER", nil
+		}
+		return "UNKNOWN", nil
+	}
+	switch ctxVal {
+	case "ONLINE", "COUNTER", "UNKNOWN":
+		return ctxVal, nil
+	default:
+		return "", operationError(422, "INVALID_PAYMENT_CONTEXT")
+	}
+}
+
 type paymentRecordRequest struct {
-	Channel   string `json:"channel"`
-	Purpose   string `json:"purpose"`
-	Amount    string `json:"requested_amount_lak"`
-	Currency  string `json:"currency"`
-	Method    string `json:"payment_method_id"`
-	Reference string `json:"reference"`
-	Evidence  string `json:"evidence_url"`
-	Percent   string `json:"requested_percent"`
-	Revision  *int64 `json:"expected_payment_revision"`
+	Channel        string `json:"channel"`
+	Purpose        string `json:"purpose"`
+	Amount         string `json:"requested_amount_lak"`
+	Currency       string `json:"currency"`
+	Method         string `json:"payment_method_id"`
+	PaymentContext string `json:"payment_context,omitempty"`
+	Reference      string `json:"reference"`
+	Evidence       string `json:"evidence_url"`
+	Percent        string `json:"requested_percent"`
+	Revision       *int64 `json:"expected_payment_revision"`
 }
 
 func paymentRecordRow(c *gin.Context, tx *sql.Tx, id string) (map[string]any, error) {
@@ -408,6 +416,11 @@ func HandleCreatePaymentRecord(c *gin.Context) {
 		return
 	}
 	req.Reference = strings.TrimSpace(req.Reference)
+	paymentContext, err := normalizePaymentContext(req.PaymentContext, req.Method)
+	if err != nil {
+		WriteOperationError(c, err)
+		return
+	}
 	id := c.Param("id")
 	tx, replay, fp, err := BeginOperation(c, "PAYMENT_REQUEST", gin.H{"order_id": id, "request": req})
 	if err != nil {
@@ -444,13 +457,24 @@ func HandleCreatePaymentRecord(c *gin.Context) {
 		WriteOperationError(c, operationError(422, "INVALID_PAYMENT_REQUEST"))
 		return
 	}
+	depositAllowed := s.DepositMode != nil && *s.DepositMode == "ON"
+	if !depositAllowed {
+		if req.Purpose == "DEPOSIT" || !amount.Equal(s.remaining) {
+			WriteOperationError(c, operationError(422, "FULL_OUTSTANDING_REQUIRED"))
+			return
+		}
+	}
 	if (req.Purpose == "FULL" || req.Purpose == "REMAINING") && !amount.Equal(s.remaining) {
 		WriteOperationError(c, operationError(422, "FULL_OUTSTANDING_REQUIRED"))
 		return
 	}
-	if s.DepositMode != nil && *s.DepositMode == "ON" {
+	if depositAllowed {
 		if err = eligibleCustomer(c, tx, s); err != nil {
 			WriteOperationError(c, err)
+			return
+		}
+		if s.percent.Equal(decimal.NewFromInt(100)) && !amount.Equal(s.remaining) {
+			WriteOperationError(c, operationError(422, "FULL_OUTSTANDING_REQUIRED"))
 			return
 		}
 	}
@@ -489,7 +513,7 @@ func HandleCreatePaymentRecord(c *gin.Context) {
 		}
 	}
 	var recordID string
-	err = tx.QueryRowContext(c.Request.Context(), `INSERT INTO payment_records(order_id,record_kind,state,channel,purpose,requested_amount_lak,payment_method_id,reference,evidence_url,actor_id,request_key,request_fingerprint) VALUES($1,'RECEIPT','PENDING',$2,$3,$4,$5,NULLIF($6,''),$7,$8,$9,$10) RETURNING id::text`, id, req.Channel, req.Purpose, amount.StringFixed(2), req.Method, req.Reference, req.Evidence, c.GetString("user_id"), c.GetHeader("Idempotency-Key"), fp).Scan(&recordID)
+	err = tx.QueryRowContext(c.Request.Context(), `INSERT INTO payment_records(order_id,record_kind,state,channel,purpose,requested_amount_lak,payment_method_id,payment_context,reference,evidence_url,actor_id,request_key,request_fingerprint) VALUES($1,'RECEIPT','PENDING',$2,$3,$4,$5,$6,NULLIF($7,''),$8,$9,$10,$11) RETURNING id::text`, id, req.Channel, req.Purpose, amount.StringFixed(2), req.Method, paymentContext, req.Reference, req.Evidence, c.GetString("user_id"), c.GetHeader("Idempotency-Key"), fp).Scan(&recordID)
 	if err != nil {
 		WriteOperationError(c, err)
 		return
@@ -631,6 +655,10 @@ func HandlePaymentHistory(c *gin.Context) {
 	if err == nil {
 		for _, record := range records {
 			url, _ := record["evidence_url"].(string)
+			if url == "cash" || strings.HasPrefix(url, "cash") {
+				record["evidence_available"] = true
+				continue
+			}
 			if _, e := ReadOrderUpload(c.Request.Context(), tx, s.OrderID, url, "payment_slip", false); e != nil {
 				record["evidence_available"] = false
 			} else {
@@ -787,8 +815,12 @@ func HandlePutPaymentConfig(c *gin.Context) {
 }
 
 // Journal linkage is obtained from this transaction, never guessed from an order's last journal.
-func receiptJournal(c *gin.Context, tx *sql.Tx, orderID, recordID string, amount decimal.Decimal) (string, error) {
-	bank, err := getAccountIDByCode(tx, "1110")
+func receiptJournal(c *gin.Context, tx *sql.Tx, orderID, recordID, method string, amount decimal.Decimal) (string, error) {
+	debitCode := "1110"
+	if strings.EqualFold(strings.TrimSpace(method), "cash") {
+		debitCode = "1100"
+	}
+	debitAccount, err := getAccountIDByCode(tx, debitCode)
 	if err != nil {
 		return "", err
 	}
@@ -801,7 +833,7 @@ func receiptJournal(c *gin.Context, tx *sql.Tx, orderID, recordID string, amount
 	if err != nil {
 		return "", err
 	}
-	_, err = tx.ExecContext(c.Request.Context(), `INSERT INTO journal_lines(entry_id,account_id,debit,credit,currency) VALUES($1::uuid,$2::uuid,$4,0,'LAK'),($1::uuid,$3::uuid,0,$4,'LAK')`, id, bank, revenue, amount.StringFixed(2))
+	_, err = tx.ExecContext(c.Request.Context(), `INSERT INTO journal_lines(entry_id,account_id,debit,credit,currency) VALUES($1::uuid,$2::uuid,$4,0,'LAK'),($1::uuid,$3::uuid,0,$4,'LAK')`, id, debitAccount, revenue, amount.StringFixed(2))
 	return id, err
 }
 func HandleReviewPaymentRecord(c *gin.Context, req PaymentVerificationRequest) {
@@ -869,6 +901,17 @@ func applyPaymentReview(c *gin.Context, tx *sql.Tx, s *PaymentSummary, req Payme
 		}
 		_, err = tx.ExecContext(c.Request.Context(), `UPDATE payment_records SET state='REJECTED',reviewer_id=$2,reason=$3,reviewed_at=NOW() WHERE id=$1::uuid`, req.PaymentRecordID, c.GetString("user_id"), req.RejectionReason)
 	} else {
+		amount, e := ParsePaymentAmount(req.ActualReceivedAmountLAK)
+		requestedAmount, e2 := decimal.NewFromString(requested)
+		if e != nil || e2 != nil || !amount.IsPositive() || amount.GreaterThan(requestedAmount) || amount.GreaterThan(s.remaining) {
+			return nil, operationError(422, "INVALID_RECEIVED_AMOUNT")
+		}
+		depositAllowed := s.DepositMode != nil && *s.DepositMode == "ON"
+		if !depositAllowed || s.percent.Equal(decimal.NewFromInt(100)) || requestedAmount.Equal(s.remaining) {
+			if !amount.Equal(s.remaining) {
+				return nil, operationError(422, "FULL_OUTSTANDING_REQUIRED")
+			}
+		}
 		// This durable request was admitted before configuration could change.
 		// Reconciliation uses its retained original destination, even when disabled.
 		var account string
@@ -878,17 +921,12 @@ func applyPaymentReview(c *gin.Context, tx *sql.Tx, s *PaymentSummary, req Payme
 		if strings.TrimSpace(account) == "" {
 			return nil, operationError(409, "PAYMENT_DESTINATION_INCONSISTENT")
 		}
-		amount, e := ParsePaymentAmount(req.ActualReceivedAmountLAK)
-		requestedAmount, e2 := decimal.NewFromString(requested)
-		if e != nil || e2 != nil || !amount.IsPositive() || amount.GreaterThan(requestedAmount) || amount.GreaterThan(s.remaining) {
-			return nil, operationError(422, "INVALID_RECEIVED_AMOUNT")
-		}
-		if s.DepositMode != nil && *s.DepositMode == "ON" {
+		if depositAllowed {
 			if err = eligibleCustomer(c, tx, s); err != nil {
 				return nil, err
 			}
 		}
-		journalID, e := receiptJournal(c, tx, s.OrderID, req.PaymentRecordID, amount)
+		journalID, e := receiptJournal(c, tx, s.OrderID, req.PaymentRecordID, method, amount)
 		if e != nil {
 			return nil, e
 		}
@@ -994,9 +1032,11 @@ func HandleReversePaymentRecord(c *gin.Context) {
 		return
 	}
 	var priorText string
-	if _, err = ReadOrderUpload(c.Request.Context(), tx, orderID, evidence, "payment_slip", false); err != nil {
-		WriteOperationError(c, err)
-		return
+	if evidence != "cash" && evidence != "CASH" && !strings.HasPrefix(evidence, "cash") {
+		if _, err = ReadOrderUpload(c.Request.Context(), tx, orderID, evidence, "payment_slip", false); err != nil {
+			WriteOperationError(c, err)
+			return
+		}
 	}
 	err = tx.QueryRowContext(c.Request.Context(), `SELECT COALESCE(SUM(actual_received_amount_lak),0)::text FROM payment_records WHERE reversal_of=$1::uuid AND state='CONFIRMED'`, originalID).Scan(&priorText)
 	if err != nil {
@@ -1076,7 +1116,8 @@ func HandleReversePaymentRecord(c *gin.Context) {
 			return
 		}
 	}
-	_, err = tx.ExecContext(c.Request.Context(), `INSERT INTO payment_records(id,order_id,record_kind,state,channel,purpose,requested_amount_lak,actual_received_amount_lak,payment_method_id,evidence_url,reversal_of,reason,actor_id,reviewer_id,journal_entry_id,request_key,request_fingerprint,reviewed_at) VALUES($1::uuid,$2,'REVERSAL','CONFIRMED','MANUAL_QR','REMAINING',$3,$3,$4,$5,$6::uuid,$7,$8,$8,$9::uuid,$10,$11,NOW())`, reversalID, orderID, amount.StringFixed(2), method, evidence, originalID, req.Reason, c.GetString("user_id"), journalID, c.GetHeader("Idempotency-Key"), fp)
+	reversalContext, _ := normalizePaymentContext("", method)
+	_, err = tx.ExecContext(c.Request.Context(), `INSERT INTO payment_records(id,order_id,record_kind,state,channel,purpose,requested_amount_lak,actual_received_amount_lak,payment_method_id,payment_context,evidence_url,reversal_of,reason,actor_id,reviewer_id,journal_entry_id,request_key,request_fingerprint,reviewed_at) VALUES($1::uuid,$2,'REVERSAL','CONFIRMED','MANUAL_QR','REMAINING',$3,$3,$4,$5,$6,$7::uuid,$8,$9,$9,$10::uuid,$11,$12,NOW())`, reversalID, orderID, amount.StringFixed(2), method, reversalContext, evidence, originalID, req.Reason, c.GetString("user_id"), journalID, c.GetHeader("Idempotency-Key"), fp)
 	if err != nil {
 		WriteOperationError(c, err)
 		return
@@ -1199,8 +1240,13 @@ func HandleLegacyFullReview(c *gin.Context, req PaymentVerificationRequest) {
 		WriteOperationError(c, operationError(422, "INVALID_RECEIVED_AMOUNT"))
 		return
 	}
+	paymentContext, err := normalizePaymentContext(req.PaymentContext, method)
+	if err != nil {
+		WriteOperationError(c, err)
+		return
+	}
 	var recordID string
-	err = tx.QueryRowContext(c.Request.Context(), `INSERT INTO payment_records(order_id,record_kind,state,channel,purpose,requested_amount_lak,payment_method_id,evidence_url,actor_id,request_key,request_fingerprint) VALUES($1,'RECEIPT','PENDING','MANUAL_QR','FULL',$2,$3,$4,$5,$6,$7) RETURNING id::text`, id, s.Remaining, method, slip, c.GetString("user_id"), c.GetHeader("Idempotency-Key"), fp).Scan(&recordID)
+	err = tx.QueryRowContext(c.Request.Context(), `INSERT INTO payment_records(order_id,record_kind,state,channel,purpose,requested_amount_lak,payment_method_id,payment_context,evidence_url,actor_id,request_key,request_fingerprint) VALUES($1,'RECEIPT','PENDING','MANUAL_QR','FULL',$2,$3,$4,$5,$6,$7,$8) RETURNING id::text`, id, s.Remaining, method, paymentContext, slip, c.GetString("user_id"), c.GetHeader("Idempotency-Key"), fp).Scan(&recordID)
 	if err != nil {
 		WriteOperationError(c, err)
 		return

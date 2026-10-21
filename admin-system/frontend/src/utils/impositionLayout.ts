@@ -42,7 +42,7 @@ export function preCutStockValidation(paper: any): { dimensions?: { sheetWidth: 
         candidates.push([specs[wk], specs[hk]]);
       }
     }
-    const standardSizeCandidate = specs.standardSize ?? paper?.standardSize ?? (paper?.name?.includes('A4') ? 'A4' : paper?.name?.includes('A3') ? 'A3' : paper?.name?.includes('A5') ? 'A5' : undefined);
+    const standardSizeCandidate = specs.standardSize ?? paper?.standardSize;
     if (standardSizeCandidate !== undefined) {
       const preset = ({ A3: [297, 420], A4: [210, 297], A5: [148, 210] } as Record<string, number[]>)[String(standardSizeCandidate).toUpperCase()];
       if (!preset) return invalid(`${path}.standardSize ຕ້ອງເປັນ A3, A4 ຫຼື A5; ຫຼື ລະບຸ width_mm/height_mm.`);

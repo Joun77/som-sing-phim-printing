@@ -1,0 +1,193 @@
+[
+  {
+    "probeId": "PROBE-1A",
+    "name": "No Fabricated Verifier Label",
+    "status": "PASS",
+    "detail": "Generic accounting label fallback removed; uses actual reviewer ID or Pending Review / —",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:53.469Z"
+  },
+  {
+    "probeId": "PROBE-1B",
+    "name": "No Fabricated CONFIRMED Receipt Number",
+    "status": "PASS",
+    "detail": "Synthesized CONFIRMED receipt number removed; falls back to —",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:53.470Z"
+  },
+  {
+    "probeId": "PROBE-1C",
+    "name": "Frontend Provenance Vitest Suite (6/6 tests)",
+    "status": "PASS",
+    "detail": "All 6 unit tests in order-completed-summary-provenance.test.tsx passed",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:55.192Z"
+  },
+  {
+    "probeId": "PROBE-1D",
+    "name": "Orders List API Readback",
+    "status": "PASS",
+    "detail": "Retrieved 117 orders for summary inspection",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:55.489Z"
+  },
+  {
+    "probeId": "PROBE-2A",
+    "name": "Migration 050 Applied in Fixture DB",
+    "status": "PASS",
+    "detail": "Migration 050 applied and tracked in schema_migrations: 049_ae_payment_context_and_actual_cost_provenance.sql, 050_actual_cost_provenance_and_reconciliation.sql",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:55.527Z"
+  },
+  {
+    "probeId": "PROBE-2B",
+    "name": "Migration 050 Fresh & Upgrade Isolation Test",
+    "status": "PASS",
+    "detail": "Both fresh (001..050) and upgrade (001..048 -> 049 -> 050) scenarios passed cleanly on disposable fixtures",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:55.791Z"
+  },
+  {
+    "probeId": "PROBE-2C",
+    "name": "Legitimate Zero Cost Preservation",
+    "status": "PASS",
+    "detail": "ORD-VIP-DEMO-01 correctly preserved: status=RECORDED, provenance=LEGITIMATE_ZERO, total_cost=0.00",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:55.843Z"
+  },
+  {
+    "probeId": "PROBE-2D",
+    "name": "Partial Cost Provenance Preservation",
+    "status": "PASS",
+    "detail": "Partial order preserved: status=PARTIAL, provenance=HISTORICAL_PRESERVED",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:55.883Z"
+  },
+  {
+    "probeId": "PROBE-2E",
+    "name": "Order Actual Cost Audit Log Recording",
+    "status": "PASS",
+    "detail": "Found 117 audit records in order_actual_cost_logs",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:55.920Z"
+  },
+  {
+    "probeId": "PROBE-3A",
+    "name": "Legacy Reconciliation In-Memory Bypass Removal",
+    "status": "PASS",
+    "detail": "Silent legacyPaidApproved in-memory waiver removed; audited reconciliation required",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:55.921Z"
+  },
+  {
+    "probeId": "PROBE-3B",
+    "name": "Financial Reconciliation 409 Enforcement (Go Suite)",
+    "status": "PASS",
+    "detail": "Explicit opening 0 with no confirmed receipts rejected with HTTP 409 across all order statuses",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:56.075Z"
+  },
+  {
+    "probeId": "PROBE-3C",
+    "name": "Unreconciled Legacy Order HTTP 409 Enforcement",
+    "status": "PASS",
+    "detail": "All legacy orders strictly guarded",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:56.127Z"
+  },
+  {
+    "probeId": "PROBE-4A",
+    "name": "Density Continuity at 15%",
+    "status": "PASS",
+    "detail": "Continuous pricing curve: ratio is 0.9933",
+    "evidence": {
+      "costs": [
+        {
+          "density": 14,
+          "inkCost": 13987.49
+        },
+        {
+          "density": 14.9,
+          "inkCost": 14886.69
+        },
+        {
+          "density": 15,
+          "inkCost": 14986.6
+        },
+        {
+          "density": 15.1,
+          "inkCost": 15086.51
+        },
+        {
+          "density": 16,
+          "inkCost": 15985.71
+        }
+      ]
+    },
+    "timestamp": "2026-10-19T19:26:56.135Z"
+  },
+  {
+    "probeId": "PROBE-4B",
+    "name": "Explicit Zero Coverage Yields Zero Ink Cost",
+    "status": "PASS",
+    "detail": "ink_cost = 0.00 LAK",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:56.136Z"
+  },
+  {
+    "probeId": "PROBE-4C",
+    "name": "Missing Coverage Returns HTTP 400",
+    "status": "PASS",
+    "detail": "HTTP 400 returned with MISSING_COVERAGE",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:56.137Z"
+  },
+  {
+    "probeId": "PROBE-4D",
+    "name": "Negative Coverage Returns HTTP 400",
+    "status": "PASS",
+    "detail": "HTTP 400 returned with INVALID_COVERAGE",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:56.139Z"
+  },
+  {
+    "probeId": "PROBE-5A",
+    "name": "Mixed Color/Mono Ink Oracle (Population Split)",
+    "status": "PASS",
+    "detail": "Exact match: total=321.83 LAK (K: 36.83, CMY: 285.00)",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:56.140Z"
+  },
+  {
+    "probeId": "PROBE-5B",
+    "name": "Mixed Color/Mono Ink Oracle (Multi-Process Split)",
+    "status": "PASS",
+    "detail": "Exact match: total=321.83 LAK (K: 36.83, CMY: 285.00)",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:56.141Z"
+  },
+  {
+    "probeId": "PROBE-6A",
+    "name": "Phase A Machinery Cost (168.00 LAK: 90 Deprec + 78 Maint)",
+    "status": "PASS",
+    "detail": "Machinery = 168.00 LAK (90.00 + 78.00)",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:56.142Z"
+  },
+  {
+    "probeId": "PROBE-6B",
+    "name": "Phase A Baseline Direct Impression Cost (217.96 LAK)",
+    "status": "PASS",
+    "detail": "168.00 machine + 49.96 ink = 217.96 LAK",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:56.142Z"
+  },
+  {
+    "probeId": "PROBE-6C",
+    "name": "Odd Duplex & A4 on A3 Imposition Decoupling",
+    "status": "PASS",
+    "detail": "Two-up A4 on A3 sheets consumed decoupled from impression count with manual override",
+    "evidence": {},
+    "timestamp": "2026-10-19T19:26:57.340Z"
+  }
+]

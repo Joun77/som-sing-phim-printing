@@ -79,8 +79,9 @@ export async function setPaymentPolicy(orderId: string, mode: 'OFF' | 'ON', perc
   const body = await paymentRequest(`/api/v1/orders/${encodeURIComponent(orderId)}/payment-policy`, 'PUT', { deposit_mode: mode, deposit_target_percent: paymentDecimal(percent), expected_payment_revision: revision }, key);
   return confirmedPaymentSummary(body.data, orderId);
 }
-export async function createPaymentRecord(orderId: string, payload: { purpose: 'FULL' | 'DEPOSIT' | 'REMAINING'; requested_amount_lak: string; payment_method_id: string; evidence_url: string; expected_payment_revision: number; reference?: string; requested_percent?: string }, key: string) {
-  const body = await paymentRequest(`/api/v1/orders/${encodeURIComponent(orderId)}/payment-records`, 'POST', { ...payload, channel: 'MANUAL_QR', currency: 'LAK' }, key);
+export async function createPaymentRecord(orderId: string, payload: { purpose: 'FULL' | 'DEPOSIT' | 'REMAINING'; requested_amount_lak: string; payment_method_id: string; evidence_url: string; expected_payment_revision: number; reference?: string; requested_percent?: string; payment_context?: 'ONLINE' | 'COUNTER' }, key: string) {
+  const context = payload.payment_context || (payload.payment_method_id === 'cash' ? 'COUNTER' : 'ONLINE');
+  const body = await paymentRequest(`/api/v1/orders/${encodeURIComponent(orderId)}/payment-records`, 'POST', { ...payload, payment_context: context, channel: 'MANUAL_QR', currency: 'LAK' }, key);
   const summary = confirmedPaymentSummary(body.data?.summary, orderId);
   const record = body.data?.record as PaymentRecord;
   if (!record?.id || record.order_id !== orderId || record.state !== 'PENDING') throw new Error('ຍັງບໍ່ຢືນຢັນຄຳຂໍຊຳລະ');

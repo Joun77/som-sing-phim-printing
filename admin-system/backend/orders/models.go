@@ -137,10 +137,21 @@ type Order struct {
 	OverallStatus        OrderStatus             `json:"overall_status"`
 	Status               OrderStatus             `json:"status"` // Backward compatibility
 	DeliveryDate         string                  `json:"delivery_date"`
-	DepositAmount        float64                 `json:"deposit_amount"`
-	TotalPrice           float64                 `json:"total_price"`
-	TotalCost            float64                 `json:"total_cost"`
-	GoogleDriveLink      string                  `json:"google_drive_link"`
+	DepositAmount          float64                 `json:"deposit_amount"`
+	TotalPrice             float64                 `json:"total_price"`
+	TotalCost              float64                 `json:"total_cost"`
+	EstimatedCost          float64                 `json:"estimated_cost"`
+	RealizedPaperCost      *float64                `json:"realized_paper_cost"`
+	RealizedInkCost        *float64                `json:"realized_ink_cost"`
+	RealizedLaborCost      *float64                `json:"realized_labor_cost"`
+	RealizedFinishingCost  *float64                `json:"realized_finishing_cost"`
+	RealizedSpoilageCost   *float64                `json:"realized_spoilage_cost"`
+	RealizedTotalCost      *float64                `json:"realized_total_cost"`
+	ActualCost             *float64                `json:"actual_cost"`
+	ActualCostComplete     bool                    `json:"actual_cost_complete"`
+	ActualCostStatus       string                  `json:"actual_cost_status"`
+	CostCompleteness       string                  `json:"cost_completeness"`
+	GoogleDriveLink        string                  `json:"google_drive_link"`
 	ArtworkURL           string                  `json:"artwork_url,omitempty"`
 	ArtworkFileName      string                  `json:"artwork_file_name,omitempty"`
 	ArtworkFileSize      int64                   `json:"artwork_file_size,omitempty"`

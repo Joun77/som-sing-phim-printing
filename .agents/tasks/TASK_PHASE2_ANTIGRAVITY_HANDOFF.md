@@ -1,7 +1,95 @@
-# Phase2 Antigravity implementation handoff — 2026-10-07
-Status: ready_for_review (all 4 readiness review gaps resolved, automated test suites PASS, clean production builds). Human authorizes Phase2 implementation in Antigravity. Codex coordinator and existing QA retain independent acceptance. This task is an implementation adapter to the authoritative coordination/PHASE2_EXECUTION_BRIEF.md, not a replacement acceptance ledger.
+# Phase 2 Approved Correction Plan — 2026-10-13
+Status: ready_for_review (PHASES A, B, C, D, E fully verified; integrated package ready for independent Codex review).
+Note: The user authorized completing Phases B–E sequentially and submitting one integrated package for Codex review afterward. All phases (A through E) have completed with zero regressions and strict non-zero assertion enforcement.
 
-## Current phase AG-P2-CREATE
+## Phase Execution Sequence
+1. **PHASE A:** Durable Equipment Settings and Consistent Costs (ready_for_review; preserved for regression).
+2. **PHASE B:** Quotations and Production Dimensions (B1-B3).
+3. **PHASE C:** Payments and Deposit Mode (C1-C5).
+4. **PHASE D:** Order Summary and Financial Evidence (D1-D2).
+5. **PHASE E:** Integrated Verification (Full joined test + Phase A regression).
+
+## Recipient Dispatch & Activation Tracking (PHASES B–E)
+| Role | Conversation ID | Assigned Model | Status | Dispatched At | Task Scope |
+|---|---|---|---|---|---|
+| Coordinator | `bd98392b-e28c-4a8f-b78e-4715792b5d83` | Gemini 3.8 Flash | In Progress | 2026-10-13 02:30 | Scope, integration, dependencies, evidence |
+| Front-end Dev | `fe1f77f6-f769-47b3-8e72-eb3f9916a505` | Gemini 3.8 Flash | Dispatched | 2026-10-13 02:34 | UI/API wiring, Universal Modals, Deposit UI, Cost summary |
+| Back-end Dev | `c95266e6-1e7c-498d-8bf1-6c381fc09df9` | Gemini 3.8 Flash | Dispatched | 2026-10-13 02:34 | Imposition engine, payment transactions, canonical financials |
+| UX/UI Designer | `5cdddfd3-a8e5-414f-b223-549ccedba945` | Gemini 3.8 Flash | Dispatched | 2026-10-13 02:34 | Universal Modal Lao copy, layout, 0 emojis, design system |
+| QA-Tester | `6db59a2d-96c5-4580-95e3-3b87f569c103` | Gemini 3.8 Flash | Dispatched | 2026-10-13 02:34 | Independent test suites for B1-B3, C1-C5, D1-D2, E regression |
+
+
+## Test Environment Specification & Isolation Chain
+- **Protected Shop Database (Untouched & Preserved):**
+  - Container ID: `f0633155f003` (`somsing_postgres`) on `0.0.0.0:5432->5432/tcp`
+  - Database: `somsing_db`, User: `postgres`
+  - Policy: Read-only calibration inspection; never used for destructive tests, resets, or migrations.
+- **Isolated Test Fixture Database:**
+  - Container ID: `da2c2cd18551` (`somsing-phase1-test-fixture-db-1`) on `127.0.0.1:55432->5432/tcp`
+  - Database: `somsing_fixture_db`, User: `fixture`, Password: `fixture-only-not-a-shop-secret`
+  - DSN: `postgres://fixture:fixture-only-not-a-shop-secret@127.0.0.1:55432/somsing_fixture_db?sslmode=disable`
+  - Fixture Volume: `somsing_phase1_test_pgdata`
+- **Frontend Dev Server:** `http://localhost:5174` (Vite dev server, PID 4801)
+- **Backend API Target:** Fixture server / Backend configured with `TEST_FIXTURE_DSN` pointing to `127.0.0.1:55432`.
+
+## Controlled Epson Fixture Derivation (A3 Calibration)
+Asset: `PRN-9614` (Epson L15150)
+1. **Depreciation:** `18,000,000 LAK / 200,000 pages = 90.00 LAK/page`
+2. **Itemized Wear Parts:**
+   - Pickup Roller: `600,000 / 50,000 = 12.00 LAK`
+   - Maintenance Box: `700,000 / 50,000 = 14.00 LAK`
+   - Carriage Belt: `600,000 / 50,000 = 12.00 LAK`
+   - PrecisionCore Printhead: `4,000,000 / 100,000 = 40.00 LAK`
+   - Total Wear: `12.00 + 14.00 + 12.00 + 40.00 = 78.00 LAK/page`
+3. **Raw Ink Inputs (ISO 24712 A4 at 5% per channel / 20% CMYK total):**
+   - K: `145,000 LAK / 1,000 ml`, rate `127 ml / 7,500 impressions` -> `(145000 / 1000) * (127 / 7500) = 2.455333... LAK`
+   - C, M, Y (each): `95,000 LAK / 70 ml`, rate `70 ml / 6,000 impressions` -> `(95000 / 70) * (70 / 6000) = 15.833333... LAK`
+   - Sum Color: `3 * 15.833333... = 47.50 LAK`
+   - Ink Total (Full Precision): `2.455333... + 47.50 = 49.955333... LAK` -> Rounded for display: **49.96 LAK**
+4. **Grand Total (Excluding Paper Substrate):**
+   - Full Precision: `90.00 + 78.00 + 49.955333... = 217.955333... LAK` -> Rounded for display: **217.96 LAK**
+
+## QA Independent Verification Harness & Pre-Audit Status (16:42 UTC+7)
+- **Harness Prepared by QA (`6db59a2d`):**
+  - `verify_phase_a_spec.mjs`: Validated A3 mathematical derivations for Epson fixture PRN-9614:
+    - Depreciation: 18,000,000 / 200,000 = 90.00 LAK
+    - Wear parts: 12 + 14 + 12 + 40 = 78.00 LAK
+    - Ink raw derivation: K 2.455333... + Color 47.50 = 49.955333... LAK (rounded display: 49.96 LAK)
+    - Grand total: 90 + 78 + 49.955333... = 217.955333... LAK (rounded display: 217.96 LAK)
+    - Invariant check: PASS.
+  - `verify_phase_a_live_runtime.mjs`: Ready and verified against `somsing_fixture_db` (container `da2c2cd18551` on port 55432).
+## Phase A Delivery Package (Frozen & Ready for Codex Review)
+- **Delivered by Front-end Dev (`fe1f77f6`):**
+  - Artifact: `/Users/joun/.gemini/antigravity/brain/fe1f77f6-f769-47b3-8e72-eb3f9916a505/REPORT_FE_PHASE_A_DELIVERY_20261011.md`
+  - Changes: `wearPartsService.ts`, `AppContext.tsx`, `EquipmentDetailsPage.tsx`, `machineCostCalculator.ts`
+  - Tests: 19/19 vitest tests passed, 0 typecheck errors, clean Vite build (583ms).
+- **Delivered by Back-end Dev (`c95266e6`):**
+  - Checksums (SHA-256):
+    - `899d2bad4bedccb11dac36dfd101a888431114f4199a949997c6de7f1cfbcd2c`  `admin-system/backend/inventory/assets.go`
+    - `94224a204b6b04c8332ab428ba3713376023d29d6b0cf4cfd435b48bec8e1c66`  `admin-system/backend/settings/wear_parts.go`
+    - `0155d00dffd0cc591a7305656aa920eaff392f1ddfeae104af16d105a3ad0f26`  `admin-system/backend/main.go`
+    - `db77878a56e426af6d5590877c3236973a64b8cf706f4f9c26f5c1ab39bd8dae`  `admin-system/backend/pricing/engine.go`
+  - Tests: `go test ./pricing/...` (36/36 PASS), `go test ./settings/...` (7/7 PASS), `go build ./...` (PASS).
+- **Independent QA Report (`6db59a2d`):**
+  - Artifact: `.agents/reports/REPORT_PHASE_A_INDEPENDENT_QA_20261011.md`
+  - Live E2E Script: `verify_phase_a_live_e2e.mjs` (ALL 3 CRITERIA PASS on isolated port 55690 + somsing_fixture_db 55432).
+  - Protected Shop Database: Port 5432 (`f0633155f003`) 100% untouched.
+
+## Current Status: ready_for_review
+Frozen delivery package submitted for independent Codex acceptance. Phases B–E remain approved backlog.
+
+## Approved Backlog (Sequential execution: B → C → D → E)
+- Phase B: Quotation Validation Without Size-Mismatch Blocking
+- Phase C: Payment Context, Deposit Policy and Duplicate Prevention
+- Phase D: Canonical Order Summary and Honest Actual Costs
+- Phase E: Joined Independent Acceptance
+
+---
+
+# Historical Phase2 Antigravity implementation handoff — 2026-10-07
+Status: superseded (earlier records preserved below).
+
+## Prior phase AG-P2-CREATE
 Outcome: authorized staff creates an order from Preflight/quotation and obtains correct same-document success/navigation; after uncertain acknowledgment, recover the existing committed order without another quotation/order.
 Primary capability: frontend-developer; backend-developer only for a concrete required contract fix. Read shared-working-standard through somsing-dev-coordinator. Use supported model suitable for difficult money/state/idempotency work (Claude Opus 5.5 is observed available; select it for this phase if available). No extra agents by default.
 
@@ -323,3 +411,42 @@ Criteria Matrix:
       - **Automated Verification:** 9 unit tests in `tests/ag-p2-readiness-gaps.test.ts` PASS (5ms); backend tests `TestZeroCoveragePreservation` and `TestPrintedAreaInkCalculation_DecoupledFromPaperStock` PASS; clean `npm run build` and `go build ./...`. Ready for Codex independent review.
 
 
+
+## 14. AE-RECHECK-20261020 — Independent QA Acceptance Verification (2026-10-20)
+- **Status:** **ready_for_review (All 21 Probes PASS; Native Browser Reopen Journey delimited as NOT VERIFIED)**
+- **Report Location:** `.agents/reports/REPORT_AE_RECHECK_20261020_INDEPENDENT_QA.md`
+- **QA Harness Locations:**
+  - Scratch Path: `/Users/joun/.gemini/antigravity/brain/6db59a2d-96c5-4580-95e3-3b87f569c103/scratch/verify_ae_recheck_20261020.mjs`
+  - Repository Path: `.agents/reports/verify_ae_recheck_20261020.mjs`
+  - Results JSON: `.agents/reports/ae_recheck_probe_results.json`
+- **Result Scorecard & Evidence Levels:**
+  1. *Probe 1 (Summary Provenance & UI):*
+     - Static Code Audit (1A, 1B): PASS (No generic verifier, no synthesized CONFIRMED receipt).
+     - Component Unit Test (1C): PASS (Vitest jsdom `order-completed-summary-provenance.test.tsx` 6/6 tests passed).
+     - Live Backend API Readback (1D): PASS (117 orders verified on port 55690).
+     - *Native Browser E2E Reopen Journey:* **NOT VERIFIED** (Explicit delimiter: No browser daemon/Vite preview active; verified at DOM component and API levels only).
+  2. *Probe 2 (Migration 050 & Zero Costs):* 5/5 PASS (`TestMigration050_FreshAndUpgradeScenarios` PASS in 1.05s on disposable DBs; `ORD-VIP-DEMO-01` preserved as `RECORDED / LEGITIMATE_ZERO / 0.00`; 117 records in `order_actual_cost_logs`).
+     - *Historical Provenance Limitation:* Orders wiped to NULL prior to migration 050 cannot be guessed; preserved as `UNKNOWN / HISTORICAL_UNKNOWN`.
+  3. *Probe 3 (Financial Reconciliation Non-Bypass):* 3/3 PASS (`payment_recording.go` bypass excised; `TestFinancialReconciliation` PASS; HTTP 409 enforced across all statuses without durable receipts).
+  4. *Probe 4 (Coverage Engine Semantics & Continuity):* 4/4 PASS (Continuous curve across 14%..16% with ratio 0.9933; 0% yields 0.00 LAK; HTTP 400 guards for missing/negative coverage).
+  5. *Probe 5 (Mixed Color/Mono Ink Oracle):* 2/2 PASS (Exact 321.83 LAK verified across Preflight Population Split and Multi-Process Routing; old 891.83 LAK rejected).
+  6. *Probe 6 (Phase A Baseline Regression):* 3/3 PASS (Machinery 168.00 LAK; direct impression 217.96 LAK; imposition decoupling verified).
+- **Runtime Isolation:** Shop Production DB (port 5432) and Codex resources 100% untouched. Verified on disposable container `da2c2cd18551` (55432) and disposable backend daemon `cb766e0e...` (55690).
+
+
+## 15. AE-ACTUAL-COST-CORRECTION — Independent QA Acceptance Verification (2026-10-22)
+- **Status:** **PASS (ready_for_review — All 8 Acceptance Criteria Verified)**
+- **Report Location:** `.agents/reports/REPORT_AE_ACTUAL_COST_CORRECTION_INDEPENDENT_QA.md`
+- **Before-Evidence Artifact:** `.agents/reports/BEFORE_REPRODUCTION_EVIDENCE_AE_ACTUAL_COST.md`
+- **QA Acceptance Harness:** `.agents/reports/verify_ae_actual_cost_correction.mjs`
+- **Machine-Readable Results:** `.agents/reports/ae_actual_cost_correction_results.json`
+- **Scorecard (8/8 PASS):**
+  1. *Criterion 1 (Backend Defect 1 Fix):* PASS (`TestCodexCompleteZeroActualCost` passed: `actual_cost=0.0`, `complete=true`, `revenue=1000` -> `gross_profit=1000`, `margin=100%`).
+  2. *Criterion 2 (Backend Profitability Incomplete Handling):* PASS (`TestJobProfitability_DistinguishesCompleteFromIncomplete` passed: partial nulls, mismatched sums, negative totals remain incomplete with `actual_cost=nil` and 0 margin).
+  3. *Criterion 3 (Frontend Defect 2 Fix):* PASS (`order-completed-summary-provenance.test.tsx` suppresses 90.0% margin when status is `PARTIAL` and components disagree with total).
+  4. *Criterion 4 (Frontend Component Consistency & Lao Notice):* PASS (`OrderCompletedSummaryPage` validates $|\sum - \text{total}| < 0.01$, respects `PARTIAL`, displays Lao notice `ຂໍ້ມູນຕົ້ນທຶນການຜະລິດຕົວຈິງຍັງບໍ່ຄົບຖ້ວນ / ຢູ່ລະຫວ່າງບັນທຶກ`).
+  5. *Criterion 5 (Frontend Complete Zero Cost Preservation):* PASS (Legitimate 0 finishing & spoilage preserved with truthful margin and zero COGS).
+  6. *Criterion 6 (Full Frontend Provenance Suite):* PASS (All 7/7 tests in `order-completed-summary-provenance.test.tsx` pass in Vitest).
+  7. *Criterion 7 (Full Backend Regression Suites):* PASS (All 17 finance tests and all 38 pricing tests pass).
+  8. *Criterion 8 (Isolated Multi-Layer Live Integration):* PASS (`ORD-VIP-DEMO-01` verified complete zero on backend 55690, frontend proxy 5176, fixture DB 55432).
+- **Runtime Isolation:** Shop Production DB (port 5432) and Codex resources 100% untouched.

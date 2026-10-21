@@ -1,10 +1,12 @@
 package pricing
 
 import (
+	"errors"
 	"math"
 	"testing"
 	"time"
 
+	"somsing.local/backend/finance"
 	"somsing.local/backend/inventory"
 )
 
@@ -25,7 +27,7 @@ func baseReq() CalculationRequest {
 		IsoYieldCMY:            4000.0,
 		MachinePrice:           50000000,
 		TargetTotalPages:       1000000,
-		MaintenanceCostPerPage: 10.0,
+		MaintenanceCostPerPage: 20.0,
 		MaintenanceRatePercent: 20.0,
 		JobWidth:               210, // A4
 		JobHeight:              297,
@@ -1375,4 +1377,547 @@ func TestTwoUpA4OnA3_WithManualSheetOverride(t *testing.T) {
 		t.Errorf("Expected Override PaperCost %v (300 A3 sheets), got %v", expectedOverridePaperCost, resOverride.PaperCost)
 	}
 }
+
+func TestMissingCoverage_ReturnsOperationError400(t *testing.T) {
+	req := CalculationRequest{
+		JobName:          "Missing Coverage Average Density Test",
+		Quantity:         100,
+		JobWidth:         210,
+		JobHeight:        297,
+		PaperCostPerUnit: 500,
+		InkCostKPerMl:    250000,
+		InkCostCMYPerMl:  250000,
+		IsoYieldK:        4000,
+		IsoYieldCMY:      4000,
+		PrintingProcesses: []PrinterProcessSetup{
+			{
+				ColorMode:      "AVERAGE",
+				AverageDensity: nil, // Missing coverage! Must NOT silently become 15%
+				AllocatedPages: 100,
+			},
+		},
+	}
+
+	_, err := CalculateJobPricing(req)
+	if err == nil {
+		t.Fatalf("expected error for nil AverageDensity, got nil")
+	}
+	var opErr *finance.OperationError
+	if !errors.As(err, &opErr) || opErr.Code != "MISSING_COVERAGE" {
+		t.Errorf("expected MISSING_COVERAGE error code, got %v", err)
+	}
+}
+
+func TestControlledEpsonFixture_ProductionCalculationPath(t *testing.T) {
+	// Epson L15150 fixture parameters:
+	// Purchase price: 18,000,000 LAK, Lifespan: 200,000 pages -> Depreciation: 90 LAK
+	// Wear parts: 78 LAK/page
+	// Ink K: 145,000 / 1000 * 127 / 7500 = 2.455333... LAK
+	// Ink CMY: 95,000 / 70 * 70 / 6000 = 15.833333... LAK each -> 3 * 15.833333... = 47.5 LAK
+	// Total Ink @ 5% A4: 49.955333... LAK
+	// Total per impression excluding paper: 90 + 78 + 49.955333... = 217.955333... -> 217.96 LAK
+	kRateA4 := (145000.0 / 1000.0) * (127.0 / 7500.0)
+	cmyRateA4 := 3.0 * ((95000.0 / 70.0) * (70.0 / 6000.0))
+
+	req := CalculationRequest{
+		JobName:                "Epson L15150 Standard Single A4 Job",
+		Quantity:               1,
+		JobWidth:               210,
+		JobHeight:              297,
+		PaperCostPerUnit:       0, // Exclude paper
+		MachinePrice:           18000000,
+		TargetTotalPages:       200000,
+		MaintenanceCostPerPage: 78.0,
+		MaintenanceRatePercent: 0.0,
+		InkCostKPerMl:          kRateA4,
+		IsoYieldK:              1.0,
+		InkCostCMYPerMl:        cmyRateA4,
+		IsoYieldCMY:            1.0,
+		InkCoverageKPercent:    Float64Ptr(5.0),
+		InkCoverageCMYPercent:  Float64Ptr(5.0),
+	}
+
+	res, err := CalculateJobPricing(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectedDeprec := 90.0
+	expectedMaint := 78.0
+	expectedInk := 49.955333333333336
+	expectedTotal := expectedDeprec + expectedMaint + expectedInk
+
+	if math.Abs(res.DepreciationCost-expectedDeprec) > 0.01 {
+		t.Errorf("Depreciation: expected %v, got %v", expectedDeprec, res.DepreciationCost)
+	}
+	if math.Abs(res.MaintenanceCost-expectedMaint) > 0.01 {
+		t.Errorf("Maintenance: expected %v, got %v", expectedMaint, res.MaintenanceCost)
+	}
+	if math.Abs(res.InkCost-expectedInk) > 0.01 {
+		t.Errorf("Ink cost: expected %v, got %v", expectedInk, res.InkCost)
+	}
+	actualTotal := res.DepreciationCost + res.MaintenanceCost + res.InkCost
+	if math.Abs(actualTotal-expectedTotal) > 0.01 {
+		t.Errorf("Total: expected %v, got %v", expectedTotal, actualTotal)
+	}
+	roundedDisplay := math.Round(actualTotal*100) / 100
+	if roundedDisplay != 217.96 {
+		t.Errorf("Rounded display: expected 217.96, got %v", roundedDisplay)
+	}
+
+	// Also verify that explicit 0% coverage returns 0 ink cost
+	reqZero := req
+	reqZero.InkCoverageKPercent = Float64Ptr(0.0)
+	reqZero.InkCoverageCMYPercent = Float64Ptr(0.0)
+	resZero, err := CalculateJobPricing(reqZero)
+	if err != nil {
+		t.Fatalf("unexpected error for zero coverage: %v", err)
+	}
+	if resZero.InkCost != 0.0 {
+		t.Errorf("Expected 0 ink cost for explicit 0%% coverage, got %v", resZero.InkCost)
+	}
+}
+
+// TestMixedColorAndMonoPages_IndependentOracle_32183 verifies the exact mathematical
+// derivation of mixed 6 color / 9 mono booklet ink cost at PRN-9614 equipment rates:
+// - K rate (5% A4): (145,000 / 1,000) * (127 / 7,500) = 2.455333... LAK
+// - Combined CMY rate (5% each): 3 * (95,000 / 70) * (70 / 6,000) = 47.50 LAK
+// - 6 color pages: CMY ink = 6 * 47.50 = 285.00 LAK
+// - 15 total pages (6 color + 9 mono): K ink = 15 * 2.455333... = 36.83 LAK
+// - Total ink cost = 285.00 + 36.83 = 321.83 LAK (NOT the bugged 891.83 LAK).
+func TestMixedColorAndMonoPages_IndependentOracle_32183(t *testing.T) {
+	kRateA4 := (145000.0 / 1000.0) * (127.0 / 7500.0)
+	cmyRateA4 := 3.0 * (95000.0 / 70.0) * (70.0 / 6000.0) // 47.50
+
+	colorPages := 6
+	monoPages := 9
+
+	// 1. Verification via Population Split with Preflight
+	reqPreflight := CalculationRequest{
+		JobName:             "6-Color 9-Mono Preflight Booklet",
+		Quantity:            1,
+		PageCount:           15,
+		ColorPagesCount:     &colorPages,
+		MonoPagesCount:      &monoPages,
+		JobWidth:            210,
+		JobHeight:           297,
+		PaperCostPerUnit:    100,
+		PaperCostIsPerSheet: true,
+		InkCostKPerMl:       kRateA4,
+		IsoYieldK:           1.0,
+		InkCostCMYPerMl:     cmyRateA4,
+		IsoYieldCMY:         1.0,
+		AvgCovC:             Float64Ptr(5.0),
+		AvgCovM:             Float64Ptr(5.0),
+		AvgCovY:             Float64Ptr(5.0),
+		AvgCovK:             Float64Ptr(5.0),
+		MonoAvgCovK:         Float64Ptr(5.0),
+	}
+
+	resPreflight, err := CalculateJobPricing(reqPreflight)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectedCMY := 6.0 * 47.50                          // 285.00 LAK
+	expectedK := 15.0 * kRateA4                         // 36.83000... LAK
+	expectedTotalInk := math.Round((expectedCMY+expectedK)*100) / 100 // 321.83 LAK
+
+	if math.Abs(resPreflight.InkCostCMY-expectedCMY) > 0.01 {
+		t.Errorf("Preflight CMY ink: expected %v, got %v", expectedCMY, resPreflight.InkCostCMY)
+	}
+	if math.Abs(resPreflight.InkCostK-36.83) > 0.01 {
+		t.Errorf("Preflight K ink: expected 36.83, got %v", resPreflight.InkCostK)
+	}
+	if resPreflight.InkCost != expectedTotalInk || resPreflight.InkCost != 321.83 {
+		t.Errorf("Preflight Total ink: expected exactly 321.83 LAK (oracle), got %v (old bug yielded 891.83)", resPreflight.InkCost)
+	}
+
+	// 2. Verification via Multi-Process Routing (Color Allocation + Mono Allocation)
+	reqProcesses := CalculationRequest{
+		JobName:             "6-Color 9-Mono Multi-Process Split",
+		Quantity:            1,
+		PageCount:           15,
+		JobWidth:            210,
+		JobHeight:           297,
+		PaperCostPerUnit:    100,
+		PaperCostIsPerSheet: true,
+		InkCostKPerMl:       kRateA4,
+		IsoYieldK:           1.0,
+		InkCostCMYPerMl:     cmyRateA4,
+		IsoYieldCMY:         1.0,
+		PrintingProcesses: []PrinterProcessSetup{
+			{
+				PrinterAssetID: "PRN-COLOR-01",
+				ColorMode:      "AVERAGE",
+				AllocatedPages: 6,
+				AverageDensity: Float64Ptr(5.0),
+			},
+			{
+				PrinterAssetID: "PRN-MONO-01",
+				ColorMode:      "MONO_K",
+				AllocatedPages: 9,
+				AverageDensity: Float64Ptr(5.0),
+			},
+		},
+	}
+
+	resProcesses, err := CalculateJobPricing(reqProcesses)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if math.Abs(resProcesses.InkCostCMY-expectedCMY) > 0.01 {
+		t.Errorf("Multi-Process CMY ink: expected %v, got %v", expectedCMY, resProcesses.InkCostCMY)
+	}
+	if math.Abs(resProcesses.InkCostK-36.83) > 0.01 {
+		t.Errorf("Multi-Process K ink: expected 36.83, got %v", resProcesses.InkCostK)
+	}
+	if resProcesses.InkCost != 321.83 {
+		t.Errorf("Multi-Process Total ink: expected exactly 321.83 LAK, got %v", resProcesses.InkCost)
+	}
+
+	// 3. Verification via Multi-Process with SEPARATE_CHANNEL ColorMode
+	reqSeparate := CalculationRequest{
+		JobName:             "6-Color 9-Mono Separate Channels",
+		Quantity:            1,
+		PageCount:           15,
+		JobWidth:            210,
+		JobHeight:           297,
+		PaperCostPerUnit:    100,
+		PaperCostIsPerSheet: true,
+		InkCostKPerMl:       kRateA4,
+		IsoYieldK:           1.0,
+		InkCostCMYPerMl:     cmyRateA4,
+		IsoYieldCMY:         1.0,
+		PrintingProcesses: []PrinterProcessSetup{
+			{
+				PrinterAssetID: "PRN-COLOR-01",
+				ColorMode:      "SEPARATE_CHANNEL",
+				AllocatedPages: 6,
+				ColorChannels: []ColorChannel{
+					{ChannelName: "C", DensityPct: 5.0},
+					{ChannelName: "M", DensityPct: 5.0},
+					{ChannelName: "Y", DensityPct: 5.0},
+					{ChannelName: "K", DensityPct: 5.0},
+				},
+			},
+			{
+				PrinterAssetID: "PRN-MONO-01",
+				ColorMode:      "MONO_K",
+				AllocatedPages: 9,
+				AverageDensity: Float64Ptr(5.0),
+			},
+		},
+	}
+
+	resSeparate, err := CalculateJobPricing(reqSeparate)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if math.Abs(resSeparate.InkCostCMY-expectedCMY) > 0.01 {
+		t.Errorf("Separate Channels CMY ink: expected %v, got %v", expectedCMY, resSeparate.InkCostCMY)
+	}
+	if math.Abs(resSeparate.InkCostK-36.83) > 0.01 {
+		t.Errorf("Separate Channels K ink: expected 36.83, got %v", resSeparate.InkCostK)
+	}
+	if resSeparate.InkCost != 321.83 {
+		t.Errorf("Separate Channels Total ink: expected exactly 321.83 LAK, got %v", resSeparate.InkCost)
+	}
+}
+
+// TestAverageDensityMode_ContinuousCoverage_BelowAtAbove15 validates that coverage
+// interpretation in AVERAGE mode is strictly linear and monotonic without any heuristic
+// discontinuity or divisor switch at 15%.
+func TestAverageDensityMode_ContinuousCoverage_BelowAtAbove15(t *testing.T) {
+	kRateA4 := (145000.0 / 1000.0) * (127.0 / 7500.0)
+	cmyRateA4 := 47.50
+
+	densities := []float64{0.0, 5.0, 10.0, 14.9, 15.0, 15.1, 20.0, 25.0}
+	costs := make(map[float64]float64)
+
+	for _, d := range densities {
+		densityVal := d
+		req := CalculationRequest{
+			JobName:             "Continuity Test",
+			Quantity:            100,
+			PageCount:           1,
+			JobWidth:            210,
+			JobHeight:           297,
+			PaperCostPerUnit:    100,
+			PaperCostIsPerSheet: true,
+			InkCostKPerMl:       kRateA4,
+			IsoYieldK:           1.0,
+			InkCostCMYPerMl:     cmyRateA4,
+			IsoYieldCMY:         1.0,
+			PrintingProcesses: []PrinterProcessSetup{
+				{
+					PrinterAssetID: "PRN-COLOR-01",
+					ColorMode:      "AVERAGE",
+					AllocatedPages: 100,
+					AverageDensity: &densityVal,
+				},
+			},
+		}
+		res, err := CalculateJobPricing(req)
+		if err != nil {
+			t.Fatalf("failed at density %v: %v", d, err)
+		}
+		costs[d] = res.InkCost
+	}
+
+	// 1. Explicit 0.0% coverage must yield 0 ink cost
+	if costs[0.0] != 0.0 {
+		t.Errorf("Expected 0 ink cost at 0%%, got %v", costs[0.0])
+	}
+
+	// 2. Strict monotonicity
+	for i := 1; i < len(densities); i++ {
+		prev := densities[i-1]
+		curr := densities[i]
+		if costs[curr] <= costs[prev] {
+			t.Errorf("Monotonicity violation: cost(%v)=%v <= cost(%v)=%v", curr, costs[curr], prev, costs[prev])
+		}
+	}
+
+	// 3. Perfect linearity check (15% must be exactly 3x 5%)
+	ratio15to5 := costs[15.0] / costs[5.0]
+	if math.Abs(ratio15to5-3.0) > 0.001 {
+		t.Errorf("Linearity violation: cost(15.0)/cost(5.0) expected 3.0, got %v", ratio15to5)
+	}
+
+	// 4. Smooth boundary transition across 15.0% (no 4x cliff)
+	ratioAcross15 := costs[15.0] / costs[14.9]
+	expectedRatio := 15.0 / 14.9
+	if math.Abs(ratioAcross15-expectedRatio) > 0.01 {
+		t.Errorf("Discontinuity detected at 15%%: ratio cost(15.0)/cost(14.9) = %v, expected %v (old bug had 0.25x cliff)", ratioAcross15, expectedRatio)
+	}
+}
+
+// TestSeparateChannel_vs_Average_vs_MonoK_Equivalence verifies that all three color modes
+// produce identical mathematical outcomes when given equivalent channel parameters.
+func TestSeparateChannel_vs_Average_vs_MonoK_Equivalence(t *testing.T) {
+	kRateA4 := (145000.0 / 1000.0) * (127.0 / 7500.0)
+	cmyRateA4 := 47.50
+
+	// 1. Full 4-channel CMYK at 8% per channel
+	reqAverage := CalculationRequest{
+		JobName:             "Average 8%",
+		Quantity:            10,
+		PageCount:           1,
+		JobWidth:            210,
+		JobHeight:           297,
+		PaperCostPerUnit:    100,
+		PaperCostIsPerSheet: true,
+		InkCostKPerMl:       kRateA4,
+		IsoYieldK:           1.0,
+		InkCostCMYPerMl:     cmyRateA4,
+		IsoYieldCMY:         1.0,
+		PrintingProcesses: []PrinterProcessSetup{
+			{
+				PrinterAssetID: "PRN-COLOR-01",
+				ColorMode:      "AVERAGE",
+				AllocatedPages: 10,
+				AverageDensity: Float64Ptr(8.0),
+			},
+		},
+	}
+
+	reqSeparate := CalculationRequest{
+		JobName:             "Separate 8%",
+		Quantity:            10,
+		PageCount:           1,
+		JobWidth:            210,
+		JobHeight:           297,
+		PaperCostPerUnit:    100,
+		PaperCostIsPerSheet: true,
+		InkCostKPerMl:       kRateA4,
+		IsoYieldK:           1.0,
+		InkCostCMYPerMl:     cmyRateA4,
+		IsoYieldCMY:         1.0,
+		PrintingProcesses: []PrinterProcessSetup{
+			{
+				PrinterAssetID: "PRN-COLOR-01",
+				ColorMode:      "SEPARATE_CHANNEL",
+				AllocatedPages: 10,
+				ColorChannels: []ColorChannel{
+					{ChannelName: "C", DensityPct: 8.0},
+					{ChannelName: "M", DensityPct: 8.0},
+					{ChannelName: "Y", DensityPct: 8.0},
+					{ChannelName: "K", DensityPct: 8.0},
+				},
+			},
+		},
+	}
+
+	resAvg, err := CalculateJobPricing(reqAverage)
+	if err != nil {
+		t.Fatalf("average error: %v", err)
+	}
+	resSep, err := CalculateJobPricing(reqSeparate)
+	if err != nil {
+		t.Fatalf("separate error: %v", err)
+	}
+
+	if math.Abs(resAvg.InkCost-resSep.InkCost) > 0.01 {
+		t.Errorf("Average mode ink (%v) != Separate channel ink (%v)", resAvg.InkCost, resSep.InkCost)
+	}
+	if math.Abs(resAvg.InkCostCMY-resSep.InkCostCMY) > 0.01 {
+		t.Errorf("Average mode CMY (%v) != Separate channel CMY (%v)", resAvg.InkCostCMY, resSep.InkCostCMY)
+	}
+	if math.Abs(resAvg.InkCostK-resSep.InkCostK) > 0.01 {
+		t.Errorf("Average mode K (%v) != Separate channel K (%v)", resAvg.InkCostK, resSep.InkCostK)
+	}
+
+	// 2. Mono K equivalence (MONO_K vs SEPARATE_CHANNEL with C=0, M=0, Y=0, K=12%)
+	reqMono := CalculationRequest{
+		JobName:             "Mono 12%",
+		Quantity:            10,
+		PageCount:           1,
+		JobWidth:            210,
+		JobHeight:           297,
+		PaperCostPerUnit:    100,
+		PaperCostIsPerSheet: true,
+		InkCostKPerMl:       kRateA4,
+		IsoYieldK:           1.0,
+		InkCostCMYPerMl:     cmyRateA4,
+		IsoYieldCMY:         1.0,
+		PrintingProcesses: []PrinterProcessSetup{
+			{
+				PrinterAssetID: "PRN-MONO-01",
+				ColorMode:      "MONO_K",
+				AllocatedPages: 10,
+				AverageDensity: Float64Ptr(12.0),
+			},
+		},
+	}
+
+	reqSepMono := CalculationRequest{
+		JobName:             "Separate Zero-Color Mono 12%",
+		Quantity:            10,
+		PageCount:           1,
+		JobWidth:            210,
+		JobHeight:           297,
+		PaperCostPerUnit:    100,
+		PaperCostIsPerSheet: true,
+		InkCostKPerMl:       kRateA4,
+		IsoYieldK:           1.0,
+		InkCostCMYPerMl:     cmyRateA4,
+		IsoYieldCMY:         1.0,
+		PrintingProcesses: []PrinterProcessSetup{
+			{
+				PrinterAssetID: "PRN-COLOR-01",
+				ColorMode:      "SEPARATE_CHANNEL",
+				AllocatedPages: 10,
+				ColorChannels: []ColorChannel{
+					{ChannelName: "C", DensityPct: 0.0},
+					{ChannelName: "M", DensityPct: 0.0},
+					{ChannelName: "Y", DensityPct: 0.0},
+					{ChannelName: "K", DensityPct: 12.0},
+				},
+			},
+		},
+	}
+
+	resMono, err := CalculateJobPricing(reqMono)
+	if err != nil {
+		t.Fatalf("mono error: %v", err)
+	}
+	resSepMono, err := CalculateJobPricing(reqSepMono)
+	if err != nil {
+		t.Fatalf("sep mono error: %v", err)
+	}
+
+	if math.Abs(resMono.InkCost-resSepMono.InkCost) > 0.01 {
+		t.Errorf("MONO_K ink (%v) != SEPARATE_CHANNEL zero-color ink (%v)", resMono.InkCost, resSepMono.InkCost)
+	}
+	if resSepMono.InkCostCMY != 0.0 {
+		t.Errorf("Expected 0 CMY ink for zero-color separate channels, got %v", resSepMono.InkCostCMY)
+	}
+}
+
+// TestOddDuplex_TwoUpA4OnA3_SheetCountDecoupling verifies:
+// 1. Two-up A4 job on A3 parent sheet (cuts_per_sheet = 2) with odd duplex (3 pages):
+//    - Paper sheet count: ceil(ceil(3 pages / 2 duplex) / 2 cuts) = 1 parent sheet of A3 per copy
+//    - Ink calculation: strictly 3 printed impressions (no phantom 4th side ink charged!)
+// 2. Manual sheet count override decoupling:
+//    - When ManualSheetCount is set (e.g. 10 sheets), PaperCost scales to 10 sheets while InkCost remains strictly based on 3 impressions.
+func TestOddDuplex_TwoUpA4OnA3_SheetCountDecoupling(t *testing.T) {
+	kRateA4 := (145000.0 / 1000.0) * (127.0 / 7500.0) // 2.455333... LAK
+	cmyRateA4 := 47.50                               // 47.50 LAK
+
+	// 1. Auto Sheet Count: 3-page duplex, 100 copies on A3 parent sheet (2 A4 cuts per sheet)
+	// Stock paper cost: 500 LAK per A3 sheet
+	reqAuto := CalculationRequest{
+		JobName:             "3-Page Odd Duplex A4 on A3",
+		Quantity:            100,
+		PageCount:           3,
+		IsDoubleSided:       true,
+		CutsPerSheet:        2,
+		JobWidth:            210,
+		JobHeight:           297,
+		PaperCostPerUnit:    500.0,
+		PaperCostIsPerSheet: true,
+		InkCostKPerMl:       kRateA4,
+		IsoYieldK:           1.0,
+		InkCostCMYPerMl:     cmyRateA4,
+		IsoYieldCMY:         1.0,
+		InkCoverageKPercent: Float64Ptr(5.0),
+		InkCoverageCMYPercent: Float64Ptr(5.0),
+	}
+
+	resAuto, err := CalculateJobPricing(reqAuto)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Stock sheets: ceil(3 / 2) = 2 A4 sheets per copy.
+	// 2 A4 sheets * 100 copies = 200 A4 sheets / 2 cuts per A3 = 100 parent sheets of A3.
+	// Paper cost: 100 * 500 = 50,000 LAK.
+	expectedPaperAuto := 100.0 * 500.0
+	if math.Abs(resAuto.PaperCost-expectedPaperAuto) > 0.01 {
+		t.Errorf("Auto PaperCost: expected %v, got %v", expectedPaperAuto, resAuto.PaperCost)
+	}
+
+	// Impressions: 3 pages * 100 copies = 300 impressions (strictly 3 printed pages per copy, NO 4th side phantom ink!).
+	// Ink K: 300 * 2.455333... = 736.60 LAK
+	// Ink CMY: 300 * 47.50 = 14,250.00 LAK
+	expectedInkK := 300.0 * kRateA4
+	expectedInkCMY := 300.0 * 47.50
+	expectedTotalInk := math.Round((expectedInkK+expectedInkCMY)*100) / 100 // 14,986.60 LAK
+
+	if math.Abs(resAuto.InkCostCMY-expectedInkCMY) > 0.01 {
+		t.Errorf("Auto InkCostCMY: expected %v, got %v", expectedInkCMY, resAuto.InkCostCMY)
+	}
+	if math.Abs(resAuto.InkCostK-expectedInkK) > 0.01 {
+		t.Errorf("Auto InkCostK: expected %v, got %v", expectedInkK, resAuto.InkCostK)
+	}
+	if math.Abs(resAuto.InkCost-expectedTotalInk) > 0.01 {
+		t.Errorf("Auto InkCost: expected %v, got %v (old bug charged 4th phantom side: 400 impressions)", expectedTotalInk, resAuto.InkCost)
+	}
+
+	// 2. Manual Sheet Override: User specifies 150 sheets (e.g. for special setup or batching)
+	reqManual := reqAuto
+	reqManual.ManualSheetCount = 150
+
+	resManual, err := CalculateJobPricing(reqManual)
+	if err != nil {
+		t.Fatalf("unexpected error with manual override: %v", err)
+	}
+
+	// Paper cost must now strictly reflect the 150 manual sheets: 150 * 500 = 75,000 LAK
+	expectedPaperManual := 150.0 * 500.0
+	if math.Abs(resManual.PaperCost-expectedPaperManual) > 0.01 {
+		t.Errorf("Manual PaperCost: expected %v, got %v", expectedPaperManual, resManual.PaperCost)
+	}
+
+	// Ink cost MUST remain completely unchanged (still 300 impressions, decoupled from manual sheet count!)
+	if math.Abs(resManual.InkCost-resAuto.InkCost) > 0.01 {
+		t.Errorf("Manual override mutated ink cost! Expected %v, got %v", resAuto.InkCost, resManual.InkCost)
+	}
+}
+
+
+
 

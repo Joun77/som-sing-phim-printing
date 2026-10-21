@@ -25,7 +25,8 @@ import {
   DollarSign,
   PieChart,
   AlertCircle,
-  Wrench
+  Wrench,
+  Clock
 } from 'lucide-react';
 import OrderStepBar from './reception/OrderStepBar';
 import CustomerInvoiceModal from './modals/CustomerInvoiceModal';
@@ -84,12 +85,68 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
   const driveLink = order.driveLink || order.googleDriveLink;
   const orderDate = order.date || new Date().toISOString().split('T')[0];
 
-  const paymentRecord = Array.isArray(order.payment_records) && order.payment_records.length > 0
-    ? order.payment_records[0]
-    : (Array.isArray(order.payments) && order.payments.length > 0 ? order.payments[0] : null);
-  const paymentReceiptNo = order.receipt_no || order.receipt_number || paymentRecord?.receipt_number || paymentRecord?.reference || paymentRecord?.id || `REC-${orderIdDisplay}`;
-  const paymentMethodDisplay = order.payment_method || order.paymentMethod || paymentRecord?.channel || (paymentSlipUrl ? 'ຫຼັກຖານການໂອນ (Bank Slip)' : '—');
-  const paymentVerifier = order.payment_verified_by || paymentRecord?.reviewed_by || (currentLang === 'lo' ? 'ກວດສອບໂດຍບັນຊີ Som Sing Phim' : 'Verified by Som-Sing Accounting');
+  const paymentRecords: any[] = Array.isArray(order.payment_records) && order.payment_records.length > 0
+    ? order.payment_records
+    : (Array.isArray(order.payments) && order.payments.length > 0 ? order.payments : []);
+
+  const confirmedReceipt = paymentRecords.find(r => r.record_kind === 'RECEIPT' && r.state === 'CONFIRMED');
+  const primaryPaymentRecord = confirmedReceipt || (paymentRecords.length > 0 ? paymentRecords[paymentRecords.length - 1] : null);
+
+  // Canonical receipt number: strictly use actual recorded values, never invent 'CONFIRMED'
+  const paymentReceiptNo = order.receipt_no || order.receipt_number || primaryPaymentRecord?.receipt_number || primaryPaymentRecord?.reference || primaryPaymentRecord?.id || '—';
+
+  // Canonical method: use actual recorded method or channel, never infer from slip existence or order status
+  const resolvePaymentMethodName = (rawMethod?: string, rawChannel?: string) => {
+    const val = (rawMethod || rawChannel || '').toUpperCase();
+    if (!val) return '—';
+    if (val === 'MANUAL_QR' || val.includes('BCEL') || val.includes('QR')) {
+      return currentLang === 'lo' ? 'ໂອນຜ່ານ QR / ທະນາຄານ (Manual QR)' : 'Bank Transfer / QR';
+    }
+    if (val === 'COUNTER_CASH' || val === 'CASH') {
+      return currentLang === 'lo' ? 'ເງິນສົດໜ້າຮ້ານ (Counter Cash)' : 'Counter Cash';
+    }
+    if (val === 'COUNTER_TRANSFER' || val === 'TRANSFER') {
+      return currentLang === 'lo' ? 'ໂອນເງິນໜ້າຮ້ານ (Counter Transfer)' : 'Counter Transfer';
+    }
+    return rawMethod || rawChannel || '—';
+  };
+
+  const paymentMethodDisplay = resolvePaymentMethodName(
+    order.payment_method || order.paymentMethod,
+    primaryPaymentRecord?.payment_method_id || primaryPaymentRecord?.channel
+  );
+
+  // Canonical verifier: strictly use actual reviewer ID or verified_by, never invent generic accounting label
+  const rawVerifier = order.payment_verified_by || primaryPaymentRecord?.reviewed_by || primaryPaymentRecord?.reviewer_id;
+  const isPendingReview = primaryPaymentRecord?.state === 'PENDING';
+  const paymentVerifier = rawVerifier 
+    ? `${currentLang === 'lo' ? 'ກວດສອບໂດຍ' : 'Verified by'}: ${rawVerifier}`
+    : (isPendingReview ? (currentLang === 'lo' ? 'ລໍຖ້າການກວດສອບ' : 'Pending Review') : '—');
+
+  // Canonical payment evidence check: require actual confirmed record or receipt reference
+  const hasConfirmedEvidence = Boolean(
+    order.receipt_no || 
+    order.receipt_number || 
+    confirmedReceipt || 
+    (primaryPaymentRecord?.state === 'CONFIRMED' && (primaryPaymentRecord?.receipt_number || primaryPaymentRecord?.reference || primaryPaymentRecord?.id))
+  );
+
+  // Actual settlement calculations: never infer full payment from order status without canonical evidence
+  const actualPaidAmount = order.paymentSummary?.received_net_lak !== undefined 
+    ? Number(order.paymentSummary.received_net_lak) 
+    : (order.paid_amount !== undefined 
+      ? Number(order.paid_amount) 
+      : (hasConfirmedEvidence && (order.payment_state === 'PAID' || order.paymentStatus === 'Paid') ? totalAmountLAK : (order.deposit_lak || order.depositAmount || 0)));
+
+  const remainingBalanceLAK = order.paymentSummary?.remaining_lak !== undefined 
+    ? Number(order.paymentSummary.remaining_lak) 
+    : (order.remaining_lak !== undefined 
+      ? Number(order.remaining_lak) 
+      : Math.max(0, totalAmountLAK - actualPaidAmount));
+
+  const isFullySettled = hasConfirmedEvidence && 
+    (order.payment_state === 'PAID' || order.paymentStatus === 'Paid' || order.paymentSummary?.payment_status === 'PAID' || remainingBalanceLAK === 0) && 
+    actualPaidAmount >= totalAmountLAK && totalAmountLAK > 0;
 
   const village = order.village || '';
   const district = order.district || '';
@@ -118,34 +175,78 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
   const paperWeightDisplay = order.items?.[0]?.paper_weight || order.paper_weight || order.paperWeight || '';
   const paperNameDisplay = order.items?.[0]?.paper_name || order.items?.[0]?.specs?.paperName || order.paper_name || order.paperName || (paperBrandDisplay ? `${paperBrandDisplay} Art Card ${paperWeightDisplay}` : '—');
 
-  const realizedPaperCost = order.realized_paper_cost !== undefined && order.realized_paper_cost !== null
-    ? Number(order.realized_paper_cost)
-    : (order.paper_cost !== undefined && order.paper_cost !== null ? Number(order.paper_cost) : 0);
+  // Distinguish legitimate 0 from unrecorded (null / undefined)
+  const isCostRecorded = (val: any): boolean => {
+    return val !== null && val !== undefined && val !== '';
+  };
 
-  const realizedInkCost = order.realized_ink_cost !== undefined && order.realized_ink_cost !== null
-    ? Number(order.realized_ink_cost)
-    : (order.ink_cost !== undefined && order.ink_cost !== null ? Number(order.ink_cost) : 0);
+  const rawPaperCost = order.realized_paper_cost !== undefined ? order.realized_paper_cost : order.paper_cost;
+  const isPaperRecorded = isCostRecorded(rawPaperCost);
+  const realizedPaperCost = isPaperRecorded ? Number(rawPaperCost) : null;
 
-  const realizedLaborCost = order.realized_labor_cost !== undefined && order.realized_labor_cost !== null
-    ? Number(order.realized_labor_cost)
-    : (order.labor_cost !== undefined && order.labor_cost !== null
-      ? Number(order.labor_cost)
-      : (order.technician_earnings_lak !== undefined ? Number(order.technician_earnings_lak) : (order.actual_labor_cost !== undefined ? Number(order.actual_labor_cost) : 0)));
+  const rawInkCost = order.realized_ink_cost !== undefined ? order.realized_ink_cost : order.ink_cost;
+  const isInkRecorded = isCostRecorded(rawInkCost);
+  const realizedInkCost = isInkRecorded ? Number(rawInkCost) : null;
 
-  const realizedFinishingCost = order.realized_finishing_cost !== undefined && order.realized_finishing_cost !== null
-    ? Number(order.realized_finishing_cost)
-    : (order.finishing_cost !== undefined && order.finishing_cost !== null ? Number(order.finishing_cost) : 0);
+  const rawLaborCost = order.realized_labor_cost !== undefined 
+    ? order.realized_labor_cost 
+    : (order.labor_cost !== undefined 
+      ? order.labor_cost 
+      : (order.technician_earnings_lak !== undefined 
+        ? order.technician_earnings_lak 
+        : order.actual_labor_cost));
+  const isLaborRecorded = isCostRecorded(rawLaborCost);
+  const realizedLaborCost = isLaborRecorded ? Number(rawLaborCost) : null;
 
-  const realizedSpoilageCost = order.realized_spoilage_cost !== undefined && order.realized_spoilage_cost !== null
-    ? Number(order.realized_spoilage_cost)
-    : (order.spoilage_cost !== undefined && order.spoilage_cost !== null ? Number(order.spoilage_cost) : 0);
+  const rawFinishingCost = order.realized_finishing_cost !== undefined ? order.realized_finishing_cost : order.finishing_cost;
+  const isFinishingRecorded = isCostRecorded(rawFinishingCost);
+  const realizedFinishingCost = isFinishingRecorded ? Number(rawFinishingCost) : null;
 
-  const totalProductionCost = order.realized_total_cost !== undefined && order.realized_total_cost !== null
+  const rawSpoilageCost = order.realized_spoilage_cost !== undefined ? order.realized_spoilage_cost : order.spoilage_cost;
+  const isSpoilageRecorded = isCostRecorded(rawSpoilageCost);
+  const realizedSpoilageCost = isSpoilageRecorded ? Number(rawSpoilageCost) : null;
+
+  // Actual cost completeness rule:
+  // Must have all 5 items recorded AND realized_total_cost explicitly recorded
+  const allComponentsRecorded = isPaperRecorded && isInkRecorded && isLaborRecorded && isFinishingRecorded && isSpoilageRecorded;
+  const hasRealizedTotal = isCostRecorded(order.realized_total_cost);
+
+  const componentSum = (realizedPaperCost !== null ? realizedPaperCost : 0) +
+    (realizedInkCost !== null ? realizedInkCost : 0) +
+    (realizedLaborCost !== null ? realizedLaborCost : 0) +
+    (realizedFinishingCost !== null ? realizedFinishingCost : 0) +
+    (realizedSpoilageCost !== null ? realizedSpoilageCost : 0);
+
+  const componentsMatchTotal = hasRealizedTotal && Math.abs(componentSum - Number(order.realized_total_cost)) < 0.01;
+
+  // Canonical incomplete/PARTIAL status check:
+  // Never promote to complete if marked PARTIAL, UNKNOWN, or INCOMPLETE
+  const isExplicitlyIncomplete = 
+    order.realized_cost_status === 'PARTIAL' ||
+    order.realized_cost_status === 'UNKNOWN' ||
+    order.realized_cost_status === 'INCOMPLETE' ||
+    order.actual_cost_status === 'INCOMPLETE' ||
+    order.cost_completeness === 'INCOMPLETE' ||
+    order.actual_cost_complete === false;
+
+  const hasActualCost = !isExplicitlyIncomplete &&
+    allComponentsRecorded &&
+    hasRealizedTotal &&
+    componentsMatchTotal &&
+    (order.actual_cost_complete === true || 
+     order.actual_cost_status === 'COMPLETE' || 
+     order.cost_completeness === 'COMPLETE' || 
+     order.realized_cost_status === 'COMPLETE' ||
+     (!order.realized_cost_status && !order.actual_cost_status && !order.cost_completeness));
+
+  const totalProductionCost = hasActualCost && hasRealizedTotal
     ? Number(order.realized_total_cost)
-    : (realizedPaperCost + realizedInkCost + realizedLaborCost + realizedFinishingCost + realizedSpoilageCost);
-  const realizedGrossProfit = Math.max(0, totalAmountLAK - totalProductionCost);
-  const realizedGrossMarginPct = totalAmountLAK > 0 ? (realizedGrossProfit / totalAmountLAK) * 100 : 0;
-  const costRatioPct = totalAmountLAK > 0 ? (totalProductionCost / totalAmountLAK) * 100 : 0;
+    : null;
+
+  const realizedGrossProfit = (hasActualCost && totalProductionCost !== null) ? (totalAmountLAK - totalProductionCost) : 0;
+  const realizedGrossMarginPct = (hasActualCost && totalProductionCost !== null && totalAmountLAK > 0) ? (realizedGrossProfit / totalAmountLAK) * 100 : 0;
+  const costRatioPct = (hasActualCost && totalProductionCost !== null && totalAmountLAK > 0) ? (totalProductionCost / totalAmountLAK) * 100 : 0;
+  const isLoss = hasActualCost && totalProductionCost !== null && realizedGrossProfit < 0;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 lg:p-8 space-y-6 animate-fade-in font-sans">
@@ -335,8 +436,28 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                   {currentLang === 'lo' ? '2. ຫຼັກຖານການຊຳລະເງິນ & ປິດຍອດ (Payment Proof)' : '2. Verified Payment Settlement'}
                 </h3>
               </div>
-              <span className="px-3 py-1 rounded-xl text-xs font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                <span>{order.payment_state === 'PAID' || order.paymentStatus === 'Paid' ? 'ຊຳລະຄົບຖ້ວນ 100% (100% PAID)' : (order.payment_state || order.paymentStatus || 'UNPAID')}</span>
+              <span className={`px-3 py-1 rounded-xl text-xs font-black uppercase border flex items-center gap-1 ${
+                isFullySettled 
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                  : primaryPaymentRecord?.state === 'PENDING'
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : primaryPaymentRecord?.record_kind === 'REVERSAL'
+                      ? 'bg-rose-50 text-rose-700 border-rose-200'
+                      : (order.depositAmountPaid || order.payment_state === 'PARTIAL')
+                        ? 'bg-sky-50 text-sky-700 border-sky-200'
+                        : 'bg-slate-100 text-slate-700 border-slate-200'
+              }`}>
+                <span>
+                  {isFullySettled 
+                    ? (currentLang === 'lo' ? 'ຊຳລະຄົບຖ້ວນ 100% (100% PAID)' : '100% PAID')
+                    : primaryPaymentRecord?.state === 'PENDING'
+                      ? (currentLang === 'lo' ? 'ລໍຖ້າກວດສອບ (PENDING REVIEW)' : 'PENDING REVIEW')
+                      : primaryPaymentRecord?.record_kind === 'REVERSAL'
+                        ? (currentLang === 'lo' ? 'ຍົກເລີກ / ຄືນເງິນ (REVERSED)' : 'REVERSED')
+                        : (order.depositAmountPaid || order.payment_state === 'PARTIAL')
+                          ? (currentLang === 'lo' ? 'ຊຳລະມັດຈຳບາງສ່ວນ (PARTIAL)' : 'PARTIAL DEPOSIT')
+                          : (currentLang === 'lo' ? 'ຍັງບໍ່ໄດ້ຊຳລະ (UNPAID)' : 'UNPAID')}
+                </span>
               </span>
             </div>
 
@@ -383,8 +504,14 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                   <div className="font-mono text-slate-500 truncate">
                     Ref: <strong className="text-slate-700">{paymentReceiptNo}</strong>
                   </div>
-                  <div className="text-emerald-700 font-semibold flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <div className={`font-semibold flex items-center gap-1 ${rawVerifier ? 'text-emerald-700' : isPendingReview ? 'text-amber-700' : 'text-slate-400'}`}>
+                    {rawVerifier ? (
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                    ) : isPendingReview ? (
+                      <Clock className="w-3 h-3 text-amber-600 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-3 h-3 text-slate-400 shrink-0" />
+                    )}
                     <span>{paymentVerifier}</span>
                   </div>
                 </div>
@@ -398,25 +525,35 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
 
                 <div className="space-y-2.5">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-500">ຍອດສັ່ງຜະລິດ:</span>
+                    <span className="text-slate-500">{currentLang === 'lo' ? 'ຍອດສັ່ງຜະລິດ:' : 'Order Total:'}</span>
                     <strong className="text-slate-800 font-mono">{formatLAK(totalAmountLAK)}</strong>
                   </div>
 
-                  {order.depositAmountPaid && order.depositAmountPaid < totalAmountLAK && (
-                    <div className="flex justify-between items-center text-xs text-amber-700 font-semibold">
-                      <span>- ຍອດມັດຈຳ (Deposit):</span>
-                      <span className="font-mono">{formatLAK(order.depositAmountPaid)}</span>
+                  {actualPaidAmount > 0 && actualPaidAmount < totalAmountLAK && (
+                    <div className="flex justify-between items-center text-xs text-sky-700 font-semibold">
+                      <span>- {currentLang === 'lo' ? 'ຍອດຊຳລະແລ້ວ (Paid):' : 'Paid Amount:'}</span>
+                      <span className="font-mono">{formatLAK(actualPaidAmount)}</span>
                     </div>
                   )}
 
                   <div className="flex justify-between items-center text-xs text-emerald-800 font-black border-t border-slate-200 pt-2">
-                    <span>ຍອດຊຳລະແລ້ວ:</span>
-                    <span className="font-mono text-sm">{formatLAK(totalAmountLAK)}</span>
+                    <span>{currentLang === 'lo' ? 'ຍອດຊຳລະສຸດທິ:' : 'Net Received:'}</span>
+                    <span className="font-mono text-sm">{formatLAK(actualPaidAmount)}</span>
                   </div>
 
-                  <div className="p-2.5 rounded-xl bg-emerald-100/70 border border-emerald-200 text-center">
-                    <span className="text-[10.5px] text-emerald-800 font-bold block">ຍອດຄ້າງຊຳລະ (Remaining)</span>
-                    <span className="font-mono text-sm font-black text-emerald-950 block">LAK 0.00 (ປິດອໍເດີແລ້ວ)</span>
+                  <div className={`p-2.5 rounded-xl border text-center ${
+                    isFullySettled 
+                      ? 'bg-emerald-100/70 border-emerald-200' 
+                      : 'bg-amber-50 border-amber-200'
+                  }`}>
+                    <span className={`text-[10.5px] font-bold block ${isFullySettled ? 'text-emerald-800' : 'text-amber-800'}`}>
+                      {currentLang === 'lo' ? 'ຍອດຄ້າງຊຳລະ (Remaining)' : 'Remaining Balance'}
+                    </span>
+                    <span className={`font-mono text-sm font-black block ${isFullySettled ? 'text-emerald-950' : 'text-amber-950'}`}>
+                      {isFullySettled 
+                        ? 'LAK 0.00 (ປິດຍອດສົມບູນ)' 
+                        : `${formatLAK(remainingBalanceLAK)} (${currentLang === 'lo' ? 'ຍັງຄ້າງຊຳລະ' : 'Unsettled'})`}
+                    </span>
                   </div>
                 </div>
 
@@ -425,11 +562,65 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                 </div>
               </div>
             </div>
+
+            {/* Multi-record Provenance Audit Log */}
+            {paymentRecords.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-slate-150 space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                  {currentLang === 'lo' ? 'ປະຫວັດລາຍການຊຳລະເງິນຕົວຈິງ (Payment Records)' : 'Payment Records Log'}
+                </span>
+                <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                  {paymentRecords.map((rec: any, idx: number) => {
+                    const recAmount = Number(rec.actual_received_amount_lak || rec.requested_amount_lak || 0);
+                    const recRef = rec.reference || rec.receipt_number || rec.id || '—';
+                    const recVerifier = rec.reviewed_by || rec.reviewer_id || '—';
+                    const isRev = rec.record_kind === 'REVERSAL';
+                    const isPending = rec.state === 'PENDING';
+                    const isConfirmed = rec.state === 'CONFIRMED';
+                    
+                    return (
+                      <div key={rec.id || idx} className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px]">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-black uppercase ${
+                            isRev ? 'bg-rose-100 text-rose-800' : isConfirmed ? 'bg-emerald-100 text-emerald-800' : isPending ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            {isRev ? (currentLang === 'lo' ? 'ຄືນເງິນ' : 'REVERSAL') : rec.purpose || rec.record_kind || 'PAYMENT'}
+                          </span>
+                          <span className="font-mono text-slate-600">Ref: {recRef}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono font-bold text-slate-800">{formatLAK(recAmount)}</span>
+                          <span className={`text-[10px] font-bold ${isConfirmed ? 'text-emerald-700' : isPending ? 'text-amber-700' : 'text-slate-500'}`}>
+                            {isConfirmed ? (recVerifier !== '—' ? `By: ${recVerifier}` : (currentLang === 'lo' ? 'ຢືນຢັນແລ້ວ' : 'Confirmed')) : isPending ? (currentLang === 'lo' ? 'ລໍຖ້າກວດ' : 'Pending') : (currentLang === 'lo' ? 'ປະຕິເສດ' : 'Rejected')}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex justify-between items-center font-mono">
+          <div className={`p-3 rounded-2xl border text-xs flex justify-between items-center font-mono ${
+            isFullySettled 
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+              : primaryPaymentRecord?.state === 'PENDING'
+                ? 'bg-amber-50 border-amber-200 text-amber-800'
+                : primaryPaymentRecord?.record_kind === 'REVERSAL'
+                  ? 'bg-rose-50 border-rose-200 text-rose-800'
+                  : 'bg-slate-50 border-slate-200 text-slate-600'
+          }`}>
             <span>Ref: {paymentReceiptNo}</span>
-            <span className="text-emerald-700 font-black">ບັນຊີປິດຍອດສົມບູນ</span>
+            <span className="font-bold">
+              {isFullySettled 
+                ? (currentLang === 'lo' ? 'ບັນຊີປິດຍອດສົມບູນ' : 'Account Settled')
+                : primaryPaymentRecord?.state === 'PENDING'
+                  ? (currentLang === 'lo' ? 'ລໍຖ້າການກວດສອບ' : 'Pending Review')
+                  : primaryPaymentRecord?.record_kind === 'REVERSAL'
+                    ? (currentLang === 'lo' ? 'ລາຍການຖືກຍົກເລີກ / ຄືນເງິນ' : 'Payment Reversed')
+                    : (currentLang === 'lo' ? 'ຍັງບໍ່ມີຫຼັກຖານການຊຳລະ' : 'Unrecorded / Unpaid')}
+            </span>
           </div>
         </div>
 
@@ -591,6 +782,18 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
             </div>
           ) : (
             <div className="space-y-4">
+              {!hasActualCost && (
+                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-center justify-between font-bold">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>{currentLang === 'lo' ? 'ຂໍ້ມູນຕົ້ນທຶນການຜະລິດຕົວຈິງຍັງບໍ່ຄົບຖ້ວນ / ຢູ່ລະຫວ່າງບັນທຶກ' : 'Actual production costs are incomplete or partially recorded'}</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-300">
+                    {order.realized_cost_status || order.actual_cost_status || order.cost_completeness || 'INCOMPLETE'}
+                  </span>
+                </div>
+              )}
+
               {/* 4 Top Metric Cards */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
@@ -610,35 +813,35 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                     {currentLang === 'lo' ? 'ຕົ້ນທຶນຜະລິດຕົວຈິງ (COGS)' : 'Realized COGS'}
                   </span>
                   <div className="text-base sm:text-lg font-black font-mono text-amber-600">
-                    {formatLAK(totalProductionCost)}
+                    {hasActualCost && totalProductionCost !== null ? formatLAK(totalProductionCost) : <span className="text-amber-600 font-bold">{currentLang === 'lo' ? 'ຍັງບໍ່ມີຂໍ້ມູນຕົ້ນທຶນ' : 'No Cost Data'}</span>}
                   </div>
                   <span className="text-[10px] text-amber-700 font-semibold block">
-                    {costRatioPct.toFixed(1)}% ຂອງຍອດຂາຍ
+                    {hasActualCost ? `${costRatioPct.toFixed(1)}% ຂອງຍອດຂາຍ` : (currentLang === 'lo' ? 'ລໍຖ້າບັນທຶກຕົ້ນທຶນຈິງ' : 'Pending Cost Recording')}
                   </span>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-1">
-                  <span className="text-[10.5px] font-bold text-emerald-800 uppercase tracking-wider block">
-                    {currentLang === 'lo' ? 'ກຳໄລຂັ້ນຕົ້ນ (Gross Profit)' : 'Gross Profit'}
+                <div className={`p-4 rounded-2xl border space-y-1 ${isLoss ? 'bg-rose-50/70 border-rose-200' : 'bg-emerald-50/70 border-emerald-200'}`}>
+                  <span className={`text-[10.5px] font-bold uppercase tracking-wider block ${isLoss ? 'text-rose-800' : 'text-emerald-800'}`}>
+                    {currentLang === 'lo' ? (isLoss ? 'ຂາດທຶນຕົວຈິງ (Gross Loss)' : 'ກຳໄລຂັ້ນຕົ້ນ (Gross Profit)') : (isLoss ? 'Gross Loss' : 'Gross Profit')}
                   </span>
-                  <div className="text-base sm:text-lg font-black font-mono text-emerald-700">
-                    {formatLAK(realizedGrossProfit)}
+                  <div className={`text-base sm:text-lg font-black font-mono ${isLoss ? 'text-rose-700' : 'text-emerald-700'}`}>
+                    {hasActualCost && totalProductionCost !== null ? `${isLoss ? '-' : ''}${formatLAK(Math.abs(realizedGrossProfit))}` : <span className="text-slate-400 font-medium">—</span>}
                   </div>
-                  <span className="text-[10px] text-emerald-700 font-semibold block">
-                    Realized Gross Income
+                  <span className={`text-[10px] font-semibold block ${isLoss ? 'text-rose-700' : 'text-emerald-700'}`}>
+                    {hasActualCost ? (isLoss ? (currentLang === 'lo' ? 'ຂາດທຶນຕົວຈິງ (Realized Loss)' : 'Realized Loss') : 'Realized Gross Income') : (currentLang === 'lo' ? 'ລໍຖ້າຕົ້ນທຶນຈິງ' : 'Pending Cost Data')}
                   </span>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-teal-50/70 border border-teal-200 space-y-1">
-                  <span className="text-[10.5px] font-bold text-teal-800 uppercase tracking-wider block">
+                <div className={`p-4 rounded-2xl border space-y-1 ${!hasActualCost ? 'bg-amber-50/70 border-amber-200' : isLoss ? 'bg-rose-50/70 border-rose-200' : 'bg-teal-50/70 border-teal-200'}`}>
+                  <span className={`text-[10.5px] font-bold uppercase tracking-wider block ${!hasActualCost ? 'text-amber-800' : isLoss ? 'text-rose-800' : 'text-teal-800'}`}>
                     {currentLang === 'lo' ? 'ອັດຕາກຳໄລຂັ້ນຕົ້ນ (Margin %)' : 'Realized Margin %'}
                   </span>
-                  <div className="text-base sm:text-lg font-black font-mono text-teal-700 flex items-center gap-1">
-                    <TrendingUp className="w-4 h-4 text-teal-600" />
-                    <span>{realizedGrossMarginPct.toFixed(1)}%</span>
+                  <div className={`text-base sm:text-lg font-black font-mono flex items-center gap-1 ${!hasActualCost ? 'text-amber-700' : isLoss ? 'text-rose-700' : 'text-teal-700'}`}>
+                    {hasActualCost && <TrendingUp className={`w-4 h-4 ${isLoss ? 'text-rose-600 rotate-180' : 'text-teal-600'}`} />}
+                    <span>{hasActualCost ? `${realizedGrossMarginPct.toFixed(1)}%` : (currentLang === 'lo' ? 'ຍັງບໍ່ຄົບຖ້ວນ' : 'Incomplete')}</span>
                   </div>
-                  <span className={`text-[10px] font-bold block ${realizedGrossMarginPct >= 35 ? 'text-teal-700' : 'text-amber-700'}`}>
-                    {realizedGrossMarginPct >= 35 ? 'Margin ສູງມາດຕະຖານ' : 'Margin ປານກາງ'}
+                  <span className={`text-[10px] font-bold block ${!hasActualCost ? 'text-amber-700' : isLoss ? 'text-rose-700' : (realizedGrossMarginPct >= 35 ? 'text-teal-700' : 'text-amber-700')}`}>
+                    {!hasActualCost ? (currentLang === 'lo' ? 'ລໍຖ້າຂໍ້ມູນຕົ້ນທຶນ' : 'Pending Cost') : isLoss ? (currentLang === 'lo' ? 'ຂາດທຶນ' : 'Loss') : (realizedGrossMarginPct >= 35 ? 'Margin ສູງມາດຕະຖານ' : 'Margin ປານກາງ')}
                   </span>
                 </div>
               </div>
@@ -649,7 +852,11 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                 <div className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-1.5 text-xs">
                   <div className="flex justify-between items-center text-slate-500 font-bold">
                     <span>ວັດສະດຸເຈ້ຍ (Substrate Paper)</span>
-                    <span className="font-mono text-slate-900 font-black">{formatLAK(realizedPaperCost)}</span>
+                    {realizedPaperCost !== null ? (
+                      <span className="font-mono text-slate-900 font-black">{formatLAK(realizedPaperCost)}</span>
+                    ) : (
+                      <span className="text-amber-600 font-bold text-[11px]">{currentLang === 'lo' ? 'ຍັງບໍ່ໄດ້ບັນທຶກ' : 'Unrecorded'}</span>
+                    )}
                   </div>
                   <div className="text-[10.5px] text-slate-600 font-medium space-y-0.5 pt-1 border-t border-slate-200/60">
                     <div>ສເປກ: <strong className="text-slate-800">{paperNameDisplay}</strong></div>
@@ -661,7 +868,11 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                 <div className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-1.5 text-xs">
                   <div className="flex justify-between items-center text-slate-500 font-bold">
                     <span>ນ້ຳໝຶກພິມ (Realized Ink)</span>
-                    <span className="font-mono text-slate-900 font-black">{formatLAK(realizedInkCost)}</span>
+                    {realizedInkCost !== null ? (
+                      <span className="font-mono text-slate-900 font-black">{formatLAK(realizedInkCost)}</span>
+                    ) : (
+                      <span className="text-amber-600 font-bold text-[11px]">{currentLang === 'lo' ? 'ຍັງບໍ່ໄດ້ບັນທຶກ' : 'Unrecorded'}</span>
+                    )}
                   </div>
                   <div className="text-[10.5px] text-slate-600 font-medium space-y-0.5 pt-1 border-t border-slate-200/60">
                     <div className="truncate">ແທ່ນພິມ: <strong className="text-slate-800">{allocatedPrinterName}</strong></div>
@@ -673,7 +884,11 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                 <div className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-1.5 text-xs">
                   <div className="flex justify-between items-center text-slate-500 font-bold">
                     <span>ຄ່າແຮງງານຊ່າງ (Piece-Rate Labor)</span>
-                    <span className="font-mono text-slate-900 font-black">{formatLAK(realizedLaborCost)}</span>
+                    {realizedLaborCost !== null ? (
+                      <span className="font-mono text-slate-900 font-black">{formatLAK(realizedLaborCost)}</span>
+                    ) : (
+                      <span className="text-amber-600 font-bold text-[11px]">{currentLang === 'lo' ? 'ຍັງບໍ່ໄດ້ບັນທຶກ' : 'Unrecorded'}</span>
+                    )}
                   </div>
                   <div className="text-[10.5px] text-slate-600 font-medium space-y-0.5 pt-1 border-t border-slate-200/60">
                     <div>ຄ່າຕອບແທນ: <strong className="text-slate-800">Piece-rate Incentive</strong></div>
@@ -685,7 +900,11 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                 <div className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-1.5 text-xs">
                   <div className="flex justify-between items-center text-slate-500 font-bold">
                     <span>ຄ່າຫຼັງພິມ & ຄ່າເສື່ອມ (Finishing & Overhead)</span>
-                    <span className="font-mono text-slate-900 font-black">{formatLAK(realizedFinishingCost)}</span>
+                    {realizedFinishingCost !== null ? (
+                      <span className="font-mono text-slate-900 font-black">{formatLAK(realizedFinishingCost)}</span>
+                    ) : (
+                      <span className="text-amber-600 font-bold text-[11px]">{currentLang === 'lo' ? 'ຍັງບໍ່ໄດ້ບັນທຶກ' : 'Unrecorded'}</span>
+                    )}
                   </div>
                   <div className="text-[10.5px] text-slate-600 font-medium space-y-0.5 pt-1 border-t border-slate-200/60">
                     <div>ຂະບວນການ: <strong className="text-slate-800">ຕັດ, ເຄືອບ, ເຂົ້າເລ່ມ</strong></div>
@@ -697,7 +916,11 @@ export const OrderCompletedSummaryPage: React.FC<OrderCompletedSummaryPageProps>
                 <div className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-1.5 text-xs">
                   <div className="flex justify-between items-center text-slate-500 font-bold">
                     <span>ອັດຕາການສູນເສຍ (Spoilage Allowance)</span>
-                    <span className="font-mono text-slate-900 font-black">{formatLAK(realizedSpoilageCost)}</span>
+                    {realizedSpoilageCost !== null ? (
+                      <span className="font-mono text-slate-900 font-black">{formatLAK(realizedSpoilageCost)}</span>
+                    ) : (
+                      <span className="text-amber-600 font-bold text-[11px]">{currentLang === 'lo' ? 'ຍັງບໍ່ໄດ້ບັນທຶກ' : 'Unrecorded'}</span>
+                    )}
                   </div>
                   <div className="text-[10.5px] text-slate-600 font-medium space-y-0.5 pt-1 border-t border-slate-200/60">
                     <div>ບັນທຶກ: <strong className="text-slate-800">spoilage_logs</strong></div>

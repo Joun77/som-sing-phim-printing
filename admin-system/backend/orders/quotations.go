@@ -358,15 +358,27 @@ func validateQuotationSnapshot(q QuotationRecord) error {
 			}
 		}
 	}
+	itemsTotalPrice := 0.0
+	itemsTotalCost := 0.0
+	hasParentSheet := false
 	for _, item := range q.Items {
+		name, _ := item["name"].(string)
+		if name == "" {
+			name, _ = item["item_name"].(string)
+		}
+		if strings.Contains(name, "(Parent Sheets)") || strings.Contains(name, "ແຜ່ນແມ່") {
+			hasParentSheet = true
+		}
 		qty, ok := quoteNumber(item["quantity"])
 		if !ok || qty <= 0 || qty != math.Trunc(qty) {
 			return quoteFailure(422, "quotation_snapshot_incomplete", "items.quantity")
 		}
-		if _, err := quotationItemMoney(item, "unit_price_lak", "unitPrice", "unit_price_snapshot"); err != nil {
+		unitPrice, err := quotationItemMoney(item, "unit_price_lak", "unitPrice", "unit_price_snapshot")
+		if err != nil {
 			return err
 		}
-		if _, err := quotationItemMoney(item, "total_price_lak", "subtotal", "totalPrice"); err != nil {
+		totalPrice, err := quotationItemMoney(item, "total_price_lak", "subtotal", "totalPrice")
+		if err != nil {
 			return err
 		}
 		unitCost, err := quotationItemMoney(item, "unit_cost_lak", "costPriceSnapshot", "unitCost")
@@ -377,6 +389,10 @@ func validateQuotationSnapshot(q QuotationRecord) error {
 			return quoteFailure(422, "quotation_snapshot_incomplete", "items.unit_cost_lak")
 		}
 		if snap != nil {
+			if math.Abs(qty*unitPrice-totalPrice) > math.Max(1.0, qty*0.5) {
+				return quoteFailure(422, "quotation_snapshot_incomplete", "items.total_price_lak")
+			}
+			itemsTotalPrice += totalPrice
 			costs := quoteObject(quoteObject(item["specs"])["commercial_cost_snapshot"])
 			for _, key := range []string{"net_cost_lak", "labor_cost_lak", "packaging_delivery_cost_lak", "commercial_cost_lak"} {
 				n, ok := quoteNumber(costs[key])
@@ -384,6 +400,23 @@ func validateQuotationSnapshot(q QuotationRecord) error {
 					return quoteFailure(422, "quotation_snapshot_incomplete", "items.specs.commercial_cost_snapshot."+key)
 				}
 			}
+			netCost, _ := quoteNumber(costs["net_cost_lak"])
+			laborCost, _ := quoteNumber(costs["labor_cost_lak"])
+			pkgDelivCost, _ := quoteNumber(costs["packaging_delivery_cost_lak"])
+			commCost, _ := quoteNumber(costs["commercial_cost_lak"])
+			if !quoteMoneyEqual(netCost+laborCost+pkgDelivCost, commCost) {
+				return quoteFailure(422, "quotation_snapshot_incomplete", "items.specs.commercial_cost_snapshot.commercial_cost_lak")
+			}
+			if !quoteMoneyEqual(commCost, qty*unitCost) && !quoteMoneyEqual(commCost, unitCost) && !quoteMoneyEqual(netCost, qty*unitCost) && !quoteMoneyEqual(netCost, unitCost) {
+				return quoteFailure(422, "quotation_snapshot_incomplete", "items.unit_cost_lak")
+			}
+			itemsTotalCost += commCost
+		}
+	}
+	if snap != nil && !hasParentSheet {
+		expectedRootCost := itemsTotalCost + q.SetupFee + q.PackagingCost
+		if !quoteMoneyEqual(expectedRootCost, q.TotalCost) && !quoteMoneyEqual(itemsTotalCost, q.TotalCost) {
+			return quoteFailure(422, "quotation_snapshot_incomplete", "total_cost")
 		}
 	}
 	return nil
@@ -442,8 +475,12 @@ func HandleSaveQuotation(c *gin.Context) {
 		sendQuotationFailure(c, quoteFailure(400, "invalid_request"))
 		return
 	}
+	if q.Status == "" {
+		q.Status = "Draft"
+	}
+	isDraft := strings.EqualFold(strings.TrimSpace(q.Status), "Draft")
 	q.CustomerName = strings.TrimSpace(q.CustomerName)
-	if q.CustomerName == "" {
+	if q.CustomerName == "" && !isDraft {
 		sendQuotationFailure(c, quoteFailure(400, "invalid_request", "customer_name"))
 		return
 	}
@@ -457,9 +494,6 @@ func HandleSaveQuotation(c *gin.Context) {
 			return
 		}
 		q.ID = "qt-" + token
-	}
-	if q.Status == "" {
-		q.Status = "Draft"
 	}
 	if (strings.EqualFold(q.Status, "ACCEPTED") || strings.EqualFold(q.Status, "REJECTED")) && !quotationManager(c) {
 		sendQuotationFailure(c, quoteFailure(403, "forbidden"))
@@ -572,13 +606,15 @@ func HandleSaveQuotation(c *gin.Context) {
 		}
 		if q.Conversion == nil {
 			if err := validateQuotationImposition(tx, &q); err != nil {
-				return err
+				if !isDraft || q.CommercialSnapshot != nil || complete {
+					return err
+				}
 			}
 		}
 		if err := normalizeQuotationItems(&q); err != nil {
 			return err
 		}
-		if target == "" {
+		if target == "" && (q.CustomerName != "" || q.CustomerID != "" || q.CustomerPhone != "") {
 			if _, err := autoLinkOrCreateCustomer(tx, Order{CustomerID: q.CustomerID, CustomerName: q.CustomerName, CustomerPhone: q.CustomerPhone, CustomerAddress: q.CustomerAddress}); err != nil {
 				return err
 			}

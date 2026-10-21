@@ -16,7 +16,18 @@ export function usePaymentSlipReview(orderId: string) {
   const keyFor = (kind: string, payload: unknown) => {
     const fingerprint = JSON.stringify([orderId, kind, payload]);
     let key = keys.current.get(fingerprint);
-    if (!key) { key = crypto.randomUUID(); keys.current.set(fingerprint, key); }
+    if (!key && typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        key = window.sessionStorage.getItem(`somsing_idemp_${fingerprint}`) || undefined;
+      } catch (_) {}
+    }
+    if (!key) {
+      key = crypto.randomUUID();
+      keys.current.set(fingerprint, key);
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        try { window.sessionStorage.setItem(`somsing_idemp_${fingerprint}`, key); } catch (_) {}
+      }
+    }
     return key;
   };
   const loadHistory = async () => {
@@ -78,12 +89,18 @@ export function usePaymentSlipReview(orderId: string) {
     if (!summary) throw new Error('ກະລຸນາໂຫຼດຂໍ້ມູນຊຳລະກ່ອນ');
     return uploadPaymentSlip(orderId, file, summary.payment_revision, keyFor('upload-slip', [file.name, file.size, file.lastModified, summary.payment_revision]));
   });
-  const requestReceipt = (amount: string, purpose: 'FULL' | 'DEPOSIT' | 'REMAINING', evidence: string, reference?: string, methodId?: string) => operation(async () => {
+  const requestReceipt = (amount: string, purpose: 'FULL' | 'DEPOSIT' | 'REMAINING', evidence: string, reference?: string, methodId?: string, paymentContext?: 'ONLINE' | 'COUNTER') => operation(async () => {
     if (!summary) throw new Error('ກະລຸນາໂຫຼດຂໍ້ມູນການຊຳລະກ່ອນ');
     const paymentMethod = methodId || configuration?.payment_method_id;
     if (!paymentMethod) throw new Error('ກະລຸນາເລືອກບັນຊີຮັບເງິນ');
-    const payload = { purpose, requested_amount_lak: paymentDecimal(amount), payment_method_id: paymentMethod, evidence_url: evidence, reference, expected_payment_revision: summary.payment_revision };
-    return createPaymentRecord(orderId, payload, keyFor('request', payload));
+    const decAmount = paymentDecimal(amount);
+    const existingPending = records.find(r => r.state === 'PENDING' && r.requested_amount_lak === decAmount && r.record_kind === 'RECEIPT');
+    if (existingPending) {
+      return { record: existingPending, summary };
+    }
+    const context = paymentContext || (paymentMethod === 'cash' ? 'COUNTER' : 'ONLINE');
+    const payload = { purpose, requested_amount_lak: decAmount, payment_method_id: paymentMethod, evidence_url: evidence, reference, expected_payment_revision: summary.payment_revision, payment_context: context };
+    return createPaymentRecord(orderId, payload, keyFor('request', [purpose, decAmount, paymentMethod, evidence, context]));
   });
   const decideReceipt = (record: PaymentRecord, status: 'APPROVED' | 'REJECTED', actual: string, reason?: string) => operation(async () => {
     if (!summary) throw new Error('ກະລຸນາໂຫຼດຂໍ້ມູນການຊຳລະກ່ອນ');

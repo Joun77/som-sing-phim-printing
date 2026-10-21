@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { calculateMachineUnitCost, calculateTotalJobMachineCost, getEquipmentAccurateCost, calculateEquipmentPrintCost, calculateMachineWearPartsRate, resolveMachineImage, formatUnitPrecisionLAK } from './machineCostCalculator.ts';
+import { calculateMachineUnitCost, calculateTotalJobMachineCost, getEquipmentAccurateCost, calculateEquipmentPrintCost, calculateMachineWearPartsRate, calculateOemReferenceInkCost, resolveMachineImage, formatUnitPrecisionLAK } from './machineCostCalculator.ts';
 
 describe('machineCostCalculator Unit Tests', () => {
   it('correctly calculates depreciation and maintenance per sheet for printer', () => {
@@ -172,8 +172,8 @@ describe('machineCostCalculator Unit Tests', () => {
     // wear = 1.0416 * 0.15 = 0.156...
     // net = 1.042 + 0.156 = 1.198 ~ 1.20
     // ink = 450000 / 7500 = 60
-    // total = 61.20 -> LAK 61
-    assert.strictEqual(epsonCost.formattedTotal, 'LAK 61');
+    // total = 61.20 -> LAK 61.20
+    assert.strictEqual(epsonCost.formattedTotal, 'LAK 61.20');
     assert.strictEqual(epsonCost.formattedMachine, 'LAK 1.20');
     assert.strictEqual(epsonCost.formattedInk, 'LAK 60');
     assert.strictEqual(epsonCost.unitLabel, 'ໜ້າ');
@@ -193,7 +193,7 @@ describe('machineCostCalculator Unit Tests', () => {
     };
 
     const brotherCost = calculateEquipmentPrintCost(brother, [], [], 'Printer');
-    assert.strictEqual(brotherCost.formattedTotal, 'LAK 943');
+    assert.strictEqual(brotherCost.formattedTotal, 'LAK 942.80');
     assert.strictEqual(brotherCost.formattedMachine, 'LAK 2.80');
     assert.strictEqual(brotherCost.formattedInk, 'LAK 940');
   });
@@ -345,17 +345,111 @@ describe('machineCostCalculator Unit Tests', () => {
     assert.strictEqual(result.finalCostPerPage, 195.76);
     assert.strictEqual(formatUnitPrecisionLAK(result.finalCostPerPage), 'LAK 195.76');
 
-    // Direct Field Verification: when machine already has colorInkCost = 56.09 directly stored
+    // Direct Field Verification: when machine has direct colorInkCost and no slots/links
     const machineWithDirectField = {
-      ...epsonMachine,
+      id: 'MAC-5707-DIRECT',
+      name: 'Custom Printer',
+      category: 'Printer',
+      price: 18500057,
+      expectedLifeA4Pages: 300000,
+      specs: {
+        wearPickupRollerCost: 600000,
+        wearPickupRollerLife: 50000,
+        wearMaintBoxCost: 700000,
+        wearMaintBoxLife: 50000,
+        wearCarriageBeltCost: 600000,
+        wearCarriageBeltLife: 50000,
+        wearPrintheadCost: 4000000,
+        wearPrintheadLife: 100000,
+      },
       colorInkCost: 56.09,
       bwInkCost: 8.59,
-      totalPrintCostPerPage: 195.76,
     };
     const directResult = calculateEquipmentPrintCost(machineWithDirectField, [], [], 'Printer');
     assert.strictEqual(directResult.linkedInkRatePerPage, 56.09);
     assert.strictEqual(directResult.finalCostPerPage, 195.76);
     assert.strictEqual(formatUnitPrecisionLAK(directResult.finalCostPerPage), 'LAK 195.76');
+  });
+
+  it('correctly calculates Controlled Epson PRN-9614 Fixture (90 Depr + 78 Wear + 49.96 Ink = 217.96 Total)', () => {
+    const prn9614 = {
+      id: 'PRN-9614',
+      name: 'Epson L15150',
+      category: 'Printer',
+      printerCategory: 'Inkjet',
+      price: 18000000,
+      expectedLifeA4Pages: 200000,
+      specs: {
+        wearPickupRollerCost: 600000,
+        wearPickupRollerLife: 50000, // 12
+        wearMaintBoxCost: 700000,
+        wearMaintBoxLife: 50000, // 14
+        wearCarriageBeltCost: 600000,
+        wearCarriageBeltLife: 50000, // 12
+        wearPrintheadCost: 4000000,
+        wearPrintheadLife: 100000, // 40
+      },
+      oemBaselineInks: [
+        { slotPosition: 'Slot 1 (K - Black)', colorGroup: 'Black', oemInkCode: 'EPSON-008-BK', oemStandardVolumeMl: 127, oemStandardIsoYieldA4: 7500, oemPrice: 450000 },
+        { slotPosition: 'Slot 2 (C - Cyan)', colorGroup: 'Cyan', oemInkCode: 'EPSON-008-C', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+        { slotPosition: 'Slot 3 (M - Magenta)', colorGroup: 'Magenta', oemInkCode: 'EPSON-008-M', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+        { slotPosition: 'Slot 4 (Y - Yellow)', colorGroup: 'Yellow', oemInkCode: 'EPSON-008-Y', oemStandardVolumeMl: 70, oemStandardIsoYieldA4: 6000, oemPrice: 320000 },
+      ]
+    };
+
+    const printerColorLinks = [
+      { assetId: 'PRN-9614', slotPosition: 'Slot 1 (K - Black)', inkCode: 'INK-9826', colorGroup: 'Black' },
+      { assetId: 'PRN-9614', slotPosition: 'Slot 2 (C - Cyan)', inkCode: 'INK-8713', colorGroup: 'Cyan' },
+      { assetId: 'PRN-9614', slotPosition: 'Slot 3 (M - Magenta)', inkCode: 'INK-0365', colorGroup: 'Magenta' },
+      { assetId: 'PRN-9614', slotPosition: 'Slot 4 (Y - Yellow)', inkCode: 'INK-6588', colorGroup: 'Yellow' },
+    ];
+
+    // Controlled fixture inventory:
+    // K: 145,000 LAK / 1,000 ml @ rate 127/7500 -> 2.455333... LAK
+    // C, M, Y: 95,000 LAK / 70 ml @ rate 70/6000 -> 15.833333... LAK each
+    const inventory = [
+      { id: 'INK-9826', sku: 'INK-9826', name: 'Epson 008 Black Pigment Ink (1000ml)', unitPrice: 145000, volume: 1000 },
+      { id: 'INK-8713', sku: 'INK-8713', specs: { volume: 70 }, unitPrice: 95000, volume: 70 },
+      { id: 'INK-0365', sku: 'INK-0365', specs: { volume: 70 }, unitPrice: 95000, volume: 70 },
+      { id: 'INK-6588', sku: 'INK-6588', specs: { volume: 70 }, unitPrice: 95000, volume: 70 },
+    ];
+
+    // 1. calculateMachineUnitCost: depreciation + sum(wear parts) without double-counting 15%
+    const machineCost = calculateMachineUnitCost(prn9614);
+    assert.strictEqual(machineCost.depreciation, 90);
+    assert.strictEqual(machineCost.maintenance, 78);
+    assert.strictEqual(machineCost.totalMachineCost, 168);
+
+    // 2. calculateOemReferenceInkCost: 2.455333... + 3 * 15.833333... = 49.955333... LAK
+    const oemRefInk = calculateOemReferenceInkCost(prn9614);
+    assert.strictEqual(oemRefInk, 49.955);
+
+    // 3. getEquipmentAccurateCost: depreciation 90, wear 78, ink 49.955 (display 49.96), grand total 217.96
+    const accurate = getEquipmentAccurateCost(prn9614);
+    assert.strictEqual(accurate.depreciation, 90);
+    assert.strictEqual(accurate.maintenance, 78);
+    assert.strictEqual(accurate.totalMachineCost, 168);
+    assert.strictEqual(formatUnitPrecisionLAK(accurate.inkCost), 'LAK 49.96');
+    assert.strictEqual(accurate.grandTotalCost, 217.96);
+    assert.strictEqual(formatUnitPrecisionLAK(accurate.grandTotalCost), 'LAK 217.96');
+
+    // 4. calculateEquipmentPrintCost: linked slots produce exact raw derivations
+    // K: (145000 / 1000) * (127 / 7500) = 2.455333... LAK (rounded display: 2.46)
+    // C, M, Y each: (95000 / 70) * (70 / 6000) = 15.833333... LAK (rounded display: 15.83)
+    // Sum = 2.455333... + 47.50 = 49.955333... LAK (rounded display: 49.96)
+    // Grand Total = 168 + 49.955333... = 217.955333... LAK (rounded display: 217.96)
+    const printCost = calculateEquipmentPrintCost(prn9614, printerColorLinks, inventory, 'Printer');
+    assert.strictEqual(printCost.baseCostPerUnit, 90);
+    assert.strictEqual(printCost.wearAllowancePerUnit, 78);
+    assert.strictEqual(printCost.netCostPerUnit, 168);
+    assert.strictEqual(printCost.linkedInkRatePerPage, 49.96);
+    assert.strictEqual(printCost.finalCostPerPage, 217.96);
+    assert.strictEqual(formatUnitPrecisionLAK(printCost.linkedInkRatePerPage), 'LAK 49.96');
+    assert.strictEqual(formatUnitPrecisionLAK(printCost.finalCostPerPage), 'LAK 217.96');
+    assert.strictEqual(printCost.inkSlotsBreakdown[0].costPerPage, 2.46);
+    assert.strictEqual(printCost.inkSlotsBreakdown[1].costPerPage, 15.83);
+    assert.strictEqual(printCost.inkSlotsBreakdown[2].costPerPage, 15.83);
+    assert.strictEqual(printCost.inkSlotsBreakdown[3].costPerPage, 15.83);
   });
 
   it('correctly calculates laser printer toner cost using OEM baseline and linked kg toner inventory', () => {

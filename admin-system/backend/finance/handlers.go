@@ -1,10 +1,7 @@
 package finance
 
 import (
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -36,6 +33,7 @@ type PaymentVerificationRequest struct {
 	PaymentRecordID         string `json:"payment_record_id"`
 	ActualReceivedAmountLAK string `json:"actual_received_amount_lak"`
 	ExpectedPaymentRevision *int64 `json:"expected_payment_revision"`
+	PaymentContext          string `json:"payment_context,omitempty"`
 	OrderID                 string `json:"order_id" binding:"required"`
 	Status                  string `json:"status" binding:"required"` // "APPROVED" | "REJECTED"
 	RejectionReason         string `json:"rejection_reason"`
@@ -104,14 +102,21 @@ type CreateExpenseRequest struct {
 
 // JobProfitabilityItem represents top job ranking by profit
 type JobProfitabilityItem struct {
-	JobID         string  `json:"job_id"`
-	JobName       string  `json:"job_name"`
-	CustomerName  string  `json:"customer_name"`
-	Revenue       float64 `json:"revenue"`
-	TotalCost     float64 `json:"total_cost"`
-	GrossProfit   float64 `json:"gross_profit"`
-	ProfitMargin  float64 `json:"profit_margin_percent"`
-	CompletedDate string  `json:"completed_date"`
+	ID                 string   `json:"id"`
+	OrderID            string   `json:"order_id"`
+	JobID              string   `json:"job_id"`
+	JobName            string   `json:"job_name"`
+	CustomerName       string   `json:"customer_name"`
+	Revenue            float64  `json:"revenue"`
+	EstimatedCost      float64  `json:"estimated_cost"`
+	ActualCost         *float64 `json:"actual_cost"`
+	ActualCostComplete bool     `json:"actual_cost_complete"`
+	ActualCostStatus   string   `json:"actual_cost_status"`
+	CostCompleteness   string   `json:"cost_completeness"`
+	TotalCost          float64  `json:"total_cost"`
+	GrossProfit        float64  `json:"gross_profit"`
+	ProfitMargin       float64  `json:"profit_margin_percent"`
+	CompletedDate      string   `json:"completed_date"`
 }
 
 // AccountsPayableItem represents AP line
@@ -239,98 +244,7 @@ func HandleVerifyPaymentSlip(c *gin.Context) {
 		HandleReviewPaymentRecord(c, req)
 		return
 	}
-	reviewer := c.GetString("user_id")
-	if reviewer == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "Unauthorized: reviewer identity required"})
-		return
-	}
-	if db.DB == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "Payment storage unavailable"})
-		return
-	}
-	tx, err := db.DB.BeginTx(c.Request.Context(), nil)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to begin transaction"})
-		return
-	}
-	defer tx.Rollback()
-	var id, status, amountText, slipURL string
-	err = tx.QueryRowContext(c.Request.Context(), `SELECT id, status, COALESCE(total_amount_lak, total_price, 0)::text, COALESCE(payment_slip_url, proof_url, '') FROM orders WHERE id = $1 OR order_no = $1 FOR UPDATE`, req.OrderID).Scan(&id, &status, &amountText, &slipURL)
-	if err != nil {
-		code := http.StatusInternalServerError
-		if err == sql.ErrNoRows {
-			code = http.StatusNotFound
-		}
-		c.JSON(code, gin.H{"status": "error", "message": "Unable to load payment review"})
-		return
-	}
-	if status != "PENDING_SLIP_CHECK" && status != "PENDING_PAYMENT" && status != "WAITING_DEPOSIT" && status != "Verification Required" && status != "Pending Payment" {
-		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "Order is not awaiting payment review"})
-		return
-	}
-	if slipURL == "" {
-		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "Payment slip is missing"})
-		return
-	}
-	newStatus := "PAYMENT_REJECTED"
-	var result sql.Result
-	if req.Status == "APPROVED" {
-		amount, amountErr := decimal.NewFromString(amountText)
-		if amountErr != nil || !amount.IsPositive() {
-			c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "Order amount is invalid"})
-			return
-		}
-		newStatus = "PAID_PREPRESS"
-		result, err = tx.ExecContext(c.Request.Context(), `UPDATE orders SET status = 'PAID_PREPRESS', overall_status = 'PAID_PREPRESS', deposit_amount = $2, deposit_lak = $2, remaining_lak = 0, updated_at = NOW() WHERE id = $1`, id, amount.String())
-		if err == nil {
-			err = CreatePaymentReceivedJournal(tx, id, amount, "Manual QR slip review")
-		}
-	} else {
-		result, err = tx.ExecContext(c.Request.Context(), `UPDATE orders SET status = 'PAYMENT_REJECTED', overall_status = 'PAYMENT_REJECTED', proof_rejection_reason = $2, updated_at = NOW() WHERE id = $1`, id, req.RejectionReason)
-	}
-	if err == nil {
-		var affected int64
-		affected, err = result.RowsAffected()
-		if err == nil && affected != 1 {
-			err = fmt.Errorf("unexpected payment update count")
-		}
-	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
-		return
-	}
-	auditID := make([]byte, 16)
-	if _, err := rand.Read(auditID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
-		return
-	}
-	oldValues, err := json.Marshal(map[string]string{"status": status})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
-		return
-	}
-	newValues, err := json.Marshal(map[string]string{"status": newStatus, "overall_status": newStatus, "decision": req.Status, "rejection_reason": req.RejectionReason})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
-		return
-	}
-	audit, err := tx.ExecContext(c.Request.Context(), `INSERT INTO audit_logs(id,user_id,user_name,action,resource_type,resource_id,old_values,new_values,ip_address,created_at) VALUES($1,$2,$3,'MANUAL_SLIP_REVIEW','ORDER',$4,$5,$6,$7,NOW())`, hex.EncodeToString(auditID), reviewer, c.GetString("username"), id, string(oldValues), string(newValues), c.ClientIP())
-	if err == nil {
-		var count int64
-		count, err = audit.RowsAffected()
-		if err == nil && count != 1 {
-			err = fmt.Errorf("unexpected review audit count")
-		}
-	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
-		return
-	}
-	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Payment review was not saved"})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "orderId": id, "newStatus": newStatus})
+	HandleLegacyFullReview(c, req)
 }
 
 type PendingSlipOrderDTO struct {
@@ -768,17 +682,18 @@ func HandleGetJobProfitability(c *gin.Context) {
 				COALESCE(o.order_no, o.order_number, o.id) AS job_id,
 				COALESCE(o.customer_name, 'Direct Customer') AS customer_name,
 				COALESCE(o.total_price, o.total_amount_lak, 0) AS revenue,
-				COALESCE(o.total_cost, 0) AS total_cost,
-				(COALESCE(o.total_price, o.total_amount_lak, 0) - COALESCE(o.total_cost, 0)) AS gross_profit,
-				CASE WHEN COALESCE(o.total_price, o.total_amount_lak, 0) > 0 
-				     THEN ((COALESCE(o.total_price, o.total_amount_lak, 0) - COALESCE(o.total_cost, 0)) / COALESCE(o.total_price, o.total_amount_lak, 1)) * 100 
-				     ELSE 0 
-				END AS profit_margin_percent,
+				COALESCE(o.total_cost, 0) AS estimated_cost,
+				o.realized_paper_cost,
+				o.realized_ink_cost,
+				o.realized_labor_cost,
+				o.realized_finishing_cost,
+				o.realized_spoilage_cost,
+				o.realized_total_cost,
 				o.created_at::text
 			FROM orders o
-			WHERE o.status IN ('IN_PRODUCTION', 'COMPLETED', 'DELIVERED', 'Paid')
-			ORDER BY gross_profit DESC
-			LIMIT 20
+			WHERE o.status IN ('IN_PRODUCTION', 'COMPLETED', 'DELIVERED', 'Paid', 'Completed')
+			ORDER BY o.created_at DESC, o.id ASC
+			LIMIT 50
 		`)
 		if err != nil {
 			WriteOperationError(c, err)
@@ -788,18 +703,53 @@ func HandleGetJobProfitability(c *gin.Context) {
 			defer rows.Close()
 			for rows.Next() {
 				var item JobProfitabilityItem
-				var dummyID string
+				var rPaper, rInk, rLabor, rFinishing, rSpoilage, rTotal sql.NullFloat64
 				if err := rows.Scan(
-					&dummyID, &item.JobID, &item.CustomerName, &item.Revenue,
-					&item.TotalCost, &item.GrossProfit, &item.ProfitMargin, &item.CompletedDate,
+					&item.ID, &item.JobID, &item.CustomerName, &item.Revenue,
+					&item.EstimatedCost,
+					&rPaper, &rInk, &rLabor, &rFinishing, &rSpoilage, &rTotal,
+					&item.CompletedDate,
 				); err != nil {
 					WriteOperationError(c, err)
 					return
 				}
-				{
-					item.JobName = "Print Job #" + item.JobID
-					list = append(list, item)
+				item.OrderID = item.ID
+				item.JobName = "Print Job #" + item.JobID
+				complete := rPaper.Valid && rInk.Valid && rLabor.Valid && rFinishing.Valid && rSpoilage.Valid && rTotal.Valid
+				if complete {
+					sumParts := decimal.NewFromFloat(rPaper.Float64).
+						Add(decimal.NewFromFloat(rInk.Float64)).
+						Add(decimal.NewFromFloat(rLabor.Float64)).
+						Add(decimal.NewFromFloat(rFinishing.Float64)).
+						Add(decimal.NewFromFloat(rSpoilage.Float64)).Round(2)
+					totalDec := decimal.NewFromFloat(rTotal.Float64).Round(2)
+					if !sumParts.Equal(totalDec) || totalDec.IsNegative() {
+						complete = false
+					}
 				}
+				if complete {
+					actualVal := rTotal.Float64
+					item.ActualCost = &actualVal
+					item.ActualCostComplete = true
+					item.ActualCostStatus = "COMPLETE"
+					item.CostCompleteness = "COMPLETE"
+					item.TotalCost = actualVal
+					item.GrossProfit = item.Revenue - actualVal
+					if item.Revenue > 0 {
+						item.ProfitMargin = (item.GrossProfit / item.Revenue) * 100.0
+					} else {
+						item.ProfitMargin = 0
+					}
+				} else {
+					item.ActualCost = nil
+					item.ActualCostComplete = false
+					item.ActualCostStatus = "INCOMPLETE"
+					item.CostCompleteness = "INCOMPLETE"
+					item.TotalCost = 0
+					item.GrossProfit = 0
+					item.ProfitMargin = 0
+				}
+				list = append(list, item)
 			}
 			if err := rows.Err(); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to iterate profitability items: " + err.Error()})

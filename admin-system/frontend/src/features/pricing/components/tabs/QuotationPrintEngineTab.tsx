@@ -90,6 +90,8 @@ export const QuotationPrintEngineTab: React.FC<QuotationPrintEngineTabProps> = (
                 name: p.name || p.id,
                 cost_per_page: prnCost.netCostPerUnit,
                 ink_cost_per_page: Number(p.colorInkCost || p.linkedInkCostPerPage || prnCost.linkedInkRatePerPage || 0),
+                depreciation_per_page: prnCost.baseCostPerUnit,
+                maintenance_per_page: prnCost.wearAllowancePerUnit,
                 printerCategory: p.category,
                 colorSchemeType: 'CMYK'
               };

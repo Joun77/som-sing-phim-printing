@@ -73,7 +73,14 @@ export function confirmedSavedQuotation(value: unknown, expectedId: string) {
   for (const field of ['total_cost', 'total_selling_price']) {
     if (typeof record[field] !== 'number' || !Number.isFinite(record[field]) || record[field] < 0) throw new Error('Missing canonical saved quotation money');
   }
-  if (!Array.isArray(record.items) || !record.items.length || !record.commercial_snapshot) throw new Error('Missing saved quotation snapshot');
+  const isDraft = String(record.status || '').toLowerCase() === 'draft';
+  if (isDraft && !record.commercial_snapshot) {
+    return normalizeSavedQuotation(record);
+  }
+  if (!Array.isArray(record.items) || !record.items.length || !record.commercial_snapshot) {
+    if (isDraft) return normalizeSavedQuotation(record);
+    throw new Error('Missing saved quotation snapshot');
+  }
   const snapshot = record.commercial_snapshot as Record<string, unknown>;
   if (snapshot.version !== 1 || snapshot.currency !== 'LAK') throw new Error('Unsupported saved quotation snapshot');
   for (const field of ['total_cost_lak', 'final_total_lak', 'discounted_subtotal_lak', 'tax_amount_lak', 'shipping_fee_lak', 'setup_fee_lak', 'packaging_cost_lak']) {
@@ -82,7 +89,7 @@ export function confirmedSavedQuotation(value: unknown, expectedId: string) {
   for (const [root, field] of [['total_cost', 'total_cost_lak'], ['total_selling_price', 'final_total_lak'], ['shipping_fee', 'shipping_fee_lak'], ['setup_fee', 'setup_fee_lak'], ['packaging_cost', 'packaging_cost_lak']]) {
     if (record[root] !== snapshot[field]) throw new Error('Conflicting saved quotation snapshot');
   }
-  if (Math.abs(Number(snapshot.final_total_lak) - Number(snapshot.discounted_subtotal_lak) - Number(snapshot.tax_amount_lak) - Number(snapshot.shipping_fee_lak)) > 0.01 || Number(snapshot.final_total_lak) <= 0) throw new Error('Conflicting saved quotation adjustments');
+  if (Math.abs(Number(snapshot.final_total_lak) - Number(snapshot.discounted_subtotal_lak) - Number(snapshot.tax_amount_lak) - Number(snapshot.shipping_fee_lak)) > 0.01 || (!isDraft && Number(snapshot.final_total_lak) <= 0)) throw new Error('Conflicting saved quotation adjustments');
   return normalizeSavedQuotation(record);
 }
 

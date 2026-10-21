@@ -511,8 +511,8 @@ export function calculateSingleItemFinancials(
           (channelCode === 'M' && (s.colorGroup?.toLowerCase().includes('magenta') || s.slotPosition?.toLowerCase().includes('magenta') || s.slotPosition?.includes('Slot 3'))) ||
           (channelCode === 'Y' && (s.colorGroup?.toLowerCase().includes('yellow') || s.slotPosition?.toLowerCase().includes('yellow') || s.slotPosition?.includes('Slot 4')))
         );
-        if (matchedSlot && matchedSlot.costPerPage > 0) {
-          slotBase5Pct = matchedSlot.costPerPage;
+        if (matchedSlot && ((matchedSlot as any).rawCostPerPage > 0 || matchedSlot.costPerPage > 0)) {
+          slotBase5Pct = (matchedSlot as any).rawCostPerPage || matchedSlot.costPerPage;
         }
       }
 
@@ -565,7 +565,13 @@ export function calculateSingleItemFinancials(
     yellowMl += yResult.ml;
     blackMl += kResult.ml;
 
-    totalInkCostAccum += (cResult.cost + mResult.cost + yResult.cost + kResult.cost);
+    const rawChannelSum = cResult.cost + mResult.cost + yResult.cost + kResult.cost;
+    const isReference5PctA4 = Math.abs(cCov - 5) < 0.01 && Math.abs(mCov - 5) < 0.01 && Math.abs(yCov - 5) < 0.01 && Math.abs(kCov - 5) < 0.01 && Math.abs(printAreaFactor - 1) < 0.01;
+    const finalChannelSum = (isReference5PctA4 && prnPrintCost?.linkedInkRatePerPage)
+      ? Math.round(prnPrintCost.linkedInkRatePerPage * allocImpressions * 100) / 100
+      : rawChannelSum;
+
+    totalInkCostAccum += finalChannelSum;
 
     const deprRate = prnPrintCost
       ? prnPrintCost.baseCostPerUnit
@@ -575,11 +581,12 @@ export function calculateSingleItemFinancials(
       ? prnPrintCost.wearAllowancePerUnit
       : (accurateMachRate > 0 ? accurateMachRate - deprRate : 0);
 
-    const deprPerSheet = deprRate * (printAreaFactor > 0 ? printAreaFactor : 1);
-    const maintPerSheet = maintRate * (printAreaFactor > 0 ? printAreaFactor : 1);
+    const parentSheetImpressions = Math.max(1, cutsPerSheet) > 1
+      ? (innerParentSheetsNeeded * (item.isDoubleSided ? Math.min(2, innerPagesPerBook) : 1))
+      : allocImpressions;
 
-    machDepr += Math.round(deprPerSheet * allocImpressions);
-    machMaint += Math.round(maintPerSheet * allocImpressions);
+    machDepr += Math.round(deprRate * parentSheetImpressions);
+    machMaint += Math.round(maintRate * parentSheetImpressions);
   });
 
   // Separate Cover Print Ink & Machine Overhead Calculation
@@ -604,8 +611,8 @@ export function calculateSingleItemFinancials(
     const coverDeprRate = coverPrnPrintCost ? coverPrnPrintCost.baseCostPerUnit : (coverMachRate * 0.65);
     const coverMaintRate = coverPrnPrintCost ? coverPrnPrintCost.wearAllowancePerUnit : (coverMachRate - coverDeprRate);
 
-    coverMachDepr = Math.round(coverPrintSheets * coverSides * coverDeprRate * coverSpreadAreaFactor);
-    coverMachMaint = Math.round(coverPrintSheets * coverSides * coverMaintRate * coverSpreadAreaFactor);
+    coverMachDepr = Math.round(coverPrintSheets * coverSides * coverDeprRate);
+    coverMachMaint = Math.round(coverPrintSheets * coverSides * coverMaintRate);
 
     totalInkCostAccum += coverInkCost;
     machDepr += coverMachDepr;
@@ -620,13 +627,14 @@ export function calculateSingleItemFinancials(
 
   const offcutRebate = Boolean(item.useOffcutRebate) ? Math.min(Math.round(innerPaperCost + coverPaperCost), Number(item.offcutRebateAmount || 0)) : 0;
   const rawPaperCost = Math.max(0, Math.round(innerPaperCost + coverPaperCost - offcutRebate));
-  const rawInkCost = Math.round(totalInkCostAccum);
+  const rawInkCost = Math.round(totalInkCostAccum * 100) / 100;
   const rawMachineOverhead = machDepr + machMaint;
   const guillotineFee = 0;
 
   const rawPostPressCost = (item.selectedPostPressIds || []).reduce((sum, machId) => {
     const mach = equipment.find(e => e.id === machId);
-    if (!mach || (preCut && String(mach.postPressSubtype || mach.specs?.postPressSubtype || '').toLowerCase() === 'guillotine')) return sum;
+    const isGuillotine = mach && String(mach.postPressSubtype || mach.specs?.postPressSubtype || '').toLowerCase() === 'guillotine';
+    if (!mach || (preCut && isGuillotine && cutsPerSheet <= 1 && !item.requiresGuillotineCut && (!item.finishingCutOption || item.finishingCutOption === 'NONE'))) return sum;
     const accCost = getEquipmentAccurateCost(mach);
     const rate = accCost.totalMachineCost > 0
       ? accCost.totalMachineCost

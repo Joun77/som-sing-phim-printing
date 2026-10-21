@@ -3,12 +3,15 @@ package settings
 import (
 	"database/sql"
 	"encoding/json"
+	"io"
 	"log"
+	"math"
 	"net/http"
 	"strings"
 	"time"
 
 	"somsing.local/backend/db"
+	"somsing.local/backend/inventory"
 
 	"github.com/gin-gonic/gin"
 )
@@ -34,14 +37,15 @@ type MachineWearPart struct {
 func HandleGetMachineWearParts(c *gin.Context) {
 	assetID := strings.TrimSpace(c.Param("id"))
 	if assetID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Asset ID is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Asset ID is required"})
 		return
 	}
+	canonicalID := inventory.ResolveEquipmentAlias(assetID)
 
 	if db.DB == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"status": "success",
-			"data":   []MachineWearPart{},
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status": "error",
+			"error":  "database unavailable: wear parts requires database connection",
 		})
 		return
 	}
@@ -51,13 +55,14 @@ func HandleGetMachineWearParts(c *gin.Context) {
 		       cost_price_lak, expected_lifespan_units, unit_type, current_counter,
 		       last_replaced_at, is_active, created_at, updated_at
 		FROM machine_wear_parts
-		WHERE asset_id = $1 AND is_active = true
+		WHERE (asset_id = $1 OR asset_id = $2) AND is_active = true
 		ORDER BY part_category ASC, created_at ASC
-	`, assetID)
+	`, canonicalID, assetID)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"status": "success",
-			"data":   []MachineWearPart{},
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"error":   "failed to query machine wear parts",
+			"details": err.Error(),
 		})
 		return
 	}
@@ -100,10 +105,98 @@ func HandleGetMachineWearParts(c *gin.Context) {
 		log.Printf("[DB ERROR] Wear parts rows error: %v", err)
 	}
 
+	// Materialize template wear parts if table is empty for this equipment but components JSONB exists in printers
+	if len(parts) == 0 {
+		var compJSON []byte
+		err := db.DB.QueryRow("SELECT COALESCE(components, '[]'::jsonb) FROM printers WHERE asset_id = $1 OR asset_id = $2", canonicalID, assetID).Scan(&compJSON)
+		if err == nil && len(compJSON) > 2 {
+			var comps []map[string]interface{}
+			if err := json.Unmarshal(compJSON, &comps); err == nil && len(comps) > 0 {
+				tx, err := db.DB.Begin()
+				if err == nil {
+					now := time.Now()
+					for _, cItem := range comps {
+						nameEn, _ := cItem["name"].(string)
+						if nameEn == "" {
+							continue
+						}
+						nameLo, _ := cItem["nameLo"].(string)
+						if nameLo == "" {
+							nameLo = nameEn
+						}
+						category, _ := cItem["category"].(string)
+						if category == "" {
+							category = "general"
+						}
+						cost, _ := cItem["cost"].(float64)
+						lifeVal, _ := cItem["lifeVal"].(float64)
+						if lifeVal <= 0 {
+							lifeVal = 50000
+						}
+						unitLabel, _ := cItem["unitLabel"].(string)
+						if unitLabel == "" {
+							unitLabel = "pages"
+						}
+						newID := generateUUID()
+						_, _ = tx.Exec(`
+							INSERT INTO machine_wear_parts (id, asset_id, part_name_lo, part_name_en, part_category, cost_price_lak, expected_lifespan_units, unit_type, current_counter, is_active, created_at, updated_at)
+							VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, true, $9, $10)
+							ON CONFLICT (asset_id, part_name_en) DO UPDATE SET
+								part_name_lo = EXCLUDED.part_name_lo,
+								cost_price_lak = EXCLUDED.cost_price_lak,
+								expected_lifespan_units = EXCLUDED.expected_lifespan_units,
+								unit_type = EXCLUDED.unit_type,
+								is_active = true,
+								updated_at = NOW()
+						`, newID, canonicalID, nameLo, nameEn, category, cost, int64(lifeVal), unitLabel, now, now)
+					}
+					if err := tx.Commit(); err == nil {
+						// Re-query newly materialized wear parts
+						reRows, reErr := db.DB.Query(`
+							SELECT id, asset_id, part_name_lo, part_name_en, part_category,
+							       cost_price_lak, expected_lifespan_units, unit_type, current_counter,
+							       last_replaced_at, is_active, created_at, updated_at
+							FROM machine_wear_parts
+							WHERE (asset_id = $1 OR asset_id = $2) AND is_active = true
+							ORDER BY part_category ASC, created_at ASC
+						`, canonicalID, assetID)
+						if reErr == nil {
+							defer reRows.Close()
+							parts = nil
+							totalWearCostPerUnit = 0
+							for reRows.Next() {
+								var p MachineWearPart
+								var lastReplaced sql.NullTime
+								if err := reRows.Scan(
+									&p.ID, &p.AssetID, &p.PartNameLo, &p.PartNameEn, &p.PartCategory,
+									&p.CostPriceLak, &p.ExpectedLifespanUnits, &p.UnitType, &p.CurrentCounter,
+									&lastReplaced, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
+								); err == nil {
+									if lastReplaced.Valid {
+										p.LastReplacedAt = &lastReplaced.Time
+									}
+									if p.ExpectedLifespanUnits > 0 {
+										p.WearCostPerUnitLak = p.CostPriceLak / float64(p.ExpectedLifespanUnits)
+									}
+									totalWearCostPerUnit += p.WearCostPerUnitLak
+									parts = append(parts, p)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if parts == nil {
+		parts = []MachineWearPart{}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"status":                   "success",
 		"data":                     parts,
-		"total_wear_cost_per_unit": totalWearCostPerUnit,
+		"total_wear_cost_per_unit": math.Round(totalWearCostPerUnit*100) / 100,
 	})
 }
 
@@ -111,11 +204,13 @@ func HandleGetMachineWearParts(c *gin.Context) {
 func HandleCreateMachineWearPart(c *gin.Context) {
 	assetID := strings.TrimSpace(c.Param("id"))
 	if assetID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Asset ID is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Asset ID is required"})
 		return
 	}
+	canonicalID := inventory.ResolveEquipmentAlias(assetID)
 
 	var req struct {
+		ID                    string  `json:"id"`
 		PartNameLo            string  `json:"part_name_lo" binding:"required"`
 		PartNameEn            string  `json:"part_name_en" binding:"required"`
 		PartCategory          string  `json:"part_category" binding:"required"`
@@ -125,20 +220,20 @@ func HandleCreateMachineWearPart(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Invalid request payload", "details": err.Error()})
 		return
 	}
 
 	if strings.TrimSpace(req.PartNameLo) == "" || strings.TrimSpace(req.PartNameEn) == "" || strings.TrimSpace(req.PartCategory) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Part name and category cannot be empty"})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Part name and category cannot be empty"})
 		return
 	}
 	if req.CostPriceLak < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Cost price must be greater than or equal to 0"})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Cost price must be greater than or equal to 0"})
 		return
 	}
 	if req.ExpectedLifespanUnits <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Expected lifespan must be greater than 0"})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Expected lifespan must be greater than 0"})
 		return
 	}
 
@@ -147,29 +242,59 @@ func HandleCreateMachineWearPart(c *gin.Context) {
 		unitType = "pages"
 	}
 
-	if db.DB != nil {
-		var exists bool
-		err := db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM printers WHERE asset_id = $1)", assetID).Scan(&exists)
-		if err == nil && !exists {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Printer asset not found"})
-			return
-		}
+	if db.DB == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status": "error",
+			"error":  "database unavailable: wear parts requires database connection",
+		})
+		return
+	}
+
+	var exists bool
+	err := db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM printers WHERE asset_id = $1 OR asset_id = $2)", canonicalID, assetID).Scan(&exists)
+	if err == nil && !exists {
+		c.JSON(http.StatusNotFound, gin.H{"status": "error", "error": "Printer asset not found"})
+		return
 	}
 
 	newID := generateUUID()
+	if req.ID != "" && !strings.HasPrefix(req.ID, "part-") && !strings.HasPrefix(req.ID, "temp-") && len(req.ID) == 36 {
+		newID = req.ID
+	}
 	now := time.Now()
 
-	if db.DB != nil {
-		_, err := db.DB.Exec(`
-			INSERT INTO machine_wear_parts (id, asset_id, part_name_lo, part_name_en, part_category, cost_price_lak, expected_lifespan_units, unit_type, current_counter, is_active, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, true, $9, $10)
-		`, newID, assetID, req.PartNameLo, req.PartNameEn, req.PartCategory, req.CostPriceLak, req.ExpectedLifespanUnits, unitType, now, now)
-
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save wear part", "details": err.Error()})
-			return
-		}
+	tx, err := db.DB.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "error": "Failed to begin transaction", "details": err.Error()})
+		return
 	}
+	defer tx.Rollback()
+
+	var actualID string
+	err = tx.QueryRow(`
+		INSERT INTO machine_wear_parts (id, asset_id, part_name_lo, part_name_en, part_category, cost_price_lak, expected_lifespan_units, unit_type, current_counter, is_active, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, true, $9, $10)
+		ON CONFLICT (asset_id, part_name_en) DO UPDATE SET
+			part_name_lo = EXCLUDED.part_name_lo,
+			part_category = EXCLUDED.part_category,
+			cost_price_lak = EXCLUDED.cost_price_lak,
+			expected_lifespan_units = EXCLUDED.expected_lifespan_units,
+			unit_type = EXCLUDED.unit_type,
+			is_active = true,
+			updated_at = EXCLUDED.updated_at
+		RETURNING id
+	`, newID, canonicalID, req.PartNameLo, req.PartNameEn, req.PartCategory, req.CostPriceLak, req.ExpectedLifespanUnits, unitType, now, now).Scan(&actualID)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "error": "Failed to save wear part", "details": err.Error()})
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "error": "Failed to commit transaction", "details": err.Error()})
+		return
+	}
+	inventory.NotifyEquipmentMutated()
 
 	wearPerUnit := req.CostPriceLak / float64(req.ExpectedLifespanUnits)
 
@@ -177,8 +302,8 @@ func HandleCreateMachineWearPart(c *gin.Context) {
 		"status":  "success",
 		"message": "Machine wear part created successfully",
 		"data": MachineWearPart{
-			ID:                    newID,
-			AssetID:               assetID,
+			ID:                    actualID,
+			AssetID:               canonicalID,
 			PartNameLo:            req.PartNameLo,
 			PartNameEn:            req.PartNameEn,
 			PartCategory:          req.PartCategory,
@@ -199,22 +324,42 @@ func HandleDeleteMachineWearPart(c *gin.Context) {
 	assetID := strings.TrimSpace(c.Param("id"))
 	partID := strings.TrimSpace(c.Param("part_id"))
 	if assetID == "" || partID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Asset ID and Part ID are required"})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Asset ID and Part ID are required"})
+		return
+	}
+	canonicalID := inventory.ResolveEquipmentAlias(assetID)
+
+	if db.DB == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status": "error",
+			"error":  "database unavailable: wear parts requires database connection",
+		})
 		return
 	}
 
-	if db.DB != nil {
-		res, err := db.DB.Exec("UPDATE machine_wear_parts SET is_active = false, updated_at = NOW() WHERE id = $1 AND asset_id = $2", partID, assetID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete wear part", "details": err.Error()})
-			return
-		}
-		rowsAffected, _ := res.RowsAffected()
-		if rowsAffected == 0 {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Wear part not found for this machine"})
-			return
-		}
+	tx, err := db.DB.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "error": "Failed to begin transaction", "details": err.Error()})
+		return
 	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec("UPDATE machine_wear_parts SET is_active = false, updated_at = NOW() WHERE id = $1 AND (asset_id = $2 OR asset_id = $3)", partID, canonicalID, assetID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "error": "Failed to delete wear part", "details": err.Error()})
+		return
+	}
+	rowsAffected, _ := res.RowsAffected()
+	if rowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"status": "error", "error": "Wear part not found for this machine"})
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "error": "Failed to commit transaction", "details": err.Error()})
+		return
+	}
+	inventory.NotifyEquipmentMutated()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
@@ -227,9 +372,10 @@ func HandleUpdateMachineWearPart(c *gin.Context) {
 	assetID := strings.TrimSpace(c.Param("id"))
 	partID := strings.TrimSpace(c.Param("part_id"))
 	if assetID == "" || partID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Asset ID and Part ID are required"})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Asset ID and Part ID are required"})
 		return
 	}
+	canonicalID := inventory.ResolveEquipmentAlias(assetID)
 
 	var req struct {
 		PartNameLo            *string  `json:"part_name_lo"`
@@ -243,75 +389,314 @@ func HandleUpdateMachineWearPart(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Invalid request payload", "details": err.Error()})
 		return
 	}
 
 	if req.CostPriceLak != nil && *req.CostPriceLak < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Cost price must be greater than or equal to 0"})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Cost price must be greater than or equal to 0"})
 		return
 	}
 	if req.ExpectedLifespanUnits != nil && *req.ExpectedLifespanUnits <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Expected lifespan must be greater than 0"})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Expected lifespan must be greater than 0"})
 		return
 	}
 	if req.CurrentCounter != nil && *req.CurrentCounter < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Current counter must be greater than or equal to 0"})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Current counter must be greater than or equal to 0"})
 		return
 	}
 	if req.PartNameLo != nil && strings.TrimSpace(*req.PartNameLo) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Part name (Lao) cannot be empty"})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Part name (Lao) cannot be empty"})
 		return
 	}
 	if req.PartNameEn != nil && strings.TrimSpace(*req.PartNameEn) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Part name (English) cannot be empty"})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Part name (English) cannot be empty"})
 		return
 	}
 	if req.PartCategory != nil && strings.TrimSpace(*req.PartCategory) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Part category cannot be empty"})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Part category cannot be empty"})
 		return
 	}
 
-	if db.DB != nil {
-		var currentCost float64
-		var currentLife int64
-		err := db.DB.QueryRow(`
-			SELECT cost_price_lak, expected_lifespan_units
-			FROM machine_wear_parts
-			WHERE id = $1 AND asset_id = $2
-		`, partID, assetID).Scan(&currentCost, &currentLife)
-		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Wear part not found for this machine"})
-			return
-		}
-
-		query := `
-			UPDATE machine_wear_parts SET
-				part_name_lo = COALESCE($1, part_name_lo),
-				part_name_en = COALESCE($2, part_name_en),
-				part_category = COALESCE($3, part_category),
-				cost_price_lak = COALESCE($4, cost_price_lak),
-				expected_lifespan_units = COALESCE($5, expected_lifespan_units),
-				unit_type = COALESCE($6, unit_type),
-				current_counter = COALESCE($7, current_counter),
-				is_active = COALESCE($8, is_active),
-				updated_at = NOW()
-			WHERE id = $9 AND asset_id = $10
-		`
-		_, err = db.DB.Exec(query,
-			req.PartNameLo, req.PartNameEn, req.PartCategory,
-			req.CostPriceLak, req.ExpectedLifespanUnits, req.UnitType,
-			req.CurrentCounter, req.IsActive, partID, assetID,
-		)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update wear part", "details": err.Error()})
-			return
-		}
+	if db.DB == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status": "error",
+			"error":  "database unavailable: wear parts requires database connection",
+		})
+		return
 	}
+
+	tx, err := db.DB.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "error": "Failed to begin transaction", "details": err.Error()})
+		return
+	}
+	defer tx.Rollback()
+
+	var currentCost float64
+	var currentLife int64
+	err = tx.QueryRow(`
+		SELECT cost_price_lak, expected_lifespan_units
+		FROM machine_wear_parts
+		WHERE id = $1 AND (asset_id = $2 OR asset_id = $3)
+	`, partID, canonicalID, assetID).Scan(&currentCost, &currentLife)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"status": "error", "error": "Wear part not found for this machine"})
+		return
+	}
+
+	query := `
+		UPDATE machine_wear_parts SET
+			part_name_lo = COALESCE($1, part_name_lo),
+			part_name_en = COALESCE($2, part_name_en),
+			part_category = COALESCE($3, part_category),
+			cost_price_lak = COALESCE($4, cost_price_lak),
+			expected_lifespan_units = COALESCE($5, expected_lifespan_units),
+			unit_type = COALESCE($6, unit_type),
+			current_counter = COALESCE($7, current_counter),
+			is_active = COALESCE($8, is_active),
+			updated_at = NOW()
+		WHERE id = $9 AND (asset_id = $10 OR asset_id = $11)
+	`
+	_, err = tx.Exec(query,
+		req.PartNameLo, req.PartNameEn, req.PartCategory,
+		req.CostPriceLak, req.ExpectedLifespanUnits, req.UnitType,
+		req.CurrentCounter, req.IsActive, partID, canonicalID, assetID,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "error": "Failed to update wear part", "details": err.Error()})
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "error": "Failed to commit transaction", "details": err.Error()})
+		return
+	}
+	inventory.NotifyEquipmentMutated()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"message": "Machine wear part updated successfully",
+	})
+}
+
+// HandleBatchUpdateMachineWearParts updates or bulk-syncs wear parts for an asset (PUT /api/v1/equipment/:id/wear-parts)
+func HandleBatchUpdateMachineWearParts(c *gin.Context) {
+	assetID := strings.TrimSpace(c.Param("id"))
+	if assetID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Asset ID is required"})
+		return
+	}
+	canonicalID := inventory.ResolveEquipmentAlias(assetID)
+
+	if db.DB == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status": "error",
+			"error":  "database unavailable: wear parts requires database connection",
+		})
+		return
+	}
+
+	var rawBody []byte
+	var err error
+	if c.Request.Body != nil {
+		rawBody, err = io.ReadAll(c.Request.Body)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Failed to read request body"})
+			return
+		}
+	}
+	if len(rawBody) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Empty request body"})
+		return
+	}
+
+	// Try unmarshaling as slice first
+	var partsList []map[string]interface{}
+	if err := json.Unmarshal(rawBody, &partsList); err != nil {
+		// Try unmarshaling as object with data/wear_parts/parts/components
+		var obj map[string]interface{}
+		if err2 := json.Unmarshal(rawBody, &obj); err2 == nil {
+			for _, key := range []string{"data", "wear_parts", "parts", "components"} {
+				if v, ok := obj[key]; ok {
+					if subList, ok := v.([]interface{}); ok {
+						for _, item := range subList {
+							if m, ok := item.(map[string]interface{}); ok {
+								partsList = append(partsList, m)
+							}
+						}
+						break
+					}
+				}
+			}
+			// Or maybe the object itself is a single wear part
+			if len(partsList) == 0 {
+				if _, ok := obj["part_name_en"]; ok {
+					partsList = append(partsList, obj)
+				}
+			}
+		}
+	}
+
+	if len(partsList) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "No wear parts provided in request body"})
+		return
+	}
+
+	tx, err := db.DB.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "error": "Failed to begin transaction", "details": err.Error()})
+		return
+	}
+	defer tx.Rollback()
+
+	now := time.Now()
+	for _, p := range partsList {
+		idStr, _ := p["id"].(string)
+		if idStr == "" || strings.HasPrefix(idStr, "part-") || strings.HasPrefix(idStr, "temp-") || len(idStr) != 36 {
+			idStr = generateUUID()
+		}
+
+		nameEn, _ := p["part_name_en"].(string)
+		if nameEn == "" {
+			nameEn, _ = p["name"].(string)
+		}
+		if nameEn == "" {
+			continue
+		}
+
+		nameLo, _ := p["part_name_lo"].(string)
+		if nameLo == "" {
+			nameLo, _ = p["nameLo"].(string)
+		}
+		if nameLo == "" {
+			nameLo = nameEn
+		}
+
+		category, _ := p["part_category"].(string)
+		if category == "" {
+			category, _ = p["category"].(string)
+		}
+		if category == "" {
+			category = "general"
+		}
+
+		var cost float64
+		hasCost := false
+		if cVal, ok := p["cost_price_lak"].(float64); ok {
+			cost = cVal
+			hasCost = true
+		} else if cVal, ok := p["cost"].(float64); ok {
+			cost = cVal
+			hasCost = true
+		}
+		if hasCost && cost < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Cost price must be greater than or equal to 0"})
+			return
+		}
+
+		var life int64
+		hasLife := false
+		if lVal, ok := p["expected_lifespan_units"].(float64); ok {
+			life = int64(lVal)
+			hasLife = true
+		} else if lVal, ok := p["lifeVal"].(float64); ok {
+			life = int64(lVal)
+			hasLife = true
+		} else if lVal, ok := p["life"].(float64); ok {
+			life = int64(lVal)
+			hasLife = true
+		}
+		if hasLife && life <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Expected lifespan must be greater than 0"})
+			return
+		}
+		if !hasLife || life <= 0 {
+			life = 50000
+		}
+
+		unitType, _ := p["unit_type"].(string)
+		if unitType == "" {
+			unitType, _ = p["unitLabel"].(string)
+		}
+		if unitType == "" {
+			unitType = "pages"
+		}
+
+		var counter int64
+		if cnt, ok := p["current_counter"].(float64); ok {
+			counter = int64(cnt)
+		}
+
+		_, err := tx.Exec(`
+			INSERT INTO machine_wear_parts (id, asset_id, part_name_lo, part_name_en, part_category, cost_price_lak, expected_lifespan_units, unit_type, current_counter, is_active, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10, $11)
+			ON CONFLICT (asset_id, part_name_en) DO UPDATE SET
+				part_name_lo = EXCLUDED.part_name_lo,
+				part_category = EXCLUDED.part_category,
+				cost_price_lak = EXCLUDED.cost_price_lak,
+				expected_lifespan_units = EXCLUDED.expected_lifespan_units,
+				unit_type = EXCLUDED.unit_type,
+				current_counter = CASE WHEN EXCLUDED.current_counter > 0 THEN EXCLUDED.current_counter ELSE machine_wear_parts.current_counter END,
+				is_active = true,
+				updated_at = NOW()
+		`, idStr, canonicalID, nameLo, nameEn, category, cost, life, unitType, counter, now, now)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "error": "Failed to persist wear part in batch", "details": err.Error()})
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "error": "Failed to commit transaction", "details": err.Error()})
+		return
+	}
+	inventory.NotifyEquipmentMutated()
+
+	// Fetch updated parts to return
+	rows, err := db.DB.Query(`
+		SELECT id, asset_id, part_name_lo, part_name_en, part_category,
+		       cost_price_lak, expected_lifespan_units, unit_type, current_counter,
+		       last_replaced_at, is_active, created_at, updated_at
+		FROM machine_wear_parts
+		WHERE (asset_id = $1 OR asset_id = $2) AND is_active = true
+		ORDER BY part_category ASC, created_at ASC
+	`, canonicalID, assetID)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Batch update committed"})
+		return
+	}
+	defer rows.Close()
+
+	var resultParts []MachineWearPart
+	var totalWear float64
+	for rows.Next() {
+		var p MachineWearPart
+		var lastReplaced sql.NullTime
+		if err := rows.Scan(
+			&p.ID, &p.AssetID, &p.PartNameLo, &p.PartNameEn, &p.PartCategory,
+			&p.CostPriceLak, &p.ExpectedLifespanUnits, &p.UnitType, &p.CurrentCounter,
+			&lastReplaced, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
+		); err == nil {
+			if lastReplaced.Valid {
+				p.LastReplacedAt = &lastReplaced.Time
+			}
+			if p.ExpectedLifespanUnits > 0 {
+				p.WearCostPerUnitLak = p.CostPriceLak / float64(p.ExpectedLifespanUnits)
+			}
+			totalWear += p.WearCostPerUnitLak
+			resultParts = append(resultParts, p)
+		}
+	}
+
+	if resultParts == nil {
+		resultParts = []MachineWearPart{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":                   "success",
+		"data":                     resultParts,
+		"total_wear_cost_per_unit": math.Round(totalWear*100) / 100,
 	})
 }
 

@@ -168,15 +168,11 @@ export default function EquipmentTable({ machines, onViewDetails, onEdit, onDele
                       : 'bg-sky-50 text-sky-700 border-sky-200')
                   : 'bg-amber-50 text-amber-700 border-amber-200';
 
-                // Specs & Cost calculation: directly prioritize persistent saved fields on equipment
+                // Specs & Cost calculation: dynamically compute print cost from equipment and links
                 const costCalc = calculateEquipmentPrintCost(eq, printerColorLinks, allAvailableInks, eq.category);
                 const netCostPerUnit = costCalc.netCostPerUnit;
-                const linkedInkRatePerPage = Number(eq.colorInkCost || eq.linkedInkCostPerPage || costCalc.linkedInkRatePerPage || 0);
-                const finalCostPerPage = isPostPress 
-                  ? costCalc.finalCostPerPage 
-                  : (Number(eq.totalPrintCostPerPage || (eq.specs as any)?.totalPrintCostPerPage) > 0
-                      ? Number(eq.totalPrintCostPerPage || (eq.specs as any)?.totalPrintCostPerPage)
-                      : (netCostPerUnit + linkedInkRatePerPage));
+                const linkedInkRatePerPage = costCalc.linkedInkRatePerPage;
+                const finalCostPerPage = isPostPress ? costCalc.finalCostPerPage : costCalc.finalCostPerPage;
 
                 const rawLinks = (printerColorLinks && printerColorLinks.length > 0)
                   ? printerColorLinks.filter((lnk: any) => lnk.assetId === eq.id || lnk.printerId === eq.id)
@@ -267,7 +263,7 @@ export default function EquipmentTable({ machines, onViewDetails, onEdit, onDele
                           </span>
                           {!isPostPress && linkedInkRatePerPage > 0 && (
                             <span className="text-[9px] font-semibold text-emerald-600 block">
-                              (ເຄື່ອງ {formatUnitLAK(netCostPerUnit)} + ໝຶກ {formatUnitLAK(linkedInkRatePerPage)})
+                              (ເຄື່ອງ {formatUnitLAK(netCostPerUnit)} + ໝຶກ {formatUnitLAK(linkedInkRatePerPage)} ISO 5% A4)
                             </span>
                           )}
                         </div>

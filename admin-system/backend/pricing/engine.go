@@ -304,6 +304,11 @@ type CalculationResponse struct {
 
 func init() {
 	decimal.MarshalJSONWithoutQuotes = true
+	inventory.OnEquipmentMutated = func() {
+		if GlobalPricingCache != nil {
+			GlobalPricingCache.Invalidate()
+		}
+	}
 }
 
 // a4BaselineArea is the reference area (mm²) used for Paper Area Factor S (210 x 297 mm = 62370)
@@ -504,10 +509,38 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		}
 	}
 	if req.ColorPagesCount != nil && *req.ColorPagesCount < 0 {
-		return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "INVALID_PAGE_COUNT"}
+		return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "INVALID_PAGE_POPULATION"}
 	}
 	if req.MonoPagesCount != nil && *req.MonoPagesCount < 0 {
-		return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "INVALID_PAGE_COUNT"}
+		return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "INVALID_PAGE_POPULATION"}
+	}
+	effPageCount := req.PageCount
+	if effPageCount <= 0 {
+		effPageCount = 1
+	}
+	if req.ColorPagesCount != nil && req.MonoPagesCount != nil {
+		if *req.ColorPagesCount+*req.MonoPagesCount != effPageCount {
+			return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "INVALID_PAGE_POPULATION"}
+		}
+	} else if req.ColorPagesCount != nil {
+		if *req.ColorPagesCount > effPageCount {
+			return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "INVALID_PAGE_POPULATION"}
+		}
+	} else if req.MonoPagesCount != nil {
+		if *req.MonoPagesCount > effPageCount {
+			return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "INVALID_PAGE_POPULATION"}
+		}
+	}
+
+	hasPreflight := req.AvgCovC != nil || req.AvgCovM != nil || req.AvgCovY != nil || req.AvgCovK != nil
+	hasSplitInk := req.InkCoverageKPercent != nil || req.InkCoverageCMYPercent != nil
+	hasInkParams := req.InkCostKPerMl > 0 || req.InkCostCMYPerMl > 0 || req.InkCostPerMl > 0 || req.DefaultMachineID != "" || req.ColorPagesCount != nil || req.MonoPagesCount != nil || req.MonoAvgCovK != nil
+	if hasPreflight {
+		if req.AvgCovC == nil || req.AvgCovM == nil || req.AvgCovY == nil || req.AvgCovK == nil {
+			return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "MISSING_COVERAGE"}
+		}
+	} else if len(req.PrintingProcesses) == 0 && !hasSplitInk && req.InkCoveragePercent <= 0 && hasInkParams {
+		return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "MISSING_COVERAGE"}
 	}
 
 	// ── In-Memory Cache Lookup ──────────────────────────────────────────────────
@@ -727,11 +760,36 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		isoCMY = 4000.0
 	}
 
+	if req.DefaultMachineID != "" && req.InkCostKPerMl <= 0 && req.InkCostCMYPerMl <= 0 {
+		if eq, err := inventory.GetEquipmentByID(req.DefaultMachineID); err == nil {
+			if eq.BwInkCost > 0 || eq.ColorInkCost > 0 {
+				costK = eq.BwInkCost
+				isoK = 1.0
+				costCMY = eq.ColorInkCost
+				isoCMY = 1.0
+			}
+		}
+	}
+
 	dCostK := decimal.NewFromFloat(costK)
 	dIsoK := decimal.NewFromFloat(isoK)
 	dCostCMY := decimal.NewFromFloat(costCMY)
 	dIsoCMY := decimal.NewFromFloat(isoCMY)
 	dFive := decimal.NewFromFloat(5.0)
+
+	resolveProcessPages := func(proc PrinterProcessSetup, pageCount int) int {
+		procQty := req.Quantity * pageCount
+		if proc.AllocatedPages > 0 {
+			procQty = proc.AllocatedPages
+			if len(req.PrintingProcesses) == 1 && req.Quantity > 1 && proc.AllocatedPages == pageCount {
+				procQty = proc.AllocatedPages * req.Quantity
+			}
+		}
+		if req.ImpositionMode == "OFF" && cutsPerSheet > 1 && !req.IsDoubleSided && procQty > 1 {
+			procQty = int(math.Ceil(float64(procQty) / float64(cutsPerSheet)))
+		}
+		return procQty
+	}
 
 	if len(req.PrintingProcesses) > 0 {
 		// Multi-printer & Channel-based calculation
@@ -744,46 +802,61 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 			if pageCount <= 0 {
 				pageCount = 1
 			}
-			procQty := req.Quantity * pageCount
-			if proc.AllocatedPages > 0 {
-				procQty = proc.AllocatedPages
-			}
+			procQty := resolveProcessPages(proc, pageCount)
 			dProcQty := decimal.NewFromInt(int64(procQty))
+			procAreaFactor := dAreaFactor
+			if req.ImpositionMode == "OFF" && cutsPerSheet > 1 && !req.IsDoubleSided {
+				procAreaFactor = decimal.NewFromInt(1)
+			}
 
 			if proc.ColorMode == "SEPARATE_CHANNEL" && len(proc.ColorChannels) > 0 {
 				for _, ch := range proc.ColorChannels {
 					totalPlates++
 					dDensity := decimal.NewFromFloat(ch.DensityPct)
 					if ch.ChannelName == "K" || ch.ChannelName == "Black" {
-						chCost := dCostK.Div(dIsoK).Mul(dDensity.Div(dFive)).Mul(dAreaFactor).Mul(dProcQty)
+						chCost := dCostK.Div(dIsoK).Mul(dDensity.Div(dFive)).Mul(procAreaFactor).Mul(dProcQty)
 						dInkCostK = dInkCostK.Add(chCost)
 						dInkCost = dInkCost.Add(chCost)
 					} else {
-						chCost := dCostCMY.Div(dIsoCMY).Mul(dDensity.Div(dFive)).Mul(dAreaFactor).Mul(dProcQty)
+						channelUnitCost := dCostCMY.Div(dIsoCMY)
+						if isoCMY == 1.0 {
+							channelUnitCost = channelUnitCost.Div(decimal.NewFromFloat(3.0))
+						}
+						chCost := channelUnitCost.Mul(dDensity.Div(dFive)).Mul(procAreaFactor).Mul(dProcQty)
 						dInkCostCMY = dInkCostCMY.Add(chCost)
 						dInkCost = dInkCost.Add(chCost)
 					}
 				}
 			} else if proc.ColorMode == "MONO_K" {
-				avgDensity := 15.0
-				if proc.AverageDensity != nil {
-					avgDensity = *proc.AverageDensity
+				if proc.AverageDensity == nil {
+					return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "MISSING_COVERAGE"}
 				}
+				avgDensity := *proc.AverageDensity
 				totalPlates += 1 // 1 plate for K
 				dDensity := decimal.NewFromFloat(avgDensity)
-				kCost := dCostK.Div(dIsoK).Mul(dDensity.Div(dFive)).Mul(dAreaFactor).Mul(dProcQty)
+				kCost := dCostK.Div(dIsoK).Mul(dDensity.Div(dFive)).Mul(procAreaFactor).Mul(dProcQty)
 				dInkCostK = dInkCostK.Add(kCost)
 				dInkCost = dInkCost.Add(kCost)
 			} else {
 				// Average Density mode
-				avgDensity := 15.0
-				if proc.AverageDensity != nil {
-					avgDensity = *proc.AverageDensity
+				if proc.AverageDensity == nil {
+					return CalculationResponse{}, &finance.OperationError{Status: 400, Code: "MISSING_COVERAGE"}
 				}
+				avgDensity := *proc.AverageDensity
 				totalPlates += 4 // CMYK
-				dDensity := decimal.NewFromFloat(avgDensity)
-				kCost := dCostK.Div(dIsoK).Mul(dDensity.Div(decimal.NewFromFloat(4.0)).Div(dFive)).Mul(dAreaFactor).Mul(dProcQty)
-				cmyCost := dCostCMY.Div(dIsoCMY).Mul(dDensity.Mul(decimal.NewFromFloat(0.75)).Div(dFive)).Mul(dAreaFactor).Mul(dProcQty)
+				var kFactor, cmyFactor decimal.Decimal
+				if hasPreflight {
+					kFactor = decimal.NewFromFloat(*req.AvgCovK).Div(dFive)
+					cmyAvg := (*req.AvgCovC + *req.AvgCovM + *req.AvgCovY) / 3.0
+					cmyFactor = decimal.NewFromFloat(cmyAvg).Div(dFive)
+				} else {
+					// Continuous, unambiguous per-channel average coverage (e.g. 5% means 5% per channel)
+					perChannel := decimal.NewFromFloat(avgDensity)
+					kFactor = perChannel.Div(dFive)
+					cmyFactor = perChannel.Div(dFive)
+				}
+				kCost := dCostK.Div(dIsoK).Mul(kFactor).Mul(procAreaFactor).Mul(dProcQty)
+				cmyCost := dCostCMY.Div(dIsoCMY).Mul(cmyFactor).Mul(procAreaFactor).Mul(dProcQty)
 				dInkCostK = dInkCostK.Add(kCost)
 				dInkCostCMY = dInkCostCMY.Add(cmyCost)
 				dInkCost = dInkCost.Add(kCost).Add(cmyCost)
@@ -801,24 +874,18 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 		}
 
 		var inkCovK, inkCovCMY float64
-		hasPreflight := req.AvgCovC != nil || req.AvgCovM != nil || req.AvgCovY != nil || req.AvgCovK != nil
-		hasSplitInk := req.InkCoverageKPercent != nil || req.InkCoverageCMYPercent != nil
-
 		if hasPreflight {
-			if req.AvgCovK != nil {
-				inkCovK = *req.AvgCovK
+			inkCovK = *req.AvgCovK
+			covC := *req.AvgCovC
+			covM := *req.AvgCovM
+			covY := *req.AvgCovY
+			// When dCostCMY comes from equipment ColorInkCost (combined 3-channel rate at 5% each),
+			// scale by average CMY channel / 5%; when bottle cost is used, preserve legacy behavior.
+			if isoCMY == 1.0 {
+				inkCovCMY = (covC + covM + covY) / 3.0
+			} else {
+				inkCovCMY = covC + covM + covY
 			}
-			covC, covM, covY := 0.0, 0.0, 0.0
-			if req.AvgCovC != nil {
-				covC = *req.AvgCovC
-			}
-			if req.AvgCovM != nil {
-				covM = *req.AvgCovM
-			}
-			if req.AvgCovY != nil {
-				covY = *req.AvgCovY
-			}
-			inkCovCMY = covC + covM + covY
 		} else if hasSplitInk {
 			if req.InkCoverageKPercent != nil {
 				inkCovK = *req.InkCoverageKPercent
@@ -851,11 +918,8 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 			if req.MonoPagesCount != nil {
 				monoPages = *req.MonoPagesCount
 			}
-			if monoPages < 0 {
-				monoPages = 0
-			}
-			if colorPages < 0 {
-				colorPages = 0
+			if req.ColorPagesCount == nil {
+				colorPages = pageCount - monoPages
 			}
 
 			// CMY ink: strictly color pages * quantity
@@ -903,10 +967,7 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 	if len(req.PrintingProcesses) > 0 {
 		for _, proc := range req.PrintingProcesses {
 			if proc.CostPerPage > 0 {
-				pages := req.Quantity * pageCount
-				if proc.AllocatedPages > 0 {
-					pages = proc.AllocatedPages
-				}
+				pages := resolveProcessPages(proc, pageCount)
 				dPages := decimal.NewFromInt(int64(pages))
 				dCost := decimal.NewFromFloat(proc.CostPerPage)
 				dDepreciationCost = dDepreciationCost.Add(dPages.Mul(dCost))
@@ -930,8 +991,21 @@ func CalculateJobPricing(req CalculationRequest) (CalculationResponse, error) {
 			}
 		}
 
+		if req.DefaultMachineID != "" && req.MaintenanceCostPerPage <= 0 {
+			if eq, err := inventory.GetEquipmentByID(req.DefaultMachineID); err == nil {
+				if wpRate, ok := eq.TechnicalSpecs["wearPartsRate"].(float64); ok && wpRate > 0 {
+					req.MaintenanceCostPerPage = wpRate
+					req.MaintenanceRatePercent = 0.0
+				}
+			}
+		}
+
 		if req.MachinePrice > 0 && req.TargetTotalPages > 0 {
-			deprecPerSheet, maintPerSheet, _ := CalculateMachineOverhead(req.MachinePrice, int(req.TargetTotalPages), req.MaintenanceRatePercent)
+			effMaintRatePct := req.MaintenanceRatePercent
+			if req.MaintenanceCostPerPage > 0 {
+				effMaintRatePct = 0.0
+			}
+			deprecPerSheet, maintPerSheet, _ := CalculateMachineOverhead(req.MachinePrice, int(req.TargetTotalPages), effMaintRatePct)
 			dDeprec := decimal.NewFromFloat(deprecPerSheet)
 			dMaint := decimal.NewFromFloat(maintPerSheet)
 			dDepreciationCost = dDeprec.Mul(dJobPages)
@@ -1527,7 +1601,7 @@ func ResolvePrecutStock(ctx context.Context, tx *sql.Tx, key string, width, heig
 	if !fitsDirect && fitsRotated {
 		snapshot.Orientation = "ROTATED"
 	} else if !fitsDirect && !fitsRotated {
-		snapshot.Orientation = "OVERSIZED"
+		return nil, 0, precutError()
 	}
 	snapshot.Source = "materials.technical_specs"
 	snapshot.Unit = "mm"

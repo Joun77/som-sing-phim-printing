@@ -85,10 +85,10 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
   const canReviewReceipt = !role || ['admin', 'manager', 'finance', 'accountant', 'owner', 'super_admin'].includes(role?.toLowerCase() || '');
   const canonical = paymentReview.summary;
   const depositMode = canonical ? canonical.deposit_mode : order.deposit_mode ?? null;
-  const receiptRequest = async (amount: number, purpose: 'FULL' | 'DEPOSIT' | 'REMAINING', methodId?: string) => {
+  const receiptRequest = async (amount: number, purpose: 'FULL' | 'DEPOSIT' | 'REMAINING', methodId?: string, paymentContext?: 'ONLINE' | 'COUNTER') => {
     if (unsavedSlip && methodId !== 'cash') { showToast('ສະລິບທີ່ເລືອກຍັງບໍ່ໄດ້ບັນທຶກໃນອໍເດີ. ບໍ່ສາມາດສ້າງຄຳຂໍຊຳລະໄດ້', 'warning'); return; }
     const evidence = methodId === 'cash' ? 'cash' : (paymentSlipUrl || 'cash');
-    const result = await paymentReview.requestReceipt(String(amount), purpose, evidence, order.transRef || order.trans_ref || undefined, methodId);
+    const result = await paymentReview.requestReceipt(String(amount), purpose, evidence, order.transRef || order.trans_ref || undefined, methodId, paymentContext);
     if (result) { void refreshData(); showToast('ບັນທຶກຄຳຂໍຊຳລະແລ້ວ; ລໍຖ້າກວດສອບ', 'success'); }
   };
   const isPaymentConfirmed = canonical ? canonical.payment_status === 'PAID' :
@@ -166,16 +166,16 @@ export const OrderReceptionPage: React.FC<OrderReceptionPageProps> = ({
             formatLAK={formatLAK}
             reviewPending={paymentReview.pending}
             reviewError={paymentReview.error}
-            onConfirmFullPayment={async (methodId) => {
-              if (canonical) { await receiptRequest(Number(canonical.remaining_lak), Number(canonical.received_net_lak) > 0 ? 'REMAINING' : 'FULL', methodId); return; }
+            onConfirmFullPayment={async (methodId, paymentContext) => {
+              if (canonical) { await receiptRequest(Number(canonical.remaining_lak), Number(canonical.received_net_lak) > 0 ? 'REMAINING' : 'FULL', methodId, paymentContext); return; }
               const result = await paymentReview.review('APPROVED');
               if (!result) return;
               onUpdatePayment?.(order.id, 'Paid', totalAmountLAK, 0);
               void refreshData();
               showToast(currentLang === 'lo' ? 'ບັນທຶກຜົນກວດສອບການຊຳລະແລ້ວ' : 'Payment review saved; ready for Pre-Press', 'success');
             }}
-            onConfirmDepositPayment={async (amount, methodId) => {
-              if (canonical) { await receiptRequest(amount, 'DEPOSIT', methodId); return; }
+            onConfirmDepositPayment={async (amount, methodId, paymentContext) => {
+              if (canonical) { await receiptRequest(amount, 'DEPOSIT', methodId, paymentContext); return; }
               showToast(currentLang === 'lo' ? 'ຍັງບໍ່ຮອງຮັບການຢືນຢັນມັດຈຳຜ່ານການກວດສະລິບ' : 'Partial deposit review is unavailable; use the finance workflow', 'warning');
             }}
             onRevertPayment={() => {

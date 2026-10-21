@@ -1,7 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../../api/client';
 
-type JobProfitability = { job_id: string; job_name: string; customer_name: string; revenue: number; total_cost: number; gross_profit: number; profit_margin_percent: number };
+type JobProfitability = {
+  job_id: string;
+  job_name: string;
+  customer_name: string;
+  revenue: number;
+  total_cost: number;
+  gross_profit: number;
+  profit_margin_percent: number;
+  actual_cost_complete?: boolean;
+  actual_cost_status?: string;
+  cost_completeness?: string;
+};
 
 export const JobProfitabilityAudit: React.FC = () => {
   const [rows, setRows] = useState<JobProfitability[]>([]);
@@ -23,7 +34,24 @@ export const JobProfitabilityAudit: React.FC = () => {
     <button onClick={load} disabled={loading} className="px-4 py-2 rounded-xl border">ອັບເດດ</button>
     {loading ? <p role="status">ກຳລັງໂຫຼດ...</p> : error ? <p role="alert">{error}</p> : !rows.length ? <p>ຍັງບໍ່ມີຂໍ້ມູນກຳໄລງານ</p> : <div className="overflow-auto"><table className="w-full text-left">
       <thead><tr>{['ອໍເດີ', 'ລູກຄ້າ', 'ລາຍຮັບ (LAK)', 'ຕົ້ນທຶນ (LAK)', 'ກຳໄລຂັ້ນຕົ້ນ (LAK)', 'ອັດຕາກຳໄລ'].map(label => <th key={label} className="p-3">{label}</th>)}</tr></thead>
-      <tbody>{rows.map(row => <tr key={row.job_id} className="border-t"><td className="p-3">{row.job_id}</td><td>{row.customer_name}</td><td>{row.revenue.toLocaleString()}</td><td>{row.total_cost.toLocaleString()}</td><td>{row.gross_profit.toLocaleString()}</td><td>{row.profit_margin_percent.toFixed(2)}%</td></tr>)}</tbody>
+      <tbody>{rows.map(row => {
+        const hasCost = row.actual_cost_complete === true || row.actual_cost_status === 'COMPLETE' || row.cost_completeness === 'COMPLETE';
+        const isLoss = hasCost && row.gross_profit < 0;
+        return (
+          <tr key={row.job_id} className="border-t">
+            <td className="p-3 font-mono font-bold text-slate-800">{row.job_id}</td>
+            <td>{row.customer_name}</td>
+            <td className="font-mono">{row.revenue.toLocaleString()}</td>
+            <td className="font-mono">{hasCost ? row.total_cost.toLocaleString() : <span className="text-amber-600 font-bold">ຍັງບໍ່ຄົບຖ້ວນ</span>}</td>
+            <td className={`font-mono ${isLoss ? 'text-rose-600 font-bold' : ''}`}>
+              {hasCost ? `${row.gross_profit.toLocaleString()}${isLoss ? ' (ຂາດທຶນ)' : ''}` : <span className="text-slate-400 font-medium">—</span>}
+            </td>
+            <td className={`font-mono ${isLoss ? 'text-rose-600 font-bold' : ''}`}>
+              {hasCost ? `${row.profit_margin_percent.toFixed(2)}%` : <span className="text-amber-600 font-bold">ຍັງບໍ່ຄົບຖ້ວນ</span>}
+            </td>
+          </tr>
+        );
+      })}</tbody>
     </table></div>}
   </section>;
 };

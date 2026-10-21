@@ -344,6 +344,8 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
                 return (
                   <div
                     key={printer.id}
+                    data-testid="printer-modal-card"
+                    data-printer-id={printer.id}
                     className={`p-4 rounded-2xl border-2 transition-all flex flex-col justify-between ${
                       isSelected
                         ? 'bg-sky-50/90 border-sky-500 shadow-md ring-2 ring-sky-400/20'
@@ -354,7 +356,7 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-black text-slate-900 font-sans block">
+                            <span data-testid="modal-printer-name" className="text-xs font-black text-slate-900 font-sans block">
                               {printer.name}
                             </span>
                             <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${colorBadge.bg}`}>
@@ -395,19 +397,19 @@ export const PrinterSelectorModal: React.FC<PrinterSelectorModalProps> = ({
                     <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                       <div className="text-left space-y-0.5">
                         <div className="flex items-baseline gap-1.5">
-                          <span className="text-[11px] font-bold text-slate-600">ຕົ້ນທຶນພິມລວມ:</span>
-                          <strong className="text-base font-black text-sky-700 font-sans">
+                          <span className="text-[11px] font-bold text-slate-600">ຕົ້ນທຶນພິມລວມ (ISO 5% A4):</span>
+                          <strong data-testid="modal-total-cost" className="text-base font-black text-sky-700 font-sans">
                             {formatUnitPrecisionLAK(totalCost)}
                           </strong>
                           <span className="text-[11px] text-slate-500 font-bold">/ໜ້າ</span>
                         </div>
                         {inkCost > 0 && (
-                          <span className="text-[10px] text-slate-500 font-semibold block font-sans">
-                            (ເຄື່ອງ {formatUnitPrecisionLAK(machineCost)} + ໝຶກ {formatUnitPrecisionLAK(inkCost)})
+                          <span data-testid="modal-breakdown-cost" className="text-[10px] text-slate-500 font-semibold block font-sans">
+                            (ເຄື່ອງ {formatUnitPrecisionLAK(machineCost)} + ໝຶກ {formatUnitPrecisionLAK(inkCost)} ISO 5% A4)
                           </span>
                         )}
                         <span className="text-[10px] text-slate-400 font-medium block">
-                          ລວມຄ່າເສື່ອມ, ອະໄຫຼ່ ແລະ ໝຶກພິມຈິງ (All-inclusive)
+                          ລວມຄ່າເສື່ອມ, ອະໄຫຼ່ ແລະ ໝຶກພິມຈິງ (All-inclusive @ ISO 5% A4)
                         </span>
                       </div>
 
