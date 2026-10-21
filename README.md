@@ -7,11 +7,20 @@
 ## Source map
 
 - `admin-system/frontend/`: print-shop back-office website.
-- `admin-system/backend/`: current back-office API and worker.
+- `admin-system/backend/`: shared API and worker serving BOTH the staff website and customer website.
 - `customer-service/`: separate customer-facing website.
 - Each website owns its TypeScript configuration. Run `npm run typecheck` inside the relevant website directory.
 - Retired prototype folders `som-sing-phim-frontend/` and `somsingphim/`, their root-only TypeScript configuration, and seven one-time patch scripts were removed from the active tree on 2026-10-22 after a hash-verified external archive. Do not use them as implementation targets.
-- Root Go modules, migration directories, uploads, environment files, local backups and QA evidence are retained pending separate review.
+- Retired alternate Go modules (root `cmd/db/internal/server` module and `backend/`), their root migration family, manual `scratch/` scripts, and the full local source backup were preserved in the external organization archive on 2026-10-22. They are no longer supported implementation targets. All47 differing backup sources were preserved without merging them into current code.
+- `admin-system/migrations/` is the canonical shared database history. The13 supplementary SQL files in `admin-system/backend/migrations/` remain pending their own schema review; identical mirrors were archived without editing canonical SQL.
+- Uploads, environment files, database dumps, compiled `main`, deployment metadata and QA reports remain protected and in place.
+
+### Supported local commands
+
+From repository root, `npm run dev` starts the shared API once and both websites. `npm run dev:admin` / `dev:customer` start just the selected website. From the admin frontend, `npm run dev:all` delegates to the same root command. Inspect the intended environment before startup: the backend connects to the configured DB and may apply migrations; do not restart a QA-owned runtime or point a dev command at shop data casually.
+
+`npm run typecheck` checks both websites. `npm run build` builds both with their typechecks; `npm run check:frontend` runs that complete frontend packaging gate. These checks do not certify API/DB behavior or authorize deployment.
+
 
 ## 📋 สารบัญ
 

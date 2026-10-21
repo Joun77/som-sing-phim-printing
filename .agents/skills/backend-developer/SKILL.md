@@ -16,7 +16,11 @@ Before this specialty workflow, read [the shared working standard](../somsing-de
 
 ## 1. บทบาทและขอบเขตความรับผิดชอบ (Role & Scope)
 
-- **Entry Points:** `cmd/server/main.go`
+- **Canonical module:** `admin-system/backend/` (`somsing.local/backend`), shared by the admin and customer websites.
+- **API entrypoint:** `admin-system/backend/main.go`; run from that module directory using the approved environment.
+- **Worker entrypoint:** `admin-system/backend/cmd/worker/main.go`.
+- **Canonical migrations:** `admin-system/migrations/`; preserve applied filenames and history.
+- **Retired implementations:** root `cmd/server`, `db`, `internal`, `server`, and nested root `backend/` are externally archived. Do not use or recreate them as current implementation targets. Handler/service/repository examples below are relative to the canonical module and are illustrative; inspect actual caller imports before editing.
 - **โครงสร้างสถาปัตยกรรม (Layered Architecture):**
   - **Handler Layer (`server/handler/` หรือ `internal/handler/`):** รับ HTTP Request, ตรวจสอบ Payload (Validation), คืนค่า JSON Response และ HTTP Status Code
   - **Service Layer (`internal/service/`):** จัดการ Business Logic, คำนวณสูตรราคา, สเตตัสคำสั่งซื้อ, กฎการตัดสต็อก

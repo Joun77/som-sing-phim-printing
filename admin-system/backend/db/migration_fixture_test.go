@@ -140,7 +140,7 @@ func TestMigration043_IsolatedFixture(t *testing.T) {
 	}
 
 	// Execute actual043 file content
-	migrationContent, err := os.ReadFile("../migrations/043_add_public_tracking_token_to_orders.sql")
+	migrationContent, err := os.ReadFile("../../migrations/043_add_public_tracking_token_to_orders.sql")
 	if err != nil {
 		// Try alternative path if run from project root
 		migrationContent, err = os.ReadFile("migrations/043_add_public_tracking_token_to_orders.sql")

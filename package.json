@@ -14,7 +14,14 @@
     "test:unit:backend": "cd admin-system/backend && go test ./...",
     "test:unit:frontend": "vitest run admin-system/frontend/src/utils/__tests__/",
     "test:unit": "npm run test:unit:backend && npm run test:unit:frontend",
-    "test": "npm run test:unit"
+    "test": "npm run test:unit",
+    "typecheck:admin": "npm --prefix admin-system/frontend run typecheck",
+    "typecheck:customer": "npm --prefix customer-service run typecheck",
+    "typecheck": "npm run typecheck:admin && npm run typecheck:customer",
+    "build:admin": "npm --prefix admin-system/frontend run build",
+    "build:customer": "npm --prefix customer-service run build",
+    "build": "npm run build:admin && npm run build:customer",
+    "check:frontend": "npm run build"
   },
   "devDependencies": {
     "concurrently": "^10.0.4",

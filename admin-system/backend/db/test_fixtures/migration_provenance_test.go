@@ -20,6 +20,7 @@ func getDisposableDSN(dbName string) string {
 
 func execRawSQLFile(targetDB *sql.DB, relPath string) error {
 	searchDirs := []string{
+		"../../../migrations", // canonical admin-system/migrations from this package
 		"../../migrations",
 		"../migrations",
 		"migrations",

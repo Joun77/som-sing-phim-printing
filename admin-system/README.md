@@ -2,6 +2,8 @@
 
 ระบบจัดการหลังบ้านสำหรับผู้ดูแลโรงพิมพ์สมสิงพิมพ์ (Som-Sing Phim Printing ERP)
 
+Ownership: `frontend/` is the staff website; `backend/` is the shared API and worker for BOTH this website and the root `customer-service/` website. Canonical SQL lives in `admin-system/migrations/`. Do not recreate the retired root/nested alternate Go modules.
+
 ---
 
 ## 🚀 Quick Start (เริ่มต้นใช้งานด่วน)

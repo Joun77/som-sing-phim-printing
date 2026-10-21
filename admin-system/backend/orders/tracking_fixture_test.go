@@ -132,7 +132,7 @@ func TestTrackingPersistence_IsolatedFixture(t *testing.T) {
 	}
 
 	// Execute actual 043 migration SQL content
-	migrationContent, err := os.ReadFile("../migrations/043_add_public_tracking_token_to_orders.sql")
+	migrationContent, err := os.ReadFile("../../migrations/043_add_public_tracking_token_to_orders.sql")
 	if err != nil {
 		migrationContent, err = os.ReadFile("migrations/043_add_public_tracking_token_to_orders.sql")
 		if err != nil {

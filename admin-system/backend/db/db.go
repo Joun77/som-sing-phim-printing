@@ -223,13 +223,14 @@ func RunMigrations(db *sql.DB) error {
 		return err
 	}
 
+	// Prefer canonical repository SQL; packaged /app/migrations remains supported.
 	searchDirs := []string{
-		"migrations",
-		"../migrations",
-		"../../migrations",
 		"admin-system/migrations",
 		"../admin-system/migrations",
 		"../../admin-system/migrations",
+		"../migrations",
+		"../../migrations",
+		"migrations",
 	}
 
 	var failedMigrations []string
