@@ -4,6 +4,15 @@
 
 ---
 
+## Source map
+
+- `admin-system/frontend/`: print-shop back-office website.
+- `admin-system/backend/`: current back-office API and worker.
+- `customer-service/`: separate customer-facing website.
+- Each website owns its TypeScript configuration. Run `npm run typecheck` inside the relevant website directory.
+- Retired prototype folders `som-sing-phim-frontend/` and `somsingphim/`, their root-only TypeScript configuration, and seven one-time patch scripts were removed from the active tree on 2026-10-22 after a hash-verified external archive. Do not use them as implementation targets.
+- Root Go modules, migration directories, uploads, environment files, local backups and QA evidence are retained pending separate review.
+
 ## 📋 สารบัญ
 
 - [ภาพรวมระบบ](#ภาพรวมระบบ)
